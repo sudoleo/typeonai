@@ -1,0 +1,361 @@
+/* Google Fonts: Roboto */
+:root {
+    --bg-color: #f4f4f4;
+    --container-bg: #fff;
+    --text-color: #333;
+    --input-bg: #fff;
+    --input-border: #ccc;
+    --button-bg: #007bff;
+    --button-text: #fff;
+    --response-bg: #e9e9e9;
+    --box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  }
+  
+  .dark-mode {
+    --bg-color: #121212;
+    --container-bg: #1e1e1e;
+    --text-color: #e0e0e0;
+    --input-bg: #333;
+    --input-border: #555;
+    --button-bg: #bb86fc;
+    --button-text: #000;
+    --response-bg: #2c2c2c;
+    --box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+  }
+  
+  body {
+    font-family: 'Roboto', Arial, sans-serif;
+    background-color: var(--bg-color);
+    margin: 0;
+    padding: 20px;
+    color: var(--text-color);
+  }
+  
+  /* Container */
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    background: var(--container-bg);
+    padding: 20px 30px;
+    border-radius: 8px;
+    box-shadow: var(--box-shadow);
+    position: relative;
+  }
+  
+  /* Überschriften */
+  h1, h2 {
+    text-align: center;
+    margin-bottom: 5px;
+    padding: 0;
+  }
+  
+  /* Input-Section */
+  .input-section {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  
+  .input-section input[type="text"] {
+    width: 60%;
+    padding: 10px 12px;
+    font-size: 1em;
+    margin-right: 10px;
+    border: 1px solid var(--input-border);
+    border-radius: 4px;
+    background-color: var(--input-bg);
+    color: var(--text-color);
+    transition: border 0.3s;
+  }
+  
+  .input-section input[type="text"]:focus {
+    outline: none;
+    border-color: var(--button-bg);
+  }
+  
+  .input-section button {
+    padding: 10px 16px;
+    font-size: 1em;
+    background-color: var(--button-bg);
+    color: var(--button-text);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+  
+  .input-section button:hover {
+    background-color: #0056b3;
+  }
+  
+  /* Response-Section */
+  .response-section {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+  
+  .response-box, .consensus-box {
+    flex: 1;
+    min-width: 280px;
+    padding: 10px 15px;
+    background: var(--response-bg);
+    border-radius: 8px;
+    box-shadow: var(--box-shadow);
+    transition: background 0.3s, box-shadow 0.3s, border 0.3s;
+    position: relative;
+  }
+  
+  /* Roter Rahmen mit verstärkter Schattierung bei Ausschluss */
+  .response-box.excluded {
+    border: 2px solid red;
+    box-shadow: 0 0 10px rgba(255, 0, 0, 0.7);
+  }
+  
+  /* Grüne Umrandung bei Best-Auswahl */
+  .response-box.best {
+    border: 2px solid green;
+  }
+  
+  /* Header & Control Icons */
+  .response-box h2 {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 5px 0 0 0;
+    padding: 0;
+    font-size: 1em;
+  }
+  
+  .response-box .title {
+    font-weight: 700;
+  }
+  
+  .control-icons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  /* Best-Button & Ausschluss-Icon */
+  /* Beide Icons sind immer sichtbar in Grau (#888) */
+  .best-btn, .exclude-btn {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    text-align: center;
+    line-height: 20px;
+    border: 2px solid #888;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background-color 0.3s, border-color 0.3s, opacity 0.3s;
+    color: #888;
+  }
+  
+  /* Bei Auswahl: */
+  .response-box.best .best-btn {
+    background-color: green;
+    border-color: green;
+    color: #fff;
+  }
+  .response-box.excluded .exclude-btn {
+    background-color: red;
+    border-color: red;
+    color: #fff;
+  }
+  
+  /* Gegenseitige Deaktivierung */
+  .response-box.best .exclude-btn,
+  .response-box.excluded .best-btn {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  
+  /* Collapse-Button und moderner Pfeil */
+  .collapse-btn {
+    background: var(--button-bg);
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.3s;
+  }
+  
+  .collapse-btn:hover {
+    background: #0056b3;
+  }
+  
+  .collapse-btn .arrow {
+    color: var(--button-text);
+    font-size: 0.9em;
+    transition: transform 0.3s ease;
+  }
+  
+  .collapse-btn .arrow.rotated {
+    transform: rotate(-90deg);
+  }
+  
+  /* Collapsible Content – jetzt ohne eigenen Hintergrund und Schatten,
+     sodass es sich farblich in die Box einfügt */
+  .collapsible-content {
+    max-height: 1000px;
+    opacity: 1;
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+    padding: 8px;
+    background-color: transparent;
+    border-radius: 4px;
+    margin-top: 5px;
+    font-size: 0.9em;
+  }
+  
+  .collapsible-content.collapsed {
+    max-height: 0;
+    opacity: 0;
+    padding: 0 8px;
+  }
+  
+  /* Konsens-Section */
+  .consensus-section {
+    text-align: center;
+    margin-bottom: 10px;
+  }
+  
+  .consensus-section button {
+    padding: 10px 16px;
+    font-size: 1em;
+    background-color: var(--button-bg);
+    color: var(--button-text);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+  
+  .consensus-section button:hover {
+    background-color: #0056b3;
+  }
+  
+  /* Mode-Switch Styling */
+  .mode-switch {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+  }
+  
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+  }
+  
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: 0.4s;
+    border-radius: 24px;
+  }
+  
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.4s;
+    border-radius: 50%;
+  }
+  
+  input:checked + .slider {
+    background-color: #2196F3;
+  }
+  
+  input:checked + .slider:before {
+    transform: translateX(26px);
+  }
+
+/* Konsens-Bereich – Wrapper, relativ positioniert */
+.consensus-wrapper {
+    position: relative;
+    width: 100%;
+    margin-bottom: 15px;
+  }
+  
+  /* Dropdown-Container – klein und rechts oben positioniert */
+  .consensus-dropdown-container {
+    position: absolute;
+    right: 0;
+    top: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.9em;  /* etwas kleiner als Standard */
+  }
+  
+  /* Konsens‑Modell Label – beibehalten */
+  .consensus-label {
+    color: var(--text-color);
+  }
+  
+  /* Gestylter Dropdown – an Buttons angelehnt */
+  .select-wrapper {
+    position: relative;
+    display: inline-block;
+    width: auto;
+  }
+  
+  .select-wrapper select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-color: var(--button-bg);
+    color: var(--button-text);
+    border: none;
+    border-radius: 4px;
+    padding: 8px 32px 8px 8px;  /* weniger Padding, damit er kleiner wirkt */
+    font-size: 0.9em;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+  
+  .select-wrapper select:focus {
+    outline: none;
+    border-color: var(--button-bg);
+  }
+  
+  /* Custom-Pfeil im Dropdown */
+  .select-wrapper::after {
+    content: '▼';
+    font-size: 0.8em;
+    color: var(--button-text);
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+  
+  /* Button-Container – zentriert */
+  .consensus-button-container {
+    text-align: center;
+    margin-top: 30px; /* Damit der Button nicht von der Dropdown-Zeile überlappt wird */
+  }

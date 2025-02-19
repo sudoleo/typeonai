@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Typeon AI</title>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- Mode-Switch in der oberen rechten Ecke -->
+  <div class="mode-switch">
+    <label class="switch">
+      <input type="checkbox" id="modeToggle">
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="container">
+    <h1>Typeon AI</h1>
+    <div class="input-section">
+      <input type="text" id="questionInput" placeholder="Geben Sie Ihre Frage ein">
+      <button onclick="sendQuestion()">Frage senden</button>
+    </div>
+<div class="response-section">
+    <!-- Antwort OpenAI -->
+    <div class="response-box" id="openaiResponse" data-model="OpenAI">
+        <h2>
+        <span class="title">Antwort von OpenAI</span>
+        <div class="control-icons">
+            <span class="best-btn" onclick="toggleBest('openaiResponse')" title="Als beste Antwort markieren">&#10003;</span>
+            <span class="exclude-btn" onclick="toggleExclude('openaiResponse')" title="Antwort ausschließen">&#10005;</span>
+            <button class="collapse-btn" onclick="toggleCollapse('openaiResponse')">
+            <span class="arrow">&#9660;</span>
+            </button>
+        </div>
+        </h2>
+        <p class="collapsible-content"></p>
+    </div>
+    <!-- Antwort Mistral -->
+    <div class="response-box" id="mistalResponse" data-model="Mistral">
+        <h2>
+        <span class="title">Antwort von Mistral</span>
+        <div class="control-icons">
+            <span class="best-btn" onclick="toggleBest('mistalResponse')" title="Als beste Antwort markieren">&#10003;</span>
+            <span class="exclude-btn" onclick="toggleExclude('mistalResponse')" title="Antwort ausschließen">&#10005;</span>
+            <button class="collapse-btn" onclick="toggleCollapse('mistalResponse')">
+            <span class="arrow">&#9660;</span>
+            </button>
+        </div>
+        </h2>
+        <p class="collapsible-content"></p>
+    </div>
+    <!-- Antwort Anthropic Claude -->
+    <div class="response-box" id="claudeResponse" data-model="Anthropic Claude">
+        <h2>
+        <span class="title">Antwort von Anthropic Claude</span>
+        <div class="control-icons">
+            <span class="best-btn" onclick="toggleBest('claudeResponse')" title="Als beste Antwort markieren">&#10003;</span>
+            <span class="exclude-btn" onclick="toggleExclude('claudeResponse')" title="Antwort ausschließen">&#10005;</span>
+            <button class="collapse-btn" onclick="toggleCollapse('claudeResponse')">
+            <span class="arrow">&#9660;</span>
+            </button>
+        </div>
+        </h2>
+        <p class="collapsible-content"></p>
+    </div>
+    <!-- Antwort Google Gemini -->
+    <div class="response-box" id="geminiResponse" data-model="Google Gemini">
+        <h2>
+        <span class="title">Antwort von Google Gemini</span>
+        <div class="control-icons">
+            <span class="best-btn" onclick="toggleBest('geminiResponse')" title="Als beste Antwort markieren">&#10003;</span>
+            <span class="exclude-btn" onclick="toggleExclude('geminiResponse')" title="Antwort ausschließen">&#10005;</span>
+            <button class="collapse-btn" onclick="toggleCollapse('geminiResponse')">
+            <span class="arrow">&#9660;</span>
+            </button>
+        </div>
+        </h2>
+        <p class="collapsible-content"></p>
+    </div>
+    </div>
+      
+    <div class="consensus-section">
+        <div class="consensus-wrapper">
+          <!-- Dropdown-Container, rechts oben positioniert -->
+          <div class="consensus-dropdown-container">
+            <label for="consensusModelDropdown" class="consensus-label">Konsens‑Modell:</label>
+            <div class="select-wrapper">
+              <select id="consensusModelDropdown">
+                <option value="OpenAI">GPT‑4 (OpenAI)</option>
+                <option value="Mistral">Mistral</option>
+                <option value="Anthropic Claude">Anthropic Claude</option>
+                <option value="Google Gemini">Google Gemini</option>
+              </select>
+            </div>
+          </div>
+          <!-- Button-Container, zentriert -->
+          <div class="consensus-button-container">
+            <button onclick="getConsensus()">Konsens‑Antwort generieren</button>
+          </div>
+        </div>
+        <p class="consensus-spacing"></p>
+        <div class="consensus-box" id="consensusResponse">
+          <h2>Konsens‑Antwort</h2>
+          <p></p>
+        </div>
+      </div>
+      
+
+  <script>
+    // Dark/Light Mode Toggle
+    document.getElementById('modeToggle').addEventListener('change', function() {
+      document.body.classList.toggle('dark-mode', this.checked);
+    });
+
+    // Trigger sendQuestion() auch bei ENTER-Taste im Frage-Input
+    document.getElementById("questionInput").addEventListener("keydown", function(event) {
+    if (event.key === "Enter") {
+        sendQuestion();
+    }
+    });
+    
+    function toggleCollapse(responseId) {
+      const responseBox = document.getElementById(responseId);
+      const content = responseBox.querySelector(".collapsible-content");
+      const arrow = responseBox.querySelector(".collapse-btn .arrow");
+      content.classList.toggle("collapsed");
+      arrow.classList.toggle("rotated");
+    }
+
+    function toggleExclude(responseId) {
+      const box = document.getElementById(responseId);
+      // Falls das Modell bereits als best markiert ist, kann es nicht ausgeschlossen werden
+      if (box.classList.contains("best")) return;
+      box.classList.toggle("excluded");
+    }
+
+    async function sendQuestion() {
+      const question = document.getElementById("questionInput").value;
+      if (!question) {
+        alert("Bitte geben Sie eine Frage ein.");
+        return;
+      }
+      
+      // Bei Absenden wird in allen Boxen "Lädt..." gesetzt
+      document.querySelectorAll(".collapsible-content").forEach(el => {
+        el.innerText = "Lädt...";
+        el.classList.remove("collapsed");
+      });
+      document.getElementById("consensusResponse").querySelector("p").innerText = "";
+
+      try {
+        const [resOpenai, resMistal, resClaude, resGemini] = await Promise.all([
+          fetch(`/ask_openai?question=${encodeURIComponent(question)}`),
+          fetch(`/ask_mistral?question=${encodeURIComponent(question)}`),
+          fetch(`/ask_claude?question=${encodeURIComponent(question)}`),
+          fetch(`/ask_gemini?question=${encodeURIComponent(question)}`)
+        ]);
+
+        const dataOpenai = await resOpenai.json();
+        const dataMistal = await resMistal.json();
+        const dataClaude = await resClaude.json();
+        const dataGemini = await resGemini.json();
+
+        const openaiContent = document.getElementById("openaiResponse").querySelector(".collapsible-content");
+        const mistalContent = document.getElementById("mistalResponse").querySelector(".collapsible-content");
+        const claudeContent = document.getElementById("claudeResponse").querySelector(".collapsible-content");
+        const geminiContent = document.getElementById("geminiResponse").querySelector(".collapsible-content");
+
+        if (dataOpenai.response) {
+          openaiContent.innerText = dataOpenai.response;
+        }
+        if (dataMistal.response) {
+          mistalContent.innerText = dataMistal.response;
+        }
+        if (dataClaude.response) {
+          claudeContent.innerText = dataClaude.response;
+        }
+        if (dataGemini.response) {
+          geminiContent.innerText = dataGemini.response;
+        }
+      } catch (error) {
+        console.error("Error fetching AI responses:", error);
+      }
+    }
+
+    function toggleBest(responseId) {
+  const box = document.getElementById(responseId);
+  // Falls die Box bereits ausgeschlossen ist, kann sie nicht als beste markiert werden.
+  if (box.classList.contains("excluded")) return;
+  
+  // Wenn die Box bereits als "best" markiert ist, wird die Markierung entfernt (Toggle)
+  if (box.classList.contains("best")) {
+    box.classList.remove("best");
+  } else {
+    // Ansonsten werden alle Boxen von "best" befreit und diese Box wird als best markiert.
+    document.querySelectorAll(".response-box").forEach(b => b.classList.remove("best"));
+    box.classList.add("best");
+  }
+}
+
+function toggleExclude(responseId) {
+  const box = document.getElementById(responseId);
+  // Falls bereits als beste Antwort markiert, darf es nicht ausgeschlossen werden
+  if (box.classList.contains("best")) return;
+  box.classList.toggle("excluded");
+}
+
+async function getConsensus() {
+  const consensusDiv = document.getElementById("consensusResponse");
+  const question = document.getElementById("questionInput").value;
+  
+  const openaiBox = document.getElementById("openaiResponse");
+  const mistalBox = document.getElementById("mistalResponse");
+  const claudeBox = document.getElementById("claudeResponse");
+  const geminiBox = document.getElementById("geminiResponse");
+
+  const answer_openai = openaiBox.querySelector(".collapsible-content").innerText;
+  const answer_mistral = mistalBox.querySelector(".collapsible-content").innerText;
+  const answer_claude = claudeBox.querySelector(".collapsible-content").innerText;
+  const answer_gemini = geminiBox.querySelector(".collapsible-content").innerText;
+  
+  // Ermittele die als beste markierte Antwort (optional)
+  const bestBox = document.querySelector(".response-box.best");
+  let best_model = "";
+  if (bestBox) {
+    best_model = bestBox.getAttribute("data-model");
+  }
+  
+  // Konsens-Modell aus dem Dropdown auslesen
+  const consensus_model = document.getElementById("consensusModelDropdown").value;
+
+  const excludedModels = [];
+  if (openaiBox.classList.contains("excluded")) {
+    excludedModels.push(openaiBox.getAttribute("data-model"));
+  }
+  if (mistalBox.classList.contains("excluded")) {
+    excludedModels.push(mistralBox.getAttribute("data-model"));
+  }
+  if (claudeBox.classList.contains("excluded")) {
+    excludedModels.push(claudeBox.getAttribute("data-model"));
+  }
+  if (geminiBox.classList.contains("excluded")) {
+    excludedModels.push(geminiBox.getAttribute("data-model"));
+  }
+
+  if (!question || !answer_openai || !answer_mistral || !answer_claude || !answer_gemini || !consensus_model) {
+    alert("Bitte zuerst eine Frage senden, alle Antworten abrufen und das Konsens-Modell auswählen.");
+    return;
+  }
+
+  consensusDiv.querySelector("p").innerText = "Konsens wird berechnet...";
+
+  try {
+    const response = await fetch("/consensus", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        question: question,
+        answer_openai: answer_openai,
+        answer_mistral: answer_mistral,
+        answer_claude: answer_claude,
+        answer_gemini: answer_gemini,
+        best_model: best_model,
+        consensus_model: consensus_model,
+        excluded_models: excludedModels
+      })
+    });
+
+    const data = await response.json();
+    
+    if (response.ok) {
+      consensusDiv.querySelector("p").innerText = data.consensus_response;
+    } else {
+      consensusDiv.querySelector("p").innerText = "Fehler: " + data.detail;
+    }
+  } catch (error) {
+    console.error("Error fetching consensus:", error);
+    consensusDiv.querySelector("p").innerText = "Fehler bei der Konsens-Berechnung.";
+  }
+}
+
+  </script>
+</body>
+</html>

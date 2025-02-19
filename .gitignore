@@ -1,0 +1,4 @@
+# Ignoriere Umgebungsvariablen und sensible Daten
+.env
+__pycache__/
+*.log
