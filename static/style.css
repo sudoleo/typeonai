@@ -107,12 +107,6 @@
     position: relative;
   }
   
-  /* Roter Rahmen mit verstärkter Schattierung bei Ausschluss */
-  .response-box.excluded {
-    border: 2px solid red;
-    box-shadow: 0 0 10px rgba(255, 0, 0, 0.7);
-  }
-  
   /* Grüne Umrandung bei Best-Auswahl */
   .response-box.best {
     border: 2px solid green;
@@ -359,3 +353,110 @@
     text-align: center;
     margin-top: 30px; /* Damit der Button nicht von der Dropdown-Zeile überlappt wird */
   }
+
+
+/* Sidebar-Styling */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 200px;  /* kompakter Bereich */
+    height: 100%;
+    background: var(--container-bg);
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+    padding: 15px;
+    box-sizing: border-box;
+    z-index: 1000;
+    text-align: center;
+}
+
+.sidebar h2 {
+    font-size: 1.1em;
+    margin-bottom: 10px;
+}
+
+/* Toggle-Button für den API-Testbereich */
+#toggleApiTest {
+    margin-bottom: 10px;
+    font-size: 0.9em;
+    padding: 6px;
+    background-color: var(--button-bg);
+    color: var(--button-text);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 100%;
+}
+#toggleApiTest:hover {
+    background-color: #0056b3;
+}
+
+/* API-Testbereich in der Sidebar (initial ausgeblendet) */
+.api-test-area {
+    margin: 0 auto;
+    padding: 0 10px; /* Abstand zu beiden Seiten */
+    display: none;   /* Anfangs ausgeblendet */
+}
+
+/* Gruppe für jedes API Key-Feld */
+.api-key-group {
+    margin-bottom: 10px;
+    text-align: left; /* Labels linksbündig */
+}
+
+.api-key-group label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.9em;
+}
+
+.api-key-group input {
+    width: 100%;
+    padding: 6px;
+    margin-bottom: 4px;
+    border: 1px solid var(--input-border);
+    border-radius: 4px;
+    background-color: var(--input-bg);
+    color: var(--text-color);
+    font-size: 0.9em;
+}
+
+/* Feedback-Span: Abstand hinter dem Labeltext */
+.feedback {
+    font-size: 1.1em;
+    font-weight: bold;
+    margin-left: 5px;
+}
+
+/* Button im API-Testbereich */
+.api-test-area button {
+    padding: 8px;
+    width: 100%;
+    background-color: var(--button-bg);
+    color: var(--button-text);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    margin-top: 10px;
+}
+.api-test-area button:hover {
+    background-color: #0056b3;
+}
+
+/* Wrapper für den Hauptinhalt – zentriert neben der Sidebar */
+.main-wrapper {
+    margin-left: 220px; /* Platz für die Sidebar */
+    display: flex;
+    justify-content: center;
+    padding-top: 20px; /* optionaler Abstand nach oben */
+}
+
+.container {
+    width: 80%;
+    max-width: 900px;
+    background: var(--container-bg);
+    padding: 20px 30px;
+    border-radius: 8px;
+    box-shadow: var(--box-shadow);
+}

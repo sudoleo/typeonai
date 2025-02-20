@@ -8,6 +8,31 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  <!-- Sidebar für API Keys -->
+  <div class="sidebar">
+    <h2>API Keys</h2>
+    <button id="toggleApiTest" onclick="toggleApiTest()">API Test ein-/ausklappen</button>
+    <div id="apiTestArea" class="api-test-area">
+      <div class="api-key-group">
+        <label for="openaiKey">OpenAI API Key <span id="openaiFeedback" class="feedback"></span></label>
+        <input type="password" id="openaiKey" placeholder="Dein OpenAI Key">
+      </div>
+      <div class="api-key-group">
+        <label for="mistralKey">Mistral API Key <span id="mistralFeedback" class="feedback"></span></label>
+        <input type="password" id="mistralKey" placeholder="Dein Mistral Key">
+      </div>
+      <div class="api-key-group">
+        <label for="anthropicKey">Anthropic API Key <span id="anthropicFeedback" class="feedback"></span></label>
+        <input type="password" id="anthropicKey" placeholder="Dein Anthropic Key">
+      </div>
+      <div class="api-key-group">
+        <label for="geminiKey">Google API Key <span id="geminiFeedback" class="feedback"></span></label>
+        <input type="password" id="geminiKey" placeholder="Dein Gemini Key">
+      </div>
+      <button onclick="testAllKeys()">Alle APIs testen</button>
+    </div>
+  </div>
+
   <!-- Mode-Switch in der oberen rechten Ecke -->
   <div class="mode-switch">
     <label class="switch">
@@ -21,7 +46,7 @@
     <div class="input-section">
       <input type="text" id="questionInput" placeholder="Geben Sie Ihre Frage ein">
       <button onclick="sendQuestion()">Frage senden</button>
-    </div>
+  </div>
 <div class="response-section">
     <!-- Antwort OpenAI -->
     <div class="response-box" id="openaiResponse" data-model="OpenAI">
@@ -79,7 +104,7 @@
         </h2>
         <p class="collapsible-content"></p>
     </div>
-    </div>
+  </div>
       
     <div class="consensus-section">
         <div class="consensus-wrapper">
@@ -88,10 +113,10 @@
             <label for="consensusModelDropdown" class="consensus-label">Konsens‑Modell:</label>
             <div class="select-wrapper">
               <select id="consensusModelDropdown">
-                <option value="OpenAI">GPT‑4 (OpenAI)</option>
-                <option value="Mistral">Mistral</option>
-                <option value="Anthropic Claude">Anthropic Claude</option>
-                <option value="Google Gemini">Google Gemini</option>
+                <option value="Anthropic Claude">claude-3-5-sonnet-20241022</option>
+                <option value="Mistral">mistral-large-latest</option>
+                <option value="OpenAI">GPT‑4</option>
+                <option value="Google Gemini">gemini-pro</option>
               </select>
             </div>
           </div>
@@ -283,6 +308,92 @@ async function getConsensus() {
   }
 }
 
-  </script>
+    // Beim Laden gespeicherte API Keys in die Felder schreiben
+    document.addEventListener("DOMContentLoaded", function() {
+      const storedOpenai = localStorage.getItem("openaiKey");
+      if (storedOpenai) {
+        document.getElementById("openaiKey").value = storedOpenai;
+      }
+      const storedMistral = localStorage.getItem("mistralKey");
+      if (storedMistral) {
+        document.getElementById("mistralKey").value = storedMistral;
+      }
+      const storedAnthropic = localStorage.getItem("anthropicKey");
+      if (storedAnthropic) {
+        document.getElementById("anthropicKey").value = storedAnthropic;
+      }
+      const storedGemini = localStorage.getItem("geminiKey");
+      if (storedGemini) {
+        document.getElementById("geminiKey").value = storedGemini;
+      }
+    });
+
+    // Umschalten der Sichtbarkeit des API-Testbereichs
+    function toggleApiTest() {
+      const apiTestArea = document.getElementById("apiTestArea");
+      // Falls display leer ist (nicht gesetzt) oder "none", dann anzeigen
+      if (apiTestArea.style.display === "none" || apiTestArea.style.display === "") {
+        apiTestArea.style.display = "block";
+      } else {
+        apiTestArea.style.display = "none";
+      }
+    }
+
+    // Alle API Keys testen und Feedback aktualisieren
+    async function testAllKeys() {
+      const openaiKey = document.getElementById("openaiKey").value;
+      const mistralKey = document.getElementById("mistralKey").value;
+      const anthropicKey = document.getElementById("anthropicKey").value;
+      const geminiKey = document.getElementById("geminiKey").value;
+      
+      // Keys im Browser speichern (localStorage)
+      localStorage.setItem("openaiKey", openaiKey);
+      localStorage.setItem("mistralKey", mistralKey);
+      localStorage.setItem("anthropicKey", anthropicKey);
+      localStorage.setItem("geminiKey", geminiKey);
+      
+      try {
+        const response = await fetch("/check_keys", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            openai_key: openaiKey,
+            mistral_key: mistralKey,
+            anthropic_key: anthropicKey,
+            gemini_key: geminiKey
+          })
+        });
+        const data = await response.json();
+        
+        // Ergebnisse auslesen und Feedback-Icons aktualisieren
+        const openaiResult = data.results["OpenAI"];
+        const mistralResult = data.results["Mistral"];
+        const anthropicResult = data.results["Anthropic Claude"];
+        const geminiResult = data.results["Google Gemini"];
+        
+        const openaiFeedback = document.getElementById("openaiFeedback");
+        const mistralFeedback = document.getElementById("mistralFeedback");
+        const anthropicFeedback = document.getElementById("anthropicFeedback");
+        const geminiFeedback = document.getElementById("geminiFeedback");
+        
+        openaiFeedback.innerHTML = openaiResult === "valid" ? "&#10003;" : "&#10007;";
+        openaiFeedback.style.color = openaiResult === "valid" ? "green" : "red";
+        
+        mistralFeedback.innerHTML = mistralResult === "valid" ? "&#10003;" : "&#10007;";
+        mistralFeedback.style.color = mistralResult === "valid" ? "green" : "red";
+        
+        anthropicFeedback.innerHTML = anthropicResult === "valid" ? "&#10003;" : "&#10007;";
+        anthropicFeedback.style.color = anthropicResult === "valid" ? "green" : "red";
+        
+        geminiFeedback.innerHTML = geminiResult === "valid" ? "&#10003;" : "&#10007;";
+        geminiFeedback.style.color = geminiResult === "valid" ? "green" : "red";
+        
+      } catch (error) {
+        console.error("Fehler beim Testen der API Keys:", error);
+        alert("Fehler beim Testen der API Keys.");
+      }
+    }
+
+</script>
 </body>
 </html>

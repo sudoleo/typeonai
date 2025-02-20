@@ -34,7 +34,7 @@ def query_openai(question: str) -> str:
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "Bitte antworte so kurz und präzise wie möglich."},
+                {"role": "system", "content": ""},
                 {"role": "user", "content": question}
             ],
             max_tokens=500
@@ -51,7 +51,7 @@ def query_mistral(question: str) -> str:
         response = client.chat.complete(
             model=model,
             messages=[
-                {"role": "system", "content": "Bitte antworte so kurz und präzise wie möglich."},
+                {"role": "system", "content": ""},
                 {"role": "user", "content": question}
             ],
             max_tokens=500
@@ -72,7 +72,7 @@ def query_claude(question: str) -> str:
         payload = {
             "model": "claude-3-5-sonnet-20241022",  # ggf. anpassen
             "max_tokens": 500,
-            "system": "Bitte fasse dich so kurz wie möglich.",
+            "system": "",
             "messages": [{"role": "user", "content": question}]
         }
         response = requests.post(url, json=payload, headers=headers)
@@ -248,3 +248,23 @@ async def consensus(data: dict):
         raise HTTPException(status_code=400, detail="Die als beste markierte Antwort darf nicht ausgeschlossen werden.")
     consensus_answer = query_consensus(question, answer_openai, answer_mistral, answer_claude, answer_gemini, best_model, excluded_models, consensus_model)
     return {"consensus_response": consensus_answer}
+
+def is_valid(key):
+    # Dummy-Prüfung: Key gilt als valide, wenn er vorhanden ist und mehr als 10 Zeichen hat.
+    return key is not None and len(key) > 10
+
+@app.post("/check_keys")
+async def check_keys(data: dict):
+    openai_key = data.get("openai_key")
+    mistral_key = data.get("mistral_key")
+    anthropic_key = data.get("anthropic_key")
+    gemini_key = data.get("gemini_key")
+    
+    results = {
+        "OpenAI": "valid" if is_valid(openai_key) else "invalid",
+        "Mistral": "valid" if is_valid(mistral_key) else "invalid",
+        "Anthropic Claude": "valid" if is_valid(anthropic_key) else "invalid",
+        "Google Gemini": "valid" if is_valid(gemini_key) else "invalid"
+    }
+    
+    return {"results": results}
