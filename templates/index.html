@@ -10,6 +10,11 @@
 <body>
   <!-- Sidebar für API Keys -->
   <div class="sidebar">
+    <!-- Überschrift innerhalb der Sidebar -->
+    <div class="sidebar-title">
+      <h1>Typeon AI</h1>
+      <hr class="sidebar-title-separator">
+    </div>
     <div class="sidebar-header">
       <h2>API Keys</h2>
       <button id="toggleApiTest" onclick="toggleApiTest()" class="collapse-btn">
@@ -38,6 +43,31 @@
         <span id="apiSpinner" class="spinner" style="display: none;"></span>
       </button>
     </div>
+
+    <!-- Trennstrich zwischen API Keys und Modelle -->
+    <div class="sidebar-separator"></div>
+
+    <!-- Verwendete Modelle (einklappbar) -->
+    <div class="sidebar-header model-header">
+      <h2>Verwendete Modelle</h2>
+      <button id="toggleModelSelection" onclick="toggleModelSelection()" class="collapse-btn">
+        <span class="arrow">&#9660;</span>
+      </button>
+    </div>
+    <div id="modelSelectionArea" class="model-selection">
+      <label for="selectOpenAI">
+        <input type="checkbox" id="selectOpenAI" checked> OpenAI
+      </label>
+      <label for="selectMistral">
+        <input type="checkbox" id="selectMistral" checked> Mistral
+      </label>
+      <label for="selectClaude">
+        <input type="checkbox" id="selectClaude" checked> Anthropic Claude
+      </label>
+      <label for="selectGemini">
+        <input type="checkbox" id="selectGemini" checked> Google Gemini
+      </label>
+    </div>
   </div>
 
   <!-- Mode-Switch in der oberen rechten Ecke -->
@@ -49,7 +79,6 @@
   </div>
 
   <div class="container">
-    <h1>Typeon AI</h1>
     <div class="input-section">
       <div class="chat-input-container">
         <input type="text" id="questionInput" placeholder="Geben Sie Ihre Frage ein" />
@@ -187,79 +216,84 @@
       box.classList.toggle("excluded");
     }
 
-  async function sendQuestion() {
-    const question = document.getElementById("questionInput").value;
-    if (!question) {
-      alert("Bitte geben Sie eine Frage ein.");
-      return;
-    }
-    
-    // Zeige Spinner in allen Antwort-Boxen an
-    const spinnerHTML = '<span class="spinner"></span>';
-    document.querySelectorAll(".collapsible-content").forEach(el => {
-      el.innerHTML = spinnerHTML;
-      el.classList.remove("collapsed");
-    });
-
-    // Spinner im Konsensbereich nur anzeigen, wenn Auto-Konsens aktiviert ist
-    if (document.getElementById("autoConsensusToggle").checked) {
-      document.getElementById("consensusResponse").querySelector("p").innerHTML = spinnerHTML;
-    }
-    
-    // Hole API Keys aus dem localStorage
-    const openaiKey = localStorage.getItem("openaiKey") || "";
-    const mistralKey = localStorage.getItem("mistralKey") || "";
-    const anthropicKey = localStorage.getItem("anthropicKey") || "";
-    const geminiKey = localStorage.getItem("geminiKey") || "";
-    
-    // Variable, um zu zählen, wie viele Antworten bereits angekommen sind
-    let responsesReceived = 0;
-    const totalResponses = 4;
-    
-    // Funktion, um nachzuschauen, ob alle Antworten da sind und ggf. den Auto-Konsens zu triggern
-    function checkAllResponses() {
-      responsesReceived++;
-      if (responsesReceived === totalResponses && document.getElementById("autoConsensusToggle").checked) {
+    async function sendQuestion() {
+      const question = document.getElementById("questionInput").value;
+      if (!question) {
+        alert("Bitte geben Sie eine Frage ein.");
+        return;
+      }
+      
+      const spinnerHTML = '<span class="spinner"></span>';
+      // Setze Spinner für alle Antwort-Boxen (unabhängig von der Modellauswahl) oder leere sie:
+      document.querySelectorAll(".collapsible-content").forEach(el => {
+        el.innerHTML = spinnerHTML;
+        el.classList.remove("collapsed");
+      });
+      if (document.getElementById("autoConsensusToggle").checked) {
+        document.getElementById("consensusResponse").querySelector("p").innerHTML = spinnerHTML;
+      }
+      
+      // Hole die API Keys aus localStorage
+      const openaiKey = localStorage.getItem("openaiKey") || "";
+      const mistralKey = localStorage.getItem("mistralKey") || "";
+      const anthropicKey = localStorage.getItem("anthropicKey") || "";
+      const geminiKey = localStorage.getItem("geminiKey") || "";
+      
+      // Für jedes Modell prüfen, ob es aktiviert ist:
+      
+      // OpenAI
+      if (document.getElementById("selectOpenAI").checked) {
+        fetch(`/ask_openai?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(openaiKey)}`)
+          .then(response => response.json())
+          .then(data => {
+            document.getElementById("openaiResponse").querySelector(".collapsible-content").innerText = data.response;
+          })
+          .catch(error => console.error("Fehler bei OpenAI:", error));
+      } else {
+        document.getElementById("openaiResponse").querySelector(".collapsible-content").innerText = "OpenAI deaktiviert";
+      }
+      
+      // Mistral
+      if (document.getElementById("selectMistral").checked) {
+        fetch(`/ask_mistral?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(mistralKey)}`)
+          .then(response => response.json())
+          .then(data => {
+            document.getElementById("mistalResponse").querySelector(".collapsible-content").innerText = data.response;
+          })
+          .catch(error => console.error("Fehler bei Mistral:", error));
+      } else {
+        document.getElementById("mistalResponse").querySelector(".collapsible-content").innerText = "Mistral deaktiviert";
+      }
+      
+      // Anthropic Claude
+      if (document.getElementById("selectClaude").checked) {
+        fetch(`/ask_claude?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(anthropicKey)}`)
+          .then(response => response.json())
+          .then(data => {
+            document.getElementById("claudeResponse").querySelector(".collapsible-content").innerText = data.response;
+          })
+          .catch(error => console.error("Fehler bei Anthropic Claude:", error));
+      } else {
+        document.getElementById("claudeResponse").querySelector(".collapsible-content").innerText = "Anthropic Claude deaktiviert";
+      }
+      
+      // Google Gemini
+      if (document.getElementById("selectGemini").checked) {
+        fetch(`/ask_gemini?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(geminiKey)}`)
+          .then(response => response.json())
+          .then(data => {
+            document.getElementById("geminiResponse").querySelector(".collapsible-content").innerText = data.response;
+          })
+          .catch(error => console.error("Fehler bei Google Gemini:", error));
+      } else {
+        document.getElementById("geminiResponse").querySelector(".collapsible-content").innerText = "Google Gemini deaktiviert";
+      }
+      
+      // Falls der Auto-Konsens-Switch aktiviert ist, direkt Konsens generieren:
+      if (document.getElementById("autoConsensusToggle").checked) {
         getConsensus();
       }
     }
-    
-    // Anfrage an OpenAI
-    fetch(`/ask_openai?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(openaiKey)}`)
-      .then(response => response.json())
-      .then(data => {
-        document.getElementById("openaiResponse").querySelector(".collapsible-content").innerText = data.response;
-        checkAllResponses();
-      })
-      .catch(error => console.error("Fehler bei OpenAI:", error));
-    
-    // Anfrage an Mistral
-    fetch(`/ask_mistral?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(mistralKey)}`)
-      .then(response => response.json())
-      .then(data => {
-        document.getElementById("mistalResponse").querySelector(".collapsible-content").innerText = data.response;
-        checkAllResponses();
-      })
-      .catch(error => console.error("Fehler bei Mistral:", error));
-    
-    // Anfrage an Anthropic Claude
-    fetch(`/ask_claude?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(anthropicKey)}`)
-      .then(response => response.json())
-      .then(data => {
-        document.getElementById("claudeResponse").querySelector(".collapsible-content").innerText = data.response;
-        checkAllResponses();
-      })
-      .catch(error => console.error("Fehler bei Anthropic Claude:", error));
-    
-    // Anfrage an Google Gemini
-    fetch(`/ask_gemini?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(geminiKey)}`)
-      .then(response => response.json())
-      .then(data => {
-        document.getElementById("geminiResponse").querySelector(".collapsible-content").innerText = data.response;
-        checkAllResponses();
-      })
-      .catch(error => console.error("Fehler bei Google Gemini:", error));
-  }
 
 
   function toggleBest(responseId) {
@@ -423,18 +457,31 @@
   });
 
     // Umschalten der Sichtbarkeit des API-Testbereichs
-function toggleApiTest() {
-  const apiTestArea = document.getElementById("apiTestArea");
-  const toggleButton = document.getElementById("toggleApiTest");
-  const arrow = toggleButton.querySelector(".arrow");
-  if (apiTestArea.style.display === "none" || apiTestArea.style.display === "") {
-    apiTestArea.style.display = "block";
-    arrow.classList.add("rotated"); // Du kannst in deiner CSS .rotated so definieren, dass der Pfeil gedreht ist
-  } else {
-    apiTestArea.style.display = "none";
-    arrow.classList.remove("rotated");
+  function toggleApiTest() {
+    const area = document.getElementById("apiTestArea");
+    const button = document.getElementById("toggleApiTest");
+    const arrow = button.querySelector(".arrow");
+    if (area.style.display === "none" || area.style.display === "") {
+      area.style.display = "block";
+      arrow.classList.add("rotated");
+    } else {
+      area.style.display = "none";
+      arrow.classList.remove("rotated");
+    }
   }
-}
+
+  function toggleModelSelection() {
+    const area = document.getElementById("modelSelectionArea");
+    const button = document.getElementById("toggleModelSelection");
+    const arrow = button.querySelector(".arrow");
+    if (area.style.display === "none" || area.style.display === "") {
+      area.style.display = "block";
+      arrow.classList.add("rotated");
+    } else {
+      area.style.display = "none";
+      arrow.classList.remove("rotated");
+    }
+  }
 
     // Alle API Keys testen und Feedback aktualisieren
 async function testAllKeys() {
@@ -509,7 +556,27 @@ async function testAllKeys() {
   }
 }
 
+function toggleModel(responseId, isChecked) {
+  const box = document.getElementById(responseId);
+  if (!isChecked) {
+    box.classList.add("excluded");
+  } else {
+    box.classList.remove("excluded");
+  }
+}
 
+document.getElementById("selectOpenAI").addEventListener("change", function() {
+  toggleModel("openaiResponse", this.checked);
+});
+document.getElementById("selectMistral").addEventListener("change", function() {
+  toggleModel("mistalResponse", this.checked);
+});
+document.getElementById("selectClaude").addEventListener("change", function() {
+  toggleModel("claudeResponse", this.checked);
+});
+document.getElementById("selectGemini").addEventListener("change", function() {
+  toggleModel("geminiResponse", this.checked);
+});
 
 </script>
 </body>

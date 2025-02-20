@@ -235,18 +235,39 @@ async def consensus(data: dict):
     best_model = data.get("best_model", "")
     consensus_model = data.get("consensus_model")
     excluded_models = data.get("excluded_models", [])
-    # Erwarte, dass auch die API Keys für alle Modelle übergeben werden:
+    # API Keys für alle Modelle (aber wir validieren nur die nicht ausgeschlossenen)
     api_keys = {
         "OpenAI": data.get("openai_key"),
         "Mistral": data.get("mistral_key"),
         "Anthropic Claude": data.get("anthropic_key"),
         "Google Gemini": data.get("gemini_key")
     }
-    if not all([question, answer_openai, answer_mistral, answer_claude, answer_gemini, consensus_model,
-                api_keys.get("OpenAI"), api_keys.get("Mistral"), api_keys.get("Anthropic Claude"), api_keys.get("Google Gemini")]):
-        raise HTTPException(status_code=400, detail="Fehlende Parameter")
+    
+    missing = []
+    if not question:
+        missing.append("question")
+    if not consensus_model:
+        missing.append("consensus_model")
+    
+    if "OpenAI" not in excluded_models:
+        if not answer_openai or not api_keys.get("OpenAI"):
+            missing.append("OpenAI")
+    if "Mistral" not in excluded_models:
+        if not answer_mistral or not api_keys.get("Mistral"):
+            missing.append("Mistral")
+    if "Anthropic Claude" not in excluded_models:
+        if not answer_claude or not api_keys.get("Anthropic Claude"):
+            missing.append("Anthropic Claude")
+    if "Google Gemini" not in excluded_models:
+        if not answer_gemini or not api_keys.get("Google Gemini"):
+            missing.append("Google Gemini")
+    
+    if missing:
+        raise HTTPException(status_code=400, detail="Fehlende Parameter: " + ", ".join(missing))
+    
     if best_model and best_model in excluded_models:
         raise HTTPException(status_code=400, detail="Die als beste markierte Antwort darf nicht ausgeschlossen werden.")
+    
     consensus_answer = query_consensus(
         question, answer_openai, answer_mistral, answer_claude, answer_gemini,
         best_model, excluded_models, consensus_model, api_keys
