@@ -9,9 +9,9 @@
     --button-text: #fff;
     --response-bg: #e9e9e9;
     --box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-  }
+}
   
-  .dark-mode {
+.dark-mode {
     --bg-color: #121212;
     --container-bg: #1e1e1e;
     --text-color: #e0e0e0;
@@ -21,18 +21,18 @@
     --button-text: #000;
     --response-bg: #2c2c2c;
     --box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-  }
+}
   
-  body {
+body {
     font-family: 'Roboto', Arial, sans-serif;
     background-color: var(--bg-color);
     margin: 0;
     padding: 20px;
     color: var(--text-color);
-  }
+}
   
-  /* Container */
-  .container {
+/* Container */
+.container {
     max-width: 900px;
     margin: 0 auto;
     background: var(--container-bg);
@@ -40,22 +40,65 @@
     border-radius: 8px;
     box-shadow: var(--box-shadow);
     position: relative;
-  }
+}
   
-  /* Überschriften */
-  h1, h2 {
+/* Überschriften */
+h1, h2 {
     text-align: center;
     margin-bottom: 5px;
     padding: 0;
-  }
+}
   
-  /* Input-Section */
-  .input-section {
+/* Input-Section */
+.input-section {
     text-align: center;
     margin-bottom: 20px;
-  }
+}
+
+/* Container für das Eingabefeld und den Senden-Button */
+.chat-input-container {
+  display: flex;
+  align-items: center;
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  padding: 10px;
+  margin: 20px auto; /* optional: Abstand nach oben und zentriert */
+  max-width: 600px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Das Textfeld */
+.chat-input-container input[type="text"] {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 1em;
+  background: transparent;
+  color: var(--text-color);
+  padding: 0 10px;
+}
+
+/* Der Senden-Button mit Pfeil-Icon */
+.chat-input-container button {
+  background-color: var(--button-bg);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.chat-input-container button:hover {
+  background-color: #0056b3;
+}
+
   
-  .input-section input[type="text"] {
+.input-section input[type="text"] {
     width: 60%;
     padding: 10px 12px;
     font-size: 1em;
@@ -65,14 +108,14 @@
     background-color: var(--input-bg);
     color: var(--text-color);
     transition: border 0.3s;
-  }
+}
   
-  .input-section input[type="text"]:focus {
+.input-section input[type="text"]:focus {
     outline: none;
     border-color: var(--button-bg);
-  }
+}
   
-  .input-section button {
+.input-section button {
     padding: 10px 16px;
     font-size: 1em;
     background-color: var(--button-bg);
@@ -81,22 +124,22 @@
     border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.3s;
-  }
+}
   
-  .input-section button:hover {
+.input-section button:hover {
     background-color: #0056b3;
-  }
+}
   
-  /* Response-Section */
-  .response-section {
+/* Response-Section */
+.response-section {
     display: flex;
     gap: 15px;
     margin-bottom: 20px;
     flex-wrap: wrap;
     justify-content: space-between;
-  }
+}
   
-  .response-box, .consensus-box {
+.response-box, .consensus-box {
     flex: 1;
     min-width: 280px;
     padding: 10px 15px;
@@ -105,36 +148,36 @@
     box-shadow: var(--box-shadow);
     transition: background 0.3s, box-shadow 0.3s, border 0.3s;
     position: relative;
-  }
+}
   
-  /* Grüne Umrandung bei Best-Auswahl */
-  .response-box.best {
+/* Grüne Umrandung bei Best-Auswahl */
+.response-box.best {
     border: 2px solid green;
-  }
+}
   
-  /* Header & Control Icons */
-  .response-box h2 {
+/* Header & Control Icons */
+.response-box h2 {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin: 5px 0 0 0;
     padding: 0;
     font-size: 1em;
-  }
+}
   
-  .response-box .title {
+.response-box .title {
     font-weight: 700;
-  }
+}
   
-  .control-icons {
+.control-icons {
     display: flex;
     align-items: center;
     gap: 8px;
-  }
+}
   
-  /* Best-Button & Ausschluss-Icon */
-  /* Beide Icons sind immer sichtbar in Grau (#888) */
-  .best-btn, .exclude-btn {
+/* Best-Button & Ausschluss-Icon */
+/* Beide Icons sind immer sichtbar in Grau (#888) */
+.best-btn, .exclude-btn {
     display: inline-block;
     width: 20px;
     height: 20px;
@@ -145,29 +188,29 @@
     cursor: pointer;
     transition: background-color 0.3s, border-color 0.3s, opacity 0.3s;
     color: #888;
-  }
+}
   
-  /* Bei Auswahl: */
-  .response-box.best .best-btn {
+/* Bei Auswahl: */
+.response-box.best .best-btn {
     background-color: green;
     border-color: green;
     color: #fff;
-  }
-  .response-box.excluded .exclude-btn {
+}
+.response-box.excluded .exclude-btn {
     background-color: red;
     border-color: red;
     color: #fff;
-  }
+}
   
-  /* Gegenseitige Deaktivierung */
-  .response-box.best .exclude-btn,
-  .response-box.excluded .best-btn {
+/* Gegenseitige Deaktivierung */
+.response-box.best .exclude-btn,
+.response-box.excluded .best-btn {
     opacity: 0.5;
     pointer-events: none;
-  }
+}
   
-  /* Collapse-Button und moderner Pfeil */
-  .collapse-btn {
+/* Collapse-Button und moderner Pfeil */
+.collapse-btn {
     background: var(--button-bg);
     border: none;
     border-radius: 50%;
@@ -178,25 +221,31 @@
     justify-content: center;
     cursor: pointer;
     transition: background 0.3s;
-  }
+}
   
-  .collapse-btn:hover {
+.collapse-btn:hover {
     background: #0056b3;
-  }
+}
   
-  .collapse-btn .arrow {
+.collapse-btn .arrow {
     color: var(--button-text);
     font-size: 0.9em;
     transition: transform 0.3s ease;
-  }
+}
   
-  .collapse-btn .arrow.rotated {
+.collapse-btn .arrow.rotated {
     transform: rotate(-90deg);
-  }
+}
   
-  /* Collapsible Content – jetzt ohne eigenen Hintergrund und Schatten,
-     sodass es sich farblich in die Box einfügt */
-  .collapsible-content {
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+  
+/* Collapsible Content – jetzt ohne eigenen Hintergrund und Schatten,
+   sodass es sich farblich in die Box einfügt */
+.collapsible-content {
     max-height: 1000px;
     opacity: 1;
     overflow: hidden;
@@ -206,21 +255,21 @@
     border-radius: 4px;
     margin-top: 5px;
     font-size: 0.9em;
-  }
+}
   
-  .collapsible-content.collapsed {
+.collapsible-content.collapsed {
     max-height: 0;
     opacity: 0;
     padding: 0 8px;
-  }
+}
   
-  /* Konsens-Section */
-  .consensus-section {
+/* Konsens-Section */
+.consensus-section {
     text-align: center;
     margin-bottom: 10px;
-  }
+}
   
-  .consensus-section button {
+.consensus-section button {
     padding: 10px 16px;
     font-size: 1em;
     background-color: var(--button-bg);
@@ -229,33 +278,33 @@
     border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.3s;
-  }
+}
   
-  .consensus-section button:hover {
+.consensus-section button:hover {
     background-color: #0056b3;
-  }
+}
   
-  /* Mode-Switch Styling */
-  .mode-switch {
+/* Mode-Switch Styling */
+.mode-switch {
     position: absolute;
     top: 20px;
     right: 20px;
-  }
+}
   
-  .switch {
+.switch {
     position: relative;
     display: inline-block;
     width: 50px;
     height: 24px;
-  }
+}
   
-  .switch input {
+.switch input {
     opacity: 0;
     width: 0;
     height: 0;
-  }
+}
   
-  .slider {
+.slider {
     position: absolute;
     cursor: pointer;
     top: 0;
@@ -265,9 +314,9 @@
     background-color: #ccc;
     transition: 0.4s;
     border-radius: 24px;
-  }
+}
   
-  .slider:before {
+.slider:before {
     position: absolute;
     content: "";
     height: 18px;
@@ -277,67 +326,80 @@
     background-color: white;
     transition: 0.4s;
     border-radius: 50%;
-  }
+}
   
-  input:checked + .slider {
+input:checked + .slider {
     background-color: #2196F3;
-  }
+}
   
-  input:checked + .slider:before {
+input:checked + .slider:before {
     transform: translateX(26px);
-  }
-
-/* Konsens-Bereich – Wrapper, relativ positioniert */
-.consensus-wrapper {
-    position: relative;
-    width: 100%;
-    margin-bottom: 15px;
-  }
+}
   
-  /* Dropdown-Container – klein und rechts oben positioniert */
-  .consensus-dropdown-container {
-    position: absolute;
-    right: 0;
-    top: 0;
+/* Container für den Switch und den Text nebeneinander */
+.auto-consensus-toggle {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 16px; /* Abstand zum Button */
+}
+  
+/* Neue Regeln für die Konsens-Kontrolle:
+   - .consensus-controls: gesamter Container, verteilt in einer Zeile
+   - .auto-consensus: Linke Seite (Switch + Label)
+   - #consensusButton: Button in der Mitte
+   - .consensus-model: Dropdown auf der rechten Seite
+*/
+.consensus-controls {
     display: flex;
     align-items: center;
-    gap: 5px;
-    font-size: 0.9em;  /* etwas kleiner als Standard */
-  }
+    justify-content: space-between;
+    margin: 20px 0;
+}
   
-  /* Konsens‑Modell Label – beibehalten */
-  .consensus-label {
-    color: var(--text-color);
-  }
+.auto-consensus {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
   
-  /* Gestylter Dropdown – an Buttons angelehnt */
-  .select-wrapper {
-    position: relative;
-    display: inline-block;
-    width: auto;
-  }
-  
-  .select-wrapper select {
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
+#consensusButton {
+    padding: 10px 16px;
+    font-size: 1em;
     background-color: var(--button-bg);
     color: var(--button-text);
     border: none;
     border-radius: 4px;
-    padding: 8px 32px 8px 8px;  /* weniger Padding, damit er kleiner wirkt */
-    font-size: 0.9em;
     cursor: pointer;
     transition: background-color 0.3s;
-  }
+}
   
-  .select-wrapper select:focus {
+#consensusButton:hover {
+    background-color: #0056b3;
+}
+  
+.consensus-model {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+  
+.select-wrapper select {
+    padding: 8px 32px 8px 8px;
+    font-size: 0.9em;
+    background-color: var(--button-bg);
+    color: var(--button-text);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+  
+.select-wrapper select:focus {
     outline: none;
     border-color: var(--button-bg);
-  }
+}
   
-  /* Custom-Pfeil im Dropdown */
-  .select-wrapper::after {
+.select-wrapper::after {
     content: '▼';
     font-size: 0.8em;
     color: var(--button-text);
@@ -346,15 +408,8 @@
     right: 8px;
     transform: translateY(-50%);
     pointer-events: none;
-  }
+}
   
-  /* Button-Container – zentriert */
-  .consensus-button-container {
-    text-align: center;
-    margin-top: 30px; /* Damit der Button nicht von der Dropdown-Zeile überlappt wird */
-  }
-
-
 /* Sidebar-Styling */
 .sidebar {
     position: fixed;
@@ -377,16 +432,18 @@
 
 /* Toggle-Button für den API-Testbereich */
 #toggleApiTest {
-    margin-bottom: 10px;
-    font-size: 0.9em;
-    padding: 6px;
-    background-color: var(--button-bg);
-    color: var(--button-text);
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    width: 100%;
+  background: var(--button-bg);
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.3s;
 }
+
 #toggleApiTest:hover {
     background-color: #0056b3;
 }
@@ -459,4 +516,21 @@
     padding: 20px 30px;
     border-radius: 8px;
     box-shadow: var(--box-shadow);
+}
+
+/* Spinner */
+.spinner {
+  border: 2px solid #f3f3f3; /* Heller Grauton für den Hintergrund */
+  border-top: 2px solid grey; /* Grauer Farbton für den rotierenden Teil */
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  animation: spin 1s linear infinite;
+  display: inline-block;
+  margin-left: 5px; /* kleiner Abstand zum Button-Text */
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
