@@ -81,20 +81,21 @@
   <div class="container">
     <div class="input-section">
       <div class="chat-input-container">
-        <input type="text" id="questionInput" placeholder="Geben Sie Ihre Frage ein" />
-        <button id="sendButton" onclick="sendQuestion()">
-          <!-- SVG-Icon für einen Pfeil -->
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+        <textarea class="input-field" id="questionInput" placeholder="Geben Sie Ihre Frage ein"></textarea>
+        <button class="button" id="sendButton" onclick="sendQuestion()">
+          <!-- SVG-Icon für einen Pfeil, der nach unten zeigt -->
+          <svg class="input-icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
           </svg>
         </button>
       </div>
     </div>
+    
     <div class="response-section">
       <!-- Antwort OpenAI -->
       <div class="response-box" id="openaiResponse" data-model="OpenAI">
         <h2>
-          <span class="title">Antwort von OpenAI</span>
+          <span class="title">Antwort von GPT-4o</span>
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('openaiResponse')" title="Als beste Antwort markieren">&#10003;</span>
             <span class="exclude-btn" onclick="toggleExclude('openaiResponse')" title="Antwort ausschließen">&#10005;</span>
@@ -108,7 +109,7 @@
       <!-- Antwort Mistral -->
       <div class="response-box" id="mistalResponse" data-model="Mistral">
         <h2>
-          <span class="title">Antwort von Mistral</span>
+          <span class="title">Antwort von mistral-large-latest</span>
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('mistalResponse')" title="Als beste Antwort markieren">&#10003;</span>
             <span class="exclude-btn" onclick="toggleExclude('mistalResponse')" title="Antwort ausschließen">&#10005;</span>
@@ -122,7 +123,7 @@
       <!-- Antwort Anthropic Claude -->
       <div class="response-box" id="claudeResponse" data-model="Anthropic Claude">
         <h2>
-          <span class="title">Antwort von Anthropic Claude</span>
+          <span class="title">Antwort von claude-3-5-sonnet</span>
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('claudeResponse')" title="Als beste Antwort markieren">&#10003;</span>
             <span class="exclude-btn" onclick="toggleExclude('claudeResponse')" title="Antwort ausschließen">&#10005;</span>
@@ -136,7 +137,7 @@
       <!-- Antwort Google Gemini -->
       <div class="response-box" id="geminiResponse" data-model="Google Gemini">
         <h2>
-          <span class="title">Antwort von Google Gemini</span>
+          <span class="title">Antwort von gemini-pro</span>
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('geminiResponse')" title="Als beste Antwort markieren">&#10003;</span>
             <span class="exclude-btn" onclick="toggleExclude('geminiResponse')" title="Antwort ausschließen">&#10005;</span>
@@ -194,11 +195,11 @@
       localStorage.setItem('darkMode', isDark ? 'true' : 'false');
     });
 
-    // Trigger sendQuestion() auch bei ENTER-Taste im Frage-Input
     document.getElementById("questionInput").addEventListener("keydown", function(event) {
-    if (event.key === "Enter") {
-        sendQuestion();
-    }
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();  // Verhindert den Zeilenumbruch
+        sendQuestion();          // Absenden der Anfrage
+      }
     });
     
     function toggleCollapse(responseId) {
@@ -217,83 +218,111 @@
     }
 
     async function sendQuestion() {
-      const question = document.getElementById("questionInput").value;
-      if (!question) {
-        alert("Bitte geben Sie eine Frage ein.");
-        return;
-      }
-      
-      const spinnerHTML = '<span class="spinner"></span>';
-      // Setze Spinner für alle Antwort-Boxen (unabhängig von der Modellauswahl) oder leere sie:
-      document.querySelectorAll(".collapsible-content").forEach(el => {
-        el.innerHTML = spinnerHTML;
-        el.classList.remove("collapsed");
-      });
-      if (document.getElementById("autoConsensusToggle").checked) {
-        document.getElementById("consensusResponse").querySelector("p").innerHTML = spinnerHTML;
-      }
-      
-      // Hole die API Keys aus localStorage
-      const openaiKey = localStorage.getItem("openaiKey") || "";
-      const mistralKey = localStorage.getItem("mistralKey") || "";
-      const anthropicKey = localStorage.getItem("anthropicKey") || "";
-      const geminiKey = localStorage.getItem("geminiKey") || "";
-      
-      // Für jedes Modell prüfen, ob es aktiviert ist:
-      
-      // OpenAI
-      if (document.getElementById("selectOpenAI").checked) {
-        fetch(`/ask_openai?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(openaiKey)}`)
-          .then(response => response.json())
-          .then(data => {
-            document.getElementById("openaiResponse").querySelector(".collapsible-content").innerText = data.response;
-          })
-          .catch(error => console.error("Fehler bei OpenAI:", error));
-      } else {
-        document.getElementById("openaiResponse").querySelector(".collapsible-content").innerText = "OpenAI deaktiviert";
-      }
-      
-      // Mistral
-      if (document.getElementById("selectMistral").checked) {
-        fetch(`/ask_mistral?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(mistralKey)}`)
-          .then(response => response.json())
-          .then(data => {
-            document.getElementById("mistalResponse").querySelector(".collapsible-content").innerText = data.response;
-          })
-          .catch(error => console.error("Fehler bei Mistral:", error));
-      } else {
-        document.getElementById("mistalResponse").querySelector(".collapsible-content").innerText = "Mistral deaktiviert";
-      }
-      
-      // Anthropic Claude
-      if (document.getElementById("selectClaude").checked) {
-        fetch(`/ask_claude?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(anthropicKey)}`)
-          .then(response => response.json())
-          .then(data => {
-            document.getElementById("claudeResponse").querySelector(".collapsible-content").innerText = data.response;
-          })
-          .catch(error => console.error("Fehler bei Anthropic Claude:", error));
-      } else {
-        document.getElementById("claudeResponse").querySelector(".collapsible-content").innerText = "Anthropic Claude deaktiviert";
-      }
-      
-      // Google Gemini
-      if (document.getElementById("selectGemini").checked) {
-        fetch(`/ask_gemini?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(geminiKey)}`)
-          .then(response => response.json())
-          .then(data => {
-            document.getElementById("geminiResponse").querySelector(".collapsible-content").innerText = data.response;
-          })
-          .catch(error => console.error("Fehler bei Google Gemini:", error));
-      } else {
-        document.getElementById("geminiResponse").querySelector(".collapsible-content").innerText = "Google Gemini deaktiviert";
-      }
-      
-      // Falls der Auto-Konsens-Switch aktiviert ist, direkt Konsens generieren:
-      if (document.getElementById("autoConsensusToggle").checked) {
-        getConsensus();
-      }
+  const question = document.getElementById("questionInput").value;
+  if (!question) {
+    alert("Bitte geben Sie eine Frage ein.");
+    return;
+  }
+  
+  const spinnerHTML = '<span class="spinner"></span>';
+  
+  // Bestimme, welche Modelle aktiv sind
+  let activeModels = [];
+  if (document.getElementById("selectOpenAI").checked) activeModels.push("OpenAI");
+  if (document.getElementById("selectMistral").checked) activeModels.push("Mistral");
+  if (document.getElementById("selectClaude").checked) activeModels.push("Anthropic Claude");
+  if (document.getElementById("selectGemini").checked) activeModels.push("Google Gemini");
+  
+  // Setze für alle aktiven Modelle den Spinner in der jeweiligen Response-Box
+  if (activeModels.includes("OpenAI")) {
+    document.getElementById("openaiResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
+  }
+  if (activeModels.includes("Mistral")) {
+    document.getElementById("mistalResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
+  }
+  if (activeModels.includes("Anthropic Claude")) {
+    document.getElementById("claudeResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
+  }
+  if (activeModels.includes("Google Gemini")) {
+    document.getElementById("geminiResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
+  }
+  
+  // Wenn Auto Konsens aktiviert ist, auch im Konsens-Bereich Spinner anzeigen
+  if (document.getElementById("autoConsensusToggle").checked) {
+    document.getElementById("consensusResponse").querySelector("p").innerHTML = spinnerHTML;
+  } else {
+    document.getElementById("consensusResponse").querySelector("p").innerHTML = "";
+  }
+  
+  // Hole API Keys
+  const openaiKey = localStorage.getItem("openaiKey") || "";
+  const mistralKey = localStorage.getItem("mistralKey") || "";
+  const anthropicKey = localStorage.getItem("anthropicKey") || "";
+  const geminiKey = localStorage.getItem("geminiKey") || "";
+  
+  let responsesReceived = 0;
+  const totalActive = activeModels.length;
+  
+  function checkAllResponses() {
+    responsesReceived++;
+    if (responsesReceived === totalActive && document.getElementById("autoConsensusToggle").checked) {
+      getConsensus();
     }
+  }
+  
+  // Sende Anfrage nur an aktive Modelle:
+  if (activeModels.includes("OpenAI")) {
+    fetch(`/ask_openai?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(openaiKey)}`)
+      .then(response => response.json())
+      .then(data => {
+        document.getElementById("openaiResponse").querySelector(".collapsible-content").innerText = data.response;
+        checkAllResponses();
+      })
+      .catch(error => {
+        console.error("Fehler bei OpenAI:", error);
+        checkAllResponses();
+      });
+  }
+  
+  if (activeModels.includes("Mistral")) {
+    fetch(`/ask_mistral?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(mistralKey)}`)
+      .then(response => response.json())
+      .then(data => {
+        document.getElementById("mistalResponse").querySelector(".collapsible-content").innerText = data.response;
+        checkAllResponses();
+      })
+      .catch(error => {
+        console.error("Fehler bei Mistral:", error);
+        checkAllResponses();
+      });
+  }
+  
+  if (activeModels.includes("Anthropic Claude")) {
+    fetch(`/ask_claude?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(anthropicKey)}`)
+      .then(response => response.json())
+      .then(data => {
+        document.getElementById("claudeResponse").querySelector(".collapsible-content").innerText = data.response;
+        checkAllResponses();
+      })
+      .catch(error => {
+        console.error("Fehler bei Anthropic Claude:", error);
+        checkAllResponses();
+      });
+  }
+  
+  if (activeModels.includes("Google Gemini")) {
+    fetch(`/ask_gemini?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(geminiKey)}`)
+      .then(response => response.json())
+      .then(data => {
+        document.getElementById("geminiResponse").querySelector(".collapsible-content").innerText = data.response;
+        checkAllResponses();
+      })
+      .catch(error => {
+        console.error("Fehler bei Google Gemini:", error);
+        checkAllResponses();
+      });
+  }
+}
 
 
   function toggleBest(responseId) {

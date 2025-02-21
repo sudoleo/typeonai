@@ -99,13 +99,13 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
     """
     prompt_parts = [f"Die Frage lautet: {question}\n\n"]
     if "OpenAI" not in excluded_models:
-        prompt_parts.append(f"Antwort von OpenAI: {answer_openai}\n\n")
+        prompt_parts.append(f"Antwort von GPT-4o: {answer_openai}\n\n")
     if "Mistral" not in excluded_models:
-        prompt_parts.append(f"Antwort von Mistral: {answer_mistral}\n\n")
+        prompt_parts.append(f"Antwort von mistral-large-latest: {answer_mistral}\n\n")
     if "Anthropic Claude" not in excluded_models:
-        prompt_parts.append(f"Antwort von Anthropic Claude: {answer_claude}\n\n")
+        prompt_parts.append(f"Antwort von claude-3-5-sonnet: {answer_claude}\n\n")
     if "Google Gemini" not in excluded_models:
-        prompt_parts.append(f"Antwort von Google Gemini: {answer_gemini}\n\n")
+        prompt_parts.append(f"Antwort von gemini-pro: {answer_gemini}\n\n")
     
     if best_model:
         prompt_parts.append(
@@ -131,11 +131,11 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
     
     try:
         if consensus_model == "OpenAI":
-            openai.api_key = api_keys.get("OpenAI")
-            response = openai.ChatCompletion.create(
+            client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
+            response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "Bitte antworte so vollständig wie möglich."},
+                    {"role": "system", "content": "Keine Formatierung bitte."},
                     {"role": "user", "content": consensus_prompt}
                 ]
             )
@@ -146,7 +146,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
             response = client.chat.complete(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "Bitte antworte so vollständig wie möglich."},
+                    {"role": "system", "content": "Keine Formatierung bitte."},
                     {"role": "user", "content": consensus_prompt}
                 ]
             )
@@ -161,7 +161,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
             payload = {
                 "model": "claude-3-5-sonnet-20241022",
                 "max_tokens": 8192,  # Sehr hoher Wert als "unbegrenzt"
-                "system": "Bitte antworte so vollständig wie möglich.",
+                "system": "Keine Formatierung bitte.",
                 "messages": [{"role": "user", "content": consensus_prompt}]
             }
             response = requests.post(url, json=payload, headers=headers)

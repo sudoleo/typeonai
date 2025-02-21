@@ -66,46 +66,51 @@ h1, h2 {
     margin-bottom: 20px;
 }
 
-/* Container für das Eingabefeld und den Senden-Button */
 .chat-input-container {
-  display: flex;
-  align-items: center;
-  background-color: var(--input-bg);
-  border: 1px solid var(--input-border);
-  border-radius: 8px;
-  padding: 10px;
-  margin: 20px auto; /* optional: Abstand nach oben und zentriert */
-  max-width: 600px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: stretch;
+    background-color: var(--response-bg);  /* statt var(--input-bg) */
+    border-radius: 10px;
+    padding: 10px;
+    width: 100%;
+    margin: 20px 0;
+    box-sizing: border-box;
+    height: 110px;
 }
 
-/* Das Textfeld */
-.chat-input-container input[type="text"] {
-  flex: 1;
-  border: none;
-  outline: none;
-  font-size: 1em;
-  background: transparent;
-  color: var(--text-color);
-  padding: 0 10px;
+.chat-input-container .input-field {
+    flex-grow: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-color);
+    font-size: 16px;
+    outline: none;
+    padding: 10px;
+    box-sizing: border-box;
+    resize: none;
+    text-align: left;
+    vertical-align: top;
+    font-family: inherit;
 }
 
-/* Der Senden-Button mit Pfeil-Icon */
-.chat-input-container button {
-  background-color: var(--button-bg);
-  border: none;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.3s;
+/* Der Senden-Button – fix und ohne die Containerbreite zu beeinflussen */
+.chat-input-container .button {
+    background-color: var(--button-bg);
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 10px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    flex-shrink: 0;
 }
 
-.chat-input-container button:hover {
-  background-color: #0056b3;
+.chat-input-container .button:hover {
+    background-color: #0056b3;
 }
 
   
@@ -212,6 +217,7 @@ h1, h2 {
     color: #fff;
 }
 .response-box.excluded .exclude-btn {
+    pointer-events: auto;
     background-color: red;
     border-color: red;
     color: #fff;
@@ -295,8 +301,8 @@ h1, h2 {
 
 .response-box.excluded {
     opacity: 0.5; /* graue Darstellung */
-    pointer-events: none; /* optional: Deaktivierung der Interaktion */
-  }
+    /* pointer-events: none;  Entferne oder kommentiere diese Zeile aus */
+}
   
 /* Collapsible Content – jetzt ohne eigenen Hintergrund und Schatten,
    sodass es sich farblich in die Box einfügt */
