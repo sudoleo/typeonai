@@ -49,16 +49,28 @@ h1, h2 {
     padding: 0;
 }
 
-/* Überschrift in der Sidebar */
+/* Überschrift in der Sidebar inkl. Logo */
 .sidebar-title {
     margin-bottom: 15px;
-  }
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Platzhalter-Logo neben der Überschrift (hier oberhalb oder neben dem Text, je nach Wunsch) */
+.sidebar-logo {
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    border-radius: 50%;
+    margin-bottom: 5px;
+}
 
 .sidebar-title h1 {
-    font-size: 1.2em;    /* etwas kleiner als ein großer Seitenheader */
-    margin: 0;
-    text-align: center;  /* zentriert innerhalb des Sidebar-Bereichs */
-  }
+    font-size: 1.2em;
+    margin: 5px 0;
+    text-align: center;
+}
   
 /* Input-Section */
 .input-section {
@@ -461,7 +473,6 @@ input:checked + .slider:before {
 }
   
 .select-wrapper::after {
-    content: '▼';
     font-size: 0.8em;
     color: var(--button-text);
     position: absolute;
@@ -476,7 +487,7 @@ input:checked + .slider:before {
     position: fixed;
     top: 0;
     left: 0;
-    width: 200px;  /* kompakter Bereich */
+    width: 200px;
     height: 100%;
     background: var(--container-bg);
     box-shadow: 2px 0 5px rgba(0,0,0,0.1);
@@ -484,6 +495,34 @@ input:checked + .slider:before {
     box-sizing: border-box;
     z-index: 1000;
     text-align: center;
+    transition: transform 0.3s ease;
+}
+
+/* Wenn die Sidebar ausgeblendet (collapsed) ist – sie wird von links verschoben */
+.sidebar.collapsed {
+    transform: translateX(-100%);
+}
+
+/* Standard: Toggle-Button ist zunächst ausgeblendet */
+.sidebar-toggle {
+    display: none;
+}
+
+/* Styling für den Toggle-Button */
+.sidebar-toggle button {
+    background: var(--button-bg);
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+}
+
+/* Pfeil im Toggle-Button */
+.sidebar-toggle .arrow {
+    display: inline-block;
+    color: var(--button-text);
+    font-size: 1.5em;
 }
 
 .sidebar h2 {
@@ -497,18 +536,24 @@ input:checked + .slider:before {
     margin: 15px 0;
   }
 
-  .sidebar-header h2 {
-    flex-grow: 1;
-    text-align: center;
-    margin: 0 0 10px 0; /* 10px Abstand unten */
-  }
-
-/* Verwendete Modelle Header – genauso wie API Keys, aber etwas nach links gerückt */
 .sidebar-header.model-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-left: 10px; /* rückt die Überschrift nach links */
+    padding-left: 10px;
+}
+
+/* Button standardmäßig ausblenden */
+.sidebar-toggle {
+    display: none;
+  }
+  
+/* Bei kleinen Displays (max-width: 1024px) anzeigen */
+@media (max-width: 1024px) {
+    .sidebar-toggle {
+        display: block;
+        position: fixed; /* damit er immer sichtbar bleibt */
+        top: 20px;
+        left: 0;
+        z-index: 1100;
+    }
 }
 
 /* Toggle-Button für den API-Testbereich */
