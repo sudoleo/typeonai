@@ -84,7 +84,7 @@ def query_gemini(question: str, api_key: str) -> str:
     """Fragt Google Gemini zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit."""
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-pro")
+        model = genai.GenerativeModel("gemini-1.5-pro-latest")
         response = model.generate_content(question)
         return response.text.strip()
     except Exception as e:
@@ -175,13 +175,103 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 return f"Fehler bei Anthropic Claude: {response.status_code} - {response.text}"
         elif consensus_model == "Google Gemini":
             genai.configure(api_key=api_keys.get("Google Gemini"))
-            model = genai.GenerativeModel("gemini-pro")
+            model = genai.GenerativeModel("gemini-1.5-pro-latest")
             response = model.generate_content(consensus_prompt)
             return response.text.strip()
         else:
             return "Ungültiges Konsensmodell ausgewählt."
     except Exception as e:
         return f"Fehler beim Konsens: {str(e)}"
+    
+
+def query_differences(answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, consensus_answer: str, api_keys: dict, differences_model: str) -> str:
+    """
+    Extrahiert die Unterschiede zwischen den vier Expertenantworten mittels des angegebenen Konsens‑Modells.
+    """
+    differences_prompt = (
+        "Analysiere die Antworten der LLMs und bewerte, wie stark sie voneinander abweichen. "
+        "Falls alle Modelle nahezu identisch antworten, ist der Konsens sehr glaubwürdig. "
+        "Falls es nur sprachliche Variationen gibt, ist er weitgehend glaubwürdig. "
+        "Falls es inhaltliche Nuancen gibt, ist er teilweise glaubwürdig. "
+        "Falls es klare Widersprüche gibt, ist er kaum oder nicht glaubwürdig. "
+        "Antwort ausschließlich mit einem der folgenden Sätze:\n\n"
+        
+        "- 'Die Konsens-Antwort ist **sehr** glaubwürdig.'\n"
+        "- 'Die Konsens-Antwort ist **weitgehend** glaubwürdig.'\n"
+        "- 'Die Konsens-Antwort ist **teilweise** glaubwürdig.'\n"
+        "- 'Die Konsens-Antwort ist **kaum** glaubwürdig.'\n"
+        "- 'Die Konsens-Antwort ist **nicht** glaubwürdig.'\n\n"
+
+        "Nach dem Satz folgt eine Trennlinie und eine **sehr knappe Erklärung**, warum diese Unterschiede relevant sind.\n\n"
+        
+        "Konsens-Antwort:\n" + consensus_answer + "\n\n"
+        
+        "Antworten der Modelle:\n"
+        "- GPT-4o: " + answer_openai + "\n"
+        "- Mistral: " + answer_mistral + "\n"
+        "- Claude: " + answer_claude + "\n"
+        "- Gemini: " + answer_gemini + "\n\n"
+        
+        "Format der Antwort:\n"
+        "[Bewertungssatz]\n"
+        "\n"
+        "_____________\n"
+        "\n"
+        "[Sehr kurze Erklärung, warum diese Unterschiede die Glaubwürdigkeit beeinflussen.]"
+    )
+
+    try:
+        if differences_model == "OpenAI":
+            client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "Gib keine Formatierungen aus."},
+                    {"role": "user", "content": differences_prompt}
+                ]
+            )
+            return response.choices[0].message.content.strip()
+        elif differences_model == "Mistral":
+            client = Mistral(api_keys.get("Mistral"))
+            response = client.chat.complete(
+                model="mistral-large-latest",
+                messages=[
+                    {"role": "system", "content": "Gib keine Formatierungen aus."},
+                    {"role": "user", "content": differences_prompt}
+                ]
+            )
+            return response.choices[0].message.content.strip()
+        elif differences_model == "Anthropic Claude":
+            url = "https://api.anthropic.com/v1/messages"
+            headers = {
+                "x-api-key": api_keys.get("Anthropic Claude"),
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01"
+            }
+            payload = {
+                "model": "claude-3-5-sonnet-20241022",
+                "max_tokens": 8192,
+                "system": "Gib keine Formatierungen aus.",
+                "messages": [{"role": "user", "content": differences_prompt}]
+            }
+            response = requests.post(url, json=payload, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                if "content" in data and isinstance(data["content"], list) and len(data["content"]) > 0:
+                    return data["content"][0]["text"]
+                else:
+                    return "Fehler: Keine Antwort im API-Response gefunden."
+            else:
+                return f"Fehler bei Anthropic Claude: {response.status_code} - {response.text}"
+        elif differences_model == "Google Gemini":
+            genai.configure(api_key=api_keys.get("Google Gemini"))
+            model = genai.GenerativeModel("gemini-1.5-pro-latest")
+            response = model.generate_content(differences_prompt)
+            return response.text.strip()
+        else:
+            return "Ungültiges Modell für den Unterschiedsvergleich."
+    except Exception as e:
+        return f"Fehler beim Vergleich: {str(e)}"
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -235,7 +325,6 @@ async def consensus(data: dict):
     best_model = data.get("best_model", "")
     consensus_model = data.get("consensus_model")
     excluded_models = data.get("excluded_models", [])
-    # API Keys für alle Modelle (aber wir validieren nur die nicht ausgeschlossenen)
     api_keys = {
         "OpenAI": data.get("openai_key"),
         "Mistral": data.get("mistral_key"),
@@ -268,11 +357,16 @@ async def consensus(data: dict):
     if best_model and best_model in excluded_models:
         raise HTTPException(status_code=400, detail="Die als beste markierte Antwort darf nicht ausgeschlossen werden.")
     
+    # Konsens-Antwort generieren
     consensus_answer = query_consensus(
         question, answer_openai, answer_mistral, answer_claude, answer_gemini,
         best_model, excluded_models, consensus_model, api_keys
     )
-    return {"consensus_response": consensus_answer}
+    
+    # Unterschiede ermitteln – nun mit Übergabe der Konsens-Antwort
+    differences = query_differences(answer_openai, answer_mistral, answer_claude, answer_gemini, consensus_answer, api_keys, differences_model=consensus_model)
+    
+    return {"consensus_response": consensus_answer, "differences": differences}
 
 
 def is_valid(key):
@@ -351,7 +445,7 @@ async def check_keys(data: dict):
         try:
             if gemini_key and len(gemini_key) > 10:
                 genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel("gemini-pro")
+                model = genai.GenerativeModel("gemini-1.5-pro-latest")
                 _ = model.generate_content("ping")
                 results["Google Gemini"] = "valid"
             else:

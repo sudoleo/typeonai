@@ -178,9 +178,36 @@ h1, h2 {
     position: relative;
 }
 
+/* Konsens-Box Aufteilung in zwei Bereiche */
+.consensus-box {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+  }
+
 .consensus-box p {
     text-align: left;
   }
+
+/* Linker Bereich: Konsens-Antwort (ca. 80% Breite) */
+.consensus-main {
+    flex: 4; /* entspricht ca. 80% */
+    background: var(--response-bg);
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: var(--box-shadow);
+  }
+
+/* Rechter Bereich: Unterschiede (ca. 20% Breite) */
+.consensus-differences {
+    flex: 1; /* entspricht ca. 20% */
+    background: var(--response-bg);
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: var(--box-shadow);
+    overflow-y: auto; /* bei längeren Inhalten */
+  }
+
   
 /* Grüne Umrandung bei Best-Auswahl */
 .response-box.best {
