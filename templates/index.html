@@ -50,7 +50,7 @@
         Alle APIs testen 
         <span id="apiSpinner" class="spinner" style="display: none;"></span>
       </button>
-    </div>
+    </div>    
 
     <!-- Trennstrich zwischen API Keys und Modelle -->
     <div class="sidebar-separator"></div>
@@ -76,7 +76,22 @@
         <input type="checkbox" id="selectGemini" checked> Google Gemini
       </label>
     </div>
+
+    <!-- Trennstrich zwischen API Keys und Modelle -->
+    <div class="sidebar-separator"></div>
+
+    <div class="sidebar-header">
+      <h2>Leaderboard</h2>
+      <button id="toggleLeaderboard" class="collapse-btn" onclick="toggleLeaderboard()">
+        <span class="arrow">&#9660;</span>
+      </button>
+    </div>
+    <div id="leaderboardContentContainer" class="hidden">
+      <div id="leaderboardContent"></div>
+    </div>
   </div>
+
+    
 
   <!-- Mode-Switch in der oberen rechten Ecke -->
   <div class="mode-switch">
@@ -218,7 +233,7 @@
         document.body.classList.toggle("dark-mode", isDark);
         localStorage.setItem("darkMode", isDark ? "true" : "false");
       });
-    
+
       // --------------------------
       // API Keys Initialisierung
       // --------------------------
@@ -280,6 +295,55 @@
       // Globale Funktionen (für Inline-Aufrufe)
       // --------------------------
     
+      function recordClick(model, clickType) {
+        fetch("/record_click", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ model: model, click_type: clickType })
+        })
+        .then(response => response.json())
+        .then(data => console.log("Klick gespeichert:", data))
+        .catch(err => console.error("Fehler beim Speichern des Klicks:", err));
+      }
+
+      window.toggleBest = function(responseId) {
+        const box = document.getElementById(responseId);
+        // Falls bereits als "best" markiert, evtl. erneuten Klick nicht speichern
+        if (box.classList.contains("excluded")) return;
+        if (box.classList.contains("best")) {
+          box.classList.remove("best");
+        } else {
+          document.querySelectorAll(".response-box").forEach(b => b.classList.remove("best"));
+          box.classList.add("best");
+          // Klick erfassen – Hole den Modellnamen aus dem data-Attribut:
+          const model = box.getAttribute("data-model");
+          recordClick(model, "best");
+        }
+      };
+
+      window.toggleExclude = function(responseId) {
+        const box = document.getElementById(responseId);
+        if (box.classList.contains("best")) return;
+        box.classList.toggle("excluded");
+        // Klick erfassen – Hole den Modellnamen:
+        const model = box.getAttribute("data-model");
+        recordClick(model, "exclude");
+      };
+
+      window.loadLeaderboard = function() {
+        fetch("/leaderboard")
+          .then(response => response.json())
+          .then(data => {
+            let html = "<ul>";
+            for (const model in data) {
+              html += `<li>${model}: ✓: ${data[model].best}, X: ${data[model].exclude}</li>`;
+            }
+            html += "</ul>";
+            document.getElementById("leaderboardContent").innerHTML = html;
+          })
+          .catch(err => console.error("Fehler beim Laden des Leaderboards:", err));
+      }
+
       // API Testbereich umschalten (für den Pfeil in der API Keys Section)
       window.toggleApiTest = function() {
         const area = document.getElementById("apiTestArea");
@@ -324,9 +388,31 @@
         box.classList.toggle("excluded");
       };
     
+      window.toggleLeaderboard = function() {
+        const container = document.getElementById("leaderboardContentContainer");
+        const arrow = document.getElementById("toggleLeaderboard").querySelector(".arrow");
+        container.classList.toggle("hidden");
+        if (container.classList.contains("hidden")) {
+          arrow.classList.remove("rotated");
+        } else {
+          arrow.classList.add("rotated");
+        }
+      }
+
+      setInterval(function(){
+        const container = document.getElementById("leaderboardContentContainer");
+        if (container && !container.classList.contains("hidden")) {
+          loadLeaderboard();
+        }
+      }, 1000);
+
+      // Globale Variable
+      let consensusGenerated = false;
+
       // Senden der Frage an die aktiven Modelle
       window.sendQuestion = async function() {
         const question = document.getElementById("questionInput").value;
+        consensusGenerated = false;
         if (!question) {
           alert("Bitte geben Sie eine Frage ein.");
           return;
@@ -465,6 +551,38 @@
       });
     
       window.getConsensus = async function() {
+        if (!consensusGenerated) {
+          // Hole die Antwort-Boxen
+          const openaiBox = document.getElementById("openaiResponse");
+          const mistalBox = document.getElementById("mistalResponse");
+          const claudeBox = document.getElementById("claudeResponse");
+          const geminiBox = document.getElementById("geminiResponse");
+
+          // Beispiel: Für jedes Modell prüfen, ob "best" oder "excluded" markiert ist
+          if (openaiBox.classList.contains("best")) {
+            recordClick("OpenAI", "best");
+          } else if (openaiBox.classList.contains("excluded")) {
+            recordClick("OpenAI", "exclude");
+          }
+          if (mistalBox.classList.contains("best")) {
+            recordClick("Mistral", "best");
+          } else if (mistalBox.classList.contains("excluded")) {
+            recordClick("Mistral", "exclude");
+          }
+          if (claudeBox.classList.contains("best")) {
+            recordClick("Anthropic Claude", "best");
+          } else if (claudeBox.classList.contains("excluded")) {
+            recordClick("Anthropic Claude", "exclude");
+          }
+          if (geminiBox.classList.contains("best")) {
+            recordClick("Google Gemini", "best");
+          } else if (geminiBox.classList.contains("excluded")) {
+            recordClick("Google Gemini", "exclude");
+          }
+          // Damit wird nur einmal pro Frage gezählt:
+          consensusGenerated = true;
+        }
+      
       const consensusDiv = document.getElementById("consensusResponse");
       const mainSpinner = '<span class="spinner"></span>';
       const diffSpinner = '<span class="spinner"></span>';

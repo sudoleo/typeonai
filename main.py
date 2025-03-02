@@ -1,3 +1,10 @@
+click_counts = {
+    "OpenAI": {"best": 0, "exclude": 0},
+    "Mistral": {"best": 0, "exclude": 0},
+    "Anthropic Claude": {"best": 0, "exclude": 0},
+    "Google Gemini": {"best": 0, "exclude": 0},
+}
+
 from fastapi import FastAPI, Query, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -457,3 +464,16 @@ async def check_keys(data: dict):
     
     except Exception as overall_error:
         return {"results": {"error": str(overall_error)}}
+
+@app.post("/record_click")
+async def record_click(data: dict):
+    model = data.get("model")
+    click_type = data.get("click_type")
+    if model not in click_counts or click_type not in ["best", "exclude"]:
+        raise HTTPException(status_code=400, detail="Ungültige Parameter")
+    click_counts[model][click_type] += 1
+    return {"status": "success", "click_counts": click_counts}
+
+@app.get("/leaderboard")
+async def leaderboard():
+    return click_counts
