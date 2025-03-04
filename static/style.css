@@ -80,14 +80,16 @@ h1, h2 {
 
 .chat-input-container {
     display: flex;
-    align-items: stretch;
-    background-color: var(--response-bg);  /* statt var(--input-bg) */
+    align-items: flex-start; /* sorgt dafür, dass der Inhalt oben beginnt */
+    background-color: var(--response-bg);
     border-radius: 10px;
     padding: 10px;
     width: 100%;
     margin: 20px 0;
     box-sizing: border-box;
-    height: 110px;
+    /* Feste Höhe entfernen, stattdessen eine Mindesthöhe setzen */
+    /* height: 110px; */
+    min-height: 110px;
 }
 
 .chat-input-container .input-field {
@@ -99,10 +101,12 @@ h1, h2 {
     outline: none;
     padding: 10px;
     box-sizing: border-box;
-    resize: none;
+    resize: vertical; /* Ermöglicht vertikales Vergrößern */
     text-align: left;
     vertical-align: top;
     font-family: inherit;
+    min-height: 50px;   /* optional */
+    max-height: 300px;  /* optional */
 }
 
 /* Der Senden-Button – fix und ohne die Containerbreite zu beeinflussen */

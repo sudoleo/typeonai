@@ -6,6 +6,23 @@
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+  <!-- Füge dies im <head> hinzu -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Optional für Sicherheit: -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
+  <!-- Firebase-Konfiguration aus Umgebungsvariablen -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
+  <script>
+    window.FIREBASE_CONFIG = {
+      apiKey: "{{ firebase_api_key }}",
+      authDomain: "{{ firebase_auth_domain }}",
+      projectId: "{{ firebase_project_id }}",
+      storageBucket: "{{ firebase_storage_bucket }}",
+      messagingSenderId: "{{ firebase_messaging_sender_id }}",
+      appId: "{{ firebase_app_id }}"
+    };
+  </script>
 </head>
 <body>
   <!-- Toggle-Button für die Sidebar (wird im responsiven Modus eingeblendet) -->
@@ -91,8 +108,6 @@
     </div>
   </div>
 
-    
-
   <!-- Mode-Switch in der oberen rechten Ecke -->
   <div class="mode-switch">
     <label class="switch">
@@ -144,7 +159,7 @@
         <p class="collapsible-content"></p>
       </div>
       <!-- Antwort Anthropic Claude -->
-      <div class="response-box" id="claudeResponse" data-model="Anthropic Claude">
+      <div class="response-box" id="claudeResponse" data-model="Anthropic">
         <h2>
           <span class="title">Antwort von claude-3-5-sonnet</span>
           <div class="control-icons">
@@ -158,7 +173,7 @@
         <p class="collapsible-content"></p>
       </div>
       <!-- Antwort Google Gemini -->
-      <div class="response-box" id="geminiResponse" data-model="Google Gemini">
+      <div class="response-box" id="geminiResponse" data-model="Gemini">
         <h2>
           <span class="title">Antwort von gemini-pro</span>
           <div class="control-icons">
@@ -290,59 +305,31 @@
           arrow.textContent = newText;
         }
       }
+
+      // Extrahiert aus dem Differences-Text den BestModel-Wert
+      function parseBestModel(differencesText) {
+        const regex = /BestModel:\s*(.*)/i;
+        const match = differencesText.match(regex);
+        return match ? match[1].trim() : null;
+      }
     
       // --------------------------
       // Globale Funktionen (für Inline-Aufrufe)
       // --------------------------
-    
-      function recordClick(model, clickType) {
-        fetch("/record_click", {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({ model: model, click_type: clickType })
-        })
-        .then(response => response.json())
-        .then(data => console.log("Klick gespeichert:", data))
-        .catch(err => console.error("Fehler beim Speichern des Klicks:", err));
-      }
 
       window.toggleBest = function(responseId) {
         const box = document.getElementById(responseId);
-        // Falls bereits als "best" markiert, evtl. erneuten Klick nicht speichern
         if (box.classList.contains("excluded")) return;
         if (box.classList.contains("best")) {
           box.classList.remove("best");
         } else {
           document.querySelectorAll(".response-box").forEach(b => b.classList.remove("best"));
           box.classList.add("best");
-          // Klick erfassen – Hole den Modellnamen aus dem data-Attribut:
           const model = box.getAttribute("data-model");
-          recordClick(model, "best");
+          // Direkter Aufruf zur Firebase-Funktion:
+          recordModelVote(model, "best");
         }
       };
-
-      window.toggleExclude = function(responseId) {
-        const box = document.getElementById(responseId);
-        if (box.classList.contains("best")) return;
-        box.classList.toggle("excluded");
-        // Klick erfassen – Hole den Modellnamen:
-        const model = box.getAttribute("data-model");
-        recordClick(model, "exclude");
-      };
-
-      window.loadLeaderboard = function() {
-        fetch("/leaderboard")
-          .then(response => response.json())
-          .then(data => {
-            let html = "<ul>";
-            for (const model in data) {
-              html += `<li>${model}: ✓: ${data[model].best}, X: ${data[model].exclude}</li>`;
-            }
-            html += "</ul>";
-            document.getElementById("leaderboardContent").innerHTML = html;
-          })
-          .catch(err => console.error("Fehler beim Laden des Leaderboards:", err));
-      }
 
       // API Testbereich umschalten (für den Pfeil in der API Keys Section)
       window.toggleApiTest = function() {
@@ -388,23 +375,14 @@
         box.classList.toggle("excluded");
       };
     
+      let leaderboardInterval; // Variable zum Speichern des Interval-IDs
+
       window.toggleLeaderboard = function() {
         const container = document.getElementById("leaderboardContentContainer");
         const arrow = document.getElementById("toggleLeaderboard").querySelector(".arrow");
         container.classList.toggle("hidden");
-        if (container.classList.contains("hidden")) {
-          arrow.classList.remove("rotated");
-        } else {
-          arrow.classList.add("rotated");
-        }
-      }
-
-      setInterval(function(){
-        const container = document.getElementById("leaderboardContentContainer");
-        if (container && !container.classList.contains("hidden")) {
-          loadLeaderboard();
-        }
-      }, 1000);
+        arrow.classList.toggle("rotated");
+      };
 
       // Globale Variable
       let consensusGenerated = false;
@@ -462,7 +440,9 @@
           fetch(`/ask_openai?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(openaiKey)}`)
             .then(response => response.json())
             .then(data => {
-              document.getElementById("openaiResponse").querySelector(".collapsible-content").innerText = data.response;
+              document.getElementById("openaiResponse")
+                .querySelector(".collapsible-content")
+                .innerHTML = DOMPurify.sanitize(marked.parse(data.response));
               checkAllResponses();
             })
             .catch(error => {
@@ -470,11 +450,14 @@
               checkAllResponses();
             });
         }
+
         if (activeModels.includes("Mistral")) {
           fetch(`/ask_mistral?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(mistralKey)}`)
             .then(response => response.json())
             .then(data => {
-              document.getElementById("mistalResponse").querySelector(".collapsible-content").innerText = data.response;
+              document.getElementById("mistalResponse")
+                .querySelector(".collapsible-content")
+                .innerHTML = DOMPurify.sanitize(marked.parse(data.response));
               checkAllResponses();
             })
             .catch(error => {
@@ -482,11 +465,14 @@
               checkAllResponses();
             });
         }
+
         if (activeModels.includes("Anthropic Claude")) {
           fetch(`/ask_claude?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(anthropicKey)}`)
             .then(response => response.json())
             .then(data => {
-              document.getElementById("claudeResponse").querySelector(".collapsible-content").innerText = data.response;
+              document.getElementById("claudeResponse")
+                .querySelector(".collapsible-content")
+                .innerHTML = DOMPurify.sanitize(marked.parse(data.response));
               checkAllResponses();
             })
             .catch(error => {
@@ -494,11 +480,14 @@
               checkAllResponses();
             });
         }
+
         if (activeModels.includes("Google Gemini")) {
           fetch(`/ask_gemini?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(geminiKey)}`)
             .then(response => response.json())
             .then(data => {
-              document.getElementById("geminiResponse").querySelector(".collapsible-content").innerText = data.response;
+              document.getElementById("geminiResponse")
+                .querySelector(".collapsible-content")
+                .innerHTML = DOMPurify.sanitize(marked.parse(data.response));
               checkAllResponses();
             })
             .catch(error => {
@@ -550,48 +539,54 @@
         }
       });
     
+      // Globale Variable, um die letzte verarbeitete Frage zu speichern.
+      let lastQuestion = "";
+
       window.getConsensus = async function() {
-        if (!consensusGenerated) {
-          // Hole die Antwort-Boxen
-          const openaiBox = document.getElementById("openaiResponse");
-          const mistalBox = document.getElementById("mistalResponse");
-          const claudeBox = document.getElementById("claudeResponse");
-          const geminiBox = document.getElementById("geminiResponse");
+        const question = document.getElementById("questionInput").value.trim();
 
-          // Beispiel: Für jedes Modell prüfen, ob "best" oder "excluded" markiert ist
-          if (openaiBox.classList.contains("best")) {
-            recordClick("OpenAI", "best");
-          } else if (openaiBox.classList.contains("excluded")) {
-            recordClick("OpenAI", "exclude");
+        // Wenn die Frage neu oder geändert ist, werden Firebase-Votes aktualisiert.
+        if (question !== lastQuestion) {
+          // Für jedes Modell prüfen, ob es als "best" markiert ist.
+          if (document.getElementById("openaiResponse").classList.contains("best")) {
+            recordModelVote("OpenAI", "best");
           }
-          if (mistalBox.classList.contains("best")) {
-            recordClick("Mistral", "best");
-          } else if (mistalBox.classList.contains("excluded")) {
-            recordClick("Mistral", "exclude");
+          if (document.getElementById("mistalResponse").classList.contains("best")) {
+            recordModelVote("Mistral", "best");
           }
-          if (claudeBox.classList.contains("best")) {
-            recordClick("Anthropic Claude", "best");
-          } else if (claudeBox.classList.contains("excluded")) {
-            recordClick("Anthropic Claude", "exclude");
+          if (document.getElementById("claudeResponse").classList.contains("best")) {
+            recordModelVote("Anthropic", "best");
           }
-          if (geminiBox.classList.contains("best")) {
-            recordClick("Google Gemini", "best");
-          } else if (geminiBox.classList.contains("excluded")) {
-            recordClick("Google Gemini", "exclude");
+          if (document.getElementById("geminiResponse").classList.contains("best")) {
+            recordModelVote("Gemini", "best");
           }
-          // Damit wird nur einmal pro Frage gezählt:
-          consensusGenerated = true;
+
+          // Ebenso für "excluded" (sofern du das separat erfassen möchtest).
+          if (document.getElementById("openaiResponse").classList.contains("excluded")) {
+            recordModelVote("OpenAI", "exclude");
+          }
+          if (document.getElementById("mistalResponse").classList.contains("excluded")) {
+            recordModelVote("Mistral", "exclude");
+          }
+          if (document.getElementById("claudeResponse").classList.contains("excluded")) {
+            recordModelVote("Anthropic", "exclude");
+          }
+          if (document.getElementById("geminiResponse").classList.contains("excluded")) {
+            recordModelVote("Gemini", "exclude");
+          }
+
+          // Aktualisiere die letzte verarbeitete Frage.
+          lastQuestion = question;
         }
-      
-      const consensusDiv = document.getElementById("consensusResponse");
-      const mainSpinner = '<span class="spinner"></span>';
-      const diffSpinner = '<span class="spinner"></span>';
-      
-      // Setze Spinner in beiden Bereichen
-      consensusDiv.querySelector(".consensus-main p").innerHTML = mainSpinner;
-      consensusDiv.querySelector(".consensus-differences p").innerHTML = diffSpinner;
 
-      const question = document.getElementById("questionInput").value;
+        // Setze den Konsens-Bereich (Spinner etc.) und rufe anschließend deinen Konsens-Endpunkt auf.
+        const consensusDiv = document.getElementById("consensusResponse");
+        const mainSpinner = '<span class="spinner"></span>';
+        const diffSpinner = '<span class="spinner"></span>';
+
+        consensusDiv.querySelector(".consensus-main p").innerHTML = mainSpinner;
+        consensusDiv.querySelector(".consensus-differences p").innerHTML = diffSpinner;
+
       const consensus_model = document.getElementById("consensusModelDropdown").value;
 
       // Hole die Antwort-Boxen
@@ -668,8 +663,14 @@
         const data = await response.json();
         if (response.ok) {
           // Aktualisiere den Konsens-Bereich und den Unterschiede-Bereich
-          consensusDiv.querySelector(".consensus-main p").innerText = data.consensus_response;
-          consensusDiv.querySelector(".consensus-differences p").innerText = data.differences || "Keine Unterschiede festgestellt.";
+          consensusDiv.querySelector(".consensus-main p").innerHTML = marked.parse(data.consensus_response);
+          consensusDiv.querySelector(".consensus-differences p").innerHTML = marked.parse(data.differences || "Keine Unterschiede festgestellt.");
+
+          // Parse den BestModel-Wert aus den Unterschieden und aktualisiere das Leaderboard in Firebase
+          const bestModelFromConsensus = parseBestModel(data.differences);
+          if (bestModelFromConsensus) {
+            recordModelVote(bestModelFromConsensus, "BestModel");
+          }
         } else {
           consensusDiv.querySelector(".consensus-main p").innerText = "Fehler: " + data.detail;
           consensusDiv.querySelector(".consensus-differences p").innerText = "";
@@ -680,7 +681,6 @@
         consensusDiv.querySelector(".consensus-differences p").innerText = "";
       }
     };
-
     
       // Testet die API Keys und aktualisiert das Feedback
       window.testAllKeys = async function() {
@@ -740,6 +740,7 @@
     
     });
 </script>
-    
+<!-- Firebase-Code wird jetzt ausgelagert -->
+<script type="module" src="/static/firebase.js"></script>
 </body>
 </html>

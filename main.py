@@ -1,10 +1,4 @@
-click_counts = {
-    "OpenAI": {"best": 0, "exclude": 0},
-    "Mistral": {"best": 0, "exclude": 0},
-    "Anthropic Claude": {"best": 0, "exclude": 0},
-    "Google Gemini": {"best": 0, "exclude": 0},
-}
-
+import os
 from fastapi import FastAPI, Query, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -32,7 +26,7 @@ def query_openai(question: str, api_key: str) -> str:
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Keine Formatierung bitte."},
+                {"role": "system", "content": ""},
                 {"role": "user", "content": question}
             ]
         )
@@ -49,7 +43,7 @@ def query_mistral(question: str, api_key: str) -> str:
         response = client.chat.complete(
             model=model,
             messages=[
-                {"role": "system", "content": "Keine Formatierung bitte."},
+                {"role": "system", "content": ""},
                 {"role": "user", "content": question}
             ]
         )
@@ -71,7 +65,7 @@ def query_claude(question: str, api_key: str) -> str:
         payload = {
             "model": "claude-3-5-sonnet-20241022",
             "max_tokens": 8192,  # Sehr hoher Wert als "unbegrenzt"
-            "system": "Keine Formatierung bitte.",
+            "system": "",
             "messages": [{"role": "user", "content": question}]
         }
         response = requests.post(url, json=payload, headers=headers)
@@ -142,7 +136,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "Keine Formatierung bitte."},
+                    {"role": "system", "content": ""},
                     {"role": "user", "content": consensus_prompt}
                 ]
             )
@@ -153,7 +147,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
             response = client.chat.complete(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "Keine Formatierung bitte."},
+                    {"role": "system", "content": ""},
                     {"role": "user", "content": consensus_prompt}
                 ]
             )
@@ -168,7 +162,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
             payload = {
                 "model": "claude-3-5-sonnet-20241022",
                 "max_tokens": 8192,  # Sehr hoher Wert als "unbegrenzt"
-                "system": "Keine Formatierung bitte.",
+                "system": "",
                 "messages": [{"role": "user", "content": consensus_prompt}]
             }
             response = requests.post(url, json=payload, headers=headers)
@@ -208,7 +202,7 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
         "- 'Die Konsens-Antwort ist **teilweise** glaubwürdig.'\n"
         "- 'Die Konsens-Antwort ist **kaum** glaubwürdig.'\n"
         "- 'Die Konsens-Antwort ist **nicht** glaubwürdig.'\n\n"
-
+        
         "Nach dem Satz folgt eine Trennlinie und eine **sehr knappe Erklärung**, warum diese Unterschiede relevant sind.\n\n"
         
         "Konsens-Antwort:\n" + consensus_answer + "\n\n"
@@ -219,12 +213,17 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
         "- Claude: " + answer_claude + "\n"
         "- Gemini: " + answer_gemini + "\n\n"
         
+        "Zum Schluss entscheide subjektiv, welches Modell die beste Antwort geliefert hat. "
+        "Wähle dabei eines der folgenden Modelle: Anthropic, Gemini, Mistral oder OpenAI. "
+        "Füge deine Entscheidung am Ende der Antwort in einer eigenen Zeile ein, beginnend mit 'BestModel:' gefolgt vom Modellnamen.\n\n"
+        
         "Format der Antwort:\n"
         "[Bewertungssatz]\n"
         "\n"
         "_____________\n"
         "\n"
-        "[Sehr kurze Erklärung, warum diese Unterschiede die Glaubwürdigkeit beeinflussen.]"
+        "[Sehr kurze Erklärung, warum diese Unterschiede die Glaubwürdigkeit beeinflussen.]\n\n"
+        "BestModel: [Name des Modells]"
     )
 
     try:
@@ -283,7 +282,15 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    firebase_config = {
+        "firebase_api_key": os.environ.get("FIREBASE_API_KEY"),
+        "firebase_auth_domain": os.environ.get("FIREBASE_AUTH_DOMAIN"),
+        "firebase_project_id": os.environ.get("FIREBASE_PROJECT_ID"),
+        "firebase_storage_bucket": os.environ.get("FIREBASE_STORAGE_BUCKET"),
+        "firebase_messaging_sender_id": os.environ.get("FIREBASE_MESSAGING_SENDER_ID"),
+        "firebase_app_id": os.environ.get("FIREBASE_APP_ID")
+    }
+    return templates.TemplateResponse("index.html", {"request": request, **firebase_config})
 
 
 @app.get("/ask_openai")
@@ -464,16 +471,3 @@ async def check_keys(data: dict):
     
     except Exception as overall_error:
         return {"results": {"error": str(overall_error)}}
-
-@app.post("/record_click")
-async def record_click(data: dict):
-    model = data.get("model")
-    click_type = data.get("click_type")
-    if model not in click_counts or click_type not in ["best", "exclude"]:
-        raise HTTPException(status_code=400, detail="Ungültige Parameter")
-    click_counts[model][click_type] += 1
-    return {"status": "success", "click_counts": click_counts}
-
-@app.get("/leaderboard")
-async def leaderboard():
-    return click_counts
