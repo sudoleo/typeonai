@@ -63,6 +63,10 @@
         <label for="geminiKey">Google API Key <span id="geminiFeedback" class="feedback"></span></label>
         <input type="password" id="geminiKey" placeholder="Dein Gemini Key">
       </div>
+      <div class="api-key-group">
+        <label for="deepseekKey">DeepSeek API Key <span id="deepseekFeedback" class="feedback"></span></label>
+        <input type="password" id="deepseekKey" placeholder="Dein DeepSeek Key">
+      </div>      
       <button onclick="testAllKeys()">
         Alle APIs testen 
         <span id="apiSpinner" class="spinner" style="display: none;"></span>
@@ -92,6 +96,9 @@
       <label for="selectGemini">
         <input type="checkbox" id="selectGemini" checked> Google Gemini
       </label>
+      <label for="selectDeepSeek">
+        <input type="checkbox" id="selectDeepSeek" checked> DeepSeek
+      </label>      
     </div>
 
     <!-- Trennstrich zwischen API Keys und Modelle -->
@@ -186,6 +193,20 @@
         </h2>
         <p class="collapsible-content"></p>
       </div>
+      <!-- Antwort DeepSeek -->
+      <div class="response-box" id="deepseekResponse" data-model="DeepSeek">
+        <h2>
+          <span class="title">Antwort von deepseek-chat</span>
+          <div class="control-icons">
+            <span class="best-btn" onclick="toggleBest('deepseekResponse')" title="Als beste Antwort markieren">&#10003;</span>
+            <span class="exclude-btn" onclick="toggleExclude('deepseekResponse')" title="Antwort ausschließen">&#10005;</span>
+            <button class="collapse-btn" onclick="toggleCollapse('deepseekResponse')">
+              <span class="arrow">&#9660;</span>
+            </button>
+          </div>
+        </h2>
+        <p class="collapsible-content"></p>
+      </div>      
     </div>
     
     <!-- Konsens-Section -->
@@ -209,6 +230,7 @@
                 <option value="Mistral">mistral-large-latest</option>
                 <option value="OpenAI">GPT‑4o</option>
                 <option value="Google Gemini">gemini-pro</option>
+                <option value="DeepSeek">deepseek-chat</option>
               </select>
             </div>
           </div>
@@ -252,7 +274,7 @@
       // --------------------------
       // API Keys Initialisierung
       // --------------------------
-      const apiKeys = ["openaiKey", "mistralKey", "anthropicKey", "geminiKey"];
+      const apiKeys = ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey"];
       apiKeys.forEach(function(key) {
         const stored = localStorage.getItem(key);
         if (stored) {
@@ -401,6 +423,7 @@
         if (document.getElementById("selectMistral").checked) activeModels.push("Mistral");
         if (document.getElementById("selectClaude").checked) activeModels.push("Anthropic Claude");
         if (document.getElementById("selectGemini").checked) activeModels.push("Google Gemini");
+        if (document.getElementById("selectDeepSeek").checked) activeModels.push("DeepSeek");
     
         // Spinner in den jeweiligen Response-Boxen setzen
         if (activeModels.includes("OpenAI")) {
@@ -415,6 +438,9 @@
         if (activeModels.includes("Google Gemini")) {
           document.getElementById("geminiResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
         }
+        if (activeModels.includes("DeepSeek")) {
+          document.getElementById("deepseekResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
+        }
         if (document.getElementById("autoConsensusToggle").checked) {
           document.getElementById("consensusResponse").querySelector("p").innerHTML = spinnerHTML;
         } else {
@@ -426,6 +452,7 @@
         const mistralKey = localStorage.getItem("mistralKey") || "";
         const anthropicKey = localStorage.getItem("anthropicKey") || "";
         const geminiKey = localStorage.getItem("geminiKey") || "";
+        const deepseekKey = localStorage.getItem("deepseekKey") || "";
     
         let responsesReceived = 0;
         const totalActive = activeModels.length;
@@ -495,6 +522,20 @@
               checkAllResponses();
             });
         }
+
+        if (activeModels.includes("DeepSeek")) {
+          fetch(`/ask_deepseek?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(deepseekKey)}`)
+            .then(response => response.json())
+            .then(data => {
+              document.getElementById("deepseekResponse")
+                .querySelector(".collapsible-content").innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+              checkAllResponses();
+            })
+            .catch(error => {
+              console.error("Fehler bei DeepSeek:", error);
+              checkAllResponses();
+            });
+        }
       };
     
       // Auswahl der besten Antwort
@@ -530,9 +571,12 @@
       document.getElementById("selectGemini").addEventListener("change", function() {
         toggleModel("geminiResponse", this.checked);
       });
+      document.getElementById("selectDeepSeek").addEventListener("change", function() {
+        toggleModel("deepseekResponse", this.checked);
+      });
     
       // Erneut API Keys in Felder schreiben (falls benötigt)
-      ["openaiKey", "mistralKey", "anthropicKey", "geminiKey"].forEach(function(key) {
+      ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey"].forEach(function(key) {
         const stored = localStorage.getItem(key);
         if (stored) {
           document.getElementById(key).value = stored;
@@ -560,6 +604,9 @@
           if (document.getElementById("geminiResponse").classList.contains("best")) {
             recordModelVote("Gemini", "best");
           }
+          if (document.getElementById("deepseekResponse").classList.contains("best")) {
+            recordModelVote("DeepSeek", "best");
+          }
 
           // Ebenso für "excluded" (sofern du das separat erfassen möchtest).
           if (document.getElementById("openaiResponse").classList.contains("excluded")) {
@@ -573,6 +620,9 @@
           }
           if (document.getElementById("geminiResponse").classList.contains("excluded")) {
             recordModelVote("Gemini", "exclude");
+          }
+          if (document.getElementById("deepseekResponse").classList.contains("excluded")) {
+            recordModelVote("DeepSeek", "exclude");
           }
 
           // Aktualisiere die letzte verarbeitete Frage.
@@ -594,12 +644,14 @@
       const mistalBox = document.getElementById("mistalResponse");
       const claudeBox = document.getElementById("claudeResponse");
       const geminiBox = document.getElementById("geminiResponse");
+      const deepseekBox = document.getElementById("deepseekResponse");
 
       // Lies die Antworten (trim für überflüssige Leerzeichen)
       const answer_openai = openaiBox.querySelector(".collapsible-content").innerText.trim();
       const answer_mistral = mistalBox.querySelector(".collapsible-content").innerText.trim();
       const answer_claude = claudeBox.querySelector(".collapsible-content").innerText.trim();
       const answer_gemini = geminiBox.querySelector(".collapsible-content").innerText.trim();
+      const answer_deepseek = deepseekBox.querySelector(".collapsible-content").innerText.trim();
 
       // Überprüfe nur die Modelle, die nicht als "ausgeschlossen" markiert sind.
       if (
@@ -608,7 +660,8 @@
         (!openaiBox.classList.contains("excluded") && !answer_openai) ||
         (!mistalBox.classList.contains("excluded") && !answer_mistral) ||
         (!claudeBox.classList.contains("excluded") && !answer_claude) ||
-        (!geminiBox.classList.contains("excluded") && !answer_gemini)
+        (!geminiBox.classList.contains("excluded") && !answer_gemini) ||
+        (!deepseekBox.classList.contains("excluded") && !answer_deepseek)
       ) {
         alert("Bitte zuerst eine Frage senden, alle Antworten abrufen und das Konsens‑Modell auswählen.");
         return;
@@ -632,12 +685,16 @@
       if (geminiBox.classList.contains("excluded")) {
         excludedModels.push(geminiBox.getAttribute("data-model"));
       }
+      if (deepseekBox.classList.contains("excluded")) {
+        excludedModels.push(deepseekBox.getAttribute("data-model"));
+      }
 
       // Hole API Keys aus localStorage
       const openaiKey = localStorage.getItem("openaiKey") || "";
       const mistralKey = localStorage.getItem("mistralKey") || "";
       const anthropicKey = localStorage.getItem("anthropicKey") || "";
       const geminiKey = localStorage.getItem("geminiKey") || "";
+      const deepseekKey= localStorage.getItem("deepseekKey") || "";
 
       try {
         const response = await fetch("/consensus", {
@@ -651,13 +708,15 @@
             answer_mistral: answer_mistral,
             answer_claude: answer_claude,
             answer_gemini: answer_gemini,
+            answer_deepseek: answer_deepseek,
             best_model: best_model,
             consensus_model: consensus_model,
             excluded_models: excludedModels,
             openai_key: openaiKey,
             mistral_key: mistralKey,
             anthropic_key: anthropicKey,
-            gemini_key: geminiKey
+            gemini_key: geminiKey,
+            deepseek_key: deepseekKey
           })
         });
         const data = await response.json();
@@ -688,10 +747,12 @@
         const mistralKey = document.getElementById("mistralKey").value;
         const anthropicKey = document.getElementById("anthropicKey").value;
         const geminiKey = document.getElementById("geminiKey").value;
+        const deepseekKey = document.getElementById("deepseekKey").value;
         localStorage.setItem("openaiKey", openaiKey);
         localStorage.setItem("mistralKey", mistralKey);
         localStorage.setItem("anthropicKey", anthropicKey);
         localStorage.setItem("geminiKey", geminiKey);
+        localStorage.setItem("deepseekKey", deepseekKey);
         const spinner = document.getElementById("apiSpinner");
         spinner.style.display = "inline-block";
         try {
@@ -702,7 +763,8 @@
               openai_key: openaiKey,
               mistral_key: mistralKey,
               anthropic_key: anthropicKey,
-              gemini_key: geminiKey
+              gemini_key: geminiKey,
+              deepseek_key: deepseekKey
             })
           });
           if (!response.ok) {
@@ -718,10 +780,12 @@
           const mistralResult = data.results["Mistral"];
           const anthropicResult = data.results["Anthropic Claude"];
           const geminiResult = data.results["Google Gemini"];
+          const deepseekResult = data.results["DeepSeek"];
           const openaiFeedback = document.getElementById("openaiFeedback");
           const mistralFeedback = document.getElementById("mistralFeedback");
           const anthropicFeedback = document.getElementById("anthropicFeedback");
           const geminiFeedback = document.getElementById("geminiFeedback");
+          const deepseekFeedback = document.getElementById("deepseekFeedback");
           openaiFeedback.innerHTML = openaiResult === "valid" ? "&#10003;" : "&#10007;";
           openaiFeedback.style.color = openaiResult === "valid" ? "green" : "red";
           mistralFeedback.innerHTML = mistralResult === "valid" ? "&#10003;" : "&#10007;";
@@ -730,6 +794,8 @@
           anthropicFeedback.style.color = anthropicResult === "valid" ? "green" : "red";
           geminiFeedback.innerHTML = geminiResult === "valid" ? "&#10003;" : "&#10007;";
           geminiFeedback.style.color = geminiResult === "valid" ? "green" : "red";
+          deepseekFeedback.innerHTML = deepseekResult === "valid" ? "&#10003;" : "&#10007;";
+          deepseekFeedback.style.color = deepseekResult === "valid" ? "green" : "red";
         } catch (error) {
           console.error("Fehler beim Testen der API Keys:", error);
           alert("Fehler beim Testen der API Keys: " + error.message);

@@ -90,9 +90,24 @@ def query_gemini(question: str, api_key: str) -> str:
         return response.text.strip()
     except Exception as e:
         return f"Fehler bei Google Gemini: {str(e)}"
+    
+def query_deepseek(question: str, api_key: str) -> str:
+    """Fragt DeepSeek zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
+    try:
+        client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "user", "content": question}
+            ],
+            stream=False
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Fehler bei DeepSeek: {str(e)}"
 
-
-def query_consensus(question: str, answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str,
+def query_consensus(question: str, answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, answer_deepseek: str,
                     best_model: str, excluded_models: list, consensus_model: str, api_keys: dict) -> str:
     """
     Nutzt ein Modell, um die Antworten der Modelle mittels Chain-of-Thought-Logik zu einem konsistenten Konsens zusammenzufassen.
@@ -107,6 +122,9 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
         prompt_parts.append(f"Antwort von claude-3-5-sonnet: {answer_claude}\n\n")
     if "Google Gemini" not in excluded_models:
         prompt_parts.append(f"Antwort von gemini-pro: {answer_gemini}\n\n")
+    if "DeepSeek" not in excluded_models:
+        prompt_parts.append(f"Antwort von deepseek-chat: {answer_deepseek}\n\n")
+
     
     if best_model:
         prompt_parts.append(
@@ -179,13 +197,25 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
             model = genai.GenerativeModel("gemini-1.5-pro-latest")
             response = model.generate_content(consensus_prompt)
             return response.text.strip()
+        
+        elif consensus_model == "DeepSeek":
+            client = openai.OpenAI(api_key=api_keys.get("DeepSeek"), base_url="https://api.deepseek.com")
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[
+                    {"role": "system", "content": ""},
+                    {"role": "user", "content": consensus_prompt}
+                ],
+                stream=False
+            )
+            return response.choices[0].message.content.strip()
         else:
             return "Ungültiges Konsensmodell ausgewählt."
     except Exception as e:
         return f"Fehler beim Konsens: {str(e)}"
     
 
-def query_differences(answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, consensus_answer: str, api_keys: dict, differences_model: str) -> str:
+def query_differences(answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, answer_deepseek: str, consensus_answer: str, api_keys: dict, differences_model: str) -> str:
     """
     Extrahiert die Unterschiede zwischen den vier Expertenantworten mittels des angegebenen Konsens‑Modells.
     """
@@ -211,8 +241,9 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
         "- GPT-4o: " + answer_openai + "\n"
         "- Mistral: " + answer_mistral + "\n"
         "- Claude: " + answer_claude + "\n"
-        "- Gemini: " + answer_gemini + "\n\n"
-        
+        "- Gemini: " + answer_gemini + "\n"
+        "- DeepSeek: " + answer_deepseek + "\n\n"
+
         "Zum Schluss entscheide subjektiv, welches Modell die beste Antwort geliefert hat. "
         "Wähle dabei eines der folgenden Modelle: Anthropic, Gemini, Mistral oder OpenAI. "
         "Füge deine Entscheidung am Ende der Antwort in einer eigenen Zeile ein, beginnend mit 'BestModel:' gefolgt vom Modellnamen.\n\n"
@@ -274,6 +305,19 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
             model = genai.GenerativeModel("gemini-1.5-pro-latest")
             response = model.generate_content(differences_prompt)
             return response.text.strip()
+        
+        elif differences_model == "DeepSeek":
+            client = openai.OpenAI(api_key=api_keys.get("DeepSeek"), base_url="https://api.deepseek.com")
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[
+                    {"role": "system", "content": ""},
+                    {"role": "user", "content": differences_prompt}
+                ],
+                stream=False
+            )
+            return response.choices[0].message.content.strip()
+
         else:
             return "Ungültiges Modell für den Unterschiedsvergleich."
     except Exception as e:
@@ -328,6 +372,13 @@ async def ask_gemini(
     answer = query_gemini(question, api_key)
     return {"response": answer}
 
+@app.get("/ask_deepseek")
+async def ask_deepseek(
+    question: str = Query(..., description="Frage für DeepSeek"),
+    api_key: str = Query(..., description="API Key für DeepSeek")
+):
+    answer = query_deepseek(question, api_key)
+    return {"response": answer}
 
 @app.post("/consensus")
 async def consensus(data: dict):
@@ -336,6 +387,7 @@ async def consensus(data: dict):
     answer_mistral = data.get("answer_mistral")
     answer_claude = data.get("answer_claude")
     answer_gemini = data.get("answer_gemini")
+    answer_deepseek = data.get("answer_deepseek")
     best_model = data.get("best_model", "")
     consensus_model = data.get("consensus_model")
     excluded_models = data.get("excluded_models", [])
@@ -343,7 +395,8 @@ async def consensus(data: dict):
         "OpenAI": data.get("openai_key"),
         "Mistral": data.get("mistral_key"),
         "Anthropic Claude": data.get("anthropic_key"),
-        "Google Gemini": data.get("gemini_key")
+        "Google Gemini": data.get("gemini_key"),
+        "DeepSeek": data.get("deepseek_key")
     }
     
     missing = []
@@ -364,6 +417,9 @@ async def consensus(data: dict):
     if "Google Gemini" not in excluded_models:
         if not answer_gemini or not api_keys.get("Google Gemini"):
             missing.append("Google Gemini")
+    if "DeepSeek" not in excluded_models:
+        if not answer_deepseek or not api_keys.get("DeepSeek"):
+            missing.append("DeepSeek")
     
     if missing:
         raise HTTPException(status_code=400, detail="Fehlende Parameter: " + ", ".join(missing))
@@ -373,12 +429,12 @@ async def consensus(data: dict):
     
     # Konsens-Antwort generieren
     consensus_answer = query_consensus(
-        question, answer_openai, answer_mistral, answer_claude, answer_gemini,
+        question, answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek,
         best_model, excluded_models, consensus_model, api_keys
     )
     
     # Unterschiede ermitteln – nun mit Übergabe der Konsens-Antwort
-    differences = query_differences(answer_openai, answer_mistral, answer_claude, answer_gemini, consensus_answer, api_keys, differences_model=consensus_model)
+    differences = query_differences(answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, consensus_answer, api_keys, differences_model=consensus_model)
     
     return {"consensus_response": consensus_answer, "differences": differences}
 
@@ -395,6 +451,7 @@ async def check_keys(data: dict):
         mistral_key = data.get("mistral_key")
         anthropic_key = data.get("anthropic_key")
         gemini_key = data.get("gemini_key")
+        deepseek_key = data.get("deepseek_key")
         
         results = {}
         
@@ -454,6 +511,25 @@ async def check_keys(data: dict):
                 results["Anthropic Claude"] = "invalid"
         except Exception as e:
             results["Anthropic Claude"] = "invalid"
+
+        # DeepSeek Handshake
+        try:
+            deepseek_key = data.get("deepseek_key")
+            if deepseek_key and len(deepseek_key) > 10:
+                client = openai.OpenAI(api_key=deepseek_key, base_url="https://api.deepseek.com")
+                response = client.chat.completions.create(
+                    model="deepseek-chat",
+                    messages=[
+                        {"role": "system", "content": "ping"},
+                        {"role": "user", "content": "ping"}
+                    ],
+                    stream=False
+                )
+                results["DeepSeek"] = "valid"
+            else:
+                results["DeepSeek"] = "invalid"
+        except Exception as e:
+            results["DeepSeek"] = "invalid"
         
         # Google Gemini Handshake
         try:
@@ -468,6 +544,6 @@ async def check_keys(data: dict):
             results["Google Gemini"] = "invalid"
         
         return {"results": results}
-    
+
     except Exception as overall_error:
         return {"results": {"error": str(overall_error)}}
