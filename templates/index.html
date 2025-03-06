@@ -2,6 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Typeon AI</title>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
@@ -25,21 +26,35 @@
   </script>
 </head>
 <body>
+  <header class="top-bar">
+    <!-- Sidebar Toggle Button -->
+    <button id="toggleSidebarButton" class="sidebar-toggle">
+      <span class="arrow">☰</span>
+    </button>
+    <!-- Logo und Titel -->
+    <div class="top-bar-logo">
+      <span class="top-bar-title">Typeon AI</span>
+    </div>
+    <!-- Mode Switch -->
+    <div class="mode-switch">
+      <label class="switch">
+        <input type="checkbox" id="modeToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+  </header>  
   <!-- Toggle-Button für die Sidebar (wird im responsiven Modus eingeblendet) -->
   <div class="sidebar-toggle">
-    <button id="toggleSidebarButton">
-      <span class="arrow">►</span>
+    <button id="toggleSidebarButton" class="collapse-btn">
+      <span class="arrow">&#9660;</span>
     </button>
-  </div>
-  <!-- Sidebar für API Keys -->
-  <div class="sidebar">
-    <!-- Überschrift innerhalb der Sidebar -->
-    <div class="sidebar-title">
-      <img src="./static/typeonai.jpg" alt="Logo" class="sidebar-logo">
-      <h1>Typeon AI</h1>
-      <hr class="sidebar-title-separator">
-      <p>&nbsp;</p>
-    </div>
+  </div>  
+  <br/>
+  <br/>
+  <br/>
+<!-- Sidebar für API Keys -->
+<div class="sidebar">
+  <div class="sidebar-content">
     <div class="sidebar-header">
       <h2>API Keys</h2>
       <button id="toggleApiTest" onclick="toggleApiTest()" class="collapse-btn">
@@ -66,12 +81,12 @@
       <div class="api-key-group">
         <label for="deepseekKey">DeepSeek API Key <span id="deepseekFeedback" class="feedback"></span></label>
         <input type="password" id="deepseekKey" placeholder="Dein DeepSeek Key">
-      </div>      
+      </div>
       <button onclick="testAllKeys()">
         Alle APIs testen 
         <span id="apiSpinner" class="spinner" style="display: none;"></span>
       </button>
-    </div>    
+    </div>
 
     <!-- Trennstrich zwischen API Keys und Modelle -->
     <div class="sidebar-separator"></div>
@@ -98,12 +113,13 @@
       </label>
       <label for="selectDeepSeek">
         <input type="checkbox" id="selectDeepSeek" checked> DeepSeek
-      </label>      
+      </label>
     </div>
 
-    <!-- Trennstrich zwischen API Keys und Modelle -->
+    <!-- Trennstrich zwischen API Keys und Leaderboard -->
     <div class="sidebar-separator"></div>
 
+    <!-- Leaderboard -->
     <div class="sidebar-header">
       <h2>Leaderboard</h2>
       <button id="toggleLeaderboard" class="collapse-btn" onclick="toggleLeaderboard()">
@@ -114,6 +130,7 @@
       <div id="leaderboardContent"></div>
     </div>
   </div>
+</div>
 
   <!-- Mode-Switch in der oberen rechten Ecke -->
   <div class="mode-switch">
@@ -226,7 +243,7 @@
             <label for="consensusModelDropdown" class="consensus-label">Konsens‑Modell:</label>
             <div class="select-wrapper">
               <select id="consensusModelDropdown">
-                <option value="Anthropic Claude">claude-3-5-sonnet-20241022</option>
+                <option value="Anthropic Claude">claude-3-5</option>
                 <option value="Mistral">mistral-large-latest</option>
                 <option value="OpenAI">GPT‑4o</option>
                 <option value="Google Gemini">gemini-pro</option>
@@ -303,6 +320,11 @@
         sidebar.classList.toggle("collapsed");
         const arrow = document.querySelector(".sidebar-toggle .arrow");
         arrow.textContent = sidebar.classList.contains("collapsed") ? "►" : "◄";
+      });
+
+      document.getElementById('toggleSidebarButton').addEventListener('click', function() {
+        const sidebar = document.querySelector('.sidebar');
+        sidebar.classList.toggle('active');
       });
     
       // Fenstergröße prüfen – wenn <1024px, Sidebar einklappen

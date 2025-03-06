@@ -27,16 +27,39 @@ body {
     font-family: 'Roboto', Arial, sans-serif;
     background-color: var(--bg-color);
     margin: 0;
-    padding: 20px;
+    padding: 10px;
     color: var(--text-color);
+    padding-top: 10px;
 }
+
+.top-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 45px; /* Angepasste Höhe */
+    background: var(--container-bg);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 1500;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  }
+  
+  /* Standard-Styling für das Logo-Element */
+  .top-bar-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
   
 /* Container */
 .container {
     max-width: 900px;
     margin: 0 auto;
     background: var(--container-bg);
-    padding: 20px 30px;
+    padding: 15px 20px;
     border-radius: 8px;
     box-shadow: var(--box-shadow);
     position: relative;
@@ -387,12 +410,13 @@ h1, h2 {
     background-color: #0056b3;
 }
   
-/* Mode-Switch Styling */
 .mode-switch {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-}
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 1300;
+  }
+  
   
 .switch {
     position: relative;
@@ -527,6 +551,12 @@ input:checked + .slider:before {
     text-align: center;
     transition: transform 0.3s ease;
 }
+  
+
+.sidebar-content {
+    margin-top: 60px; /* Passe diesen Wert an, falls nötig */
+  }
+  
 
 /* Wenn die Sidebar ausgeblendet (collapsed) ist – sie wird von links verschoben */
 .sidebar.collapsed {
@@ -546,7 +576,11 @@ input:checked + .slider:before {
     width: 28px;
     height: 28px;
     cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.3s;
 }
+
 
 /* Pfeil im Toggle-Button */
 .sidebar-toggle .arrow {
@@ -575,16 +609,225 @@ input:checked + .slider:before {
     display: none;
   }
   
-/* Bei kleinen Displays (max-width: 1024px) anzeigen */
-@media (max-width: 1024px) {
-    .sidebar-toggle {
-        display: block;
-        position: fixed; /* damit er immer sichtbar bleibt */
-        top: 20px;
-        left: 0;
-        z-index: 1100;
+  @media (max-width: 1400px) {
+    /* Top Bar & Body */
+    .top-bar-logo {
+      margin-left: 40px; /* Abstand, damit der Pfeil links Platz hat */
     }
-}
+    body {
+      padding: 10px !important;
+      padding-top: 70px;
+    }
+    .container {
+      width: 80% !important;
+      max-width: none !important;
+      margin: 0 auto !important;
+      padding: 15px 20px;
+    }
+    .main-wrapper {
+      margin-left: 0 !important;
+      padding-top: 10px;
+    }
+  
+    /* Sidebar Overlay */
+    .sidebar {
+      position: fixed;
+      top: 45px;
+      left: 0;
+      width: 80%;
+      max-width: 300px;
+      height: 100%;
+      background: var(--container-bg);
+      box-shadow: var(--box-shadow);
+      padding: 15px;
+      box-sizing: border-box;
+      z-index: 1100;
+      transition: transform 0.3s ease;
+      transform: translateX(-100%);
+    }
+    .sidebar.active {
+      transform: translateX(0);
+    }
+  
+    /* Sidebar Toggle Button – nur in der Top Bar anzeigen */
+    .sidebar-toggle {
+      display: block !important;
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 1200;
+    }
+
+    /* Falls du einen doppelten Toggle außerhalb der Top Bar hast, blendest du ihn hier aus */
+    body > .sidebar-toggle:not(header .sidebar-toggle) {
+      display: none;
+    }
+  
+    /* Weitere Anpassungen (z. B. für Antwortfelder, Eingabecontainer etc.) */
+    .response-section,
+    .consensus-box {
+      flex-direction: column;
+      gap: 10px;
+    }
+    .response-box,
+    .consensus-box {
+      width: 100% !important;
+      box-sizing: border-box;
+    }
+    .chat-input-container {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      width: 100%;
+    }
+    .chat-input-container .input-field {
+      width: 100% !important;
+      box-sizing: border-box;
+      margin-bottom: 10px;
+    }
+    .chat-input-container .button {
+      width: 40px;
+      height: 40px;
+      flex-shrink: 0;
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .chat-input-container .button svg {
+      width: 60%;
+      height: 60%;
+      fill: var(--button-text);
+    }
+    .mode-switch {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 1300;
+    }
+    .consensus-controls {
+      flex-direction: column;
+      gap: 10px;
+    }
+    .consensus-controls > * {
+      width: 100%;
+    }
+  }  
+
+@media (max-width: 768px) {
+    .top-bar-logo {
+      margin-left: 40px; /* Abstand anpassen, damit der Pfeil links Platz hat */
+    }
+
+    body {
+      padding: 10px !important;
+      padding-top: 70px;
+    }
+  
+    .container {
+      width: 80% !important;
+      max-width: none !important;
+      margin: 0 auto !important;
+      padding: 15px 20px;
+    }
+  
+    .main-wrapper {
+      margin-left: 0 !important;
+      padding-top: 10px;
+    }
+  
+    /* Sidebar Overlay (aktiv sichtbar bei Klasse 'active') */
+    .sidebar {
+      position: fixed;
+      top: 45px;
+      left: 0;
+      width: 80%;
+      max-width: 300px;
+      height: 100%;
+      background: var(--container-bg);
+      box-shadow: var(--box-shadow);
+      padding: 15px;
+      box-sizing: border-box;
+      z-index: 1100;
+      transition: transform 0.3s ease;
+      transform: translateX(-100%);
+    }
+      
+    .sidebar.active {
+      transform: translateX(0);
+    }
+  
+    /* Sidebar-Toggle-Button sichtbar und fixiert */
+    .sidebar-toggle {
+      display: block !important;
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 1200;
+    }
+  
+    /* Antwortfelder und Konsens-Box untereinander */
+    .response-section,
+    .consensus-box {
+      flex-direction: column;
+      gap: 10px;
+    }
+  
+    .response-box,
+    .consensus-box {
+      width: 100% !important;
+      box-sizing: border-box;
+    }
+  
+    /* Eingabecontainer korrekt ausgerichtet */
+    .chat-input-container {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      width: 100%;
+    }
+  
+    .chat-input-container .input-field {
+      width: 100% !important;
+      box-sizing: border-box;
+      margin-bottom: 10px;
+    }
+  
+    /* Button mit korrekter Ausrichtung nach rechts */
+    .chat-input-container .button {
+      width: 40px;
+      height: 40px;
+      flex-shrink: 0;
+      margin-left: auto; /* Rechts ausrichten */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  
+    /* SVG sichtbar */
+    .chat-input-container .button svg {
+      width: 60%;
+      height: 60%;
+      fill: var(--button-text);
+    }
+  
+    .mode-switch {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        z-index: 1300;
+      }      
+  
+    /* Konsens-Kontrollen sauber stapeln */
+    .consensus-controls {
+      flex-direction: column;
+      gap: 10px;
+    }
+  
+    .consensus-controls > * {
+      width: 100%;
+    }
+  }  
 
 /* Toggle-Button für den API-Testbereich */
 #toggleApiTest {
@@ -669,7 +912,7 @@ input:checked + .slider:before {
     width: 80%;
     max-width: 900px;
     background: var(--container-bg);
-    padding: 20px 30px;
+    padding: 15px 20px;
     border-radius: 8px;
     box-shadow: var(--box-shadow);
 }
