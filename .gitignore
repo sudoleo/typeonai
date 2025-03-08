@@ -2,3 +2,5 @@
 .env
 __pycache__/
 *.log
+*json
+consensai-firebase-adminsdk-fbsvc-9064a77134.json

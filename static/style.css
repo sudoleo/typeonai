@@ -45,7 +45,15 @@ body {
     padding: 0 20px;
     z-index: 1500;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    flex-wrap: nowrap; /* verhindert Zeilenumbruch */
   }
+
+  .top-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-right: 40px; /* zusätzlichen Abstand vom rechten Rand */
+  }  
   
   /* Standard-Styling für das Logo-Element */
   .top-bar-logo {
@@ -53,6 +61,12 @@ body {
     align-items: center;
     gap: 8px;
   }
+
+  .top-bar .mode-switch {
+    position: relative;
+    top: auto;
+    right: auto;
+  }  
   
 /* Container */
 .container {
@@ -93,6 +107,10 @@ h1, h2 {
     font-size: 1.2em;
     margin: 5px 0;
     text-align: center;
+}
+
+.title small {
+  font-size: 0.8em;
 }
   
 /* Input-Section */
@@ -608,6 +626,73 @@ input:checked + .slider:before {
 .sidebar-toggle {
     display: none;
   }
+
+/* Styling für den Login-Text in der Top Bar */
+.login-text {
+  cursor: pointer;
+  font-size: 1em;
+  color: var(--text-color);
+}
+
+/* Modal Hintergrund */
+.modal {
+  display: none; 
+  position: fixed; 
+  z-index: 2000; 
+  left: 0;
+  top: 0;
+  width: 100%; 
+  height: 100%; 
+  overflow: auto;
+  background-color: rgba(0,0,0,0.5);
+}
+
+/* Modal Content */
+.modal-content {
+  background-color: var(--container-bg);
+  margin: 15% auto;
+  padding: 20px;
+  border: 1px solid var(--input-border);
+  width: 300px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+/* Inputfelder im Modal */
+.modal-content input {
+  width: 90%;
+  padding: 10px;
+  margin: 10px 0;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  background-color: var(--input-bg);
+  color: var(--text-color);
+}
+
+/* Login Button im Modal */
+.modal-content button {
+  background-color: var(--button-bg);
+  border: none;
+  border-radius: 4px;
+  padding: 10px;
+  color: var(--button-text);
+  cursor: pointer;
+  width: 100%;
+}
+
+/* Schließ-Button für das Modal */
+.modal-content .close {
+  float: right;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+/* Fehlernachricht */
+.error-message {
+  color: red;
+  font-size: 0.9em;
+}
+
   
   @media (max-width: 1400px) {
     /* Top Bar & Body */
@@ -712,6 +797,10 @@ input:checked + .slider:before {
     .consensus-controls > * {
       width: 100%;
     }
+    .title small {
+      font-size: 0.8em;
+    }
+    
   }  
 
 @media (max-width: 768px) {
@@ -826,6 +915,9 @@ input:checked + .slider:before {
   
     .consensus-controls > * {
       width: 100%;
+    }
+    .title small {
+      font-size: 0.8em;
     }
   }  
 

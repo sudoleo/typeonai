@@ -1,9 +1,98 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
 import { getFirestore, collection, query, orderBy, onSnapshot, doc, setDoc, increment } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 
 // Initialisiere Firebase mit der globalen Konfiguration, die aus dem HTML kommt
 const app = initializeApp(window.FIREBASE_CONFIG);
 const db = getFirestore(app);
+
+// Initialisiere Auth
+const auth = getAuth(app);
+
+onAuthStateChanged(auth, (user) => {
+  const loginContainer = document.getElementById("loginContainer");
+  const usageOptions = document.getElementById("usageOptions");
+  if (user) {
+    user.getIdToken().then((token) => {
+      localStorage.setItem("id_token", token);
+      // Zeige den Bereich, sobald der Token gesetzt ist
+      if (usageOptions) {
+        usageOptions.style.display = "block";
+      }
+    });
+    loginContainer.innerText = `Logout (${user.email})`;
+  } else {
+    localStorage.removeItem("id_token");
+    loginContainer.innerText = "Einloggen und gratis nutzen";
+    if (usageOptions) {
+      usageOptions.style.display = "none";
+    }
+  }
+});
+
+// Login-Funktion
+document.getElementById("loginButton").addEventListener("click", () => {
+  const email = document.getElementById("loginEmail").value;
+  const password = document.getElementById("loginPassword").value;
+  signInWithEmailAndPassword(auth, email, password)
+    .then((userCredential) => {
+      // Login erfolgreich – Modal schließen
+      document.getElementById("loginModal").style.display = "none";
+    })
+    .catch((error) => {
+      document.getElementById("loginError").innerText = error.message;
+    });
+});
+
+// Registrierungs-Funktion
+document.getElementById("registerButton").addEventListener("click", () => {
+  const email = document.getElementById("loginEmail").value;
+  const password = document.getElementById("loginPassword").value;
+  
+  createUserWithEmailAndPassword(auth, email, password)
+    .then((userCredential) => {
+      // Registrierung erfolgreich
+      console.log("Benutzer registriert:", userCredential.user);
+      // Optional: Modal schließen oder Benutzer informieren
+      document.getElementById("loginModal").style.display = "none";
+    })
+    .catch((error) => {
+      document.getElementById("loginError").innerText = error.message;
+    });
+});
+
+// "Passwort vergessen?"-Funktion hinzufügen
+document.getElementById("forgotPasswordButton").addEventListener("click", () => {
+  const email = document.getElementById("loginEmail").value;
+  if (!email) {
+    alert("Bitte geben Sie Ihre E-Mail-Adresse ein, um das Passwort zurückzusetzen.");
+    return;
+  }
+  sendPasswordResetEmail(auth, email)
+    .then(() => {
+      alert("Eine E-Mail zum Zurücksetzen Ihres Passworts wurde an " + email + " gesendet.");
+    })
+    .catch((error) => {
+      console.error("Fehler beim Senden der Passwort-Zurücksetzen-E-Mail:", error);
+      alert("Fehler: " + error.message);
+    });
+});
+
+// Klick auf den Login-Bereich: Öffne das Modal, wenn nicht angemeldet, oder melde ab, wenn schon eingeloggt
+document.getElementById("loginContainer").addEventListener("click", () => {
+  if (auth.currentUser) {
+    signOut(auth).catch((error) => {
+      console.error("Fehler beim Logout:", error);
+    });
+  } else {
+    document.getElementById("loginModal").style.display = "block";
+  }
+});
+
+// Schließen des Modals
+document.getElementById("closeLoginModal").addEventListener("click", () => {
+  document.getElementById("loginModal").style.display = "none";
+});
 
 // Restlicher Firebase-Code (z.B. Leaderboard, Funktionen, etc.)
 const leaderboardRef = collection(db, "leaderboard");

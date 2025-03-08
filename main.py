@@ -8,11 +8,20 @@ import requests
 from mistralai import Mistral
 from dotenv import load_dotenv
 import google.generativeai as genai
+import firebase_admin
+from firebase_admin import credentials, auth
+from typing import Optional
 
 # Lade .env falls nötig (wird hier nicht mehr für API Keys genutzt)
 load_dotenv()
 
 app = FastAPI()
+
+# Beispiel: Free-Usage-Limit
+FREE_USAGE_LIMIT = 25
+
+# In-Memory-Speicher für Demonstrationszwecke – in der Produktion persistent speichern
+usage_counter = {}  # { uid: anzahl_anfragen }
 
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -322,6 +331,20 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
             return "Ungültiges Modell für den Unterschiedsvergleich."
     except Exception as e:
         return f"Fehler beim Vergleich: {str(e)}"
+    
+# Initialisiere Firebase Admin (Beispiel, passe den Pfad zu deinem Service Account an)
+cred = credentials.Certificate("consensai-firebase-adminsdk-fbsvc-9064a77134.json")
+firebase_admin.initialize_app(cred)
+
+def verify_user_token(token: str) -> str:
+    """
+    Verifiziert das Firebase-ID-Token und gibt die uid zurück.
+    """
+    try:
+        decoded_token = auth.verify_id_token(token)
+        return decoded_token["uid"]
+    except Exception as e:
+        raise Exception("Ungültiger Token")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -339,72 +362,222 @@ async def read_root(request: Request):
 
 @app.get("/ask_openai")
 async def ask_openai(
-    question: str = Query(..., description="Frage für OpenAI"),
-    api_key: str = Query(..., description="API Key für OpenAI")
+    question: str,
+    id_token: Optional[str] = Query(None),
+    api_key: Optional[str] = Query(None),
+    active_count: Optional[float] = Query(1)
 ):
-    answer = query_openai(question, api_key)
-    return {"response": answer}
+    if id_token:
+        try:
+            uid = verify_user_token(id_token)
+        except Exception:
+            raise HTTPException(status_code=401, detail="Authentifizierung fehlgeschlagen")
+        current_usage = usage_counter.get(uid, 0)
+        increment = 1.0 / active_count
+        if current_usage + increment > FREE_USAGE_LIMIT:
+            return {"error": "Ihr gratis Kontingent (5 Anfragen) ist aufgebraucht. Bitte hinterlegen Sie Ihre eigenen API Keys."}
+        usage_counter[uid] = current_usage + increment
+
+        developer_api_key = os.environ.get("DEVELOPER_OPENAI_API_KEY")
+        if not developer_api_key:
+            raise HTTPException(status_code=500, detail="Serverfehler: API Key nicht konfiguriert")
+        answer = query_openai(question, developer_api_key)
+        free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
+        return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
+    
+    elif api_key:
+        answer = query_openai(question, api_key)
+        return {"response": answer, "key_used": "User API Key"}
+    
+    else:
+        raise HTTPException(status_code=400, detail="Kein Authentifizierungsparameter (id_token oder api_key) angegeben")
 
 
 @app.get("/ask_mistral")
 async def ask_mistral(
-    question: str = Query(..., description="Frage für Mistral"),
-    api_key: str = Query(..., description="API Key für Mistral")
+    question: str,
+    id_token: Optional[str] = Query(None),
+    api_key: Optional[str] = Query(None),
+    active_count: Optional[float] = Query(1)
 ):
-    answer = query_mistral(question, api_key)
-    return {"response": answer}
+    if id_token:
+        try:
+            uid = verify_user_token(id_token)
+        except Exception:
+            raise HTTPException(status_code=401, detail="Authentifizierung fehlgeschlagen")
+        current_usage = usage_counter.get(uid, 0)
+        increment = 1.0 / active_count
+        if current_usage + increment > FREE_USAGE_LIMIT:
+            return {"error": "Ihr gratis Kontingent (5 Anfragen) ist aufgebraucht. Bitte hinterlegen Sie Ihre eigenen API Keys."}
+        usage_counter[uid] = current_usage + increment
+
+        developer_api_key = os.environ.get("DEVELOPER_MISTRAL_API_KEY")
+        if not developer_api_key:
+            raise HTTPException(status_code=500, detail="Serverfehler: API Key nicht konfiguriert")
+        answer = query_mistral(question, developer_api_key)
+        free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
+        return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
+    
+    elif api_key:
+        answer = query_mistral(question, api_key)
+        return {"response": answer, "key_used": "User API Key"}
+    
+    else:
+        raise HTTPException(status_code=400, detail="Kein id_token oder api_key angegeben.")
 
 
 @app.get("/ask_claude")
 async def ask_claude(
-    question: str = Query(..., description="Frage für Anthropic Claude"),
-    api_key: str = Query(..., description="API Key für Anthropic Claude")
+    question: str,
+    id_token: Optional[str] = Query(None),
+    api_key: Optional[str] = Query(None),
+    active_count: Optional[float] = Query(1)
 ):
-    answer = query_claude(question, api_key)
-    return {"response": answer}
+    if id_token:
+        try:
+            uid = verify_user_token(id_token)
+        except Exception:
+            raise HTTPException(status_code=401, detail="Authentifizierung fehlgeschlagen")
+        current_usage = usage_counter.get(uid, 0)
+        increment = 1.0 / active_count
+        if current_usage + increment > FREE_USAGE_LIMIT:
+            return {"error": "Ihr gratis Kontingent (5 Anfragen) ist aufgebraucht. Bitte hinterlegen Sie Ihre eigenen API Keys."}
+        usage_counter[uid] = current_usage + increment
+
+        developer_api_key = os.environ.get("DEVELOPER_ANTHROPIC_API_KEY")
+        if not developer_api_key:
+            raise HTTPException(status_code=500, detail="Serverfehler: API Key nicht konfiguriert")
+        answer = query_claude(question, developer_api_key)
+        free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
+        return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
+    
+    elif api_key:
+        answer = query_claude(question, api_key)
+        return {"response": answer, "key_used": "User API Key"}
+    
+    else:
+        raise HTTPException(status_code=400, detail="Kein id_token oder api_key angegeben.")
 
 
 @app.get("/ask_gemini")
 async def ask_gemini(
-    question: str = Query(..., description="Frage für Google Gemini"),
-    api_key: str = Query(..., description="API Key für Google Gemini")
+    question: str,
+    id_token: Optional[str] = Query(None),
+    api_key: Optional[str] = Query(None),
+    active_count: Optional[float] = Query(1)
 ):
-    answer = query_gemini(question, api_key)
-    return {"response": answer}
+    if id_token:
+        try:
+            uid = verify_user_token(id_token)
+        except Exception:
+            raise HTTPException(status_code=401, detail="Authentifizierung fehlgeschlagen")
+        current_usage = usage_counter.get(uid, 0)
+        increment = 1.0 / active_count
+        if current_usage + increment > FREE_USAGE_LIMIT:
+            return {"error": "Ihr gratis Kontingent (5 Anfragen) ist aufgebraucht. Bitte hinterlegen Sie Ihre eigenen API Keys."}
+        usage_counter[uid] = current_usage + increment
+
+        developer_api_key = os.environ.get("DEVELOPER_GEMINI_API_KEY")
+        if not developer_api_key:
+            raise HTTPException(status_code=500, detail="Serverfehler: API Key nicht konfiguriert")
+        answer = query_gemini(question, developer_api_key)
+        free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
+        return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
+    
+    elif api_key:
+        answer = query_gemini(question, api_key)
+        return {"response": answer, "key_used": "User API Key"}
+    
+    else:
+        raise HTTPException(status_code=400, detail="Kein id_token oder api_key angegeben.")
+
 
 @app.get("/ask_deepseek")
 async def ask_deepseek(
-    question: str = Query(..., description="Frage für DeepSeek"),
-    api_key: str = Query(..., description="API Key für DeepSeek")
+    question: str,
+    id_token: Optional[str] = Query(None),
+    api_key: Optional[str] = Query(None),
+    active_count: Optional[float] = Query(1)
 ):
-    answer = query_deepseek(question, api_key)
-    return {"response": answer}
+    if id_token:
+        try:
+            uid = verify_user_token(id_token)
+        except Exception:
+            raise HTTPException(status_code=401, detail="Authentifizierung fehlgeschlagen")
+        current_usage = usage_counter.get(uid, 0)
+        increment = 1.0 / active_count
+        if current_usage + increment > FREE_USAGE_LIMIT:
+            return {"error": "Ihr gratis Kontingent (5 Anfragen) ist aufgebraucht. Bitte hinterlegen Sie Ihre eigenen API Keys."}
+        usage_counter[uid] = current_usage + increment
+
+        developer_api_key = os.environ.get("DEVELOPER_DEEPSEEK_API_KEY")
+        if not developer_api_key:
+            raise HTTPException(status_code=500, detail="Serverfehler: API Key nicht konfiguriert")
+        answer = query_deepseek(question, developer_api_key)
+        free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
+        return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
+    
+    elif api_key:
+        answer = query_deepseek(question, api_key)
+        return {"response": answer, "key_used": "User API Key"}
+    
+    else:
+        raise HTTPException(status_code=400, detail="Kein id_token oder api_key angegeben.")
+
 
 @app.post("/consensus")
 async def consensus(data: dict):
+    # Prüfe, ob der Nutzer eigene API Keys verwenden möchte (z. B. über einen Boolean-Parameter "useOwnKeys")
+    use_own_keys = data.get("useOwnKeys", False)
+
+    if not use_own_keys:
+        # Falls nicht – erwarte einen id_token und führe den Free-Usage-Check durch.
+        id_token = data.get("id_token")
+        if not id_token:
+            raise HTTPException(status_code=400, detail="id_token fehlt")
+        try:
+            uid = verify_user_token(id_token)
+        except Exception:
+            raise HTTPException(status_code=401, detail="Ungültiger Token")
+        current_usage = usage_counter.get(uid, 0)
+        if current_usage >= FREE_USAGE_LIMIT:
+            raise HTTPException(status_code=403, detail="Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie Ihre eigenen API Keys.")
+        usage_counter[uid] = current_usage + 1
+    # Bei useOwnKeys==True wird der Free-Usage-Check übersprungen.
+
+    # Parameter extrahieren
     question = data.get("question")
-    answer_openai = data.get("answer_openai")
-    answer_mistral = data.get("answer_mistral")
-    answer_claude = data.get("answer_claude")
-    answer_gemini = data.get("answer_gemini")
+    answer_openai   = data.get("answer_openai")
+    answer_mistral  = data.get("answer_mistral")
+    answer_claude   = data.get("answer_claude")
+    answer_gemini   = data.get("answer_gemini")
     answer_deepseek = data.get("answer_deepseek")
-    best_model = data.get("best_model", "")
+    best_model      = data.get("best_model", "")
     consensus_model = data.get("consensus_model")
     excluded_models = data.get("excluded_models", [])
-    api_keys = {
-        "OpenAI": data.get("openai_key"),
-        "Mistral": data.get("mistral_key"),
-        "Anthropic Claude": data.get("anthropic_key"),
-        "Google Gemini": data.get("gemini_key"),
-        "DeepSeek": data.get("deepseek_key")
-    }
-    
+
+    # API Keys setzen: Bei useOwnKeys werden die vom Nutzer übermittelten Keys genutzt,
+    # andernfalls wird für fehlende Keys auf die Developer Keys zurückgegriffen.
+    api_keys = {}
+    if use_own_keys:
+        api_keys["OpenAI"] = data.get("openai_key")
+        api_keys["Mistral"] = data.get("mistral_key")
+        api_keys["Anthropic Claude"] = data.get("anthropic_key")
+        api_keys["Google Gemini"] = data.get("gemini_key")
+        api_keys["DeepSeek"] = data.get("deepseek_key")
+    else:
+        api_keys["OpenAI"] = data.get("openai_key") or os.environ.get("DEVELOPER_OPENAI_API_KEY")
+        api_keys["Mistral"] = data.get("mistral_key") or os.environ.get("DEVELOPER_MISTRAL_API_KEY")
+        api_keys["Anthropic Claude"] = data.get("anthropic_key") or os.environ.get("DEVELOPER_ANTHROPIC_API_KEY")
+        api_keys["Google Gemini"] = data.get("gemini_key") or os.environ.get("DEVELOPER_GEMINI_API_KEY")
+        api_keys["DeepSeek"] = data.get("deepseek_key") or os.environ.get("DEVELOPER_DEEPSEEK_API_KEY")
+
+    # Validierung der erforderlichen Parameter (nur für Modelle, die nicht ausgeschlossen wurden)
     missing = []
     if not question:
         missing.append("question")
     if not consensus_model:
         missing.append("consensus_model")
-    
     if "OpenAI" not in excluded_models:
         if not answer_openai or not api_keys.get("OpenAI"):
             missing.append("OpenAI")
@@ -420,22 +593,24 @@ async def consensus(data: dict):
     if "DeepSeek" not in excluded_models:
         if not answer_deepseek or not api_keys.get("DeepSeek"):
             missing.append("DeepSeek")
-    
     if missing:
         raise HTTPException(status_code=400, detail="Fehlende Parameter: " + ", ".join(missing))
-    
+
     if best_model and best_model in excluded_models:
         raise HTTPException(status_code=400, detail="Die als beste markierte Antwort darf nicht ausgeschlossen werden.")
-    
+
     # Konsens-Antwort generieren
     consensus_answer = query_consensus(
         question, answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek,
         best_model, excluded_models, consensus_model, api_keys
     )
-    
-    # Unterschiede ermitteln – nun mit Übergabe der Konsens-Antwort
-    differences = query_differences(answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, consensus_answer, api_keys, differences_model=consensus_model)
-    
+
+    # Unterschiede ermitteln
+    differences = query_differences(
+        answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek,
+        consensus_answer, api_keys, differences_model=consensus_model
+    )
+
     return {"consensus_response": consensus_answer, "differences": differences}
 
 
