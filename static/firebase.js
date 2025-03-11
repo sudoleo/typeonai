@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
 import { getFirestore, collection, query, orderBy, onSnapshot, doc, setDoc, increment } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithCustomToken, signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 
 // Initialisiere Firebase mit der globalen Konfiguration, die aus dem HTML kommt
 const app = initializeApp(window.FIREBASE_CONFIG);
@@ -8,6 +8,7 @@ const db = getFirestore(app);
 
 // Initialisiere Auth
 const auth = getAuth(app);
+window.auth = auth;
 
 onAuthStateChanged(auth, (user) => {
   const loginContainer = document.getElementById("loginContainer");
@@ -44,21 +45,34 @@ document.getElementById("loginButton").addEventListener("click", () => {
     });
 });
 
-// Registrierungs-Funktion
 document.getElementById("registerButton").addEventListener("click", () => {
   const email = document.getElementById("loginEmail").value;
   const password = document.getElementById("loginPassword").value;
   
-  createUserWithEmailAndPassword(auth, email, password)
-    .then((userCredential) => {
-      // Registrierung erfolgreich
-      console.log("Benutzer registriert:", userCredential.user);
-      // Optional: Modal schließen oder Benutzer informieren
-      document.getElementById("loginModal").style.display = "none";
-    })
-    .catch((error) => {
-      document.getElementById("loginError").innerText = error.message;
-    });
+  fetch("/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: email, password: password })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.customToken) {
+      // Mit dem Custom Token den Nutzer automatisch einloggen
+      signInWithCustomToken(auth, data.customToken)
+        .then((userCredential) => {
+          console.log("Benutzer erfolgreich angemeldet:", userCredential.user);
+          document.getElementById("loginModal").style.display = "none";
+        })
+        .catch((error) => {
+          document.getElementById("registerError").innerText = error.message;
+        });
+    } else if (data.detail) {
+      document.getElementById("registerError").innerText = data.detail;
+    }
+  })
+  .catch(error => {
+    document.getElementById("registerError").innerText = error.message;
+  });
 });
 
 // "Passwort vergessen?"-Funktion hinzufügen

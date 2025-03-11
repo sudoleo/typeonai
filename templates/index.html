@@ -12,8 +12,6 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <!-- Optional für Sicherheit: -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
-  <!-- Firebase-Konfiguration aus Umgebungsvariablen -->
-  <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
   <script>
     window.FIREBASE_CONFIG = {
       apiKey: "{{ firebase_api_key }}",
@@ -26,6 +24,38 @@
   </script>
 </head>
 <body>
+  <!-- Marketing Popup -->
+  <div id="marketingPopup" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2>Willkommen bei <span class="highlight">Consens AI</span></h2>
+      <p class="subheading">Die besten KI-Modelle an einem Ort – für klare, verlässliche Antworten.</p>
+  
+      <div class="benefits">
+        <div class="benefit">
+          <span class="benefit-icon">✔</span>
+          <strong>Beste Antwort, nicht nur eine:</strong>
+          <span>Vergleiche führende KIs & erhalte die optimale Lösung.</span>
+        </div>
+        
+        <div class="benefit">
+          <span class="benefit-icon">✔</span>
+          <strong>Verstehe die Unterschiede:</strong>
+          <span>Sieh sofort, wo sich die Modelle einig oder uneinig sind.</span>
+        </div>
+  
+        <div class="benefit">
+          <span class="benefit-icon">✔</span>
+          <strong>Einfach & flexibel:</strong>
+          <span>Nutze eigene API-Keys oder starte gratis.</span>
+        </div>
+      </div>
+  
+      <p class="cta-text">Probier’s aus – <span class="highlight-green">25 Gratis-Anfragen</span> warten auf dich!</p>
+      
+      <button id="startNowButton" class="cta-button">Loslegen</button>
+    </div>
+  </div>  
   <header class="top-bar">
     <!-- Sidebar Toggle Button -->
     <button id="toggleSidebarButton" class="sidebar-toggle collapse-btn">
@@ -58,7 +88,10 @@
 <div class="sidebar">
   <div class="sidebar-content">
     <div class="sidebar-header">
-      <h2>API Keys</h2>
+      <div class="sidebar-tooltip">
+        <h2>API Keys</h2>
+        <div class="sidebar-tooltiptext">Eigene API-Keys hinterlegen – nötig nur ohne Login oder bei erschöpftem Kontingent.</div>
+      </div>      
       <button id="toggleApiTest" onclick="toggleApiTest()" class="collapse-btn">
         <span class="arrow">&#9660;</span>
       </button>
@@ -84,16 +117,21 @@
         <label for="deepseekKey">DeepSeek API Key <span id="deepseekFeedback" class="feedback"></span></label>
         <input type="password" id="deepseekKey" placeholder="Dein DeepSeek Key">
       </div>
-      <button onclick="testAllKeys()">
-        Alle APIs testen 
-        <span id="apiSpinner" class="spinner" style="display: none;"></span>
-      </button>
+      <div class="sidebar-tooltip">
+        <button onclick="testAllKeys()">
+          Alle APIs testen 
+          <span id="apiSpinner" class="spinner" style="display: none;"></span>
+        </button>
+        <div class="sidebar-tooltiptext">Dauert circa 1 min.</div>
+      </div>      
     </div>
     <div id="usageOptions">
+      <br>
       <label>
         <input type="checkbox" id="useOwnKeysSwitch">
         Eigene API Keys verwenden
       </label>
+      <br><br>
       <span id="freeUsageDisplay"></span>
     </div>   
 
@@ -101,7 +139,7 @@
     <div class="sidebar-separator"></div>
 
     <!-- Verwendete Modelle (einklappbar) -->
-    <div class="sidebar-header model-header">
+    <div class="sidebar-header">
       <h2>Verwendete Modelle</h2>
       <button id="toggleModelSelection" onclick="toggleModelSelection()" class="collapse-btn">
         <span class="arrow">&#9660;</span>
@@ -240,7 +278,14 @@
       <div class="consensus-wrapper">
         <!-- Konsens-Kontrolle: Schalter, Button und Dropdown wie gehabt -->
         <div class="consensus-controls">
-          <button id="consensusButton" onclick="getConsensus()">Konsens‑Antwort generieren</button>
+          <!-- Tooltip-Wrapper um den Button -->
+          <div class="tooltip">
+            <button id="consensusButton" onclick="getConsensus()">Konsens‑Antwort generieren</button>
+            <!-- Das Hover-Feld mit weiteren Infos -->
+            <div class="tooltiptext">
+              Bündele vier Antworten zu einem finalen, konsistenten Konsens, indem du Widersprüche und Fehler abgleichst.
+            </div>
+          </div>
           <div class="auto-consensus">
             <label class="switch">
               <input type="checkbox" id="autoConsensusToggle">
@@ -296,20 +341,27 @@
         document.body.classList.toggle("dark-mode", isDark);
         localStorage.setItem("darkMode", isDark ? "true" : "false");
       });
+      
+      // --------------------------
+      // Marketing Popup Initialisierung
+      // --------------------------
+      // Überprüfen, ob das Popup schon angezeigt wurde
+      if (!localStorage.getItem("marketingPopupShown")) {
+        document.getElementById("marketingPopup").style.display = "block";
+        document.body.classList.add("modal-open");
+      }
 
-      // --------------------------
-      // API Keys Initialisierung
-      // --------------------------
-      const FREE_USAGE_LIMIT = 25;
-      const apiKeys = ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey"];
-      apiKeys.forEach(function(key) {
-        const stored = localStorage.getItem(key);
-        if (stored) {
-          const inputEl = document.getElementById(key);
-          if (inputEl) {
-            inputEl.value = stored;
-          }
-        }
+      // Popup schließen, wenn auf das "x" geklickt wird
+      document.querySelector("#marketingPopup .close").addEventListener("click", function() {
+        document.getElementById("marketingPopup").style.display = "none";
+        document.body.classList.remove("modal-open");
+        localStorage.setItem("marketingPopupShown", "true");
+      });
+
+      // Popup schließen, wenn der "Jetzt starten"-Button geklickt wird
+      document.getElementById("startNowButton").addEventListener("click", function() {
+        document.getElementById("marketingPopup").style.display = "none";
+        localStorage.setItem("marketingPopupShown", "true");
       });
     
       // --------------------------
@@ -501,25 +553,31 @@
       // OpenAI
       if (activeModels.includes("OpenAI")) {
         const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
-        let endpoint = "";
+        const payload = {
+          question: question,
+          active_count: 1  // Passe diesen Wert ggf. dynamisch an
+        };
+
         if (!useOwnKeys) {
           let id_token = localStorage.getItem("id_token");
           if (id_token) {
-            endpoint = `/ask_openai?question=${encodeURIComponent(question)}&id_token=${encodeURIComponent(id_token)}`;
+            payload.id_token = id_token;
           } else {
-            const openaiKey = localStorage.getItem("openaiKey") || "";
-            endpoint = `/ask_openai?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(openaiKey)}`;
+            payload.api_key = localStorage.getItem("openaiKey") || "";
           }
         } else {
           if (!validateUserKey("openaiKey")) {
             alert("Bitte geben Sie einen gültigen OpenAI API Key ein.");
-            // Beende den Request für OpenAI
             return;
           }
-          const openaiKey = localStorage.getItem("openaiKey");
-          endpoint = `/ask_openai?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(openaiKey)}`;
+          payload.api_key = localStorage.getItem("openaiKey");
         }
-        fetch(endpoint)
+
+        fetch('/ask_openai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
           .then(response => response.json())
           .then(data => {
             const outputEl = document.getElementById("openaiResponse").querySelector(".collapsible-content");
@@ -542,27 +600,35 @@
           });
       }
 
+
       // Mistral
       if (activeModels.includes("Mistral")) {
         const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
-        let endpoint = "";
+        const payload = {
+          question: question,
+          active_count: 1
+        };
+
         if (!useOwnKeys) {
           let id_token = localStorage.getItem("id_token");
           if (id_token) {
-            endpoint = `/ask_mistral?question=${encodeURIComponent(question)}&id_token=${encodeURIComponent(id_token)}`;
+            payload.id_token = id_token;
           } else {
-            const mistralKey = localStorage.getItem("mistralKey") || "";
-            endpoint = `/ask_mistral?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(mistralKey)}`;
+            payload.api_key = localStorage.getItem("mistralKey") || "";
           }
         } else {
           if (!validateUserKey("mistralKey")) {
             alert("Bitte geben Sie einen gültigen Mistral API Key ein.");
             return;
           }
-          const mistralKey = localStorage.getItem("mistralKey");
-          endpoint = `/ask_mistral?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(mistralKey)}`;
+          payload.api_key = localStorage.getItem("mistralKey");
         }
-        fetch(endpoint)
+
+        fetch('/ask_mistral', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
           .then(response => response.json())
           .then(data => {
             const outputEl = document.getElementById("mistalResponse").querySelector(".collapsible-content");
@@ -588,24 +654,31 @@
       // Anthropic Claude
       if (activeModels.includes("Anthropic Claude")) {
         const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
-        let endpoint = "";
+        const payload = {
+          question: question,
+          active_count: 1
+        };
+
         if (!useOwnKeys) {
           let id_token = localStorage.getItem("id_token");
           if (id_token) {
-            endpoint = `/ask_claude?question=${encodeURIComponent(question)}&id_token=${encodeURIComponent(id_token)}`;
+            payload.id_token = id_token;
           } else {
-            const anthropicKey = localStorage.getItem("anthropicKey") || "";
-            endpoint = `/ask_claude?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(anthropicKey)}`;
+            payload.api_key = localStorage.getItem("anthropicKey") || "";
           }
         } else {
           if (!validateUserKey("anthropicKey")) {
             alert("Bitte geben Sie einen gültigen Anthropic API Key ein.");
             return;
           }
-          const anthropicKey = localStorage.getItem("anthropicKey");
-          endpoint = `/ask_claude?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(anthropicKey)}`;
+          payload.api_key = localStorage.getItem("anthropicKey");
         }
-        fetch(endpoint)
+
+        fetch('/ask_claude', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
           .then(response => response.json())
           .then(data => {
             const outputEl = document.getElementById("claudeResponse").querySelector(".collapsible-content");
@@ -631,24 +704,31 @@
       // Google Gemini
       if (activeModels.includes("Google Gemini")) {
         const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
-        let endpoint = "";
+        const payload = {
+          question: question,
+          active_count: 1
+        };
+
         if (!useOwnKeys) {
           let id_token = localStorage.getItem("id_token");
           if (id_token) {
-            endpoint = `/ask_gemini?question=${encodeURIComponent(question)}&id_token=${encodeURIComponent(id_token)}`;
+            payload.id_token = id_token;
           } else {
-            const geminiKey = localStorage.getItem("geminiKey") || "";
-            endpoint = `/ask_gemini?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(geminiKey)}`;
+            payload.api_key = localStorage.getItem("geminiKey") || "";
           }
         } else {
           if (!validateUserKey("geminiKey")) {
             alert("Bitte geben Sie einen gültigen Google Gemini API Key ein.");
             return;
           }
-          const geminiKey = localStorage.getItem("geminiKey");
-          endpoint = `/ask_gemini?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(geminiKey)}`;
+          payload.api_key = localStorage.getItem("geminiKey");
         }
-        fetch(endpoint)
+
+        fetch('/ask_gemini', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
           .then(response => response.json())
           .then(data => {
             const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
@@ -674,24 +754,31 @@
       // DeepSeek
       if (activeModels.includes("DeepSeek")) {
         const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
-        let endpoint = "";
+        const payload = {
+          question: question,
+          active_count: 1
+        };
+
         if (!useOwnKeys) {
           let id_token = localStorage.getItem("id_token");
           if (id_token) {
-            endpoint = `/ask_deepseek?question=${encodeURIComponent(question)}&id_token=${encodeURIComponent(id_token)}`;
+            payload.id_token = id_token;
           } else {
-            const deepseekKey = localStorage.getItem("deepseekKey") || "";
-            endpoint = `/ask_deepseek?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(deepseekKey)}`;
+            payload.api_key = localStorage.getItem("deepseekKey") || "";
           }
         } else {
           if (!validateUserKey("deepseekKey")) {
             alert("Bitte geben Sie einen gültigen DeepSeek API Key ein.");
             return;
           }
-          const deepseekKey = localStorage.getItem("deepseekKey");
-          endpoint = `/ask_deepseek?question=${encodeURIComponent(question)}&api_key=${encodeURIComponent(deepseekKey)}`;
+          payload.api_key = localStorage.getItem("deepseekKey");
         }
-        fetch(endpoint)
+
+        fetch('/ask_deepseek', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
           .then(response => response.json())
           .then(data => {
             const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
@@ -713,19 +800,7 @@
             checkAllResponses();
           });
       }
-      };
-    
-      // Auswahl der besten Antwort
-      window.toggleBest = function(responseId) {
-        const box = document.getElementById(responseId);
-        if (box.classList.contains("excluded")) return;
-        if (box.classList.contains("best")) {
-          box.classList.remove("best");
-        } else {
-          document.querySelectorAll(".response-box").forEach(b => b.classList.remove("best"));
-          box.classList.add("best");
-        }
-      };
+    };
     
       // Modelle (Checkboxen) ein-/ausschalten
       window.toggleModel = function(responseId, isChecked) {
@@ -997,17 +1072,18 @@
   <div class="modal-content">
     <span class="close" id="closeLoginModal">&times;</span>
     <h2>Login</h2>
-    <input type="email" id="loginEmail" placeholder="Email">
-    <input type="password" id="loginPassword" placeholder="Passwort">
-    <button id="loginButton">Einloggen</button>
-    <div id="loginError" class="error-message"></div><br/>
-    <!-- Neuer Registrierungs-Button -->
-    <button id="registerButton">Registrieren</button>
-    <div id="loginError" class="error-message"></div><br/>
-    <a href="#" id="forgotPasswordButton">Passwort vergessen?</a>
+    <!-- Das Login-Formular hat autocomplete="on" -->
+    <form id="loginForm" autocomplete="on">
+      <input type="email" id="loginEmail" name="email" placeholder="Email" autocomplete="username">
+      <input type="password" id="loginPassword" name="password" placeholder="Passwort" autocomplete="current-password">
+      <button type="button" id="loginButton">Einloggen</button>
+      <div id="loginError" class="error-message"></div><br/>
+      <!-- Neuer Registrierungs-Button -->
+      <button type="button" id="registerButton">Registrieren</button>
+      <div id="registerError" class="error-message"></div><br/>
+      <a href="#" id="forgotPasswordButton">Passwort vergessen?</a>
+    </form>
   </div>
 </div>
-<!-- recaptcha-Container: Dieser wird für den reCAPTCHA-Verifier benötigt -->
-<div id="recaptcha-container"></div>
 </body>
 </html>

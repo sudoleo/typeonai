@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, Query, Request, HTTPException
+from fastapi import FastAPI, Query, Request, HTTPException, Body
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -11,6 +11,7 @@ import google.generativeai as genai
 import firebase_admin
 from firebase_admin import credentials, auth
 from typing import Optional
+from datetime import datetime, timedelta
 
 # Lade .env falls nötig (wird hier nicht mehr für API Keys genutzt)
 load_dotenv()
@@ -359,14 +360,42 @@ async def read_root(request: Request):
     }
     return templates.TemplateResponse("index.html", {"request": request, **firebase_config})
 
+# Globales Dictionary zum Speichern der IP-Adressen registrierter Nutzer
+registered_ips = {}  # { ip_address: uid }
 
-@app.get("/ask_openai")
-async def ask_openai(
-    question: str,
-    id_token: Optional[str] = Query(None),
-    api_key: Optional[str] = Query(None),
-    active_count: Optional[float] = Query(1)
-):
+@app.post("/register")
+async def register_user(request: Request, data: dict):
+    ip_address = request.client.host
+    # Prüfe, ob diese IP-Adresse bereits einen Account registriert hat
+    if ip_address in registered_ips:
+        raise HTTPException(status_code=400, detail="Ein Account pro Nutzer ist erlaubt.")
+    
+    email = data.get("email")
+    password = data.get("password")
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email und Passwort müssen angegeben werden.")
+    
+    try:
+        # Erstelle den Nutzer über Firebase Admin
+        user = auth.create_user(email=email, password=password)
+        # Speichere die IP-Adresse als registriert
+        registered_ips[ip_address] = user.uid
+        # Erzeuge ein Custom Token für den neuen Nutzer
+        custom_token = auth.create_custom_token(user.uid)
+        # Das Token ist ein Bytes-Objekt – in einen String konvertieren
+        custom_token_str = custom_token.decode("utf-8")
+        return {"uid": user.uid, "email": user.email, "customToken": custom_token_str}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/ask_openai")
+async def ask_openai_post(data: dict = Body(...)):
+    question = data.get("question")
+    id_token = data.get("id_token")
+    api_key = data.get("api_key")
+    active_count = data.get("active_count", 1)
+    
     if id_token:
         try:
             uid = verify_user_token(id_token)
@@ -375,7 +404,7 @@ async def ask_openai(
         current_usage = usage_counter.get(uid, 0)
         increment = 1.0 / active_count
         if current_usage + increment > FREE_USAGE_LIMIT:
-            return {"error": "Ihr gratis Kontingent (5 Anfragen) ist aufgebraucht. Bitte hinterlegen Sie Ihre eigenen API Keys."}
+            return {"error": "Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie eigene API Keys."}
         usage_counter[uid] = current_usage + increment
 
         developer_api_key = os.environ.get("DEVELOPER_OPENAI_API_KEY")
@@ -384,22 +413,20 @@ async def ask_openai(
         answer = query_openai(question, developer_api_key)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
-    
     elif api_key:
         answer = query_openai(question, api_key)
         return {"response": answer, "key_used": "User API Key"}
-    
     else:
         raise HTTPException(status_code=400, detail="Kein Authentifizierungsparameter (id_token oder api_key) angegeben")
 
-
-@app.get("/ask_mistral")
-async def ask_mistral(
-    question: str,
-    id_token: Optional[str] = Query(None),
-    api_key: Optional[str] = Query(None),
-    active_count: Optional[float] = Query(1)
-):
+# Angepasster Endpoint für Mistral
+@app.post("/ask_mistral")
+async def ask_mistral_post(data: dict = Body(...)):
+    question = data.get("question")
+    id_token = data.get("id_token")
+    api_key = data.get("api_key")
+    active_count = data.get("active_count", 1)
+    
     if id_token:
         try:
             uid = verify_user_token(id_token)
@@ -408,7 +435,7 @@ async def ask_mistral(
         current_usage = usage_counter.get(uid, 0)
         increment = 1.0 / active_count
         if current_usage + increment > FREE_USAGE_LIMIT:
-            return {"error": "Ihr gratis Kontingent (5 Anfragen) ist aufgebraucht. Bitte hinterlegen Sie Ihre eigenen API Keys."}
+            return {"error": "Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie eigene API Keys."}
         usage_counter[uid] = current_usage + increment
 
         developer_api_key = os.environ.get("DEVELOPER_MISTRAL_API_KEY")
@@ -417,22 +444,20 @@ async def ask_mistral(
         answer = query_mistral(question, developer_api_key)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
-    
     elif api_key:
         answer = query_mistral(question, api_key)
         return {"response": answer, "key_used": "User API Key"}
-    
     else:
         raise HTTPException(status_code=400, detail="Kein id_token oder api_key angegeben.")
 
-
-@app.get("/ask_claude")
-async def ask_claude(
-    question: str,
-    id_token: Optional[str] = Query(None),
-    api_key: Optional[str] = Query(None),
-    active_count: Optional[float] = Query(1)
-):
+# Angepasster Endpoint für Anthropic Claude
+@app.post("/ask_claude")
+async def ask_claude_post(data: dict = Body(...)):
+    question = data.get("question")
+    id_token = data.get("id_token")
+    api_key = data.get("api_key")
+    active_count = data.get("active_count", 1)
+    
     if id_token:
         try:
             uid = verify_user_token(id_token)
@@ -441,7 +466,7 @@ async def ask_claude(
         current_usage = usage_counter.get(uid, 0)
         increment = 1.0 / active_count
         if current_usage + increment > FREE_USAGE_LIMIT:
-            return {"error": "Ihr gratis Kontingent (5 Anfragen) ist aufgebraucht. Bitte hinterlegen Sie Ihre eigenen API Keys."}
+            return {"error": "Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie eigene API Keys."}
         usage_counter[uid] = current_usage + increment
 
         developer_api_key = os.environ.get("DEVELOPER_ANTHROPIC_API_KEY")
@@ -450,22 +475,20 @@ async def ask_claude(
         answer = query_claude(question, developer_api_key)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
-    
     elif api_key:
         answer = query_claude(question, api_key)
         return {"response": answer, "key_used": "User API Key"}
-    
     else:
         raise HTTPException(status_code=400, detail="Kein id_token oder api_key angegeben.")
 
-
-@app.get("/ask_gemini")
-async def ask_gemini(
-    question: str,
-    id_token: Optional[str] = Query(None),
-    api_key: Optional[str] = Query(None),
-    active_count: Optional[float] = Query(1)
-):
+# Angepasster Endpoint für Google Gemini
+@app.post("/ask_gemini")
+async def ask_gemini_post(data: dict = Body(...)):
+    question = data.get("question")
+    id_token = data.get("id_token")
+    api_key = data.get("api_key")
+    active_count = data.get("active_count", 1)
+    
     if id_token:
         try:
             uid = verify_user_token(id_token)
@@ -474,7 +497,7 @@ async def ask_gemini(
         current_usage = usage_counter.get(uid, 0)
         increment = 1.0 / active_count
         if current_usage + increment > FREE_USAGE_LIMIT:
-            return {"error": "Ihr gratis Kontingent (5 Anfragen) ist aufgebraucht. Bitte hinterlegen Sie Ihre eigenen API Keys."}
+            return {"error": "Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie eigene API Keys."}
         usage_counter[uid] = current_usage + increment
 
         developer_api_key = os.environ.get("DEVELOPER_GEMINI_API_KEY")
@@ -483,22 +506,20 @@ async def ask_gemini(
         answer = query_gemini(question, developer_api_key)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
-    
     elif api_key:
         answer = query_gemini(question, api_key)
         return {"response": answer, "key_used": "User API Key"}
-    
     else:
         raise HTTPException(status_code=400, detail="Kein id_token oder api_key angegeben.")
 
-
-@app.get("/ask_deepseek")
-async def ask_deepseek(
-    question: str,
-    id_token: Optional[str] = Query(None),
-    api_key: Optional[str] = Query(None),
-    active_count: Optional[float] = Query(1)
-):
+# Angepasster Endpoint für DeepSeek
+@app.post("/ask_deepseek")
+async def ask_deepseek_post(data: dict = Body(...)):
+    question = data.get("question")
+    id_token = data.get("id_token")
+    api_key = data.get("api_key")
+    active_count = data.get("active_count", 1)
+    
     if id_token:
         try:
             uid = verify_user_token(id_token)
@@ -507,7 +528,7 @@ async def ask_deepseek(
         current_usage = usage_counter.get(uid, 0)
         increment = 1.0 / active_count
         if current_usage + increment > FREE_USAGE_LIMIT:
-            return {"error": "Ihr gratis Kontingent (5 Anfragen) ist aufgebraucht. Bitte hinterlegen Sie Ihre eigenen API Keys."}
+            return {"error": "Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie eigene API Keys."}
         usage_counter[uid] = current_usage + increment
 
         developer_api_key = os.environ.get("DEVELOPER_DEEPSEEK_API_KEY")
@@ -516,11 +537,9 @@ async def ask_deepseek(
         answer = query_deepseek(question, developer_api_key)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
-    
     elif api_key:
         answer = query_deepseek(question, api_key)
         return {"response": answer, "key_used": "User API Key"}
-    
     else:
         raise HTTPException(status_code=400, detail="Kein id_token oder api_key angegeben.")
 
