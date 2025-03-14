@@ -376,8 +376,17 @@ async def register_user(request: Request, data: dict):
     password = data.get("password")
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email und Passwort müssen angegeben werden.")
-    
+
     try:
+        # Überprüfe, ob die E-Mail bereits existiert
+        try:
+            existing_user = auth.get_user_by_email(email)
+            # Falls kein Fehler auftritt, existiert der Nutzer bereits
+            raise HTTPException(status_code=400, detail="Diese E-Mail ist bereits registriert.")
+        except firebase_admin.auth.UserNotFoundError:
+            # Keine Registrierung mit dieser E-Mail gefunden, also weiter
+            pass
+
         # Erstelle den Nutzer über Firebase Admin
         user = auth.create_user(email=email, password=password)
         # Speichere die IP-Adresse als registriert
