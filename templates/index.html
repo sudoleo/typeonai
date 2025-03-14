@@ -346,6 +346,9 @@
       // Marketing Popup Initialisierung
       // --------------------------
       // Überprüfen, ob das Popup schon angezeigt wurde
+
+      const FREE_USAGE_LIMIT = 25;
+
       if (!localStorage.getItem("marketingPopupShown")) {
         document.getElementById("marketingPopup").style.display = "block";
         document.body.classList.add("modal-open");

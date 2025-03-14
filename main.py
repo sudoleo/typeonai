@@ -360,7 +360,7 @@ async def read_root(request: Request):
         "firebase_messaging_sender_id": os.environ.get("FIREBASE_MESSAGING_SENDER_ID"),
         "firebase_app_id": os.environ.get("FIREBASE_APP_ID")
     }
-    return templates.TemplateResponse("index.html", {"request": request, **firebase_config})
+    return templates.TemplateResponse("index.html", {"request": request, "free_limit": FREE_USAGE_LIMIT, **firebase_config})
 
 # Globales Dictionary zum Speichern der IP-Adressen registrierter Nutzer
 registered_ips = {}  # { ip_address: uid }
