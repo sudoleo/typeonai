@@ -36,7 +36,7 @@ def query_openai(question: str, api_key: str) -> str:
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": ""},
+                {"role": "system", "content": "Bitte antworte kurz und präzise und beschränke dich auf das Wesentliche."},
                 {"role": "user", "content": question}
             ]
         )
@@ -53,7 +53,7 @@ def query_mistral(question: str, api_key: str) -> str:
         response = client.chat.complete(
             model=model,
             messages=[
-                {"role": "system", "content": ""},
+                {"role": "system", "content": "Bitte antworte kurz und präzise und beschränke dich auf das Wesentliche."},
                 {"role": "user", "content": question}
             ]
         )
@@ -75,7 +75,7 @@ def query_claude(question: str, api_key: str) -> str:
         payload = {
             "model": "claude-3-5-sonnet-20241022",
             "max_tokens": 8192,  # Sehr hoher Wert als "unbegrenzt"
-            "system": "",
+            "system": "Bitte antworte kurz und präzise und beschränke dich auf das Wesentliche.",
             "messages": [{"role": "user", "content": question}]
         }
         response = requests.post(url, json=payload, headers=headers)
@@ -96,7 +96,9 @@ def query_gemini(question: str, api_key: str) -> str:
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-1.5-pro-latest")
-        response = model.generate_content(question)
+        # Integriere die Direktive in den Prompt:
+        prompt = "Bitte antworte kurz und präzise und beschränke dich auf das Wesentliche. " + question
+        response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
         return f"Fehler bei Google Gemini: {str(e)}"
@@ -108,7 +110,7 @@ def query_deepseek(question: str, api_key: str) -> str:
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "system", "content": "Bitte antworte kurz und präzise und beschränke dich auf das Wesentliche."},
                 {"role": "user", "content": question}
             ],
             stream=False
