@@ -1016,7 +1016,7 @@ input:checked + .slider:before {
     }
   
     .chat-input-container .input-field {
-      width: 120% !important;
+      width: 100% !important;
       box-sizing: border-box;
       margin-bottom: 10px;
     }

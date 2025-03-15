@@ -78,12 +78,6 @@
   </header>
    
   <br/><br/><br/>
-<!-- Toggle-Button für die Sidebar (wird im responsiven Modus eingeblendet) -->
-<div class="sidebar-toggle">
-  <button id="toggleSidebarButton" class="collapse-btn">
-    <span class="arrow">&#9776;</span>
-  </button>
-</div>
 <!-- Sidebar für API Keys -->
 <div class="sidebar">
   <div class="sidebar-content">
@@ -117,6 +111,10 @@
         <label for="deepseekKey">DeepSeek API Key <span id="deepseekFeedback" class="feedback"></span></label>
         <input type="password" id="deepseekKey" placeholder="Dein DeepSeek Key">
       </div>
+      <div class="api-key-group">
+        <label for="grokKey">Grok API Key <span id="grokFeedback" class="feedback"></span></label>
+        <input type="password" id="grokKey" placeholder="Dein Grok Key">
+      </div>      
       <div class="sidebar-tooltip">
         <button onclick="testAllKeys()">
           Alle APIs testen 
@@ -161,6 +159,9 @@
       <label for="selectDeepSeek">
         <input type="checkbox" id="selectDeepSeek" checked> DeepSeek
       </label>
+      <label for="selectGrok">
+        <input type="checkbox" id="selectGrok" checked> Grok
+      </label>      
     </div>
 
     <!-- Trennstrich zwischen API Keys und Leaderboard -->
@@ -270,7 +271,21 @@
           </div>
         </h2>
         <p class="collapsible-content"></p>
-      </div>      
+      </div>
+      <!-- Antwort Grok -->
+      <div class="response-box" id="grokResponse" data-model="Grok">
+        <h2>
+          <span class="title">Antwort von Grok <small>(grok-model)</small></span>
+          <div class="control-icons">
+            <span class="best-btn" onclick="toggleBest('grokResponse')" title="Als beste Antwort markieren">&#10003;</span>
+            <span class="exclude-btn" onclick="toggleExclude('grokResponse')" title="Antwort ausschließen">&#10005;</span>
+            <button class="collapse-btn" onclick="toggleCollapse('grokResponse')">
+              <span class="arrow">&#9660;</span>
+            </button>
+          </div>
+        </h2>
+        <p class="collapsible-content"></p>
+      </div>     
     </div>
     
     <!-- Konsens-Section -->
@@ -302,6 +317,7 @@
                 <option value="OpenAI">GPT‑4o</option>
                 <option value="Google Gemini">gemini-pro</option>
                 <option value="DeepSeek">deepseek-chat</option>
+                <option value="Grok">grok-chat</option>
               </select>
             </div>
           </div>
@@ -366,7 +382,7 @@
         document.getElementById("marketingPopup").style.display = "none";
         localStorage.setItem("marketingPopupShown", "true");
       });
-    
+
       // --------------------------
       // Event-Listener für Eingabefelder und Buttons
       // --------------------------
@@ -508,6 +524,7 @@
         if (document.getElementById("selectClaude").checked) activeModels.push("Anthropic Claude");
         if (document.getElementById("selectGemini").checked) activeModels.push("Google Gemini");
         if (document.getElementById("selectDeepSeek").checked) activeModels.push("DeepSeek");
+        if (document.getElementById("selectGrok").checked) activeModels.push("Grok");
     
         // Spinner in den jeweiligen Response-Boxen setzen
         if (activeModels.includes("OpenAI")) {
@@ -525,6 +542,9 @@
         if (activeModels.includes("DeepSeek")) {
           document.getElementById("deepseekResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
         }
+        if (activeModels.includes("Grok")) {
+          document.getElementById("grokResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
+        }
         if (document.getElementById("autoConsensusToggle").checked) {
           document.getElementById("consensusResponse").querySelector("p").innerHTML = spinnerHTML;
         } else {
@@ -537,6 +557,7 @@
         const anthropicKey = localStorage.getItem("anthropicKey") || "";
         const geminiKey = localStorage.getItem("geminiKey") || "";
         const deepseekKey = localStorage.getItem("deepseekKey") || "";
+        const grokKey = localStorage.getItem("grokKey") || "";
     
         let responsesReceived = 0;
         const totalActive = activeModels.length;
@@ -803,6 +824,54 @@
             checkAllResponses();
           });
       }
+
+      // Grok
+      if (activeModels.includes("Grok")) {
+        const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
+        const payload = {
+          question: question,
+          active_count: 1
+        };
+        if (!useOwnKeys) {
+          let id_token = localStorage.getItem("id_token");
+          if (id_token) {
+            payload.id_token = id_token;
+          } else {
+            payload.api_key = localStorage.getItem("grokKey") || "";
+          }
+        } else {
+          if (!validateUserKey("grokKey")) {
+            alert("Bitte geben Sie einen gültigen Grok API Key ein.");
+            return;
+          }
+          payload.api_key = localStorage.getItem("grokKey");
+        }
+        fetch('/ask_grok', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        .then(response => response.json())
+        .then(data => {
+          const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
+          if (data.response) {
+            outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+          } else if (data.error) {
+            outputEl.innerText = data.error;
+          } else {
+            outputEl.innerText = "Bitte loggen Sie sich ein oder hinterlegen Sie eigene API Keys.";
+          }
+          if (data.free_usage_remaining !== undefined) {
+            document.getElementById("freeUsageDisplay").innerText =
+              "Verbleibende Gratis-Anfragen: " + data.free_usage_remaining + " / " + FREE_USAGE_LIMIT;
+          }
+          checkAllResponses();
+        })
+        .catch(error => {
+          console.error("Fehler bei Grok:", error);
+          checkAllResponses();
+        });
+    }
     };
     
       // Modelle (Checkboxen) ein-/ausschalten
@@ -829,9 +898,12 @@
       document.getElementById("selectDeepSeek").addEventListener("change", function() {
         toggleModel("deepseekResponse", this.checked);
       });
+      document.getElementById("selectGrok").addEventListener("change", function() {
+        toggleModel("grokResponse", this.checked);
+      });
     
       // Erneut API Keys in Felder schreiben (falls benötigt)
-      ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey"].forEach(function(key) {
+      ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey", "grokKey"].forEach(function(key) {
         const stored = localStorage.getItem(key);
         if (stored) {
           document.getElementById(key).value = stored;
@@ -867,6 +939,9 @@
           if (document.getElementById("deepseekResponse").classList.contains("best")) {
             recordModelVote("DeepSeek", "best");
           }
+          if (document.getElementById("grokResponse").classList.contains("best")) {
+            recordModelVote("Grok", "best");
+          }
 
           // Ebenso für "excluded" (sofern du das separat erfassen möchtest).
           if (document.getElementById("openaiResponse").classList.contains("excluded")) {
@@ -883,6 +958,9 @@
           }
           if (document.getElementById("deepseekResponse").classList.contains("excluded")) {
             recordModelVote("DeepSeek", "exclude");
+          }
+          if (document.getElementById("grokResponse").classList.contains("excluded")) {
+            recordModelVote("Grok", "exclude");
           }
 
           // Aktualisiere die letzte verarbeitete Frage.
@@ -905,6 +983,7 @@
       const claudeBox = document.getElementById("claudeResponse");
       const geminiBox = document.getElementById("geminiResponse");
       const deepseekBox = document.getElementById("deepseekResponse");
+      const grokBox = document.getElementById("grokResponse");
 
       // Lies die Antworten (trim für überflüssige Leerzeichen)
       const answer_openai = openaiBox.querySelector(".collapsible-content").innerText.trim();
@@ -912,6 +991,7 @@
       const answer_claude = claudeBox.querySelector(".collapsible-content").innerText.trim();
       const answer_gemini = geminiBox.querySelector(".collapsible-content").innerText.trim();
       const answer_deepseek = deepseekBox.querySelector(".collapsible-content").innerText.trim();
+      const answer_grok = grokBox.querySelector(".collapsible-content").innerText.trim();
 
       // Überprüfe nur die Modelle, die nicht als "ausgeschlossen" markiert sind.
       if (
@@ -921,7 +1001,8 @@
         (!mistalBox.classList.contains("excluded") && !answer_mistral) ||
         (!claudeBox.classList.contains("excluded") && !answer_claude) ||
         (!geminiBox.classList.contains("excluded") && !answer_gemini) ||
-        (!deepseekBox.classList.contains("excluded") && !answer_deepseek)
+        (!deepseekBox.classList.contains("excluded") && !answer_deepseek) ||
+        (!grokBox.classList.contains("excluded") && !answer_grok)
       ) {
         alert("Bitte zuerst eine Frage senden, alle Antworten abrufen und das Konsens‑Modell auswählen.");
         return;
@@ -948,6 +1029,9 @@
       if (deepseekBox.classList.contains("excluded")) {
         excludedModels.push(deepseekBox.getAttribute("data-model"));
       }
+      if (grokBox.classList.contains("excluded")) {
+        excludedModels.push(grokBox.getAttribute("data-model"));
+      }
 
       // Hole API Keys aus localStorage
       const openaiKey = localStorage.getItem("openaiKey") || "";
@@ -955,6 +1039,7 @@
       const anthropicKey = localStorage.getItem("anthropicKey") || "";
       const geminiKey = localStorage.getItem("geminiKey") || "";
       const deepseekKey= localStorage.getItem("deepseekKey") || "";
+      const grokKey= localStorage.getItem("grokKey") || "";
 
       try {
         const response = await fetch("/consensus", {
@@ -971,6 +1056,7 @@
             answer_claude: answer_claude,
             answer_gemini: answer_gemini,
             answer_deepseek: answer_deepseek,
+            answer_grok: answer_grok,
             best_model: best_model,
             consensus_model: consensus_model,
             excluded_models: excludedModels,
@@ -978,7 +1064,8 @@
             mistral_key: mistralKey,
             anthropic_key: anthropicKey,
             gemini_key: geminiKey,
-            deepseek_key: deepseekKey
+            deepseek_key: deepseekKey,
+            grok_key: grokKey
           })
         });
         const data = await response.json();
@@ -1010,11 +1097,13 @@
         const anthropicKey = document.getElementById("anthropicKey").value;
         const geminiKey = document.getElementById("geminiKey").value;
         const deepseekKey = document.getElementById("deepseekKey").value;
+        const grokKey = document.getElementById("grokKey").value;
         localStorage.setItem("openaiKey", openaiKey);
         localStorage.setItem("mistralKey", mistralKey);
         localStorage.setItem("anthropicKey", anthropicKey);
         localStorage.setItem("geminiKey", geminiKey);
         localStorage.setItem("deepseekKey", deepseekKey);
+        localStorage.setItem("grokKey", grokKey);
         const spinner = document.getElementById("apiSpinner");
         spinner.style.display = "inline-block";
         try {
@@ -1026,7 +1115,8 @@
               mistral_key: mistralKey,
               anthropic_key: anthropicKey,
               gemini_key: geminiKey,
-              deepseek_key: deepseekKey
+              deepseek_key: deepseekKey,
+              grok_key: grokKey
             })
           });
           if (!response.ok) {
@@ -1043,11 +1133,13 @@
           const anthropicResult = data.results["Anthropic Claude"];
           const geminiResult = data.results["Google Gemini"];
           const deepseekResult = data.results["DeepSeek"];
+          const grokResult = data.results["Grok"];
           const openaiFeedback = document.getElementById("openaiFeedback");
           const mistralFeedback = document.getElementById("mistralFeedback");
           const anthropicFeedback = document.getElementById("anthropicFeedback");
           const geminiFeedback = document.getElementById("geminiFeedback");
           const deepseekFeedback = document.getElementById("deepseekFeedback");
+          const grokFeedback = document.getElementById("grokFeedback");
           openaiFeedback.innerHTML = openaiResult === "valid" ? "&#10003;" : "&#10007;";
           openaiFeedback.style.color = openaiResult === "valid" ? "green" : "red";
           mistralFeedback.innerHTML = mistralResult === "valid" ? "&#10003;" : "&#10007;";
@@ -1058,6 +1150,8 @@
           geminiFeedback.style.color = geminiResult === "valid" ? "green" : "red";
           deepseekFeedback.innerHTML = deepseekResult === "valid" ? "&#10003;" : "&#10007;";
           deepseekFeedback.style.color = deepseekResult === "valid" ? "green" : "red";
+          grokFeedback.innerHTML = grokResult === "valid" ? "&#10003;" : "&#10007;";
+          grokFeedback.style.color = grokResult === "valid" ? "green" : "red";
         } catch (error) {
           console.error("Fehler beim Testen der API Keys:", error);
           alert("Fehler beim Testen der API Keys: " + error.message);

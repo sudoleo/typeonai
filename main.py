@@ -118,8 +118,25 @@ def query_deepseek(question: str, api_key: str) -> str:
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Fehler bei DeepSeek: {str(e)}"
+    
+def query_grok(question: str, api_key: str) -> str:
+    """Fragt die Grok API zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
+    try:
+        import openai
+        client = openai.OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
+        response = client.chat.completions.create(
+            model="grok-2-latest",
+            messages=[
+                {"role": "system", "content": "Bitte antworte kurz und präzise und beschränke dich auf das Wesentliche."},
+                {"role": "user", "content": question}
+            ]
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Fehler bei Grok: {str(e)}"
 
-def query_consensus(question: str, answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, answer_deepseek: str,
+
+def query_consensus(question: str, answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, answer_deepseek: str, answer_grok: str,
                     best_model: str, excluded_models: list, consensus_model: str, api_keys: dict) -> str:
     """
     Nutzt ein Modell, um die Antworten der Modelle mittels Chain-of-Thought-Logik zu einem konsistenten Konsens zusammenzufassen.
@@ -136,6 +153,8 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
         prompt_parts.append(f"Antwort von gemini-pro: {answer_gemini}\n\n")
     if "DeepSeek" not in excluded_models:
         prompt_parts.append(f"Antwort von deepseek-chat: {answer_deepseek}\n\n")
+    if "Grok" not in excluded_models:
+        prompt_parts.append(f"Antwort von Grok: {answer_grok}\n\n")
 
     
     if best_model:
@@ -221,13 +240,26 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 stream=False
             )
             return response.choices[0].message.content.strip()
+        
+        elif consensus_model == "Grok":
+            import openai
+            client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
+            response = client.chat.completions.create(
+                model="grok-2-latest",
+                messages=[
+                    {"role": "system", "content": ""},
+                    {"role": "user", "content": consensus_prompt}
+                ]
+            )
+            return response.choices[0].message.content.strip()
+
         else:
             return "Ungültiges Konsensmodell ausgewählt."
     except Exception as e:
         return f"Fehler beim Konsens: {str(e)}"
     
 
-def query_differences(answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, answer_deepseek: str, consensus_answer: str, api_keys: dict, differences_model: str) -> str:
+def query_differences(answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, answer_deepseek: str, answer_grok: str, consensus_answer: str, api_keys: dict, differences_model: str) -> str:
     """
     Extrahiert die Unterschiede zwischen den vier Expertenantworten mittels des angegebenen Konsens‑Modells.
     """
@@ -254,7 +286,8 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
         "- Mistral: " + answer_mistral + "\n"
         "- Claude: " + answer_claude + "\n"
         "- Gemini: " + answer_gemini + "\n"
-        "- DeepSeek: " + answer_deepseek + "\n\n"
+        "- DeepSeek: " + answer_deepseek + "\n"
+        "- Grok: " + answer_grok + "\n\n"
 
         "Zum Schluss entscheide subjektiv, welches Modell die beste Antwort geliefert hat. "
         "Wähle dabei eines der folgenden Modelle: Anthropic, Gemini, Mistral oder OpenAI. "
@@ -327,6 +360,18 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
                     {"role": "user", "content": differences_prompt}
                 ],
                 stream=False
+            )
+            return response.choices[0].message.content.strip()
+        
+        elif differences_model == "Grok":
+            import openai
+            client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
+            response = client.chat.completions.create(
+                model="grok-2-latest",
+                messages=[
+                    {"role": "system", "content": "Gib keine Formatierungen aus."},
+                    {"role": "user", "content": differences_prompt}
+                ]
             )
             return response.choices[0].message.content.strip()
 
@@ -553,6 +598,36 @@ async def ask_deepseek_post(data: dict = Body(...)):
         return {"response": answer, "key_used": "User API Key"}
     else:
         raise HTTPException(status_code=400, detail="Kein id_token oder api_key angegeben.")
+    
+@app.post("/ask_grok")
+async def ask_grok_post(data: dict = Body(...)):
+    question = data.get("question")
+    id_token = data.get("id_token")
+    api_key = data.get("api_key")
+    active_count = data.get("active_count", 1)
+    
+    if id_token:
+        try:
+            uid = verify_user_token(id_token)
+        except Exception:
+            raise HTTPException(status_code=401, detail="Authentifizierung fehlgeschlagen")
+        current_usage = usage_counter.get(uid, 0)
+        increment = 1.0 / active_count
+        if current_usage + increment > FREE_USAGE_LIMIT:
+            return {"error": "Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie eigene API Keys."}
+        usage_counter[uid] = current_usage + increment
+
+        developer_api_key = os.environ.get("DEVELOPER_GROK_API_KEY")
+        if not developer_api_key:
+            raise HTTPException(status_code=500, detail="Serverfehler: API Key nicht konfiguriert")
+        answer = query_grok(question, developer_api_key)
+        free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
+        return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
+    elif api_key:
+        answer = query_grok(question, api_key)
+        return {"response": answer, "key_used": "User API Key"}
+    else:
+        raise HTTPException(status_code=400, detail="Kein id_token oder api_key angegeben.")
 
 
 @app.post("/consensus")
@@ -582,6 +657,7 @@ async def consensus(data: dict):
     answer_claude   = data.get("answer_claude")
     answer_gemini   = data.get("answer_gemini")
     answer_deepseek = data.get("answer_deepseek")
+    answer_grok     = data.get("answer_grok")
     best_model      = data.get("best_model", "")
     consensus_model = data.get("consensus_model")
     excluded_models = data.get("excluded_models", [])
@@ -595,12 +671,14 @@ async def consensus(data: dict):
         api_keys["Anthropic Claude"] = data.get("anthropic_key")
         api_keys["Google Gemini"] = data.get("gemini_key")
         api_keys["DeepSeek"] = data.get("deepseek_key")
+        api_keys["Grok"] = data.get("grok_key")
     else:
         api_keys["OpenAI"] = data.get("openai_key") or os.environ.get("DEVELOPER_OPENAI_API_KEY")
         api_keys["Mistral"] = data.get("mistral_key") or os.environ.get("DEVELOPER_MISTRAL_API_KEY")
         api_keys["Anthropic Claude"] = data.get("anthropic_key") or os.environ.get("DEVELOPER_ANTHROPIC_API_KEY")
         api_keys["Google Gemini"] = data.get("gemini_key") or os.environ.get("DEVELOPER_GEMINI_API_KEY")
         api_keys["DeepSeek"] = data.get("deepseek_key") or os.environ.get("DEVELOPER_DEEPSEEK_API_KEY")
+        api_keys["Grok"] = data.get("grok_key") or os.environ.get("DEVELOPER_GROK_API_KEY")
 
     # Validierung der erforderlichen Parameter (nur für Modelle, die nicht ausgeschlossen wurden)
     missing = []
@@ -623,6 +701,10 @@ async def consensus(data: dict):
     if "DeepSeek" not in excluded_models:
         if not answer_deepseek or not api_keys.get("DeepSeek"):
             missing.append("DeepSeek")
+    if "Grok" not in excluded_models:
+        if not answer_grok or not api_keys.get("Grok"):
+            missing.append("Grok")
+
     if missing:
         raise HTTPException(status_code=400, detail="Fehlende Parameter: " + ", ".join(missing))
 
@@ -631,13 +713,13 @@ async def consensus(data: dict):
 
     # Konsens-Antwort generieren
     consensus_answer = query_consensus(
-        question, answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek,
+        question, answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok,
         best_model, excluded_models, consensus_model, api_keys
     )
 
     # Unterschiede ermitteln
     differences = query_differences(
-        answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek,
+        answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok,
         consensus_answer, api_keys, differences_model=consensus_model
     )
 
@@ -657,6 +739,7 @@ async def check_keys(data: dict):
         anthropic_key = data.get("anthropic_key")
         gemini_key = data.get("gemini_key")
         deepseek_key = data.get("deepseek_key")
+        grok_key = data.get("grok_key")
         
         results = {}
         
@@ -735,6 +818,24 @@ async def check_keys(data: dict):
                 results["DeepSeek"] = "invalid"
         except Exception as e:
             results["DeepSeek"] = "invalid"
+
+        # Grok Handshake
+        try:
+            grok_key = data.get("grok_key")
+            if grok_key and len(grok_key) > 10:
+                client = openai.OpenAI(api_key=grok_key, base_url="https://api.x.ai/v1")
+                response = client.chat.completions.create(
+                    model="grok-2-latest",
+                    messages=[
+                        {"role": "system", "content": "ping"},
+                        {"role": "user", "content": "ping"}
+                    ]
+                )
+                results["Grok"] = "valid"
+            else:
+                results["Grok"] = "invalid"
+        except Exception as e:
+            results["Grok"] = "invalid"
         
         # Google Gemini Handshake
         try:
