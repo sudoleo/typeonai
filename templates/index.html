@@ -217,13 +217,13 @@
         <p class="collapsible-content"></p>
       </div>
       <!-- Antwort Mistral -->
-      <div class="response-box" id="mistalResponse" data-model="Mistral">
+      <div class="response-box" id="mistralResponse" data-model="Mistral">
         <h2>
           <span class="title">Antwort von Mistral <small>(mistral-large-latest)</small></span>
           <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('mistalResponse')" title="Als beste Antwort markieren">&#10003;</span>
-            <span class="exclude-btn" onclick="toggleExclude('mistalResponse')" title="Antwort ausschließen">&#10005;</span>
-            <button class="collapse-btn" onclick="toggleCollapse('mistalResponse')">
+            <span class="best-btn" onclick="toggleBest('mistralResponse')" title="Als beste Antwort markieren">&#10003;</span>
+            <span class="exclude-btn" onclick="toggleExclude('mistralResponse')" title="Antwort ausschließen">&#10005;</span>
+            <button class="collapse-btn" onclick="toggleCollapse('mistralResponse')">
               <span class="arrow">&#9660;</span>
             </button>
           </div>
@@ -231,7 +231,7 @@
         <p class="collapsible-content"></p>
       </div>
       <!-- Antwort Anthropic Claude -->
-      <div class="response-box" id="claudeResponse" data-model="Anthropic">
+      <div class="response-box" id="claudeResponse" data-model="Anthropic Claude">
         <h2>
           <span class="title">Antwort von Claude <small>(claude-3-5-sonnet)</small></span>
           <div class="control-icons">
@@ -245,7 +245,7 @@
         <p class="collapsible-content"></p>
       </div>
       <!-- Antwort Google Gemini -->
-      <div class="response-box" id="geminiResponse" data-model="Gemini">
+      <div class="response-box" id="geminiResponse" data-model="Google Gemini">
         <h2>
           <span class="title">Antwort von Gemini <small>(gemini-pro)</small></span>
           <div class="control-icons">
@@ -381,6 +381,19 @@
       document.getElementById("startNowButton").addEventListener("click", function() {
         document.getElementById("marketingPopup").style.display = "none";
         localStorage.setItem("marketingPopupShown", "true");
+      });
+
+      document.addEventListener("click", function(event) {
+        const sidebar = document.querySelector('.sidebar');
+        const burgerButton = document.querySelector('.sidebar-toggle');
+        
+        // Nur auf kleinen Displays
+        if (window.innerWidth <= 1400 && sidebar.classList.contains("active")) {
+          // Wenn der Klick weder innerhalb der Sidebar noch auf dem Burger-Button erfolgt
+          if (!sidebar.contains(event.target) && !event.target.closest('.sidebar-toggle')) {
+            sidebar.classList.remove("active");
+          }
+        }
       });
 
       // --------------------------
@@ -531,7 +544,7 @@
           document.getElementById("openaiResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
         }
         if (activeModels.includes("Mistral")) {
-          document.getElementById("mistalResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
+          document.getElementById("mistralResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
         }
         if (activeModels.includes("Anthropic Claude")) {
           document.getElementById("claudeResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
@@ -655,7 +668,7 @@
         })
           .then(response => response.json())
           .then(data => {
-            const outputEl = document.getElementById("mistalResponse").querySelector(".collapsible-content");
+            const outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
             if (data.response) {
               outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
             } else if (data.error) {
@@ -887,7 +900,7 @@
         toggleModel("openaiResponse", this.checked);
       });
       document.getElementById("selectMistral").addEventListener("change", function() {
-        toggleModel("mistalResponse", this.checked);
+        toggleModel("mistralResponse", this.checked);
       });
       document.getElementById("selectClaude").addEventListener("change", function() {
         toggleModel("claudeResponse", this.checked);
@@ -927,7 +940,7 @@
           if (document.getElementById("openaiResponse").classList.contains("best")) {
             recordModelVote("OpenAI", "best");
           }
-          if (document.getElementById("mistalResponse").classList.contains("best")) {
+          if (document.getElementById("mistralResponse").classList.contains("best")) {
             recordModelVote("Mistral", "best");
           }
           if (document.getElementById("claudeResponse").classList.contains("best")) {
@@ -947,7 +960,7 @@
           if (document.getElementById("openaiResponse").classList.contains("excluded")) {
             recordModelVote("OpenAI", "exclude");
           }
-          if (document.getElementById("mistalResponse").classList.contains("excluded")) {
+          if (document.getElementById("mistralResponse").classList.contains("excluded")) {
             recordModelVote("Mistral", "exclude");
           }
           if (document.getElementById("claudeResponse").classList.contains("excluded")) {
@@ -979,7 +992,7 @@
 
       // Hole die Antwort-Boxen
       const openaiBox = document.getElementById("openaiResponse");
-      const mistalBox = document.getElementById("mistalResponse");
+      const mistralBox = document.getElementById("mistralResponse");
       const claudeBox = document.getElementById("claudeResponse");
       const geminiBox = document.getElementById("geminiResponse");
       const deepseekBox = document.getElementById("deepseekResponse");
@@ -987,7 +1000,7 @@
 
       // Lies die Antworten (trim für überflüssige Leerzeichen)
       const answer_openai = openaiBox.querySelector(".collapsible-content").innerText.trim();
-      const answer_mistral = mistalBox.querySelector(".collapsible-content").innerText.trim();
+      const answer_mistral = mistralBox.querySelector(".collapsible-content").innerText.trim();
       const answer_claude = claudeBox.querySelector(".collapsible-content").innerText.trim();
       const answer_gemini = geminiBox.querySelector(".collapsible-content").innerText.trim();
       const answer_deepseek = deepseekBox.querySelector(".collapsible-content").innerText.trim();
@@ -998,7 +1011,7 @@
         !question ||
         !consensus_model ||
         (!openaiBox.classList.contains("excluded") && !answer_openai) ||
-        (!mistalBox.classList.contains("excluded") && !answer_mistral) ||
+        (!mistralBox.classList.contains("excluded") && !answer_mistral) ||
         (!claudeBox.classList.contains("excluded") && !answer_claude) ||
         (!geminiBox.classList.contains("excluded") && !answer_gemini) ||
         (!deepseekBox.classList.contains("excluded") && !answer_deepseek) ||
@@ -1017,8 +1030,8 @@
       if (openaiBox.classList.contains("excluded")) {
         excludedModels.push(openaiBox.getAttribute("data-model"));
       }
-      if (mistalBox.classList.contains("excluded")) {
-        excludedModels.push(mistalBox.getAttribute("data-model"));
+      if (mistralBox.classList.contains("excluded")) {
+        excludedModels.push(mistralBox.getAttribute("data-model"));
       }
       if (claudeBox.classList.contains("excluded")) {
         excludedModels.push(claudeBox.getAttribute("data-model"));

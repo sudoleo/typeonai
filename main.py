@@ -143,20 +143,19 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
     Die übergebenen API Keys werden dabei aus dem Dictionary 'api_keys' entnommen.
     """
     prompt_parts = [f"Die Frage lautet: {question}\n\n"]
-    if "OpenAI" not in excluded_models:
+    if "OpenAI" not in excluded_models and answer_openai:
         prompt_parts.append(f"Antwort von GPT-4o: {answer_openai}\n\n")
-    if "Mistral" not in excluded_models:
+    if "Mistral" not in excluded_models and answer_mistral:
         prompt_parts.append(f"Antwort von mistral-large-latest: {answer_mistral}\n\n")
-    if "Anthropic Claude" not in excluded_models:
+    if "Anthropic Claude" not in excluded_models and answer_claude:
         prompt_parts.append(f"Antwort von claude-3-5-sonnet: {answer_claude}\n\n")
-    if "Google Gemini" not in excluded_models:
+    if "Google Gemini" not in excluded_models and answer_gemini:
         prompt_parts.append(f"Antwort von gemini-pro: {answer_gemini}\n\n")
-    if "DeepSeek" not in excluded_models:
+    if "DeepSeek" not in excluded_models and answer_deepseek:
         prompt_parts.append(f"Antwort von deepseek-chat: {answer_deepseek}\n\n")
-    if "Grok" not in excluded_models:
+    if "Grok" not in excluded_models and answer_grok:
         prompt_parts.append(f"Antwort von Grok: {answer_grok}\n\n")
 
-    
     if best_model:
         prompt_parts.append(
             f"Der Nutzer hat die Antwort von {best_model} als die beste markiert. "
@@ -443,7 +442,6 @@ async def register_user(request: Request, data: dict):
         return {"uid": user.uid, "email": user.email, "customToken": custom_token_str}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
 
 @app.post("/ask_openai")
 async def ask_openai_post(data: dict = Body(...)):
