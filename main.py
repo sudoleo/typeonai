@@ -122,7 +122,6 @@ def query_deepseek(question: str, api_key: str) -> str:
 def query_grok(question: str, api_key: str) -> str:
     """Fragt die Grok API zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
     try:
-        import openai
         client = openai.OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
         response = client.chat.completions.create(
             model="grok-2-latest",
@@ -233,20 +232,18 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
             response = client.chat.completions.create(
                 model="deepseek-chat",
                 messages=[
-                    {"role": "system", "content": ""},
+                    {"role": "system", "content": " "},
                     {"role": "user", "content": consensus_prompt}
-                ],
-                stream=False
+                ]
             )
             return response.choices[0].message.content.strip()
         
         elif consensus_model == "Grok":
-            import openai
             client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
             response = client.chat.completions.create(
                 model="grok-2-latest",
                 messages=[
-                    {"role": "system", "content": ""},
+                    {"role": "system", "content": " "},
                     {"role": "user", "content": consensus_prompt}
                 ]
             )
@@ -363,7 +360,6 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
             return response.choices[0].message.content.strip()
         
         elif differences_model == "Grok":
-            import openai
             client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
             response = client.chat.completions.create(
                 model="grok-2-latest",
