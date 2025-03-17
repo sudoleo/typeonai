@@ -27,6 +27,8 @@ usage_counter = {}  # { uid: anzahl_anfragen }
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gen-lang-client-0234219247-53b2b1c0e355.json"
+
 # Keine globalen API Keys mehr – diese werden nun via Request übergeben
 
 def query_openai(question: str, api_key: str) -> str:
@@ -91,12 +93,16 @@ def query_claude(question: str, api_key: str) -> str:
         return f"Fehler bei Anthropic Claude: {str(e)}"
 
 
-def query_gemini(question: str, api_key: str) -> str:
-    """Fragt Google Gemini zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit."""
+def query_gemini(question: str, user_api_key: Optional[str] = None) -> str:
     try:
-        genai.configure(api_key=api_key)
+        # Wenn ein manueller Key vorhanden ist, verwende ihn
+        if user_api_key and user_api_key.strip() != "":
+            genai.configure(api_key=user_api_key)
+        else:
+            # Kein manueller Key: Authentifizierung über den Service Account
+            genai.configure()  # Hier wird automatisch die in GOOGLE_APPLICATION_CREDENTIALS gesetzte JSON genutzt
+
         model = genai.GenerativeModel("gemini-1.5-pro-latest")
-        # Integriere die Direktive in den Prompt:
         prompt = "Bitte antworte kurz und präzise und beschränke dich auf das Wesentliche. " + question
         response = model.generate_content(prompt)
         return response.text.strip()
@@ -221,8 +227,14 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                     return "Fehler: Keine Antwort im API-Response gefunden."
             else:
                 return f"Fehler bei Anthropic Claude: {response.status_code} - {response.text}"
+            
         elif consensus_model == "Google Gemini":
-            genai.configure(api_key=api_keys.get("Google Gemini"))
+            # Prüfe, ob ein manueller Gemini-Key vorhanden ist:
+            gemini_key = api_keys.get("Google Gemini")
+            if gemini_key and gemini_key.strip() != "":
+                genai.configure(api_key=gemini_key)
+            else:
+                genai.configure()  # Service-Account-Modus
             model = genai.GenerativeModel("gemini-1.5-pro-latest")
             response = model.generate_content(consensus_prompt)
             return response.text.strip()
@@ -341,8 +353,13 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
                     return "Fehler: Keine Antwort im API-Response gefunden."
             else:
                 return f"Fehler bei Anthropic Claude: {response.status_code} - {response.text}"
+            
         elif differences_model == "Google Gemini":
-            genai.configure(api_key=api_keys.get("Google Gemini"))
+            gemini_key = api_keys.get("Google Gemini")
+            if gemini_key and gemini_key.strip() != "":
+                genai.configure(api_key=gemini_key)
+            else:
+                genai.configure()
             model = genai.GenerativeModel("gemini-1.5-pro-latest")
             response = model.generate_content(differences_prompt)
             return response.text.strip()
@@ -531,12 +548,12 @@ async def ask_claude_post(data: dict = Body(...)):
     else:
         raise HTTPException(status_code=400, detail="Kein id_token oder api_key angegeben.")
 
-# Angepasster Endpoint für Google Gemini
 @app.post("/ask_gemini")
 async def ask_gemini_post(data: dict = Body(...)):
     question = data.get("question")
+    use_own_keys = data.get("useOwnKeys", False)
     id_token = data.get("id_token")
-    api_key = data.get("api_key")
+    user_api_key = data.get("api_key") if use_own_keys else None
     active_count = data.get("active_count", 1)
     
     if id_token:
@@ -550,17 +567,14 @@ async def ask_gemini_post(data: dict = Body(...)):
             return {"error": "Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie eigene API Keys."}
         usage_counter[uid] = current_usage + increment
 
-        developer_api_key = os.environ.get("DEVELOPER_GEMINI_API_KEY")
-        if not developer_api_key:
-            raise HTTPException(status_code=500, detail="Serverfehler: API Key nicht konfiguriert")
-        answer = query_gemini(question, developer_api_key)
+        # Falls kein manueller Key übermittelt wird, greift der Service-Account-Modus
+        answer = query_gemini(question, user_api_key)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
-        return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
-    elif api_key:
-        answer = query_gemini(question, api_key)
-        return {"response": answer, "key_used": "User API Key"}
+        return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Service Account" if not user_api_key else "User API Key"}
     else:
-        raise HTTPException(status_code=400, detail="Kein id_token oder api_key angegeben.")
+        # Wenn keine Authentifizierung via id_token vorliegt, nutzen wir den manuellen Key, falls vorhanden
+        answer = query_gemini(question, user_api_key)
+        return {"response": answer, "key_used": "Service Account" if not user_api_key else "User API Key"}
 
 # Angepasster Endpoint für DeepSeek
 @app.post("/ask_deepseek")
@@ -690,8 +704,12 @@ async def consensus(data: dict):
         if not answer_claude or not api_keys.get("Anthropic Claude"):
             missing.append("Anthropic Claude")
     if "Google Gemini" not in excluded_models:
-        if not answer_gemini or not api_keys.get("Google Gemini"):
-            missing.append("Google Gemini")
+        if use_own_keys:
+            if not answer_gemini or not api_keys.get("Google Gemini"):
+                missing.append("Google Gemini")
+        else:
+            if not answer_gemini:
+                missing.append("Google Gemini")
     if "DeepSeek" not in excluded_models:
         if not answer_deepseek or not api_keys.get("DeepSeek"):
             missing.append("DeepSeek")
@@ -833,6 +851,7 @@ async def check_keys(data: dict):
         
         # Google Gemini Handshake
         try:
+            gemini_key = data.get("gemini_key")
             if gemini_key and len(gemini_key) > 10:
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel("gemini-1.5-pro-latest")
