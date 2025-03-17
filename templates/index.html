@@ -191,8 +191,16 @@
 
   <div class="container">
     <div class="input-section">
-      <div class="chat-input-container">
+      <div class="chat-input-container" style="position: relative;">
         <textarea class="input-field" id="questionInput" placeholder="Geben Sie Ihre Frage ein"></textarea>
+        <!-- Auto-Konsens-Switch, positioniert unten links im Textfeld -->
+        <div class="auto-consensus" style="position: absolute; left: 10px; bottom: 10px; z-index: 2;">
+          <label class="switch">
+            <input type="checkbox" id="autoConsensusToggle">
+            <span class="slider"></span>
+          </label>
+          <span class="auto-consensus-label">Auto Konsens</span>
+        </div>
         <button class="button" id="sendButton" onclick="sendQuestion()">
           <!-- SVG-Icon für einen Pfeil, der nach unten zeigt -->
           <svg class="input-icon" viewBox="0 0 24 24" fill="currentColor">
@@ -301,13 +309,6 @@
             <div class="tooltiptext">
               Bündele vier Antworten zu einem finalen, konsistenten Konsens, indem du Widersprüche und Fehler abgleichst.
             </div>
-          </div>
-          <div class="auto-consensus">
-            <label class="switch">
-              <input type="checkbox" id="autoConsensusToggle">
-              <span class="slider"></span>
-            </label>
-            <span class="auto-consensus-label">Auto Konsens</span>
           </div>
           <div class="consensus-model">
             <label for="consensusModelDropdown" class="consensus-label">Konsens‑Modell:</label>
