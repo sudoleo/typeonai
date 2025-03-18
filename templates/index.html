@@ -193,13 +193,28 @@
     <div class="input-section">
       <div class="chat-input-container" style="position: relative;">
         <textarea class="input-field" id="questionInput" placeholder="Geben Sie Ihre Frage ein"></textarea>
-        <!-- Auto-Konsens-Switch, positioniert unten links im Textfeld -->
-        <div class="auto-consensus" style="position: absolute; left: 10px; bottom: 10px; z-index: 2;">
-          <label class="switch">
-            <input type="checkbox" id="autoConsensusToggle">
-            <span class="slider"></span>
-          </label>
-          <span class="auto-consensus-label">Auto Konsens</span>
+        <!-- Container für beide Schalter -->
+        <div class="consensus-switch-container" style="position: absolute; bottom: 10px; left: 10px; display: flex; align-items: center; gap: 20px;">
+          <!-- Auto-Konsens-Switch -->
+          <div class="auto-consensus">
+            <label class="switch">
+              <input type="checkbox" id="autoConsensusToggle">
+              <span class="slider"></span>
+            </label>
+            <span class="auto-consensus-label">Auto Konsens</span>
+          </div>
+          <!-- Search Mode Switch, standardmäßig leicht ausgegraut -->
+          <div class="search-mode">
+            <label class="switch">
+              <input type="checkbox" id="searchModeToggle">
+              <span class="slider"></span>
+            </label>
+            <span class="search-mode-label">Search Mode</span>
+            <!-- Disclaimer, der nur beim Aktivieren angezeigt wird -->
+            <span id="searchDisclaimer" class="search-disclaimer" style="display: none; font-size: 0.8em; margin-left: 5px;">
+              Aktuell nur mit GPT nutzbar, bald auch mit weiteren Modellen nutzbar!
+            </span>
+          </div>
         </div>
         <button class="button" id="sendButton" onclick="sendQuestion()">
           <!-- SVG-Icon für einen Pfeil, der nach unten zeigt -->
@@ -594,7 +609,9 @@
         const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
         const payload = {
           question: question,
-          active_count: 1  // Passe diesen Wert ggf. dynamisch an
+          active_count: 1,  // Passe diesen Wert ggf. dynamisch an
+          // Hier wird der neue Parameter hinzugefügt:
+          search_mode: document.getElementById("searchModeToggle").checked
         };
 
         if (!useOwnKeys) {
@@ -924,6 +941,97 @@
           document.getElementById(key).value = stored;
         }
       });
+
+    // Search Mode Toggle: Modelle automatisch anpassen, wenn aktiviert
+    const searchModeToggle = document.getElementById("searchModeToggle");
+    const searchDisclaimer = document.getElementById("searchDisclaimer");
+
+    function showDisclaimerPopup() {
+      const popup = document.getElementById('disclaimerPopup');
+      popup.classList.add('show');
+      // Popup nach 3 Sekunden wieder ausblenden
+      setTimeout(() => {
+        popup.classList.remove('show');
+      }, 5000);
+    }
+
+    searchModeToggle.addEventListener("change", function() {
+      const isSearchMode = this.checked;
+
+      // Hole die Checkboxen der Modelle
+      const openaiCheckbox = document.getElementById("selectOpenAI");
+      const mistralCheckbox = document.getElementById("selectMistral");
+      const claudeCheckbox = document.getElementById("selectClaude");
+      const geminiCheckbox = document.getElementById("selectGemini");
+      const deepseekCheckbox = document.getElementById("selectDeepSeek");
+      const grokCheckbox = document.getElementById("selectGrok");
+
+      // Hole das Konsens-Dropdown
+      const consensusDropdown = document.getElementById("consensusModelDropdown");
+
+      if (isSearchMode) {
+        // Zeige den Inline-Disclaimer zunächst an
+        searchDisclaimer.style.display = "inline-block";
+        
+        // Nur OpenAI (ChatGPT) unterstützt aktuell den Search Mode.
+        // Deaktiviere und deaktiviere alle anderen Modelle.
+        mistralCheckbox.checked = false;
+        claudeCheckbox.checked = false;
+        geminiCheckbox.checked = false;
+        deepseekCheckbox.checked = false;
+        grokCheckbox.checked = false;
+
+        mistralCheckbox.disabled = true;
+        claudeCheckbox.disabled = true;
+        geminiCheckbox.disabled = true;
+        deepseekCheckbox.disabled = true;
+        grokCheckbox.disabled = true;
+
+        // Optional: Setze die zugehörigen Response-Boxen auf "ausgeschlossen"
+        toggleModel("mistralResponse", false);
+        toggleModel("claudeResponse", false);
+        toggleModel("geminiResponse", false);
+        toggleModel("deepseekResponse", false);
+        toggleModel("grokResponse", false);
+
+        // Setze das Konsensmodell automatisch auf OpenAI und deaktiviere die Auswahl
+        consensusDropdown.value = "OpenAI";
+        consensusDropdown.disabled = true;
+
+        // Auf kleinen Bildschirmen: Popup anzeigen statt Inline-Disclaimer
+        if (window.innerWidth < 768) {
+          showDisclaimerPopup();
+          searchDisclaimer.style.display = "none";
+        }
+      } else {
+        // Schalte den Inline-Disclaimer aus
+        searchDisclaimer.style.display = "none";
+
+        // Reaktiviere alle Modelle, wenn der Search Mode ausgeschaltet wird.
+        mistralCheckbox.disabled = false;
+        claudeCheckbox.disabled = false;
+        geminiCheckbox.disabled = false;
+        deepseekCheckbox.disabled = false;
+        grokCheckbox.disabled = false;
+
+        // Setze die Checkboxen wieder auf "angewählt"
+        mistralCheckbox.checked = true;
+        claudeCheckbox.checked = true;
+        geminiCheckbox.checked = true;
+        deepseekCheckbox.checked = true;
+        grokCheckbox.checked = true;
+
+        // Aktualisiere die zugehörigen Response-Boxen als "nicht ausgeschlossen"
+        toggleModel("mistralResponse", true);
+        toggleModel("claudeResponse", true);
+        toggleModel("geminiResponse", true);
+        toggleModel("deepseekResponse", true);
+        toggleModel("grokResponse", true);
+
+        // Reaktiviere das Konsens-Dropdown
+        consensusDropdown.disabled = false;
+      }
+    });
     
       // Globale Variable, um die letzte verarbeitete Frage zu speichern.
       let lastQuestion = "";
@@ -1196,6 +1304,9 @@
       <a href="#" id="forgotPasswordButton">Passwort vergessen?</a>
     </form>
   </div>
+</div>
+<div id="disclaimerPopup" class="popup">
+  <p>Aktuell nur mit ChatGPT, bald auch mit weiteren Modellen nutzbar!</p>
 </div>
 </body>
 </html>

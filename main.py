@@ -31,12 +31,13 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gen-lang-client-0234219247-53b2b
 
 # Keine globalen API Keys mehr – diese werden nun via Request übergeben
 
-def query_openai(question: str, api_key: str) -> str:
-    """Fragt OpenAI (GPT-4) mit der neuen API-Schnittstelle ohne Limit."""
+def query_openai(question: str, api_key: str, search_mode: bool = False) -> str:
     try:
-        client = openai.OpenAI(api_key=api_key)  # Erstelle OpenAI-Client
+        client = openai.OpenAI(api_key=api_key)
+        # Wähle das richtige Modell: falls search_mode aktiv ist, nutze "gpt-4o-search-preview"
+        model_to_use = "gpt-4o-search-preview" if search_mode else "gpt-4o"
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=model_to_use,
             messages=[
                 {"role": "system", "content": "Bitte antworte kurz und präzise und beschränke dich auf das Wesentliche."},
                 {"role": "user", "content": question}
@@ -45,7 +46,6 @@ def query_openai(question: str, api_key: str) -> str:
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Fehler bei OpenAI: {str(e)}"
-
 
 def query_mistral(question: str, api_key: str) -> str:
     """Fragt die Mistral API zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit."""
@@ -141,8 +141,10 @@ def query_grok(question: str, api_key: str) -> str:
         return f"Fehler bei Grok: {str(e)}"
 
 
-def query_consensus(question: str, answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, answer_deepseek: str, answer_grok: str,
-                    best_model: str, excluded_models: list, consensus_model: str, api_keys: dict) -> str:
+def query_consensus(question: str, answer_openai: str, answer_mistral: str, answer_claude: str, 
+                    answer_gemini: str, answer_deepseek: str, answer_grok: str,
+                    best_model: str, excluded_models: list, consensus_model: str, 
+                    api_keys: dict, search_mode: bool = False) -> str:
     """
     Nutzt ein Modell, um die Antworten der Modelle mittels Chain-of-Thought-Logik zu einem konsistenten Konsens zusammenzufassen.
     Die übergebenen API Keys werden dabei aus dem Dictionary 'api_keys' entnommen.
@@ -186,14 +188,16 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
     try:
         if consensus_model == "OpenAI":
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
+            model_to_use = "gpt-4o-search-preview" if search_mode else "gpt-4o"
             response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": ""},
-                    {"role": "user", "content": consensus_prompt}
-                ]
-            )
+                        model=model_to_use,
+                        messages=[
+                            {"role": "system", "content": ""},
+                            {"role": "user", "content": consensus_prompt}
+                        ]
+                    )
             return response.choices[0].message.content.strip()
+        
         elif consensus_model == "Mistral":
             client = Mistral(api_key=api_keys.get("Mistral"))
             model = "mistral-large-latest"
@@ -461,6 +465,8 @@ async def ask_openai_post(data: dict = Body(...)):
     question = data.get("question")
     id_token = data.get("id_token")
     api_key = data.get("api_key")
+    # Neuer Parameter: search_mode (Standard: False)
+    search_mode = data.get("search_mode", False)
     active_count = data.get("active_count", 1)
     
     if id_token:
@@ -477,11 +483,12 @@ async def ask_openai_post(data: dict = Body(...)):
         developer_api_key = os.environ.get("DEVELOPER_OPENAI_API_KEY")
         if not developer_api_key:
             raise HTTPException(status_code=500, detail="Serverfehler: API Key nicht konfiguriert")
-        answer = query_openai(question, developer_api_key)
+        # Übergabe des search_mode-Flags
+        answer = query_openai(question, developer_api_key, search_mode)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
     elif api_key:
-        answer = query_openai(question, api_key)
+        answer = query_openai(question, api_key, search_mode)
         return {"response": answer, "key_used": "User API Key"}
     else:
         raise HTTPException(status_code=400, detail="Kein Authentifizierungsparameter (id_token oder api_key) angegeben")
@@ -640,23 +647,26 @@ async def ask_grok_post(data: dict = Body(...)):
 
 @app.post("/consensus")
 async def consensus(data: dict):
-    # Prüfe, ob der Nutzer eigene API Keys verwenden möchte (z. B. über einen Boolean-Parameter "useOwnKeys")
+    id_token = data.get("id_token")
     use_own_keys = data.get("useOwnKeys", False)
-
-    if not use_own_keys:
-        # Falls nicht – erwarte einen id_token und führe den Free-Usage-Check durch.
-        id_token = data.get("id_token")
-        if not id_token:
-            raise HTTPException(status_code=400, detail="id_token fehlt")
-        try:
-            uid = verify_user_token(id_token)
-        except Exception:
-            raise HTTPException(status_code=401, detail="Ungültiger Token")
-        current_usage = usage_counter.get(uid, 0)
-        if current_usage >= FREE_USAGE_LIMIT:
-            raise HTTPException(status_code=403, detail="Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie Ihre eigenen API Keys.")
-        usage_counter[uid] = current_usage + 1
-    # Bei useOwnKeys==True wird der Free-Usage-Check übersprungen.
+    # Neuer Parameter: search_mode
+    search_mode = data.get("search_mode", False)
+    
+    if id_token:
+        if not use_own_keys:
+            try:
+                uid = verify_user_token(id_token)
+            except Exception:
+                raise HTTPException(status_code=401, detail="Ungültiger Token")
+            current_usage = usage_counter.get(uid, 0)
+            if current_usage >= FREE_USAGE_LIMIT:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie Ihre eigenen API Keys."
+                )
+            usage_counter[uid] = current_usage + 1
+    else:
+        use_own_keys = True
 
     # Parameter extrahieren
     question = data.get("question")
@@ -726,14 +736,12 @@ async def consensus(data: dict):
     # Konsens-Antwort generieren
     consensus_answer = query_consensus(
         question, answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok,
-        best_model, excluded_models, consensus_model, api_keys
-    )
+        best_model, excluded_models, consensus_model, api_keys, search_mode)
 
     # Unterschiede ermitteln
     differences = query_differences(
         answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok,
-        consensus_answer, api_keys, differences_model=consensus_model
-    )
+        consensus_answer, api_keys, differences_model=consensus_model)
 
     return {"consensus_response": consensus_answer, "differences": differences}
 

@@ -137,6 +137,7 @@ h1, h2 {
     /* Feste Höhe entfernen, stattdessen eine Mindesthöhe setzen */
     /* height: 110px; */
     min-height: 110px;
+    padding-bottom: 60px;
 }
 
 .chat-input-container .input-field {
@@ -152,7 +153,7 @@ h1, h2 {
     text-align: left;
     vertical-align: top;
     font-family: inherit;
-    min-height: 50px;   /* optional */
+    min-height: 80px;   /* optional */
     max-height: 300px;  /* optional */
 }
 
@@ -212,6 +213,26 @@ h1, h2 {
 .input-icon {
   width: 100px;
   height: 100px;
+}
+
+.popup {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  opacity: 0;
+  pointer-events: none;  /* Damit es nicht interaktiv ist */
+  transition: opacity 0.5s ease;
+  z-index: 2000;
+}
+
+.popup.show {
+  opacity: 1;
 }
 
 /* Tooltip-Wrapper */
@@ -583,6 +604,13 @@ input:checked + .slider:before {
     align-items: center;
     gap: 10px;
 }
+
+.search-mode {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0.5;
+}
   
 #consensusButton {
     padding: 10px 16px;
@@ -881,6 +909,7 @@ input:checked + .slider:before {
       flex-direction: column;
       align-items: stretch;
       width: 100%;
+      padding-bottom: 50px;
     }
     .chat-input-container .input-field {
       width: 100% !important;
@@ -895,6 +924,10 @@ input:checked + .slider:before {
       display: flex;
       align-items: center;
       justify-content: center;
+      position: absolute;
+      bottom: 10px;       /* Immer 10px vom unteren Rand entfernt */
+      right: 10px;        /* Optional: rechtsbündig */
+      margin: 0; 
     }
     .chat-input-container .button svg {
       width: 60%;
@@ -987,6 +1020,12 @@ input:checked + .slider:before {
       background-color: var(--button-bg);
     }
 
+    .consensus-switch-container {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
     .login-text {
       cursor: pointer;
       font-size: 0.8em; /* vorher 1em */
@@ -1023,6 +1062,8 @@ input:checked + .slider:before {
       flex-direction: column;
       align-items: stretch;
       width: 100%;
+      position: relative;  /* Ermöglicht absolute Positionierung der Kinder */
+      padding-bottom: 80px; /* Genug Platz am unteren Rand für den Button */
     }
   
     .chat-input-container .input-field {
@@ -1040,6 +1081,10 @@ input:checked + .slider:before {
       display: flex;
       align-items: center;
       justify-content: center;
+      position: absolute;
+      bottom: 10px;   /* Immer 10px vom unteren Rand entfernt */
+      right: 10px;
+      margin: 0;
     }
   
     /* SVG sichtbar */
@@ -1049,12 +1094,42 @@ input:checked + .slider:before {
       fill: var(--button-text);
     }
   
-    .mode-switch {
-        position: fixed;
-        top: 10px;
-        right: 10px;
-        z-index: 1300;
-      }      
+  .mode-switch {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 1300;
+    }
+
+  /* Standard: Container nebeneinander anordnen */
+  .consensus-switch-container {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  /* Spezifische Formatierung für den Search Mode: leicht ausgegraut */
+  .search-mode {
+    opacity: 0.5;
+    display: flex;
+    align-items: center;
+  }
+
+  .search-mode label.switch {
+    margin-right: 8px;
+  }
+
+  .search-mode-label {
+    font-size: 1em;
+    line-height: 24px; /* entspricht der Höhe des Switches */
+  }
+
+  .search-disclaimer {
+    font-size: 0.8em;
+    margin-left: 5px;
+    line-height: 24px;
+    color: #666;
+  }    
   
     /* Konsens-Kontrollen sauber stapeln */
     .consensus-controls {
