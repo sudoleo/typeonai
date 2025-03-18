@@ -92,22 +92,44 @@ def query_claude(question: str, api_key: str) -> str:
     except Exception as e:
         return f"Fehler bei Anthropic Claude: {str(e)}"
 
-
-def query_gemini(question: str, user_api_key: Optional[str] = None) -> str:
+def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode: bool = False) -> str:
     try:
-        # Wenn ein manueller Key vorhanden ist, verwende ihn
-        if user_api_key and user_api_key.strip() != "":
+        if user_api_key and user_api_key.strip():
             genai.configure(api_key=user_api_key)
         else:
-            # Kein manueller Key: Authentifizierung über den Service Account
-            genai.configure()  # Hier wird automatisch die in GOOGLE_APPLICATION_CREDENTIALS gesetzte JSON genutzt
-
-        model = genai.GenerativeModel("gemini-1.5-pro-latest")
-        prompt = "Bitte antworte kurz und präzise und beschränke dich auf das Wesentliche. " + question
-        response = model.generate_content(prompt)
-        return response.text.strip()
+            genai.configure()
+        
+        # Im Search Mode den Modellnamen und Parameter anpassen:
+        if search_mode:
+            model_name = "models/gemini-1.5-pro-002"
+        else:
+            model_name = "gemini-1.5-pro-latest"
+            
+        model = genai.GenerativeModel(model_name)
+        
+        base_content = "Bitte antworte präzise " + question
+        # Bei Search Mode: Verwende "contents" und den Retrieval-Parameter
+        if search_mode:
+            # Optional: Prompt um Hinweis auf Quellen erweitern
+            base_content += "\nBitte füge am Ende deiner Antwort klickbare Links zu den verwendeten Quellen ein."
+            response = model.generate_content(
+                contents=base_content,
+                tools={"google_search_retrieval": {"dynamic_retrieval_config": {"mode": "MODE_DYNAMIC", "dynamic_threshold": 0.5}}}
+            )
+        else:
+            response = model.generate_content(base_content)
+        
+        answer_text = response.text.strip()
+        # Im Search Mode: Extrahiere und füge Links hinzu, sofern vorhanden
+        if search_mode and hasattr(response.candidates[0], "grounding_metadata") and response.candidates[0].grounding_metadata:
+            grounding = response.candidates[0].grounding_metadata
+            if hasattr(grounding, "grounding_chunks") and grounding.grounding_chunks:
+                formatted_links = [f"[{chunk.web.title}]({chunk.web.uri})" for chunk in grounding.grounding_chunks]
+                answer_text += "\n\n" + "\n".join(formatted_links)
+        return answer_text
     except Exception as e:
         return f"Fehler bei Google Gemini: {str(e)}"
+
     
 def query_deepseek(question: str, api_key: str) -> str:
     """Fragt DeepSeek zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
@@ -149,7 +171,10 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
     Nutzt ein Modell, um die Antworten der Modelle mittels Chain-of-Thought-Logik zu einem konsistenten Konsens zusammenzufassen.
     Die übergebenen API Keys werden dabei aus dem Dictionary 'api_keys' entnommen.
     """
-    prompt_parts = [f"Die Frage lautet: {question}\n\n"]
+    prompt_parts = []
+    if search_mode:
+        prompt_parts.append("Hinweis: Die folgenden Antworten basieren auf aktuellen Echtzeitdaten. Bitte berücksichtige diese Informationen in deiner finalen Antwort.\n\n")
+    prompt_parts.append(f"Die Frage lautet: {question}\n\n")
     if "OpenAI" not in excluded_models and answer_openai:
         prompt_parts.append(f"Antwort von GPT-4o: {answer_openai}\n\n")
     if "Mistral" not in excluded_models and answer_mistral:
@@ -233,16 +258,22 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 return f"Fehler bei Anthropic Claude: {response.status_code} - {response.text}"
             
         elif consensus_model == "Google Gemini":
-            # Prüfe, ob ein manueller Gemini-Key vorhanden ist:
             gemini_key = api_keys.get("Google Gemini")
             if gemini_key and gemini_key.strip() != "":
                 genai.configure(api_key=gemini_key)
             else:
                 genai.configure()  # Service-Account-Modus
             model = genai.GenerativeModel("gemini-1.5-pro-latest")
-            response = model.generate_content(consensus_prompt)
+            # Schalte auch hier zwischen Search und normalem Modus um:
+            if search_mode:
+                response = model.generate_content(
+                    consensus_prompt,
+                    tools={"google_search_retrieval": {"dynamic_retrieval_config": {"mode": "MODE_DYNAMIC", "dynamic_threshold": 0.5}}}
+                )
+            else:
+                response = model.generate_content(consensus_prompt)
             return response.text.strip()
-        
+
         elif consensus_model == "DeepSeek":
             client = openai.OpenAI(api_key=api_keys.get("DeepSeek"), base_url="https://api.deepseek.com")
             response = client.chat.completions.create(
@@ -562,6 +593,8 @@ async def ask_gemini_post(data: dict = Body(...)):
     id_token = data.get("id_token")
     user_api_key = data.get("api_key") if use_own_keys else None
     active_count = data.get("active_count", 1)
+    # search_mode-Parameter auslesen:
+    search_mode = data.get("search_mode", False)
     
     if id_token:
         try:
@@ -574,13 +607,11 @@ async def ask_gemini_post(data: dict = Body(...)):
             return {"error": "Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie eigene API Keys."}
         usage_counter[uid] = current_usage + increment
 
-        # Falls kein manueller Key übermittelt wird, greift der Service-Account-Modus
-        answer = query_gemini(question, user_api_key)
+        answer = query_gemini(question, user_api_key, search_mode)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Service Account" if not user_api_key else "User API Key"}
     else:
-        # Wenn keine Authentifizierung via id_token vorliegt, nutzen wir den manuellen Key, falls vorhanden
-        answer = query_gemini(question, user_api_key)
+        answer = query_gemini(question, user_api_key, search_mode)
         return {"response": answer, "key_used": "Service Account" if not user_api_key else "User API Key"}
 
 # Angepasster Endpoint für DeepSeek

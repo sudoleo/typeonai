@@ -212,7 +212,7 @@
             <span class="search-mode-label">Search Mode</span>
             <!-- Disclaimer, der nur beim Aktivieren angezeigt wird -->
             <span id="searchDisclaimer" class="search-disclaimer" style="display: none; font-size: 0.8em; margin-left: 5px;">
-              Aktuell nur mit GPT nutzbar, bald auch mit weiteren Modellen nutzbar!
+              Aktuell nur mit ChatGPT und Gemini, bald auch mit weiteren Modellen nutzbar!
             </span>
           </div>
         </div>
@@ -225,7 +225,10 @@
       </div>
     </div>
     
-    <div class="response-section">
+    <div class="response-section" style="position: relative;">
+      <button id="toggleAllButton" onclick="toggleAllResponses()" title="Alle Antworten ein- oder ausklappen">
+        <span class="toggle-visual"></span>
+      </button>
       <!-- Antwort OpenAI -->
       <div class="response-box" id="openaiResponse" data-model="OpenAI">
         <h2>
@@ -510,6 +513,37 @@
           arrow.classList.remove("rotated");
         }
       };
+
+      window.toggleAllResponses = function() {
+        const responses = document.querySelectorAll('.response-box');
+        let shouldCollapse = false;
+        responses.forEach(box => {
+          const content = box.querySelector('.collapsible-content');
+          if (content && !content.classList.contains('collapsed')) {
+            shouldCollapse = true;
+          }
+        });
+        
+        responses.forEach(box => {
+          const content = box.querySelector('.collapsible-content');
+          const arrow = box.querySelector('.collapse-btn .arrow');
+          if (shouldCollapse) {
+            if (content && !content.classList.contains('collapsed')) {
+              content.classList.add('collapsed');
+            }
+            if (arrow && !arrow.classList.contains('rotated')) {
+              arrow.classList.add('rotated');
+            }
+          } else {
+            if (content && content.classList.contains('collapsed')) {
+              content.classList.remove('collapsed');
+            }
+            if (arrow && arrow.classList.contains('rotated')) {
+              arrow.classList.remove('rotated');
+            }
+          }
+        });
+      };
     
       // Collapse/Expand einer Antwort-Box
       window.toggleCollapse = function(responseId) {
@@ -759,32 +793,34 @@
 
       // Google Gemini
       if (activeModels.includes("Google Gemini")) {
-        const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
-        const payload = {
-          question: question,
-          active_count: 1
-        };
+          const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
+          const payload = {
+            question: question,
+            active_count: 1,
+            // Suche-Parameter hinzufügen:
+            search_mode: document.getElementById("searchModeToggle").checked
+          };
 
-        if (!useOwnKeys) {
-          let id_token = localStorage.getItem("id_token");
-          if (id_token) {
-            payload.id_token = id_token;
+          if (!useOwnKeys) {
+            let id_token = localStorage.getItem("id_token");
+            if (id_token) {
+              payload.id_token = id_token;
+            } else {
+              payload.api_key = localStorage.getItem("geminiKey") || "";
+            }
           } else {
-            payload.api_key = localStorage.getItem("geminiKey") || "";
+            if (!validateUserKey("geminiKey")) {
+              alert("Bitte geben Sie einen gültigen Google Gemini API Key ein.");
+              return;
+            }
+            payload.api_key = localStorage.getItem("geminiKey");
           }
-        } else {
-          if (!validateUserKey("geminiKey")) {
-            alert("Bitte geben Sie einen gültigen Google Gemini API Key ein.");
-            return;
-          }
-          payload.api_key = localStorage.getItem("geminiKey");
-        }
 
-        fetch('/ask_gemini', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        })
+          fetch('/ask_gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          })
           .then(response => response.json())
           .then(data => {
             const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
@@ -977,20 +1013,17 @@
         // Deaktiviere und deaktiviere alle anderen Modelle.
         mistralCheckbox.checked = false;
         claudeCheckbox.checked = false;
-        geminiCheckbox.checked = false;
         deepseekCheckbox.checked = false;
         grokCheckbox.checked = false;
 
         mistralCheckbox.disabled = true;
         claudeCheckbox.disabled = true;
-        geminiCheckbox.disabled = true;
         deepseekCheckbox.disabled = true;
         grokCheckbox.disabled = true;
 
         // Optional: Setze die zugehörigen Response-Boxen auf "ausgeschlossen"
         toggleModel("mistralResponse", false);
         toggleModel("claudeResponse", false);
-        toggleModel("geminiResponse", false);
         toggleModel("deepseekResponse", false);
         toggleModel("grokResponse", false);
 
@@ -1010,14 +1043,12 @@
         // Reaktiviere alle Modelle, wenn der Search Mode ausgeschaltet wird.
         mistralCheckbox.disabled = false;
         claudeCheckbox.disabled = false;
-        geminiCheckbox.disabled = false;
         deepseekCheckbox.disabled = false;
         grokCheckbox.disabled = false;
 
         // Setze die Checkboxen wieder auf "angewählt"
         mistralCheckbox.checked = true;
         claudeCheckbox.checked = true;
-        geminiCheckbox.checked = true;
         deepseekCheckbox.checked = true;
         grokCheckbox.checked = true;
 
@@ -1306,7 +1337,7 @@
   </div>
 </div>
 <div id="disclaimerPopup" class="popup">
-  <p>Aktuell nur mit ChatGPT, bald auch mit weiteren Modellen nutzbar!</p>
+  <p>Aktuell nur mit ChatGPT und Gemini, bald auch mit weiteren Modellen nutzbar!</p>
 </div>
 </body>
 </html>

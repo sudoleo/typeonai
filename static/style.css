@@ -118,6 +118,10 @@ h1, h2 {
 .title small {
   font-size: 0.8em;
 }
+
+#marketingPopup {
+  z-index: 2000;  /* höher als der toggleAllButton */
+}
   
 /* Input-Section */
 .input-section {
@@ -215,6 +219,44 @@ h1, h2 {
   height: 100px;
 }
 
+.response-section {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+#toggleAllButton {
+  position: absolute;
+  top: -13px;
+  right: -5px;
+  /* Erhöhe die Klickfläche mit Padding, ohne das Erscheinungsbild zu verändern */
+  border: none;
+  background: none; /* Unsichtbarer Hintergrund für den Button */
+  cursor: pointer;
+  z-index: 1000;
+}
+
+/* Das visuelle Element (der Strich) */
+#toggleAllButton .toggle-visual {
+  display: block;
+  width: 25px;
+  height: 5px;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: background-color 0.3s, box-shadow 0.3s;
+  animation: pulse 2s ease-out;
+}
+
+/* Hover-Effekt über den Button (optional, greift auch auf den inneren Strich) */
+#toggleAllButton:hover .toggle-visual {
+  background-color: #f9f9f9;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
 .popup {
   position: fixed;
   bottom: 20px;
@@ -300,15 +342,6 @@ h1, h2 {
   visibility: visible;
   opacity: 1;
   transition-delay: 0.5s;
-}
-  
-/* Response-Section */
-.response-section {
-    display: flex;
-    gap: 15px;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-    justify-content: space-between;
 }
   
 .response-box, .consensus-box {
@@ -586,12 +619,6 @@ input:checked + .slider:before {
     margin-right: 16px; /* Abstand zum Button */
 }
   
-/* Neue Regeln für die Konsens-Kontrolle:
-   - .consensus-controls: gesamter Container, verteilt in einer Zeile
-   - .auto-consensus: Linke Seite (Switch + Label)
-   - #consensusButton: Button in der Mitte
-   - .consensus-model: Dropdown auf der rechten Seite
-*/
 .consensus-controls {
     display: flex;
     align-items: center;
@@ -603,6 +630,7 @@ input:checked + .slider:before {
     display: flex;
     align-items: center;
     gap: 10px;
+    opacity: 0.6;
 }
 
 .search-mode {
