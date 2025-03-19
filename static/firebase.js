@@ -37,8 +37,11 @@ document.getElementById("loginButton").addEventListener("click", () => {
   const password = document.getElementById("loginPassword").value;
   signInWithEmailAndPassword(auth, email, password)
     .then((userCredential) => {
-      // Login erfolgreich – Modal schließen
-      document.getElementById("loginModal").style.display = "none";
+      return userCredential.user.getIdToken();
+    })
+    .then((token) => {
+      localStorage.setItem("id_token", token);
+      window.location.href = "/"; // Seite neu laden, damit der Token verfügbar ist
     })
     .catch((error) => {
       document.getElementById("loginError").innerText = error.message;

@@ -115,6 +115,30 @@ h1, h2 {
     text-align: center;
 }
 
+/* Leaderboard an die Sidebar anpassen */
+#leaderboardContent table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto; /* statt fixed, damit der Inhalt nicht unnötig umbricht */
+}
+
+#leaderboardContent th,
+#leaderboardContent td {
+  white-space: nowrap;      /* Alle Inhalte in einer Zeile anzeigen */
+  text-align: left;
+  padding: 4px 8px;         /* Feineres Padding, um den Platz optimal zu nutzen */
+  font-size: 0.9em;         /* Schrift ggf. etwas kleiner */
+}
+
+#leaderboardContent th {
+  border-bottom: 1px solid #ccc;
+}
+
+#leaderboardContent tr {
+  border-bottom: 1px solid #eee;
+  vertical-align: middle;
+}
+
 .title small {
   font-size: 0.8em;
 }
@@ -562,7 +586,6 @@ h1, h2 {
 /* Modelle-Bereich standardmäßig einklappen */
 .model-selection {
     display: none;
-    margin: 10px;
     flex-direction: column;
   }
   
@@ -959,7 +982,7 @@ input:checked + .slider:before {
       top: 45px;
       left: 0;
       width: 80%;
-      max-width: 300px;
+      max-width: 260px;
       height: 100%;
       background: var(--container-bg);
       box-shadow: var(--box-shadow);
@@ -971,6 +994,30 @@ input:checked + .slider:before {
     }
     .sidebar.active {
       transform: translateX(0);
+    }
+
+    /* Leaderboard an die Sidebar anpassen */
+    #leaderboardContent table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: auto; /* statt fixed, damit der Inhalt nicht unnötig umbricht */
+    }
+
+    #leaderboardContent th,
+    #leaderboardContent td {
+      white-space: nowrap;      /* Alle Inhalte in einer Zeile anzeigen */
+      text-align: left;
+      padding: 4px 8px;         /* Feineres Padding, um den Platz optimal zu nutzen */
+      font-size: 0.9em;         /* Schrift ggf. etwas kleiner */
+    }
+
+    #leaderboardContent th {
+      border-bottom: 1px solid #ccc;
+    }
+
+    #leaderboardContent tr {
+      border-bottom: 1px solid #eee;
+      vertical-align: middle;
     }
   
     /* Sidebar Toggle Button – nur in der Top Bar anzeigen */
@@ -1079,7 +1126,7 @@ input:checked + .slider:before {
       top: 45px;
       left: 0;
       width: 80%;
-      max-width: 300px;
+      max-width: 260px;
       height: 100%;
       background: var(--container-bg);
       box-shadow: var(--box-shadow);
@@ -1092,6 +1139,30 @@ input:checked + .slider:before {
       
     .sidebar.active {
       transform: translateX(0);
+    }
+
+    /* Leaderboard an die Sidebar anpassen */
+    #leaderboardContent table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: auto; /* statt fixed, damit der Inhalt nicht unnötig umbricht */
+    }
+
+    #leaderboardContent th,
+    #leaderboardContent td {
+      white-space: nowrap;      /* Alle Inhalte in einer Zeile anzeigen */
+      text-align: left;
+      padding: 4px 8px;         /* Feineres Padding, um den Platz optimal zu nutzen */
+      font-size: 0.9em;         /* Schrift ggf. etwas kleiner */
+    }
+
+    #leaderboardContent th {
+      border-bottom: 1px solid #ccc;
+    }
+
+    #leaderboardContent tr {
+      border-bottom: 1px solid #eee;
+      vertical-align: middle;
     }
 
     .burger-icon {
@@ -1268,34 +1339,37 @@ input:checked + .slider:before {
     background-color: #0056b3;
 }
 
-/* API-Testbereich standardmäßig einklappen */
-.api-test-area {
-    display: none;
-    margin: 0 auto;
-    padding: 0 10px;
-  }
-
-/* Gruppe für jedes API Key-Feld */
+/* API-Key Gruppe: keine extra Einrückung und kleineres Padding */
 .api-key-group {
-    margin-bottom: 10px;
-    text-align: left; /* Labels linksbündig */
+  margin-bottom: 8px;
+  text-align: left;
+  padding-left: 0;
 }
 
 .api-key-group label {
-    display: block;
-    margin-bottom: 4px;
-    font-size: 0.9em;
+  display: block;
+  margin-bottom: 2px;
+  font-size: 0.85em;
 }
 
+/* Eingabefelder kompakter gestalten */
 .api-key-group input {
-    width: 100%;
-    padding: 6px;
-    margin-bottom: 4px;
-    border: 1px solid var(--input-border);
-    border-radius: 4px;
-    background-color: var(--input-bg);
-    color: var(--text-color);
-    font-size: 0.9em;
+  width: 90%;
+  padding: 6px 8px;  /* kleineres Padding */
+  margin-bottom: 4px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  font-size: 0.9em;
+  text-align: left;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.api-key-group input:focus {
+  border-color: var(--button-bg);
+  box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+  outline: none;
 }
 
 /* Feedback-Span: Abstand hinter dem Labeltext */
@@ -1319,6 +1393,10 @@ input:checked + .slider:before {
 }
 .api-test-area button:hover {
     background-color: #0056b3;
+}
+
+.api-test-area {
+  display: none;
 }
 
 /* Wrapper für den Hauptinhalt – zentriert neben der Sidebar */
