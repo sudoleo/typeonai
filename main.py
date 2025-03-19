@@ -487,6 +487,17 @@ async def register_user(request: Request, data: dict):
         return {"uid": user.uid, "email": user.email, "customToken": custom_token_str}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+@app.post("/usage")
+async def get_usage_post(data: dict):
+    try:
+        token = data.get("id_token")
+        uid = verify_user_token(token)
+        current_usage = usage_counter.get(uid, 0)
+        remaining = FREE_USAGE_LIMIT - current_usage
+        return {"remaining": remaining}
+    except Exception:
+        raise HTTPException(status_code=401, detail="Authentifizierung fehlgeschlagen")
 
 @app.post("/ask_openai")
 async def ask_openai_post(data: dict = Body(...)):

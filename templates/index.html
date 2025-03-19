@@ -125,14 +125,12 @@
       </div>      
     </div>
     <div id="usageOptions">
-      <br>
-      <label>
-        <input type="checkbox" id="useOwnKeysSwitch">
+      <label for="useOwnKeysSwitch" class="custom-checkbox-label">
         Eigene API Keys verwenden
+        <input type="checkbox" id="useOwnKeysSwitch">
       </label>
-      <br><br>
-      <span id="freeUsageDisplay"></span>
-    </div>   
+      <span id="freeUsageDisplay">Gratis-Anfragen: ...</span>
+    </div>       
 
     <!-- Trennstrich zwischen API Keys und Modelle -->
     <div class="sidebar-separator"></div>
@@ -193,6 +191,9 @@
     <div class="input-section">
       <div class="chat-input-container" style="position: relative;">
         <textarea class="input-field" id="questionInput" placeholder="Geben Sie Ihre Frage ein"></textarea>
+        <button id="toggleAllButton" onclick="toggleAllResponses()" title="Alle Antworten ein- oder ausklappen">
+          <span class="toggle-visual"></span>
+        </button>
         <!-- Container für beide Schalter -->
         <div class="consensus-switch-container" style="position: absolute; bottom: 10px; left: 10px; display: flex; align-items: center; gap: 20px;">
           <!-- Auto-Konsens-Switch -->
@@ -226,9 +227,6 @@
     </div>
     
     <div class="response-section" style="position: relative;">
-      <button id="toggleAllButton" onclick="toggleAllResponses()" title="Alle Antworten ein- oder ausklappen">
-        <span class="toggle-visual"></span>
-      </button>
       <!-- Antwort OpenAI -->
       <div class="response-box" id="openaiResponse" data-model="OpenAI">
         <h2>
@@ -415,6 +413,23 @@
           }
         }
       });
+
+      const freeDisplay = document.getElementById("freeUsageDisplay");
+      const idToken = localStorage.getItem("id_token");
+      if (idToken && freeDisplay) {
+        fetch("/usage", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ id_token: idToken })
+        })
+          .then(response => response.json())
+          .then(data => {
+            freeDisplay.innerText = "Gratis-Anfragen: " + data.remaining + " / " + 25;
+          })
+          .catch(err => console.error("Fehler beim Abrufen des Kontingents:", err));
+      }
 
       // --------------------------
       // Event-Listener für Eingabefelder und Buttons

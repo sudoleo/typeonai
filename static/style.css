@@ -229,13 +229,18 @@ h1, h2 {
 
 #toggleAllButton {
   position: absolute;
-  top: -13px;
-  right: -5px;
-  /* Erhöhe die Klickfläche mit Padding, ohne das Erscheinungsbild zu verändern */
+  top: -23px;    /* Passt die vertikale Position an */
+  right: -13px;   /* Passt die horizontale Position an */
   border: none;
-  background: none; /* Unsichtbarer Hintergrund für den Button */
+  background: none;
   cursor: pointer;
   z-index: 1000;
+}
+
+.dark-mode #toggleAllButton .toggle-visual {
+  background-color: #3f3f3f;  /* dunkler als #fff */
+  border: 1px solid #535353;  /* angepasster Rahmen */
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5); /* optional angepasster Schatten */
 }
 
 /* Das visuelle Element (der Strich) */
@@ -255,6 +260,67 @@ h1, h2 {
 #toggleAllButton:hover .toggle-visual {
   background-color: #f9f9f9;
   box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+/* Container: einfache Ausrichtung ohne Rahmen oder Hintergrund */
+#usageOptions {
+  margin: 10px 0;
+  text-align: left;
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  color: #333;
+}
+
+/* Checkbox-Label: linksbündig mit Abstand zwischen Checkbox und Text */
+.custom-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;         /* Abstand zwischen Checkbox und Text */
+  cursor: pointer;
+  margin-bottom: 10px; /* Abstand zum nächsten Element */
+}
+
+/* Individuelle Checkbox */
+.custom-checkbox-label input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #ccc;
+  border-radius: 4px;
+  transition: background-color 0.3s, border-color 0.3s;
+  position: relative;
+}
+
+.custom-checkbox-label input[type="checkbox"]:checked {
+  background-color: #007bff;
+  border-color: #007bff;
+}
+
+.custom-checkbox-label input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 4px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* Darkmode-Anpassungen */
+.dark-mode #usageOptions {
+  color: #e0e0e0;
+}
+
+.dark-mode .custom-checkbox-label input[type="checkbox"] {
+  border: 2px solid #555;
+}
+
+.dark-mode .custom-checkbox-label input[type="checkbox"]:checked {
+  background-color: #bb86fc;
+  border-color: #bb86fc;
 }
 
 .popup {
