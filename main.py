@@ -94,23 +94,20 @@ def query_claude(question: str, api_key: str) -> str:
 
 def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode: bool = False) -> str:
     try:
+        # Wenn ein eigener API Key übergeben wurde, verwende ihn.
+        # Andernfalls – bei eingeloggten Nutzern – wird der Service-Account-Key aus der JSON genutzt.
         if user_api_key and user_api_key.strip():
             genai.configure(api_key=user_api_key)
         else:
             genai.configure()
         
-        # Im Search Mode den Modellnamen und Parameter anpassen:
-        if search_mode:
-            model_name = "models/gemini-1.5-pro-002"
-        else:
-            model_name = "gemini-1.5-pro-latest"
-            
+        # Je nach Search Mode den passenden Modellnamen wählen:
+        model_name = "models/gemini-1.5-pro-002" if search_mode else "gemini-1.5-pro-latest"
         model = genai.GenerativeModel(model_name)
         
-        base_content = "Bitte antworte präzise " + question
-        # Bei Search Mode: Verwende "contents" und den Retrieval-Parameter
+        base_content = "Bitte antworte präzise. " + question
         if search_mode:
-            # Optional: Prompt um Hinweis auf Quellen erweitern
+            # Hinweis im Prompt, der auch die Links (über Retrieval) liefern soll
             base_content += "\nBitte füge am Ende deiner Antwort klickbare Links zu den verwendeten Quellen ein."
             response = model.generate_content(
                 contents=base_content,
@@ -120,7 +117,7 @@ def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode:
             response = model.generate_content(base_content)
         
         answer_text = response.text.strip()
-        # Im Search Mode: Extrahiere und füge Links hinzu, sofern vorhanden
+        # Im Search Mode: Falls Grounding‑Metadata vorhanden, extrahiere die Links
         if search_mode and hasattr(response.candidates[0], "grounding_metadata") and response.candidates[0].grounding_metadata:
             grounding = response.candidates[0].grounding_metadata
             if hasattr(grounding, "grounding_chunks") and grounding.grounding_chunks:
@@ -590,10 +587,11 @@ async def ask_claude_post(data: dict = Body(...)):
 async def ask_gemini_post(data: dict = Body(...)):
     question = data.get("question")
     use_own_keys = data.get("useOwnKeys", False)
+    if isinstance(use_own_keys, str):
+        use_own_keys = use_own_keys.lower() == "true"
     id_token = data.get("id_token")
-    user_api_key = data.get("api_key") if use_own_keys else None
+    api_key = data.get("api_key")  # von der Sidebar
     active_count = data.get("active_count", 1)
-    # search_mode-Parameter auslesen:
     search_mode = data.get("search_mode", False)
     
     if id_token:
@@ -607,12 +605,23 @@ async def ask_gemini_post(data: dict = Body(...)):
             return {"error": "Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie eigene API Keys."}
         usage_counter[uid] = current_usage + increment
 
-        answer = query_gemini(question, user_api_key, search_mode)
+        if use_own_keys:
+            if not (api_key and api_key.strip()):
+                raise HTTPException(status_code=400, detail="Bitte loggen Sie sich ein oder hinterlegen Sie eigene API Keys.")
+            answer = query_gemini(question, api_key.strip(), search_mode)
+            key_used = "User API Key"
+        else:
+            answer = query_gemini(question, None, search_mode)
+            key_used = "Service Account"
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
-        return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Service Account" if not user_api_key else "User API Key"}
+        return {"response": answer, "free_usage_remaining": free_remaining, "key_used": key_used}
     else:
-        answer = query_gemini(question, user_api_key, search_mode)
-        return {"response": answer, "key_used": "Service Account" if not user_api_key else "User API Key"}
+        # Nicht eingeloggte Nutzer müssen einen eigenen API Key bereitstellen.
+        if not (api_key and api_key.strip()):
+            raise HTTPException(status_code=400, detail="Bitte loggen Sie sich ein oder hinterlegen Sie eigene API Keys.")
+        answer = query_gemini(question, api_key.strip(), search_mode)
+        return {"response": answer, "key_used": "User API Key"}
+
 
 # Angepasster Endpoint für DeepSeek
 @app.post("/ask_deepseek")

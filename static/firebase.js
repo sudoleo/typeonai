@@ -144,3 +144,19 @@ async function recordModelVote(model, type) {
 }
 
 window.recordModelVote = recordModelVote;
+
+// Login per Enter-Taste auslösen: Bei Fokus im Email- oder Passwortfeld wird der Login-Button "geklickt".
+document.getElementById("loginEmail").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    document.getElementById("loginButton").click();
+  }
+});
+
+document.getElementById("loginPassword").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    document.getElementById("loginButton").click();
+  }
+});
+
