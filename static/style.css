@@ -530,19 +530,35 @@ transition-delay: 0.5s;
 .sidebar-section h2 {
   text-align: left;
   margin-left: 0;
+  margin-top: 20px;
 }
 
 .bookmark {
   cursor: pointer;
-  transition: background-color 0.3s ease;
-  border-radius: 8px;
-  text-align: left;
+  background: none;
+  color: inherit;
   font-size: 14px;
+  margin: 0;       /* Keine Außenabstände */
+  padding: 0.5px 0;  /* Nur minimaler innerer Abstand */
+  border: none;
+  border-radius: 3px;
+  text-align: left;
+  transition: background-color 0.2s ease;
 }
 
 /* Hover-Effekt im White Mode */
 .sidebar .bookmark:hover {
   background-color: #f2f2f2;
+}
+
+.delete-bookmark {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  font-weight: bold;       /* Optional, damit das "x" etwas kräftiger erscheint */
+  opacity: 0.5;
 }
 
 /* Hover-Effekt im Dark Mode */
@@ -875,6 +891,7 @@ opacity: 0.5;
   text-align: center;
   transition: transform 0.3s ease;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 
@@ -1212,7 +1229,7 @@ font-size: 0.9em;
     top: 45px;
     left: 0;
     width: 80%;
-    max-width: 260px;
+    max-width: 440px;
     height: 100%;
     background: var(--container-bg);
     box-shadow: var(--box-shadow);
@@ -1223,9 +1240,18 @@ font-size: 0.9em;
     transform: translateX(-100%);
     overflow-x: hidden;
   }
+
+  .sidebar-content {
+    margin-top: 10px; /* oder einen anderen kleineren Wert */
+    margin-bottom: 20px;
+  }
     
   .sidebar.active {
     transform: translateX(0);
+  }
+
+  #bookmarksContainer {
+    padding-bottom: 60px; /* Passe den Wert ggf. an die Höhe deiner Search Bar an */
   }
 
   /* Leaderboard an die Sidebar anpassen */
@@ -1489,6 +1515,10 @@ outline: none;
 
 .api-test-area {
 display: none;
+}
+
+#freeUsageDisplay {
+  display: block;
 }
 
 /* Wrapper für den Hauptinhalt – zentriert neben der Sidebar */

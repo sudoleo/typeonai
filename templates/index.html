@@ -133,7 +133,7 @@
         <input type="checkbox" id="useOwnKeysSwitch">
       </label>
       <span id="freeUsageDisplay">Gratis-Anfragen: ...</span>
-    </div>       
+    </div>      
 
     <!-- Trennstrich zwischen API Keys und Modelle -->
     <div class="sidebar-separator"></div>
@@ -141,7 +141,7 @@
     <!-- Verwendete Modelle (einklappbar) -->
     <div class="sidebar-header">
       <h2>
-        Verwendete Modelle 
+        Modelle 
         <span class="sidebar-tooltip">
           <span class="info-icon">?</span>
           <span class="sidebar-tooltiptext">Wähle die Modelle, die du verwenden möchtest.</span>
@@ -196,7 +196,12 @@
     <div class="sidebar-separator"></div>
 
     <div class="sidebar-section">
-      <h2>Lesezeichen</h2>
+      <h2>Lesezeichen
+        <span class="sidebar-tooltip">
+          <span class="info-icon">?</span>
+          <span class="sidebar-tooltiptext">All deine Chats.</span>
+        </span>
+      </h2>
       <div id="bookmarksContainer"></div>
     </div>
   </div>
@@ -640,6 +645,8 @@
 
       // Senden der Frage an die aktiven Modelle
       window.sendQuestion = async function() {
+        // Konsens-Button wieder aktivieren, bevor eine neue Anfrage gesendet wird.
+        document.getElementById("consensusButton").disabled = false;
         const question = document.getElementById("questionInput").value;
         consensusGenerated = false;
         if (!question) {

@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getFirestore, collection, query, orderBy, onSnapshot, doc, setDoc, getDoc, increment, addDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+import { getFirestore, collection, query, orderBy, onSnapshot, doc, setDoc, getDoc, increment, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithCustomToken, signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 
 // Initialisiere Firebase mit der globalen Konfiguration, die aus dem HTML kommt
@@ -159,6 +159,15 @@ async function recordModelVote(model, type) {
   }
 }
 
+// Hilfsfunktion zum Kürzen des Textes auf maximal 5 Wörter
+function truncateText(text, maxWords = 5) {
+  const words = text.split(' ');
+  if (words.length > maxWords) {
+    return words.slice(0, maxWords).join(' ') + '...';
+  }
+  return text;
+}
+
 window.recordModelVote = recordModelVote;
 
 function saveBookmark(question, response, modelName) {
@@ -214,18 +223,32 @@ function loadBookmarks() {
     let bookmarksHTML = "";
     snapshot.forEach((doc) => {
       const data = doc.data();
-      bookmarksHTML += `<div class="bookmark" data-id="${doc.id}">
-                          <p>${data.query}</p>
+      bookmarksHTML += `<div class="bookmark" data-id="${doc.id}" style="position: relative;">
+                        <p>${truncateText(data.query)}</p>
+                        <span class="delete-bookmark" style="position: absolute; right: 5px; top: 50%; transform: translateY(-50%); cursor: pointer;">x</span>
                         </div>`;
     });
     document.getElementById("bookmarksContainer").innerHTML = bookmarksHTML;
 
-    // Konsens-Button deaktivieren, da Bookmarks aus der DB angezeigt werden
-    document.getElementById("consensusButton").disabled = true;
+    // Löschen-Event hinzufügen
+    document.querySelectorAll(".delete-bookmark").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        // Verhindert, dass das Klick-Event auch den Klick auf das Bookmark auslöst
+        e.stopPropagation();
+        const bookmarkId = btn.parentElement.getAttribute("data-id");
+        deleteBookmark(bookmarkId);
+      });
+    });
 
-    // Klick-Event hinzufügen, um bei einem Klick das Bookmark zu laden
+    // Entferne die automatische Deaktivierung hier:
+    // document.getElementById("consensusButton").disabled = true;
+
+    // Klick-Event hinzufügen: Beim Klick auf ein Bookmark wird der Konsens-Button deaktiviert und das Bookmark geladen
     document.querySelectorAll(".bookmark").forEach(item => {
       item.addEventListener("click", () => {
+        // Konsens-Button deaktivieren, weil hier ein Bookmark geladen wird
+        document.getElementById("consensusButton").disabled = true;
+
         const bookmarkId = item.getAttribute("data-id");
         console.log("Lade Bookmark-Dokument mit ID: ", bookmarkId);
         getDoc(doc(db, "users", userUid, "bookmarks", bookmarkId))
@@ -234,23 +257,31 @@ function loadBookmarks() {
               const bookmarkData = docSnapshot.data();
               console.log("Bookmark-Daten:", bookmarkData);
               if (bookmarkData.responses) {
-                document.getElementById("openaiResponse").querySelector(".collapsible-content").innerHTML =
-                marked.parse(bookmarkData.responses["OpenAI"] || "");
-                document.getElementById("mistralResponse").querySelector(".collapsible-content").innerHTML =
-                marked.parse(bookmarkData.responses["Mistral"] || "");
-                document.getElementById("claudeResponse").querySelector(".collapsible-content").innerHTML =
-                marked.parse(bookmarkData.responses["Anthropic"] || "");
-                document.getElementById("geminiResponse").querySelector(".collapsible-content").innerHTML =
-                marked.parse(bookmarkData.responses["Gemini"] || "");
-                document.getElementById("deepseekResponse").querySelector(".collapsible-content").innerHTML =
-                marked.parse(bookmarkData.responses["DeepSeek"] || "");
-                document.getElementById("grokResponse").querySelector(".collapsible-content").innerHTML =
-                marked.parse(bookmarkData.responses["Grok"] || "");
+                document.getElementById("openaiResponse")
+                  .querySelector(".collapsible-content").innerHTML =
+                  marked.parse(bookmarkData.responses["OpenAI"] || "");
+                document.getElementById("mistralResponse")
+                  .querySelector(".collapsible-content").innerHTML =
+                  marked.parse(bookmarkData.responses["Mistral"] || "");
+                document.getElementById("claudeResponse")
+                  .querySelector(".collapsible-content").innerHTML =
+                  marked.parse(bookmarkData.responses["Anthropic"] || "");
+                document.getElementById("geminiResponse")
+                  .querySelector(".collapsible-content").innerHTML =
+                  marked.parse(bookmarkData.responses["Gemini"] || "");
+                document.getElementById("deepseekResponse")
+                  .querySelector(".collapsible-content").innerHTML =
+                  marked.parse(bookmarkData.responses["DeepSeek"] || "");
+                document.getElementById("grokResponse")
+                  .querySelector(".collapsible-content").innerHTML =
+                  marked.parse(bookmarkData.responses["Grok"] || "");
                 // Zusätzlich Konsens & Unterschiede laden:
-                document.getElementById("consensusResponse").querySelector(".consensus-main p").innerHTML =
-                marked.parse(bookmarkData.responses["consensus"] || "");
-                document.getElementById("consensusResponse").querySelector(".consensus-differences p").innerHTML =
-                marked.parse(bookmarkData.responses["differences"] || "");
+                document.getElementById("consensusResponse")
+                  .querySelector(".consensus-main p").innerHTML =
+                  marked.parse(bookmarkData.responses["consensus"] || "");
+                document.getElementById("consensusResponse")
+                  .querySelector(".consensus-differences p").innerHTML =
+                  marked.parse(bookmarkData.responses["differences"] || "");
               } else {
                 console.log("Keine 'responses' im Bookmark gefunden.");
               }
@@ -263,6 +294,21 @@ function loadBookmarks() {
     });
   });
 }
+
+function deleteBookmark(bookmarkId) {
+  if (!auth.currentUser) return;
+  const userUid = auth.currentUser.uid;
+  const bookmarkDocRef = doc(db, "users", userUid, "bookmarks", bookmarkId);
+  deleteDoc(bookmarkDocRef)
+    .then(() => {
+      console.log("Bookmark gelöscht:", bookmarkId);
+    })
+    .catch((error) => {
+      console.error("Fehler beim Löschen des Bookmarks:", error);
+    });
+}
+
+window.deleteBookmark = deleteBookmark;
 
 // Login per Enter-Taste auslösen: Bei Fokus im Email- oder Passwortfeld wird der Login-Button "geklickt".
 document.getElementById("loginEmail").addEventListener("keydown", function(e) {
