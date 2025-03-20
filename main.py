@@ -1,3 +1,4 @@
+
 import os
 from fastapi import FastAPI, Query, Request, HTTPException, Body
 from fastapi.responses import HTMLResponse
@@ -105,7 +106,7 @@ def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode:
         model_name = "models/gemini-1.5-pro-002" if search_mode else "gemini-1.5-pro-latest"
         model = genai.GenerativeModel(model_name)
         
-        base_content = "Bitte antworte präzise. " + question
+        base_content = "Bitte antworte präzise und stelle keine Rückfragen. " + question
         if search_mode:
             # Hinweis im Prompt, der auch die Links (über Retrieval) liefern soll
             base_content += "\nBitte füge am Ende deiner Antwort klickbare Links zu den verwendeten Quellen ein."
@@ -170,7 +171,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
     """
     prompt_parts = []
     if search_mode:
-        prompt_parts.append("Hinweis: Die folgenden Antworten basieren auf aktuellen Echtzeitdaten. Bitte berücksichtige diese Informationen in deiner finalen Antwort.\n\n")
+        prompt_parts.append("Hinweis: Die folgenden Antworten basieren auf aktuellen Echtzeitdaten. Bitte füge die Links aus den Antworten in deiner Finalen Konsens-Antwort mit an.\n\n")
     prompt_parts.append(f"Die Frage lautet: {question}\n\n")
     if "OpenAI" not in excluded_models and answer_openai:
         prompt_parts.append(f"Antwort von GPT-4o: {answer_openai}\n\n")

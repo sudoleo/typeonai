@@ -162,4 +162,3 @@ document.getElementById("loginPassword").addEventListener("keydown", function(e)
     document.getElementById("loginButton").click();
   }
 });
-
