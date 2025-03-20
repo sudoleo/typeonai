@@ -51,7 +51,7 @@
       </div>
     </div>
 
-    <p class="cta-text">Log dich ein, um kostenlos und unverbindlich zu starten.</p>
+    <p class="cta-text">Einloggen & direkt loslegen – kostenlos.</p>
 
     <button id="startNowButton" class="cta-button">Loslegen</button>
   </div>
@@ -190,6 +190,14 @@
     </div>
     <div id="leaderboardContentContainer" class="hidden">
       <div id="leaderboardContent"></div>
+    </div>
+
+    <!-- Trennstrich zwischen API Keys und Leaderboard -->
+    <div class="sidebar-separator"></div>
+
+    <div class="sidebar-section">
+      <h2>Lesezeichen</h2>
+      <div id="bookmarksContainer"></div>
     </div>
   </div>
 </div>
@@ -730,6 +738,9 @@
             const outputEl = document.getElementById("openaiResponse").querySelector(".collapsible-content");
             if (data.response) {
               outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+              if (auth.currentUser) {
+                saveBookmark(question, data.response, "OpenAI");
+              }
             } else if (data.error) {
               outputEl.innerText = data.error;
             } else {
@@ -781,6 +792,9 @@
             const outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
             if (data.response) {
               outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+              if (auth.currentUser) {
+                saveBookmark(question, data.response, "Mistral");
+              }
             } else if (data.error) {
               outputEl.innerText = data.error;
             } else {
@@ -831,6 +845,9 @@
             const outputEl = document.getElementById("claudeResponse").querySelector(".collapsible-content");
             if (data.response) {
               outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+              if (auth.currentUser) {
+                saveBookmark(question, data.response, "Anthropic");
+              }
             } else if (data.error) {
               outputEl.innerText = data.error;
             } else {
@@ -883,6 +900,9 @@
             const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
             if (data.response) {
               outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+              if (auth.currentUser) {
+                saveBookmark(question, data.response, "Gemini");
+              }
             } else if (data.error) {
               outputEl.innerText = data.error;
             } else {
@@ -933,6 +953,9 @@
             const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
             if (data.response) {
               outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+              if (auth.currentUser) {
+                saveBookmark(question, data.response, "DeepSeek");
+              }
             } else if (data.error) {
               outputEl.innerText = data.error;
             } else {
@@ -981,6 +1004,9 @@
           const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
           if (data.response) {
             outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+            if (auth.currentUser) {
+              saveBookmark(question, data.response, "Grok");
+            }
           } else if (data.error) {
             outputEl.innerText = data.error;
           } else {
@@ -996,7 +1022,7 @@
           console.error("Fehler bei Grok:", error);
           checkAllResponses();
         });
-    }
+      }
     };
     
       // Modelle (Checkboxen) ein-/ausschalten
@@ -1284,6 +1310,10 @@
           // Aktualisiere den Konsens-Bereich und den Unterschiede-Bereich
           consensusDiv.querySelector(".consensus-main p").innerHTML = marked.parse(data.consensus_response);
           consensusDiv.querySelector(".consensus-differences p").innerHTML = marked.parse(data.differences || "Keine Unterschiede festgestellt.");
+
+          if (auth.currentUser) {
+            saveBookmarkConsensus(question, data.consensus_response, data.differences);
+          }
 
           // Parse den BestModel-Wert aus den Unterschieden und aktualisiere das Leaderboard in Firebase
           const bestModelFromConsensus = parseBestModel(data.differences);
