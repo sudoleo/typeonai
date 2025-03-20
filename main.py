@@ -14,15 +14,14 @@ from firebase_admin import credentials, auth
 from typing import Optional
 from datetime import datetime, timedelta
 
-# Lade .env falls nötig (wird hier nicht mehr für API Keys genutzt)
+# Load .env if necessary (no longer used here for API keys)
 load_dotenv()
 
 app = FastAPI()
 
-# Beispiel: Free-Usage-Limit
+# Free usage limit
 FREE_USAGE_LIMIT = 25
 
-# In-Memory-Speicher für Demonstrationszwecke – in der Produktion persistent speichern
 usage_counter = {}  # { uid: anzahl_anfragen }
 
 templates = Jinja2Templates(directory="templates")
@@ -40,13 +39,13 @@ def query_openai(question: str, api_key: str, search_mode: bool = False) -> str:
         response = client.chat.completions.create(
             model=model_to_use,
             messages=[
-                {"role": "system", "content": "Bitte antworte kurz und präzise und beschränke dich auf das Wesentliche."},
+                {"role": "system", "content": "Please respond briefly and precisely, focusing only on the essentials."},
                 {"role": "user", "content": question}
             ]
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        return f"Fehler bei OpenAI: {str(e)}"
+        return f"Error with OpenAI: {str(e)}"
 
 def query_mistral(question: str, api_key: str) -> str:
     """Fragt die Mistral API zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit."""
@@ -56,13 +55,13 @@ def query_mistral(question: str, api_key: str) -> str:
         response = client.chat.complete(
             model=model,
             messages=[
-                {"role": "system", "content": "Bitte antworte kurz und präzise und beschränke dich auf das Wesentliche."},
+                {"role": "system", "content": "Please respond briefly and precisely, focusing only on the essentials."},
                 {"role": "user", "content": question}
             ]
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        return f"Fehler bei Mistral: {str(e)}"
+        return f"Error with Mistral: {str(e)}"
 
 
 def query_claude(question: str, api_key: str) -> str:
@@ -78,7 +77,7 @@ def query_claude(question: str, api_key: str) -> str:
         payload = {
             "model": "claude-3-5-sonnet-20241022",
             "max_tokens": 8192,  # Sehr hoher Wert als "unbegrenzt"
-            "system": "Bitte antworte kurz und präzise und beschränke dich auf das Wesentliche.",
+            "system": "Please respond briefly and precisely, focusing only on the essentials.",
             "messages": [{"role": "user", "content": question}]
         }
         response = requests.post(url, json=payload, headers=headers)
@@ -87,11 +86,11 @@ def query_claude(question: str, api_key: str) -> str:
             if "content" in data and isinstance(data["content"], list) and len(data["content"]) > 0:
                 return data["content"][0]["text"]
             else:
-                return "Fehler: Keine Antwort im API-Response gefunden."
+                return "Error: No response found in the API response."
         else:
-            return f"Fehler bei Anthropic Claude: {response.status_code} - {response.text}"
+            return f"Error with Anthropic Claude: {response.status_code} - {response.text}"
     except Exception as e:
-        return f"Fehler bei Anthropic Claude: {str(e)}"
+        return f"Error with Anthropic Claude: {str(e)}"
 
 def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode: bool = False) -> str:
     try:
@@ -126,7 +125,7 @@ def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode:
                 answer_text += "\n\n" + "\n".join(formatted_links)
         return answer_text
     except Exception as e:
-        return f"Fehler bei Google Gemini: {str(e)}"
+        return f"Error with Google Gemini: {str(e)}"
 
     
 def query_deepseek(question: str, api_key: str) -> str:
@@ -136,14 +135,14 @@ def query_deepseek(question: str, api_key: str) -> str:
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "Bitte antworte kurz und präzise und beschränke dich auf das Wesentliche."},
+                {"role": "system", "content": "Please respond briefly and precisely, focusing only on the essentials."},
                 {"role": "user", "content": question}
             ],
             stream=False
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        return f"Fehler bei DeepSeek: {str(e)}"
+        return f"Error with DeepSeek: {str(e)}"
     
 def query_grok(question: str, api_key: str) -> str:
     """Fragt die Grok API zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
@@ -152,13 +151,13 @@ def query_grok(question: str, api_key: str) -> str:
         response = client.chat.completions.create(
             model="grok-2-latest",
             messages=[
-                {"role": "system", "content": "Bitte antworte kurz und präzise und beschränke dich auf das Wesentliche."},
+                {"role": "system", "content": "Please respond briefly and precisely, focusing only on the essentials."},
                 {"role": "user", "content": question}
             ]
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        return f"Fehler bei Grok: {str(e)}"
+        return f"Error with Grok: {str(e)}"
 
 
 def query_consensus(question: str, answer_openai: str, answer_mistral: str, answer_claude: str, 
@@ -166,44 +165,44 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                     best_model: str, excluded_models: list, consensus_model: str, 
                     api_keys: dict, search_mode: bool = False) -> str:
     """
-    Nutzt ein Modell, um die Antworten der Modelle mittels Chain-of-Thought-Logik zu einem konsistenten Konsens zusammenzufassen.
-    Die übergebenen API Keys werden dabei aus dem Dictionary 'api_keys' entnommen.
+    Uses a model to consolidate responses from multiple models into a consistent consensus answer using chain-of-thought logic.
+    The API keys provided are retrieved from the 'api_keys' dictionary.
     """
     prompt_parts = []
     if search_mode:
-        prompt_parts.append("Hinweis: Die folgenden Antworten basieren auf aktuellen Echtzeitdaten. Bitte füge die Links aus den Antworten in deiner Finalen Konsens-Antwort mit an.\n\n")
-    prompt_parts.append(f"Die Frage lautet: {question}\n\n")
+        prompt_parts.append("Note: The following responses are based on current real-time data. Please include links from the responses in your final consensus answer.\n\n")
+    prompt_parts.append(f"Please provide your answer in the same language as the user's question. The question is: {question}\n\n")
     if "OpenAI" not in excluded_models and answer_openai:
-        prompt_parts.append(f"Antwort von GPT-4o: {answer_openai}\n\n")
+        prompt_parts.append(f"Response from GPT-4o: {answer_openai}\n\n")
     if "Mistral" not in excluded_models and answer_mistral:
-        prompt_parts.append(f"Antwort von mistral-large-latest: {answer_mistral}\n\n")
+        prompt_parts.append(f"Response from mistral-large-latest: {answer_mistral}\n\n")
     if "Anthropic Claude" not in excluded_models and answer_claude:
-        prompt_parts.append(f"Antwort von claude-3-5-sonnet: {answer_claude}\n\n")
+        prompt_parts.append(f"Response from claude-3-5-sonnet: {answer_claude}\n\n")
     if "Google Gemini" not in excluded_models and answer_gemini:
-        prompt_parts.append(f"Antwort von gemini-pro: {answer_gemini}\n\n")
+        prompt_parts.append(f"Response from gemini-pro: {answer_gemini}\n\n")
     if "DeepSeek" not in excluded_models and answer_deepseek:
-        prompt_parts.append(f"Antwort von deepseek-chat: {answer_deepseek}\n\n")
+        prompt_parts.append(f"Response from deepseek-chat: {answer_deepseek}\n\n")
     if "Grok" not in excluded_models and answer_grok:
-        prompt_parts.append(f"Antwort von Grok: {answer_grok}\n\n")
+        prompt_parts.append(f"Response from Grok: {answer_grok}\n\n")
 
     if best_model:
         prompt_parts.append(
-            f"Der Nutzer hat die Antwort von {best_model} als die beste markiert. "
-            "Du erhältst vier Meinungen von Experten zu einer bestimmten Frage. "
-            "Deine Aufgabe ist es, diese Antworten zu bündeln und zu einer umfassenden, korrekten und kohärenten Antwort zu entwickeln. "
-            "Beachte: Auch Experten können sich irren. Versuche daher, durch Abgleich der Antworten mögliche Fehler aufzudecken und auszuschließen. "
-            "Falls sich die Antworten in einem Punkt stark widersprechen, überlege logisch, welche Variante am plausibelsten ist. "
-            "Strukturiere die Antwort verständlich und schlüssig. "
-            "Gib ausschließlich die finale, ausbalancierte Antwort aus."
+            f"The user marked the Answer from the Model: {best_model} as the best one. "
+            "You receive four expert opinions on a specific question. "
+            "Your task is to combine these responses into a comprehensive, correct, and coherent answer. "
+            "Note: Experts can also make mistakes. Therefore, try to identify and exclude possible errors by comparing the answers. "
+            "If the answers strongly contradict each other at any point, logically determine which variant is most plausible. "
+            "Structure the answer clearly and coherently. "
+            "Provide only the final, balanced answer. Adapt the "
         )
     else:
         prompt_parts.append(
-            "Du erhältst vier Meinungen von Experten zu einer bestimmten Frage. "
-            "Deine Aufgabe ist es, diese Antworten zu bündeln und zu einer umfassenden, korrekten und kohärenten Antwort zu entwickeln. "
-            "Beachte: Auch Experten können sich irren. Versuche daher, durch Abgleich der Antworten mögliche Fehler aufzudecken und auszuschließen. "
-            "Falls sich die Antworten in einem Punkt stark widersprechen, überlege logisch, welche Variante am plausibelsten ist. "
-            "Strukturiere die Antwort verständlich und schlüssig. "
-            "Gib ausschließlich die finale, ausbalancierte Antwort aus."
+            "You receive four expert opinions on a specific question. "
+            "Your task is to combine these responses into a comprehensive, correct, and coherent answer. "
+            "Note: Experts can also make mistakes. Therefore, try to identify and exclude possible errors by comparing the answers. "
+            "If the answers strongly contradict each other at any point, logically determine which variant is most plausible. "
+            "Structure the answer clearly and coherently. "
+            "Provide only the final, balanced answer."
         )
 
     consensus_prompt = "".join(prompt_parts)
@@ -241,7 +240,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
             }
             payload = {
                 "model": "claude-3-5-sonnet-20241022",
-                "max_tokens": 8192,  # Sehr hoher Wert als "unbegrenzt"
+                "max_tokens": 8192, 
                 "system": "",
                 "messages": [{"role": "user", "content": consensus_prompt}]
             }
@@ -251,9 +250,9 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 if "content" in data and isinstance(data["content"], list) and len(data["content"]) > 0:
                     return data["content"][0]["text"]
                 else:
-                    return "Fehler: Keine Antwort im API-Response gefunden."
+                    return "Error: No response found in the API response."
             else:
-                return f"Fehler bei Anthropic Claude: {response.status_code} - {response.text}"
+                return f"Error with Anthropic Claude: {response.status_code} - {response.text}"
             
         elif consensus_model == "Google Gemini":
             gemini_key = api_keys.get("Google Gemini")
@@ -295,9 +294,9 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
             return response.choices[0].message.content.strip()
 
         else:
-            return "Ungültiges Konsensmodell ausgewählt."
+            return "Invalid consensus model selected."
     except Exception as e:
-        return f"Fehler beim Konsens: {str(e)}"
+        return f"Consensus error: {str(e)}"
     
 
 def query_differences(answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, answer_deepseek: str, answer_grok: str, consensus_answer: str, api_keys: dict, differences_model: str) -> str:
@@ -305,24 +304,24 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
     Extrahiert die Unterschiede zwischen den vier Expertenantworten mittels des angegebenen Konsens‑Modells.
     """
     differences_prompt = (
-        "Analysiere die Antworten der LLMs und bewerte, wie stark sie voneinander abweichen. "
-        "Falls alle Modelle nahezu identisch antworten, ist der Konsens sehr glaubwürdig. "
-        "Falls es nur sprachliche Variationen gibt, ist er weitgehend glaubwürdig. "
-        "Falls es inhaltliche Nuancen gibt, ist er teilweise glaubwürdig. "
-        "Falls es klare Widersprüche gibt, ist er kaum oder nicht glaubwürdig. "
-        "Antwort ausschließlich mit einem der folgenden Sätze:\n\n"
-        
-        "- 'Die Konsens-Antwort ist **sehr** glaubwürdig.'\n"
-        "- 'Die Konsens-Antwort ist **weitgehend** glaubwürdig.'\n"
-        "- 'Die Konsens-Antwort ist **teilweise** glaubwürdig.'\n"
-        "- 'Die Konsens-Antwort ist **kaum** glaubwürdig.'\n"
-        "- 'Die Konsens-Antwort ist **nicht** glaubwürdig.'\n\n"
-        
-        "Nach dem Satz folgt eine Trennlinie und eine **sehr knappe Erklärung**, warum diese Unterschiede relevant sind.\n\n"
-        
-        "Konsens-Antwort:\n" + consensus_answer + "\n\n"
-        
-        "Antworten der Modelle:\n"
+        "Analyze the LLM responses and assess how strongly they differ from each other. "
+        "If all models respond almost identically, the consensus is very credible. "
+        "If there are only linguistic variations, it is largely credible. "
+        "If there are content nuances, it is partially credible. "
+        "If there are clear contradictions, it is hardly or not credible."
+        "Respond with one of the following sentences:\n\n"
+
+        "- 'The consensus answer is **very** credible.'\n"
+        "- 'The consensus answer is **largely** credible.'\n"
+        "- 'The consensus answer is **partially** credible.'\n"
+        "- 'The consensus answer is **hardly** credible.'\n"
+        "- 'The consensus answer is **not** credible.'\n\n"
+
+        "After the sentence, include a separator line and a **very brief explanation** of why these differences are relevant.\n\n"
+
+        "Consensus answer:\n" + consensus_answer + "\n\n"
+
+        "Model responses:\n"
         "- GPT-4o: " + answer_openai + "\n"
         "- Mistral: " + answer_mistral + "\n"
         "- Claude: " + answer_claude + "\n"
@@ -330,17 +329,17 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
         "- DeepSeek: " + answer_deepseek + "\n"
         "- Grok: " + answer_grok + "\n\n"
 
-        "Zum Schluss entscheide subjektiv, welches Modell die beste Antwort geliefert hat. "
-        "Wähle dabei eines der folgenden Modelle: Anthropic, Gemini, Mistral oder OpenAI. "
-        "Füge deine Entscheidung am Ende der Antwort in einer eigenen Zeile ein, beginnend mit 'BestModel:' gefolgt vom Modellnamen.\n\n"
-        
-        "Format der Antwort:\n"
-        "[Bewertungssatz]\n"
+        "Finally, subjectively determine which model provided the best answer. "
+        "Choose from one of the following models: Anthropic, Gemini, Mistral, or OpenAI. "
+        "Include your decision at the end of the response on a separate line, starting with 'BestModel:' followed by the model name.\n\n"
+
+        "Response format:\n"
+        "[Credibility statement]\n"
         "\n"
         "_____________\n"
         "\n"
-        "[Sehr kurze Erklärung, warum diese Unterschiede die Glaubwürdigkeit beeinflussen.]\n\n"
-        "BestModel: [Name des Modells]"
+        "[Very brief explanation of why these differences affect credibility.]\n\n"
+        "BestModel: [Model name]"
     )
 
     try:
@@ -349,7 +348,7 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "Gib keine Formatierungen aus."},
+                    {"role": "system", "content": "Answer in the exact same Langugage as the Model responses: "},
                     {"role": "user", "content": differences_prompt}
                 ]
             )
@@ -359,7 +358,7 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
             response = client.chat.complete(
                 model="mistral-large-latest",
                 messages=[
-                    {"role": "system", "content": "Gib keine Formatierungen aus."},
+                    {"role": "system", "content": "Answer in the exact same Langugage as the Model responses:  "},
                     {"role": "user", "content": differences_prompt}
                 ]
             )
@@ -374,7 +373,7 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
             payload = {
                 "model": "claude-3-5-sonnet-20241022",
                 "max_tokens": 8192,
-                "system": "Gib keine Formatierungen aus.",
+                "system": "Answer in the exact same Langugage as the Model responses:  ",
                 "messages": [{"role": "user", "content": differences_prompt}]
             }
             response = requests.post(url, json=payload, headers=headers)
@@ -383,9 +382,9 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
                 if "content" in data and isinstance(data["content"], list) and len(data["content"]) > 0:
                     return data["content"][0]["text"]
                 else:
-                    return "Fehler: Keine Antwort im API-Response gefunden."
+                    return "Error: No response found in the API response."
             else:
-                return f"Fehler bei Anthropic Claude: {response.status_code} - {response.text}"
+                return f"Error with Anthropic Claude: {response.status_code} - {response.text}"
             
         elif differences_model == "Google Gemini":
             gemini_key = api_keys.get("Google Gemini")
@@ -402,7 +401,7 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
             response = client.chat.completions.create(
                 model="deepseek-chat",
                 messages=[
-                    {"role": "system", "content": ""},
+                    {"role": "system", "content": "Answer in the exact same Langugage as the Model responses:  "},
                     {"role": "user", "content": differences_prompt}
                 ],
                 stream=False
@@ -414,16 +413,16 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
             response = client.chat.completions.create(
                 model="grok-2-latest",
                 messages=[
-                    {"role": "system", "content": "Gib keine Formatierungen aus."},
+                    {"role": "system", "content": "Answer in the exact same Langugage as the Model responses: "},
                     {"role": "user", "content": differences_prompt}
                 ]
             )
             return response.choices[0].message.content.strip()
 
         else:
-            return "Ungültiges Modell für den Unterschiedsvergleich."
+            return "Invalid model selected for difference comparison."
     except Exception as e:
-        return f"Fehler beim Vergleich: {str(e)}"
+        return f"Error in comparison: {str(e)}"
     
 # Initialisiere Firebase Admin (Beispiel, passe den Pfad zu deinem Service Account an)
 cred = credentials.Certificate("consensai-firebase-adminsdk-fbsvc-9064a77134.json")
@@ -437,7 +436,7 @@ def verify_user_token(token: str) -> str:
         decoded_token = auth.verify_id_token(token)
         return decoded_token["uid"]
     except Exception as e:
-        raise Exception("Ungültiger Token")
+        raise Exception("Invalid token")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -460,19 +459,19 @@ async def register_user(request: Request, data: dict):
     ip_address = request.client.host
     # Prüfe, ob diese IP-Adresse bereits einen Account registriert hat
     if ip_address in registered_ips:
-        raise HTTPException(status_code=400, detail="Ein Account pro Nutzer ist erlaubt.")
+        raise HTTPException(status_code=400, detail="Only one account per user is allowed.")
     
     email = data.get("email")
     password = data.get("password")
     if not email or not password:
-        raise HTTPException(status_code=400, detail="Email und Passwort müssen angegeben werden.")
+        raise HTTPException(status_code=400, detail="Email and password must be provided.")
 
     try:
         # Überprüfe, ob die E-Mail bereits existiert
         try:
             existing_user = auth.get_user_by_email(email)
             # Falls kein Fehler auftritt, existiert der Nutzer bereits
-            raise HTTPException(status_code=400, detail="Diese E-Mail ist bereits registriert.")
+            raise HTTPException(status_code=400, detail="This email is already registered.")
         except firebase_admin.auth.UserNotFoundError:
             # Keine Registrierung mit dieser E-Mail gefunden, also weiter
             pass
@@ -498,7 +497,7 @@ async def get_usage_post(data: dict):
         remaining = FREE_USAGE_LIMIT - current_usage
         return {"remaining": remaining}
     except Exception:
-        raise HTTPException(status_code=401, detail="Authentifizierung fehlgeschlagen")
+        raise HTTPException(status_code=401, detail="Authentication failed")
 
 @app.post("/ask_openai")
 async def ask_openai_post(data: dict = Body(...)):
@@ -513,16 +512,16 @@ async def ask_openai_post(data: dict = Body(...)):
         try:
             uid = verify_user_token(id_token)
         except Exception:
-            raise HTTPException(status_code=401, detail="Authentifizierung fehlgeschlagen")
+            raise HTTPException(status_code=401, detail="Authentication failed")
         current_usage = usage_counter.get(uid, 0)
         increment = 1.0 / active_count
         if current_usage + increment > FREE_USAGE_LIMIT:
-            return {"error": "Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie eigene API Keys."}
+            return {"error": "Your free quota is exhausted. Please provide your own API keys."}
         usage_counter[uid] = current_usage + increment
 
         developer_api_key = os.environ.get("DEVELOPER_OPENAI_API_KEY")
         if not developer_api_key:
-            raise HTTPException(status_code=500, detail="Serverfehler: API Key nicht konfiguriert")
+            raise HTTPException(status_code=500, detail="Server error: API key not configured")
         # Übergabe des search_mode-Flags
         answer = query_openai(question, developer_api_key, search_mode)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
@@ -531,7 +530,7 @@ async def ask_openai_post(data: dict = Body(...)):
         answer = query_openai(question, api_key, search_mode)
         return {"response": answer, "key_used": "User API Key"}
     else:
-        raise HTTPException(status_code=400, detail="Kein Authentifizierungsparameter (id_token oder api_key) angegeben")
+        raise HTTPException(status_code=400, detail="No authentication parameter (id_token or api_key) specified")
 
 # Angepasster Endpoint für Mistral
 @app.post("/ask_mistral")
@@ -545,16 +544,16 @@ async def ask_mistral_post(data: dict = Body(...)):
         try:
             uid = verify_user_token(id_token)
         except Exception:
-            raise HTTPException(status_code=401, detail="Authentifizierung fehlgeschlagen")
+            raise HTTPException(status_code=401, detail="Authentication failed")
         current_usage = usage_counter.get(uid, 0)
         increment = 1.0 / active_count
         if current_usage + increment > FREE_USAGE_LIMIT:
-            return {"error": "Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie eigene API Keys."}
+            return {"error": "Your free quota has been used up. Please store your own API keys."}
         usage_counter[uid] = current_usage + increment
 
         developer_api_key = os.environ.get("DEVELOPER_MISTRAL_API_KEY")
         if not developer_api_key:
-            raise HTTPException(status_code=500, detail="Serverfehler: API Key nicht konfiguriert")
+            raise HTTPException(status_code=500, detail="Server error: API key not configured")
         answer = query_mistral(question, developer_api_key)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
@@ -562,7 +561,7 @@ async def ask_mistral_post(data: dict = Body(...)):
         answer = query_mistral(question, api_key)
         return {"response": answer, "key_used": "User API Key"}
     else:
-        raise HTTPException(status_code=400, detail="Kein id_token oder api_key angegeben.")
+        raise HTTPException(status_code=400, detail="No id_token or api_key specified.")
 
 # Angepasster Endpoint für Anthropic Claude
 @app.post("/ask_claude")
@@ -576,16 +575,16 @@ async def ask_claude_post(data: dict = Body(...)):
         try:
             uid = verify_user_token(id_token)
         except Exception:
-            raise HTTPException(status_code=401, detail="Authentifizierung fehlgeschlagen")
+            raise HTTPException(status_code=401, detail="Authentication failed")
         current_usage = usage_counter.get(uid, 0)
         increment = 1.0 / active_count
         if current_usage + increment > FREE_USAGE_LIMIT:
-            return {"error": "Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie eigene API Keys."}
+            return {"error": "Your free quota has been used up. Please store your own API keys."}
         usage_counter[uid] = current_usage + increment
 
         developer_api_key = os.environ.get("DEVELOPER_ANTHROPIC_API_KEY")
         if not developer_api_key:
-            raise HTTPException(status_code=500, detail="Serverfehler: API Key nicht konfiguriert")
+            raise HTTPException(status_code=500, detail="Server error: API key not configured")
         answer = query_claude(question, developer_api_key)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
@@ -593,7 +592,7 @@ async def ask_claude_post(data: dict = Body(...)):
         answer = query_claude(question, api_key)
         return {"response": answer, "key_used": "User API Key"}
     else:
-        raise HTTPException(status_code=400, detail="Kein id_token oder api_key angegeben.")
+        raise HTTPException(status_code=400, detail="No id_token or api_key specified.")
 
 @app.post("/ask_gemini")
 async def ask_gemini_post(data: dict = Body(...)):
@@ -610,16 +609,16 @@ async def ask_gemini_post(data: dict = Body(...)):
         try:
             uid = verify_user_token(id_token)
         except Exception:
-            raise HTTPException(status_code=401, detail="Authentifizierung fehlgeschlagen")
+            raise HTTPException(status_code=401, detail="Authentication failed")
         current_usage = usage_counter.get(uid, 0)
         increment = 1.0 / active_count
         if current_usage + increment > FREE_USAGE_LIMIT:
-            return {"error": "Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie eigene API Keys."}
+            return {"error": "Your free quota has been used up. Please store your own API keys."}
         usage_counter[uid] = current_usage + increment
 
         if use_own_keys:
             if not (api_key and api_key.strip()):
-                raise HTTPException(status_code=400, detail="Bitte loggen Sie sich ein oder hinterlegen Sie eigene API Keys.")
+                raise HTTPException(status_code=400, detail="Please log in or store your own API keys.")
             answer = query_gemini(question, api_key.strip(), search_mode)
             key_used = "User API Key"
         else:
@@ -630,7 +629,7 @@ async def ask_gemini_post(data: dict = Body(...)):
     else:
         # Nicht eingeloggte Nutzer müssen einen eigenen API Key bereitstellen.
         if not (api_key and api_key.strip()):
-            raise HTTPException(status_code=400, detail="Bitte loggen Sie sich ein oder hinterlegen Sie eigene API Keys.")
+            raise HTTPException(status_code=400, detail="Please log in or store your own API keys.")
         answer = query_gemini(question, api_key.strip(), search_mode)
         return {"response": answer, "key_used": "User API Key"}
 
@@ -647,16 +646,16 @@ async def ask_deepseek_post(data: dict = Body(...)):
         try:
             uid = verify_user_token(id_token)
         except Exception:
-            raise HTTPException(status_code=401, detail="Authentifizierung fehlgeschlagen")
+            raise HTTPException(status_code=401, detail="Authentication failed")
         current_usage = usage_counter.get(uid, 0)
         increment = 1.0 / active_count
         if current_usage + increment > FREE_USAGE_LIMIT:
-            return {"error": "Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie eigene API Keys."}
+            return {"error": "Your free quota has been used up. Please store your own API keys."}
         usage_counter[uid] = current_usage + increment
 
         developer_api_key = os.environ.get("DEVELOPER_DEEPSEEK_API_KEY")
         if not developer_api_key:
-            raise HTTPException(status_code=500, detail="Serverfehler: API Key nicht konfiguriert")
+            raise HTTPException(status_code=500, detail="Server error: API key not configured")
         answer = query_deepseek(question, developer_api_key)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
@@ -664,7 +663,7 @@ async def ask_deepseek_post(data: dict = Body(...)):
         answer = query_deepseek(question, api_key)
         return {"response": answer, "key_used": "User API Key"}
     else:
-        raise HTTPException(status_code=400, detail="Kein id_token oder api_key angegeben.")
+        raise HTTPException(status_code=400, detail="No id_token or api_key specified.")
     
 @app.post("/ask_grok")
 async def ask_grok_post(data: dict = Body(...)):
@@ -677,16 +676,16 @@ async def ask_grok_post(data: dict = Body(...)):
         try:
             uid = verify_user_token(id_token)
         except Exception:
-            raise HTTPException(status_code=401, detail="Authentifizierung fehlgeschlagen")
+            raise HTTPException(status_code=401, detail="Authentication failed")
         current_usage = usage_counter.get(uid, 0)
         increment = 1.0 / active_count
         if current_usage + increment > FREE_USAGE_LIMIT:
-            return {"error": "Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie eigene API Keys."}
+            return {"error": "Your free quota has been used up. Please store your own API keys."}
         usage_counter[uid] = current_usage + increment
 
         developer_api_key = os.environ.get("DEVELOPER_GROK_API_KEY")
         if not developer_api_key:
-            raise HTTPException(status_code=500, detail="Serverfehler: API Key nicht konfiguriert")
+            raise HTTPException(status_code=500, detail="Server error: API key not configured")
         answer = query_grok(question, developer_api_key)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
@@ -694,7 +693,7 @@ async def ask_grok_post(data: dict = Body(...)):
         answer = query_grok(question, api_key)
         return {"response": answer, "key_used": "User API Key"}
     else:
-        raise HTTPException(status_code=400, detail="Kein id_token oder api_key angegeben.")
+        raise HTTPException(status_code=400, detail="No id_token or api_key specified.")
 
 
 @app.post("/consensus")
@@ -709,12 +708,12 @@ async def consensus(data: dict):
             try:
                 uid = verify_user_token(id_token)
             except Exception:
-                raise HTTPException(status_code=401, detail="Ungültiger Token")
+                raise HTTPException(status_code=401, detail="Invalid token")
             current_usage = usage_counter.get(uid, 0)
             if current_usage >= FREE_USAGE_LIMIT:
                 raise HTTPException(
                     status_code=403,
-                    detail="Ihr gratis Kontingent ist aufgebraucht. Bitte hinterlegen Sie Ihre eigenen API Keys."
+                    detail="Your free quota has been used up. Please store your own API keys."
                 )
             usage_counter[uid] = current_usage + 1
     else:
@@ -780,10 +779,10 @@ async def consensus(data: dict):
             missing.append("Grok")
 
     if missing:
-        raise HTTPException(status_code=400, detail="Fehlende Parameter: " + ", ".join(missing))
+        raise HTTPException(status_code=400, detail="Missing parameters: " + ", ".join(missing))
 
     if best_model and best_model in excluded_models:
-        raise HTTPException(status_code=400, detail="Die als beste markierte Antwort darf nicht ausgeschlossen werden.")
+        raise HTTPException(status_code=400, detail="The answer marked as best must not be excluded.")
 
     # Konsens-Antwort generieren
     consensus_answer = query_consensus(
@@ -799,7 +798,7 @@ async def consensus(data: dict):
 
 
 def is_valid(key):
-    # Beispielhafte Validierung: Key gilt als valide, wenn er vorhanden ist und mehr als 10 Zeichen hat.
+    # Example validation: Key is considered valid if it is present and longer than 10 characters.
     return key is not None and len(key) > 10
 
 

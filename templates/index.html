@@ -28,32 +28,30 @@
 <div id="marketingPopup" class="modal">
   <div class="modal-content">
     <span class="close">&times;</span>
-    <h2>Willkommen bei <span class="highlight">consens.io</span></h2>
+    <h2>Welcome to <span class="highlight">consens.io</span></h2>
     <p class="subheading"><span style="background-color: rgba(255,215,0,0.4); padding: 0 5px;">KI macht Fehler. Wir machen sie sichtbar.</p>
 
     <div class="benefits">
       <div class="benefit">
         <span class="benefit-icon">✔</span>
-        <strong>Modellvergleich:</strong>
-        <span>Erhalte Antworten von verschiedenen KI-Modellen parallel.</span>
+        <strong>Model Comparison:</strong>
+        <span>Get responses from multiple AI models simultaneously.</span>
       </div>
       <br/>
       <div class="benefit">
         <span class="benefit-icon">✔</span>
-        <strong>Transparenz:</strong>
-        <span>Erkenne Unterschiede und Gemeinsamkeiten auf einen Blick.</span>
+        <strong>Transparency:</strong>
+        <span>Recognize differences and similarities at a glance.</span>
       </div>
       <br/>
       <div class="benefit">
         <span class="benefit-icon">✔</span>
-        <strong>Flexibel nutzbar:</strong>
-        <span>Eigene API-Keys hinterlegen oder direkt kostenlos testen.</span>
+        <strong>Flexible usage:</strong>
+        <span>Use your own API keys or test directly for free.</span>
       </div>
     </div>
-
-    <p class="cta-text">Einloggen & direkt loslegen – kostenlos.</p>
-
-    <button id="startNowButton" class="cta-button">Loslegen</button>
+    <p class="cta-text">Log in & get started immediately – free.</p>
+    <button id="startNowButton" class="cta-button">Get started</button>
   </div>
 </div>
   <header class="top-bar">
@@ -68,7 +66,7 @@
     </div>
     <!-- Container für rechte Elemente -->
     <div class="top-bar-right">
-      <div id="loginContainer" class="login-text">Einloggen und gratis nutzen</div>
+      <div id="loginContainer" class="login-text">Log in and use for free</div>
       <div class="mode-switch">
         <label class="switch">
           <input type="checkbox" id="modeToggle">
@@ -84,10 +82,10 @@
   <div class="sidebar-content">
     <div class="sidebar-header">
       <h2>
-        API Keys 
+        APIs 
         <span class="sidebar-tooltip">
           <span class="info-icon">?</span>
-          <span class="sidebar-tooltiptext">Eigene API-Keys hinterlegen – nötig nur ohne Login oder bei erschöpftem Kontingent.</span>
+          <span class="sidebar-tooltiptext">Enter your own API keys – only necessary without login or when your quota is exhausted.</span>
         </span>
       </h2>
       <button id="toggleApiTest" onclick="toggleApiTest()" class="collapse-btn">
@@ -97,42 +95,42 @@
     <div id="apiTestArea" class="api-test-area">
       <div class="api-key-group">
         <label for="openaiKey">OpenAI API Key <span id="openaiFeedback" class="feedback"></span></label>
-        <input type="password" id="openaiKey" placeholder="Dein OpenAI Key">
+        <input type="password" id="openaiKey" placeholder="Your OpenAI Key">
       </div>
       <div class="api-key-group">
         <label for="mistralKey">Mistral API Key <span id="mistralFeedback" class="feedback"></span></label>
-        <input type="password" id="mistralKey" placeholder="Dein Mistral Key">
+        <input type="password" id="mistralKey" placeholder="Your Mistral Key">
       </div>
       <div class="api-key-group">
         <label for="anthropicKey">Anthropic API Key <span id="anthropicFeedback" class="feedback"></span></label>
-        <input type="password" id="anthropicKey" placeholder="Dein Anthropic Key">
+        <input type="password" id="anthropicKey" placeholder="Your Anthropic Key">
       </div>
       <div class="api-key-group">
         <label for="geminiKey">Google API Key <span id="geminiFeedback" class="feedback"></span></label>
-        <input type="password" id="geminiKey" placeholder="Dein Gemini Key">
+        <input type="password" id="geminiKey" placeholder="Your Gemini Key">
       </div>
       <div class="api-key-group">
         <label for="deepseekKey">DeepSeek API Key <span id="deepseekFeedback" class="feedback"></span></label>
-        <input type="password" id="deepseekKey" placeholder="Dein DeepSeek Key">
+        <input type="password" id="deepseekKey" placeholder="Your DeepSeek Key">
       </div>
       <div class="api-key-group">
         <label for="grokKey">Grok API Key <span id="grokFeedback" class="feedback"></span></label>
-        <input type="password" id="grokKey" placeholder="Dein Grok Key">
+        <input type="password" id="grokKey" placeholder="Your Grok Key">
       </div>      
       <div class="sidebar-tooltip">
         <button onclick="testAllKeys()">
-          Alle APIs testen 
+          Test all APIs 
           <span id="apiSpinner" class="spinner" style="display: none;"></span>
         </button>
-        <div class="sidebar-tooltiptext">Dauert circa 1 min.</div>
+        <div class="sidebar-tooltiptext">Takes about 1 min.</div>
       </div>      
     </div>
     <div id="usageOptions">
       <label for="useOwnKeysSwitch" class="custom-checkbox-label">
-        Eigene API Keys verwenden
+        Use your own API keys
         <input type="checkbox" id="useOwnKeysSwitch">
       </label>
-      <span id="freeUsageDisplay">Gratis-Anfragen: ...</span>
+      <span id="freeUsageDisplay">Free requests: ...</span>
     </div>      
 
     <!-- Trennstrich zwischen API Keys und Modelle -->
@@ -141,10 +139,10 @@
     <!-- Verwendete Modelle (einklappbar) -->
     <div class="sidebar-header">
       <h2>
-        Modelle 
+        Models
         <span class="sidebar-tooltip">
           <span class="info-icon">?</span>
-          <span class="sidebar-tooltiptext">Wähle die Modelle, die du verwenden möchtest.</span>
+          <span class="sidebar-tooltiptext">Choose the models you want to use.</span>
         </span>
       </h2>
       <button id="toggleModelSelection" onclick="toggleModelSelection()" class="collapse-btn">
@@ -181,7 +179,7 @@
         Leaderboard 
         <span class="sidebar-tooltip">
           <span class="info-icon">?</span>
-          <span class="sidebar-tooltiptext">Zeigt die Rangliste der Nutzer basierend auf ihren Ergebnissen.</span>
+          <span class="sidebar-tooltiptext">Displays the user leaderboard based on their results.</span>
         </span>
       </h2>
       <button id="toggleLeaderboard" onclick="toggleLeaderboard()" class="collapse-btn">
@@ -196,10 +194,10 @@
     <div class="sidebar-separator"></div>
 
     <div class="sidebar-section">
-      <h2>Lesezeichen
+      <h2>Bookmarks
         <span class="sidebar-tooltip">
           <span class="info-icon">?</span>
-          <span class="sidebar-tooltiptext">All deine Chats.</span>
+          <span class="sidebar-tooltiptext">All your chats.</span>
         </span>
       </h2>
       <div id="bookmarksContainer"></div>
@@ -218,8 +216,8 @@
   <div class="container">
     <div class="input-section">
       <div class="chat-input-container" style="position: relative;">
-        <textarea class="input-field" id="questionInput" placeholder="Geben Sie Ihre Frage ein"></textarea>
-        <button id="toggleAllButton" onclick="toggleAllResponses()" title="Alle Antworten ein- oder ausklappen">
+        <textarea class="input-field" id="questionInput" placeholder="Enter your question"></textarea>
+        <button id="toggleAllButton" onclick="toggleAllResponses()" title="Collapse or expand all answers">
           <span class="toggle-visual"></span>
         </button>
         <!-- Container für beide Schalter -->
@@ -230,7 +228,7 @@
               <input type="checkbox" id="autoConsensusToggle">
               <span class="slider"></span>
             </label>
-            <span class="auto-consensus-label">Auto Konsens</span>
+            <span class="auto-consensus-label">Auto Consensus</span>
           </div>
           <!-- Search Mode Switch, standardmäßig leicht ausgegraut -->
           <div class="search-mode">
@@ -241,7 +239,7 @@
             <span class="search-mode-label">Search Mode</span>
             <!-- Disclaimer, der nur beim Aktivieren angezeigt wird -->
             <span id="searchDisclaimer" class="search-disclaimer" style="display: none; font-size: 0.8em; margin-left: 5px;">
-              Aktuell nur mit ChatGPT und Gemini, bald auch mit weiteren Modellen nutzbar!
+              Currently only available with ChatGPT and Gemini, soon also usable with other models!
             </span>
           </div>
         </div>
@@ -258,10 +256,10 @@
       <!-- Antwort OpenAI -->
       <div class="response-box" id="openaiResponse" data-model="OpenAI">
         <h2>
-          <span class="title">Antwort von ChatGPT <small>(GPT-4o)</small></span>
+          <span class="title">Response from ChatGPT <small>(GPT-4o)</small></span>
           <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('openaiResponse')" title="Als beste Antwort markieren">&#10003;</span>
-            <span class="exclude-btn" onclick="toggleExclude('openaiResponse')" title="Antwort ausschließen">&#10005;</span>
+            <span class="best-btn" onclick="toggleBest('openaiResponse')" title="Mark as best answer">&#10003;</span>
+            <span class="exclude-btn" onclick="toggleExclude('openaiResponse')" title="Exclude answer">&#10005;</span>
             <button class="collapse-btn" onclick="toggleCollapse('openaiResponse')">
               <span class="arrow">&#9660;</span>
             </button>
@@ -272,10 +270,10 @@
       <!-- Antwort Mistral -->
       <div class="response-box" id="mistralResponse" data-model="Mistral">
         <h2>
-          <span class="title">Antwort von Mistral <small>(mistral-large-latest)</small></span>
+          <span class="title">Response from Mistral <small>(mistral-large-latest)</small></span>
           <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('mistralResponse')" title="Als beste Antwort markieren">&#10003;</span>
-            <span class="exclude-btn" onclick="toggleExclude('mistralResponse')" title="Antwort ausschließen">&#10005;</span>
+            <span class="best-btn" onclick="toggleBest('mistralResponse')" title="Mark as best answer">&#10003;</span>
+            <span class="exclude-btn" onclick="toggleExclude('mistralResponse')" title="Exclude answer">&#10005;</span>
             <button class="collapse-btn" onclick="toggleCollapse('mistralResponse')">
               <span class="arrow">&#9660;</span>
             </button>
@@ -286,10 +284,10 @@
       <!-- Antwort Anthropic Claude -->
       <div class="response-box" id="claudeResponse" data-model="Anthropic Claude">
         <h2>
-          <span class="title">Antwort von Claude <small>(claude-3-5-sonnet)</small></span>
+          <span class="title">Response from Claude <small>(claude-3-5-sonnet)</small></span>
           <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('claudeResponse')" title="Als beste Antwort markieren">&#10003;</span>
-            <span class="exclude-btn" onclick="toggleExclude('claudeResponse')" title="Antwort ausschließen">&#10005;</span>
+            <span class="best-btn" onclick="toggleBest('claudeResponse')" title="Mark as best answer">&#10003;</span>
+            <span class="exclude-btn" onclick="toggleExclude('claudeResponse')" title="Exclude answer">&#10005;</span>
             <button class="collapse-btn" onclick="toggleCollapse('claudeResponse')">
               <span class="arrow">&#9660;</span>
             </button>
@@ -300,10 +298,10 @@
       <!-- Antwort Google Gemini -->
       <div class="response-box" id="geminiResponse" data-model="Gemini">
         <h2>
-          <span class="title">Antwort von Gemini <small>(gemini-pro)</small></span>
+          <span class="title">Response from Gemini <small>(gemini-pro)</small></span>
           <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('geminiResponse')" title="Als beste Antwort markieren">&#10003;</span>
-            <span class="exclude-btn" onclick="toggleExclude('geminiResponse')" title="Antwort ausschließen">&#10005;</span>
+            <span class="best-btn" onclick="toggleBest('geminiResponse')" title="Mark as best answer">&#10003;</span>
+            <span class="exclude-btn" onclick="toggleExclude('geminiResponse')" title="Exclude answer">&#10005;</span>
             <button class="collapse-btn" onclick="toggleCollapse('geminiResponse')">
               <span class="arrow">&#9660;</span>
             </button>
@@ -314,10 +312,10 @@
       <!-- Antwort DeepSeek -->
       <div class="response-box" id="deepseekResponse" data-model="DeepSeek">
         <h2>
-          <span class="title">Antwort von DeepSeek <small>(deepseek-chat)</small></span>
+          <span class="title">Response from DeepSeek <small>(deepseek-chat)</small></span>
           <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('deepseekResponse')" title="Als beste Antwort markieren">&#10003;</span>
-            <span class="exclude-btn" onclick="toggleExclude('deepseekResponse')" title="Antwort ausschließen">&#10005;</span>
+            <span class="best-btn" onclick="toggleBest('deepseekResponse')" title="Mark as best answer">&#10003;</span>
+            <span class="exclude-btn" onclick="toggleExclude('deepseekResponse')" title="Exclude answer">&#10005;</span>
             <button class="collapse-btn" onclick="toggleCollapse('deepseekResponse')">
               <span class="arrow">&#9660;</span>
             </button>
@@ -328,10 +326,10 @@
       <!-- Antwort Grok -->
       <div class="response-box" id="grokResponse" data-model="Grok">
         <h2>
-          <span class="title">Antwort von Grok <small>(grok-model)</small></span>
+          <span class="title">Response from Grok <small>(grok-model)</small></span>
           <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('grokResponse')" title="Als beste Antwort markieren">&#10003;</span>
-            <span class="exclude-btn" onclick="toggleExclude('grokResponse')" title="Antwort ausschließen">&#10005;</span>
+            <span class="best-btn" onclick="toggleBest('grokResponse')" title="Mark as best answer">&#10003;</span>
+            <span class="exclude-btn" onclick="toggleExclude('grokResponse')" title="Exclude answer">&#10005;</span>
             <button class="collapse-btn" onclick="toggleCollapse('grokResponse')">
               <span class="arrow">&#9660;</span>
             </button>
@@ -348,14 +346,14 @@
         <div class="consensus-controls">
           <!-- Tooltip-Wrapper um den Button -->
           <div class="tooltip">
-            <button id="consensusButton" onclick="getConsensus()">Konsens‑Antwort generieren</button>
+            <button id="consensusButton" onclick="getConsensus()">Generate Consensus Answer</button>
             <!-- Das Hover-Feld mit weiteren Infos -->
             <div class="tooltiptext">
-              Bündele vier Antworten zu einem finalen, konsistenten Konsens, indem du Widersprüche und Fehler abgleichst.
+              Combine four responses into a final, consistent consensus by reconciling contradictions and errors.
             </div>
           </div>
           <div class="consensus-model">
-            <label for="consensusModelDropdown" class="consensus-label">Konsens‑Modell:</label>
+            <label for="consensusModelDropdown" class="consensus-label">Consensus Model:</label>
             <div class="select-wrapper">
               <select id="consensusModelDropdown">
                 <option value="OpenAI">GPT‑4o</option>
@@ -372,12 +370,12 @@
         <div class="consensus-box" id="consensusResponse">
           <!-- Linker Bereich: Konsens-Antwort (80%) -->
           <div class="consensus-main">
-            <h2>Konsens‑Antwort</h2>
+            <h2>Consensus Answer</h2>
             <p></p>
           </div>
           <!-- Rechter Bereich: Unterschiede (20%) -->
           <div class="consensus-differences">
-            <h2>Unterschiede</h2>
+            <h2>Differences</h2>
             <p></p>
           </div>
         </div>
@@ -454,9 +452,9 @@
         })
           .then(response => response.json())
           .then(data => {
-            freeDisplay.innerText = "Gratis-Anfragen: " + data.remaining + " / " + 25;
+            freeDisplay.innerText = "Free requests: " + data.remaining + " / " + 25;
           })
-          .catch(err => console.error("Fehler beim Abrufen des Kontingents:", err));
+          .catch(err => console.error("Error when retrieving the quota:", err));
       }
 
       // --------------------------
@@ -539,7 +537,7 @@
         if (box.classList.contains("excluded")) return;
         // Nur Popup anzeigen, wenn die Antwort nicht bereits als "best" markiert ist
         if (!box.classList.contains("best")) {
-          showPopup("Du markierst diese Antwort als beste Antwort. So wird sie hervorgehoben und besonders im Konsens beachtet.");
+          showPopup("You mark this answer as the best answer. This way it will be highlighted and given special attention in the consensus.");
         }
         if (box.classList.contains("best")) {
           box.classList.remove("best");
@@ -626,7 +624,7 @@
         if (box.classList.contains("best")) return;
         // Nur Popup anzeigen, wenn die Antwort nicht bereits ausgeschlossen ist
         if (!box.classList.contains("excluded")) {
-          showPopup("Du hast diese Antwort ausgeschlossen. Sie wird aus der Ansicht entfernt und nicht im Konsens berücksichtigt.");
+          showPopup("You have excluded this answer. It will be removed from the view and not included in the consensus.");
         }
         box.classList.toggle("excluded");
       };
@@ -650,7 +648,7 @@
         const question = document.getElementById("questionInput").value;
         consensusGenerated = false;
         if (!question) {
-          alert("Bitte geben Sie eine Frage ein.");
+          alert("Please enter a question.");
           return;
         }
         const spinnerHTML = '<span class="spinner"></span>';
@@ -729,7 +727,7 @@
           }
         } else {
           if (!validateUserKey("openaiKey")) {
-            alert("Bitte geben Sie einen gültigen OpenAI API Key ein.");
+            alert("Please enter a valid OpenAI API key.");
             return;
           }
           payload.api_key = localStorage.getItem("openaiKey");
@@ -751,11 +749,11 @@
             } else if (data.error) {
               outputEl.innerText = data.error;
             } else {
-              outputEl.innerText = "Bitte loggen Sie sich ein oder hinterlegen Sie eigene API Keys.";
+              outputEl.innerText = "Please log in or store your own API keys.";
             }
             if (data.free_usage_remaining !== undefined) {
               document.getElementById("freeUsageDisplay").innerText =
-                "Gratis-Anfragen: " + data.free_usage_remaining + " / " + FREE_USAGE_LIMIT;
+                "Free requests: " + data.free_usage_remaining + " / " + FREE_USAGE_LIMIT;
             }
             checkAllResponses();
           })
@@ -783,7 +781,7 @@
           }
         } else {
           if (!validateUserKey("mistralKey")) {
-            alert("Bitte geben Sie einen gültigen Mistral API Key ein.");
+            alert("Please enter a valid Mistral API key.");
             return;
           }
           payload.api_key = localStorage.getItem("mistralKey");
@@ -805,16 +803,16 @@
             } else if (data.error) {
               outputEl.innerText = data.error;
             } else {
-              outputEl.innerText = "Bitte loggen Sie sich ein oder hinterlegen Sie eigene API Keys.";
+              outputEl.innerText = "Please log in or store your own API keys.";
             }
             if (data.free_usage_remaining !== undefined) {
               document.getElementById("freeUsageDisplay").innerText =
-                "Gratis-Anfragen: " + data.free_usage_remaining + " / " + FREE_USAGE_LIMIT;
+                "Free requests: " + data.free_usage_remaining + " / " + FREE_USAGE_LIMIT;
             }
             checkAllResponses();
           })
           .catch(error => {
-            console.error("Fehler bei Mistral:", error);
+            console.error("Error with Mistral:", error);
             checkAllResponses();
           });
       }
@@ -836,7 +834,7 @@
           }
         } else {
           if (!validateUserKey("anthropicKey")) {
-            alert("Bitte geben Sie einen gültigen Anthropic API Key ein.");
+            alert("Please enter a valid Anthropic API Key.");
             return;
           }
           payload.api_key = localStorage.getItem("anthropicKey");
@@ -858,16 +856,16 @@
             } else if (data.error) {
               outputEl.innerText = data.error;
             } else {
-              outputEl.innerText = "Bitte loggen Sie sich ein oder hinterlegen Sie eigene API Keys.";
+              outputEl.innerText = "Please log in or store your own API keys.";
             }
             if (data.free_usage_remaining !== undefined) {
               document.getElementById("freeUsageDisplay").innerText =
-                "Gratis-Anfragen: " + data.free_usage_remaining + " / " + FREE_USAGE_LIMIT;
+                "Free requests: " + data.free_usage_remaining + " / " + FREE_USAGE_LIMIT;
             }
             checkAllResponses();
           })
           .catch(error => {
-            console.error("Fehler bei Anthropic Claude:", error);
+            console.error("Error with Anthropic Claude:", error);
             checkAllResponses();
           });
       }
@@ -891,7 +889,7 @@
             }
           } else {
             if (!validateUserKey("geminiKey")) {
-              alert("Bitte geben Sie einen gültigen Google Gemini API Key ein.");
+              alert("Please enter a valid Google Gemini API Key.");
               return;
             }
             payload.api_key = localStorage.getItem("geminiKey");
@@ -913,16 +911,16 @@
             } else if (data.error) {
               outputEl.innerText = data.error;
             } else {
-              outputEl.innerText = "Bitte loggen Sie sich ein oder hinterlegen Sie eigene API Keys.";
+              outputEl.innerText = "Please log in or store your own API keys.";
             }
             if (data.free_usage_remaining !== undefined) {
               document.getElementById("freeUsageDisplay").innerText =
-                "Gratis-Anfragen: " + data.free_usage_remaining + " / " + FREE_USAGE_LIMIT;
+                "Free requests: " + data.free_usage_remaining + " / " + FREE_USAGE_LIMIT;
             }
             checkAllResponses();
           })
           .catch(error => {
-            console.error("Fehler bei Google Gemini:", error);
+            console.error("Error with Google Gemini:", error);
             checkAllResponses();
           });
       }
@@ -944,7 +942,7 @@
           }
         } else {
           if (!validateUserKey("deepseekKey")) {
-            alert("Bitte geben Sie einen gültigen DeepSeek API Key ein.");
+            alert("Please enter a valid DeepSeek API key.");
             return;
           }
           payload.api_key = localStorage.getItem("deepseekKey");
@@ -966,11 +964,11 @@
             } else if (data.error) {
               outputEl.innerText = data.error;
             } else {
-              outputEl.innerText = "Bitte loggen Sie sich ein oder hinterlegen Sie eigene API Keys.";
+              outputEl.innerText = "Please log in or store your own API keys.";
             }
             if (data.free_usage_remaining !== undefined) {
               document.getElementById("freeUsageDisplay").innerText =
-                "Gratis-Anfragen: " + data.free_usage_remaining + " / " + FREE_USAGE_LIMIT;
+                "Free requests:" + data.free_usage_remaining + " / " + FREE_USAGE_LIMIT;
             }
             checkAllResponses();
           })
@@ -996,7 +994,7 @@
           }
         } else {
           if (!validateUserKey("grokKey")) {
-            alert("Bitte geben Sie einen gültigen Grok API Key ein.");
+            alert("Please enter a valid Grok API key.");
             return;
           }
           payload.api_key = localStorage.getItem("grokKey");
@@ -1017,11 +1015,11 @@
           } else if (data.error) {
             outputEl.innerText = data.error;
           } else {
-            outputEl.innerText = "Bitte loggen Sie sich ein oder hinterlegen Sie eigene API Keys.";
+            outputEl.innerText = "Please log in or store your own API keys.";
           }
           if (data.free_usage_remaining !== undefined) {
             document.getElementById("freeUsageDisplay").innerText =
-              "Gratis-Anfragen: " + data.free_usage_remaining + " / " + FREE_USAGE_LIMIT;
+              "Free requests: " + data.free_usage_remaining + " / " + FREE_USAGE_LIMIT;
           }
           checkAllResponses();
         })
@@ -1248,7 +1246,7 @@
         (!deepseekBox.classList.contains("excluded") && !answer_deepseek) ||
         (!grokBox.classList.contains("excluded") && !answer_grok)
       ) {
-        alert("Bitte zuerst eine Frage senden, alle Antworten abrufen und das Konsens‑Modell auswählen. Bitte Seite refreshen.");
+        alert("Refresh the page. Please send a question first, retrieve all answers and select the consensus model.");
         return;
       }
 
@@ -1316,7 +1314,7 @@
         if (response.ok) {
           // Aktualisiere den Konsens-Bereich und den Unterschiede-Bereich
           consensusDiv.querySelector(".consensus-main p").innerHTML = marked.parse(data.consensus_response);
-          consensusDiv.querySelector(".consensus-differences p").innerHTML = marked.parse(data.differences || "Keine Unterschiede festgestellt.");
+          consensusDiv.querySelector(".consensus-differences p").innerHTML = marked.parse(data.differences || "No differences found.");
 
           if (auth.currentUser) {
             saveBookmarkConsensus(question, data.consensus_response, data.differences);
@@ -1328,12 +1326,12 @@
             recordModelVote(bestModelFromConsensus, "BestModel");
           }
         } else {
-          consensusDiv.querySelector(".consensus-main p").innerText = "Fehler: " + data.detail;
+          consensusDiv.querySelector(".consensus-main p").innerText = "Error: " + data.detail;
           consensusDiv.querySelector(".consensus-differences p").innerText = "";
         }
       } catch (error) {
         console.error("Error fetching consensus:", error);
-        consensusDiv.querySelector(".consensus-main p").innerText = "Fehler bei der Konsens-Berechnung.";
+        consensusDiv.querySelector(".consensus-main p").innerText = "Error in the consensus calculation.";
         consensusDiv.querySelector(".consensus-differences p").innerText = "";
       }
     };
@@ -1374,7 +1372,7 @@
           const data = await response.json();
           console.log("Response von /check_keys:", data);
           if (!data || !data.results) {
-            throw new Error("Die Antwort enthält kein 'results'-Objekt. Response: " + JSON.stringify(data));
+            throw new Error("The response does not contain a 'results' object. Response: " + JSON.stringify(data));
           }
           const openaiResult = data.results["OpenAI"];
           const mistralResult = data.results["Mistral"];
@@ -1420,18 +1418,18 @@
     <!-- Das Login-Formular hat autocomplete="on" -->
     <form id="loginForm" autocomplete="on">
       <input type="email" id="loginEmail" name="email" placeholder="Email" autocomplete="username">
-      <input type="password" id="loginPassword" name="password" placeholder="Passwort" autocomplete="current-password">
-      <button type="button" id="loginButton">Einloggen</button>
+      <input type="password" id="loginPassword" name="password" placeholder="Password" autocomplete="current-password">
+      <button type="button" id="loginButton">Log in</button>
       <div id="loginError" class="error-message"></div><br/>
       <!-- Neuer Registrierungs-Button -->
-      <button type="button" id="registerButton">Registrieren</button>
+      <button type="button" id="registerButton">Register</button>
       <div id="registerError" class="error-message"></div><br/>
-      <a href="#" id="forgotPasswordButton">Passwort vergessen?</a>
+      <a href="#" id="forgotPasswordButton">Forgot Password?</a>
     </form>
   </div>
 </div>
 <div id="disclaimerPopup" class="popup">
-  <p>Aktuell nur mit ChatGPT und Gemini, bald auch mit weiteren Modellen nutzbar!</p>
+  <p>Currently only usable with ChatGPT and Gemini, soon also with other models!</p>
 </div>
 <div id="popupContainer"></div>
 </body>

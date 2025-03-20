@@ -435,8 +435,8 @@ transition-delay: 0.5s;
 }
 
 .sidebar-tooltip {
-position: relative;
-display: inline-block;
+  position: relative;
+  display: inline-block;
 }
 
 .info-icon {
@@ -456,6 +456,17 @@ display: inline-block;
 .dark-mode .info-icon {
   color: #bbb;
   border-color: #bbb;
+}
+
+.sidebar-section h2 .info-icon,
+.sidebar-header h2 .info-icon {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.sidebar-section h2:hover .info-icon,
+.sidebar-header h2:hover .info-icon {
+  opacity: 0.5; /* oder 1, je nach gewünschter Sichtbarkeit */
 }
 
 .sidebar-tooltip .sidebar-tooltiptext {
@@ -541,9 +552,11 @@ transition-delay: 0.5s;
   margin: 0;       /* Keine Außenabstände */
   padding: 0.5px 0;  /* Nur minimaler innerer Abstand */
   border: none;
-  border-radius: 3px;
+  border-radius: 6px;
   text-align: left;
   transition: background-color 0.2s ease;
+  border-left: 10px solid transparent; /* Erweitert den Bereich links */
+  border-right: 10px solid transparent; /* Erweitert den Bereich rechts */
 }
 
 /* Hover-Effekt im White Mode */
