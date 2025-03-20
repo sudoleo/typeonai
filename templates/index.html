@@ -83,14 +83,17 @@
 <div class="sidebar">
   <div class="sidebar-content">
     <div class="sidebar-header">
-      <div class="sidebar-tooltip">
-        <h2>API Keys</h2>
-        <div class="sidebar-tooltiptext">Eigene API-Keys hinterlegen – nötig nur ohne Login oder bei erschöpftem Kontingent.</div>
-      </div>      
+      <h2>
+        API Keys 
+        <span class="sidebar-tooltip">
+          <span class="info-icon">?</span>
+          <span class="sidebar-tooltiptext">Eigene API-Keys hinterlegen – nötig nur ohne Login oder bei erschöpftem Kontingent.</span>
+        </span>
+      </h2>
       <button id="toggleApiTest" onclick="toggleApiTest()" class="collapse-btn">
         <span class="arrow">&#9660;</span>
       </button>
-    </div>
+    </div>    
     <div id="apiTestArea" class="api-test-area">
       <div class="api-key-group">
         <label for="openaiKey">OpenAI API Key <span id="openaiFeedback" class="feedback"></span></label>
@@ -137,11 +140,17 @@
 
     <!-- Verwendete Modelle (einklappbar) -->
     <div class="sidebar-header">
-      <h2>Verwendete Modelle</h2>
+      <h2>
+        Verwendete Modelle 
+        <span class="sidebar-tooltip">
+          <span class="info-icon">?</span>
+          <span class="sidebar-tooltiptext">Wähle die Modelle, die du verwenden möchtest.</span>
+        </span>
+      </h2>
       <button id="toggleModelSelection" onclick="toggleModelSelection()" class="collapse-btn">
         <span class="arrow">&#9660;</span>
       </button>
-    </div>
+    </div>    
     <div id="modelSelectionArea" class="model-selection">
       <label for="selectOpenAI">
         <input type="checkbox" id="selectOpenAI" checked> OpenAI
@@ -168,8 +177,14 @@
 
     <!-- Leaderboard -->
     <div class="sidebar-header">
-      <h2>Leaderboard</h2>
-      <button id="toggleLeaderboard" class="collapse-btn" onclick="toggleLeaderboard()">
+      <h2>
+        Leaderboard 
+        <span class="sidebar-tooltip">
+          <span class="info-icon">?</span>
+          <span class="sidebar-tooltiptext">Zeigt die Rangliste der Nutzer basierend auf ihren Ergebnissen.</span>
+        </span>
+      </h2>
+      <button id="toggleLeaderboard" onclick="toggleLeaderboard()" class="collapse-btn">
         <span class="arrow">&#9660;</span>
       </button>
     </div>
@@ -482,6 +497,25 @@
         const match = differencesText.match(regex);
         return match ? match[1].trim() : null;
       }
+
+      // Funktion, um das Popup anzuzeigen
+      function showPopup(message) {
+        const popup = document.createElement('div');
+        popup.className = 'explanation-popup';
+        popup.innerText = message;
+        document.body.appendChild(popup);
+        
+        setTimeout(() => {
+          popup.style.opacity = '1';
+        }, 100);
+        
+        setTimeout(() => {
+          popup.style.opacity = '0';
+          setTimeout(() => {
+            popup.remove();
+          }, 300);
+        }, 3000);
+      }
     
       // --------------------------
       // Globale Funktionen (für Inline-Aufrufe)
@@ -490,6 +524,10 @@
       window.toggleBest = function(responseId) {
         const box = document.getElementById(responseId);
         if (box.classList.contains("excluded")) return;
+        // Nur Popup anzeigen, wenn die Antwort nicht bereits als "best" markiert ist
+        if (!box.classList.contains("best")) {
+          showPopup("Du markierst diese Antwort als beste Antwort. So wird sie hervorgehoben und besonders im Konsens beachtet.");
+        }
         if (box.classList.contains("best")) {
           box.classList.remove("best");
         } else {
@@ -573,6 +611,10 @@
       window.toggleExclude = function(responseId) {
         const box = document.getElementById(responseId);
         if (box.classList.contains("best")) return;
+        // Nur Popup anzeigen, wenn die Antwort nicht bereits ausgeschlossen ist
+        if (!box.classList.contains("excluded")) {
+          showPopup("Du hast diese Antwort ausgeschlossen. Sie wird aus der Ansicht entfernt und nicht im Konsens berücksichtigt.");
+        }
         box.classList.toggle("excluded");
       };
     
@@ -1354,5 +1396,6 @@
 <div id="disclaimerPopup" class="popup">
   <p>Aktuell nur mit ChatGPT und Gemini, bald auch mit weiteren Modellen nutzbar!</p>
 </div>
+<div id="popupContainer"></div>
 </body>
 </html>

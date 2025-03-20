@@ -367,6 +367,21 @@ z-index: 2000;
 opacity: 1;
 }
 
+.explanation-popup {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: 2000;
+}
+
 /* Tooltip-Wrapper */
 .tooltip {
 position: relative;
@@ -405,6 +420,24 @@ transition-delay: 0.5s;
 .sidebar-tooltip {
 position: relative;
 display: inline-block;
+}
+
+.info-icon {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  line-height: 12px;
+  font-size: 0.6em;
+  text-align: center;
+  color: #888;
+  cursor: help;
+  margin-left: 5px;
+  position: relative;
+  top: -5px;  /* Verschiebt das Icon 2px nach oben */
+}
+.dark-mode .info-icon {
+  color: #bbb;
+  border-color: #bbb;
 }
 
 .sidebar-tooltip .sidebar-tooltiptext {
