@@ -112,7 +112,7 @@ def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode:
             genai.configure()
         
         # Je nach Search Mode den passenden Modellnamen wählen:
-        model_name = "models/gemini-1.5-pro-002" if search_mode else "gemini-1.5-pro-latest"
+        model_name = "gemini-1.5-pro-002" if search_mode else "gemini-1.5-pro-latest"
         model = genai.GenerativeModel(model_name)
         
         base_content = "Do not ask any questions.\n" + system_prompt + "\n---\n" + question
@@ -353,6 +353,7 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
         "_____________\n"
         "\n"
         "[Very brief explanation of why these differences affect credibility.]\n\n"
+        "(Info: Mark the model closest to the consensus as Best Model)"
         "BestModel: [Model name]"
     )
 
@@ -786,12 +787,8 @@ async def consensus(data: dict):
         if not answer_claude or not api_keys.get("Anthropic Claude"):
             missing.append("Anthropic Claude")
     if "Google Gemini" not in excluded_models:
-        if use_own_keys:
-            if not answer_gemini or not api_keys.get("Google Gemini"):
-                missing.append("Google Gemini")
-        else:
-            if not answer_gemini:
-                missing.append("Google Gemini")
+        if not answer_gemini or not api_keys.get("Google Gemini"):
+            missing.append("Google Gemini")
     if "DeepSeek" not in excluded_models:
         if not answer_deepseek or not api_keys.get("DeepSeek"):
             missing.append("DeepSeek")

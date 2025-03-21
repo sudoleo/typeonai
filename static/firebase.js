@@ -127,8 +127,8 @@ document.getElementById("closeLoginModal").addEventListener("click", () => {
 const leaderboardRef = collection(db, "leaderboard");
 const leaderboardQuery = query(leaderboardRef, orderBy("best", "desc"));
 onSnapshot(leaderboardQuery, (snapshot) => {
-  let html = '<table style="width:100%; table-layout: fixed;">';
-  html += '<thead><tr><th style="width:40%;">Modell</th><th style="width:60%;">Votes</th></tr></thead>';
+  let html = '<table style="width:100%; table-layout: fixed; margin-left: -5px;">';
+  html += '<thead><tr><th style="width:40%;">Model</th><th style="width:60%;">Votes</th></tr></thead>';
   html += '<tbody>';
   snapshot.forEach((doc) => {
     const data = doc.data();

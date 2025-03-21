@@ -1312,6 +1312,12 @@ font-size: 0.9em;
     margin-left: 40px; /* Abstand anpassen, damit der Pfeil links Platz hat */
   }
 
+  .top-bar-favicon {
+    width: 24px; /* oder eine andere passende Größe */
+    height: auto;
+    margin-top: 3px;
+  }
+
   body {
     padding: 5px !important;
     padding-top: 60px;

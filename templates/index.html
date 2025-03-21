@@ -119,10 +119,10 @@
       </div>      
       <div class="sidebar-tooltip">
         <button onclick="testAllKeys()">
-          Test all APIs 
+          Save/Test all APIs 
           <span id="apiSpinner" class="spinner" style="display: none;"></span>
         </button>
-        <div class="sidebar-tooltiptext">Takes about 1 min.</div>
+        <div class="sidebar-tooltiptext">~1 min.</div>
       </div>      
     </div>
     <div id="usageOptions">
@@ -289,7 +289,7 @@
         <p class="collapsible-content"></p>
       </div>
       <!-- Antwort Anthropic Claude -->
-      <div class="response-box" id="claudeResponse" data-model="Anthropic Claude">
+      <div class="response-box" id="claudeResponse" data-model="Anthropic">
         <h2>
           <span class="title">Response from Claude <small>(claude-3-5-sonnet)</small></span>
           <div class="control-icons">
@@ -303,7 +303,7 @@
         <p class="collapsible-content"></p>
       </div>
       <!-- Antwort Google Gemini -->
-      <div class="response-box" id="geminiResponse" data-model="Gemini">
+      <div class="response-box" id="geminiResponse" data-model="Google Gemini">
         <h2>
           <span class="title">Response from Gemini <small>(gemini-pro)</small></span>
           <div class="control-icons">
@@ -672,6 +672,7 @@
 
       // Globale Variable
       let consensusGenerated = false;
+      document.getElementById("consensusButton").disabled = true;
 
       // Senden der Frage an die aktiven Modelle
       window.sendQuestion = async function() {
@@ -719,7 +720,7 @@
         let activeModels = [];
         if (document.getElementById("selectOpenAI").checked) activeModels.push("OpenAI");
         if (document.getElementById("selectMistral").checked) activeModels.push("Mistral");
-        if (document.getElementById("selectClaude").checked) activeModels.push("Anthropic Claude");
+        if (document.getElementById("selectClaude").checked) activeModels.push("Anthropic");
         if (document.getElementById("selectGemini").checked) activeModels.push("Google Gemini");
         if (document.getElementById("selectDeepSeek").checked) activeModels.push("DeepSeek");
         if (document.getElementById("selectGrok").checked) activeModels.push("Grok");
@@ -731,7 +732,7 @@
         if (activeModels.includes("Mistral")) {
           document.getElementById("mistralResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
         }
-        if (activeModels.includes("Anthropic Claude")) {
+        if (activeModels.includes("Anthropic")) {
           document.getElementById("claudeResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
         }
         if (activeModels.includes("Google Gemini")) {
@@ -889,7 +890,7 @@
       }
 
       // Anthropic Claude
-      if (activeModels.includes("Anthropic Claude")) {
+      if (activeModels.includes("Anthropic")) {
         const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
         const payload = {
           question: question,
@@ -937,7 +938,7 @@
             checkAllResponses();
           })
           .catch(error => {
-            console.error("Error with Anthropic Claude:", error);
+            console.error("Error with Anthropic:", error);
             checkAllResponses();
           });
       }
@@ -1451,7 +1452,7 @@
           }
           const openaiResult = data.results["OpenAI"];
           const mistralResult = data.results["Mistral"];
-          const anthropicResult = data.results["Anthropic Claude"];
+          const anthropicResult = data.results["Anthropic"];
           const geminiResult = data.results["Google Gemini"];
           const deepseekResult = data.results["DeepSeek"];
           const grokResult = data.results["Grok"];
