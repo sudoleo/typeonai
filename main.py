@@ -96,9 +96,9 @@ def query_claude(question: str, api_key: str, system_prompt: str = None) -> str:
             else:
                 return "Error: No response found in the API response."
         else:
-            return f"Error with Anthropic Claude: {response.status_code} - {response.text}"
+            return f"Error with Anthropice: {response.status_code} - {response.text}"
     except Exception as e:
-        return f"Error with Anthropic Claude: {str(e)}"
+        return f"Error with Anthropic: {str(e)}"
 
 def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode: bool = False, system_prompt: str = None) -> str:
     if system_prompt is None:
@@ -190,7 +190,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
         prompt_parts.append(f"Response from GPT-4o: {answer_openai}\n\n")
     if "Mistral" not in excluded_models and answer_mistral:
         prompt_parts.append(f"Response from mistral-large-latest: {answer_mistral}\n\n")
-    if "Anthropic Claude" not in excluded_models and answer_claude:
+    if "Anthropic" not in excluded_models and answer_claude:
         prompt_parts.append(f"Response from claude-3-5-sonnet: {answer_claude}\n\n")
     if "Google Gemini" not in excluded_models and answer_gemini:
         prompt_parts.append(f"Response from gemini-pro: {answer_gemini}\n\n")
@@ -245,10 +245,10 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 ]
             )
             return response.choices[0].message.content.strip()
-        elif consensus_model == "Anthropic Claude":
+        elif consensus_model == "Anthropic":
             url = "https://api.anthropic.com/v1/messages"
             headers = {
-                "x-api-key": api_keys.get("Anthropic Claude"),
+                "x-api-key": api_keys.get("Anthropic"),
                 "Content-Type": "application/json",
                 "anthropic-version": "2023-06-01"
             }
@@ -266,7 +266,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 else:
                     return "Error: No response found in the API response."
             else:
-                return f"Error with Anthropic Claude: {response.status_code} - {response.text}"
+                return f"Error with Anthropic: {response.status_code} - {response.text}"
             
         elif consensus_model == "Google Gemini":
             gemini_key = api_keys.get("Google Gemini")
@@ -378,10 +378,10 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
                 ]
             )
             return response.choices[0].message.content.strip()
-        elif differences_model == "Anthropic Claude":
+        elif differences_model == "Anthropic":
             url = "https://api.anthropic.com/v1/messages"
             headers = {
-                "x-api-key": api_keys.get("Anthropic Claude"),
+                "x-api-key": api_keys.get("Anthropic"),
                 "Content-Type": "application/json",
                 "anthropic-version": "2023-06-01"
             }
@@ -399,7 +399,7 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
                 else:
                     return "Error: No response found in the API response."
             else:
-                return f"Error with Anthropic Claude: {response.status_code} - {response.text}"
+                return f"Error with Anthropic: {response.status_code} - {response.text}"
             
         elif differences_model == "Google Gemini":
             gemini_key = api_keys.get("Google Gemini")
@@ -581,7 +581,7 @@ async def ask_mistral_post(data: dict = Body(...)):
     else:
         raise HTTPException(status_code=400, detail="No id_token or api_key specified.")
 
-# Angepasster Endpoint für Anthropic Claude
+# Angepasster Endpoint für Anthropic
 @app.post("/ask_claude")
 async def ask_claude_post(data: dict = Body(...)):
     question = data.get("question")
@@ -759,14 +759,14 @@ async def consensus(data: dict):
     if use_own_keys:
         api_keys["OpenAI"] = data.get("openai_key")
         api_keys["Mistral"] = data.get("mistral_key")
-        api_keys["Anthropic Claude"] = data.get("anthropic_key")
+        api_keys["Anthropic"] = data.get("anthropic_key")
         api_keys["Google Gemini"] = data.get("gemini_key")
         api_keys["DeepSeek"] = data.get("deepseek_key")
         api_keys["Grok"] = data.get("grok_key")
     else:
         api_keys["OpenAI"] = data.get("openai_key") or os.environ.get("DEVELOPER_OPENAI_API_KEY")
         api_keys["Mistral"] = data.get("mistral_key") or os.environ.get("DEVELOPER_MISTRAL_API_KEY")
-        api_keys["Anthropic Claude"] = data.get("anthropic_key") or os.environ.get("DEVELOPER_ANTHROPIC_API_KEY")
+        api_keys["Anthropic"] = data.get("anthropic_key") or os.environ.get("DEVELOPER_ANTHROPIC_API_KEY")
         api_keys["Google Gemini"] = data.get("gemini_key") or os.environ.get("DEVELOPER_GEMINI_API_KEY")
         api_keys["DeepSeek"] = data.get("deepseek_key") or os.environ.get("DEVELOPER_DEEPSEEK_API_KEY")
         api_keys["Grok"] = data.get("grok_key") or os.environ.get("DEVELOPER_GROK_API_KEY")
@@ -783,9 +783,9 @@ async def consensus(data: dict):
     if "Mistral" not in excluded_models:
         if not answer_mistral or not api_keys.get("Mistral"):
             missing.append("Mistral")
-    if "Anthropic Claude" not in excluded_models:
-        if not answer_claude or not api_keys.get("Anthropic Claude"):
-            missing.append("Anthropic Claude")
+    if "Anthropic" not in excluded_models:
+        if not answer_claude or not api_keys.get("Anthropic"):
+            missing.append("Anthropic")
     if "Google Gemini" not in excluded_models:
         if not answer_gemini or not api_keys.get("Google Gemini"):
             missing.append("Google Gemini")
@@ -881,13 +881,13 @@ async def check_keys(data: dict):
                 }
                 response = requests.post(url, json=payload, headers=headers)
                 if response.status_code == 200:
-                    results["Anthropic Claude"] = "valid"
+                    results["Anthropic"] = "valid"
                 else:
-                    results["Anthropic Claude"] = "invalid"
+                    results["Anthropic"] = "invalid"
             else:
-                results["Anthropic Claude"] = "invalid"
+                results["Anthropic"] = "invalid"
         except Exception as e:
-            results["Anthropic Claude"] = "invalid"
+            results["Anthropic"] = "invalid"
 
         # DeepSeek Handshake
         try:

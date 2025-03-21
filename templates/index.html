@@ -29,8 +29,12 @@
   <div class="modal-content">
     <span class="close">&times;</span>
     <h2>Welcome to <span class="highlight">consens.io</span></h2>
-    <p class="subheading"><span style="background-color: rgba(255,215,0,0.4); padding: 0 5px;">Don't ask just any AI. Ask all of them.</p>
-
+    <p class="subheading">
+      <span style="background-color: rgba(255,215,0,0.4); padding: 0 5px;">
+        Don't ask just any AI.<br>
+        Ask all of them.
+      </span>
+    </p>
     <div class="benefits">
       <div class="benefit">
         <span class="benefit-icon">✔</span>
@@ -497,7 +501,7 @@
         })
           .then(response => response.json())
           .then(data => {
-            freeDisplay.innerText = "Free requests: " + data.remaining + " / " + 25;
+            freeDisplay.innerText = "Free requests:\u00A0" + data.remaining + " / " + 25;
           })
           .catch(err => console.error("Error when retrieving the quota:", err));
       }
