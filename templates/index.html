@@ -29,7 +29,7 @@
   <div class="modal-content">
     <span class="close">&times;</span>
     <h2>Welcome to <span class="highlight">consens.io</span></h2>
-    <p class="subheading"><span style="background-color: rgba(255,215,0,0.4); padding: 0 5px;">KI macht Fehler. Wir machen sie sichtbar.</p>
+    <p class="subheading"><span style="background-color: rgba(255,215,0,0.4); padding: 0 5px;">Don't ask just any AI. Ask all of them.</p>
 
     <div class="benefits">
       <div class="benefit">
@@ -395,18 +395,30 @@
       // Dark/Light Mode Initialisierung
       // --------------------------
       const modeToggle = document.getElementById("modeToggle");
-      const darkModeStored = localStorage.getItem("darkMode");
-      if (darkModeStored === "true") {
-        document.body.classList.add("dark-mode");
-        modeToggle.checked = true;
-      } else {
-        document.body.classList.remove("dark-mode");
-        modeToggle.checked = false;
+
+      function applyTheme(theme) {
+        if (theme === "dark") {
+          document.body.classList.add("dark-mode");
+          modeToggle.checked = true;
+        } else {
+          document.body.classList.remove("dark-mode");
+          modeToggle.checked = false;
+        }
       }
+
+      // Lese gespeicherten Wert aus; wenn keiner vorhanden, verwende die Systempräferenz:
+      let storedTheme = localStorage.getItem("theme");
+      if (!storedTheme) {
+        storedTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        localStorage.setItem("theme", storedTheme);
+      }
+      applyTheme(storedTheme);
+
+      // Schalte den Dark Mode um und speichere die Auswahl:
       modeToggle.addEventListener("change", function() {
-        const isDark = this.checked;
-        document.body.classList.toggle("dark-mode", isDark);
-        localStorage.setItem("darkMode", isDark ? "true" : "false");
+        const newTheme = this.checked ? "dark" : "light";
+        localStorage.setItem("theme", newTheme);
+        applyTheme(newTheme);
       });
       
       // --------------------------
