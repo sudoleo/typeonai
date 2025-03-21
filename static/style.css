@@ -1146,14 +1146,14 @@ font-size: 0.9em;
     padding-top: 10px;
   }
 
-  /* Sidebar Overlay */
+  /* Sidebar Overlay (aktiv sichtbar bei Klasse 'active') */
   .sidebar {
     position: fixed;
     top: 45px;
     left: 0;
     width: 80%;
-    max-width: 260px;
-    height: 100%;
+    max-width: 440px;
+    height: calc(100% - 45px); /* Höhe anpassen */
     background: var(--container-bg);
     box-shadow: var(--box-shadow);
     padding: 15px;
@@ -1163,8 +1163,23 @@ font-size: 0.9em;
     transform: translateX(-100%);
     overflow-x: hidden;
   }
+
+  .sidebar-settings {
+    position: absolute;
+    bottom: 20px;
+    left: 15px;
+    width: calc(100% - 30px);
+    text-align: left;
+  }
   .sidebar.active {
     transform: translateX(0);
+  }
+
+  .sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 80px; /* Erhöhe diesen Wert */
+    margin-top: 5px;
   }
 
   /* Leaderboard an die Sidebar anpassen */
@@ -1314,14 +1329,13 @@ font-size: 0.9em;
     padding-top: 0px;
   }
 
-  /* Sidebar Overlay (aktiv sichtbar bei Klasse 'active') */
   .sidebar {
     position: fixed;
     top: 45px;
     left: 0;
     width: 80%;
     max-width: 440px;
-    height: 100%;
+    height: calc(100% - 45px);
     background: var(--container-bg);
     box-shadow: var(--box-shadow);
     padding: 15px;
@@ -1330,11 +1344,26 @@ font-size: 0.9em;
     transition: transform 0.3s ease;
     transform: translateX(-100%);
     overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   .sidebar-content {
-    margin-top: 10px; /* oder einen anderen kleineren Wert */
-    margin-bottom: 20px;
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 80px; /* Erhöhe diesen Wert */
+    margin-top: 5px;
+  }
+  
+  .sidebar-settings {
+    position: absolute; /* oder alternativ per flexbox als fester Teil unten */
+    bottom: 20px;
+    left: 15px;
+    width: calc(100% - 30px);
+    text-align: left;
+  }
+  .sidebar.active {
+    transform: translateX(0);
   }
     
   .sidebar.active {
@@ -1381,14 +1410,18 @@ font-size: 0.9em;
     color: var(--button-text); /* oder eine feste Farbe, z.B. #fff */
   }    
 
-  /* Sidebar-Toggle-Button sichtbar und fixiert */
+  /* Sidebar Toggle Button – nur in der Top Bar anzeigen */
   .sidebar-toggle {
     display: block !important;
     position: fixed;
     top: 10px;
     left: 10px;
     z-index: 1200;
-    background-color: var(--button-bg);
+  }
+
+  /* Falls du einen doppelten Toggle außerhalb der Top Bar hast, blendest du ihn hier aus */
+  body > .sidebar-toggle:not(header .sidebar-toggle) {
+    display: none;
   }
 
   .consensus-switch-container {
