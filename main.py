@@ -31,7 +31,11 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gen-lang-client-0234219247-53b2b
 
 # Keine globalen API Keys mehr – diese werden nun via Request übergeben
 
-def query_openai(question: str, api_key: str, search_mode: bool = False) -> str:
+DEFAULT_SYSTEM_PROMPT = "Please respond briefly and precisely, focusing only on the essentials."
+
+def query_openai(question: str, api_key: str, search_mode: bool = False, system_prompt: str = None) -> str:
+    if system_prompt is None:
+        system_prompt = DEFAULT_SYSTEM_PROMPT
     try:
         client = openai.OpenAI(api_key=api_key)
         # Wähle das richtige Modell: falls search_mode aktiv ist, nutze "gpt-4o-search-preview"
@@ -39,7 +43,7 @@ def query_openai(question: str, api_key: str, search_mode: bool = False) -> str:
         response = client.chat.completions.create(
             model=model_to_use,
             messages=[
-                {"role": "system", "content": "Please respond briefly and precisely, focusing only on the essentials."},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question}
             ]
         )
@@ -47,15 +51,17 @@ def query_openai(question: str, api_key: str, search_mode: bool = False) -> str:
     except Exception as e:
         return f"Error with OpenAI: {str(e)}"
 
-def query_mistral(question: str, api_key: str) -> str:
+def query_mistral(question: str, api_key: str, system_prompt: str = None) -> str:
     """Fragt die Mistral API zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit."""
+    if system_prompt is None:
+        system_prompt = DEFAULT_SYSTEM_PROMPT
     try:
         client = Mistral(api_key=api_key)
         model = "mistral-large-latest"
         response = client.chat.complete(
             model=model,
             messages=[
-                {"role": "system", "content": "Please respond briefly and precisely, focusing only on the essentials."},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question}
             ]
         )
@@ -64,9 +70,11 @@ def query_mistral(question: str, api_key: str) -> str:
         return f"Error with Mistral: {str(e)}"
 
 
-def query_claude(question: str, api_key: str) -> str:
+def query_claude(question: str, api_key: str, system_prompt: str = None) -> str:
     """Fragt die Anthropic API (Claude) zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit.
        Da die Anthropic API ein Token-Limit erwartet, setzen wir einen sehr hohen Wert ein."""
+    if system_prompt is None:
+        system_prompt = DEFAULT_SYSTEM_PROMPT
     try:
         url = "https://api.anthropic.com/v1/messages"
         headers = {
@@ -77,7 +85,7 @@ def query_claude(question: str, api_key: str) -> str:
         payload = {
             "model": "claude-3-5-sonnet-20241022",
             "max_tokens": 8192,  # Sehr hoher Wert als "unbegrenzt"
-            "system": "Please respond briefly and precisely, focusing only on the essentials.",
+            "system": system_prompt,
             "messages": [{"role": "user", "content": question}]
         }
         response = requests.post(url, json=payload, headers=headers)
@@ -92,7 +100,9 @@ def query_claude(question: str, api_key: str) -> str:
     except Exception as e:
         return f"Error with Anthropic Claude: {str(e)}"
 
-def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode: bool = False) -> str:
+def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode: bool = False, system_prompt: str = None) -> str:
+    if system_prompt is None:
+        system_prompt = DEFAULT_SYSTEM_PROMPT
     try:
         # Wenn ein eigener API Key übergeben wurde, verwende ihn.
         # Andernfalls – bei eingeloggten Nutzern – wird der Service-Account-Key aus der JSON genutzt.
@@ -105,10 +115,10 @@ def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode:
         model_name = "models/gemini-1.5-pro-002" if search_mode else "gemini-1.5-pro-latest"
         model = genai.GenerativeModel(model_name)
         
-        base_content = "Bitte antworte präzise und stelle keine Rückfragen. " + question
+        base_content = "Do not ask any questions.\n" + system_prompt + "\n---\n" + question
         if search_mode:
             # Hinweis im Prompt, der auch die Links (über Retrieval) liefern soll
-            base_content += "\nBitte füge am Ende deiner Antwort klickbare Links zu den verwendeten Quellen ein."
+            base_content += "\nPlease include clickable links to the sources used at the end of your answer."
             response = model.generate_content(
                 contents=base_content,
                 tools={"google_search_retrieval": {"dynamic_retrieval_config": {"mode": "MODE_DYNAMIC", "dynamic_threshold": 0.5}}}
@@ -128,14 +138,16 @@ def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode:
         return f"Error with Google Gemini: {str(e)}"
 
     
-def query_deepseek(question: str, api_key: str) -> str:
+def query_deepseek(question: str, api_key: str, system_prompt: str = None) -> str:
     """Fragt DeepSeek zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
+    if system_prompt is None:
+        system_prompt = DEFAULT_SYSTEM_PROMPT
     try:
         client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "Please respond briefly and precisely, focusing only on the essentials."},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question}
             ],
             stream=False
@@ -144,14 +156,16 @@ def query_deepseek(question: str, api_key: str) -> str:
     except Exception as e:
         return f"Error with DeepSeek: {str(e)}"
     
-def query_grok(question: str, api_key: str) -> str:
+def query_grok(question: str, api_key: str, system_prompt: str = None) -> str:
     """Fragt die Grok API zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
+    if system_prompt is None:
+        system_prompt = DEFAULT_SYSTEM_PROMPT
     try:
         client = openai.OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
         response = client.chat.completions.create(
             model="grok-2-latest",
             messages=[
-                {"role": "system", "content": "Please respond briefly and precisely, focusing only on the essentials."},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question}
             ]
         )
@@ -502,6 +516,8 @@ async def get_usage_post(data: dict):
 @app.post("/ask_openai")
 async def ask_openai_post(data: dict = Body(...)):
     question = data.get("question")
+    system_prompt = data.get("system_prompt")
+    print("Received system_prompt:", system_prompt)  # Debug-Ausgabe
     id_token = data.get("id_token")
     api_key = data.get("api_key")
     # Neuer Parameter: search_mode (Standard: False)
@@ -523,11 +539,11 @@ async def ask_openai_post(data: dict = Body(...)):
         if not developer_api_key:
             raise HTTPException(status_code=500, detail="Server error: API key not configured")
         # Übergabe des search_mode-Flags
-        answer = query_openai(question, developer_api_key, search_mode)
+        answer = query_openai(question, developer_api_key, search_mode, system_prompt)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
     elif api_key:
-        answer = query_openai(question, api_key, search_mode)
+        answer = query_openai(question, api_key, search_mode, system_prompt)
         return {"response": answer, "key_used": "User API Key"}
     else:
         raise HTTPException(status_code=400, detail="No authentication parameter (id_token or api_key) specified")
@@ -536,6 +552,7 @@ async def ask_openai_post(data: dict = Body(...)):
 @app.post("/ask_mistral")
 async def ask_mistral_post(data: dict = Body(...)):
     question = data.get("question")
+    system_prompt = data.get("system_prompt")
     id_token = data.get("id_token")
     api_key = data.get("api_key")
     active_count = data.get("active_count", 1)
@@ -554,11 +571,11 @@ async def ask_mistral_post(data: dict = Body(...)):
         developer_api_key = os.environ.get("DEVELOPER_MISTRAL_API_KEY")
         if not developer_api_key:
             raise HTTPException(status_code=500, detail="Server error: API key not configured")
-        answer = query_mistral(question, developer_api_key)
+        answer = query_mistral(question, developer_api_key, system_prompt)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
     elif api_key:
-        answer = query_mistral(question, api_key)
+        answer = query_mistral(question, api_key, system_prompt)
         return {"response": answer, "key_used": "User API Key"}
     else:
         raise HTTPException(status_code=400, detail="No id_token or api_key specified.")
@@ -567,6 +584,7 @@ async def ask_mistral_post(data: dict = Body(...)):
 @app.post("/ask_claude")
 async def ask_claude_post(data: dict = Body(...)):
     question = data.get("question")
+    system_prompt = data.get("system_prompt")
     id_token = data.get("id_token")
     api_key = data.get("api_key")
     active_count = data.get("active_count", 1)
@@ -585,11 +603,11 @@ async def ask_claude_post(data: dict = Body(...)):
         developer_api_key = os.environ.get("DEVELOPER_ANTHROPIC_API_KEY")
         if not developer_api_key:
             raise HTTPException(status_code=500, detail="Server error: API key not configured")
-        answer = query_claude(question, developer_api_key)
+        answer = query_claude(question, developer_api_key, system_prompt)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
     elif api_key:
-        answer = query_claude(question, api_key)
+        answer = query_claude(question, api_key, system_prompt)
         return {"response": answer, "key_used": "User API Key"}
     else:
         raise HTTPException(status_code=400, detail="No id_token or api_key specified.")
@@ -597,6 +615,7 @@ async def ask_claude_post(data: dict = Body(...)):
 @app.post("/ask_gemini")
 async def ask_gemini_post(data: dict = Body(...)):
     question = data.get("question")
+    system_prompt = data.get("system_prompt")
     use_own_keys = data.get("useOwnKeys", False)
     if isinstance(use_own_keys, str):
         use_own_keys = use_own_keys.lower() == "true"
@@ -619,10 +638,10 @@ async def ask_gemini_post(data: dict = Body(...)):
         if use_own_keys:
             if not (api_key and api_key.strip()):
                 raise HTTPException(status_code=400, detail="Please log in or store your own API keys.")
-            answer = query_gemini(question, api_key.strip(), search_mode)
+            answer = query_gemini(question, api_key.strip(), search_mode, system_prompt)
             key_used = "User API Key"
         else:
-            answer = query_gemini(question, None, search_mode)
+            answer = query_gemini(question, None, search_mode, system_prompt)
             key_used = "Service Account"
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": key_used}
@@ -638,6 +657,7 @@ async def ask_gemini_post(data: dict = Body(...)):
 @app.post("/ask_deepseek")
 async def ask_deepseek_post(data: dict = Body(...)):
     question = data.get("question")
+    system_prompt = data.get("system_prompt")
     id_token = data.get("id_token")
     api_key = data.get("api_key")
     active_count = data.get("active_count", 1)
@@ -656,11 +676,11 @@ async def ask_deepseek_post(data: dict = Body(...)):
         developer_api_key = os.environ.get("DEVELOPER_DEEPSEEK_API_KEY")
         if not developer_api_key:
             raise HTTPException(status_code=500, detail="Server error: API key not configured")
-        answer = query_deepseek(question, developer_api_key)
+        answer = query_deepseek(question, developer_api_key, system_prompt)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
     elif api_key:
-        answer = query_deepseek(question, api_key)
+        answer = query_deepseek(question, api_key, system_prompt)
         return {"response": answer, "key_used": "User API Key"}
     else:
         raise HTTPException(status_code=400, detail="No id_token or api_key specified.")
@@ -668,6 +688,7 @@ async def ask_deepseek_post(data: dict = Body(...)):
 @app.post("/ask_grok")
 async def ask_grok_post(data: dict = Body(...)):
     question = data.get("question")
+    system_prompt = data.get("system_prompt")
     id_token = data.get("id_token")
     api_key = data.get("api_key")
     active_count = data.get("active_count", 1)
@@ -686,11 +707,11 @@ async def ask_grok_post(data: dict = Body(...)):
         developer_api_key = os.environ.get("DEVELOPER_GROK_API_KEY")
         if not developer_api_key:
             raise HTTPException(status_code=500, detail="Server error: API key not configured")
-        answer = query_grok(question, developer_api_key)
+        answer = query_grok(question, developer_api_key, system_prompt)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
     elif api_key:
-        answer = query_grok(question, api_key)
+        answer = query_grok(question, api_key, system_prompt)
         return {"response": answer, "key_used": "User API Key"}
     else:
         raise HTTPException(status_code=400, detail="No id_token or api_key specified.")

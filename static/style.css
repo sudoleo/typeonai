@@ -583,6 +583,54 @@ transition-delay: 0.5s;
   border: 2px solid green;
 }
 
+/* Positioniere den Settings-Button in der unteren linken Ecke der Sidebar */
+.sidebar-settings {
+  position: absolute;
+  bottom: 20px; /* Abstand vom unteren Rand */
+  left: 20px;   /* Abstand vom linken Rand */
+  width: calc(100% - 40px);
+  text-align: left;
+  position: fixed;
+  bottom: 20px;
+  width: calc(260px - 40px); /* passt die Breite an die Sidebar an */
+  text-align: left;
+}
+
+/* Für WebKit-Browser (Chrome, Edge, Safari) */
+.sidebar-content::-webkit-scrollbar {
+  width: 5px; /* Schmalere Scrollbar */
+}
+
+/* Style den Button: Icon und Text nebeneinander */
+.sidebar-settings button {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: 1em;
+  padding: 5px;
+}
+
+.sidebar-settings .settings-icon {
+  font-size: 18px; /* oder eine andere gewünschte Größe */
+  margin-right: 8px;
+  margin-top: -4px; /* Passe diesen Wert an, um das Icon etwas höher zu positionieren */
+  transition: transform 0.3s ease;
+}
+
+/* Beim Hover: leicht drehen */
+.sidebar-settings button:hover .settings-icon {
+  transform: rotate(20deg);
+}
+
+/* Optional: Text-Style für das Label */
+.sidebar-settings .settings-label {
+  font-weight: 500;
+  line-height: 1.2; /* ggf. anpassen */
+}
+
 /* Header & Control Icons */
 .response-box h2 {
   display: flex;
@@ -894,22 +942,29 @@ opacity: 0.5;
   position: fixed;
   top: 0;
   left: 0;
+  padding: 5px;
   width: 260px;
   height: 100%;
   background: var(--container-bg);
   box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-  padding: 15px;
   box-sizing: border-box;
   z-index: 1000;
   text-align: center;
   transition: transform 0.3s ease;
   overflow-y: auto;
   overflow-x: hidden;
+  flex-direction: column;
+  display: flex;
 }
 
 
 .sidebar-content {
+  flex: 1;
+  padding: 15px;
   margin-top: 60px; /* Passe diesen Wert an, falls nötig */
+  margin-bottom: 80px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 
@@ -1287,7 +1342,9 @@ font-size: 0.9em;
   }
 
   #bookmarksContainer {
-    padding-bottom: 60px; /* Passe den Wert ggf. an die Höhe deiner Search Bar an */
+    max-height: calc(100vh - 120px); /* Verhindert, dass es zu weit nach unten geht */
+    overflow-y: auto; /* Scrollbar bleibt */
+    padding-bottom: 50px; /* Platz für Settings-Button */
   }
 
   /* Leaderboard an die Sidebar anpassen */

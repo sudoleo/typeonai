@@ -82,7 +82,7 @@
   <div class="sidebar-content">
     <div class="sidebar-header">
       <h2>
-        APIs 
+        Endpoints
         <span class="sidebar-tooltip">
           <span class="info-icon">?</span>
           <span class="sidebar-tooltiptext">Enter your own API keys – only necessary without login or when your quota is exhausted.</span>
@@ -202,6 +202,13 @@
       </h2>
       <div id="bookmarksContainer"></div>
     </div>
+  </div>
+  <!-- Neuer Abschnitt in der Sidebar für Einstellungen -->
+  <div class="sidebar-settings">
+    <button id="editSystemPromptBtn" title="Settings">
+      <span class="settings-icon">⚙️</span>
+      <span class="settings-label">Settings</span>
+    </button>
   </div>
 </div>
 
@@ -440,6 +447,32 @@
         }
       });
 
+      // Beispiel für das Setzen des systemPrompt-Wertes, falls noch nicht gesetzt:
+      const defaultPrompt = "Please respond briefly and precisely, focusing only on the essentials.";
+      if (!localStorage.getItem("systemPrompt")) {
+        localStorage.setItem("systemPrompt", defaultPrompt);
+      }
+
+      // Öffnen des Modals beim Klick auf das Zahnrad
+      document.getElementById("editSystemPromptBtn").addEventListener("click", function() {
+        const modal = document.getElementById("systemPromptModal");
+        const textarea = document.getElementById("systemPromptInput");
+        textarea.value = localStorage.getItem("systemPrompt");
+        modal.style.display = "block";
+      });
+
+      // Schließen des Modals
+      document.getElementById("closeSystemPromptModal").addEventListener("click", function() {
+        document.getElementById("systemPromptModal").style.display = "none";
+      });
+
+      // Speichern des neuen Prompts
+      document.getElementById("saveSystemPromptBtn").addEventListener("click", function() {
+        const newPrompt = document.getElementById("systemPromptInput").value.trim();
+        localStorage.setItem("systemPrompt", newPrompt); // Speichert auch leere Strings!
+        document.getElementById("systemPromptModal").style.display = "none";
+      });
+
       const freeDisplay = document.getElementById("freeUsageDisplay");
       const idToken = localStorage.getItem("id_token");
       if (idToken && freeDisplay) {
@@ -456,7 +489,6 @@
           })
           .catch(err => console.error("Error when retrieving the quota:", err));
       }
-
       // --------------------------
       // Event-Listener für Eingabefelder und Buttons
       // --------------------------
@@ -652,6 +684,38 @@
           return;
         }
         const spinnerHTML = '<span class="spinner"></span>';
+        // Lese den benutzerdefinierten Systemprompt aus oder nutze den Standardwert
+        const customSystemPrompt = localStorage.getItem("systemPrompt") || "Please respond briefly and precisely, focusing only on the essentials.";
+        console.log("Using system prompt:", customSystemPrompt);
+        
+        // Beispiel für den Payload für OpenAI:
+        const payload = {
+          question: question,
+          active_count: 1,
+          search_mode: document.getElementById("searchModeToggle").checked,
+          system_prompt: customSystemPrompt
+        };
+
+        // Konsens-Button deaktivieren, solange noch Antworten fehlen
+        const consensusBtn = document.getElementById("consensusButton");
+        consensusBtn.disabled = true;
+        totalRequiredResponses = 0;
+
+        const openaiBox = document.getElementById("openaiResponse");
+        const mistralBox = document.getElementById("mistralResponse");
+        const claudeBox = document.getElementById("claudeResponse");
+        const geminiBox = document.getElementById("geminiResponse");
+        const deepseekBox = document.getElementById("deepseekResponse");
+        const grokBox = document.getElementById("grokResponse");
+
+        // Zähle nur die Modelle, die nicht als "ausgeschlossen" markiert sind
+        if (!openaiBox.classList.contains("excluded")) totalRequiredResponses++;
+        if (!mistralBox.classList.contains("excluded")) totalRequiredResponses++;
+        if (!claudeBox.classList.contains("excluded")) totalRequiredResponses++;
+        if (!geminiBox.classList.contains("excluded")) totalRequiredResponses++;
+        if (!deepseekBox.classList.contains("excluded")) totalRequiredResponses++;
+        if (!grokBox.classList.contains("excluded")) totalRequiredResponses++;
+
         let activeModels = [];
         if (document.getElementById("selectOpenAI").checked) activeModels.push("OpenAI");
         if (document.getElementById("selectMistral").checked) activeModels.push("Mistral");
@@ -699,6 +763,11 @@
           responsesReceived++;
           if (responsesReceived === totalActive && document.getElementById("autoConsensusToggle").checked) {
             getConsensus();
+            // Alle erforderlichen Antworten sind da – Konsens-Button aktivieren
+            document.getElementById("consensusButton").disabled = false;
+          } else if (responsesReceived === totalActive) {
+            // Unabhängig vom Auto-Konsens-Status: Konsens-Button wieder freischalten
+            document.getElementById("consensusButton").disabled = false;
           }
         }
 
@@ -715,7 +784,8 @@
           question: question,
           active_count: 1,  // Passe diesen Wert ggf. dynamisch an
           // Hier wird der neue Parameter hinzugefügt:
-          search_mode: document.getElementById("searchModeToggle").checked
+          search_mode: document.getElementById("searchModeToggle").checked,
+          system_prompt: customSystemPrompt
         };
 
         if (!useOwnKeys) {
@@ -769,7 +839,8 @@
         const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
         const payload = {
           question: question,
-          active_count: 1
+          active_count: 1,
+          system_prompt: customSystemPrompt
         };
 
         if (!useOwnKeys) {
@@ -822,7 +893,8 @@
         const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
         const payload = {
           question: question,
-          active_count: 1
+          active_count: 1,
+          system_prompt: customSystemPrompt
         };
 
         if (!useOwnKeys) {
@@ -877,7 +949,8 @@
             question: question,
             active_count: 1,
             // Suche-Parameter hinzufügen:
-            search_mode: document.getElementById("searchModeToggle").checked
+            search_mode: document.getElementById("searchModeToggle").checked,
+            system_prompt: customSystemPrompt
           };
 
           if (!useOwnKeys) {
@@ -930,7 +1003,8 @@
         const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
         const payload = {
           question: question,
-          active_count: 1
+          active_count: 1,
+          system_prompt: customSystemPrompt
         };
 
         if (!useOwnKeys) {
@@ -983,7 +1057,8 @@
         const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
         const payload = {
           question: question,
-          active_count: 1
+          active_count: 1,
+          system_prompt: customSystemPrompt
         };
         if (!useOwnKeys) {
           let id_token = localStorage.getItem("id_token");
@@ -1432,5 +1507,15 @@
   <p>Currently only usable with ChatGPT and Gemini, soon also with other models!</p>
 </div>
 <div id="popupContainer"></div>
+<!-- Modal zum Editieren des Systemprompts -->
+<div id="systemPromptModal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <span id="closeSystemPromptModal" class="close">&times;</span>
+    <h2>Edit System Prompt</h2>
+    <p>When empty, default is applied.</p>
+    <textarea id="systemPromptInput" rows="4" style="width:100%;"></textarea>
+    <button id="saveSystemPromptBtn">Save</button>
+  </div>
+</div>
 </body>
 </html>
