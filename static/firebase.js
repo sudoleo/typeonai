@@ -30,7 +30,7 @@ onAuthStateChanged(auth, (user) => {
     }
   } else {
     localStorage.removeItem("id_token");
-    loginContainer.innerText = "Einloggen und gratis nutzen";
+    loginContainer.innerText = "Log in and use for free";
     if (usageOptions) {
       usageOptions.style.display = "none";
     }
@@ -76,7 +76,6 @@ document.getElementById("registerButton").addEventListener("click", () => {
       // Mit dem Custom Token den Nutzer automatisch einloggen
       signInWithCustomToken(auth, data.customToken)
         .then((userCredential) => {
-          console.log("Benutzer erfolgreich angemeldet:", userCredential.user);
           document.getElementById("loginModal").style.display = "none";
         })
         .catch((error) => {
@@ -95,15 +94,15 @@ document.getElementById("registerButton").addEventListener("click", () => {
 document.getElementById("forgotPasswordButton").addEventListener("click", () => {
   const email = document.getElementById("loginEmail").value;
   if (!email) {
-    alert("Bitte geben Sie Ihre E-Mail-Adresse ein, um das Passwort zurückzusetzen.");
+    alert("Please enter your e-mail address to reset the password.");
     return;
   }
   sendPasswordResetEmail(auth, email)
     .then(() => {
-      alert("Eine E-Mail zum Zurücksetzen Ihres Passworts wurde an " + email + " gesendet.");
+      alert("An e-mail to reset your password has been sent to " + email);
     })
     .catch((error) => {
-      console.error("Fehler beim Senden der Passwort-Zurücksetzen-E-Mail:", error);
+      console.error("Error sending the password reset email:", error);
       alert("Fehler: " + error.message);
     });
 });
@@ -153,9 +152,8 @@ async function recordModelVote(model, type) {
   const modelRef = doc(db, "leaderboard", model);
   try {
     await setDoc(modelRef, { [type]: increment(1) }, { merge: true });
-    console.log(`Vote für ${model} (${type}) erfolgreich registriert.`);
   } catch (error) {
-    console.error("Fehler beim Aktualisieren des Leaderboard-Eintrags:", error);
+    console.error("Error when updating the leaderboard entry:", error);
   }
 }
 
@@ -186,8 +184,7 @@ function saveBookmark(question, response, modelName) {
   };
 
   setDoc(docRef, dataToMerge, { merge: true })
-    .then(() => console.log(`Bookmark aktualisiert: ${modelName}`))
-    .catch(error => console.error("Fehler beim Speichern des Bookmarks:", error));
+    .then(() => console.log(`Bookmark updated: ${modelName}`))
 }
 
 window.saveBookmark = saveBookmark;
@@ -208,8 +205,8 @@ function saveBookmarkConsensus(question, consensusText, differencesText) {
 
   // Merge: alte Felder bleiben erhalten
   setDoc(docRef, dataToMerge, { merge: true })
-    .then(() => console.log("Konsens & Unterschiede gespeichert."))
-    .catch(error => console.error("Fehler beim Speichern des Konsens:", error));
+    .then(() => console.log("Consensus & differences saved."))
+    .catch(error => console.error("Error when saving the consensus:", error));
 }
 
 window.saveBookmarkConsensus = saveBookmarkConsensus;
@@ -283,13 +280,13 @@ function loadBookmarks() {
                   .querySelector(".consensus-differences p").innerHTML =
                   marked.parse(bookmarkData.responses["differences"] || "");
               } else {
-                console.log("Keine 'responses' im Bookmark gefunden.");
+                console.log("No 'responses' found in the bookmark.");
               }
             } else {
-              console.log("Kein Bookmark-Dokument gefunden.");
+              console.log("No bookmark document found.");
             }
           })
-          .catch(error => console.error("Fehler beim Laden des Bookmarks:", error));
+          .catch(error => console.error("Error loading the bookmark:", error));
       });
     });
   });
@@ -301,10 +298,10 @@ function deleteBookmark(bookmarkId) {
   const bookmarkDocRef = doc(db, "users", userUid, "bookmarks", bookmarkId);
   deleteDoc(bookmarkDocRef)
     .then(() => {
-      console.log("Bookmark gelöscht:", bookmarkId);
+      console.log("Bookmark deleted:", bookmarkId);
     })
     .catch((error) => {
-      console.error("Fehler beim Löschen des Bookmarks:", error);
+      console.error("Error when deleting the bookmark:", error);
     });
 }
 

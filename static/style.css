@@ -1201,6 +1201,18 @@ font-size: 0.9em;
     flex-direction: column;
     gap: 10px;
   }
+  /* Antwortfelder und Konsens-Box untereinander */
+  .response-section,
+  .consensus-box {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .consensus-switch-container {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px; /* kleiner Abstand zwischen den Schaltern */
+  }
   .consensus-controls > * {
     width: 100%;
   }
@@ -1396,38 +1408,38 @@ font-size: 0.9em;
     fill: var(--button-text);
   }
 
-.mode-switch {
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    z-index: 1300;
+  .mode-switch {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 1300;
+    }
+
+  /* Spezifische Formatierung für den Search Mode: leicht ausgegraut */
+  .search-mode {
+    opacity: 0.5;
+    display: flex;
+    align-items: center;
+    left: -20px;
+    margin: 0;
+    padding: 0;
   }
 
-/* Spezifische Formatierung für den Search Mode: leicht ausgegraut */
-.search-mode {
-  opacity: 0.5;
-  display: flex;
-  align-items: center;
-  left: -20px;
-  margin: 0;
-  padding: 0;
-}
+  .search-mode label.switch {
+    margin-right: 8px;
+  }
 
-.search-mode label.switch {
-  margin-right: 8px;
-}
+  .search-mode-label {
+    font-size: 1em;
+    line-height: 24px; /* entspricht der Höhe des Switches */
+  }
 
-.search-mode-label {
-  font-size: 1em;
-  line-height: 24px; /* entspricht der Höhe des Switches */
-}
-
-.search-disclaimer {
-  font-size: 0.8em;
-  margin-left: 5px;
-  line-height: 24px;
-  color: #666;
-}    
+  .search-disclaimer {
+    font-size: 0.8em;
+    margin-left: 5px;
+    line-height: 24px;
+    color: #666;
+  }    
 
   /* Konsens-Kontrollen sauber stapeln */
   .consensus-controls {
