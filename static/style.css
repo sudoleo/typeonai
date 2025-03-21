@@ -1210,6 +1210,17 @@ font-size: 0.9em;
   .modal-content {
     margin-top: 80px; /* Erhöht den Abstand vom oberen Rand */
   }
+  .search-mode {
+    opacity: 0.5;
+    display: flex;
+    align-items: center;
+    left: -20px;
+    margin: 0;
+    padding: 0;
+  }
+  .auto-consensus, .search-mode {
+    width: 200px; /* oder ein prozentualer Wert */
+  }
   
 }  
 
@@ -1225,15 +1236,15 @@ font-size: 0.9em;
   }
 
   .container {
-    width: 79% !important;
-    max-width: none !important;
+    width: 90% !important;
+    max-width: 100% !important;
     margin: 0 auto !important;
-    padding: 15px 20px;
+    /*padding: 15px 20px;*/
   }
 
   .main-wrapper {
     margin-left: 0 !important;
-    padding-top: 10px;
+    padding-top: 0px;
   }
 
   /* Sidebar Overlay (aktiv sichtbar bei Klasse 'active') */
@@ -1314,7 +1325,7 @@ font-size: 0.9em;
   .consensus-switch-container {
     flex-direction: column;
     align-items: flex-start;
-    gap: 10px;
+    gap: 0;
   }
 
   .login-text {
@@ -1392,18 +1403,14 @@ font-size: 0.9em;
     z-index: 1300;
   }
 
-/* Standard: Container nebeneinander anordnen */
-.consensus-switch-container {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
 /* Spezifische Formatierung für den Search Mode: leicht ausgegraut */
 .search-mode {
   opacity: 0.5;
   display: flex;
   align-items: center;
+  left: -20px;
+  margin: 0;
+  padding: 0;
 }
 
 .search-mode label.switch {
