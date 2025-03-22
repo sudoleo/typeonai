@@ -794,6 +794,31 @@
         return key && key.trim() !== "";
       }
 
+      function addCopyButtons(container) {
+        container.querySelectorAll('pre').forEach(function(pre) {
+          // Falls bereits ein Copy-Button existiert, überspringen
+          if (pre.querySelector('.copy-btn')) return;
+          
+          var btn = document.createElement('button');
+          // Verwende ein dezentes Clipboard-Symbol
+          btn.textContent = '📋';
+          btn.className = 'copy-btn';
+          pre.appendChild(btn);
+          
+          btn.addEventListener('click', function() {
+            // Falls ein <code> innerhalb des <pre> existiert, kopiere dessen innerText
+            var codeElement = pre.querySelector('code');
+            var codeText = codeElement ? codeElement.innerText : pre.innerText;
+            navigator.clipboard.writeText(codeText).then(function() {
+              btn.textContent = '✓';
+              setTimeout(function() {
+                btn.textContent = '📋';
+              }, 2000);
+            });
+          });
+        });
+      }
+
       // OpenAI
       if (activeModels.includes("OpenAI")) {
         const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
@@ -830,6 +855,7 @@
             const outputEl = document.getElementById("openaiResponse").querySelector(".collapsible-content");
             if (data.response) {
               outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+              addCopyButtons(outputEl);
               if (auth.currentUser) {
                 saveBookmark(question, data.response, "OpenAI");
               }
@@ -885,6 +911,7 @@
             const outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
             if (data.response) {
               outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+              addCopyButtons(outputEl);
               if (auth.currentUser) {
                 saveBookmark(question, data.response, "Mistral");
               }
@@ -939,6 +966,7 @@
             const outputEl = document.getElementById("claudeResponse").querySelector(".collapsible-content");
             if (data.response) {
               outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+              addCopyButtons(outputEl);
               if (auth.currentUser) {
                 saveBookmark(question, data.response, "Anthropic");
               }
@@ -995,6 +1023,7 @@
             const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
             if (data.response) {
               outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+              addCopyButtons(outputEl);
               if (auth.currentUser) {
                 saveBookmark(question, data.response, "Gemini");
               }
@@ -1049,6 +1078,7 @@
             const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
             if (data.response) {
               outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+              addCopyButtons(outputEl);
               if (auth.currentUser) {
                 saveBookmark(question, data.response, "DeepSeek");
               }
@@ -1101,6 +1131,7 @@
           const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
           if (data.response) {
             outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+            addCopyButtons(outputEl);
             if (auth.currentUser) {
               saveBookmark(question, data.response, "Grok");
             }

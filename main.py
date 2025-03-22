@@ -787,7 +787,9 @@ async def consensus(data: dict):
         if not answer_claude or not api_keys.get("Anthropic"):
             missing.append("Anthropic")
     if "Google Gemini" not in excluded_models:
-        if not answer_gemini or not api_keys.get("Google Gemini"):
+        if not answer_gemini:
+            missing.append("Google Gemini")
+        elif use_own_keys and not api_keys.get("Google Gemini"):
             missing.append("Google Gemini")
     if "DeepSeek" not in excluded_models:
         if not answer_deepseek or not api_keys.get("DeepSeek"):
