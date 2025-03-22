@@ -528,7 +528,6 @@ transition-delay: 0.5s;
   border-radius: 8px;
   box-shadow: var(--box-shadow);
   overflow-x: auto; /* horizontaler Scrollbar, falls nötig */
-  white-space: nowrap; /* verhindert automatisches Umbrechen sehr langer Zeilen */
 }
 
 /* Rechter Bereich: Unterschiede (ca. 20% Breite) */

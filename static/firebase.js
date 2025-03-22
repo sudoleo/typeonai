@@ -149,6 +149,11 @@ onSnapshot(leaderboardQuery, (snapshot) => {
 });
 
 async function recordModelVote(model, type) {
+  // Prüfe, ob der Nutzer eingeloggt ist.
+  if (!auth.currentUser) {
+    return;
+  }
+  
   const modelRef = doc(db, "leaderboard", model);
   try {
     await setDoc(modelRef, { [type]: increment(1) }, { merge: true });

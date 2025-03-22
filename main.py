@@ -313,10 +313,28 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
         return f"Consensus error: {str(e)}"
     
 
-def query_differences(answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, answer_deepseek: str, answer_grok: str, consensus_answer: str, api_keys: dict, differences_model: str) -> str:
+def query_differences(answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, answer_deepseek: str, answer_grok: str, consensus_answer: str, api_keys: dict, differences_model: str, search_mode: bool = False) -> str:
     """
     Extrahiert die Unterschiede zwischen den vier Expertenantworten mittels des angegebenen Konsens‑Modells.
     """
+    # Je nach Modus nur die relevanten Antworten in den Prompt aufnehmen:
+    if search_mode in [True, "true", "True"]:
+        responses_text = (
+            f"- GPT-4o: {answer_openai}\n"
+            f"- Gemini: {answer_gemini}\n"
+        )
+        best_models_instruction = "Choose from one of the following models: OpenAI or Gemini."
+    else:
+        responses_text = (
+            f"- GPT-4o: {answer_openai}\n"
+            f"- Mistral: {answer_mistral}\n"
+            f"- Claude: {answer_claude}\n"
+            f"- Gemini: {answer_gemini}\n"
+            f"- DeepSeek: {answer_deepseek}\n"
+            f"- Grok: {answer_grok}\n"
+        )
+        best_models_instruction = "Choose from one of the following models: Anthropic, Gemini, Mistral, or OpenAI."
+
     differences_prompt = (
         "Analyze the LLM responses and assess how strongly they differ from each other. "
         "If all models respond almost identically, the consensus is very credible. "
@@ -335,16 +353,9 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
 
         "Consensus answer:\n" + consensus_answer + "\n\n"
 
-        "Model responses:\n"
-        "- GPT-4o: " + answer_openai + "\n"
-        "- Mistral: " + answer_mistral + "\n"
-        "- Claude: " + answer_claude + "\n"
-        "- Gemini: " + answer_gemini + "\n"
-        "- DeepSeek: " + answer_deepseek + "\n"
-        "- Grok: " + answer_grok + "\n\n"
+        "Model responses:\n" + responses_text + "\n"
 
-        "Finally, subjectively determine which model provided the best answer. "
-        "Choose from one of the following models: Anthropic, Gemini, Mistral, or OpenAI. "
+        "Finally, subjectively determine which model provided the best answer. " + best_models_instruction + " "
         "Include your decision at the end of the response on a separate line, starting with 'BestModel:' followed by the model name.\n\n"
 
         "Response format:\n"
@@ -812,7 +823,7 @@ async def consensus(data: dict):
     # Unterschiede ermitteln
     differences = query_differences(
         answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok,
-        consensus_answer, api_keys, differences_model=consensus_model)
+        consensus_answer, api_keys, differences_model=consensus_model, search_mode=search_mode)
 
     return {"consensus_response": consensus_answer, "differences": differences}
 

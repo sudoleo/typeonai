@@ -1282,6 +1282,7 @@
         const question = document.getElementById("questionInput").value.trim();
           // Status, ob eigene API Keys genutzt werden sollen
         const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
+        let searchMode = document.getElementById("searchModeToggle").checked;
         
         // Nur im Gratis-Modus id_token abrufen
         const id_token = useOwnKeys ? null : localStorage.getItem("id_token");
@@ -1416,6 +1417,7 @@
             id_token: id_token,
             useOwnKeys: useOwnKeys,
             question: question,
+            search_mode: searchMode,
             answer_openai: answer_openai,
             answer_mistral: answer_mistral,
             answer_claude: answer_claude,
