@@ -980,6 +980,11 @@ opacity: 0.5;
   cursor: not-allowed;
 }
 
+#sendButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .consensus-model {
   display: flex;
   align-items: center;

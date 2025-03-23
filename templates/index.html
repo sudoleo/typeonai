@@ -337,7 +337,7 @@
       <!-- Antwort Grok -->
       <div class="response-box" id="grokResponse" data-model="Grok">
         <h2>
-          <span class="title">Response from Grok <small>(grok-model)</small></span>
+          <span class="title">Response from Grok <small>(grok-2)</small></span>
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('grokResponse')" title="Mark as best answer">&#10003;</span>
             <span class="exclude-btn" onclick="toggleExclude('grokResponse')" title="Exclude answer">&#10005;</span>
@@ -692,6 +692,7 @@
 
       // Senden der Frage an die aktiven Modelle
       window.sendQuestion = async function() {
+        document.getElementById("sendButton").disabled = true;
         // Konsens-Button wieder aktivieren, bevor eine neue Anfrage gesendet wird.
         document.getElementById("consensusButton").disabled = false;
         const question = document.getElementById("questionInput").value;
@@ -778,13 +779,27 @@
         const totalActive = activeModels.length;
         function checkAllResponses() {
           responsesReceived++;
-          if (responsesReceived === totalActive && document.getElementById("autoConsensusToggle").checked) {
-            getConsensus();
-            // Alle erforderlichen Antworten sind da – Konsens-Button aktivieren
-            document.getElementById("consensusButton").disabled = false;
-          } else if (responsesReceived === totalActive) {
-            // Unabhängig vom Auto-Konsens-Status: Konsens-Button wieder freischalten
-            document.getElementById("consensusButton").disabled = false;
+          if (responsesReceived === totalActive) {
+            // Sende-Button immer wieder freischalten
+            document.getElementById("sendButton").disabled = false;
+            
+            if (document.getElementById("autoConsensusToggle").checked) {
+              // Auto Consensus ist aktiviert: 
+              // Den Consensus-Button vorübergehend deaktivieren und
+              // erst nach Abschluss der Konsensgenerierung wieder aktivieren.
+              document.getElementById("consensusButton").disabled = true;
+              getConsensus()
+                .then(() => {
+                  document.getElementById("consensusButton").disabled = false;
+                })
+                .catch((error) => {
+                  console.error("Fehler bei der Konsensgenerierung:", error);
+                  document.getElementById("consensusButton").disabled = false;
+                });
+            } else {
+              // Auto Consensus nicht aktiviert – beide Buttons direkt freigeben.
+              document.getElementById("consensusButton").disabled = false;
+            }
           }
         }
 
@@ -819,6 +834,9 @@
         });
       }
 
+      // Mache addCopyButtons global verfügbar:
+      window.addCopyButtons = addCopyButtons;
+
       // OpenAI
       if (activeModels.includes("OpenAI")) {
         const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
@@ -848,7 +866,8 @@
         fetch('/ask_openai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          keepalive: true
         })
           .then(response => response.json())
           .then(data => {
@@ -904,7 +923,8 @@
         fetch('/ask_mistral', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          keepalive: true
         })
           .then(response => response.json())
           .then(data => {
@@ -959,7 +979,8 @@
         fetch('/ask_claude', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          keepalive: true
         })
           .then(response => response.json())
           .then(data => {
@@ -1016,7 +1037,8 @@
           fetch('/ask_gemini', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            keepalive: true
           })
           .then(response => response.json())
           .then(data => {
@@ -1071,7 +1093,8 @@
         fetch('/ask_deepseek', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          keepalive: true
         })
           .then(response => response.json())
           .then(data => {
@@ -1124,7 +1147,8 @@
         fetch('/ask_grok', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          keepalive: true
         })
         .then(response => response.json())
         .then(data => {
@@ -1432,7 +1456,8 @@
             anthropic_key: anthropicKey,
             gemini_key: geminiKey,
             deepseek_key: deepseekKey,
-            grok_key: grokKey
+            grok_key: grokKey,
+            keepalive: true
           })
         });
         const data = await response.json();
@@ -1440,6 +1465,9 @@
           // Aktualisiere den Konsens-Bereich und den Unterschiede-Bereich
           consensusDiv.querySelector(".consensus-main p").innerHTML = marked.parse(data.consensus_response);
           consensusDiv.querySelector(".consensus-differences p").innerHTML = marked.parse(data.differences || "No differences found.");
+          const consensusMainEl = consensusDiv.querySelector(".consensus-main p");
+          consensusMainEl.innerHTML = marked.parse(data.consensus_response);
+          addCopyButtons(consensusMainEl);
 
           if (auth.currentUser) {
             saveBookmarkConsensus(question, data.consensus_response, data.differences);
@@ -1530,7 +1558,6 @@
           spinner.style.display = "none";
         }
       };
-    
     });
 </script>
 <!-- Firebase-Code wird jetzt ausgelagert -->
@@ -1542,6 +1569,9 @@
     <h2>Login</h2>
     <!-- Das Login-Formular hat autocomplete="on" -->
     <form id="loginForm" autocomplete="on">
+      <p style="color: red;">
+        Important: Only one e-mail can be registered – check carefully!
+      </p>
       <input type="email" id="loginEmail" name="email" placeholder="Email" autocomplete="username">
       <input type="password" id="loginPassword" name="password" placeholder="Password" autocomplete="current-password">
       <button type="button" id="loginButton">Log in</button>

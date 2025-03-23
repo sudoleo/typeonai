@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
 import { getFirestore, collection, query, orderBy, onSnapshot, doc, setDoc, getDoc, increment, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithCustomToken, signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithCustomToken, signOut, onAuthStateChanged, sendPasswordResetEmail, sendEmailVerification } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 
 // Initialisiere Firebase mit der globalen Konfiguration, die aus dem HTML kommt
 const app = initializeApp(window.FIREBASE_CONFIG);
@@ -48,13 +48,20 @@ onAuthStateChanged(auth, (user) => {
 document.getElementById("loginButton").addEventListener("click", () => {
   const email = document.getElementById("loginEmail").value;
   const password = document.getElementById("loginPassword").value;
+  
   signInWithEmailAndPassword(auth, email, password)
     .then((userCredential) => {
-      return userCredential.user.getIdToken();
-    })
-    .then((token) => {
-      localStorage.setItem("id_token", token);
-      window.location.href = "/"; // Seite neu laden, damit der Token verfügbar ist
+      const user = userCredential.user;
+      if (user.emailVerified) {
+        // Login erfolgreich, Token speichern und Seite neu laden
+        user.getIdToken().then((token) => {
+          localStorage.setItem("id_token", token);
+          window.location.href = "/";
+        });
+      } else {
+        alert("Please verify your e-mail address first. Check your inbox for the confirmation link.");
+        signOut(auth);
+      }
     })
     .catch((error) => {
       document.getElementById("loginError").innerText = error.message;
@@ -73,10 +80,19 @@ document.getElementById("registerButton").addEventListener("click", () => {
   .then(response => response.json())
   .then(data => {
     if (data.customToken) {
-      // Mit dem Custom Token den Nutzer automatisch einloggen
+      // Nutzer mit dem Custom Token anmelden
       signInWithCustomToken(auth, data.customToken)
         .then((userCredential) => {
-          document.getElementById("loginModal").style.display = "none";
+          // Sende nach erfolgreichem Login den Verifizierungs-Link
+          sendEmailVerification(auth.currentUser)
+            .then(() => {
+              alert("Registration successful! Please confirm your e-mail address by clicking on the link in the e-mail.");
+              // Optional: Nach dem Versenden der Verifizierungs-Mail den Nutzer abmelden
+              signOut(auth);
+            })
+            .catch((error) => {
+              document.getElementById("registerError").innerText = "Error sending the verification e-mail: " + error.message;
+            });
         })
         .catch((error) => {
           document.getElementById("registerError").innerText = error.message;
@@ -94,7 +110,7 @@ document.getElementById("registerButton").addEventListener("click", () => {
 document.getElementById("forgotPasswordButton").addEventListener("click", () => {
   const email = document.getElementById("loginEmail").value;
   if (!email) {
-    alert("Please enter your e-mail address to reset the password.");
+    alert("Please enter your e-mail address to reset the password. Check your Spam Folder.");
     return;
   }
   sendPasswordResetEmail(auth, email)
