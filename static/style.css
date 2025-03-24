@@ -540,34 +540,39 @@ transition-delay: 0.5s;
   overflow-y: auto; /* bei längeren Inhalten */
 }
 
-/* Für WebKit-Browser: Konsens- und Differences-Boxen */
+/* Gemeinsame Scrollbar-Regeln für Konsens-Boxen und das Input-Feld (WebKit) */
 .consensus-main::-webkit-scrollbar,
-.consensus-differences::-webkit-scrollbar {
+.consensus-differences::-webkit-scrollbar,
+.chat-input-container .input-field::-webkit-scrollbar {
   width: 8px;
-  height: 8px; /* falls horizontaler Scroll vorhanden ist */
+  height: 8px;
 }
 
 .consensus-main::-webkit-scrollbar-track,
-.consensus-differences::-webkit-scrollbar-track {
+.consensus-differences::-webkit-scrollbar-track,
+.chat-input-container .input-field::-webkit-scrollbar-track {
   background: transparent;
   border-radius: 4px;
 }
 
 .consensus-main::-webkit-scrollbar-thumb,
-.consensus-differences::-webkit-scrollbar-thumb {
+.consensus-differences::-webkit-scrollbar-thumb,
+.chat-input-container .input-field::-webkit-scrollbar-thumb {
   background-color: rgba(0, 0, 0, 0.3);
   border-radius: 4px;
   box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
 .consensus-main::-webkit-scrollbar-thumb:hover,
-.consensus-differences::-webkit-scrollbar-thumb:hover {
+.consensus-differences::-webkit-scrollbar-thumb:hover,
+.chat-input-container .input-field::-webkit-scrollbar-thumb:hover {
   background-color: rgba(0, 0, 0, 0.5);
 }
 
-/* Für Firefox: Konsens- und Differences-Boxen */
+/* Gemeinsame Scrollbar-Regeln für Firefox */
 .consensus-main,
-.consensus-differences {
+.consensus-differences,
+.chat-input-container .input-field {
   scrollbar-width: thin;
   scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
 }
@@ -1311,12 +1316,13 @@ font-size: 0.9em;
     width: 100% !important;
     box-sizing: border-box;
   }
+
   .chat-input-container {
     display: flex;
     flex-direction: column;
     align-items: stretch;
     width: 100%;
-    padding-bottom: 50px;
+    padding-bottom: 80px; /* Mehr Platz, damit der Text nicht in die Schalter ragt */
   }
   .chat-input-container .input-field {
     width: 100% !important;
