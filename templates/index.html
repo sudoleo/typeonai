@@ -424,7 +424,19 @@
         localStorage.setItem("theme", newTheme);
         applyTheme(newTheme);
       });
-      
+
+      // --- Speichern des Auto Consensus Zustands ---
+      const autoConsensusToggle = document.getElementById("autoConsensusToggle");
+      // Beim Laden den gespeicherten Zustand auslesen (Standard: false, wenn nichts gespeichert wurde)
+      let storedAutoConsensus = localStorage.getItem("autoConsensus");
+      if (storedAutoConsensus !== null) {
+        autoConsensusToggle.checked = storedAutoConsensus === "true";
+      }
+      // Bei Änderung den neuen Zustand speichern
+      autoConsensusToggle.addEventListener("change", function() {
+        localStorage.setItem("autoConsensus", this.checked);
+      });
+          
       // --------------------------
       // Marketing Popup Initialisierung
       // --------------------------

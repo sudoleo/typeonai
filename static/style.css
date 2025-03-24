@@ -955,7 +955,7 @@ input:checked + .slider:before {
   display: flex;
   align-items: center;
   gap: 10px;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .search-mode {
