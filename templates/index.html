@@ -517,6 +517,27 @@
           })
           .catch(err => console.error("Error when retrieving the quota:", err));
       }
+
+      // Maximales Wortlimit definieren (z. B. 100 Wörter)
+      const MAX_WORDS = 300;
+
+      function validateInputText() {
+        const text = document.getElementById("questionInput").value.trim();
+        const wordCount = text.split(/\s+/).filter(word => word.length > 0).length;
+        
+        if (wordCount > MAX_WORDS) {
+          alert(`Die Eingabe überschreitet das erlaubte Wortlimit von ${MAX_WORDS} Wörtern (aktuell ${wordCount}).`);
+          return false;
+        }
+        return true;
+      }
+
+      document.getElementById("sendButton").addEventListener("click", function(e) {
+        if (!validateInputText()) {
+          e.preventDefault();
+        }
+      });
+
       // --------------------------
       // Event-Listener für Eingabefelder und Buttons
       // --------------------------
@@ -704,6 +725,10 @@
 
       // Senden der Frage an die aktiven Modelle
       window.sendQuestion = async function() {
+        // Überprüfe zuerst das Wortlimit. Falls überschritten, wird die Funktion beendet.
+        if (!validateInputText()) {
+          return;
+        }
         document.getElementById("sendButton").disabled = true;
         // Konsens-Button wieder aktivieren, bevor eine neue Anfrage gesendet wird.
         document.getElementById("consensusButton").disabled = false;

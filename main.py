@@ -22,12 +22,17 @@ app = FastAPI()
 # Free usage limit
 FREE_USAGE_LIMIT = 25
 
+MAX_WORDS = 300
+
 usage_counter = {}  # { uid: anzahl_anfragen }
 
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gen-lang-client-0234219247-53b2b1c0e355.json"
+
+def count_words(text: str) -> int:
+    return len(text.strip().split())
 
 # Keine globalen API Keys mehr – diese werden nun via Request übergeben
 
@@ -45,7 +50,8 @@ def query_openai(question: str, api_key: str, search_mode: bool = False, system_
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question}
-            ]
+            ],
+            max_tokens=1024
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
@@ -63,7 +69,8 @@ def query_mistral(question: str, api_key: str, system_prompt: str = None) -> str
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question}
-            ]
+            ],
+            max_tokens=1024
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
@@ -84,7 +91,7 @@ def query_claude(question: str, api_key: str, system_prompt: str = None) -> str:
         }
         payload = {
             "model": "claude-3-5-sonnet-20241022",
-            "max_tokens": 8192,  # Sehr hoher Wert als "unbegrenzt"
+            "max_tokens": 1024,
             "system": system_prompt,
             "messages": [{"role": "user", "content": question}]
         }
@@ -150,7 +157,8 @@ def query_deepseek(question: str, api_key: str, system_prompt: str = None) -> st
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question}
             ],
-            stream=False
+            stream=False,
+            max_tokens=1024
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
@@ -167,7 +175,8 @@ def query_grok(question: str, api_key: str, system_prompt: str = None) -> str:
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question}
-            ]
+            ],
+            max_tokens=1024
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
@@ -230,7 +239,8 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                         messages=[
                             {"role": "system", "content": ""},
                             {"role": "user", "content": consensus_prompt}
-                        ]
+                        ],
+                        max_tokens=2048
                     )
             return response.choices[0].message.content.strip()
         
@@ -242,7 +252,8 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 messages=[
                     {"role": "system", "content": ""},
                     {"role": "user", "content": consensus_prompt}
-                ]
+                ],
+                max_tokens=2048
             )
             return response.choices[0].message.content.strip()
         elif consensus_model == "Anthropic":
@@ -254,7 +265,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
             }
             payload = {
                 "model": "claude-3-5-sonnet-20241022",
-                "max_tokens": 8192, 
+                "max_tokens": 2048, 
                 "system": "",
                 "messages": [{"role": "user", "content": consensus_prompt}]
             }
@@ -279,6 +290,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
             if search_mode:
                 response = model.generate_content(
                     consensus_prompt,
+                    max_tokens=2048,
                     tools={"google_search_retrieval": {"dynamic_retrieval_config": {"mode": "MODE_DYNAMIC", "dynamic_threshold": 0.5}}}
                 )
             else:
@@ -292,7 +304,8 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 messages=[
                     {"role": "system", "content": " "},
                     {"role": "user", "content": consensus_prompt}
-                ]
+                ],
+                max_tokens=2048
             )
             return response.choices[0].message.content.strip()
         
@@ -303,7 +316,8 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 messages=[
                     {"role": "system", "content": " "},
                     {"role": "user", "content": consensus_prompt}
-                ]
+                ],
+                max_tokens=2048
             )
             return response.choices[0].message.content.strip()
 
@@ -528,6 +542,11 @@ async def get_usage_post(data: dict):
 @app.post("/ask_openai")
 async def ask_openai_post(data: dict = Body(...)):
     question = data.get("question")
+    if count_words(question) > MAX_WORDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {MAX_WORDS} Wörtern."
+    )
     system_prompt = data.get("system_prompt")
     print("Received system_prompt:", system_prompt)  # Debug-Ausgabe
     id_token = data.get("id_token")
@@ -564,6 +583,11 @@ async def ask_openai_post(data: dict = Body(...)):
 @app.post("/ask_mistral")
 async def ask_mistral_post(data: dict = Body(...)):
     question = data.get("question")
+    if count_words(question) > MAX_WORDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {MAX_WORDS} Wörtern."
+    )
     system_prompt = data.get("system_prompt")
     id_token = data.get("id_token")
     api_key = data.get("api_key")
@@ -596,6 +620,11 @@ async def ask_mistral_post(data: dict = Body(...)):
 @app.post("/ask_claude")
 async def ask_claude_post(data: dict = Body(...)):
     question = data.get("question")
+    if count_words(question) > MAX_WORDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {MAX_WORDS} Wörtern."
+    )
     system_prompt = data.get("system_prompt")
     id_token = data.get("id_token")
     api_key = data.get("api_key")
@@ -627,6 +656,11 @@ async def ask_claude_post(data: dict = Body(...)):
 @app.post("/ask_gemini")
 async def ask_gemini_post(data: dict = Body(...)):
     question = data.get("question")
+    if count_words(question) > MAX_WORDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {MAX_WORDS} Wörtern."
+    )
     system_prompt = data.get("system_prompt")
     use_own_keys = data.get("useOwnKeys", False)
     if isinstance(use_own_keys, str):
@@ -669,6 +703,11 @@ async def ask_gemini_post(data: dict = Body(...)):
 @app.post("/ask_deepseek")
 async def ask_deepseek_post(data: dict = Body(...)):
     question = data.get("question")
+    if count_words(question) > MAX_WORDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {MAX_WORDS} Wörtern."
+    )
     system_prompt = data.get("system_prompt")
     id_token = data.get("id_token")
     api_key = data.get("api_key")
@@ -700,6 +739,11 @@ async def ask_deepseek_post(data: dict = Body(...)):
 @app.post("/ask_grok")
 async def ask_grok_post(data: dict = Body(...)):
     question = data.get("question")
+    if count_words(question) > MAX_WORDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {MAX_WORDS} Wörtern."
+    )
     system_prompt = data.get("system_prompt")
     id_token = data.get("id_token")
     api_key = data.get("api_key")
