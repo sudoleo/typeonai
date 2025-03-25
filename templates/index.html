@@ -99,27 +99,27 @@
     <div id="apiTestArea" class="api-test-area">
       <div class="api-key-group">
         <label for="openaiKey">OpenAI API Key <span id="openaiFeedback" class="feedback"></span></label>
-        <input type="password" id="openaiKey" placeholder="Your OpenAI Key">
+        <input type="password" id="openaiKey" placeholder="Your OpenAI Key" autocomplete="new-password">
       </div>
       <div class="api-key-group">
         <label for="mistralKey">Mistral API Key <span id="mistralFeedback" class="feedback"></span></label>
-        <input type="password" id="mistralKey" placeholder="Your Mistral Key">
+        <input type="password" id="mistralKey" placeholder="Your Mistral Key" autocomplete="new-password">
       </div>
       <div class="api-key-group">
         <label for="anthropicKey">Anthropic API Key <span id="anthropicFeedback" class="feedback"></span></label>
-        <input type="password" id="anthropicKey" placeholder="Your Anthropic Key">
+        <input type="password" id="anthropicKey" placeholder="Your Anthropic Key" autocomplete="new-password">
       </div>
       <div class="api-key-group">
         <label for="geminiKey">Google API Key <span id="geminiFeedback" class="feedback"></span></label>
-        <input type="password" id="geminiKey" placeholder="Your Gemini Key">
+        <input type="password" id="geminiKey" placeholder="Your Gemini Key" autocomplete="new-password">
       </div>
       <div class="api-key-group">
         <label for="deepseekKey">DeepSeek API Key <span id="deepseekFeedback" class="feedback"></span></label>
-        <input type="password" id="deepseekKey" placeholder="Your DeepSeek Key">
+        <input type="password" id="deepseekKey" placeholder="Your DeepSeek Key" autocomplete="new-password">
       </div>
       <div class="api-key-group">
         <label for="grokKey">Grok API Key <span id="grokFeedback" class="feedback"></span></label>
-        <input type="password" id="grokKey" placeholder="Your Grok Key">
+        <input type="password" id="grokKey" placeholder="Your Grok Key" autocomplete="new-password">
       </div>      
       <div class="sidebar-tooltip">
         <button onclick="testAllKeys()">
@@ -247,7 +247,7 @@
               <input type="checkbox" id="searchModeToggle">
               <span class="slider"></span>
             </label>
-            <span class="search-mode-label">Search Mode</span>
+            <span class="search-mode-label">Web Search</span>
             <!-- Disclaimer, der nur beim Aktivieren angezeigt wird -->
             <span id="searchDisclaimer" class="search-disclaimer" style="display: none; font-size: 0.8em; margin-left: 5px;">
               Currently only available with ChatGPT and Gemini, soon also usable with other models!

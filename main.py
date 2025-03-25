@@ -499,7 +499,7 @@ async def add_security_headers(request: Request, call_next):
         "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.gstatic.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "img-src 'self' data:; "
-        "connect-src 'self' https://firestore.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://api.openai.com https://api.mistral.ai https://api.anthropic.com https://api.x.ai https://api.deepseek.com"
+        "connect-src 'self' https://firestore.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://api.openai.com https://api.mistral.ai/v1/chat/completions https://api.anthropic.com/v1/messages https://api.x.ai/v1 https://api.deepseek.com"
     )
     response.headers["Content-Security-Policy"] = csp
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -507,6 +507,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Referrer-Policy"] = "no-referrer-when-downgrade"
     return response
+
 
 # Globales Dictionary zum Speichern der IP-Adressen registrierter Nutzer
 registered_ips = {}  # { ip_address: uid }
