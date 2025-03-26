@@ -501,6 +501,39 @@
         document.getElementById("systemPromptModal").style.display = "none";
       });
 
+      // Öffnen des Hilfemodals beim Klick auf den Hilfebutton
+      document.getElementById("helpButton").addEventListener("click", function() {
+        document.getElementById("helpModal").style.display = "block";
+      });
+
+      // Schließen des Modals beim Klick auf das Schließen-Symbol
+      document.getElementById("closeHelpModal").addEventListener("click", function() {
+        document.getElementById("helpModal").style.display = "none";
+      });
+
+      // Optional: Modal schließen, wenn außerhalb geklickt wird
+      window.addEventListener("click", function(event) {
+        if (event.target === document.getElementById("helpModal")) {
+          document.getElementById("helpModal").style.display = "none";
+        }
+      });
+
+      document.querySelectorAll('.faq-item h3').forEach((question) => {
+        question.addEventListener('click', () => {
+          const answer = question.nextElementSibling;
+          if (answer.style.display === 'none' || !answer.style.display) {
+            answer.style.display = 'block';
+          } else {
+            answer.style.display = 'none';
+          }
+        });
+      });
+
+      // Standardmäßig Antworten ausgeblendet (optional)
+      document.querySelectorAll('.faq-item p').forEach((answer) => {
+        answer.style.display = 'none';
+      });
+
       const freeDisplay = document.getElementById("freeUsageDisplay");
       const idToken = localStorage.getItem("id_token");
       if (idToken && freeDisplay) {
@@ -1623,15 +1656,76 @@
 <div id="disclaimerPopup" class="popup">
   <p>Currently only usable with ChatGPT and Gemini, soon also with other models!</p>
 </div>
-<div id="popupContainer"></div>
-<!-- Modal zum Editieren des Systemprompts -->
-<div id="systemPromptModal" class="modal" style="display:none;">
-  <div class="modal-content">
-    <span id="closeSystemPromptModal" class="close">&times;</span>
-    <h2>Edit System Prompt</h2>
-    <p>When empty, default is applied.</p>
-    <textarea id="systemPromptInput" rows="4" style="width:100%;"></textarea>
-    <button id="saveSystemPromptBtn">Save</button>
+<div id="popupContainer">
+  <!-- Modal zum Editieren des Systemprompts -->
+  <div id="systemPromptModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <span id="closeSystemPromptModal" class="close">&times;</span>
+      <h2>Edit System Prompt</h2>
+      <p>When empty, default is applied.</p>
+      <textarea id="systemPromptInput" rows="4" style="width:100%;"></textarea>
+      <button id="saveSystemPromptBtn">Save</button>
+    </div>
+  </div>
+</div>
+<!-- Hilfebutton (z.B. in der unteren rechten Ecke) -->
+<button id="helpButton" class="help-button" title="Hilfe & Erklärung">
+  ❔
+</button>
+<!-- FAQ Modal -->
+<div id="helpModal" class="modal">
+  <div class="modal-content faq-modal">
+    <span class="close" id="closeHelpModal">&times;</span>
+    <h2>FAQ & Quick Start</h2>
+
+    <div class="faq-intro">
+      <p>
+        <strong>What is consens.io?</strong><br>
+        consens.io instantly queries multiple leading AI models, creating a unified "consensus" answer. It also integrates real-time web search for accurate, up-to-date results.
+      </p>
+      <p>
+        <strong>Benefits:</strong><br>
+        ✓ Reliable consensus answers<br>
+        ✓ Real-time web search<br>
+        ✓ Easy query bookmarking
+      </p>
+    </div>   
+
+    <div class="faq-item">
+      <h3><span class="faq-number">1.</span> 🔑 When do I need to enter API keys? <span class="faq-toggle-icon">＋</span></h3>
+      <p>
+        You only need to enter your own API keys if you're not logged in or wish to use your personal model access.
+      </p>
+    </div>
+
+    <div class="faq-item">
+      <h3><span class="faq-number">2.</span> 🤖 Which AI models are available? <span class="faq-toggle-icon">＋</span></h3>
+      <p>
+        consens.io provides access to top-tier LLMs including OpenAI, Mistral, Anthropic, Gemini, and more.
+      </p>
+    </div>
+
+    <div class="faq-item">
+      <h3><span class="faq-number">3.</span> ⚡ How does Consensus Generation work? <span class="faq-toggle-icon">＋</span></h3>
+      <p>
+        Consensus generation automatically compares the answers of different AI models, identifies discrepancies, and creates a reliable, unified answer by filtering out potential errors.
+      </p>
+    </div>
+
+    <div class="faq-item">
+      <h3><span class="faq-number">4.</span> 🌐 How does Web Search integration work? <span class="faq-toggle-icon">＋</span></h3>
+      <p>
+        You can extend your query with a real-time web search via GPT and Gemini, providing current and factually up-to-date answers directly within consens.io.
+      </p>
+    </div>
+
+    <div class="faq-item">
+      <h3><span class="faq-number">5.</span> 📌 How do Bookmarks & Leaderboards work? <span class="faq-toggle-icon">＋</span></h3>
+      <p>
+        Logged-in users can bookmark queries for future reference, and also view popular queries on leaderboards, comparing their results with other users.
+      </p>
+    </div>
+
   </div>
 </div>
 </body>
