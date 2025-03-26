@@ -38,20 +38,20 @@
     <div class="benefits">
       <div class="benefit">
         <span class="benefit-icon">✔</span>
-        <strong>Model Comparison:</strong>
-        <span>Get responses from multiple AI models simultaneously.</span>
+        <strong>Models:</strong>
+        <span>Responses from multiple leading AI models simultaneously.</span>
       </div>
       <br/>
       <div class="benefit">
         <span class="benefit-icon">✔</span>
-        <strong>Transparency:</strong>
-        <span>Recognize differences and similarities at a glance.</span>
+        <strong>Answers:</strong>
+        <span>AI creats reliable & unified "consensus"</span>
       </div>
       <br/>
       <div class="benefit">
         <span class="benefit-icon">✔</span>
-        <strong>Flexible usage:</strong>
-        <span>Use your own API keys or test directly for free.</span>
+        <strong>Search:</strong>
+        <span>Real-time web search for accurate, up-to-date results.</span>
       </div>
     </div>
     <p class="cta-text">Log in & get started immediately – free.</p>
@@ -518,13 +518,17 @@
         }
       });
 
+      // Toggle FAQ items with icons
       document.querySelectorAll('.faq-item h3').forEach((question) => {
         question.addEventListener('click', () => {
           const answer = question.nextElementSibling;
-          if (answer.style.display === 'none' || !answer.style.display) {
+          const icon = question.querySelector('.faq-toggle-icon');
+          if (!answer.style.display || answer.style.display === 'none') {
             answer.style.display = 'block';
+            icon.textContent = '－';
           } else {
             answer.style.display = 'none';
+            icon.textContent = '＋';
           }
         });
       });
@@ -1670,62 +1674,106 @@
 </div>
 <!-- Hilfebutton (z.B. in der unteren rechten Ecke) -->
 <button id="helpButton" class="help-button" title="Hilfe & Erklärung">
-  ❔
+  &#63;
 </button>
 <!-- FAQ Modal -->
 <div id="helpModal" class="modal">
   <div class="modal-content faq-modal">
     <span class="close" id="closeHelpModal">&times;</span>
-    <h2>FAQ & Quick Start</h2>
-
-    <div class="faq-intro">
-      <p>
-        <strong>What is consens.io?</strong><br>
-        consens.io instantly queries multiple leading AI models, creating a unified "consensus" answer. It also integrates real-time web search for accurate, up-to-date results.
-      </p>
-      <p>
-        <strong>Benefits:</strong><br>
-        ✓ Reliable consensus answers<br>
-        ✓ Real-time web search<br>
-        ✓ Easy query bookmarking
-      </p>
-    </div>   
-
-    <div class="faq-item">
-      <h3><span class="faq-number">1.</span> 🔑 When do I need to enter API keys? <span class="faq-toggle-icon">＋</span></h3>
-      <p>
-        You only need to enter your own API keys if you're not logged in or wish to use your personal model access.
-      </p>
+    <div class="faq-header">
+      <h2>FAQ & Quick Start</h2>
     </div>
+    <div class="faq-body">
+      <div class="faq-intro">
+        <p>
+          <strong>What is consens.io?</strong><br>
+          consens.io instantly queries multiple leading AI models, creating a unified "consensus" answer. It also integrates real-time web search for accurate, up-to-date results.
+        </p>
+        <p>
+          <strong>Benefits:</strong><br>
+          ✓ Reliable consensus answers<br>
+          ✓ Real-time web search<br>
+          ✓ Easy query bookmarking
+        </p>
+      </div>
 
-    <div class="faq-item">
-      <h3><span class="faq-number">2.</span> 🤖 Which AI models are available? <span class="faq-toggle-icon">＋</span></h3>
-      <p>
-        consens.io provides access to top-tier LLMs including OpenAI, Mistral, Anthropic, Gemini, and more.
-      </p>
+      <div class="faq-item">
+        <h3><span class="faq-number">1.</span> 🤖 What is Auto Consensus? <span class="faq-toggle-icon">＋</span></h3>
+        <p>
+          Auto Consensus automatically combines and compares answers from multiple AI models, highlighting differences, correcting errors, and providing a reliable final response.
+        </p>
+      </div>
+      
+      <div class="faq-item">
+        <h3><span class="faq-number">2.</span> 🔘 What is the Consensus Button? <span class="faq-toggle-icon">＋</span></h3>
+        <p>
+          The Consensus Button generates a unified answer by merging responses from selected models. You can include (✅) or exclude (❌) specific model outputs before clicking the button. It ensures that only trusted answers influence the final result.
+        </p>
+      </div>
+      
+      <div class="faq-item">
+        <h3><span class="faq-number">3.</span> 🧠 What is the Consensus Model? <span class="faq-toggle-icon">＋</span></h3>
+        <p>
+          The Consensus Model is a special AI that processes and synthesizes responses from other models. It analyzes agreement, corrects inconsistencies, and creates a coherent final answer based on the selected responses.
+        </p>
+      </div>
+      
+      <div class="faq-item">
+        <h3><span class="faq-number">4.</span> 🧩 What are Differences? <span class="faq-toggle-icon">＋</span></h3>
+        <p>
+          Differences highlight conflicting or unique parts across model responses. This lets you quickly spot where models disagree or contribute distinct perspectives—helping you make informed decisions before generating a consensus.
+        </p>
+      </div>
+      
+      <div class="faq-item">
+        <h3><span class="faq-number">5.</span> 🌐 What is Web Search? <span class="faq-toggle-icon">＋</span></h3>
+        <p>
+          Web Search sends your query to GPT and Gemini with real-time internet access, delivering current and accurate results directly within consens.io.
+        </p>
+      </div>
+      
+      <div class="faq-item">
+        <h3><span class="faq-number">6.</span> ✅❌ What are the checkmarks and crosses? <span class="faq-toggle-icon">＋</span></h3>
+        <p>
+          The checkmark (✅) selects an answer to be included in the consensus generation. The cross (❌) excludes an answer from influencing the final consensus.
+        </p>
+      </div>
+      
+      <div class="faq-item">
+        <h3><span class="faq-number">7.</span> 🔑 When do I need to enter API keys? <span class="faq-toggle-icon">＋</span></h3>
+        <p>
+          You only need to enter your own API keys if you're not logged in or wish to use your personal model access.
+        </p>
+      </div>
+      
+      <div class="faq-item">
+        <h3><span class="faq-number">8.</span> 🧠 Which AI models are available? <span class="faq-toggle-icon">＋</span></h3>
+        <p>
+          consens.io provides access to top-tier LLMs including OpenAI, Mistral, Anthropic, Gemini, and more.
+        </p>
+      </div>
+      
+      <div class="faq-item">
+        <h3><span class="faq-number">9.</span> 📌 How do Bookmarks & Leaderboards work? <span class="faq-toggle-icon">＋</span></h3>
+        <p>
+          Logged-in users can bookmark queries for future reference, and view popular queries on leaderboards, comparing their results with other users.
+        </p>
+      </div>
+
+      <div class="faq-item">
+        <h3><span class="faq-number">10.</span> 🔢 How many queries can I make? <span class="faq-toggle-icon">＋</span></h3>
+        <p>
+          Free users can make up to 25 AI-powered queries. This includes consensus generations, web searches, and direct model queries. You can track remaining quota in the Sidebar.
+        </p>
+      </div>
+      
+      <div class="faq-item">
+        <h3><span class="faq-number">11.</span> 💸 Why are the first 25 queries free? <span class="faq-toggle-icon">＋</span></h3>
+        <p>
+          We want you to explore consens.io with no commitment. The 25 free queries let you test the platform, compare models, and experience consensus answers—all without needing to provide payment information.
+        </p>
+      </div>      
     </div>
-
-    <div class="faq-item">
-      <h3><span class="faq-number">3.</span> ⚡ How does Consensus Generation work? <span class="faq-toggle-icon">＋</span></h3>
-      <p>
-        Consensus generation automatically compares the answers of different AI models, identifies discrepancies, and creates a reliable, unified answer by filtering out potential errors.
-      </p>
-    </div>
-
-    <div class="faq-item">
-      <h3><span class="faq-number">4.</span> 🌐 How does Web Search integration work? <span class="faq-toggle-icon">＋</span></h3>
-      <p>
-        You can extend your query with a real-time web search via GPT and Gemini, providing current and factually up-to-date answers directly within consens.io.
-      </p>
-    </div>
-
-    <div class="faq-item">
-      <h3><span class="faq-number">5.</span> 📌 How do Bookmarks & Leaderboards work? <span class="faq-toggle-icon">＋</span></h3>
-      <p>
-        Logged-in users can bookmark queries for future reference, and also view popular queries on leaderboards, comparing their results with other users.
-      </p>
-    </div>
-
   </div>
 </div>
 </body>

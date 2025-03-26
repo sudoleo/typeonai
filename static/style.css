@@ -1126,7 +1126,8 @@ text-decoration: underline;
   font-size: 20px;
   cursor: pointer;
   transition: color 0.3s, transform 0.3s;
-  opacity: 0.5;
+  opacity: 0.8;
+  color: #4e4e4e; /* Dark grey for light mode */
 }
 
 .help-button:hover {
@@ -1134,15 +1135,44 @@ text-decoration: underline;
   transform: scale(1.2);
 }
 
-/* FAQ Modal spezifisch modern gestylt */
+/* Override for dark mode */
+.dark-mode .help-button {
+  color: #cccccc; /* Light grey for dark mode */
+}
+
+.dark-mode .help-button:hover {
+  color: #66b2ff;
+}
+
 .faq-modal {
+  position: relative;
   width: 850px;
   max-width: 95%;
-  max-height: 50vh; /* Begrenzung der Höhe für Bildschirmgröße */
-  overflow-y: auto; /* Scrollbar bei Überlauf aktivieren */
+  max-height: 55vh; /* Reduzierte Höhe */
   border-radius: 12px;
-  padding: 35px;
   box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+  background-color: #fff; /* Light mode */
+  overflow: hidden; /* Verhindert, dass Header und Close-Button scrollen */
+}
+
+/* Fixed header with close button (Header bleibt immer oben) */
+.faq-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding: 10px 35px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: inherit;
+  border-bottom: 1px solid rgba(0,123,255,0.2);
+}
+
+/* Scrollable FAQ body – nur dieser Bereich scrollt */
+.faq-body {
+  padding: 20px 20px 20px 20px;
+  overflow-y: auto;
+  max-height: calc(55vh - 55px); /* 60vh minus Header/Close-Button Höhe */
 }
 
 .faq-intro {
@@ -1204,24 +1234,29 @@ text-decoration: underline;
   border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 
-/* WebKit-basierte Browser (Chrome, Safari, Edge) */
-.faq-modal::-webkit-scrollbar {
-  width: 8px;
+.faq-body::-webkit-scrollbar {
+  width: 6px;
 }
 
-.faq-modal::-webkit-scrollbar-track {
+.faq-body::-webkit-scrollbar-track {
   background: transparent;
   border-radius: 4px;
 }
 
-.faq-modal::-webkit-scrollbar-thumb {
+.faq-body::-webkit-scrollbar-thumb {
   background-color: rgba(0, 0, 0, 0.3);
   border-radius: 4px;
   box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
-.faq-modal::-webkit-scrollbar-thumb:hover {
+.faq-body::-webkit-scrollbar-thumb:hover {
   background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Firefox Scrollbar */
+.faq-body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
 }
 
 /* Modal Hintergrund */
