@@ -428,9 +428,13 @@
 
       // --- Speichern des Auto Consensus Zustands ---
       const autoConsensusToggle = document.getElementById("autoConsensusToggle");
-      // Beim Laden den gespeicherten Zustand auslesen (Standard: false, wenn nichts gespeichert wurde)
+      // Beim Laden den gespeicherten Zustand auslesen
       let storedAutoConsensus = localStorage.getItem("autoConsensus");
-      if (storedAutoConsensus !== null) {
+      if (storedAutoConsensus === null) {
+        // Falls noch kein Wert gespeichert wurde, Standard: true (an)
+        autoConsensusToggle.checked = true;
+        localStorage.setItem("autoConsensus", "true");
+      } else {
         autoConsensusToggle.checked = storedAutoConsensus === "true";
       }
       // Bei Änderung den neuen Zustand speichern
