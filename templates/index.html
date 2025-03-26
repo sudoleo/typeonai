@@ -213,6 +213,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
+    <span id="version-number">v0.4.0</span>
   </div>
 </div>
 
@@ -309,7 +310,7 @@
       <!-- Antwort Google Gemini -->
       <div class="response-box" id="geminiResponse" data-model="Google Gemini">
         <h2>
-          <span class="title">Response from Gemini <small>(gemini-pro)</small></span>
+          <span class="title">Response from Gemini <small>(gemini-1.5-pro)</small></span>
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('geminiResponse')" title="Mark as best answer">&#10003;</span>
             <span class="exclude-btn" onclick="toggleExclude('geminiResponse')" title="Exclude answer">&#10005;</span>
@@ -370,9 +371,9 @@
                 <option value="OpenAI">GPT‑4o</option>
                 <option value="Anthropic">claude-3-5</option>
                 <option value="Mistral">mistral-large-latest</option>
-                <option value="Google Gemini">gemini-pro</option>
+                <option value="Google Gemini">gemini-1.5-pro</option>
                 <option value="DeepSeek">deepseek-chat</option>
-                <option value="Grok">grok-chat</option>
+                <option value="Grok">grok2</option>
               </select>
             </div>
           </div>
@@ -1763,7 +1764,7 @@
       <div class="faq-item">
         <h3><span class="faq-number">10.</span> 🔢 How many queries can I make? <span class="faq-toggle-icon">＋</span></h3>
         <p>
-          Free users can make up to 25 AI-powered queries. This includes consensus generations, web searches, and direct model queries. You can track remaining quota in the Sidebar.
+          Free users can make up to 25 AI-powered queries. This includes consensus generations, web searches, and direct model queries. You can track your remaining quota in the sidebar.
         </p>
       </div>
       
@@ -1773,6 +1774,7 @@
           We want you to explore consens.io with no commitment. The 25 free queries let you test the platform, compare models, and experience consensus answers—all without needing to provide payment information.
         </p>
       </div>      
+
     </div>
   </div>
 </div>

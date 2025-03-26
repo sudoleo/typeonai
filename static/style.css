@@ -1357,6 +1357,21 @@ color: red;
 font-size: 0.9em;
 }
 
+#version-number {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  opacity: 0.3;
+  font-size: 12px;
+  color: #000;
+  padding-right: 10px; /* adjust as needed */
+}
+
+.dark-mode #version-number {
+  color: var(--text-color);
+}
+
 @media (max-width: 1400px) {
   /* Top Bar & Body */
   .top-bar-logo {
