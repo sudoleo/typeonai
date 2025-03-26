@@ -213,7 +213,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v0.4.1</span>
+    <span id="version-number">v0.4.2</span>
   </div>
 </div>
 
@@ -1363,6 +1363,19 @@
         toggleModel("deepseekResponse", false);
         toggleModel("grokResponse", false);
 
+        // ...und deaktiviere zusätzlich die Buttons in den Response-Boxen:
+        const disableButtons = (selector) => {
+          const btns = document.querySelectorAll(selector);
+          btns.forEach(btn => {
+            btn.style.pointerEvents = "none";
+            btn.style.opacity = "0.5";
+          });
+        };
+        disableButtons("#mistralResponse .best-btn, #mistralResponse .exclude-btn");
+        disableButtons("#claudeResponse .best-btn, #claudeResponse .exclude-btn");
+        disableButtons("#deepseekResponse .best-btn, #deepseekResponse .exclude-btn");
+        disableButtons("#grokResponse .best-btn, #grokResponse .exclude-btn");
+
         // Setze das Konsensmodell automatisch auf OpenAI und deaktiviere die Auswahl
         consensusDropdown.value = "OpenAI";
         consensusDropdown.disabled = true;
@@ -1394,6 +1407,19 @@
         toggleModel("geminiResponse", true);
         toggleModel("deepseekResponse", true);
         toggleModel("grokResponse", true);
+
+        // Reaktiviere die Buttons wieder:
+        const enableButtons = (selector) => {
+          const btns = document.querySelectorAll(selector);
+          btns.forEach(btn => {
+            btn.style.pointerEvents = "";
+            btn.style.opacity = "";
+          });
+        };
+        enableButtons("#mistralResponse .best-btn, #mistralResponse .exclude-btn");
+        enableButtons("#claudeResponse .best-btn, #claudeResponse .exclude-btn");
+        enableButtons("#deepseekResponse .best-btn, #deepseekResponse .exclude-btn");
+        enableButtons("#grokResponse .best-btn, #grokResponse .exclude-btn");
 
         // Reaktiviere das Konsens-Dropdown
         consensusDropdown.disabled = false;
