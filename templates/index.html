@@ -213,7 +213,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v0.4.0</span>
+    <span id="version-number">v0.4.1</span>
   </div>
 </div>
 
@@ -441,6 +441,23 @@
       autoConsensusToggle.addEventListener("change", function() {
         localStorage.setItem("autoConsensus", this.checked);
       });
+
+      const questionInput = document.getElementById("questionInput");
+      // Prüfe, ob der Nutzer eingeloggt ist (z.B. über ein gespeichertes Token)
+      const isLoggedIn = !!localStorage.getItem("id_token");
+      // Prüfe, ob mindestens ein API Key vorhanden ist
+      const hasApiKeys = localStorage.getItem("openaiKey") ||
+                        localStorage.getItem("mistralKey") ||
+                        localStorage.getItem("anthropicKey") ||
+                        localStorage.getItem("geminiKey") ||
+                        localStorage.getItem("deepseekKey") ||
+                        localStorage.getItem("grokKey");
+      
+      if (isLoggedIn || hasApiKeys) {
+        questionInput.placeholder = "Enter your question";
+      } else {
+        questionInput.placeholder = "Please log in or store your own API keys.";
+      }
           
       // --------------------------
       // Marketing Popup Initialisierung
@@ -587,6 +604,11 @@
       // Frage per Enter (ohne Zeilenumbruch) absenden
       document.getElementById("questionInput").addEventListener("keydown", function(event) {
         if (event.key === "Enter" && !event.shiftKey) {
+          // Wenn der Button deaktiviert ist, breche die Ausführung ab
+          if (document.getElementById("sendButton").disabled) {
+            event.preventDefault();
+            return;
+          }
           event.preventDefault();
           sendQuestion();
         }
@@ -771,15 +793,15 @@
         if (!validateInputText()) {
           return;
         }
-        document.getElementById("sendButton").disabled = true;
-        // Konsens-Button wieder aktivieren, bevor eine neue Anfrage gesendet wird.
-        document.getElementById("consensusButton").disabled = false;
         const question = document.getElementById("questionInput").value;
         consensusGenerated = false;
         if (!question) {
           alert("Please enter a question.");
           return;
         }
+        document.getElementById("sendButton").disabled = true;
+        // Konsens-Button wieder aktivieren, bevor eine neue Anfrage gesendet wird.
+        document.getElementById("consensusButton").disabled = false;
         const spinnerHTML = '<span class="spinner"></span>';
         // Lese den benutzerdefinierten Systemprompt aus oder nutze den Standardwert
         const customSystemPrompt = localStorage.getItem("systemPrompt") || "Please respond briefly and precisely, focusing only on the essentials.";
