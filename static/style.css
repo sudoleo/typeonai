@@ -723,6 +723,7 @@ pre .copy-btn:hover {
 
 .response-box .title {
   font-weight: 700;
+  text-align: left;
 }
 
 .control-icons {
