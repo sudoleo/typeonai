@@ -257,7 +257,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
     try:
         if consensus_model == "OpenAI":
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
-            model_to_use = "gpt-4o-search-preview" if search_mode else "gpt-4o"
+            model_to_use = "gpt-4o" if search_mode else "gpt-4o"
             response = client.chat.completions.create(
                         model=model_to_use,
                         messages=[
