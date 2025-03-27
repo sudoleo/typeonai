@@ -1892,6 +1892,16 @@ outline: none;
 display: none;
 }
 
+/* Dark Mode: Links in einer helleren, gut lesbaren Farbe */
+.dark-mode a {
+  color: #bb86fc; /* Beispiel: ein sanftes Lila, passend zu deinem Button-Hintergrund */
+  text-decoration: underline;
+}
+
+.dark-mode a:hover {
+  color: #d0a7f9; /* Leicht aufgehellt beim Hover */
+}
+
 #freeUsageDisplay {
   display: block;
 }

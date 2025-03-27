@@ -197,15 +197,60 @@ def query_exa(question: str, api_key: str, search_mode: bool, system_prompt: str
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question}
             ],
-            extra_body={"text": True}  # Stellt sicher, dass als Text geantwortet wird
+            extra_body={"text": True},  # Stellt sicher, dass als Text geantwortet wird
+            max_tokens=1024
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Error with Exa: {str(e)}"
+    
+
+import re
+from openai import OpenAI
+
+def query_perplexity(question: str, api_key: str, search_mode: bool, system_prompt: str = None) -> str:
+    # Falls der Search Mode nicht aktiv ist, wird Perplexity nicht angefragt.
+    if not search_mode:
+        return ""
+    if system_prompt is None:
+        system_prompt = (
+            "You are an artificial intelligence assistant and you need to "
+            "Answer shortly."
+        )
+    try:
+        # Erstelle den Client mit der Perplexity-URL
+        client = OpenAI(api_key=api_key, base_url="https://api.perplexity.ai")
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": question},
+        ]
+        response = client.chat.completions.create(
+            model="sonar",
+            messages=messages,
+            max_tokens=1024,
+        )
+        
+        # Extrahiere den Antworttext und die citations (sofern vorhanden)
+        result_text = response.choices[0].message.content.strip()
+        citations = getattr(response, "citations", [])
+        
+        # Ersetze Zitations-Marker [1], [2], ... durch HTML-Links
+        def replace_citation(match):
+            # Die Ziffern in den Klammern sind 1-indexiert, während die Liste 0-indexiert ist.
+            index = int(match.group(1)) - 1
+            if 0 <= index < len(citations):
+                url = citations[index]
+                return f'<a href="{url}" target="_blank">[{match.group(1)}]</a>'
+            return match.group(0)
+        
+        processed_text = re.sub(r'\[([0-9]+)\]', replace_citation, result_text)
+        return processed_text
+    except Exception as e:
+        return f"Error with Perplexity: {str(e)}"
 
 
 def query_consensus(question: str, answer_openai: str, answer_mistral: str, answer_claude: str, 
-                    answer_gemini: str, answer_deepseek: str, answer_grok: str, answer_exa: str,
+                    answer_gemini: str, answer_deepseek: str, answer_grok: str, answer_exa: str, answer_perplexity: str,
                     best_model: str, excluded_models: list, consensus_model: str, 
                     api_keys: dict, search_mode: bool = False) -> str:
     """
@@ -230,6 +275,8 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
         prompt_parts.append(f"Response from Grok: {answer_grok}\n\n")
     if "Exa" not in excluded_models and answer_exa:
         prompt_parts.append(f"Response from Exa: {answer_exa}\n\n")
+    if "Perplexity" not in excluded_models and answer_perplexity:
+        prompt_parts.append(f"Response from Perplexity: {answer_perplexity}\n\n")
 
     if best_model:
         prompt_parts.append(
@@ -357,6 +404,18 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 max_tokens=2048
             )
             return response.choices[0].message.content.strip()
+        
+        elif consensus_model == "Perplexity":
+            client = openai.OpenAI(api_key=api_keys.get("Perplexity"), base_url="https://api.perplexity.ai")
+            response = client.chat.completions.create(
+                model="sonar",
+                messages=[
+                    {"role": "system", "content": ""},
+                    {"role": "user", "content": consensus_prompt}
+                ],
+                max_tokens=2048
+            )
+            return response.choices[0].message.content.strip()
 
         else:
             return "Invalid consensus model selected."
@@ -364,7 +423,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
         return f"Consensus error: {str(e)}"
     
 
-def query_differences(answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, answer_deepseek: str, answer_grok: str, answer_exa: str, consensus_answer: str, api_keys: dict, differences_model: str, search_mode: bool = False) -> str:
+def query_differences(answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, answer_deepseek: str, answer_grok: str, answer_exa: str, answer_perplexity: str, consensus_answer: str, api_keys: dict, differences_model: str, search_mode: bool = False) -> str:
     """
     Extrahiert die Unterschiede zwischen den vier Expertenantworten mittels des angegebenen Konsens‑Modells.
     """
@@ -374,6 +433,7 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
             f"- GPT-4o: {answer_openai}\n"
             f"- Gemini: {answer_gemini}\n"
             f"- Exa: {answer_exa}\n"
+            f"- Perplexity: {answer_perplexity}\n"
         )
         best_models_instruction = "Choose from one of the following models: OpenAI or Gemini."
     else:
@@ -506,6 +566,18 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
                     {"role": "user", "content": differences_prompt}
                 ],
                 extra_body={"text": True},
+                max_tokens=2048
+            )
+            return response.choices[0].message.content.strip()
+        
+        elif differences_model == "Perplexity":
+            client = openai.OpenAI(api_key=api_keys.get("Perplexity"), base_url="https://api.perplexity.ai")
+            response = client.chat.completions.create(
+                model="sonar",
+                messages=[
+                    {"role": "system", "content": "Answer in the exact same language as the Model responses:"},
+                    {"role": "user", "content": differences_prompt}
+                ],
                 max_tokens=2048
             )
             return response.choices[0].message.content.strip()
@@ -883,6 +955,47 @@ async def ask_exa_post(data: dict = Body(...)):
     else:
         raise HTTPException(status_code=400, detail="No authentication parameter (id_token or api_key) specified")
 
+@app.post("/ask_perplexity")
+async def ask_perplexity_post(data: dict = Body(...)):
+    """
+    Endpoint für Perplexity im Search Mode.
+    Nutzt entweder den Developer-API-Key (bei eingeloggten Nutzern) oder einen vom User gelieferten API-Key.
+    """
+    question = data.get("question")
+    if count_words(question) > MAX_WORDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {MAX_WORDS} Wörtern."
+        )
+    system_prompt = data.get("system_prompt")
+    id_token = data.get("id_token")
+    api_key = data.get("api_key")
+    active_count = data.get("active_count", 1)
+
+    if id_token:
+        try:
+            uid = verify_user_token(id_token)
+        except Exception:
+            raise HTTPException(status_code=401, detail="Authentication failed")
+        current_usage = usage_counter.get(uid, 0)
+        increment = 1.0 / active_count
+        if current_usage + increment > FREE_USAGE_LIMIT:
+            return {"error": "Your free quota is exhausted. Please provide your own API keys."}
+        usage_counter[uid] = current_usage + increment
+
+        # Verwende hier den Developer-API-Key für Perplexity (z.B. aus der Umgebungsvariable)
+        developer_api_key = os.environ.get("DEVELOPER_PERPLEXITY_API_KEY")
+        if not developer_api_key:
+            raise HTTPException(status_code=500, detail="Server error: API key not configured")
+        answer = query_perplexity(question, developer_api_key, system_prompt)
+        free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
+        return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
+    elif api_key:
+        answer = query_perplexity(question, api_key, system_prompt)
+        return {"response": answer, "key_used": "User API Key"}
+    else:
+        raise HTTPException(status_code=400, detail="No authentication parameter (id_token or api_key) specified")
+
 
 @app.post("/consensus")
 async def consensus(data: dict):
@@ -916,6 +1029,7 @@ async def consensus(data: dict):
     answer_deepseek = data.get("answer_deepseek")
     answer_grok     = data.get("answer_grok")
     answer_exa     = data.get("answer_exa")
+    answer_perplexity     = data.get("answer_perplexity")
     best_model      = data.get("best_model", "")
     consensus_model = data.get("consensus_model")
     excluded_models = data.get("excluded_models", [])
@@ -931,6 +1045,7 @@ async def consensus(data: dict):
         api_keys["DeepSeek"] = data.get("deepseek_key")
         api_keys["Grok"] = data.get("grok_key")
         api_keys["Exa"] = data.get("exa_key")
+        api_keys["Perplexity"] = data.get("perplexity_key")
     else:
         api_keys["OpenAI"] = data.get("openai_key") or os.environ.get("DEVELOPER_OPENAI_API_KEY")
         api_keys["Mistral"] = data.get("mistral_key") or os.environ.get("DEVELOPER_MISTRAL_API_KEY")
@@ -939,6 +1054,7 @@ async def consensus(data: dict):
         api_keys["DeepSeek"] = data.get("deepseek_key") or os.environ.get("DEVELOPER_DEEPSEEK_API_KEY")
         api_keys["Grok"] = data.get("grok_key") or os.environ.get("DEVELOPER_GROK_API_KEY")
         api_keys["Exa"] = data.get("exa_key") or os.environ.get("DEVELOPER_EXA_API_KEY")
+        api_keys["Perplexity"] = data.get("perplexity_key") or os.environ.get("DEVELOPER_PERPLEXITY_API_KEY")
 
     # Validierung der erforderlichen Parameter (nur für Modelle, die nicht ausgeschlossen wurden)
     missing = []
@@ -953,11 +1069,14 @@ async def consensus(data: dict):
     if "Google Gemini" not in excluded_models:
         if not answer_gemini or (use_own_keys and not api_keys.get("Google Gemini")):
             missing.append("Google Gemini")
-    # Bei Search Mode: nur Exa prüfen, ansonsten die anderen Modelle
+    # Bei Search Mode: Exa UND Perplexity prüfen, ansonsten die anderen Modelle
     if search_mode:
         if "Exa" not in excluded_models:
             if not answer_exa or not api_keys.get("Exa"):
                 missing.append("Exa")
+        if "Perplexity" not in excluded_models:
+            if not answer_perplexity or not api_keys.get("Perplexity"):
+                missing.append("Perplexity")
     else:
         if "Mistral" not in excluded_models:
             if not answer_mistral or not api_keys.get("Mistral"):
@@ -980,12 +1099,12 @@ async def consensus(data: dict):
 
     # Konsens-Antwort generieren
     consensus_answer = query_consensus(
-        question, answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok, answer_exa, 
+        question, answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok, answer_exa, answer_perplexity,
         best_model, excluded_models, consensus_model, api_keys, search_mode)
 
     # Unterschiede ermitteln
     differences = query_differences(
-        answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok, answer_exa,
+        answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok, answer_exa, answer_perplexity,
         consensus_answer, api_keys, differences_model=consensus_model, search_mode=search_mode)
 
     return {"consensus_response": consensus_answer, "differences": differences}
@@ -1006,6 +1125,7 @@ async def check_keys(data: dict):
         deepseek_key = data.get("deepseek_key")
         grok_key = data.get("grok_key")
         exa_key = data.get("exa_key")
+        perplexity_key = data.get("perplexity_key")
         
         results = {}
         
@@ -1134,6 +1254,23 @@ async def check_keys(data: dict):
                 results["Exa"] = "invalid"
         except Exception as e:
             results["Exa"] = "invalid"
+
+        # Perplexity Handshake
+        try:
+            if perplexity_key and len(perplexity_key) > 10:
+                client = openai.OpenAI(api_key=perplexity_key, base_url="https://api.perplexity.ai")
+                response = client.chat.completions.create(
+                    model="sonar",
+                    messages=[
+                        {"role": "system", "content": "ping"},
+                        {"role": "user", "content": "ping"}
+                    ]
+                )
+                results["Perplexity"] = "valid"
+            else:
+                results["Perplexity"] = "invalid"
+        except Exception as e:
+            results["Perplexity"] = "invalid"
         
         return {"results": results}
 

@@ -296,6 +296,9 @@ function loadBookmarks() {
                 document.getElementById("exaResponse")
                   .querySelector(".collapsible-content").innerHTML =
                   marked.parse(bookmarkData.responses["Exa"] || "");
+                document.getElementById("perplexityResponse")
+                  .querySelector(".collapsible-content").innerHTML =
+                  marked.parse(bookmarkData.responses["Perplexity"] || "");
                 // Zusätzlich Konsens & Unterschiede laden:
                 document.getElementById("consensusResponse")
                   .querySelector(".consensus-main p").innerHTML =

@@ -124,7 +124,11 @@
       <div class="api-key-group">
         <label for="eaxKey">Exa API Key <span id="exaFeedback" class="feedback"></span></label>
         <input type="password" id="exaKey" placeholder="Your Exa Key" autocomplete="new-password">
-      </div>       
+      </div>
+      <div class="api-key-group">
+        <label for="eaxKey">Perplexity API Key <span id="perplexityFeedback" class="feedback"></span></label>
+        <input type="password" id="perplexityKey" placeholder="Your Perplexity Key" autocomplete="new-password">
+      </div>            
       <div class="sidebar-tooltip">
         <button onclick="testAllKeys()">
           Save/Test all APIs 
@@ -178,7 +182,10 @@
       </label>
       <label for="selectExa">
         <input type="checkbox" id="selectExa" checked> Exa
-      </label>        
+      </label>
+      <label for="selectPerplexity">
+        <input type="checkbox" id="selectPerplexity" checked> Perplexity
+      </label>           
     </div>
 
     <!-- Trennstrich zwischen API Keys und Leaderboard -->
@@ -220,7 +227,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v0.5.0</span>
+    <span id="version-number">v0.6.0</span>
   </div>
 </div>
 
@@ -258,7 +265,7 @@
             <span class="search-mode-label">Web Search</span>
             <!-- Disclaimer, der nur beim Aktivieren angezeigt wird -->
             <span id="searchDisclaimer" class="search-disclaimer" style="display: none; font-size: 0.8em; margin-left: 5px;">
-              Currently available with ChatGPT, Gemini and Exa. Soon also usable with other models!
+              Available with ChatGPT, Gemini, Exa and Perplexity. Soon also usable with other models!
             </span>
           </div>
         </div>
@@ -369,6 +376,20 @@
           </div>
         </h2>
         <p class="collapsible-content"></p>
+      </div>
+      <!-- Antwort Perplexity -->
+      <div class="response-box" id="perplexityResponse" data-model="Perplexity">
+        <h2>
+          <span class="title">Response from Perplexity <small>(sonar-pro)</small></span>
+          <div class="control-icons">
+            <span class="best-btn" onclick="toggleBest('perplexityResponse')" title="Mark as best answer">&#10003;</span>
+            <span class="exclude-btn" onclick="toggleExclude('perplexityResponse')" title="Exclude answer">&#10005;</span>
+            <button class="collapse-btn" onclick="toggleCollapse('perplexityResponse')">
+              <span class="arrow">&#9660;</span>
+            </button>
+          </div>
+        </h2>
+        <p class="collapsible-content"></p>
       </div>  
     </div>
     
@@ -473,7 +494,8 @@
                         localStorage.getItem("geminiKey") ||
                         localStorage.getItem("deepseekKey") ||
                         localStorage.getItem("grokKey") ||
-                        localStorage.getItem("exaKey");
+                        localStorage.getItem("exaKey") ||
+                        localStorage.getItem("perplexityKey");
       
       if (isLoggedIn || hasApiKeys) {
         questionInput.placeholder = "Enter your question";
@@ -532,6 +554,7 @@
       const deepseekCheckbox = document.getElementById("selectDeepSeek");
       const grokCheckbox = document.getElementById("selectGrok");
       const exaCheckbox = document.getElementById("selectExa");
+      const perplexityCheckbox = document.getElementById("selectPerplexity");
 
       // Label-Container der Checkboxen:
       const mistralLabel = document.querySelector("label[for='selectMistral']");
@@ -539,12 +562,17 @@
       const deepseekLabel = document.querySelector("label[for='selectDeepSeek']");
       const grokLabel = document.querySelector("label[for='selectGrok']");
       const exaLabel = document.querySelector("label[for='selectExa']");
+      const perplexityLabel = document.querySelector("label[for='selectPerplexity']");
 
-      // Exa standardmäßig ausblenden, da es nur im Search Mode verwendet wird:
+      // Exa & Perplexity standardmäßig ausblenden, da es nur im Search Mode verwendet wird:
       exaCheckbox.checked = false;
       exaCheckbox.disabled = true;
       exaLabel.style.display = "none";
+      perplexityCheckbox.checked = false;
+      perplexityCheckbox.disabled = true;
+      perplexityLabel.style.display = "none";
       setResponseBoxDisplay("exaResponse", "none");
+      setResponseBoxDisplay("perplexityResponse", "none");
 
       // Funktion, um Response-Boxen komplett auszublenden oder einzublenden:
       function setResponseBoxDisplay(id, displayValue) {
@@ -898,6 +926,7 @@
         const deepseekBox = document.getElementById("deepseekResponse");
         const grokBox = document.getElementById("grokResponse");
         const exaBox = document.getElementById("exaResponse");
+        const perplexityBox = document.getElementById("perplexityResponse");
         
         // Zähle nur die Modelle, die nicht als "ausgeschlossen" markiert sind
         if (!openaiBox.classList.contains("excluded")) totalRequiredResponses++;
@@ -907,6 +936,7 @@
         if (!deepseekBox.classList.contains("excluded")) totalRequiredResponses++;
         if (!grokBox.classList.contains("excluded")) totalRequiredResponses++;
         if (document.getElementById("searchModeToggle").checked && !exaBox.classList.contains("excluded")) totalRequiredResponses++;
+        if (document.getElementById("searchModeToggle").checked && !perplexityBox.classList.contains("excluded")) totalRequiredResponses++;
 
         let activeModels = [];
         if (document.getElementById("selectOpenAI").checked) activeModels.push("OpenAI");
@@ -916,6 +946,7 @@
         if (document.getElementById("selectDeepSeek").checked) activeModels.push("DeepSeek");
         if (document.getElementById("selectGrok").checked) activeModels.push("Grok");
         if (document.getElementById("selectExa").checked && document.getElementById("searchModeToggle").checked) activeModels.push("Exa");
+        if (document.getElementById("selectPerplexity").checked && document.getElementById("searchModeToggle").checked) activeModels.push("Perplexity");
     
         // Spinner in den jeweiligen Response-Boxen setzen
         if (activeModels.includes("OpenAI")) {
@@ -939,6 +970,9 @@
         if (activeModels.includes("Exa")) {
           document.getElementById("exaResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
         }
+        if (activeModels.includes("Perplexity")) {
+          document.getElementById("perplexityResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
+        }
         if (document.getElementById("autoConsensusToggle").checked) {
           document.getElementById("consensusResponse").querySelector("p").innerHTML = spinnerHTML;
         } else {
@@ -953,6 +987,7 @@
         const deepseekKey = localStorage.getItem("deepseekKey") || "";
         const grokKey = localStorage.getItem("grokKey") || "";
         const exaKey = localStorage.getItem("exaKey") || "";
+        const perplexityKey = localStorage.getItem("perplexityKey") || "";
     
         let responsesReceived = 0;
         const totalActive = activeModels.length;
@@ -1412,6 +1447,64 @@
             checkAllResponses();
           });
         }
+
+        // Perplexity
+        if (activeModels.includes("Perplexity")) {
+          const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
+          const payload = {
+            question: question,
+            active_count: 1,
+            system_prompt: customSystemPrompt,
+            search_mode: document.getElementById("searchModeToggle").checked  // optional, falls benötigt
+          };
+
+          if (!useOwnKeys) {
+            let id_token = localStorage.getItem("id_token");
+            if (id_token) {
+              payload.id_token = id_token;
+            } else {
+              // Nehme hier den Perplexity API-Key (z. B. gespeichert unter "perplexityKey")
+              payload.api_key = localStorage.getItem("perplexityKey") || "";
+            }
+          } else {
+            if (!validateUserKey("perplexityKey")) {
+              alert("Please enter a valid Perplexity API key.");
+              return;
+            }
+            payload.api_key = localStorage.getItem("perplexityKey");
+          }
+
+          fetch('/ask_perplexity', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            keepalive: true
+          })
+            .then(response => response.json())
+            .then(data => {
+              const outputEl = document.getElementById("perplexityResponse").querySelector(".collapsible-content");
+              if (data.response) {
+                outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+                addCopyButtons(outputEl);
+                if (auth.currentUser) {
+                  saveBookmark(question, data.response, "Perplexity");
+                }
+              } else if (data.error) {
+                outputEl.innerText = data.error;
+              } else {
+                outputEl.innerText = "Please log in or store your own API keys.";
+              }
+              if (data.free_usage_remaining !== undefined) {
+                document.getElementById("freeUsageDisplay").innerText =
+                  "Free requests: " + data.free_usage_remaining + " / " + FREE_USAGE_LIMIT;
+              }
+              checkAllResponses();
+            })
+            .catch(error => {
+              console.error("Error with Perplexity:", error);
+              checkAllResponses();
+            });
+        }
     };
     
       // Modelle (Checkboxen) ein-/ausschalten
@@ -1444,9 +1537,12 @@
       document.getElementById("selectExa").addEventListener("change", function() {
         toggleModel("exaResponse", this.checked);
       });
+      document.getElementById("selectPerplexity").addEventListener("change", function() {
+        toggleModel("perplexityResponse", this.checked);
+      });
     
       // Erneut API Keys in Felder schreiben (falls benötigt)
-      ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey", "grokKey", "exaKey"].forEach(function(key) {
+      ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey", "grokKey", "exaKey", "perplexityKey"].forEach(function(key) {
         const stored = localStorage.getItem(key);
         if (stored) {
           document.getElementById(key).value = stored;
@@ -1512,6 +1608,13 @@
         exaCheckbox.style.removeProperty("display");
         setResponseBoxDisplay("exaResponse", "block");
 
+        // Zeige Perplexity und reaktiviere sie:
+        perplexityCheckbox.disabled = false;
+        perplexityCheckbox.checked = true;
+        perplexityLabel.style.removeProperty("display");
+        perplexityCheckbox.style.removeProperty("display");
+        setResponseBoxDisplay("perplexityResponse", "block");
+
         // Setze das Konsens-Dropdown automatisch auf OpenAI und deaktiviere die Auswahl:
         consensusDropdown.value = "OpenAI";
         consensusDropdown.disabled = true;
@@ -1557,6 +1660,12 @@
         setResponseBoxDisplay("exaResponse", "none");
         exaCheckbox.style.display = "none";
         exaLabel.style.display = "none";
+
+        perplexityCheckbox.disabled = true;
+        perplexityCheckbox.checked = false;
+        setResponseBoxDisplay("perplexityResponse", "none");
+        perplexityCheckbox.style.display = "none";
+        perplexityLabel.style.display = "none";
 
         // Reaktiviere die Buttons in den Response-Boxen:
         updateButtons("#mistralResponse .best-btn, #mistralResponse .exclude-btn", false);
@@ -1607,6 +1716,9 @@
           if (searchMode && document.getElementById("exaResponse").classList.contains("best")) {
             recordModelVote("Exa", "best");
           }
+          if (searchMode && document.getElementById("perplexityResponse").classList.contains("best")) {
+            recordModelVote("Perplexity", "best");
+          }
 
           // Ebenso für "excluded" (sofern du das separat erfassen möchtest).
           if (document.getElementById("openaiResponse").classList.contains("excluded")) {
@@ -1629,6 +1741,9 @@
           }
           if (searchMode && document.getElementById("exaResponse").classList.contains("excluded")) {
             recordModelVote("Exa", "exclude");
+          }
+          if (searchMode && document.getElementById("perplexityResponse").classList.contains("excluded")) {
+            recordModelVote("Perplexity", "exclude");
           }
 
           // Aktualisiere die letzte verarbeitete Frage.
@@ -1653,6 +1768,7 @@
       const deepseekBox = document.getElementById("deepseekResponse");
       const grokBox = document.getElementById("grokResponse");
       const exaBox = document.getElementById("exaResponse");
+      const perplexityBox = document.getElementById("perplexityResponse");
 
       // Lies die Antworten (trim für überflüssige Leerzeichen)
       const answer_openai = openaiBox.querySelector(".collapsible-content").innerText.trim();
@@ -1662,6 +1778,7 @@
       const answer_deepseek = deepseekBox.querySelector(".collapsible-content").innerText.trim();
       const answer_grok = grokBox.querySelector(".collapsible-content").innerText.trim();
       const answer_exa = exaBox.querySelector(".collapsible-content").innerText.trim();
+      const answer_perplexity = perplexityBox.querySelector(".collapsible-content").innerText.trim();
 
       // Überprüfe nur die Modelle, die nicht als "ausgeschlossen" markiert sind.
       if (
@@ -1670,9 +1787,12 @@
         // Überprüfe immer OpenAI und Gemini:
         (!openaiBox.classList.contains("excluded") && !answer_openai) ||
         (!geminiBox.classList.contains("excluded") && !answer_gemini) ||
-        // Wenn Search Mode aktiv ist, prüfe Exa, ansonsten die anderen Modelle:
+        // Wenn Search Mode aktiv ist, prüfe Exa UND Perplexity, ansonsten die anderen Modelle:
         (searchMode 
-          ? (!exaBox.classList.contains("excluded") && !answer_exa)
+          ? (
+              (!exaBox.classList.contains("excluded") && !answer_exa) ||
+              (!perplexityBox.classList.contains("excluded") && !answer_perplexity)
+            )
           : (
               (!mistralBox.classList.contains("excluded") && !answer_mistral) ||
               (!claudeBox.classList.contains("excluded") && !answer_claude) ||
@@ -1712,6 +1832,9 @@
       if (exaBox.classList.contains("excluded")) {
         excludedModels.push(exaBox.getAttribute("data-model"));
       }
+      if (perplexityBox.classList.contains("excluded")) {
+        excludedModels.push(perplexityBox.getAttribute("data-model"));
+      }
 
       // Hole API Keys aus localStorage
       const openaiKey = localStorage.getItem("openaiKey") || "";
@@ -1721,6 +1844,7 @@
       const deepseekKey= localStorage.getItem("deepseekKey") || "";
       const grokKey= localStorage.getItem("grokKey") || "";
       const exaKey= localStorage.getItem("exaKey") || "";
+      const perplexityKey= localStorage.getItem("perplexityKey") || "";
 
       try {
         const response = await fetch("/consensus", {
@@ -1740,6 +1864,7 @@
             answer_deepseek: answer_deepseek,
             answer_grok: answer_grok,
             answer_exa: answer_exa,
+            answer_perplexity: answer_perplexity,
             best_model: best_model,
             consensus_model: consensus_model,
             excluded_models: excludedModels,
@@ -1750,6 +1875,7 @@
             deepseek_key: deepseekKey,
             grok_key: grokKey,
             exa_key: exaKey,
+            perplexity_key: perplexityKey,
             keepalive: true
           })
         });
@@ -1791,6 +1917,7 @@
         const deepseekKey = document.getElementById("deepseekKey").value;
         const grokKey = document.getElementById("grokKey").value;
         const exaKey = document.getElementById("exaKey").value;
+        const perplexityKey = document.getElementById("perplexityKey").value;
         localStorage.setItem("openaiKey", openaiKey);
         localStorage.setItem("mistralKey", mistralKey);
         localStorage.setItem("anthropicKey", anthropicKey);
@@ -1798,6 +1925,7 @@
         localStorage.setItem("deepseekKey", deepseekKey);
         localStorage.setItem("grokKey", grokKey);
         localStorage.setItem("exaKey", exaKey);
+        localStorage.setItem("perplexityKey", perplexityKey);
         const spinner = document.getElementById("apiSpinner");
         spinner.style.display = "inline-block";
         try {
@@ -1811,7 +1939,8 @@
               gemini_key: geminiKey,
               deepseek_key: deepseekKey,
               grok_key: grokKey,
-              exa_key: exaKey
+              exa_key: exaKey,
+              perplexity_key: perplexityKey
             })
           });
           if (!response.ok) {
@@ -1830,6 +1959,7 @@
           const deepseekResult = data.results["DeepSeek"];
           const grokResult = data.results["Grok"];
           const exaResult = data.results["Exa"];
+          const perplexityResult = data.results["Perplexity"];
           const openaiFeedback = document.getElementById("openaiFeedback");
           const mistralFeedback = document.getElementById("mistralFeedback");
           const anthropicFeedback = document.getElementById("anthropicFeedback");
@@ -1837,6 +1967,7 @@
           const deepseekFeedback = document.getElementById("deepseekFeedback");
           const grokFeedback = document.getElementById("grokFeedback");
           const exaFeedback = document.getElementById("exaFeedback");
+          const perplexityFeedback = document.getElementById("perplexityFeedback");
           openaiFeedback.innerHTML = openaiResult === "valid" ? "&#10003;" : "&#10007;";
           openaiFeedback.style.color = openaiResult === "valid" ? "green" : "red";
           mistralFeedback.innerHTML = mistralResult === "valid" ? "&#10003;" : "&#10007;";
@@ -1851,6 +1982,8 @@
           grokFeedback.style.color = grokResult === "valid" ? "green" : "red";
           exaFeedback.innerHTML = exaResult === "valid" ? "&#10003;" : "&#10007;";
           exaFeedback.style.color = exaResult === "valid" ? "green" : "red";
+          perplexityFeedback.innerHTML = perplexityResult === "valid" ? "&#10003;" : "&#10007;";
+          perplexityFeedback.style.color = perplexityResult === "valid" ? "green" : "red";
         } catch (error) {
           console.error("Fehler beim Testen der API Keys:", error);
           alert("Fehler beim Testen der API Keys: " + error.message);
@@ -1884,7 +2017,7 @@
   </div>
 </div>
 <div id="disclaimerPopup" class="popup">
-  <p>Currently usable with ChatGPT, Gemini and Exa. Soon also with other models!</p>
+  <p>Avialbale with ChatGPT, Gemini, Exa and Perplexity. Soon also with other models!</p>
 </div>
 <div id="popupContainer">
   <!-- Modal zum Editieren des Systemprompts -->
@@ -1975,7 +2108,7 @@
       <div class="faq-item">
         <h3><span class="faq-number">8.</span> 🧠 Which AI models are available? <span class="faq-toggle-icon">＋</span></h3>
         <p>
-          consens.io provides access to top-tier LLMs including OpenAI, Mistral, Anthropic, Gemini, and more.
+          consens.io provides access to top-tier LLMs including OpenAI, Mistral, Anthropic, Gemini, Exa, Perplexity and more.
         </p>
       </div>
       
