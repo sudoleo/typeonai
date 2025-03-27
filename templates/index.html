@@ -120,7 +120,11 @@
       <div class="api-key-group">
         <label for="grokKey">Grok API Key <span id="grokFeedback" class="feedback"></span></label>
         <input type="password" id="grokKey" placeholder="Your Grok Key" autocomplete="new-password">
-      </div>      
+      </div>
+      <div class="api-key-group">
+        <label for="eaxKey">Exa API Key <span id="exaFeedback" class="feedback"></span></label>
+        <input type="password" id="exaKey" placeholder="Your Exa Key" autocomplete="new-password">
+      </div>       
       <div class="sidebar-tooltip">
         <button onclick="testAllKeys()">
           Save/Test all APIs 
@@ -171,7 +175,10 @@
       </label>
       <label for="selectGrok">
         <input type="checkbox" id="selectGrok" checked> Grok
-      </label>      
+      </label>
+      <label for="selectExa">
+        <input type="checkbox" id="selectExa" checked> Exa
+      </label>        
     </div>
 
     <!-- Trennstrich zwischen API Keys und Leaderboard -->
@@ -213,7 +220,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v0.4.3</span>
+    <span id="version-number">v0.5.0</span>
   </div>
 </div>
 
@@ -251,7 +258,7 @@
             <span class="search-mode-label">Web Search</span>
             <!-- Disclaimer, der nur beim Aktivieren angezeigt wird -->
             <span id="searchDisclaimer" class="search-disclaimer" style="display: none; font-size: 0.8em; margin-left: 5px;">
-              Currently only available with ChatGPT and Gemini, soon also usable with other models!
+              Currently available with ChatGPT, Gemini and Exa. Soon also usable with other models!
             </span>
           </div>
         </div>
@@ -348,7 +355,21 @@
           </div>
         </h2>
         <p class="collapsible-content"></p>
-      </div>     
+      </div>
+      <!-- Antwort Exa -->
+      <div class="response-box" id="exaResponse" data-model="Exa">
+        <h2>
+          <span class="title">Response from Exa <small>(exa)</small></span>
+          <div class="control-icons">
+            <span class="best-btn" onclick="toggleBest('exaResponse')" title="Mark as best answer">&#10003;</span>
+            <span class="exclude-btn" onclick="toggleExclude('exaResponse')" title="Exclude answer">&#10005;</span>
+            <button class="collapse-btn" onclick="toggleCollapse('exaResponse')">
+              <span class="arrow">&#9660;</span>
+            </button>
+          </div>
+        </h2>
+        <p class="collapsible-content"></p>
+      </div>  
     </div>
     
     <!-- Konsens-Section -->
@@ -451,7 +472,8 @@
                         localStorage.getItem("anthropicKey") ||
                         localStorage.getItem("geminiKey") ||
                         localStorage.getItem("deepseekKey") ||
-                        localStorage.getItem("grokKey");
+                        localStorage.getItem("grokKey") ||
+                        localStorage.getItem("exaKey");
       
       if (isLoggedIn || hasApiKeys) {
         questionInput.placeholder = "Enter your question";
@@ -496,6 +518,55 @@
           }
         }
       });
+
+      // Elemente für den Search Mode:
+      const searchModeToggle = document.getElementById("searchModeToggle");
+      const searchDisclaimer = document.getElementById("searchDisclaimer");
+      const consensusDropdown = document.getElementById("consensusModelDropdown");
+      
+      // Checkboxen für die Modelle:
+      const openaiCheckbox = document.getElementById("selectOpenAI");
+      const mistralCheckbox = document.getElementById("selectMistral");
+      const claudeCheckbox = document.getElementById("selectClaude");
+      const geminiCheckbox = document.getElementById("selectGemini");
+      const deepseekCheckbox = document.getElementById("selectDeepSeek");
+      const grokCheckbox = document.getElementById("selectGrok");
+      const exaCheckbox = document.getElementById("selectExa");
+
+      // Label-Container der Checkboxen:
+      const mistralLabel = document.querySelector("label[for='selectMistral']");
+      const claudeLabel = document.querySelector("label[for='selectClaude']");
+      const deepseekLabel = document.querySelector("label[for='selectDeepSeek']");
+      const grokLabel = document.querySelector("label[for='selectGrok']");
+      const exaLabel = document.querySelector("label[for='selectExa']");
+
+      // Exa standardmäßig ausblenden, da es nur im Search Mode verwendet wird:
+      exaCheckbox.checked = false;
+      exaCheckbox.disabled = true;
+      exaLabel.style.display = "none";
+      setResponseBoxDisplay("exaResponse", "none");
+
+      // Funktion, um Response-Boxen komplett auszublenden oder einzublenden:
+      function setResponseBoxDisplay(id, displayValue) {
+        const el = document.getElementById(id);
+        if (el) {
+          el.style.display = displayValue;
+        }
+      }
+
+      // Funktion, um Buttons in den Response-Boxen zu deaktivieren/aktivieren:
+      function updateButtons(selector, disable) {
+        const btns = document.querySelectorAll(selector);
+        btns.forEach(btn => {
+          if (disable) {
+            btn.style.pointerEvents = "none";
+            btn.style.opacity = "0.5";
+          } else {
+            btn.style.pointerEvents = "";
+            btn.style.opacity = "";
+          }
+        });
+      }
 
       // Beispiel für das Setzen des systemPrompt-Wertes, falls noch nicht gesetzt:
       const defaultPrompt = "Please respond briefly and precisely, focusing only on the essentials.";
@@ -826,7 +897,8 @@
         const geminiBox = document.getElementById("geminiResponse");
         const deepseekBox = document.getElementById("deepseekResponse");
         const grokBox = document.getElementById("grokResponse");
-
+        const exaBox = document.getElementById("exaResponse");
+        
         // Zähle nur die Modelle, die nicht als "ausgeschlossen" markiert sind
         if (!openaiBox.classList.contains("excluded")) totalRequiredResponses++;
         if (!mistralBox.classList.contains("excluded")) totalRequiredResponses++;
@@ -834,6 +906,7 @@
         if (!geminiBox.classList.contains("excluded")) totalRequiredResponses++;
         if (!deepseekBox.classList.contains("excluded")) totalRequiredResponses++;
         if (!grokBox.classList.contains("excluded")) totalRequiredResponses++;
+        if (document.getElementById("searchModeToggle").checked && !exaBox.classList.contains("excluded")) totalRequiredResponses++;
 
         let activeModels = [];
         if (document.getElementById("selectOpenAI").checked) activeModels.push("OpenAI");
@@ -842,6 +915,7 @@
         if (document.getElementById("selectGemini").checked) activeModels.push("Google Gemini");
         if (document.getElementById("selectDeepSeek").checked) activeModels.push("DeepSeek");
         if (document.getElementById("selectGrok").checked) activeModels.push("Grok");
+        if (document.getElementById("selectExa").checked && document.getElementById("searchModeToggle").checked) activeModels.push("Exa");
     
         // Spinner in den jeweiligen Response-Boxen setzen
         if (activeModels.includes("OpenAI")) {
@@ -862,6 +936,9 @@
         if (activeModels.includes("Grok")) {
           document.getElementById("grokResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
         }
+        if (activeModels.includes("Exa")) {
+          document.getElementById("exaResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
+        }
         if (document.getElementById("autoConsensusToggle").checked) {
           document.getElementById("consensusResponse").querySelector("p").innerHTML = spinnerHTML;
         } else {
@@ -875,6 +952,7 @@
         const geminiKey = localStorage.getItem("geminiKey") || "";
         const deepseekKey = localStorage.getItem("deepseekKey") || "";
         const grokKey = localStorage.getItem("grokKey") || "";
+        const exaKey = localStorage.getItem("exaKey") || "";
     
         let responsesReceived = 0;
         const totalActive = activeModels.length;
@@ -1276,6 +1354,64 @@
           checkAllResponses();
         });
       }
+
+      // Exa
+      if (activeModels.includes("Exa")) {
+        const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
+        const payload = {
+          question: question,
+          active_count: 1,
+          system_prompt: customSystemPrompt,
+          search_mode: document.getElementById("searchModeToggle").checked  // optional, falls benötigt
+        };
+
+        if (!useOwnKeys) {
+          let id_token = localStorage.getItem("id_token");
+          if (id_token) {
+            payload.id_token = id_token;
+          } else {
+            // Nehme hier den Exa API-Key (z. B. gespeichert unter "exaKey")
+            payload.api_key = localStorage.getItem("exaKey") || "";
+          }
+        } else {
+          if (!validateUserKey("exaKey")) {
+            alert("Please enter a valid Exa API key.");
+            return;
+          }
+          payload.api_key = localStorage.getItem("exaKey");
+        }
+
+        fetch('/ask_exa', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          keepalive: true
+        })
+          .then(response => response.json())
+          .then(data => {
+            const outputEl = document.getElementById("exaResponse").querySelector(".collapsible-content");
+            if (data.response) {
+              outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+              addCopyButtons(outputEl);
+              if (auth.currentUser) {
+                saveBookmark(question, data.response, "Exa");
+              }
+            } else if (data.error) {
+              outputEl.innerText = data.error;
+            } else {
+              outputEl.innerText = "Please log in or store your own API keys.";
+            }
+            if (data.free_usage_remaining !== undefined) {
+              document.getElementById("freeUsageDisplay").innerText =
+                "Free requests: " + data.free_usage_remaining + " / " + FREE_USAGE_LIMIT;
+            }
+            checkAllResponses();
+          })
+          .catch(error => {
+            console.error("Error with Exa:", error);
+            checkAllResponses();
+          });
+        }
     };
     
       // Modelle (Checkboxen) ein-/ausschalten
@@ -1305,9 +1441,12 @@
       document.getElementById("selectGrok").addEventListener("change", function() {
         toggleModel("grokResponse", this.checked);
       });
+      document.getElementById("selectExa").addEventListener("change", function() {
+        toggleModel("exaResponse", this.checked);
+      });
     
       // Erneut API Keys in Felder schreiben (falls benötigt)
-      ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey", "grokKey"].forEach(function(key) {
+      ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey", "grokKey", "exaKey"].forEach(function(key) {
         const stored = localStorage.getItem(key);
         if (stored) {
           document.getElementById(key).value = stored;
@@ -1315,8 +1454,8 @@
       });
 
     // Search Mode Toggle: Modelle automatisch anpassen, wenn aktiviert
-    const searchModeToggle = document.getElementById("searchModeToggle");
-    const searchDisclaimer = document.getElementById("searchDisclaimer");
+    //const searchModeToggle = document.getElementById("searchModeToggle");
+    //const searchDisclaimer = document.getElementById("searchDisclaimer");
 
     function showDisclaimerPopup() {
       const popup = document.getElementById('disclaimerPopup');
@@ -1330,23 +1469,14 @@
     searchModeToggle.addEventListener("change", function() {
       const isSearchMode = this.checked;
 
-      // Hole die Checkboxen der Modelle
-      const openaiCheckbox = document.getElementById("selectOpenAI");
-      const mistralCheckbox = document.getElementById("selectMistral");
-      const claudeCheckbox = document.getElementById("selectClaude");
-      const geminiCheckbox = document.getElementById("selectGemini");
-      const deepseekCheckbox = document.getElementById("selectDeepSeek");
-      const grokCheckbox = document.getElementById("selectGrok");
-
       // Hole das Konsens-Dropdown
       const consensusDropdown = document.getElementById("consensusModelDropdown");
 
       if (isSearchMode) {
-        // Zeige den Inline-Disclaimer zunächst an
+        // Zeige den Disclaimer an (ggf. später wieder ausblenden, wenn auf kleinen Bildschirmen ein Popup verwendet wird)
         searchDisclaimer.style.display = "inline-block";
-        
-        // Nur OpenAI (ChatGPT) unterstützt aktuell den Search Mode.
-        // Deaktiviere und deaktiviere alle anderen Modelle.
+
+        // Deaktiviere und deaktiviere die nicht benötigten Modelle (Mistral, Anthropic/Claude, DeepSeek, Grok)
         mistralCheckbox.checked = false;
         claudeCheckbox.checked = false;
         deepseekCheckbox.checked = false;
@@ -1357,71 +1487,86 @@
         deepseekCheckbox.disabled = true;
         grokCheckbox.disabled = true;
 
-        // Optional: Setze die zugehörigen Response-Boxen auf "ausgeschlossen"
-        toggleModel("mistralResponse", false);
-        toggleModel("claudeResponse", false);
-        toggleModel("deepseekResponse", false);
-        toggleModel("grokResponse", false);
+        // Optional: Setze die zugehörigen Response-Boxen als "ausgeschlossen" (hier zusätzlich komplett ausblenden)
+        setResponseBoxDisplay("mistralResponse", "none");
+        setResponseBoxDisplay("claudeResponse", "none");
+        setResponseBoxDisplay("deepseekResponse", "none");
+        setResponseBoxDisplay("grokResponse", "none");
 
-        // ...und deaktiviere zusätzlich die Buttons in den Response-Boxen:
-        const disableButtons = (selector) => {
-          const btns = document.querySelectorAll(selector);
-          btns.forEach(btn => {
-            btn.style.pointerEvents = "none";
-            btn.style.opacity = "0.5";
-          });
-        };
-        disableButtons("#mistralResponse .best-btn, #mistralResponse .exclude-btn");
-        disableButtons("#claudeResponse .best-btn, #claudeResponse .exclude-btn");
-        disableButtons("#deepseekResponse .best-btn, #deepseekResponse .exclude-btn");
-        disableButtons("#grokResponse .best-btn, #grokResponse .exclude-btn");
+        // Blende auch die zugehörigen Labels aus:
+        mistralLabel.style.display = "none";
+        claudeLabel.style.display = "none";
+        deepseekLabel.style.display = "none";
+        grokLabel.style.display = "none";
 
-        // Setze das Konsensmodell automatisch auf OpenAI und deaktiviere die Auswahl
+        // Deaktiviere zusätzlich die Buttons in den Response-Boxen (falls noch sichtbar)
+        updateButtons("#mistralResponse .best-btn, #mistralResponse .exclude-btn", true);
+        updateButtons("#claudeResponse .best-btn, #claudeResponse .exclude-btn", true);
+        updateButtons("#deepseekResponse .best-btn, #deepseekResponse .exclude-btn", true);
+        updateButtons("#grokResponse .best-btn, #grokResponse .exclude-btn", true);
+
+        // Zeige Exa und reaktiviere sie:
+        exaCheckbox.disabled = false;
+        exaCheckbox.checked = true;
+        exaLabel.style.removeProperty("display");
+        exaCheckbox.style.removeProperty("display");
+        setResponseBoxDisplay("exaResponse", "block");
+
+        // Setze das Konsens-Dropdown automatisch auf OpenAI und deaktiviere die Auswahl:
         consensusDropdown.value = "OpenAI";
         consensusDropdown.disabled = true;
 
-        // Auf kleinen Bildschirmen: Popup anzeigen statt Inline-Disclaimer
-        if (window.innerWidth < 1400) {
-          showDisclaimerPopup();
-          searchDisclaimer.style.display = "none";
-        }
+      // Auf kleinen Bildschirmen: Popup statt Inline-Disclaimer
+      if (window.innerWidth < 1400) {
+        showDisclaimerPopup();
+        searchDisclaimer.style.display = "none";
+      }
       } else {
-        // Schalte den Inline-Disclaimer aus
+        // Suchmodus ist deaktiviert:
+        // Blende den Disclaimer aus
         searchDisclaimer.style.display = "none";
 
-        // Reaktiviere alle Modelle, wenn der Search Mode ausgeschaltet wird.
+        // Reaktiviere alle Modelle:
         mistralCheckbox.disabled = false;
         claudeCheckbox.disabled = false;
         deepseekCheckbox.disabled = false;
         grokCheckbox.disabled = false;
 
-        // Setze die Checkboxen wieder auf "angewählt"
+        // Setze die Checkboxen der Modelle (außer Exa) auf "angewählt":
         mistralCheckbox.checked = true;
         claudeCheckbox.checked = true;
         deepseekCheckbox.checked = true;
         grokCheckbox.checked = true;
 
-        // Aktualisiere die zugehörigen Response-Boxen als "nicht ausgeschlossen"
-        toggleModel("mistralResponse", true);
-        toggleModel("claudeResponse", true);
-        toggleModel("geminiResponse", true);
-        toggleModel("deepseekResponse", true);
-        toggleModel("grokResponse", true);
+        // Zeige die Response-Boxen wieder:
+        setResponseBoxDisplay("mistralResponse", "block");
+        setResponseBoxDisplay("claudeResponse", "block");
+        setResponseBoxDisplay("deepseekResponse", "block");
+        setResponseBoxDisplay("grokResponse", "block");
 
-        // Reaktiviere die Buttons wieder:
-        const enableButtons = (selector) => {
-          const btns = document.querySelectorAll(selector);
-          btns.forEach(btn => {
-            btn.style.pointerEvents = "";
-            btn.style.opacity = "";
-          });
-        };
-        enableButtons("#mistralResponse .best-btn, #mistralResponse .exclude-btn");
-        enableButtons("#claudeResponse .best-btn, #claudeResponse .exclude-btn");
-        enableButtons("#deepseekResponse .best-btn, #deepseekResponse .exclude-btn");
-        enableButtons("#grokResponse .best-btn, #grokResponse .exclude-btn");
+        // Zeige die zugehörigen Labels wieder an – einmalig, ohne Duplikate:
+        mistralLabel.style.removeProperty("display");
+        claudeLabel.style.removeProperty("display");
+        deepseekLabel.style.removeProperty("display");
+        grokLabel.style.removeProperty("display");
+        //exaLabel.style.removeProperty("display");
 
-        // Reaktiviere das Konsens-Dropdown
+        // (Exa wird bereits unten ausgeblendet.)
+        exaCheckbox.disabled = true;
+        exaCheckbox.checked = false;
+        setResponseBoxDisplay("exaResponse", "none");
+        exaCheckbox.style.display = "none";
+        exaLabel.style.display = "none";
+
+        // Reaktiviere die Buttons in den Response-Boxen:
+        updateButtons("#mistralResponse .best-btn, #mistralResponse .exclude-btn", false);
+        updateButtons("#claudeResponse .best-btn, #claudeResponse .exclude-btn", false);
+        updateButtons("#deepseekResponse .best-btn, #deepseekResponse .exclude-btn", false);
+        updateButtons("#grokResponse .best-btn, #grokResponse .exclude-btn", false);
+
+        consensusButton.disabled = true;
+
+        // Reaktiviere das Konsens-Dropdown:
         consensusDropdown.disabled = false;
       }
     });
@@ -1459,6 +1604,9 @@
           if (document.getElementById("grokResponse").classList.contains("best")) {
             recordModelVote("Grok", "best");
           }
+          if (searchMode && document.getElementById("exaResponse").classList.contains("best")) {
+            recordModelVote("Exa", "best");
+          }
 
           // Ebenso für "excluded" (sofern du das separat erfassen möchtest).
           if (document.getElementById("openaiResponse").classList.contains("excluded")) {
@@ -1478,6 +1626,9 @@
           }
           if (document.getElementById("grokResponse").classList.contains("excluded")) {
             recordModelVote("Grok", "exclude");
+          }
+          if (searchMode && document.getElementById("exaResponse").classList.contains("excluded")) {
+            recordModelVote("Exa", "exclude");
           }
 
           // Aktualisiere die letzte verarbeitete Frage.
@@ -1501,6 +1652,7 @@
       const geminiBox = document.getElementById("geminiResponse");
       const deepseekBox = document.getElementById("deepseekResponse");
       const grokBox = document.getElementById("grokResponse");
+      const exaBox = document.getElementById("exaResponse");
 
       // Lies die Antworten (trim für überflüssige Leerzeichen)
       const answer_openai = openaiBox.querySelector(".collapsible-content").innerText.trim();
@@ -1509,17 +1661,25 @@
       const answer_gemini = geminiBox.querySelector(".collapsible-content").innerText.trim();
       const answer_deepseek = deepseekBox.querySelector(".collapsible-content").innerText.trim();
       const answer_grok = grokBox.querySelector(".collapsible-content").innerText.trim();
+      const answer_exa = exaBox.querySelector(".collapsible-content").innerText.trim();
 
       // Überprüfe nur die Modelle, die nicht als "ausgeschlossen" markiert sind.
       if (
         !question ||
         !consensus_model ||
+        // Überprüfe immer OpenAI und Gemini:
         (!openaiBox.classList.contains("excluded") && !answer_openai) ||
-        (!mistralBox.classList.contains("excluded") && !answer_mistral) ||
-        (!claudeBox.classList.contains("excluded") && !answer_claude) ||
         (!geminiBox.classList.contains("excluded") && !answer_gemini) ||
-        (!deepseekBox.classList.contains("excluded") && !answer_deepseek) ||
-        (!grokBox.classList.contains("excluded") && !answer_grok)
+        // Wenn Search Mode aktiv ist, prüfe Exa, ansonsten die anderen Modelle:
+        (searchMode 
+          ? (!exaBox.classList.contains("excluded") && !answer_exa)
+          : (
+              (!mistralBox.classList.contains("excluded") && !answer_mistral) ||
+              (!claudeBox.classList.contains("excluded") && !answer_claude) ||
+              (!deepseekBox.classList.contains("excluded") && !answer_deepseek) ||
+              (!grokBox.classList.contains("excluded") && !answer_grok)
+            )
+        )
       ) {
         alert("Refresh the page. Please send a question first, retrieve all answers and select the consensus model.");
         return;
@@ -1549,6 +1709,9 @@
       if (grokBox.classList.contains("excluded")) {
         excludedModels.push(grokBox.getAttribute("data-model"));
       }
+      if (exaBox.classList.contains("excluded")) {
+        excludedModels.push(exaBox.getAttribute("data-model"));
+      }
 
       // Hole API Keys aus localStorage
       const openaiKey = localStorage.getItem("openaiKey") || "";
@@ -1557,6 +1720,7 @@
       const geminiKey = localStorage.getItem("geminiKey") || "";
       const deepseekKey= localStorage.getItem("deepseekKey") || "";
       const grokKey= localStorage.getItem("grokKey") || "";
+      const exaKey= localStorage.getItem("exaKey") || "";
 
       try {
         const response = await fetch("/consensus", {
@@ -1575,6 +1739,7 @@
             answer_gemini: answer_gemini,
             answer_deepseek: answer_deepseek,
             answer_grok: answer_grok,
+            answer_exa: answer_exa,
             best_model: best_model,
             consensus_model: consensus_model,
             excluded_models: excludedModels,
@@ -1584,6 +1749,7 @@
             gemini_key: geminiKey,
             deepseek_key: deepseekKey,
             grok_key: grokKey,
+            exa_key: exaKey,
             keepalive: true
           })
         });
@@ -1624,12 +1790,14 @@
         const geminiKey = document.getElementById("geminiKey").value;
         const deepseekKey = document.getElementById("deepseekKey").value;
         const grokKey = document.getElementById("grokKey").value;
+        const exaKey = document.getElementById("exaKey").value;
         localStorage.setItem("openaiKey", openaiKey);
         localStorage.setItem("mistralKey", mistralKey);
         localStorage.setItem("anthropicKey", anthropicKey);
         localStorage.setItem("geminiKey", geminiKey);
         localStorage.setItem("deepseekKey", deepseekKey);
         localStorage.setItem("grokKey", grokKey);
+        localStorage.setItem("exaKey", exaKey);
         const spinner = document.getElementById("apiSpinner");
         spinner.style.display = "inline-block";
         try {
@@ -1642,7 +1810,8 @@
               anthropic_key: anthropicKey,
               gemini_key: geminiKey,
               deepseek_key: deepseekKey,
-              grok_key: grokKey
+              grok_key: grokKey,
+              exa_key: exaKey
             })
           });
           if (!response.ok) {
@@ -1660,12 +1829,14 @@
           const geminiResult = data.results["Google Gemini"];
           const deepseekResult = data.results["DeepSeek"];
           const grokResult = data.results["Grok"];
+          const exaResult = data.results["Exa"];
           const openaiFeedback = document.getElementById("openaiFeedback");
           const mistralFeedback = document.getElementById("mistralFeedback");
           const anthropicFeedback = document.getElementById("anthropicFeedback");
           const geminiFeedback = document.getElementById("geminiFeedback");
           const deepseekFeedback = document.getElementById("deepseekFeedback");
           const grokFeedback = document.getElementById("grokFeedback");
+          const exaFeedback = document.getElementById("exaFeedback");
           openaiFeedback.innerHTML = openaiResult === "valid" ? "&#10003;" : "&#10007;";
           openaiFeedback.style.color = openaiResult === "valid" ? "green" : "red";
           mistralFeedback.innerHTML = mistralResult === "valid" ? "&#10003;" : "&#10007;";
@@ -1678,6 +1849,8 @@
           deepseekFeedback.style.color = deepseekResult === "valid" ? "green" : "red";
           grokFeedback.innerHTML = grokResult === "valid" ? "&#10003;" : "&#10007;";
           grokFeedback.style.color = grokResult === "valid" ? "green" : "red";
+          exaFeedback.innerHTML = exaResult === "valid" ? "&#10003;" : "&#10007;";
+          exaFeedback.style.color = exaResult === "valid" ? "green" : "red";
         } catch (error) {
           console.error("Fehler beim Testen der API Keys:", error);
           alert("Fehler beim Testen der API Keys: " + error.message);
@@ -1711,7 +1884,7 @@
   </div>
 </div>
 <div id="disclaimerPopup" class="popup">
-  <p>Currently only usable with ChatGPT and Gemini, soon also with other models!</p>
+  <p>Currently usable with ChatGPT, Gemini and Exa. Soon also with other models!</p>
 </div>
 <div id="popupContainer">
   <!-- Modal zum Editieren des Systemprompts -->

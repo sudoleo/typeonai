@@ -293,6 +293,9 @@ function loadBookmarks() {
                 document.getElementById("grokResponse")
                   .querySelector(".collapsible-content").innerHTML =
                   marked.parse(bookmarkData.responses["Grok"] || "");
+                document.getElementById("exaResponse")
+                  .querySelector(".collapsible-content").innerHTML =
+                  marked.parse(bookmarkData.responses["Exa"] || "");
                 // Zusätzlich Konsens & Unterschiede laden:
                 document.getElementById("consensusResponse")
                   .querySelector(".consensus-main p").innerHTML =

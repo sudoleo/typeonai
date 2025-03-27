@@ -181,10 +181,31 @@ def query_grok(question: str, api_key: str, system_prompt: str = None) -> str:
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Error with Grok: {str(e)}"
+    
+    
+def query_exa(question: str, api_key: str, search_mode: bool, system_prompt: str = None) -> str:
+    if not search_mode:
+        # Falls der Search Mode nicht aktiv ist, wird Exa nicht angefragt.
+        return ""
+    if system_prompt is None:
+        system_prompt = DEFAULT_SYSTEM_PROMPT
+    try:
+        client = openai.OpenAI(api_key=api_key, base_url="https://api.exa.ai")
+        response = client.chat.completions.create(
+            model="exa",  # Alternativ: "exa-pro", falls gewünscht
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": question}
+            ],
+            extra_body={"text": True}  # Stellt sicher, dass als Text geantwortet wird
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Error with Exa: {str(e)}"
 
 
 def query_consensus(question: str, answer_openai: str, answer_mistral: str, answer_claude: str, 
-                    answer_gemini: str, answer_deepseek: str, answer_grok: str,
+                    answer_gemini: str, answer_deepseek: str, answer_grok: str, answer_exa: str,
                     best_model: str, excluded_models: list, consensus_model: str, 
                     api_keys: dict, search_mode: bool = False) -> str:
     """
@@ -207,6 +228,8 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
         prompt_parts.append(f"Response from deepseek-chat: {answer_deepseek}\n\n")
     if "Grok" not in excluded_models and answer_grok:
         prompt_parts.append(f"Response from Grok: {answer_grok}\n\n")
+    if "Exa" not in excluded_models and answer_exa:
+        prompt_parts.append(f"Response from Exa: {answer_exa}\n\n")
 
     if best_model:
         prompt_parts.append(
@@ -221,6 +244,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
     else:
         prompt_parts.append(
             "You receive four expert opinions on a specific question. "
+            "Treat all expert opinions equally. Do not focus on the answer of one model. "
             "Your task is to combine these responses into a comprehensive, correct, and coherent answer. "
             "Note: Experts can also make mistakes. Therefore, try to identify and exclude possible errors by comparing the answers. "
             "If the answers strongly contradict each other at any point, logically determine which variant is most plausible. "
@@ -320,6 +344,19 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 max_tokens=2048
             )
             return response.choices[0].message.content.strip()
+        
+        elif consensus_model == "Exa":
+            client = openai.OpenAI(api_key=api_keys.get("Exa"), base_url="https://api.exa.ai")
+            response = client.chat.completions.create(
+                model="exa",  # Alternativ "exa-pro", falls gewünscht
+                messages=[
+                    {"role": "system", "content": ""},
+                    {"role": "user", "content": consensus_prompt}
+                ],
+                extra_body={"text": True},
+                max_tokens=2048
+            )
+            return response.choices[0].message.content.strip()
 
         else:
             return "Invalid consensus model selected."
@@ -327,7 +364,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
         return f"Consensus error: {str(e)}"
     
 
-def query_differences(answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, answer_deepseek: str, answer_grok: str, consensus_answer: str, api_keys: dict, differences_model: str, search_mode: bool = False) -> str:
+def query_differences(answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, answer_deepseek: str, answer_grok: str, answer_exa: str, consensus_answer: str, api_keys: dict, differences_model: str, search_mode: bool = False) -> str:
     """
     Extrahiert die Unterschiede zwischen den vier Expertenantworten mittels des angegebenen Konsens‑Modells.
     """
@@ -336,6 +373,7 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
         responses_text = (
             f"- GPT-4o: {answer_openai}\n"
             f"- Gemini: {answer_gemini}\n"
+            f"- Exa: {answer_exa}\n"
         )
         best_models_instruction = "Choose from one of the following models: OpenAI or Gemini."
     else:
@@ -456,6 +494,19 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
                     {"role": "system", "content": "Answer in the exact same Langugage as the Model responses: "},
                     {"role": "user", "content": differences_prompt}
                 ]
+            )
+            return response.choices[0].message.content.strip()
+        
+        elif differences_model == "Exa":
+            client = openai.OpenAI(api_key=api_keys.get("Exa"), base_url="https://api.exa.ai")
+            response = client.chat.completions.create(
+                model="exa",  # oder "exa-pro" falls gewünscht
+                messages=[
+                    {"role": "system", "content": "Answer in the exact same language as the Model responses:"},
+                    {"role": "user", "content": differences_prompt}
+                ],
+                extra_body={"text": True},
+                max_tokens=2048
             )
             return response.choices[0].message.content.strip()
 
@@ -789,6 +840,48 @@ async def ask_grok_post(data: dict = Body(...)):
         return {"response": answer, "key_used": "User API Key"}
     else:
         raise HTTPException(status_code=400, detail="No id_token or api_key specified.")
+    
+
+@app.post("/ask_exa")
+async def ask_exa_post(data: dict = Body(...)):
+    """
+    Endpoint für Exa im Search Mode.
+    Nutzt entweder den Developer-API-Key (bei eingeloggten Nutzern) oder einen vom User gelieferten API-Key.
+    """
+    question = data.get("question")
+    if count_words(question) > MAX_WORDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {MAX_WORDS} Wörtern."
+        )
+    system_prompt = data.get("system_prompt")
+    id_token = data.get("id_token")
+    api_key = data.get("api_key")
+    # Exa wird ausschließlich im Search Mode eingesetzt
+    active_count = data.get("active_count", 1)
+
+    if id_token:
+        try:
+            uid = verify_user_token(id_token)
+        except Exception:
+            raise HTTPException(status_code=401, detail="Authentication failed")
+        current_usage = usage_counter.get(uid, 0)
+        increment = 1.0 / active_count
+        if current_usage + increment > FREE_USAGE_LIMIT:
+            return {"error": "Your free quota is exhausted. Please provide your own API keys."}
+        usage_counter[uid] = current_usage + increment
+
+        developer_api_key = os.environ.get("DEVELOPER_EXA_API_KEY")
+        if not developer_api_key:
+            raise HTTPException(status_code=500, detail="Server error: API key not configured")
+        answer = query_exa(question, developer_api_key, system_prompt)
+        free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
+        return {"response": answer, "free_usage_remaining": free_remaining, "key_used": "Developer API Key"}
+    elif api_key:
+        answer = query_exa(question, api_key, system_prompt)
+        return {"response": answer, "key_used": "User API Key"}
+    else:
+        raise HTTPException(status_code=400, detail="No authentication parameter (id_token or api_key) specified")
 
 
 @app.post("/consensus")
@@ -822,6 +915,7 @@ async def consensus(data: dict):
     answer_gemini   = data.get("answer_gemini")
     answer_deepseek = data.get("answer_deepseek")
     answer_grok     = data.get("answer_grok")
+    answer_exa     = data.get("answer_exa")
     best_model      = data.get("best_model", "")
     consensus_model = data.get("consensus_model")
     excluded_models = data.get("excluded_models", [])
@@ -836,6 +930,7 @@ async def consensus(data: dict):
         api_keys["Google Gemini"] = data.get("gemini_key")
         api_keys["DeepSeek"] = data.get("deepseek_key")
         api_keys["Grok"] = data.get("grok_key")
+        api_keys["Exa"] = data.get("exa_key")
     else:
         api_keys["OpenAI"] = data.get("openai_key") or os.environ.get("DEVELOPER_OPENAI_API_KEY")
         api_keys["Mistral"] = data.get("mistral_key") or os.environ.get("DEVELOPER_MISTRAL_API_KEY")
@@ -843,6 +938,7 @@ async def consensus(data: dict):
         api_keys["Google Gemini"] = data.get("gemini_key") or os.environ.get("DEVELOPER_GEMINI_API_KEY")
         api_keys["DeepSeek"] = data.get("deepseek_key") or os.environ.get("DEVELOPER_DEEPSEEK_API_KEY")
         api_keys["Grok"] = data.get("grok_key") or os.environ.get("DEVELOPER_GROK_API_KEY")
+        api_keys["Exa"] = data.get("exa_key") or os.environ.get("DEVELOPER_EXA_API_KEY")
 
     # Validierung der erforderlichen Parameter (nur für Modelle, die nicht ausgeschlossen wurden)
     missing = []
@@ -850,26 +946,31 @@ async def consensus(data: dict):
         missing.append("question")
     if not consensus_model:
         missing.append("consensus_model")
+    # Immer prüfen: OpenAI und Gemini
     if "OpenAI" not in excluded_models:
         if not answer_openai or not api_keys.get("OpenAI"):
             missing.append("OpenAI")
-    if "Mistral" not in excluded_models:
-        if not answer_mistral or not api_keys.get("Mistral"):
-            missing.append("Mistral")
-    if "Anthropic" not in excluded_models:
-        if not answer_claude or not api_keys.get("Anthropic"):
-            missing.append("Anthropic")
     if "Google Gemini" not in excluded_models:
-        if not answer_gemini:
+        if not answer_gemini or (use_own_keys and not api_keys.get("Google Gemini")):
             missing.append("Google Gemini")
-        elif use_own_keys and not api_keys.get("Google Gemini"):
-            missing.append("Google Gemini")
-    if "DeepSeek" not in excluded_models:
-        if not answer_deepseek or not api_keys.get("DeepSeek"):
-            missing.append("DeepSeek")
-    if "Grok" not in excluded_models:
-        if not answer_grok or not api_keys.get("Grok"):
-            missing.append("Grok")
+    # Bei Search Mode: nur Exa prüfen, ansonsten die anderen Modelle
+    if search_mode:
+        if "Exa" not in excluded_models:
+            if not answer_exa or not api_keys.get("Exa"):
+                missing.append("Exa")
+    else:
+        if "Mistral" not in excluded_models:
+            if not answer_mistral or not api_keys.get("Mistral"):
+                missing.append("Mistral")
+        if "Anthropic" not in excluded_models:
+            if not answer_claude or not api_keys.get("Anthropic"):
+                missing.append("Anthropic")
+        if "DeepSeek" not in excluded_models:
+            if not answer_deepseek or not api_keys.get("DeepSeek"):
+                missing.append("DeepSeek")
+        if "Grok" not in excluded_models:
+            if not answer_grok or not api_keys.get("Grok"):
+                missing.append("Grok")
 
     if missing:
         raise HTTPException(status_code=400, detail="Missing parameters: " + ", ".join(missing))
@@ -879,12 +980,12 @@ async def consensus(data: dict):
 
     # Konsens-Antwort generieren
     consensus_answer = query_consensus(
-        question, answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok,
+        question, answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok, answer_exa, 
         best_model, excluded_models, consensus_model, api_keys, search_mode)
 
     # Unterschiede ermitteln
     differences = query_differences(
-        answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok,
+        answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok, answer_exa,
         consensus_answer, api_keys, differences_model=consensus_model, search_mode=search_mode)
 
     return {"consensus_response": consensus_answer, "differences": differences}
@@ -904,6 +1005,7 @@ async def check_keys(data: dict):
         gemini_key = data.get("gemini_key")
         deepseek_key = data.get("deepseek_key")
         grok_key = data.get("grok_key")
+        exa_key = data.get("exa_key")
         
         results = {}
         
@@ -1013,6 +1115,25 @@ async def check_keys(data: dict):
                 results["Google Gemini"] = "invalid"
         except Exception as e:
             results["Google Gemini"] = "invalid"
+
+        # Exa Handshake
+        try:
+            exa_key = data.get("exa_key")
+            if exa_key and len(exa_key) > 10:
+                client = openai.OpenAI(api_key=exa_key, base_url="https://api.exa.ai")
+                response = client.chat.completions.create(
+                    model="exa",  # Alternativ "exa-pro" falls gewünscht
+                    messages=[
+                        {"role": "system", "content": "ping"},
+                        {"role": "user", "content": "ping"}
+                    ],
+                    extra_body={"text": True}
+                )
+                results["Exa"] = "valid"
+            else:
+                results["Exa"] = "invalid"
+        except Exception as e:
+            results["Exa"] = "invalid"
         
         return {"results": results}
 
