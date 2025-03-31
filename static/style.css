@@ -258,128 +258,128 @@ z-index: 2000;  /* höher als der toggleAllButton */
 }
 
 .input-icon {
-width: 100px;
-height: 100px;
+  width: 100px;
+  height: 100px;
 }
 
 .response-section {
-display: flex;
-gap: 15px;
-margin-bottom: 20px;
-flex-wrap: wrap;
-justify-content: space-between;
+  display: flex;
+  gap: 15px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  justify-content: space-between;
 }
 
 #toggleAllButton {
-position: absolute;
-top: -23px;    /* Passt die vertikale Position an */
-right: -13px;   /* Passt die horizontale Position an */
-border: none;
-background: none;
-cursor: pointer;
-z-index: 1000;
+  position: absolute;
+  top: -23px;    /* Passt die vertikale Position an */
+  right: -13px;   /* Passt die horizontale Position an */
+  border: none;
+  background: none;
+  cursor: pointer;
+  z-index: 1000;
 }
 
 .dark-mode #toggleAllButton .toggle-visual {
-background-color: #3f3f3f;  /* dunkler als #fff */
-border: 1px solid #535353;  /* angepasster Rahmen */
-box-shadow: 0 1px 3px rgba(0,0,0,0.5); /* optional angepasster Schatten */
+  background-color: #3f3f3f;  /* dunkler als #fff */
+  border: 1px solid #535353;  /* angepasster Rahmen */
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5); /* optional angepasster Schatten */
 }
 
 /* Das visuelle Element (der Strich) */
 #toggleAllButton .toggle-visual {
-display: block;
-width: 25px;
-height: 5px;
-background-color: #fff;
-border: 1px solid #ccc;
-border-radius: 3px;
-box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-transition: background-color 0.3s, box-shadow 0.3s;
-animation: pulse 2s ease-out;
+  display: block;
+  width: 25px;
+  height: 5px;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: background-color 0.3s, box-shadow 0.3s;
+  animation: pulse 2s ease-out;
 }
 
 /* Hover-Effekt über den Button (optional, greift auch auf den inneren Strich) */
 #toggleAllButton:hover .toggle-visual {
-background-color: #f9f9f9;
-box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+  background-color: #f9f9f9;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
 }
 
 /* Container: einfache Ausrichtung ohne Rahmen oder Hintergrund */
 #usageOptions {
-margin: 10px 0;
-text-align: left;
-font-family: 'Roboto', sans-serif;
-font-size: 14px;
-color: #333;
+  margin: 10px 0;
+  text-align: left;
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  color: #333;
 }
 
 /* Checkbox-Label: linksbündig mit Abstand zwischen Checkbox und Text */
 .custom-checkbox-label {
-display: inline-flex;
-align-items: center;
-gap: 8px;         /* Abstand zwischen Checkbox und Text */
-cursor: pointer;
-margin-bottom: 10px; /* Abstand zum nächsten Element */
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;         /* Abstand zwischen Checkbox und Text */
+  cursor: pointer;
+  margin-bottom: 10px; /* Abstand zum nächsten Element */
 }
 
 /* Individuelle Checkbox */
 .custom-checkbox-label input[type="checkbox"] {
-appearance: none;
--webkit-appearance: none;
-width: 20px;
-height: 20px;
-border: 2px solid #ccc;
-border-radius: 4px;
-transition: background-color 0.3s, border-color 0.3s;
-position: relative;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #ccc;
+  border-radius: 4px;
+  transition: background-color 0.3s, border-color 0.3s;
+  position: relative;
 }
 
 .custom-checkbox-label input[type="checkbox"]:checked {
-background-color: #007bff;
-border-color: #007bff;
+  background-color: #007bff;
+  border-color: #007bff;
 }
 
 .custom-checkbox-label input[type="checkbox"]:checked::after {
-content: "";
-position: absolute;
-left: 6px;
-top: 2px;
-width: 4px;
-height: 10px;
-border: solid white;
-border-width: 0 2px 2px 0;
-transform: rotate(45deg);
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 4px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 
 /* Darkmode-Anpassungen */
 .dark-mode #usageOptions {
-color: #e0e0e0;
+  color: #e0e0e0;
 }
 
 .dark-mode .custom-checkbox-label input[type="checkbox"] {
-border: 2px solid #555;
+  border: 2px solid #555;
 }
 
 .dark-mode .custom-checkbox-label input[type="checkbox"]:checked {
-background-color: #bb86fc;
-border-color: #bb86fc;
+  background-color: #bb86fc;
+  border-color: #bb86fc;
 }
 
 .popup {
-position: fixed;
-bottom: 20px;
-left: 50%;
-transform: translateX(-50%);
-background: rgba(0, 0, 0, 0.8);
-color: #fff;
-padding: 10px 20px;
-border-radius: 4px;
-font-size: 0.8em;
-opacity: 0;
-pointer-events: none;  /* Damit es nicht interaktiv ist */
-transition: opacity 0.5s ease;
-z-index: 2000;
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  opacity: 0;
+  pointer-events: none;  /* Damit es nicht interaktiv ist */
+  transition: opacity 0.5s ease;
+  z-index: 2000;
 }
 
 .popup.show {
@@ -1484,7 +1484,7 @@ font-size: 0.9em;
     flex-direction: column;
     align-items: stretch;
     width: 100%;
-    padding-bottom: 80px; /* Mehr Platz, damit der Text nicht in die Schalter ragt */
+    padding-bottom: 120px; /* Mehr Platz, damit der Text nicht in die Schalter ragt */
   }
   .chat-input-container .input-field {
     width: 100% !important;
@@ -1529,7 +1529,8 @@ font-size: 0.9em;
   .consensus-switch-container {
     flex-direction: column;
     align-items: flex-start;
-    gap: 10px; /* kleiner Abstand zwischen den Schaltern */
+    gap: 5px; /* kleiner Abstand zwischen den Schaltern */
+    justify-content: flex-start;
   }
   .consensus-controls > * {
     width: 100%;
@@ -1544,15 +1545,14 @@ font-size: 0.9em;
     opacity: 0.5;
     display: flex;
     align-items: center;
-    left: -20px;
     margin: 0;
     padding: 0;
   }
   .auto-consensus, .search-mode {
     width: 200px; /* oder ein prozentualer Wert */
+    gap: 5px;
   }
-  
-}  
+}
 
 @media (max-width: 768px) {
 
@@ -1679,9 +1679,245 @@ font-size: 0.9em;
   }
 
   .consensus-switch-container {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  
+  .auto-consensus,
+  .search-mode:not(.deep-search-mode),
+  .deep-search-mode {
+    width: auto !important;
+    min-width: 70px; 
+    flex-shrink: 0;
+    /* Falls du vorher margin-right: 8px vergeben hast, bitte entfernen */
+    margin-right: 0 !important;
+  }
+
+  .deep-search-mode label.switch {
+    margin-left: -8px;
+  }
+  
+  /* ---------------------------------------
+     1) AUTO CONSENSUS
+     --------------------------------------- */
+  
+  /* Alte Elemente ausblenden */
+  .auto-consensus .slider,
+  .auto-consensus .auto-consensus-label {
+    display: none !important;
+  }
+  
+  .auto-consensus label.switch {
+    position: relative;
+    display: inline-block;
+    min-width: 60px;
+    height: 30px;
+    cursor: pointer;
+  }
+  
+  /* Checkbox unsichtbar machen */
+  .auto-consensus label.switch input[type="checkbox"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    margin: 0;
+    cursor: pointer;
+  }
+  
+  /* Text + Icon im ::before unterbringen */
+  .auto-consensus label.switch::before {
+    content: "Auto Consens";
+    display: inline-flex;
+    align-items: center;
+    
+    /* Dünnere Linie, sehr dunkle Schrift & etwas dickere Schriftart */
+    border: 1px solid #aaa;
+    border-radius: 15px;
+    background-color: transparent;
+    color: #000;           /* jetzt reines Schwarz für bessere Lesbarkeit */
+    font-weight: 600;
+    font-size: 0.7em;
+    height: 30px;
+    box-sizing: border-box;
+    
+    /* Icon */
+    background-image: url("./icons/consensus.png");
+    background-repeat: no-repeat;
+    background-size: 16px 16px;
+    background-position: 8px center;
+    
+    /* Padding für Icon-Abstand */
+    padding-left: 28px;
+    padding-right: 8px;
+  }
+  
+  /* Aktivierter Zustand */
+  .auto-consensus label.switch:has(input:checked)::before {
+    background-color: rgba(65, 138, 245, 0.2);
+    color: #418af5;
+    border-color: #418af5;
+    font-weight: 600;
+  }
+  
+  /* ---------------------------------------
+     2) WEB SEARCH
+     --------------------------------------- */
+  
+  /* Alte Elemente ausblenden */
+  .search-mode:not(.deep-search-mode) .slider,
+  .search-mode:not(.deep-search-mode) .search-mode-label,
+  .search-mode:not(.deep-search-mode) .search-disclaimer {
+    display: none !important;
+  }
+  
+  .search-mode:not(.deep-search-mode) label.switch {
+    position: relative;
+    display: inline-block;
+    min-width: 60px;
+    height: 30px;
+    cursor: pointer;
+  }
+  
+  .search-mode:not(.deep-search-mode) label.switch input[type="checkbox"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    margin: 0;
+    cursor: pointer;
+  }
+  
+  .search-mode:not(.deep-search-mode) label.switch::before {
+    content: "Web Search";
+    display: inline-flex;
+    align-items: center;
+    
+    border: 1px solid #aaa;
+    border-radius: 15px;
+    background-color: transparent;
+    color: #000;    /* jetzt reines Schwarz */
+    font-weight: 600;
+    font-size: 0.7em;
+    height: 30px;
+    box-sizing: border-box;
+    
+    background-image: url("./icons/search.png");
+    background-repeat: no-repeat;
+    background-size: 16px 16px;
+    background-position: 8px center;
+    
+    padding-left: 28px;
+    padding-right: 8px;
+  }
+  
+  .search-mode:not(.deep-search-mode) label.switch:has(input:checked)::before {
+    background-color: rgba(65, 138, 245, 0.2);
+    color: #418af5;
+    border-color: #418af5;
+    font-weight: 600;
+  }
+  
+  /* ---------------------------------------
+     3) DEEP SEARCH
+     --------------------------------------- */
+  
+  /* Alte Elemente ausblenden */
+  .deep-search-mode .slider,
+  .deep-search-mode .deep-switch-label,
+  .deep-search-mode .deep-search-disclaimer {
+    display: none !important;
+  }
+  
+  .deep-search-mode .deep-switch {
+    position: relative;
+    display: inline-block;
+    min-width: 60px;
+    height: 30px;
+    cursor: pointer;
+  }
+  
+  .deep-search-mode .deep-switch input[type="checkbox"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    margin: 0;
+    cursor: pointer;
+  }
+  
+  .deep-search-mode .deep-switch::before {
+    content: "Deep Think";
+    display: inline-flex;
+    align-items: center;
+    
+    border: 1px solid #aaa;
+    border-radius: 15px;
+    background-color: transparent;
+    color: #000;    /* jetzt reines Schwarz */
+    font-weight: 600;
+    font-size: 0.7em;
+    height: 30px;
+    box-sizing: border-box;
+    
+    background-image: url("./icons/deepsearch.png");
+    background-repeat: no-repeat;
+    background-size: 16px 16px;
+    background-position: 8px center;
+    
+    padding-left: 28px;
+    padding-right: 8px;
+  }
+  
+  .deep-search-mode .deep-switch:has(input:checked)::before {
+    background-color: rgba(65, 138, 245, 0.2);
+    color: #418af5;
+    border-color: #418af5;
+    font-weight: 600;
+  }
+  
+  /* ---------------------------------------
+     4) Dark Mode-Anpassungen
+     --------------------------------------- */
+  /* Explizite Deklaration für Light Mode */
+  /* White Mode – explizit */
+  :root .auto-consensus label.switch::before,
+  :root .search-mode:not(.deep-search-mode) label.switch::before,
+  :root .deep-search-mode .deep-switch::before {
+    color: #000 !important;
+    border-color: var(--input-border) !important;
+  }
+
+  :root .auto-consensus label.switch:has(input:checked)::before,
+  :root .search-mode:not(.deep-search-mode) label.switch:has(input:checked)::before,
+  :root .deep-search-mode .deep-switch:has(input:checked)::before {
+    color: #000 !important;
+    background-color: rgba(65, 138, 245, 0.2) !important; /* bleibt wie gehabt */
+    border-color: var(--input-border) !important;
+  }
+
+  /* Dark Mode – explizit */
+  .dark-mode .auto-consensus label.switch::before,
+  .dark-mode .search-mode:not(.deep-search-mode) label.switch::before,
+  .dark-mode .deep-search-mode .deep-switch::before {
+    color: #fff !important;
+    border-color: var(--input-border) !important;
+  }
+
+  .dark-mode .auto-consensus label.switch:has(input:checked)::before,
+  .dark-mode .search-mode:not(.deep-search-mode) label.switch:has(input:checked)::before,
+  .dark-mode .deep-search-mode .deep-switch:has(input:checked)::before {
+    color: #fff !important;
+    background-color: rgba(187, 134, 252, 0.2) !important;
+    border-color: var(--input-border) !important;
   }
 
   .login-text {
@@ -1721,7 +1957,7 @@ font-size: 0.9em;
     align-items: stretch;
     width: 100%;
     position: relative;  /* Ermöglicht absolute Positionierung der Kinder */
-    padding-bottom: 80px; /* Genug Platz am unteren Rand für den Button */
+    padding-bottom: 40px; /* Genug Platz am unteren Rand für den Button */
   }
 
   .chat-input-container .input-field {
@@ -1966,7 +2202,27 @@ margin-left: 5px; /* kleiner Abstand zum Button-Text */
   scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
 }  
 
+/* Für Firefox */
+.consensus-main,
+.consensus-differences,
+.chat-input-container .input-field {
+    scrollbar-width: thin; /* oder 'auto' */
+    scrollbar-color: rgba(0, 0, 0, 0.3) transparent; /* Daumen-Farbe Track-Farbe */
+}
+
+.dark-mode .consensus-main,
+.dark-mode .consensus-differences,
+.dark-mode .chat-input-container .input-field {
+   scrollbar-color: rgba(255, 255, 255, 0.3) transparent; /* Angepasste Farbe für Dark Mode */
+}
+
 @keyframes spin {
 0% { transform: rotate(0deg); }
 100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
 }
