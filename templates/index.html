@@ -99,35 +99,35 @@
     <div id="apiTestArea" class="api-test-area">
       <div class="api-key-group">
         <label for="openaiKey">OpenAI API Key <span id="openaiFeedback" class="feedback"></span></label>
-        <input type="password" id="openaiKey" placeholder="Your OpenAI Key" autocomplete="new-password">
+        <input type="text" id="openaiKey" placeholder="Your OpenAI Key" autocomplete="off">
       </div>
       <div class="api-key-group">
         <label for="mistralKey">Mistral API Key <span id="mistralFeedback" class="feedback"></span></label>
-        <input type="password" id="mistralKey" placeholder="Your Mistral Key" autocomplete="new-password">
+        <input type="text" id="mistralKey" placeholder="Your Mistral Key" autocomplete="off">
       </div>
       <div class="api-key-group">
         <label for="anthropicKey">Anthropic API Key <span id="anthropicFeedback" class="feedback"></span></label>
-        <input type="password" id="anthropicKey" placeholder="Your Anthropic Key" autocomplete="new-password">
+        <input type="text" id="anthropicKey" placeholder="Your Anthropic Key" autocomplete="off">
       </div>
       <div class="api-key-group">
         <label for="geminiKey">Google API Key <span id="geminiFeedback" class="feedback"></span></label>
-        <input type="password" id="geminiKey" placeholder="Your Gemini Key" autocomplete="new-password">
+        <input type="text" id="geminiKey" placeholder="Your Gemini Key" autocomplete="off">
       </div>
       <div class="api-key-group">
         <label for="deepseekKey">DeepSeek API Key <span id="deepseekFeedback" class="feedback"></span></label>
-        <input type="password" id="deepseekKey" placeholder="Your DeepSeek Key" autocomplete="new-password">
+        <input type="text" id="deepseekKey" placeholder="Your DeepSeek Key" autocomplete="off">
       </div>
       <div class="api-key-group">
         <label for="grokKey">Grok API Key <span id="grokFeedback" class="feedback"></span></label>
-        <input type="password" id="grokKey" placeholder="Your Grok Key" autocomplete="new-password">
+        <input type="text" id="grokKey" placeholder="Your Grok Key" autocomplete="off">
       </div>
       <div class="api-key-group">
         <label for="eaxKey">Exa API Key <span id="exaFeedback" class="feedback"></span></label>
-        <input type="password" id="exaKey" placeholder="Your Exa Key" autocomplete="new-password">
+        <input type="text" id="exaKey" placeholder="Your Exa Key" autocomplete="off">
       </div>
       <div class="api-key-group">
         <label for="eaxKey">Perplexity API Key <span id="perplexityFeedback" class="feedback"></span></label>
-        <input type="password" id="perplexityKey" placeholder="Your Perplexity Key" autocomplete="new-password">
+        <input type="text" id="perplexityKey" placeholder="Your Perplexity Key" autocomplete="off">
       </div>            
       <div class="sidebar-tooltip">
         <button onclick="testAllKeys()">
@@ -414,12 +414,12 @@
             <label for="consensusModelDropdown" class="consensus-label">Consensus Model:</label>
             <div class="select-wrapper">
               <select id="consensusModelDropdown">
+                <option value="Grok">Grok-2</option>
                 <option value="OpenAI">GPT‑4o</option>
                 <option value="Anthropic">claude-3-5</option>
                 <option value="Mistral">mistral-large-latest</option>
                 <option value="Google Gemini">gemini-1.5-pro</option>
                 <option value="DeepSeek">DeepSeek-V3</option>
-                <option value="Grok">grok2</option>
               </select>
             </div>
           </div>
@@ -2118,7 +2118,7 @@
           }
         };
       });
-  </script>
+</script>
 <!-- Firebase-Code wird jetzt ausgelagert -->
 <script type="module" src="/static/firebase.js"></script>
 <!-- Login Modal -->
