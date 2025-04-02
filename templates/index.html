@@ -230,7 +230,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v0.6.1</span>
+    <span id="version-number">v0.8.1</span>
   </div>
 </div>
   <div class="container">
@@ -268,8 +268,8 @@
               <span class="slider"></span>
             </label>
             <span class="search-mode-label deep-switch-label">Deep Think</span>
-            <span class="search-disclaimer deep-search-disclaimer" style="display: none; font-size: 0.8em; margin-left: 5px;">
-              Deep Think the Web to get live data.
+            <span id="deepthinkDisclaimer" class="deepthink-disclaimer" style="display: none; font-size: 0.8em; margin-left: 5px;">
+              Reasoning models. More thoughtful & in-depth responses.
             </span>
           </div>
         </div>
@@ -506,7 +506,57 @@
         } else {
           questionInput.placeholder = "Please log in or store your own API keys.";
         }
-            
+
+        function updateDeepThinkText() {
+          const deepSearchToggle = document.getElementById("deepSearchToggle");
+          const deepSearchActive = deepSearchToggle.checked;
+          const deepthinkDisclaimer = document.getElementById("deepthinkDisclaimer");
+
+          let searchModeActive = false;
+          const searchToggle = document.getElementById("searchModeToggle");
+          if (searchToggle) {
+            searchModeActive = searchToggle.checked;
+          }
+
+          const text = searchModeActive
+            ? "DeepSearch models. More thoughtful & in-depth responses."
+            : "Reasoning models. More thoughtful & in-depth responses.";
+
+          if (deepSearchActive) {
+            if (window.innerWidth < 1400) {
+              // Auf kleinen Displays: Popup anzeigen
+              showPopup(text);
+              // Den Inline-Disclaimer ausblenden
+              deepthinkDisclaimer.style.display = "none";
+            } else {
+              // Auf größeren Displays: Inline-Disclaimer aktualisieren
+              deepthinkDisclaimer.textContent = text;
+              deepthinkDisclaimer.style.display = "inline-block";
+            }
+          } else {
+            // Falls Deep Think nicht aktiv ist, ausblenden:
+            deepthinkDisclaimer.style.display = "none";
+          }
+
+          // Aktualisiere weiterhin die Modellnamen:
+          const openaiModelText = (deepSearchActive && !searchModeActive) ? "o3-mini" : "GPT-4o";
+          document.querySelector("#openaiResponse .title small").textContent = "(" + openaiModelText + ")";
+
+          const deepseekModelText = deepSearchActive ? "DeepSeek-R1" : "DeepSeek-V3";
+          document.querySelector("#deepseekResponse .title small").textContent = "(" + deepseekModelText + ")";
+
+          const exaModelText = deepSearchActive ? "exa-pro" : "exa";
+          document.querySelector("#exaResponse .title small").textContent = "(" + exaModelText + ")";
+
+          const sonarModelText = deepSearchActive ? "sonar-pro" : "sonar";
+          document.querySelector("#perplexityResponse .title small").textContent = "(" + sonarModelText + ")";
+        }
+
+        // Event-Listener registrieren:
+        document.getElementById("deepSearchToggle").addEventListener("change", updateDeepThinkText);
+        document.getElementById("searchModeToggle").addEventListener("change", updateDeepThinkText);
+        document.addEventListener("DOMContentLoaded", updateDeepThinkText);
+
         // --------------------------
         // Marketing Popup Initialisierung
         // --------------------------
@@ -541,13 +591,14 @@
             // Wenn der Klick weder innerhalb der Sidebar noch auf dem Burger-Button erfolgt
             if (!sidebar.contains(event.target) && !event.target.closest('.sidebar-toggle')) {
               sidebar.classList.remove("active");
+              
             }
           }
         });
   
         // Elemente für den Search Mode:
-        const searchModeToggle = document.getElementById("searchModeToggle");
-        const searchDisclaimer = document.getElementById("searchDisclaimer");
+        const deepSearchToggle = document.getElementById("deepSearchToggle");
+        const deepthinkDisclaimer = document.getElementById("deepthinkDisclaimer");
         const consensusDropdown = document.getElementById("consensusModelDropdown");
         
         // Checkboxen für die Modelle:
@@ -666,6 +717,7 @@
         const freeDisplay = document.getElementById("freeUsageDisplay");
         const deepDisplay = document.getElementById("deepUsageDisplay");
         const idToken = localStorage.getItem("id_token");
+        
         if (idToken && freeDisplay && deepDisplay) {
           fetch("/usage", {
             method: "POST",
@@ -1083,6 +1135,8 @@
             }
           } else {
             if (!validateUserKey("openaiKey")) {
+              const outputEl = document.getElementById("openaiResponse").querySelector(".collapsible-content");
+              outputEl.innerHTML = "Please log in or store your own API keys.";
               alert("Please enter a valid OpenAI API key.");
               return;
             }
@@ -1146,6 +1200,8 @@
             }
           } else {
             if (!validateUserKey("mistralKey")) {
+              const outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
+              outputEl.innerHTML = "Please log in or store your own API keys.";
               alert("Please enter a valid Mistral API key.");
               return;
             }
@@ -1160,7 +1216,7 @@
           })
             .then(response => response.json())
             .then(data => {
-              const outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
+              let outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
               if (data.response) {
                 outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
                 addCopyButtons(outputEl);
@@ -1207,6 +1263,8 @@
             }
           } else {
             if (!validateUserKey("anthropicKey")) {
+              const outputEl = document.getElementById("anthropiResponse").querySelector(".collapsible-content");
+              outputEl.innerHTML = "Please log in or store your own API keys.";
               alert("Please enter a valid Anthropic API Key.");
               return;
             }
@@ -1269,7 +1327,10 @@
                 payload.api_key = localStorage.getItem("geminiKey") || "";
               }
             } else {
-              if (!validateUserKey("geminiKey")) {
+              if (!validateUserKey("geminiKey")) 
+              {
+                const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
+                outputEl.innerHTML = "Please log in or store your own API keys.";
                 alert("Please enter a valid Google Gemini API Key.");
                 return;
               }
@@ -1331,6 +1392,8 @@
             }
           } else {
             if (!validateUserKey("deepseekKey")) {
+              const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
+              outputEl.innerHTML = "Please log in or store your own API keys.";
               alert("Please enter a valid DeepSeek API key.");
               return;
             }
@@ -1391,6 +1454,8 @@
             }
           } else {
             if (!validateUserKey("grokKey")) {
+              const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
+              outputEl.innerHTML = "Please log in or store your own API keys.";
               alert("Please enter a valid Grok API key.");
               return;
             }
@@ -1453,6 +1518,8 @@
             }
           } else {
             if (!validateUserKey("exaKey")) {
+              const outputEl = document.getElementById("exaResponse").querySelector(".collapsible-content");
+              outputEl.innerHTML = "Please log in or store your own API keys.";
               alert("Please enter a valid Exa API key.");
               return;
             }
@@ -1516,6 +1583,8 @@
               }
             } else {
               if (!validateUserKey("perplexityKey")) {
+                const outputEl = document.getElementById("perplexityResponse").querySelector(".collapsible-content");
+                outputEl.innerHTML = "Please log in or store your own API keys.";
                 alert("Please enter a valid Perplexity API key.");
                 return;
               }
@@ -1621,8 +1690,7 @@
         const consensusDropdown = document.getElementById("consensusModelDropdown");
   
         if (isSearchMode) {
-          // Zeige den Disclaimer an (ggf. später wieder ausblenden, wenn auf kleinen Bildschirmen ein Popup verwendet wird)
-          searchDisclaimer.style.display = "inline-block";
+          // searchDisclaimer.style.display = "inline-block";
   
           // Deaktiviere und deaktiviere die nicht benötigten Modelle (Mistral, Anthropic/Claude, DeepSeek, Grok)
           mistralCheckbox.checked = false;
@@ -1673,13 +1741,12 @@
   
         // Auf kleinen Bildschirmen: Popup statt Inline-Disclaimer
         if (window.innerWidth < 1400) {
-          showDisclaimerPopup();
-          searchDisclaimer.style.display = "none";
+          deepthinkDisclaimer.style.display = "none";
         }
         } else {
           // Suchmodus ist deaktiviert:
           // Blende den Disclaimer aus
-          searchDisclaimer.style.display = "none";
+          // deepthinkDisclaimer.style.display = "none";
   
           // Reaktiviere alle Modelle:
           mistralCheckbox.disabled = false;
@@ -2076,7 +2143,7 @@
   </div>
 </div>
 <div id="disclaimerPopup" class="popup">
-  <p>Avialbale with ChatGPT, Gemini, Exa and Perplexity. Soon also with other models!</p>
+  <p>Deep Think Mode!</p>
 </div>
 <div id="popupContainer">
   <!-- Modal zum Editieren des Systemprompts -->
@@ -2142,56 +2209,62 @@
           Differences highlight conflicting or unique parts across model responses. This lets you quickly spot where models disagree or contribute distinct perspectives—helping you make informed decisions before generating a consensus.
         </p>
       </div>
-      
+
       <div class="faq-item">
-        <h3><span class="faq-number">5.</span> 🌐 What is Web Search? <span class="faq-toggle-icon">＋</span></h3>
+        <h3><span class="faq-number">5.</span> 💡 What is Deep Think Mode? <span class="faq-toggle-icon">＋</span></h3>
         <p>
-          Web Search sends your query to GPT and Gemini with real-time internet access, delivering current and accurate results directly within consens.io.
+          Deep Think Mode provides an in-depth, step-by-step reasoning from selected AI models, offering detailed explanations and deeper insights into complex queries.
         </p>
       </div>
       
       <div class="faq-item">
-        <h3><span class="faq-number">6.</span> ✅❌ What are the checkmarks and crosses? <span class="faq-toggle-icon">＋</span></h3>
+        <h3><span class="faq-number">6.</span> 🌐 What is Web Search? <span class="faq-toggle-icon">＋</span></h3>
+        <p>
+          Web Search sends your query to GPT, Gemini, Exa (an AI model optimized for detailed document retrieval), and Perplexity (specialized in concise, trustworthy answers from diverse internet sources), providing real-time and accurate results directly within consens.io.
+        </p>
+      </div>
+      
+      <div class="faq-item">
+        <h3><span class="faq-number">7.</span> ✅❌ What are the checkmarks and crosses? <span class="faq-toggle-icon">＋</span></h3>
         <p>
           The checkmark (✅) selects an answer to be included in the consensus generation. The cross (❌) excludes an answer from influencing the final consensus.
         </p>
       </div>
       
       <div class="faq-item">
-        <h3><span class="faq-number">7.</span> 🔑 When do I need to enter API keys? <span class="faq-toggle-icon">＋</span></h3>
+        <h3><span class="faq-number">8.</span> 🔑 When do I need to enter API keys? <span class="faq-toggle-icon">＋</span></h3>
         <p>
           You only need to enter your own API keys if you're not logged in or wish to use your personal model access.
         </p>
       </div>
       
       <div class="faq-item">
-        <h3><span class="faq-number">8.</span> 🧠 Which AI models are available? <span class="faq-toggle-icon">＋</span></h3>
+        <h3><span class="faq-number">9.</span> 🧠 Which AI models are available? <span class="faq-toggle-icon">＋</span></h3>
         <p>
-          consens.io provides access to top-tier LLMs including OpenAI, Mistral, Anthropic, Gemini, Exa, Perplexity and more.
+          consens.io provides access to top-tier LLMs including OpenAI, Mistral, Anthropic, Gemini, Exa, Perplexity, and more.
         </p>
       </div>
       
       <div class="faq-item">
-        <h3><span class="faq-number">9.</span> 📌 How do Bookmarks & Leaderboards work? <span class="faq-toggle-icon">＋</span></h3>
+        <h3><span class="faq-number">10.</span> 📌 How do Bookmarks & Leaderboards work? <span class="faq-toggle-icon">＋</span></h3>
         <p>
           Logged-in users can bookmark queries for future reference, and view popular queries on leaderboards, comparing their results with other users.
         </p>
       </div>
 
       <div class="faq-item">
-        <h3><span class="faq-number">10.</span> 🔢 How many queries can I make? <span class="faq-toggle-icon">＋</span></h3>
+        <h3><span class="faq-number">11.</span> 🔢 How many queries can I make? <span class="faq-toggle-icon">＋</span></h3>
         <p>
-          Free users can make up to 25 AI-powered queries. This includes consensus generations, web searches, and direct model queries. You can track your remaining quota in the sidebar.
-        </p>
+          Free users can make up to 25 standard AI-powered queries (including consensus generations, web searches, and direct model prompts), plus 12 Deep Think queries. You can track your remaining quota in the sidebar.
+        </p>        
       </div>
       
       <div class="faq-item">
-        <h3><span class="faq-number">11.</span> 💸 Why are the first 25 queries free? <span class="faq-toggle-icon">＋</span></h3>
+        <h3><span class="faq-number">12.</span> 💸 Why are the first 25 queries free? <span class="faq-toggle-icon">＋</span></h3>
         <p>
-          We want you to explore consens.io with no commitment. The 25 free queries let you test the platform, compare models, and experience consensus answers—all without needing to provide payment information.
-        </p>
+          We want you to explore consens.io with no commitment. That's why we offer 25 free standard queries and 12 Deep Think queries—so you can test features, compare models, and experience consensus answers without providing payment information.
+        </p>        
       </div>      
-
     </div>
   </div>
 </div>

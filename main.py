@@ -1,4 +1,3 @@
-
 import os
 from fastapi import FastAPI, Query, Request, HTTPException, Body
 from fastapi.responses import HTMLResponse
@@ -15,54 +14,99 @@ from firebase_admin import credentials, auth
 from typing import Optional
 from datetime import datetime, timedelta
 
-# Load .env if necessary (no longer used here for API keys)
-load_dotenv()
+class CustomSecurityMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = dict(message.get("headers", []))
+                csp = (
+                    "default-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net https://www.gstatic.com; "
+                    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.gstatic.com; "
+                    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                    "img-src 'self' data:; "
+                    "connect-src 'self' https://firestore.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://apis.google.com https://api.openai.com https://api.mistral.ai https://api.anthropic.com https://api.x.ai https://api.deepseek.com https://api.perplexity.ai https://api.exa.ai;"
+                )
+                headers[b"Content-Security-Policy"] = csp.encode("utf-8")
+                headers[b"X-Content-Type-Options"] = b"nosniff"
+                headers[b"X-Frame-Options"] = b"DENY"
+                headers[b"Strict-Transport-Security"] = b"max-age=31536000; includeSubDomains"
+                headers[b"Referrer-Policy"] = b"no-referrer-when-downgrade"
+                message["headers"] = list(headers.items())
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
 
 app = FastAPI()
+# Füge die Middleware direkt nach der App-Initialisierung hinzu
+app.add_middleware(CustomSecurityMiddleware)
 
-# Free usage limit
+load_dotenv()
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 FREE_USAGE_LIMIT = 25
-
 MAX_WORDS = 300
 DEEP_SEARCH_MAX_WORDS = 1000
 MAX_TOKENS = 1024
 DEEP_SEARCH_MAX_TOKENS = 2048
 CONSENSUS_MAX_TOKENS = 2048
 
+DEFAULT_SYSTEM_PROMPT = "Please respond briefly and precisely, focusing only on the essentials."
+DEEP_THINK_PROMPT = "Deep Think: Please provide a deep, detailed analysis. Focus as hard as you can!"
+
 usage_counter = {}  # { uid: anzahl_anfragen }
 deep_search_usage = {}  # { uid: anzahl_deep_search_anfragen }
-
-templates = Jinja2Templates(directory="templates")
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gen-lang-client-0234219247-53b2b1c0e355.json"
 
 def count_words(text: str) -> int:
     return len(text.strip().split())
 
-# Keine globalen API Keys mehr – diese werden nun via Request übergeben
-
-DEFAULT_SYSTEM_PROMPT = "Please respond briefly and precisely, focusing only on the essentials."
-
 def query_openai(question: str, api_key: str, search_mode: bool = False, deep_search: bool = False, system_prompt: str = None) -> str:
     if system_prompt is None:
         system_prompt = DEFAULT_SYSTEM_PROMPT
 
-    # Setze max_tokens basierend auf dem deep_search Flag
+    if deep_search:
+        system_prompt += "\n" + DEEP_THINK_PROMPT
+
     max_tokens = DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS
 
     try:
         client = openai.OpenAI(api_key=api_key)
-        # Wähle das richtige Modell: falls search_mode aktiv ist, nutze "gpt-4o-search-preview"
-        model_to_use = "gpt-4o-search-preview" if search_mode else "gpt-4o"
-        response = client.chat.completions.create(
-            model=model_to_use,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": question}
-            ],
-            max_tokens=max_tokens
-        )
+        # Wähle das Modell abhängig von search_mode und deep_search:
+        if search_mode:
+            model_to_use = "gpt-4o-search-preview"
+        elif deep_search:
+            model_to_use = "o3-mini"
+        else:
+            model_to_use = "gpt-4o"
+
+        # Verwende den korrekten Parameter basierend auf dem Modell
+        if model_to_use == "o3-mini":
+            response = client.chat.completions.create(
+                model=model_to_use,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": question}
+                ],
+                max_completion_tokens=max_tokens
+            )
+        else:
+            response = client.chat.completions.create(
+                model=model_to_use,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": question}
+                ],
+                max_tokens=max_tokens
+            )
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Error with OpenAI: {str(e)}"
@@ -71,6 +115,9 @@ def query_mistral(question: str, api_key: str, system_prompt: str = None, deep_s
     """Fragt die Mistral API zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit."""
     if system_prompt is None:
         system_prompt = DEFAULT_SYSTEM_PROMPT
+
+    if deep_search:
+        system_prompt += "\n" + DEEP_THINK_PROMPT
 
     # Setze max_tokens basierend auf dem deep_search Flag
     max_tokens = DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS
@@ -96,6 +143,9 @@ def query_claude(question: str, api_key: str, system_prompt: str = None, deep_se
        Da die Anthropic API ein Token-Limit erwartet, setzen wir einen sehr hohen Wert ein."""
     if system_prompt is None:
         system_prompt = DEFAULT_SYSTEM_PROMPT
+
+    if deep_search:
+        system_prompt += "\n" + DEEP_THINK_PROMPT
 
     # Setze max_tokens basierend auf dem deep_search Flag
     max_tokens = DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS
@@ -125,9 +175,13 @@ def query_claude(question: str, api_key: str, system_prompt: str = None, deep_se
     except Exception as e:
         return f"Error with Anthropic: {str(e)}"
 
-def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode: bool = False, system_prompt: str = None) -> str:
+def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode: bool = False, deep_search: bool = False, system_prompt: str = None) -> str:
     if system_prompt is None:
         system_prompt = DEFAULT_SYSTEM_PROMPT
+
+    if deep_search:
+        system_prompt += "\n" + DEEP_THINK_PROMPT
+
     try:
         # Wenn ein eigener API Key übergeben wurde, verwende ihn.
         # Andernfalls – bei eingeloggten Nutzern – wird der Service-Account-Key aus der JSON genutzt.
@@ -168,13 +222,18 @@ def query_deepseek(question: str, api_key: str, system_prompt: str = None, deep_
     if system_prompt is None:
         system_prompt = DEFAULT_SYSTEM_PROMPT
 
+    if deep_search:
+        system_prompt += "\n" + DEEP_THINK_PROMPT
+
     # Setze max_tokens basierend auf dem deep_search Flag
     max_tokens = DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS
 
     try:
         client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        # Wähle das Modell: Falls deep_search aktiviert ist, nutze "deepseek-reasoner", sonst "deepseek-chat"
+        model_to_use = "deepseek-reasoner" if deep_search else "deepseek-chat"
         response = client.chat.completions.create(
-            model="deepseek-chat",
+            model=model_to_use,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question}
@@ -190,6 +249,9 @@ def query_grok(question: str, api_key: str, system_prompt: str = None, deep_sear
     """Fragt die Grok API zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
     if system_prompt is None:
         system_prompt = DEFAULT_SYSTEM_PROMPT
+
+    if deep_search:
+        system_prompt += "\n" + DEEP_THINK_PROMPT
 
     # Setze max_tokens basierend auf dem deep_search Flag
     max_tokens = DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS
@@ -215,6 +277,9 @@ def query_exa(question: str, api_key: str, search_mode: bool, system_prompt: str
         return ""
     if system_prompt is None:
         system_prompt = DEFAULT_SYSTEM_PROMPT
+
+    if deep_search:
+        system_prompt += "\n" + DEEP_THINK_PROMPT
     
     # Setze max_tokens basierend auf dem deep_search Flag
     max_tokens = DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS
@@ -247,6 +312,9 @@ def query_perplexity(question: str, api_key: str, search_mode: bool, system_prom
             "You are an artificial intelligence assistant and you need to "
             "Answer shortly."
         )
+
+    if deep_search:
+        system_prompt += "\n" + DEEP_THINK_PROMPT
     
     # Setze max_tokens basierend auf dem deep_search Flag
     max_tokens = DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS
@@ -650,24 +718,6 @@ async def read_root(request: Request):
         "firebase_app_id": os.environ.get("FIREBASE_APP_ID")
     }
     return templates.TemplateResponse("index.html", {"request": request, "free_limit": FREE_USAGE_LIMIT, **firebase_config})
-
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
-    csp = (
-        "default-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net https://www.gstatic.com; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.gstatic.com; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "img-src 'self' data:; "
-        "connect-src 'self' https://firestore.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://apis.google.com https://api.openai.com https://api.mistral.ai https://api.anthropic.com https://api.x.ai https://api.deepseek.com https://api.perplexity.ai https://api.exa.ai"
-    )
-    response.headers["Content-Security-Policy"] = csp
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    response.headers["Referrer-Policy"] = "no-referrer-when-downgrade"
-    return response
-
 
 # Globales Dictionary zum Speichern der IP-Adressen registrierter Nutzer
 registered_ips = {}  # { ip_address: uid }
@@ -1306,7 +1356,6 @@ async def ask_exa_post(data: dict = Body(...)):
         }
     else:
         raise HTTPException(status_code=400, detail="No authentication parameter (id_token or api_key) specified")
-
 
 
 @app.post("/ask_perplexity")

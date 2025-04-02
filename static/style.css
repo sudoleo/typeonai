@@ -1771,7 +1771,7 @@ font-size: 0.9em;
   /* Alte Elemente ausblenden */
   .search-mode:not(.deep-search-mode) .slider,
   .search-mode:not(.deep-search-mode) .search-mode-label,
-  .search-mode:not(.deep-search-mode) .search-disclaimer {
+  .search-mode:not(.deep-search-mode) .deepthink-disclaimer {
     display: none !important;
   }
   
@@ -1831,7 +1831,7 @@ font-size: 0.9em;
   /* Alte Elemente ausblenden */
   .deep-search-mode .slider,
   .deep-search-mode .deep-switch-label,
-  .deep-search-mode .deep-search-disclaimer {
+  .deep-search-mode .deep-deepthink-disclaimer {
     display: none !important;
   }
   
@@ -1900,7 +1900,7 @@ font-size: 0.9em;
   :root .search-mode:not(.deep-search-mode) label.switch:has(input:checked)::before,
   :root .deep-search-mode .deep-switch:has(input:checked)::before {
     color: #000 !important;
-    background-color: rgba(65, 138, 245, 0.2) !important; /* bleibt wie gehabt */
+    background-color: rgba(65, 209, 245, 0.582) !important; /* bleibt wie gehabt */
     border-color: var(--input-border) !important;
   }
 
@@ -1916,7 +1916,7 @@ font-size: 0.9em;
   .dark-mode .search-mode:not(.deep-search-mode) label.switch:has(input:checked)::before,
   .dark-mode .deep-search-mode .deep-switch:has(input:checked)::before {
     color: #fff !important;
-    background-color: rgba(187, 134, 252, 0.2) !important;
+    background-color: rgba(242, 134, 252, 0.486) !important;
     border-color: var(--input-border) !important;
   }
 
@@ -2014,7 +2014,7 @@ font-size: 0.9em;
     line-height: 24px; /* entspricht der Höhe des Switches */
   }
 
-  .search-disclaimer {
+  .deepthink-disclaimer {
     font-size: 0.8em;
     margin-left: 5px;
     line-height: 24px;
