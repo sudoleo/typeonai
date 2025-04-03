@@ -977,8 +977,8 @@ opacity: 0.5;
   transition: background-color 0.3s;
 }
 
-#consensusButton:hover {
-  background-color: #0056b3;
+.dark-mode #consensusButton:hover {
+  background-color: var(--response-bg) !important;
 }
 
 #consensusButton:disabled {
@@ -1533,7 +1533,7 @@ font-size: 0.9em;
     justify-content: flex-start;
   }
   .consensus-controls > * {
-    width: 100%;
+    width: auto;
   }
   .title small {
     font-size: 0.8em;
@@ -2021,17 +2021,102 @@ font-size: 0.9em;
     color: #666;
   }    
 
-  /* Konsens-Kontrollen sauber stapeln */
+  /* Container der Konsens-Kontrollen in einer Zeile */
   .consensus-controls {
-    flex-direction: column;
+    display: flex;
+    align-items: center;
     gap: 10px;
+    flex-wrap: nowrap;
+    flex-direction: row;
   }
-
-  .consensus-controls > * {
-    width: 100%;
+  
+  .consensus-label {
+    display: none;
   }
+  
   .title small {
     font-size: 0.8em;
+  }
+  
+  #consensusButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 15px;
+    font-size: 0.9em;
+    font-weight: normal;
+    background: var(--response-bg);
+    color: var(--consensus-button-text, #333);
+    border: none;
+    border-radius: 8px;
+    box-shadow: var(--box-shadow);
+    transition: background 0.3s, box-shadow 0.3s;
+    position: relative;
+  }
+  #consensusButton::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    background-color: currentColor; /* übernimmt die Textfarbe */
+    -webkit-mask: url('./icons/consensus.png') no-repeat center;
+    mask: url('./icons/consensus.png') no-repeat center;
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  
+  #consensusButton:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+  /* Expliziter Active- und Focus-Zustand */
+  #consensusButton:active,
+  #consensusButton:focus {
+    background: var(--response-bg) !important;
+  }
+  
+  /* Dropdown im Konsens-Modell-Bereich */
+  .consensus-model .select-wrapper {
+    position: relative;
+    display: inline-block;
+    width: auto;
+    margin-left: auto;
+  }
+  .consensus-model .select-wrapper select {
+    padding: 10px 30px 10px 15px;
+    font-size: 0.7em;
+    font-weight: normal;
+    background: var(--response-bg);
+    color: var(--consensus-button-text, #333);
+    border: none;
+    border-radius: 8px;
+    box-shadow: var(--box-shadow);
+    appearance: none;
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+  .consensus-model .select-wrapper::after {
+    content: "▼";
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    font-size: 0.7em;
+    color: var(--consensus-button-text, #333);
+  }
+  .consensus-model .select-wrapper select:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.3);
+  }
+  
+  /* Standardfarben im Light Mode */
+  :root {
+    --consensus-button-text: #333;
+  }
+  /* Dark Mode Anpassungen */
+  .dark-mode {
+    --consensus-button-text: #eee;
   }
 
   .modal-content {
