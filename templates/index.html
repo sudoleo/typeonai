@@ -12,6 +12,8 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <!-- Optional für Sicherheit: -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
+  <!-- Firebase-Code wird jetzt ausgelagert -->
+  <script type="module" src="/static/firebase.js"></script>
   <script>
     window.FIREBASE_CONFIG = {
       apiKey: "{{ firebase_api_key }}",
@@ -230,7 +232,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v0.8.1</span>
+    <span id="version-number">v0.8.3</span>
   </div>
 </div>
   <div class="container">
@@ -669,6 +671,17 @@
         document.getElementById("closeSystemPromptModal").addEventListener("click", function() {
           document.getElementById("systemPromptModal").style.display = "none";
         });
+
+        // // Öffnen des Feedback-Modals beim Klick auf den Feedback-Button
+        // document.getElementById("openFeedbackBtn").addEventListener("click", function() {
+        //   const modal = document.getElementById("feedbackModal");
+        //   modal.style.display = "block";
+        // });
+
+        // // Schließen des Feedback-Modals beim Klick auf den Schließen-Button
+        // document.getElementById("closeFeedbackModal").addEventListener("click", function() {
+        //   document.getElementById("feedbackModal").style.display = "none";
+        // });
   
         // Speichern des neuen Prompts
         document.getElementById("saveSystemPromptBtn").addEventListener("click", function() {
@@ -691,6 +704,23 @@
         window.addEventListener("click", function(event) {
           if (event.target === document.getElementById("helpModal")) {
             document.getElementById("helpModal").style.display = "none";
+          }
+        });
+
+        // Öffnen des Feedback-Modals beim Klick auf den Feedback-Button
+        document.getElementById("feedbackButton").addEventListener("click", function() {
+          document.getElementById("feedbackModal").style.display = "block";
+        });
+
+        // Schließen des Feedback-Modals beim Klick auf das Schließen-Symbol
+        document.getElementById("closeFeedbackModal").addEventListener("click", function() {
+          document.getElementById("feedbackModal").style.display = "none";
+        });
+
+        // Optional: Modal schließen, wenn außerhalb des Modal-Inhalts geklickt wird
+        window.addEventListener("click", function(event) {
+          if (event.target === document.getElementById("feedbackModal")) {
+            document.getElementById("feedbackModal").style.display = "none";
           }
         });
   
@@ -2117,10 +2147,33 @@
             spinner.style.display = "none";
           }
         };
+
+        const feedbackForm = document.getElementById("feedbackForm");
+          if (feedbackForm) {
+            feedbackForm.addEventListener("submit", function(e) {
+              e.preventDefault();
+              const message = this.elements["message"].value;
+              const email = this.elements["email"].value;
+              // Hier rufen wir die neue sendFeedback-Funktion auf, die den Backend-Endpoint nutzt.
+              window.sendFeedback(message, email)
+                .then(data => {
+                  if(data.status === "success"){
+                    this.reset();
+                    alert("Feedback gesendet!");
+                  } else {
+                    alert("Fehler: " + data.detail);
+                  }
+                })
+                .catch(error => {
+                  console.error("Fehler beim Speichern des Feedbacks:", error);
+                  alert("Fehler beim Speichern des Feedbacks: " + error.message);
+                });
+            });
+          }
       });
+
 </script>
-<!-- Firebase-Code wird jetzt ausgelagert -->
-<script type="module" src="/static/firebase.js"></script>
+
 <!-- Login Modal -->
 <div id="loginModal" class="modal">
   <div class="modal-content">
@@ -2266,6 +2319,25 @@
         </p>        
       </div>      
     </div>
+  </div>
+</div>
+<div class="feedback-line">
+  <span class="feedback-note">This is still a work in progress.</span>
+  <button id="feedbackButton" class="feedback-button" title="Feedback senden">
+    Got feedback?
+  </button>
+</div>
+
+<!-- Feedback Modal -->
+<div id="feedbackModal" class="modal">
+  <div class="modal-content feedback-modal">
+    <span class="close" id="closeFeedbackModal">&times;</span>
+    <h2>Send Feedback</h2>
+    <form id="feedbackForm">
+      <textarea name="message" placeholder="Your Feedback"></textarea>
+      <input type="email" name="email" placeholder="Your email (optional)">
+      <button type="submit">Submit</button>
+    </form>
   </div>
 </div>
 </body>

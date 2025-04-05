@@ -10,7 +10,7 @@ from mistralai import Mistral
 from dotenv import load_dotenv
 import google.generativeai as genai
 import firebase_admin
-from firebase_admin import credentials, auth
+from firebase_admin import credentials, auth, firestore
 from typing import Optional
 from datetime import datetime, timedelta
 
@@ -696,12 +696,16 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
 cred = credentials.Certificate("consensai-firebase-adminsdk-fbsvc-9064a77134.json")
 firebase_admin.initialize_app(cred)
 
+# Erstelle einen Firestore-Client
+db_firestore = firestore.client()
+
 def verify_user_token(token: str) -> str:
     """
     Verifiziert das Firebase-ID-Token und gibt die uid zurück.
     """
     try:
         decoded_token = auth.verify_id_token(token)
+        # Optional: Logge einige Claims zur Kontrolle
         return decoded_token["uid"]
     except Exception as e:
         raise Exception("Invalid token")
@@ -770,6 +774,49 @@ async def get_usage_post(data: dict):
         return {"remaining": remaining, "deep_remaining": deep_remaining}
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed")
+    
+# Globales Dictionary zum Speichern des letzten Feedback-Zeitstempels pro Nutzer
+last_feedback_time = {}
+    
+@app.post("/feedback")
+async def submit_feedback(request: Request, data: dict = Body(...)):
+    message = data.get("message")
+    email = data.get("email")
+    id_token = data.get("id_token")
+    
+    if not id_token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    try:
+        uid = verify_user_token(id_token)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Authentication failed")
+    
+    # Restlicher Code bleibt unverändert...
+    now = datetime.utcnow()
+    last_time = last_feedback_time.get(uid)
+    if last_time and now - last_time < timedelta(seconds=30):
+        raise HTTPException(status_code=429, detail="Please wait a few seconds before sending feedback again.")
+    
+    last_feedback_time[uid] = now
+
+    if not message or message.strip() == "":
+        raise HTTPException(status_code=400, detail="Feedback message must not be empty.")
+
+    feedback_data = {
+        "message": message,
+        "email": email,
+        "uid": uid,
+        "ip_address": request.client.host,
+        "timestamp": now
+    }
+
+    try:
+        db_firestore.collection("feedback").add(feedback_data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error when saving the feedback.")
+    
+    return {"status": "success", "message": "Feedback has been successfully submitted."}
 
 
 @app.post("/ask_openai")

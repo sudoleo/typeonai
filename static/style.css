@@ -10,6 +10,8 @@
   --response-bg: #e9e9e9;
   --box-shadow: 0 2px 5px rgba(0,0,0,0.1);
   --code-bg: #f7f7f7; /* Heller Hintergrund für Light Mode */
+  --feedback-text-color: #b3b3b3;           /* Dezentes mittleres Grau im Light Mode */
+  --feedback-text-hover-color: #666;       /* Etwas dunkler beim Hover */
 }
 
 .dark-mode {
@@ -23,6 +25,13 @@
   --response-bg: #2c2c2c;
   --box-shadow: 0 2px 5px rgba(0,0,0,0.5);
   --code-bg: #1e1e1e; /* Dunkler Hintergrund für Dark Mode */
+  --feedback-text-color: #949494;             /* Dezentes helles Grau im Dark Mode */
+  --feedback-text-hover-color: #bbb;         /* Etwas dunkler beim Hover */
+}
+
+/* Dark Mode Anpassungen */
+.dark-mode {
+  --consensus-button-text: #eee;
 }
 
 body {
@@ -967,23 +976,82 @@ opacity: 0.5;
 }
 
 #consensusButton {
-  padding: 10px 16px;
-  font-size: 1em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 15px;
+  font-size: 0.9em;
+  font-weight: normal;
   background-color: var(--button-bg);
-  color: var(--button-text);
+  color: var(--consensus-button-text, #333);
   border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.3s;
+  border-radius: 8px;
+  box-shadow: var(--box-shadow);
+  transition: background 0.3s, box-shadow 0.3s;
+  position: relative;
+  opacity: 0.8;
 }
 
-.dark-mode #consensusButton:hover {
-  background-color: var(--response-bg) !important;
+#consensusButton::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  background-color: currentColor; /* übernimmt die Textfarbe */
+  -webkit-mask: url('./icons/consensus.png') no-repeat center;
+  mask: url('./icons/consensus.png') no-repeat center;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+#consensusButton:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+/* Expliziter Active- und Focus-Zustand */
+#consensusButton:active,
+#consensusButton:focus {
+  background: var(--response-bg) !important;
 }
 
 #consensusButton:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Dropdown im Konsens-Modell-Bereich */
+.consensus-model .select-wrapper {
+  position: relative;
+  display: inline-block;
+  width: auto;
+  margin-left: auto;
+}
+.consensus-model .select-wrapper select {
+  padding: 10px 30px 10px 15px;
+  font-size: 0.8em;
+  font-weight: normal;
+  background: var(--response-bg);
+  color: var(--consensus-button-text, #333);
+  border: none;
+  border-radius: 8px;
+  box-shadow: var(--box-shadow);
+  appearance: none;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+.consensus-model .select-wrapper::after {
+  content: "▼";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: 0.7em;
+  color: var(--consensus-button-text, #333);
+}
+.consensus-model .select-wrapper select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.3);
 }
 
 #sendButton:disabled {
@@ -1373,6 +1441,61 @@ font-size: 0.9em;
   color: var(--text-color);
 }
 
+/* Styling für die Textarea im Feedback-Modal */
+.modal-content.feedback-modal textarea {
+  width: 100%;
+  min-height: 150px;      /* Erhöht die Höhe für mehr Platz */
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  resize: vertical;       /* Ermöglicht vertikales Anpassen */
+  box-sizing: border-box;
+}
+
+/* Feedback-Auslöser als klickbarer Text */
+#feedbackButton {
+  background: none;
+  border: none;
+  color: var(--feedback-text-color);
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.3s ease;
+}
+
+/* Hover-Effekt für den Feedback-Text */
+#feedbackButton:hover {
+  color: var(--feedback-text-hover-color);
+}
+
+/* Styling für die Textarea im Feedback-Modal */
+.modal-content.feedback-modal textarea {
+  width: 100%;
+  min-height: 150px;
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.feedback-line {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* Abstand zwischen Text & Button */
+  justify-content: center;
+  font-size: 11px;
+}
+
+/* Nicht-klickbarer Text im gleichen Stil */
+.feedback-note {
+  color: var(--feedback-text-color);
+  opacity: 0.8;
+}
+
 @media (max-width: 1400px) {
   /* Top Bar & Body */
   .top-bar-logo {
@@ -1484,7 +1607,6 @@ font-size: 0.9em;
     flex-direction: column;
     align-items: stretch;
     width: 100%;
-    padding-bottom: 120px; /* Mehr Platz, damit der Text nicht in die Schalter ragt */
   }
   .chat-input-container .input-field {
     width: 100% !important;
@@ -1516,7 +1638,6 @@ font-size: 0.9em;
     z-index: 1300;
   }
   .consensus-controls {
-    flex-direction: column;
     gap: 10px;
   }
   /* Antwortfelder und Konsens-Box untereinander */
@@ -1526,12 +1647,6 @@ font-size: 0.9em;
     gap: 10px;
   }
 
-  .consensus-switch-container {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 5px; /* kleiner Abstand zwischen den Schaltern */
-    justify-content: flex-start;
-  }
   .consensus-controls > * {
     width: auto;
   }
@@ -1541,16 +1656,18 @@ font-size: 0.9em;
   .modal-content {
     margin-top: 80px; /* Erhöht den Abstand vom oberen Rand */
   }
-  .search-mode {
-    opacity: 0.5;
+  .auto-consensus {
     display: flex;
     align-items: center;
-    margin: 0;
-    padding: 0;
+    gap: 10px;
+    opacity: 0.5;
   }
-  .auto-consensus, .search-mode {
-    width: 200px; /* oder ein prozentualer Wert */
-    gap: 5px;
+  
+  .search-mode {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0.5;
   }
 }
 
@@ -2045,14 +2162,16 @@ font-size: 0.9em;
     padding: 10px 15px;
     font-size: 0.9em;
     font-weight: normal;
-    background: var(--response-bg);
+    background-color: var(--button-bg);
     color: var(--consensus-button-text, #333);
     border: none;
     border-radius: 8px;
     box-shadow: var(--box-shadow);
     transition: background 0.3s, box-shadow 0.3s;
     position: relative;
+    opacity: 0.8;
   }
+
   #consensusButton::before {
     content: "";
     display: inline-block;
