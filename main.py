@@ -819,6 +819,43 @@ async def submit_feedback(request: Request, data: dict = Body(...)):
     return {"status": "success", "message": "Feedback has been successfully submitted."}
 
 
+ALLOWED_VOTE_TYPES = {"best", "exclude", "BestModel"}
+
+@app.post("/vote")
+async def record_vote(data: dict):
+    # Extrahiere Parameter
+    id_token = data.get("id_token")
+    model = data.get("model")
+    vote_type = data.get("vote_type")
+    
+    # Parameter-Validierung
+    if not id_token or not model or not vote_type:
+        raise HTTPException(status_code=400, detail="Missing required fields: id_token, model or vote_type.")
+    
+    if vote_type not in ALLOWED_VOTE_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid vote type provided.")
+
+    # Authentifizierung
+    try:
+        uid = verify_user_token(id_token)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Authentication failed: " + str(e))
+    
+    # Optional: Hier könnte ein Rate-Limiting-Check ergänzt werden, um Mehrfachvotings in kurzer Zeit zu unterbinden.
+    
+    # Aktualisiere den Vote in Firestore (Leaderboard)
+    try:
+        doc_ref = db_firestore.collection("leaderboard").document(model)
+        # Verwende ein atomic update (Increment) statt eines direkten setDoc-Aufrufs
+        doc_ref.update({
+            vote_type: firestore.Increment(1)
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error updating vote: " + str(e))
+    
+    return {"status": "success", "message": f"{vote_type} vote recorded for {model}"}
+
+
 @app.post("/ask_openai")
 async def ask_openai_post(data: dict = Body(...)):
     question = data.get("question")

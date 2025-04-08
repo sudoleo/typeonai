@@ -170,11 +170,30 @@ async function recordModelVote(model, type) {
     return;
   }
   
-  const modelRef = doc(db, "leaderboard", model);
+  const id_token = localStorage.getItem("id_token");
+  if (!id_token) {
+    console.error("No id_token available for voting.");
+    return;
+  }
+
   try {
-    await setDoc(modelRef, { [type]: increment(1) }, { merge: true });
+    const response = await fetch("/vote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id_token: id_token,
+        model: model,
+        vote_type: type
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      console.error("Error recording vote:", data.detail);
+    } else {
+      console.log("Vote recorded:", data.message);
+    }
   } catch (error) {
-    console.error("Error when updating the leaderboard entry:", error);
+    console.error("Error connecting to backend for vote recording:", error);
   }
 }
 
