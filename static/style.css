@@ -16,6 +16,7 @@
   --clear-button-border: #ffcdd2;   /* Passende, weiche Umrandung */
   --clear-button-text: #b71c1c;     /* Dunkler, kontrastreicher Rotton für den Text */
   --clear-button-bg-hover: #f8bdbd;  /* Leicht intensiver Farbton beim Hover */
+  --slider-bg: #ccc; /* Standard für White Mode */
 }
 
 .dark-mode {
@@ -35,6 +36,7 @@
   --clear-button-border: #633131;   /* Entsprechende Umrandung im Dark Mode */
   --clear-button-text: #f8bdbd;     /* Helle Schrift, damit der Kontrast im Dunkeln stimmt */
   --clear-button-bg-hover: #5a2a2a;  /* Etwas hellere Variante beim Hover */
+  --slider-bg: #636363;
 }
 
 /* Dark Mode Anpassungen */
@@ -980,7 +982,7 @@ pre .copy-btn:hover {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #ccc;
+  background-color: var(--slider-bg);
   transition: 0.4s;
   border-radius: 24px;
 }
@@ -998,7 +1000,7 @@ pre .copy-btn:hover {
 }
 
 input:checked + .slider {
-  background-color: #2196F3;
+  background-color: var(--button-bg);
 }
 
 input:checked + .slider:before {
@@ -1716,14 +1718,12 @@ font-size: 0.9em;
     display: flex;
     align-items: center;
     gap: 10px;
-    opacity: 0.5;
   }
   
   .search-mode {
   display: flex;
   align-items: center;
   gap: 10px;
-  opacity: 0.5;
   }
 }
 
@@ -1763,7 +1763,6 @@ font-size: 0.9em;
     padding: 6px 10px;  /* Reduziertes Padding */
     opacity: 0.7;    /* Etwas weniger auffällig */
     color: var(--text-color);  /* Textfarbe wie im p-Tag bzw. dem globalen Text */
-    opacity: 0.5;
   }
 
   /* Pseudo-Element, das das Icon anzeigt – gestylt analog zu toggleAllButton .toggle-visual */
@@ -2213,7 +2212,6 @@ font-size: 0.9em;
 
   /* Spezifische Formatierung für den Search Mode: leicht ausgegraut */
   .search-mode {
-    opacity: 0.5;
     display: flex;
     align-items: center;
     left: -20px;
@@ -2268,7 +2266,6 @@ font-size: 0.9em;
     box-shadow: var(--box-shadow);
     transition: background 0.3s, box-shadow 0.3s;
     position: relative;
-    opacity: 0.8;
   }
 
   #consensusButton::before {

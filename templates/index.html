@@ -177,7 +177,7 @@
         <input type="checkbox" id="selectClaude" checked> Anthropic Claude
       </label>
       <label for="selectGemini">
-        <input type="checkbox" id="selectGemini" checked> Google Gemini
+        <input type="checkbox" id="selectGemini" checked> Gemini
       </label>
       <label for="selectDeepSeek">
         <input type="checkbox" id="selectDeepSeek" checked> DeepSeek
@@ -232,7 +232,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v0.8.3</span>
+    <span id="version-number">v0.9.4</span>
   </div>
 </div>
   <div class="container">
@@ -329,8 +329,8 @@
         </h2>
         <p class="collapsible-content"></p>
       </div>
-      <!-- Antwort Google Gemini -->
-      <div class="response-box" id="geminiResponse" data-model="Google Gemini">
+      <!-- Antwort Gemini -->
+      <div class="response-box" id="geminiResponse" data-model="Gemini">
         <h2>
           <span class="title">Response from Gemini <small>(gemini-1.5-pro)</small></span>
           <div class="control-icons">
@@ -422,7 +422,7 @@
                 <option value="OpenAI">GPT‑4o</option>
                 <option value="Anthropic">claude-3-5</option>
                 <option value="Mistral">mistral-large-latest</option>
-                <option value="Google Gemini">gemini-1.5-pro</option>
+                <option value="Gemini">gemini-1.5-pro</option>
                 <option value="DeepSeek">DeepSeek-V3</option>
               </select>
             </div>
@@ -1028,7 +1028,7 @@
           if (document.getElementById("selectOpenAI").checked) activeModels.push("OpenAI");
           if (document.getElementById("selectMistral").checked) activeModels.push("Mistral");
           if (document.getElementById("selectClaude").checked) activeModels.push("Anthropic");
-          if (document.getElementById("selectGemini").checked) activeModels.push("Google Gemini");
+          if (document.getElementById("selectGemini").checked) activeModels.push("Gemini");
           if (document.getElementById("selectDeepSeek").checked) activeModels.push("DeepSeek");
           if (document.getElementById("selectGrok").checked) activeModels.push("Grok");
           if (document.getElementById("selectExa").checked && document.getElementById("searchModeToggle").checked) activeModels.push("Exa");
@@ -1044,7 +1044,7 @@
           if (activeModels.includes("Anthropic")) {
             document.getElementById("claudeResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
           }
-          if (activeModels.includes("Google Gemini")) {
+          if (activeModels.includes("Gemini")) {
             document.getElementById("geminiResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
           }
           if (activeModels.includes("DeepSeek")) {
@@ -1330,8 +1330,8 @@
             });
         }
   
-        // Google Gemini
-        if (activeModels.includes("Google Gemini")) {
+        // Gemini
+        if (activeModels.includes("Gemini")) {
             const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
             const payload = {
               question: question,
@@ -1354,7 +1354,7 @@
               {
                 const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
                 outputEl.innerHTML = "Please log in or store your own API keys.";
-                alert("Please enter a valid Google Gemini API Key.");
+                alert("Please enter a valid Gemini API Key.");
                 return;
               }
               payload.api_key = localStorage.getItem("geminiKey");
@@ -1391,7 +1391,7 @@
               checkAllResponses();
             })
             .catch(error => {
-              console.error("Error with Google Gemini:", error);
+              console.error("Error with Gemini:", error);
               checkAllResponses();
             });
         }
@@ -2104,7 +2104,7 @@
             const openaiResult = data.results["OpenAI"];
             const mistralResult = data.results["Mistral"];
             const anthropicResult = data.results["Anthropic"];
-            const geminiResult = data.results["Google Gemini"];
+            const geminiResult = data.results["Gemini"];
             const deepseekResult = data.results["DeepSeek"];
             const grokResult = data.results["Grok"];
             const exaResult = data.results["Exa"];

@@ -220,7 +220,7 @@ def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode:
                 answer_text += "\n\n" + "\n".join(formatted_links)
         return answer_text
     except Exception as e:
-        return f"Error with Google Gemini: {str(e)}"
+        return f"Error with Gemini: {str(e)}"
 
     
 def query_deepseek(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False) -> str:
@@ -378,7 +378,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
         prompt_parts.append(f"Response from mistral-large-latest: {answer_mistral}\n\n")
     if "Anthropic" not in excluded_models and answer_claude:
         prompt_parts.append(f"Response from claude-3-5-sonnet: {answer_claude}\n\n")
-    if "Google Gemini" not in excluded_models and answer_gemini:
+    if "Gemini" not in excluded_models and answer_gemini:
         prompt_parts.append(f"Response from gemini-pro: {answer_gemini}\n\n")
     if "DeepSeek" not in excluded_models and answer_deepseek:
         prompt_parts.append(f"Response from deepseek-chat: {answer_deepseek}\n\n")
@@ -461,8 +461,8 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
             else:
                 return f"Error with Anthropic: {response.status_code} - {response.text}"
             
-        elif consensus_model == "Google Gemini":
-            gemini_key = api_keys.get("Google Gemini")
+        elif consensus_model == "Gemini":
+            gemini_key = api_keys.get("Gemini")
             if gemini_key and gemini_key.strip() != "":
                 genai.configure(api_key=gemini_key)
             else:
@@ -635,8 +635,8 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
             else:
                 return f"Error with Anthropic: {response.status_code} - {response.text}"
             
-        elif differences_model == "Google Gemini":
-            gemini_key = api_keys.get("Google Gemini")
+        elif differences_model == "Gemini":
+            gemini_key = api_keys.get("Gemini")
             if gemini_key and gemini_key.strip() != "":
                 genai.configure(api_key=gemini_key)
             else:
@@ -1697,7 +1697,7 @@ async def consensus(data: dict):
         api_keys["OpenAI"] = data.get("openai_key")
         api_keys["Mistral"] = data.get("mistral_key")
         api_keys["Anthropic"] = data.get("anthropic_key")
-        api_keys["Google Gemini"] = data.get("gemini_key")
+        api_keys["Gemini"] = data.get("gemini_key")
         api_keys["DeepSeek"] = data.get("deepseek_key")
         api_keys["Grok"] = data.get("grok_key")
         api_keys["Exa"] = data.get("exa_key")
@@ -1706,7 +1706,7 @@ async def consensus(data: dict):
         api_keys["OpenAI"] = data.get("openai_key") or os.environ.get("DEVELOPER_OPENAI_API_KEY")
         api_keys["Mistral"] = data.get("mistral_key") or os.environ.get("DEVELOPER_MISTRAL_API_KEY")
         api_keys["Anthropic"] = data.get("anthropic_key") or os.environ.get("DEVELOPER_ANTHROPIC_API_KEY")
-        api_keys["Google Gemini"] = data.get("gemini_key") or os.environ.get("DEVELOPER_GEMINI_API_KEY")
+        api_keys["Gemini"] = data.get("gemini_key") or os.environ.get("DEVELOPER_GEMINI_API_KEY")
         api_keys["DeepSeek"] = data.get("deepseek_key") or os.environ.get("DEVELOPER_DEEPSEEK_API_KEY")
         api_keys["Grok"] = data.get("grok_key") or os.environ.get("DEVELOPER_GROK_API_KEY")
         api_keys["Exa"] = data.get("exa_key") or os.environ.get("DEVELOPER_EXA_API_KEY")
@@ -1722,9 +1722,9 @@ async def consensus(data: dict):
     if "OpenAI" not in excluded_models:
         if not answer_openai or not api_keys.get("OpenAI"):
             missing.append("OpenAI")
-    if "Google Gemini" not in excluded_models:
-        if not answer_gemini or (use_own_keys and not api_keys.get("Google Gemini")):
-            missing.append("Google Gemini")
+    if "Gemini" not in excluded_models:
+        if not answer_gemini or (use_own_keys and not api_keys.get("Gemini")):
+            missing.append("Gemini")
     # Bei Search Mode: Exa UND Perplexity prüfen, ansonsten die anderen Modelle
     if search_mode:
         if "Exa" not in excluded_models:
@@ -1879,18 +1879,18 @@ async def check_keys(data: dict):
         except Exception as e:
             results["Grok"] = "invalid"
         
-        # Google Gemini Handshake
+        # Gemini Handshake
         try:
             gemini_key = data.get("gemini_key")
             if gemini_key and len(gemini_key) > 10:
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel("gemini-1.5-pro-latest")
                 _ = model.generate_content("ping")
-                results["Google Gemini"] = "valid"
+                results["Gemini"] = "valid"
             else:
-                results["Google Gemini"] = "invalid"
+                results["Gemini"] = "invalid"
         except Exception as e:
-            results["Google Gemini"] = "invalid"
+            results["Gemini"] = "invalid"
 
         # Exa Handshake
         try:
