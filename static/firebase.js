@@ -197,6 +197,8 @@ async function recordModelVote(model, type) {
   }
 }
 
+window.recordModelVote = recordModelVote;
+
 // Hilfsfunktion zum Kürzen des Textes auf maximal 5 Wörter
 function truncateText(text, maxWords = 5) {
   const words = text.split(' ');
@@ -206,151 +208,187 @@ function truncateText(text, maxWords = 5) {
   return text;
 }
 
-window.recordModelVote = recordModelVote;
-
-function saveBookmark(question, response, modelName) {
+async function saveBookmark(question, response, modelName) {
   if (!auth.currentUser) return;
-  const userUid = auth.currentUser.uid;
-  const docId = btoa(question).replace(/[^a-zA-Z0-9]/g, "_").slice(0, 50);
-  const docRef = doc(db, "users", userUid, "bookmarks", docId);
-
-  // Statt "responses.OpenAI" als Feldname ein verschachteltes Objekt:
-  const dataToMerge = {
-    query: question,
-    timestamp: new Date(),
-    responses: {
-      [modelName]: response
+  const id_token = localStorage.getItem("id_token");
+  if (!id_token) return;
+  try {
+    const res = await fetch("/bookmark", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+          id_token: id_token,
+          question: question,
+          response: response,
+          modelName: modelName
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.error("Error saving bookmark:", data.detail);
+    } else {
+      console.log(data.message);
+      // Nach erfolgreichem Speichern das Bookmark-Listing aktualisieren:
+      loadBookmarks();
     }
-  };
-
-  setDoc(docRef, dataToMerge, { merge: true })
-    .then(() => console.log(`Bookmark updated: ${modelName}`))
+  } catch (error) {
+      console.error("Error in saveBookmark:", error);
+  }
 }
-
 window.saveBookmark = saveBookmark;
 
-function saveBookmarkConsensus(question, consensusText, differencesText) {
+async function saveBookmarkConsensus(question, consensusText, differencesText) {
   if (!auth.currentUser) return;
-  const userUid = auth.currentUser.uid;
-  const docId = btoa(question).replace(/[^a-zA-Z0-9]/g, "_").slice(0, 50);
-  const docRef = doc(db, "users", userUid, "bookmarks", docId);
-
-  // Schreibe die Konsens-Daten in dasselbe "responses"-Objekt
-  const dataToMerge = {
-    responses: {
-      consensus: consensusText,
-      differences: differencesText
+  const id_token = localStorage.getItem("id_token");
+  if (!id_token) return;
+  try {
+    const res = await fetch("/bookmark/consensus", {
+       method: "POST",
+       headers: { "Content-Type": "application/json" },
+       body: JSON.stringify({
+         id_token: id_token,
+         question: question,
+         consensusText: consensusText,
+         differencesText: differencesText
+       })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.error("Error saving consensus bookmark:", data.detail);
+    } else {
+      console.log(data.message);
     }
-  };
-
-  // Merge: alte Felder bleiben erhalten
-  setDoc(docRef, dataToMerge, { merge: true })
-    .then(() => console.log("Consensus & differences saved."))
-    .catch(error => console.error("Error when saving the consensus:", error));
+  } catch (error) {
+    console.error("Error in saveBookmarkConsensus:", error);
+  }
 }
-
 window.saveBookmarkConsensus = saveBookmarkConsensus;
 
-function loadBookmarks() {
-  if (!auth.currentUser) return;
-  const userUid = auth.currentUser.uid;
-  const bookmarksCollection = collection(db, "users", userUid, "bookmarks");
-  const q = query(bookmarksCollection, orderBy("timestamp", "desc"));
-  return onSnapshot(q, (snapshot) => {
-    let bookmarksHTML = "";
-    snapshot.forEach((doc) => {
-      const data = doc.data();
-      bookmarksHTML += `<div class="bookmark" data-id="${doc.id}" style="position: relative;">
-                        <p>${truncateText(data.query)}</p>
-                        <span class="delete-bookmark" style="position: absolute; right: 5px; top: 50%; transform: translateY(-50%); cursor: pointer;">x</span>
-                        </div>`;
-    });
-    document.getElementById("bookmarksContainer").innerHTML = bookmarksHTML;
 
+async function loadBookmarks() {
+  if (!auth.currentUser) return;
+  
+  const id_token = localStorage.getItem("id_token");
+  if (!id_token) return;
+  
+  try {
+    // Abruf der Bookmarks über den Backend-Endpoint
+    const res = await fetch("/bookmarks", {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + id_token
+      }
+    });
+    const data = await res.json();
+    
+    if (!res.ok) {
+      console.error("Error loading bookmarks:", data.detail);
+      return;
+    }
+    
+    // Speichere die abgerufenen Bookmarks global, um später darauf zugreifen zu können
+    window.bookmarksData = data.bookmarks;
+    
+    let bookmarksHTML = "";
+    data.bookmarks.forEach(bookmark => {
+      bookmarksHTML += `
+        <div class="bookmark" data-id="${bookmark.id}" style="position: relative;">
+          <p>${truncateText(bookmark.query)}</p>
+          <span class="delete-bookmark" style="position: absolute; right: 5px; top: 50%; transform: translateY(-50%); cursor: pointer;">x</span>
+        </div>`;
+    });
+    
+    const container = document.getElementById("bookmarksContainer");
+    container.innerHTML = bookmarksHTML;
+    
+    // Füge die fade-in Klasse hinzu, um Animation zu triggern
+    container.classList.add("fade-in");
+    // Entferne die Klasse nach der Animation (0.5s entspricht der Animationsdauer)
+    setTimeout(() => container.classList.remove("fade-in"), 500);
+    
     // Löschen-Event hinzufügen
     document.querySelectorAll(".delete-bookmark").forEach(btn => {
       btn.addEventListener("click", (e) => {
-        // Verhindert, dass das Klick-Event auch den Klick auf das Bookmark auslöst
+        // Verhindert, dass das Klick-Event auch das Bookmark selbst auslöst
         e.stopPropagation();
         const bookmarkId = btn.parentElement.getAttribute("data-id");
         deleteBookmark(bookmarkId);
       });
     });
-
-    // Entferne die automatische Deaktivierung hier:
-    // document.getElementById("consensusButton").disabled = true;
-
-    // Klick-Event hinzufügen: Beim Klick auf ein Bookmark wird der Konsens-Button deaktiviert und das Bookmark geladen
+    
+    // Klick-Event hinzufügen: Beim Klick auf ein Bookmark werden alle Antwortboxen aktualisiert
     document.querySelectorAll(".bookmark").forEach(item => {
       item.addEventListener("click", () => {
-        // Konsens-Button deaktivieren, weil hier ein Bookmark geladen wird
+        // Konsens-Button deaktivieren, da hier ein Bookmark geladen wird
         document.getElementById("consensusButton").disabled = true;
-
+        
         const bookmarkId = item.getAttribute("data-id");
-        console.log("Lade Bookmark-Dokument mit ID: ", bookmarkId);
-        getDoc(doc(db, "users", userUid, "bookmarks", bookmarkId))
-          .then(docSnapshot => {
-            if (docSnapshot.exists()) {
-              const bookmarkData = docSnapshot.data();
-              console.log("Bookmark-Daten:", bookmarkData);
-              if (bookmarkData.responses) {
-                document.getElementById("openaiResponse")
-                  .querySelector(".collapsible-content").innerHTML =
-                  marked.parse(bookmarkData.responses["OpenAI"] || "");
-                document.getElementById("mistralResponse")
-                  .querySelector(".collapsible-content").innerHTML =
-                  marked.parse(bookmarkData.responses["Mistral"] || "");
-                document.getElementById("claudeResponse")
-                  .querySelector(".collapsible-content").innerHTML =
-                  marked.parse(bookmarkData.responses["Anthropic"] || "");
-                document.getElementById("geminiResponse")
-                  .querySelector(".collapsible-content").innerHTML =
-                  marked.parse(bookmarkData.responses["Gemini"] || "");
-                document.getElementById("deepseekResponse")
-                  .querySelector(".collapsible-content").innerHTML =
-                  marked.parse(bookmarkData.responses["DeepSeek"] || "");
-                document.getElementById("grokResponse")
-                  .querySelector(".collapsible-content").innerHTML =
-                  marked.parse(bookmarkData.responses["Grok"] || "");
-                document.getElementById("exaResponse")
-                  .querySelector(".collapsible-content").innerHTML =
-                  marked.parse(bookmarkData.responses["Exa"] || "");
-                document.getElementById("perplexityResponse")
-                  .querySelector(".collapsible-content").innerHTML =
-                  marked.parse(bookmarkData.responses["Perplexity"] || "");
-                // Zusätzlich Konsens & Unterschiede laden:
-                document.getElementById("consensusResponse")
-                  .querySelector(".consensus-main p").innerHTML =
-                  marked.parse(bookmarkData.responses["consensus"] || "");
-                document.getElementById("consensusResponse")
-                  .querySelector(".consensus-differences p").innerHTML =
-                  marked.parse(bookmarkData.responses["differences"] || "");
-              } else {
-                console.log("No 'responses' found in the bookmark.");
-              }
-            } else {
-              console.log("No bookmark document found.");
-            }
-          })
-          .catch(error => console.error("Error loading the bookmark:", error));
+        console.log("Bookmark clicked with ID:", bookmarkId);
+        
+        // Finde das Bookmark-Objekt in den global gespeicherten Daten
+        const bookmark = window.bookmarksData.find(b => b.id === bookmarkId);
+        if (bookmark && bookmark.responses) {
+          // Update der Antwortboxen anhand der gespeicherten Antworten
+          document.getElementById("openaiResponse").querySelector(".collapsible-content").innerHTML =
+            marked.parse(bookmark.responses["OpenAI"] || "");
+          document.getElementById("mistralResponse").querySelector(".collapsible-content").innerHTML =
+            marked.parse(bookmark.responses["Mistral"] || "");
+          document.getElementById("claudeResponse").querySelector(".collapsible-content").innerHTML =
+            marked.parse(bookmark.responses["Anthropic"] || "");
+          document.getElementById("geminiResponse").querySelector(".collapsible-content").innerHTML =
+            marked.parse(bookmark.responses["Gemini"] || "");
+          document.getElementById("deepseekResponse").querySelector(".collapsible-content").innerHTML =
+            marked.parse(bookmark.responses["DeepSeek"] || "");
+          document.getElementById("grokResponse").querySelector(".collapsible-content").innerHTML =
+            marked.parse(bookmark.responses["Grok"] || "");
+          document.getElementById("exaResponse").querySelector(".collapsible-content").innerHTML =
+            marked.parse(bookmark.responses["Exa"] || "");
+          document.getElementById("perplexityResponse").querySelector(".collapsible-content").innerHTML =
+            marked.parse(bookmark.responses["Perplexity"] || "");
+          
+          // Aktualisiere auch die Konsens-Boxen, falls vorhanden
+          document.getElementById("consensusResponse").querySelector(".consensus-main p").innerHTML =
+            marked.parse(bookmark.responses["consensus"] || "");
+          document.getElementById("consensusResponse").querySelector(".consensus-differences p").innerHTML =
+            marked.parse(bookmark.responses["differences"] || "");
+        } else {
+          console.log("No responses found in this bookmark.");
+        }
       });
     });
-  });
+    
+  } catch (error) {
+    console.error("Error in loadBookmarks:", error);
+  }
 }
 
-function deleteBookmark(bookmarkId) {
+window.loadBookmarks = loadBookmarks;
+
+async function deleteBookmark(bookmarkId) {
   if (!auth.currentUser) return;
-  const userUid = auth.currentUser.uid;
-  const bookmarkDocRef = doc(db, "users", userUid, "bookmarks", bookmarkId);
-  deleteDoc(bookmarkDocRef)
-    .then(() => {
-      console.log("Bookmark deleted:", bookmarkId);
-    })
-    .catch((error) => {
-      console.error("Error when deleting the bookmark:", error);
+  const id_token = localStorage.getItem("id_token");
+  if (!id_token) return;
+  try {
+    const res = await fetch("/bookmark", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+         id_token: id_token,
+         bookmarkId: bookmarkId
+      })
     });
+    const data = await res.json();
+    if (!res.ok) {
+       console.error("Error deleting bookmark:", data.detail);
+    } else {
+       console.log(data.message);
+       loadBookmarks();
+    }
+  } catch (error) {
+    console.error("Error in deleteBookmark:", error);
+  }
 }
-
 window.deleteBookmark = deleteBookmark;
 
 // Login per Enter-Taste auslösen: Bei Fokus im Email- oder Passwortfeld wird der Login-Button "geklickt".

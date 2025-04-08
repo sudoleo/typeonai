@@ -12,6 +12,10 @@
   --code-bg: #f7f7f7; /* Heller Hintergrund für Light Mode */
   --feedback-text-color: #b3b3b3;           /* Dezentes mittleres Grau im Light Mode */
   --feedback-text-hover-color: #666;       /* Etwas dunkler beim Hover */
+  --clear-button-bg: #fce4e4;       /* Sehr dezenter, pastelliger Rotton */
+  --clear-button-border: #ffcdd2;   /* Passende, weiche Umrandung */
+  --clear-button-text: #b71c1c;     /* Dunkler, kontrastreicher Rotton für den Text */
+  --clear-button-bg-hover: #f8bdbd;  /* Leicht intensiver Farbton beim Hover */
 }
 
 .dark-mode {
@@ -27,6 +31,10 @@
   --code-bg: #1e1e1e; /* Dunkler Hintergrund für Dark Mode */
   --feedback-text-color: #949494;             /* Dezentes helles Grau im Dark Mode */
   --feedback-text-hover-color: #bbb;         /* Etwas dunkler beim Hover */
+  --clear-button-bg: #3d1f1f;       /* Im Dark Mode etwas gedämpfter, dunkler Rotton */
+  --clear-button-border: #633131;   /* Entsprechende Umrandung im Dark Mode */
+  --clear-button-text: #f8bdbd;     /* Helle Schrift, damit der Kontrast im Dunkeln stimmt */
+  --clear-button-bg-hover: #5a2a2a;  /* Etwas hellere Variante beim Hover */
 }
 
 /* Dark Mode Anpassungen */
@@ -188,12 +196,12 @@ z-index: 2000;  /* höher als der toggleAllButton */
   border-radius: 10px;
   padding: 10px;
   width: 100%;
-  margin: 20px 0;
+  margin: 10px 0;
   box-sizing: border-box;
   /* Feste Höhe entfernen, stattdessen eine Mindesthöhe setzen */
   /* height: 110px; */
   min-height: 110px;
-  padding-bottom: 60px;
+  padding-bottom: 50px;
 }
 
 .chat-input-container .input-field {
@@ -667,6 +675,56 @@ pre .copy-btn:hover {
 .dark-mode .sidebar .bookmark:hover {
   background-color: #363636;
 }
+
+/* Fade-In-Klasse für den Bookmarks-Container */
+.fade-in {
+  animation: fadeInAnimation 0.5s ease-in-out;
+}
+
+/* Angepasstes Styling für den Clear-Button */
+#clearButton {
+  position: absolute;
+  bottom: 1px;
+  right: 1px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  z-index: 1000;
+}
+
+/* Pseudo-Element, das das Icon anzeigt – gestylt analog zu toggleAllButton .toggle-visual */
+#clearButton::before {
+  content: "";
+  display: block;
+  width: 25px;               /* ggf. anpassen, falls das Icon zu klein ist */
+  height: 25px;              /* hier etwas größer, um das clear.png detailreich darzustellen */
+  background-color: #888;    /* Standard-Hintergrundfarbe */
+  border: 1px solid #ccc;    /* Standard-Rahmen */
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: background-color 0.3s, box-shadow 0.3s;
+  animation: pulse 2s ease-out;
+  
+  /* clear.png als Maske – übernimmmt die Form der Bilddatei */
+  -webkit-mask: url('./icons/clear.png') no-repeat center;
+  mask: url('./icons/clear.png') no-repeat center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+/* Dark-Mode: Anpassung analog zum toggleAllButton */
+.dark-mode #clearButton::before {
+  background-color: #9e9e9e;
+  border: 1px solid #535353;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+
+/* Hover-Effekt */
+#clearButton:hover::before {
+  background-color: #4e4e4e;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
 /* Grüne Umrandung bei Best-Auswahl */
 .response-box.best {
   border: 2px solid green;
@@ -1697,6 +1755,44 @@ font-size: 0.9em;
     margin-left: 0 !important;
     padding-top: 0px;
   }
+  
+  #clearButton {
+    right: 1px; /* 10px vom rechten Rand */
+    bottom: auto;    /* Entferne die unten gesetzte Positionierung */
+    transform: none; /* Keine vertikale Verschiebung */
+    padding: 6px 10px;  /* Reduziertes Padding */
+    opacity: 0.7;    /* Etwas weniger auffällig */
+    color: var(--text-color);  /* Textfarbe wie im p-Tag bzw. dem globalen Text */
+    opacity: 0.5;
+  }
+
+  /* Pseudo-Element, das das Icon anzeigt – gestylt analog zu toggleAllButton .toggle-visual */
+  #clearButton::before {
+    content: "";
+    display: block;
+    width: 18px;               /* ggf. anpassen, falls das Icon zu klein ist */
+    height: 18px;              /* hier etwas größer, um das clear.png detailreich darzustellen */
+    background-color: #888;    /* Standard-Hintergrundfarbe */
+    border: 1px solid #ccc;    /* Standard-Rahmen */
+    border-radius: 3px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    transition: background-color 0.3s, box-shadow 0.3s;
+    animation: pulse 2s ease-out;
+    
+    /* clear.png als Maske – übernimmmt die Form der Bilddatei */
+    -webkit-mask: url('./icons/clear.png') no-repeat center;
+    mask: url('./icons/clear.png') no-repeat center;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+  }
+  
+  #clearButton:hover {
+    background-color: transparent; /* Hover-Effekt bleibt transparent */
+  }
+  
+  #clearButton:active {
+    transform: none;
+  }
 
   .sidebar {
     position: fixed;
@@ -1786,6 +1882,11 @@ font-size: 0.9em;
     top: 10px;
     left: 10px;
     z-index: 1200;
+  }
+
+  #toggleAllButton {
+    position: absolute;
+    top: -23px;
   }
 
   /* Falls du einen doppelten Toggle außerhalb der Top Bar hast, blendest du ihn hier aus */
@@ -2244,6 +2345,14 @@ font-size: 0.9em;
     width: 65%;  /* Nimmt 90% der Bildschirmbreite ein */
     max-width: 400px; /* Begrenzung, damit es nicht zu groß wird */
   }
+
+  .feedback-line {
+    display: grid;
+    align-items: center;
+    gap: 8px; /* Abstand zwischen Text & Button */
+    justify-content: center;
+    font-size: 11px;
+  }
 }  
 
 @media (max-width: 480px) {
@@ -2427,4 +2536,9 @@ margin-left: 5px; /* kleiner Abstand zum Button-Text */
   0% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.05); opacity: 0.8; }
   100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes fadeInAnimation {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }

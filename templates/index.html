@@ -275,6 +275,8 @@
             </span>
           </div>
         </div>
+        <!-- Clear-Button nur mit Icon -->
+        <button id="clearButton" onclick="clearResponseBoxes()" title="Clear all responses" aria-label="Clear all responses"></button>      
         <button class="button" id="sendButton" onclick="sendQuestion()">
           <!-- SVG-Icon für einen Pfeil, der nach unten zeigt -->
           <svg class="input-icon" viewBox="0 0 24 24" fill="currentColor">
@@ -671,17 +673,6 @@
         document.getElementById("closeSystemPromptModal").addEventListener("click", function() {
           document.getElementById("systemPromptModal").style.display = "none";
         });
-
-        // // Öffnen des Feedback-Modals beim Klick auf den Feedback-Button
-        // document.getElementById("openFeedbackBtn").addEventListener("click", function() {
-        //   const modal = document.getElementById("feedbackModal");
-        //   modal.style.display = "block";
-        // });
-
-        // // Schließen des Feedback-Modals beim Klick auf den Schließen-Button
-        // document.getElementById("closeFeedbackModal").addEventListener("click", function() {
-        //   document.getElementById("feedbackModal").style.display = "none";
-        // });
   
         // Speichern des neuen Prompts
         document.getElementById("saveSystemPromptBtn").addEventListener("click", function() {
@@ -983,6 +974,8 @@
             return;
           }
           const question = document.getElementById("questionInput").value;
+          lastQuestion = question;  // Speichern in einer globalen Variable
+          // clearResponseBoxes();
           consensusGenerated = false;
           if (!question) {
             alert("Please enter a question.");
@@ -1833,7 +1826,7 @@
         let lastQuestion = "";
   
         window.getConsensus = async function() {
-          const question = document.getElementById("questionInput").value.trim();
+          const question = lastQuestion.trim();
             // Status, ob eigene API Keys genutzt werden sollen
           const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
           let searchMode = document.getElementById("searchModeToggle").checked;
@@ -2170,6 +2163,53 @@
                 });
             });
           }
+
+        window.clearResponseBoxes = function() {
+          const boxIds = [
+            "openaiResponse",
+            "mistralResponse",
+            "claudeResponse",
+            "geminiResponse",
+            "deepseekResponse",
+            "grokResponse",
+            "exaResponse",
+            "perplexityResponse"
+          ];
+          
+          // Deaktiviere den Consensus-Button, sofern nötig.
+          document.getElementById("consensusButton").disabled = true;
+          
+          // Lösche den Inhalt aller Modell-Antwortboxen.
+          boxIds.forEach(id => {
+            const box = document.getElementById(id);
+            if (box) {
+              const contentEl = box.querySelector(".collapsible-content");
+              if (contentEl) {
+                contentEl.innerHTML = "";
+              }
+            }
+          });
+          
+          // Leere den Inhalt der Consensus-Antwortbox.
+          const consensusBox = document.getElementById("consensusResponse");
+          if (consensusBox) {
+            const mainElement = consensusBox.querySelector(".consensus-main p");
+            if (mainElement) {
+              mainElement.innerHTML = "";
+            }
+            
+            const diffElement = consensusBox.querySelector(".consensus-differences p");
+            if (diffElement) {
+              diffElement.innerHTML = "";
+            }
+          }
+
+          // Leere den Inhalt der Input-Box mit der ID "questionInput".
+          const inputBox = document.getElementById("questionInput");
+          if (inputBox) {
+            inputBox.value = "";
+          }
+        }
       });
 
 </script>

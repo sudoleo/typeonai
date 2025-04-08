@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 import openai
 import requests
-import re
+import base64, re
 from mistralai import Mistral
 from dotenv import load_dotenv
 import google.generativeai as genai
@@ -13,6 +13,8 @@ import firebase_admin
 from firebase_admin import credentials, auth, firestore
 from typing import Optional
 from datetime import datetime, timedelta
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 class CustomSecurityMiddleware:
     def __init__(self, app):
@@ -48,6 +50,10 @@ app = FastAPI()
 app.add_middleware(CustomSecurityMiddleware)
 
 load_dotenv()
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -723,6 +729,32 @@ async def read_root(request: Request):
     }
     return templates.TemplateResponse("index.html", {"request": request, "free_limit": FREE_USAGE_LIMIT, **firebase_config})
 
+@app.get("/bookmarks")
+@limiter.limit("10/minute")  # Beispiel: maximal 10 Anfragen pro Minute pro IP
+async def load_bookmarks(request: Request):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    
+    id_token = auth_header.split(" ")[1]
+    try:
+        uid = verify_user_token(id_token)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Authentication failed: " + str(e))
+    
+    try:
+        bookmarks_ref = db_firestore.collection("users").document(uid).collection("bookmarks")
+        query_ref = bookmarks_ref.order_by("timestamp", direction=firestore.Query.DESCENDING)
+        docs = query_ref.stream()
+        bookmarks = []
+        for doc in docs:
+            bookmark_data = doc.to_dict()
+            bookmark_data["id"] = doc.id
+            bookmarks.append(bookmark_data)
+        return {"status": "success", "bookmarks": bookmarks}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error loading bookmarks: " + str(e))
+
 # Globales Dictionary zum Speichern der IP-Adressen registrierter Nutzer
 registered_ips = {}  # { ip_address: uid }
 
@@ -855,7 +887,93 @@ async def record_vote(data: dict):
     
     return {"status": "success", "message": f"{vote_type} vote recorded for {model}"}
 
+@app.post("/bookmark")
+async def save_bookmark(data: dict):
+    id_token = data.get("id_token")
+    question = data.get("question")
+    response_text = data.get("response")
+    modelName = data.get("modelName")
+    
+    if not id_token or not question or not response_text or not modelName:
+        raise HTTPException(status_code=400, detail="Missing required fields.")
+    
+    try:
+        uid = verify_user_token(id_token)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Authentication failed: " + str(e))
+    
+    # Berechne die Dokument-ID (analog zur Client-Logik)
+    doc_id = base64.b64encode(question.encode()).decode()
+    doc_id = re.sub(r'[^a-zA-Z0-9]', '_', doc_id)[:50]
+    
+    dataToMerge = {
+        "query": question,
+        "timestamp": firestore.SERVER_TIMESTAMP,  # Serverseitiger Zeitstempel
+        "responses": {
+            modelName: response_text
+        }
+    }
+    
+    try:
+        db_firestore.collection("users").document(uid).collection("bookmarks").document(doc_id).set(dataToMerge, merge=True)
+        return {"status": "success", "message": f"Bookmark for {modelName} saved."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error saving bookmark: " + str(e))
+    
 
+@app.post("/bookmark/consensus")
+async def save_bookmark_consensus(data: dict):
+    id_token = data.get("id_token")
+    question = data.get("question")
+    consensusText = data.get("consensusText")
+    differencesText = data.get("differencesText")
+    
+    if not id_token or not question or consensusText is None or differencesText is None:
+        raise HTTPException(status_code=400, detail="Missing required fields.")
+    
+    try:
+        uid = verify_user_token(id_token)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Authentication failed: " + str(e))
+    
+    # Berechne Dokument-ID (wie oben)
+    doc_id = base64.b64encode(question.encode()).decode()
+    doc_id = re.sub(r'[^a-zA-Z0-9]', '_', doc_id)[:50]
+    
+    dataToMerge = {
+        "responses": {
+            "consensus": consensusText,
+            "differences": differencesText
+        }
+    }
+    
+    try:
+        db_firestore.collection("users").document(uid).collection("bookmarks").document(doc_id).set(dataToMerge, merge=True)
+        return {"status": "success", "message": "Consensus and differences saved."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error saving consensus: " + str(e))
+    
+    
+@app.delete("/bookmark")
+async def delete_bookmark(data: dict):
+    id_token = data.get("id_token")
+    bookmark_id = data.get("bookmarkId")
+    
+    if not id_token or not bookmark_id:
+        raise HTTPException(status_code=400, detail="Missing required fields.")
+    
+    try:
+        uid = verify_user_token(id_token)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Authentication failed: " + str(e))
+    
+    try:
+        db_firestore.collection("users").document(uid).collection("bookmarks").document(bookmark_id).delete()
+        return {"status": "success", "message": "Bookmark deleted."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error deleting bookmark: " + str(e))
+
+    
 @app.post("/ask_openai")
 async def ask_openai_post(data: dict = Body(...)):
     question = data.get("question")
