@@ -1874,6 +1874,10 @@ font-size: 0.9em;
   align-items: center;
   gap: 10px;
   }
+
+  #clearButton {
+    right: 50px;
+}
 }
 
 @media (max-width: 768px) {
