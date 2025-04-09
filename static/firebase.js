@@ -15,6 +15,7 @@ let unsubscribeBookmarks = null;
 onAuthStateChanged(auth, (user) => {
   const loginContainer = document.getElementById("loginContainer");
   const usageOptions = document.getElementById("usageOptions");
+
   if (user) {
     user.getIdToken().then((token) => {
       localStorage.setItem("id_token", token);
@@ -22,9 +23,54 @@ onAuthStateChanged(auth, (user) => {
         usageOptions.style.display = "block";
       }
     });
-    loginContainer.innerText = `Logout (${user.email})`;
 
-    // Starte die Bookmarks-Subscription, wenn sie noch nicht läuft
+    // Hole den ersten Buchstaben der E-Mail (Großbuchstabe)
+    const emailInitial = user.email.charAt(0).toUpperCase();
+
+    // Setze HTML: Das Popup enthält jetzt die E-Mail und den Logout-Button
+    loginContainer.innerHTML = `
+      <div class="email-container">
+        <span id="emailIcon" class="email-icon">${emailInitial}</span>
+        <div id="emailPopup" class="email-popup">
+          <div class="popup-content">
+            <span class="user-email">${user.email}</span>
+            <button id="logoutButton" class="logout-button">Logout</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const emailIcon = document.getElementById("emailIcon");
+    const emailPopup = document.getElementById("emailPopup");
+    const logoutButton = document.getElementById("logoutButton");
+
+    // Klick auf das Icon öffnet oder schließt das Popup
+    emailIcon.addEventListener("click", function(event) {
+      event.stopPropagation();
+      emailPopup.style.display = (emailPopup.style.display === "none" || emailPopup.style.display === "")
+                                 ? "block"
+                                 : "none";
+    });
+
+    // Logout: Beim Klick auf den Button wird signOut() aufgerufen
+    logoutButton.addEventListener("click", function() {
+      signOut(auth)
+        .then(() => {
+          // Optional: Schließe das Popup nach erfolgreichem Logout
+          emailPopup.style.display = "none";
+        })
+        .catch((error) => {
+          console.error("Logout-Fehler", error);
+        });
+    });
+
+    // Klick außerhalb des loginContainer schließt das Popup
+    document.addEventListener("click", function(event) {
+      if (!loginContainer.contains(event.target)) {
+        emailPopup.style.display = "none";
+      }
+    });
+
     if (!unsubscribeBookmarks) {
       unsubscribeBookmarks = loadBookmarks();
     }
@@ -34,15 +80,14 @@ onAuthStateChanged(auth, (user) => {
     if (usageOptions) {
       usageOptions.style.display = "none";
     }
-    // Bookmarks leeren
     document.getElementById("bookmarksContainer").innerHTML = "";
-    // Falls onSnapshot abonniert war, abbestellen:
     if (unsubscribeBookmarks) {
       unsubscribeBookmarks();
       unsubscribeBookmarks = null;
     }
   }
 });
+
 
 // Login-Funktion
 document.getElementById("loginButton").addEventListener("click", () => {

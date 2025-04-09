@@ -17,6 +17,7 @@
   --clear-button-text: #b71c1c;     /* Dunkler, kontrastreicher Rotton für den Text */
   --clear-button-bg-hover: #f8bdbd;  /* Leicht intensiver Farbton beim Hover */
   --slider-bg: #ccc; /* Standard für White Mode */
+  --email-icon-bg: #ddd; /* Neue Variable: leicht grauer Hintergrund für Whitemode */
 }
 
 .dark-mode {
@@ -37,6 +38,7 @@
   --clear-button-text: #f8bdbd;     /* Helle Schrift, damit der Kontrast im Dunkeln stimmt */
   --clear-button-bg-hover: #5a2a2a;  /* Etwas hellere Variante beim Hover */
   --slider-bg: #636363;
+  --email-icon-bg: #555; /* Passende dunkle Farbe im Dark Mode */
 }
 
 /* Dark Mode Anpassungen */
@@ -94,6 +96,73 @@ body {
   top: auto;
   right: auto;
 }  
+
+/* Container als flex-Container für die rechte Seite */
+#loginContainer {
+  display: flex;
+  align-items: center;
+  color: var(--text-color);
+}
+
+/* Wrapper für das Icon (und das Popup) */
+.email-container {
+  display: inline-block;
+  margin-left: 8px; /* sorgt für Abstand */
+  position: relative; /* wichtig für die absolute Positionierung des Popups */
+}
+
+/* Stil für das E-Mail Icon */
+.email-icon {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: var(--email-icon-bg);
+  color: var(--text-color);
+  text-align: center;
+  line-height: 32px;
+  cursor: pointer;
+}
+
+/* Stil für das Popup */
+.email-popup {
+  display: none;
+  position: absolute;
+  top: 40px;
+  right: 0;
+  background-color: var(--container-bg);
+  border: 1px solid var(--input-border);
+  padding: 10px;
+  box-shadow: var(--box-shadow);
+  z-index: 100;
+  color: var(--text-color);
+}
+
+/* Inhalt des Popups */
+.email-popup .popup-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* Stil für die E-Mail-Anzeige */
+.email-popup .user-email {
+  margin-bottom: 8px;
+}
+
+/* Stil für den Logout-Button */
+.logout-button {
+  background-color: var(--button-bg);
+  color: var(--button-text);
+  border: none;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.logout-button:hover {
+  opacity: 0.9;
+}
 
 /* Container */
 .container {
@@ -700,7 +769,7 @@ pre .copy-btn:hover {
   display: block;
   width: 25px;               /* ggf. anpassen, falls das Icon zu klein ist */
   height: 25px;              /* hier etwas größer, um das clear.png detailreich darzustellen */
-  background-color: #888;    /* Standard-Hintergrundfarbe */
+  background-color: #a7a5a5;    /* Standard-Hintergrundfarbe */
   border: 1px solid #ccc;    /* Standard-Rahmen */
   border-radius: 3px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
@@ -907,6 +976,11 @@ pre .copy-btn:hover {
 #bookmarksContainer,
 .bookmark p {
   text-align: left !important;
+}
+
+.bookmark p {
+  overflow-wrap: break-word; /* lange Wörter umbrechen */
+  padding-right: 30px;        /* Platz schaffen für den 'x'-Button */
 }
 
 .response-box.excluded {
@@ -1482,6 +1556,10 @@ cursor: pointer;
 .error-message {
 color: red;
 font-size: 0.9em;
+}
+
+.systemPromptInputSytle {
+  resize: vertical;
 }
 
 #version-number {

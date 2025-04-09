@@ -1136,6 +1136,19 @@
   
         // Mache addCopyButtons global verfügbar:
         window.addCopyButtons = addCopyButtons;
+
+        function addNewTabToLinks(container) {
+          container.querySelectorAll('a').forEach(function(link) {
+            // Falls noch kein target-Attribut gesetzt ist, füge es hinzu
+            if (!link.hasAttribute('target')) {
+              link.setAttribute('target', '_blank');
+              link.setAttribute('rel', 'noopener noreferrer');
+            }
+          });
+        }
+
+        // Mache die Funktion global verfügbar:
+        window.addNewTabToLinks = addNewTabToLinks;
   
         // OpenAI
         if (activeModels.includes("OpenAI")) {
@@ -1178,6 +1191,7 @@
               if (data.response) {
                 outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
                 addCopyButtons(outputEl);
+                addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
                 if (auth.currentUser) {
                   saveBookmark(question, data.response, "OpenAI");
                 }
@@ -1243,6 +1257,7 @@
               if (data.response) {
                 outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
                 addCopyButtons(outputEl);
+                addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
                 if (auth.currentUser) {
                   saveBookmark(question, data.response, "Mistral");
                 }
@@ -1306,6 +1321,7 @@
               if (data.response) {
                 outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
                 addCopyButtons(outputEl);
+                addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
                 if (auth.currentUser) {
                   saveBookmark(question, data.response, "Anthropic");
                 }
@@ -1372,6 +1388,7 @@
               if (data.response) {
                 outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
                 addCopyButtons(outputEl);
+                addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
                 if (auth.currentUser) {
                   saveBookmark(question, data.response, "Gemini");
                 }
@@ -1435,6 +1452,7 @@
               if (data.response) {
                 outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
                 addCopyButtons(outputEl);
+                addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
                 if (auth.currentUser) {
                   saveBookmark(question, data.response, "DeepSeek");
                 }
@@ -1496,6 +1514,7 @@
             if (data.response) {
               outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
               addCopyButtons(outputEl);
+              addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
               if (auth.currentUser) {
                 saveBookmark(question, data.response, "Grok");
               }
@@ -1561,6 +1580,7 @@
               if (data.response) {
                 outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
                 addCopyButtons(outputEl);
+                addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
                 if (auth.currentUser) {
                   saveBookmark(question, data.response, "Exa");
                 }
@@ -1626,6 +1646,7 @@
                 if (data.response) {
                   outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
                   addCopyButtons(outputEl);
+                  addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
                   if (auth.currentUser) {
                     saveBookmark(question, data.response, "Perplexity");
                   }
@@ -2245,7 +2266,7 @@
       <span id="closeSystemPromptModal" class="close">&times;</span>
       <h2>Edit System Prompt</h2>
       <p>When empty, default is applied.</p>
-      <textarea id="systemPromptInput" rows="4" style="width:100%;"></textarea>
+      <textarea id="systemPromptInput" class="systemPromptInputSytle" rows="4" style="width:98%;"></textarea>
       <button id="saveSystemPromptBtn">Save</button>
     </div>
   </div>

@@ -730,7 +730,7 @@ async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "free_limit": FREE_USAGE_LIMIT, **firebase_config})
 
 @app.get("/bookmarks")
-@limiter.limit("10/minute")  # Beispiel: maximal 10 Anfragen pro Minute pro IP
+@limiter.limit("20/minute")  # Beispiel: maximal 10 Anfragen pro Minute pro IP
 async def load_bookmarks(request: Request):
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
