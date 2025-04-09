@@ -893,6 +893,7 @@ async def save_bookmark(data: dict):
     question = data.get("question")
     response_text = data.get("response")
     modelName = data.get("modelName")
+    mode = data.get("mode")
     
     if not id_token or not question or not response_text or not modelName:
         raise HTTPException(status_code=400, detail="Missing required fields.")
@@ -909,6 +910,7 @@ async def save_bookmark(data: dict):
     dataToMerge = {
         "query": question,
         "timestamp": firestore.SERVER_TIMESTAMP,  # Serverseitiger Zeitstempel
+        "mode": mode,
         "responses": {
             modelName: response_text
         }

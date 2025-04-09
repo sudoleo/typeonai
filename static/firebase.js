@@ -251,7 +251,7 @@ function truncateText(text, maxWords = 5) {
   return text;
 }
 
-async function saveBookmark(question, response, modelName) {
+async function saveBookmark(question, response, modelName, mode) {
   if (!auth.currentUser) return;
   const id_token = localStorage.getItem("id_token");
   if (!id_token) return;
@@ -263,7 +263,8 @@ async function saveBookmark(question, response, modelName) {
           id_token: id_token,
           question: question,
           response: response,
-          modelName: modelName
+          modelName: modelName,
+          mode: mode
       })
     });
     const data = await res.json();
@@ -395,6 +396,42 @@ async function loadBookmarks() {
             marked.parse(bookmark.responses["consensus"] || "");
           document.getElementById("consensusResponse").querySelector(".consensus-differences p").innerHTML =
             marked.parse(bookmark.responses["differences"] || "");
+
+          // Nun: UI-Modus festlegen, indem wir den entsprechenden Toggle simulieren
+          if (bookmark.mode) {
+            // Für "Deep Think" – Wenn deepSearchToggle noch nicht aktiv ist, klicke darauf.
+            if (bookmark.mode === "Deep Think") {
+              const deepToggle = document.getElementById("deepSearchToggle");
+              if (!deepToggle.checked) {
+                deepToggle.click();  // Löst den Click-Handler aus, der die UI anpasst
+              }
+              // Gleichzeitig sicherstellen, dass der Web Search Toggle deaktiviert ist:
+              const searchToggle = document.getElementById("searchModeToggle");
+              if (searchToggle.checked) {
+                searchToggle.click();
+              }
+            }
+            // Für "Web Search"
+            else if (bookmark.mode === "Web Search") {
+              const searchToggle = document.getElementById("searchModeToggle");
+              if (!searchToggle.checked) {
+                searchToggle.click();
+              }
+              // Gleichfalls den Deep Think Toggle deaktivieren, falls aktiv:
+              const deepToggle = document.getElementById("deepSearchToggle");
+              if (deepToggle.checked) {
+                deepToggle.click();
+              }
+            }
+            // Wenn dein Bookmark einen anderen oder einen Standardmodus hat,
+            // kannst du hier auch einen Default-Zustand setzen, z. B. beide Toggles deaktiviert:
+            else {
+              const deepToggle = document.getElementById("deepSearchToggle");
+              if (deepToggle.checked) deepToggle.click();
+              const searchToggle = document.getElementById("searchModeToggle");
+              if (searchToggle.checked) searchToggle.click();
+            }
+          }
         } else {
           console.log("No responses found in this bookmark.");
         }

@@ -449,7 +449,13 @@
         // --------------------------
         // Dark/Light Mode Initialisierung
         // --------------------------
-        const modeToggle = document.getElementById("modeToggle");
+        // Zugriff auf die Checkboxen:
+        const deepSearchToggle = document.getElementById("deepSearchToggle");
+        const searchModeToggle = document.getElementById("searchModeToggle");
+
+        // Auslesen des aktuellen Zustands (true, wenn aktiviert, sonst false):
+        const deepSearchActive = deepSearchToggle.checked;
+        const searchModeActive = searchModeToggle.checked;
   
         function applyTheme(theme) {
           if (theme === "dark") {
@@ -601,7 +607,7 @@
         });
   
         // Elemente für den Search Mode:
-        const deepSearchToggle = document.getElementById("deepSearchToggle");
+        //const deepSearchToggle = document.getElementById("deepSearchToggle");
         const deepthinkDisclaimer = document.getElementById("deepthinkDisclaimer");
         const consensusDropdown = document.getElementById("consensusModelDropdown");
         
@@ -966,10 +972,11 @@
         // Globale Variable
         let consensusGenerated = false;
         document.getElementById("consensusButton").disabled = true;
-  
+        
         // Senden der Frage an die aktiven Modelle
         window.sendQuestion = async function() {
           // Überprüfe zuerst das Wortlimit. Falls überschritten, wird die Funktion beendet.
+          const mode = getActiveMode();
           if (!validateInputText()) {
             return;
           }
@@ -995,7 +1002,8 @@
             active_count: 1,
             search_mode: document.getElementById("searchModeToggle").checked,
             deep_search: document.getElementById("deepSearchToggle").checked,
-            system_prompt: customSystemPrompt
+            system_prompt: customSystemPrompt,
+            mode: mode
           };
 
           const deepSearchActive = document.getElementById("deepSearchToggle").checked;
@@ -1159,7 +1167,8 @@
             // Hier wird der neue Parameter hinzugefügt:
             search_mode: document.getElementById("searchModeToggle").checked,
             deep_search: document.getElementById("deepSearchToggle").checked,
-            system_prompt: customSystemPrompt
+            system_prompt: customSystemPrompt,
+            mode: mode
           };
   
           if (!useOwnKeys) {
@@ -1193,7 +1202,7 @@
                 addCopyButtons(outputEl);
                 addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
                 if (auth.currentUser) {
-                  saveBookmark(question, data.response, "OpenAI");
+                  saveBookmark(question, data.response, "OpenAI", mode);
                 }
               } else if (data.error) {
                 outputEl.innerText = data.error;
@@ -1225,7 +1234,8 @@
             question: question,
             deep_search: document.getElementById("deepSearchToggle").checked,
             active_count: 1,
-            system_prompt: customSystemPrompt
+            system_prompt: customSystemPrompt,
+            mode: mode
           };
   
           if (!useOwnKeys) {
@@ -1259,7 +1269,7 @@
                 addCopyButtons(outputEl);
                 addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
                 if (auth.currentUser) {
-                  saveBookmark(question, data.response, "Mistral");
+                  saveBookmark(question, data.response, "Mistral", mode);
                 }
               } else if (data.error) {
                 outputEl.innerText = data.error;
@@ -1289,7 +1299,8 @@
             question: question,
             deep_search: document.getElementById("deepSearchToggle").checked,
             active_count: 1,
-            system_prompt: customSystemPrompt
+            system_prompt: customSystemPrompt,
+            mode: mode
           };
   
           if (!useOwnKeys) {
@@ -1323,7 +1334,7 @@
                 addCopyButtons(outputEl);
                 addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
                 if (auth.currentUser) {
-                  saveBookmark(question, data.response, "Anthropic");
+                  saveBookmark(question, data.response, "Anthropic", mode);
                 }
               } else if (data.error) {
                 outputEl.innerText = data.error;
@@ -1355,7 +1366,8 @@
               // Suche-Parameter hinzufügen:
               search_mode: document.getElementById("searchModeToggle").checked,
               deep_search: document.getElementById("deepSearchToggle").checked,
-              system_prompt: customSystemPrompt
+              system_prompt: customSystemPrompt,
+              mode: mode
             };
   
             if (!useOwnKeys) {
@@ -1390,7 +1402,7 @@
                 addCopyButtons(outputEl);
                 addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
                 if (auth.currentUser) {
-                  saveBookmark(question, data.response, "Gemini");
+                  saveBookmark(question, data.response, "Gemini", mode);
                 }
               } else if (data.error) {
                 outputEl.innerText = data.error;
@@ -1420,7 +1432,8 @@
             question: question,
             deep_search: document.getElementById("deepSearchToggle").checked,
             active_count: 1,
-            system_prompt: customSystemPrompt
+            system_prompt: customSystemPrompt,
+            mode: mode
           };
   
           if (!useOwnKeys) {
@@ -1454,7 +1467,7 @@
                 addCopyButtons(outputEl);
                 addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
                 if (auth.currentUser) {
-                  saveBookmark(question, data.response, "DeepSeek");
+                  saveBookmark(question, data.response, "DeepSeek", mode);
                 }
               } else if (data.error) {
                 outputEl.innerText = data.error;
@@ -1484,7 +1497,8 @@
             question: question,
             deep_search: document.getElementById("deepSearchToggle").checked,
             active_count: 1,
-            system_prompt: customSystemPrompt
+            system_prompt: customSystemPrompt,
+            mode: mode
           };
           if (!useOwnKeys) {
             let id_token = localStorage.getItem("id_token");
@@ -1516,7 +1530,7 @@
               addCopyButtons(outputEl);
               addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
               if (auth.currentUser) {
-                saveBookmark(question, data.response, "Grok");
+                saveBookmark(question, data.response, "Grok", mode);
               }
             } else if (data.error) {
               outputEl.innerText = data.error;
@@ -1547,7 +1561,8 @@
             active_count: 1,
             system_prompt: customSystemPrompt,
             deep_search: document.getElementById("deepSearchToggle").checked,
-            search_mode: document.getElementById("searchModeToggle").checked  // optional, falls benötigt
+            search_mode: document.getElementById("searchModeToggle").checked,
+            mode: mode  // optional, falls benötigt
           };
   
           if (!useOwnKeys) {
@@ -1582,7 +1597,7 @@
                 addCopyButtons(outputEl);
                 addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
                 if (auth.currentUser) {
-                  saveBookmark(question, data.response, "Exa");
+                  saveBookmark(question, data.response, "Exa", mode);
                 }
               } else if (data.error) {
                 outputEl.innerText = data.error;
@@ -1613,7 +1628,8 @@
               active_count: 1,
               system_prompt: customSystemPrompt,
               deep_search: document.getElementById("deepSearchToggle").checked,
-              search_mode: document.getElementById("searchModeToggle").checked  // optional, falls benötigt
+              search_mode: document.getElementById("searchModeToggle").checked,
+              mode: mode  // optional, falls benötigt
             };
   
             if (!useOwnKeys) {
@@ -1648,7 +1664,7 @@
                   addCopyButtons(outputEl);
                   addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
                   if (auth.currentUser) {
-                    saveBookmark(question, data.response, "Perplexity");
+                    saveBookmark(question, data.response, "Perplexity", mode);
                   }
                 } else if (data.error) {
                   outputEl.innerText = data.error;
@@ -2231,6 +2247,20 @@
             inputBox.value = "";
           }
         }
+
+        function getActiveMode() {
+          const deepSearchActive = document.getElementById("deepSearchToggle").checked;
+          const searchModeActive = document.getElementById("searchModeToggle").checked;
+          
+          // Beispielhafte Logik: Priorisiere Deep Think, falls aktiviert:
+          if (deepSearchActive) {
+            return "Deep Think";
+          } else if (searchModeActive) {
+            return "Web Search";
+          }
+          return "Standard"; // Default-Wert, falls keine Checkbox aktiviert ist
+        }
+
       });
 
 </script>

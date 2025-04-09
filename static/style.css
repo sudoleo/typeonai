@@ -18,6 +18,8 @@
   --clear-button-bg-hover: #f8bdbd;  /* Leicht intensiver Farbton beim Hover */
   --slider-bg: #ccc; /* Standard für White Mode */
   --email-icon-bg: #ddd; /* Neue Variable: leicht grauer Hintergrund für Whitemode */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.3);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.5);
 }
 
 .dark-mode {
@@ -39,6 +41,8 @@
   --clear-button-bg-hover: #5a2a2a;  /* Etwas hellere Variante beim Hover */
   --slider-bg: #636363;
   --email-icon-bg: #555; /* Passende dunkle Farbe im Dark Mode */
+  --scrollbar-thumb: rgba(255, 255, 255, 0.3);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.5);
 }
 
 /* Dark Mode Anpassungen */
@@ -53,6 +57,26 @@ body {
   padding: 10px;
   color: var(--text-color);
   padding-top: 10px;
+}
+
+/* Scrollbar-Styling direkt für das Body-Element */
+body::-webkit-scrollbar {
+  width: 6px;
+}
+
+body::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
+body::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 4px;
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+}
+
+body::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
 }
 
 .top-bar {
@@ -665,6 +689,7 @@ transition-delay: 0.5s;
   height: 8px;
 }
 
+:-webkit-scrollbar-track,
 .consensus-main::-webkit-scrollbar-track,
 .consensus-differences::-webkit-scrollbar-track,
 .chat-input-container .input-field::-webkit-scrollbar-track {
@@ -672,6 +697,7 @@ transition-delay: 0.5s;
   border-radius: 4px;
 }
 
+:-webkit-scrollbar-track,
 .consensus-main::-webkit-scrollbar-thumb,
 .consensus-differences::-webkit-scrollbar-thumb,
 .chat-input-container .input-field::-webkit-scrollbar-thumb {
@@ -680,6 +706,7 @@ transition-delay: 0.5s;
   box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
+:-webkit-scrollbar-track,
 .consensus-main::-webkit-scrollbar-thumb:hover,
 .consensus-differences::-webkit-scrollbar-thumb:hover,
 .chat-input-container .input-field::-webkit-scrollbar-thumb:hover {
@@ -830,7 +857,7 @@ pre .copy-btn:hover {
 
 /* Hover-Effekt */
 #clearButton:hover::before {
-  background-color: #4e4e4e;
+  background-color: var(--text-color);
   box-shadow: 0 2px 5px rgba(0,0,0,0.3);
 }
 
@@ -1473,21 +1500,25 @@ text-decoration: underline;
   border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 
+::-webkit-scrollbar-thumb:hover,
 .faq-body::-webkit-scrollbar {
   width: 6px;
 }
 
+::-webkit-scrollbar-thumb:hover,
 .faq-body::-webkit-scrollbar-track {
   background: transparent;
   border-radius: 4px;
 }
 
+::-webkit-scrollbar-thumb:hover,
 .faq-body::-webkit-scrollbar-thumb {
   background-color: rgba(0, 0, 0, 0.3);
   border-radius: 4px;
   box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
+::-webkit-scrollbar-thumb:hover,
 .faq-body::-webkit-scrollbar-thumb:hover {
   background-color: rgba(0, 0, 0, 0.5);
 }
@@ -1518,6 +1549,7 @@ padding: 20px;
 border: 1px solid var(--input-border);
 width: 90%;
 max-width: 300px;
+max-height: 450px;
 border-radius: 8px;
 text-align: center;
 }
@@ -1598,6 +1630,7 @@ font-size: 0.9em;
 
 .systemPromptInputSytle {
   resize: vertical;
+  max-height: 300px;
 }
 
 #version-number {
