@@ -44,20 +44,18 @@ onAuthStateChanged(auth, (user) => {
     const emailPopup = document.getElementById("emailPopup");
     const logoutButton = document.getElementById("logoutButton");
 
-    // Klick auf das Icon öffnet oder schließt das Popup
+    // Klick auf das Icon öffnet oder schließt das Popup (über .active Klasse)
     emailIcon.addEventListener("click", function(event) {
       event.stopPropagation();
-      emailPopup.style.display = (emailPopup.style.display === "none" || emailPopup.style.display === "")
-                                 ? "block"
-                                 : "none";
+      emailPopup.classList.toggle("active");
     });
 
-    // Logout: Beim Klick auf den Button wird signOut() aufgerufen
+    // Logout: Beim Klick auf den Button wird signOut() aufgerufen 
+    // und das Popup schließt sich nach erfolgreichem Logout
     logoutButton.addEventListener("click", function() {
       signOut(auth)
         .then(() => {
-          // Optional: Schließe das Popup nach erfolgreichem Logout
-          emailPopup.style.display = "none";
+          emailPopup.classList.remove("active");
         })
         .catch((error) => {
           console.error("Logout-Fehler", error);
@@ -67,7 +65,7 @@ onAuthStateChanged(auth, (user) => {
     // Klick außerhalb des loginContainer schließt das Popup
     document.addEventListener("click", function(event) {
       if (!loginContainer.contains(event.target)) {
-        emailPopup.style.display = "none";
+        emailPopup.classList.remove("active");
       }
     });
 

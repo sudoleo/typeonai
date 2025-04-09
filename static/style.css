@@ -124,21 +124,32 @@ body {
   cursor: pointer;
 }
 
-/* Stil für das Popup */
+/* Modernes Styling für das EmailPopup */
 .email-popup {
-  display: none;
+  display: none; /* Initial nicht sichtbar */
   position: absolute;
-  top: 40px;
+  top: 50px;         /* Etwas Abstand nach oben, z. B. anpassen */
   right: 0;
-  background-color: var(--container-bg);
-  border: 1px solid var(--input-border);
-  padding: 10px;
-  box-shadow: var(--box-shadow);
+  background-color: var(--container-bg, #ffffff);
+  border: 1px solid var(--input-border, #ddd);
+  border-radius: 8px;        /* Abgerundete Ecken */
+  padding: 15px 20px;        /* Mehr Innenabstand */
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);  /* Weicher, moderner Schatten */
+  color: var(--text-color, #333);
   z-index: 100;
-  color: var(--text-color);
+  opacity: 0;              /* Für sanftes Einblenden */
+  transform: translateY(10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
-/* Inhalt des Popups */
+/* Sichtbarmachen des Popups, z. B. durch Aktivierung */
+.email-popup.active {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Container für den Inhalt */
 .email-popup .popup-content {
   display: flex;
   flex-direction: column;
@@ -147,7 +158,25 @@ body {
 
 /* Stil für die E-Mail-Anzeige */
 .email-popup .user-email {
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+/* Optional: Stil für einen Close-Button im Popup */
+.email-popup .close-btn {
+  align-self: flex-end;
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: var(--text-color, #333);
+  margin-bottom: 10px;
+  transition: color 0.2s ease;
+}
+
+.email-popup .close-btn:hover {
+  color: var(--primary-color, #007BFF);
 }
 
 /* Stil für den Logout-Button */
@@ -752,7 +781,7 @@ pre .copy-btn:hover {
   animation: fadeInAnimation 0.5s ease-in-out;
 }
 
-/* Angepasstes Styling für den Clear-Button */
+/* Button als flex-Container */
 #clearButton {
   position: absolute;
   bottom: 1px;
@@ -761,26 +790,35 @@ pre .copy-btn:hover {
   background: none;
   cursor: pointer;
   z-index: 1000;
+  display: flex;
+  align-items: center;
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--text-color, #333);
+  opacity: 0.5;
 }
 
-/* Pseudo-Element, das das Icon anzeigt – gestylt analog zu toggleAllButton .toggle-visual */
+/* Icon als Pseudo-Element, angeordnet vor dem Text */
 #clearButton::before {
   content: "";
-  display: block;
-  width: 25px;               /* ggf. anpassen, falls das Icon zu klein ist */
-  height: 25px;              /* hier etwas größer, um das clear.png detailreich darzustellen */
-  background-color: #a7a5a5;    /* Standard-Hintergrundfarbe */
-  border: 1px solid #ccc;    /* Standard-Rahmen */
+  display: inline-block;
+  width: 25px;
+  height: 25px;
+  background-color: #a7a5a5; 
+  border: 1px solid #ccc; 
   border-radius: 3px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   transition: background-color 0.3s, box-shadow 0.3s;
   animation: pulse 2s ease-out;
   
-  /* clear.png als Maske – übernimmmt die Form der Bilddatei */
+  /* clear.png als Maske */
   -webkit-mask: url('./icons/clear.png') no-repeat center;
   mask: url('./icons/clear.png') no-repeat center;
   -webkit-mask-size: contain;
   mask-size: contain;
+  
+  /* Abstand zwischen Icon und Text */
+  margin-right: 8px;
 }
 
 /* Dark-Mode: Anpassung analog zum toggleAllButton */
@@ -1833,42 +1871,9 @@ font-size: 0.9em;
     margin-left: 0 !important;
     padding-top: 0px;
   }
-  
-  #clearButton {
-    right: 1px; /* 10px vom rechten Rand */
-    bottom: auto;    /* Entferne die unten gesetzte Positionierung */
-    transform: none; /* Keine vertikale Verschiebung */
-    padding: 6px 10px;  /* Reduziertes Padding */
-    opacity: 0.7;    /* Etwas weniger auffällig */
-    color: var(--text-color);  /* Textfarbe wie im p-Tag bzw. dem globalen Text */
-  }
 
-  /* Pseudo-Element, das das Icon anzeigt – gestylt analog zu toggleAllButton .toggle-visual */
-  #clearButton::before {
-    content: "";
-    display: block;
-    width: 18px;               /* ggf. anpassen, falls das Icon zu klein ist */
-    height: 18px;              /* hier etwas größer, um das clear.png detailreich darzustellen */
-    background-color: #888;    /* Standard-Hintergrundfarbe */
-    border: 1px solid #ccc;    /* Standard-Rahmen */
-    border-radius: 3px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    transition: background-color 0.3s, box-shadow 0.3s;
-    animation: pulse 2s ease-out;
-    
-    /* clear.png als Maske – übernimmmt die Form der Bilddatei */
-    -webkit-mask: url('./icons/clear.png') no-repeat center;
-    mask: url('./icons/clear.png') no-repeat center;
-    -webkit-mask-size: contain;
-    mask-size: contain;
-  }
-  
-  #clearButton:hover {
-    background-color: transparent; /* Hover-Effekt bleibt transparent */
-  }
-  
-  #clearButton:active {
-    transform: none;
+  #clearButton {
+    display: none; /* Der Button und sein ::before-Pseudo-Element werden nicht angezeigt */
   }
 
   .sidebar {
