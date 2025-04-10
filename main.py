@@ -759,7 +759,8 @@ async def load_bookmarks(request: Request):
 registered_ips = {}  # { ip_address: uid }
 
 @app.post("/register")
-async def register_user(request: Request, data: dict):
+@limiter.limit("1/minute")  # Beispiel: maximal 10 Registrierungen pro Minute pro IP
+async def register_user(request: Request, data: dict = Body(...)):
     ip_address = request.client.host
     # Prüfe, ob diese IP-Adresse bereits einen Account registriert hat
     if ip_address in registered_ips:
@@ -791,26 +792,33 @@ async def register_user(request: Request, data: dict):
         return {"uid": user.uid, "email": user.email, "customToken": custom_token_str}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
     
 @app.post("/usage")
-async def get_usage_post(data: dict):
+@limiter.limit("20/minute")  # Beispiel: maximal 20 Anfragen pro Minute pro IP
+async def get_usage_post(request: Request):
+    # JSON-Daten aus dem Request abrufen
+    data = await request.json()
+    
+    token = data.get("id_token")
     try:
-        token = data.get("id_token")
         uid = verify_user_token(token)
-        current_usage = usage_counter.get(uid, 0)
-        remaining = FREE_USAGE_LIMIT - current_usage
-        
-        current_deep_usage = deep_search_usage.get(uid, 0)
-        deep_remaining = 12 - current_deep_usage  # Deep Search Limit: 12
-        
-        return {"remaining": remaining, "deep_remaining": deep_remaining}
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed")
+    
+    current_usage = usage_counter.get(uid, 0)
+    remaining = FREE_USAGE_LIMIT - current_usage
+
+    current_deep_usage = deep_search_usage.get(uid, 0)
+    deep_remaining = 12 - current_deep_usage  # Deep Search Limit: 12
+
+    return {"remaining": remaining, "deep_remaining": deep_remaining}
     
 # Globales Dictionary zum Speichern des letzten Feedback-Zeitstempels pro Nutzer
 last_feedback_time = {}
     
 @app.post("/feedback")
+@limiter.limit("3/minute")
 async def submit_feedback(request: Request, data: dict = Body(...)):
     message = data.get("message")
     email = data.get("email")
@@ -854,7 +862,8 @@ async def submit_feedback(request: Request, data: dict = Body(...)):
 ALLOWED_VOTE_TYPES = {"best", "exclude", "BestModel"}
 
 @app.post("/vote")
-async def record_vote(data: dict):
+@limiter.limit("3/minute")
+async def record_vote(request: Request, data: dict = Body(...)):
     # Extrahiere Parameter
     id_token = data.get("id_token")
     model = data.get("model")
@@ -888,7 +897,8 @@ async def record_vote(data: dict):
     return {"status": "success", "message": f"{vote_type} vote recorded for {model}"}
 
 @app.post("/bookmark")
-async def save_bookmark(data: dict):
+@limiter.limit("20/minute")
+async def save_bookmark(request: Request, data: dict = Body(...)):
     id_token = data.get("id_token")
     question = data.get("question")
     response_text = data.get("response")
@@ -924,7 +934,8 @@ async def save_bookmark(data: dict):
     
 
 @app.post("/bookmark/consensus")
-async def save_bookmark_consensus(data: dict):
+@limiter.limit("3/minute")
+async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
     id_token = data.get("id_token")
     question = data.get("question")
     consensusText = data.get("consensusText")
@@ -977,7 +988,8 @@ async def delete_bookmark(data: dict):
 
     
 @app.post("/ask_openai")
-async def ask_openai_post(data: dict = Body(...)):
+@limiter.limit("5/minute")  # Beispiel: maximal 20 Anfragen pro Minute pro IP
+async def ask_openai_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
     # Konvertiere deep_search vor der Wortzählung
     deep_search_raw = data.get("deep_search", False)
@@ -1065,7 +1077,8 @@ async def ask_openai_post(data: dict = Body(...)):
 
 # Angepasster Endpoint für Mistral
 @app.post("/ask_mistral")
-async def ask_mistral_post(data: dict = Body(...)):
+@limiter.limit("5/minute")
+async def ask_mistral_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
     # Konvertiere deep_search in einen Boolean
     deep_search_raw = data.get("deep_search", False)
@@ -1140,7 +1153,8 @@ async def ask_mistral_post(data: dict = Body(...)):
 
 # Angepasster Endpoint für Anthropic
 @app.post("/ask_claude")
-async def ask_claude_post(data: dict = Body(...)):
+@limiter.limit("3/minute")
+async def ask_claude_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
     # Konvertiere deep_search in einen Boolean
     deep_search_raw = data.get("deep_search", False)
@@ -1223,7 +1237,8 @@ async def ask_claude_post(data: dict = Body(...)):
         raise HTTPException(status_code=400, detail="No id_token or api_key specified.")
 
 @app.post("/ask_gemini")
-async def ask_gemini_post(data: dict = Body(...)):
+@limiter.limit("3/minute")
+async def ask_gemini_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
     # Konvertiere deep_search in einen Boolean
     deep_search_raw = data.get("deep_search", False)
@@ -1303,7 +1318,8 @@ async def ask_gemini_post(data: dict = Body(...)):
 
 # Angepasster Endpoint für DeepSeek
 @app.post("/ask_deepseek")
-async def ask_deepseek_post(data: dict = Body(...)):
+@limiter.limit("3/minute")
+async def ask_deepseek_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
     # Konvertiere deep_search in einen Boolean
     deep_search_raw = data.get("deep_search", False)
@@ -1387,7 +1403,8 @@ async def ask_deepseek_post(data: dict = Body(...)):
 
     
 @app.post("/ask_grok")
-async def ask_grok_post(data: dict = Body(...)):
+@limiter.limit("3/minute")
+async def ask_grok_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
     # Konvertiere deep_search in einen Boolean
     deep_search_raw = data.get("deep_search", False)
@@ -1471,7 +1488,8 @@ async def ask_grok_post(data: dict = Body(...)):
     
 
 @app.post("/ask_exa")
-async def ask_exa_post(data: dict = Body(...)):
+@limiter.limit("3/minute")
+async def ask_exa_post(request: Request, data: dict = Body(...)):
     """
     Endpoint für Exa im Search Mode.
     Nutzt entweder den Developer-API-Key (bei eingeloggten Nutzern) oder einen vom User gelieferten API-Key.
@@ -1563,7 +1581,8 @@ async def ask_exa_post(data: dict = Body(...)):
 
 
 @app.post("/ask_perplexity")
-async def ask_perplexity_post(data: dict = Body(...)):
+@limiter.limit("3/minute")
+async def ask_perplexity_post(request: Request, data: dict = Body(...)):
     """
     Endpoint für Perplexity im Search Mode.
     Nutzt entweder den Developer-API-Key (bei eingeloggten Nutzern) oder einen vom User gelieferten API-Key.
@@ -1656,7 +1675,8 @@ async def ask_perplexity_post(data: dict = Body(...)):
 
 
 @app.post("/consensus")
-async def consensus(data: dict):
+@limiter.limit("3/minute")
+async def consensus(request: Request, data: dict = Body(...)):
     id_token = data.get("id_token")
     use_own_keys = data.get("useOwnKeys", False)
     # Neuer Parameter: search_mode
@@ -1774,7 +1794,8 @@ def is_valid(key):
 
 
 @app.post("/check_keys")
-async def check_keys(data: dict):
+@limiter.limit("3/minute")
+async def check_keys(request: Request, data: dict = Body(...)):
     try:
         openai_key = data.get("openai_key")
         mistral_key = data.get("mistral_key")

@@ -10,6 +10,8 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 window.auth = auth;
 
+const FREE_USAGE_LIMIT = 25;
+
 let unsubscribeBookmarks = null;
 
 onAuthStateChanged(auth, (user) => {
@@ -19,6 +21,8 @@ onAuthStateChanged(auth, (user) => {
   if (user) {
     user.getIdToken().then((token) => {
       localStorage.setItem("id_token", token);
+      // API-Aufruf starten:
+      fetchUsageData(token);
       if (usageOptions) {
         usageOptions.style.display = "block";
       }
@@ -86,6 +90,30 @@ onAuthStateChanged(auth, (user) => {
   }
 });
 
+function fetchUsageData(token) {
+  // DOM-Elemente innerhalb der Funktion abrufen:
+  const freeDisplay = document.getElementById("freeUsageDisplay");
+  const deepDisplay = document.getElementById("deepUsageDisplay");
+  
+  // Sicherstellen, dass die Elemente vorhanden sind
+  if (!freeDisplay || !deepDisplay) {
+    console.error("Benötigte DOM-Elemente nicht gefunden.");
+    return;
+  }
+  
+  // API-Aufruf starten:
+  fetch("/usage", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id_token: token })
+  })
+    .then(response => response.json())
+    .then(data => {
+      freeDisplay.innerText = "Free requests: " + data.remaining + " / " + FREE_USAGE_LIMIT;
+      deepDisplay.innerText = "Deep Think: " + data.deep_remaining + " / 12";
+    })
+    .catch(err => console.error("Error when retrieving the quota:", err));
+}
 
 // Login-Funktion
 document.getElementById("loginButton").addEventListener("click", () => {

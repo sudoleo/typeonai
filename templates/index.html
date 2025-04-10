@@ -741,24 +741,6 @@
           answer.style.display = 'none';
         });
   
-        const freeDisplay = document.getElementById("freeUsageDisplay");
-        const deepDisplay = document.getElementById("deepUsageDisplay");
-        const idToken = localStorage.getItem("id_token");
-        
-        if (idToken && freeDisplay && deepDisplay) {
-          fetch("/usage", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id_token: idToken })
-          })
-            .then(response => response.json())
-            .then(data => {
-              freeDisplay.innerText = "Free requests: " + data.remaining + " / " + FREE_USAGE_LIMIT;
-              deepDisplay.innerText = "Deep Think: " + data.deep_remaining + " / 12";
-            })
-            .catch(err => console.error("Error when retrieving the quota:", err));
-        }
-  
         const DEFAULT_MAX_WORDS = 300;
         const DEEP_SEARCH_MAX_WORDS = 1000;
 
