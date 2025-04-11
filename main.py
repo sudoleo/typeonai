@@ -711,10 +711,10 @@ def verify_user_token(token: str) -> str:
     """
     try:
         decoded_token = auth.verify_id_token(token)
-        # Optional: Logge einige Claims zur Kontrolle
         return decoded_token["uid"]
     except Exception as e:
-        raise Exception("Invalid token")
+        # Logge den Originalfehler, um mehr Details zu erhalten
+        raise Exception("Invalid token: " + str(e))
 
 
 @app.get("/", response_class=HTMLResponse)

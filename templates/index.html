@@ -146,7 +146,9 @@
       </label>
       <div id="usageDisplay">
         <span id="freeUsageDisplay">Free requests: ...</span><br>
-        <span id="deepUsageDisplay">Deep Think: ...</span>
+        <span id="deepUsageDisplay">Deep Think: ...</span><br>
+        <!-- Countdown-Timer -->
+        <span id="countdownDisplay"></span>
       </div>
     </div>      
 
@@ -232,7 +234,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v0.9.5</span>
+    <span id="version-number">v0.9.6</span>
   </div>
 </div>
   <div class="container">
@@ -271,7 +273,7 @@
             </label>
             <span class="search-mode-label deep-switch-label">Deep Think</span>
             <span id="deepthinkDisclaimer" class="deepthink-disclaimer" style="display: none; font-size: 0.8em; margin-left: 5px;">
-              Reasoning models. More thoughtful & in-depth responses.
+              Reasoning models. More thoughtful responses.
             </span>
           </div>
         </div>
@@ -529,8 +531,8 @@
           }
 
           const text = searchModeActive
-            ? "DeepSearch models. More thoughtful & in-depth responses."
-            : "Reasoning models. More thoughtful & in-depth responses.";
+            ? "DeepSearch models. More thoughtful responses."
+            : "Reasoning models. More thoughtful responses.";
 
           if (deepSearchActive) {
             if (window.innerWidth < 1400) {
@@ -2242,6 +2244,45 @@
           }
           return "Standard"; // Default-Wert, falls keine Checkbox aktiviert ist
         }
+
+        function updateCountdown() {
+          // Aktuelles Datum und Uhrzeit
+          const now = new Date();
+          
+          // Erstelle ein Datum für heute um 00:15
+          let resetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 15, 0, 0);
+          
+          // Falls aktuelle Zeit bereits nach 00:15 liegt, setze resetTime auf morgen um 00:15
+          if (now >= resetTime) {
+            resetTime.setDate(resetTime.getDate() + 1);
+          }
+          
+          // Differenz in Millisekunden bis zur festgelegten Reset-Zeit (00:15)
+          const diff = resetTime - now;
+          
+          // Berechne Stunden, Minuten und Sekunden
+          const hours = Math.floor(diff / (1000 * 60 * 60));
+          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+          
+          // Formatieren mit führenden Nullen
+          const formattedHours = hours.toString().padStart(2, "0");
+          const formattedMinutes = minutes.toString().padStart(2, "0");
+          const formattedSeconds = seconds.toString().padStart(2, "0");
+          
+          // Ausgabe im HTML-Element aktualisieren
+          document.getElementById('countdownDisplay').innerHTML =
+            "Resets in: " + formattedHours + ":" + formattedMinutes + ":" + formattedSeconds;
+          
+          // Wenn der Countdown abgelaufen ist, wird der Server (oder die Seite) neu gestartet
+          if (diff <= 0) {
+            location.reload(); // Hier kann auch ein anderer Reset-Mechanismus aufgerufen werden
+          }
+        }
+
+        // Countdown sofort starten und jede Sekunde aktualisieren
+        updateCountdown();
+        setInterval(updateCountdown, 1000);
 
       });
 

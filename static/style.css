@@ -808,10 +808,9 @@ pre .copy-btn:hover {
   animation: fadeInAnimation 0.5s ease-in-out;
 }
 
-/* Button als flex-Container */
 #clearButton {
   position: absolute;
-  bottom: 1px;
+  bottom: 9px;
   right: 1px;
   border: none;
   background: none;
@@ -820,17 +819,18 @@ pre .copy-btn:hover {
   display: flex;
   align-items: center;
   font-family: inherit;
-  font-size: 1rem;
+  font-size: 0.8rem; /* Kleinere Schriftgröße */
   color: var(--text-color, #333);
   opacity: 0.5;
+  padding: 0.2rem 0.3rem; /* Angepasstes, geringeres Padding */
 }
 
 /* Icon als Pseudo-Element, angeordnet vor dem Text */
 #clearButton::before {
   content: "";
   display: inline-block;
-  width: 25px;
-  height: 25px;
+  width: 16px;
+  height: 16px;
   background-color: #a7a5a5; 
   border: 1px solid #ccc; 
   border-radius: 3px;
@@ -853,6 +853,8 @@ pre .copy-btn:hover {
   background-color: #9e9e9e;
   border: 1px solid #535353;
   box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  width: 16px;         /* Neue Breite des Icons */
+  height: 16px;        /* Neue Höhe des Icons */
 }
 
 /* Hover-Effekt */
@@ -2569,6 +2571,11 @@ display: none;
 
 #freeUsageDisplay {
   display: block;
+}
+
+#countdownDisplay {
+  display: block;
+  margin-top: 30px;
 }
 
 /* Wrapper für den Hauptinhalt – zentriert neben der Sidebar */
