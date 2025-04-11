@@ -1,0 +1,17 @@
+name: Restart Render Service Daily
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 22 * * *'
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render Restart
+        run: |
+          curl --request POST \
+               --url "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/restart" \
+               --header "Accept: application/json" \
+               --header "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}"

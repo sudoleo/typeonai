@@ -339,8 +339,11 @@ window.saveBookmarkConsensus = saveBookmarkConsensus;
 
 async function loadBookmarks() {
   if (!auth.currentUser) return;
-  
-  const id_token = localStorage.getItem("id_token");
+
+  // Frische den Token ab
+  const id_token = await auth.currentUser.getIdToken(true);
+  localStorage.setItem("id_token", id_token);
+
   if (!id_token) return;
   
   try {
