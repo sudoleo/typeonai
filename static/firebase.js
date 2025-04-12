@@ -109,8 +109,8 @@ function fetchUsageData(token) {
   })
     .then(response => response.json())
     .then(data => {
-      freeDisplay.innerText = "Free requests: " + data.remaining + " / " + FREE_USAGE_LIMIT;
-      deepDisplay.innerText = "Deep Think: " + data.deep_remaining + " / 12";
+      freeDisplay.innerHTML = 'Free requests: <strong>' + data.remaining + ' / ' + FREE_USAGE_LIMIT + '</strong>';
+      deepDisplay.innerHTML = 'Deep Think: <strong>' + data.deep_remaining + ' / 12</strong>';
     })
     .catch(err => console.error("Error when retrieving the quota:", err));
 }

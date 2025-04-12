@@ -811,7 +811,7 @@ pre .copy-btn:hover {
 #clearButton {
   position: absolute;
   bottom: 9px;
-  right: 1px;
+  right: 10px;
   border: none;
   background: none;
   cursor: pointer;
@@ -2575,7 +2575,7 @@ display: none;
 
 #countdownDisplay {
   display: block;
-  margin-top: 30px;
+  margin-top: 17px;
 }
 
 /* Wrapper für den Hauptinhalt – zentriert neben der Sidebar */
