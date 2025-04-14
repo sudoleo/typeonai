@@ -92,7 +92,7 @@ def query_openai(question: str, api_key: str, search_mode: bool = False, deep_se
         elif deep_search:
             model_to_use = "o3-mini"
         else:
-            model_to_use = "gpt-4o"
+            model_to_use = "gpt-4.1"
 
         # Verwende den korrekten Parameter basierend auf dem Modell
         if model_to_use == "o3-mini":
@@ -415,7 +415,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
     try:
         if consensus_model == "OpenAI":
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
-            model_to_use = "gpt-4o" if search_mode else "gpt-4o"
+            model_to_use = "gpt-4.1" if search_mode else "gpt-4.1"
             response = client.chat.completions.create(
                         model=model_to_use,
                         messages=[
@@ -595,7 +595,7 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
         if differences_model == "OpenAI":
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4.1",
                 messages=[
                     {"role": "system", "content": "Answer in the exact same Langugage as the Model responses: "},
                     {"role": "user", "content": differences_prompt}
