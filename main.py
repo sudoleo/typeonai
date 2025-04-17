@@ -1,6 +1,6 @@
 import os
 from fastapi import FastAPI, Query, Request, HTTPException, Body
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 import openai
@@ -71,6 +71,18 @@ usage_counter = {}  # { uid: anzahl_anfragen }
 deep_search_usage = {}  # { uid: anzahl_deep_search_anfragen }
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gen-lang-client-0234219247-53b2b1c0e355.json"
+
+# ganz oben in app.py, direkt nach deinen Imports
+def is_valid_session(token: str) -> bool:
+    """
+    Prüft, ob das übergebene Firebase-ID-Token gültig ist.
+    Gibt True zurück, wenn verify_user_token() keinen Fehler wirft.
+    """
+    try:
+        verify_user_token(token)
+        return True
+    except Exception:
+        return False
 
 def count_words(text: str) -> int:
     return len(text.strip().split())
@@ -717,7 +729,21 @@ def verify_user_token(token: str) -> str:
         raise Exception("Invalid token: " + str(e))
 
 
+# 1) Landingpage unter '/'
 @app.get("/", response_class=HTMLResponse)
+async def landing(request: Request):
+    # Lies das Token aus dem Cookie (oder Authorization-Header), je nachdem wo du es speicherst
+    token = request.cookies.get("session") or request.headers.get("Authorization", "").removeprefix("Bearer ")
+    
+    if token and is_valid_session(token):
+        # eingeloggter Nutzer kommt direkt in die App
+        return RedirectResponse(url="/app")
+    
+    # sonst Landingpage
+    return templates.TemplateResponse("landing.html", {"request": request})
+
+
+@app.get("/app", response_class=HTMLResponse)
 async def read_root(request: Request):
     firebase_config = {
         "firebase_api_key": os.environ.get("FIREBASE_API_KEY"),
@@ -783,8 +809,6 @@ async def register_user(request: Request, data: dict = Body(...)):
 
         # Erstelle den Nutzer über Firebase Admin
         user = auth.create_user(email=email, password=password)
-        # Speichere die IP-Adresse als registriert
-        registered_ips[ip_address] = user.uid
         # Erzeuge ein Custom Token für den neuen Nutzer
         custom_token = auth.create_custom_token(user.uid)
         # Das Token ist ein Bytes-Objekt – in einen String konvertieren
@@ -792,6 +816,34 @@ async def register_user(request: Request, data: dict = Body(...)):
         return {"uid": user.uid, "email": user.email, "customToken": custom_token_str}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+
+@app.post("/confirm-registration")
+async def confirm_registration(request: Request, data: dict = Body(...)):
+    """
+    Einmaliger Aufruf beim ersten Login nach erfolgreicher E‑Mail‑Bestätigung.
+    Trägt die IP in registered_ips ein, wenn emailVerified == True.
+    """
+    token = data.get("id_token")
+    if not token:
+        raise HTTPException(status_code=400, detail="id_token fehlt.")
+
+    try:
+        uid = verify_user_token(token)
+        user = auth.get_user(uid)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Token ungültig: " + str(e))
+
+    if not user.email_verified:
+        raise HTTPException(status_code=400, detail="E‑Mail noch nicht bestätigt.")
+
+    ip_address = request.client.host
+    if ip_address in registered_ips:
+        # falls schon eingetragen, nichts tun
+        return {"status": "already_registered"}
+
+    registered_ips[ip_address] = uid
+    return {"status": "registered", "ip": ip_address}
 
     
 @app.post("/usage")
@@ -899,13 +951,13 @@ async def record_vote(request: Request, data: dict = Body(...)):
 @app.post("/bookmark")
 @limiter.limit("20/minute")
 async def save_bookmark(request: Request, data: dict = Body(...)):
-    id_token = data.get("id_token")
-    question = data.get("question")
-    response_text = data.get("response")
-    modelName = data.get("modelName")
-    mode = data.get("mode")
+    id_token     = data.get("id_token")
+    question     = data.get("question")
+    response_text= data.get("response")
+    modelName    = data.get("modelName")
+    mode         = data.get("mode")
     
-    if not id_token or not question or not response_text or not modelName:
+    if not (id_token and question and response_text and modelName):
         raise HTTPException(status_code=400, detail="Missing required fields.")
     
     try:
@@ -913,22 +965,40 @@ async def save_bookmark(request: Request, data: dict = Body(...)):
     except Exception as e:
         raise HTTPException(status_code=401, detail="Authentication failed: " + str(e))
     
-    # Berechne die Dokument-ID (analog zur Client-Logik)
-    doc_id = base64.b64encode(question.encode()).decode()
-    doc_id = re.sub(r'[^a-zA-Z0-9]', '_', doc_id)[:50]
+    # Berechne die Dokument-ID wie gehabt
+    raw_id = base64.b64encode(question.encode()).decode()
+    doc_id = re.sub(r'[^a-zA-Z0-9]', '_', raw_id)[:50]
     
     dataToMerge = {
         "query": question,
-        "timestamp": firestore.SERVER_TIMESTAMP,  # Serverseitiger Zeitstempel
+        "timestamp": firestore.SERVER_TIMESTAMP,
         "mode": mode,
-        "responses": {
-            modelName: response_text
-        }
+        "responses": { modelName: response_text }
     }
     
     try:
-        db_firestore.collection("users").document(uid).collection("bookmarks").document(doc_id).set(dataToMerge, merge=True)
-        return {"status": "success", "message": f"Bookmark for {modelName} saved."}
+        # Speichern (merge)
+        doc_ref = (
+            db_firestore
+            .collection("users")
+            .document(uid)
+            .collection("bookmarks")
+            .document(doc_id)
+        )
+        # speichern (merge)
+        doc_ref.set(dataToMerge, merge=True)
+
+        # **Neu:** direkt danach auslesen
+        snap = doc_ref.get()
+        bm = snap.to_dict()
+        bm["id"] = snap.id
+
+        return {
+            "status":  "success",
+            "message": f"Bookmark for {modelName} saved.",
+            "bookmark": bm
+        }
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error saving bookmark: " + str(e))
     
@@ -1314,7 +1384,6 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
             raise HTTPException(status_code=400, detail="Please log in or store your own API keys.")
         answer = query_gemini(question, api_key.strip(), search_mode, system_prompt)
         return {"response": answer, "key_used": "User API Key"}
-
 
 # Angepasster Endpoint für DeepSeek
 @app.post("/ask_deepseek")

@@ -31,31 +31,27 @@
   <div class="modal-content">
     <span class="close">&times;</span>
     <h2>Welcome to <span class="highlight">consens.io</span></h2>
-    <p class="subheading">
-      <span style="background-color: rgba(255,215,0,0.4); padding: 0 5px;">
-        Don't ask just any AI.<br>
-        Ask all of them.
-      </span>
-    </p>
     <div class="benefits">
+      <p class="benefits-note"><strong>All free & completely non‑binding</strong></p>
+    
       <div class="benefit">
         <span class="benefit-icon">✔</span>
         <strong>Models:</strong>
-        <span>Responses from multiple leading AI models simultaneously.</span>
+        <span>25 free queries to multiple leading AI models.</span>
       </div>
       <br/>
       <div class="benefit">
         <span class="benefit-icon">✔</span>
-        <strong>Answers:</strong>
-        <span>AI creats reliable & unified "consensus"</span>
+        <strong>Deep Think Mode:</strong>
+        <span>12 free deep‑research queries for detailed insights.</span>
       </div>
       <br/>
       <div class="benefit">
         <span class="benefit-icon">✔</span>
         <strong>Search:</strong>
-        <span>Real-time web search for accurate, up-to-date results.</span>
+        <span>Real‑time web search for accurate, up‑to‑date results.</span>
       </div>
-    </div>
+    </div>    
     <p class="cta-text">Log in & get started immediately – free.</p>
     <button id="startNowButton" class="cta-button">Get started</button>
   </div>
@@ -65,9 +61,11 @@
     <button id="toggleSidebarButton" class="sidebar-toggle collapse-btn">
       <span class="burger-icon">&#9776;</span>
     </button>
-    <!-- Logo und Titel -->
+    <!-- Logo und Titel: nur das IMG im Link -->
     <div class="top-bar-logo">
-      <img src="/static/favicon.png" alt="Favicon" class="top-bar-favicon">
+      <a href="/" id="logoLink">
+        <img src="/static/favicon.png" alt="Favicon" class="top-bar-favicon">
+      </a>
       <span class="top-bar-title">consens.io</span>
     </div>
     <!-- Container für rechte Elemente -->
@@ -2284,6 +2282,12 @@
         updateCountdown();
         setInterval(updateCountdown, 1000);
 
+        document.getElementById("logoLink").addEventListener("click", () => {
+          // wenn ich wirklich zurück will, entferne den visitedLanding-Flag
+          localStorage.removeItem("visitedLanding");
+          // und damit gilt beim nächsten Laden der Landing-Seite wieder first-view
+        });
+
       });
 
 </script>
@@ -2297,6 +2301,9 @@
     <form id="loginForm" autocomplete="on">
       <p style="color: red;">
         Important: Only one e-mail can be registered – check carefully!
+      </p>
+      <p style="font-size: 0.9em; color: #666; margin-top: -10px; margin-bottom: 20px; font-size: small;">
+        No spam — just to make it work.
       </p>
       <input type="email" id="loginEmail" name="email" placeholder="Email" autocomplete="username">
       <input type="password" id="loginPassword" name="password" placeholder="Password" autocomplete="current-password">

@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
 import { getFirestore, collection, query, orderBy, onSnapshot, doc, setDoc, getDoc, increment, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithCustomToken, signOut, onAuthStateChanged, sendPasswordResetEmail, sendEmailVerification } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithCustomToken, signOut, onAuthStateChanged, sendPasswordResetEmail, sendEmailVerification, onIdTokenChanged } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 
 // Initialisiere Firebase mit der globalen Konfiguration, die aus dem HTML kommt
 const app = initializeApp(window.FIREBASE_CONFIG);
@@ -12,26 +12,47 @@ window.auth = auth;
 
 const FREE_USAGE_LIMIT = 25;
 
-let unsubscribeBookmarks = null;
+// merken, dass wir Bookmarks schon einmal geladen haben
+let bookmarksLoaded = false;
 
-onAuthStateChanged(auth, (user) => {
+onIdTokenChanged(auth, async (user) => {
   const loginContainer = document.getElementById("loginContainer");
-  const usageOptions = document.getElementById("usageOptions");
+  const usageOptions   = document.getElementById("usageOptions");
 
   if (user) {
-    user.getIdToken().then((token) => {
-      localStorage.setItem("id_token", token);
-      // API-Aufruf starten:
-      fetchUsageData(token);
-      if (usageOptions) {
-        usageOptions.style.display = "block";
+    // 1) Immer frisches Token holen
+    const token = await user.getIdToken(/* forceRefresh= */ true);
+    localStorage.setItem("id_token", token);
+
+    // 1a) Nur bei verifizierter E‑Mail: IP im Backend sperren lassen
+    if (user.emailVerified) {
+      try {
+        await fetch("/confirm-registration", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id_token: token })
+        });
+      } catch (err) {
+        console.error("Error during confirm-registration:", err);
       }
-    });
+    }
 
-    // Hole den ersten Buchstaben der E-Mail (Großbuchstabe)
+    // 2) Usage laden
+    fetchUsageData(token);
+
+    // 3) Bookmarks einmal pro Login laden
+    if (!bookmarksLoaded) {
+      await loadBookmarks();
+      bookmarksLoaded = true;
+    }
+
+    // 4) Usage-UI anzeigen
+    if (usageOptions) {
+      usageOptions.style.display = "block";
+    }
+
+    // 5) E‑Mail‑Icon & Popup setzen
     const emailInitial = user.email.charAt(0).toUpperCase();
-
-    // Setze HTML: Das Popup enthält jetzt die E-Mail und den Logout-Button
     loginContainer.innerHTML = `
       <div class="email-container">
         <span id="emailIcon" class="email-icon">${emailInitial}</span>
@@ -43,50 +64,32 @@ onAuthStateChanged(auth, (user) => {
         </div>
       </div>
     `;
-
-    const emailIcon = document.getElementById("emailIcon");
-    const emailPopup = document.getElementById("emailPopup");
+    const emailIcon    = document.getElementById("emailIcon");
+    const emailPopup   = document.getElementById("emailPopup");
     const logoutButton = document.getElementById("logoutButton");
 
-    // Klick auf das Icon öffnet oder schließt das Popup (über .active Klasse)
-    emailIcon.addEventListener("click", function(event) {
-      event.stopPropagation();
+    emailIcon.addEventListener("click", e => {
+      e.stopPropagation();
       emailPopup.classList.toggle("active");
     });
-
-    // Logout: Beim Klick auf den Button wird signOut() aufgerufen 
-    // und das Popup schließt sich nach erfolgreichem Logout
-    logoutButton.addEventListener("click", function() {
-      signOut(auth)
-        .then(() => {
-          emailPopup.classList.remove("active");
-        })
-        .catch((error) => {
-          console.error("Logout-Fehler", error);
-        });
+    logoutButton.addEventListener("click", () => {
+      signOut(auth).then(() => emailPopup.classList.remove("active"))
+                    .catch(err => console.error("Logout-Fehler", err));
     });
-
-    // Klick außerhalb des loginContainer schließt das Popup
-    document.addEventListener("click", function(event) {
-      if (!loginContainer.contains(event.target)) {
+    document.addEventListener("click", e => {
+      if (!loginContainer.contains(e.target)) {
         emailPopup.classList.remove("active");
       }
     });
 
-    if (!unsubscribeBookmarks) {
-      unsubscribeBookmarks = loadBookmarks();
-    }
   } else {
+    // Cleanup bei Logout
     localStorage.removeItem("id_token");
     loginContainer.innerText = "Log in and use for free";
-    if (usageOptions) {
-      usageOptions.style.display = "none";
-    }
+    if (usageOptions) usageOptions.style.display = "none";
+
     document.getElementById("bookmarksContainer").innerHTML = "";
-    if (unsubscribeBookmarks) {
-      unsubscribeBookmarks();
-      unsubscribeBookmarks = null;
-    }
+    bookmarksLoaded = false;
   }
 });
 
@@ -127,6 +130,17 @@ document.getElementById("loginButton").addEventListener("click", () => {
         // Login erfolgreich, Token speichern und Seite neu laden
         user.getIdToken().then((token) => {
           localStorage.setItem("id_token", token);
+
+          // ❶ Bestätige Registrierung beim Backend, damit die IP gesperrt wird
+          fetch("/confirm-registration", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id_token: token })
+          })
+          .then(res => res.json())
+          .then(info => console.log("Confirm-Registration:", info))
+          .catch(err => console.error("Confirm-Registration-Fehler:", err));
+
           window.location.href = "/";
         });
       } else {
@@ -241,7 +255,7 @@ async function recordModelVote(model, type) {
     return;
   }
   
-  const id_token = localStorage.getItem("id_token");
+  const id_token = await auth.currentUser?.getIdToken(/* forceRefresh= */ false);
   if (!id_token) {
     console.error("No id_token available for voting.");
     return;
@@ -281,37 +295,38 @@ function truncateText(text, maxWords = 5) {
 
 async function saveBookmark(question, response, modelName, mode) {
   if (!auth.currentUser) return;
-  const id_token = localStorage.getItem("id_token");
+  const id_token = await auth.currentUser.getIdToken(false);
   if (!id_token) return;
+
   try {
     const res = await fetch("/bookmark", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-          id_token: id_token,
-          question: question,
-          response: response,
-          modelName: modelName,
-          mode: mode
-      })
+      body: JSON.stringify({ id_token, question, response, modelName, mode })
     });
     const data = await res.json();
+
     if (!res.ok) {
       console.error("Error saving bookmark:", data.detail);
-    } else {
-      console.log(data.message);
-      // Nach erfolgreichem Speichern das Bookmark-Listing aktualisieren:
-      loadBookmarks();
+      return;
     }
+
+    console.log("Bookmark gespeichert:", data.message);
+    // Neu: nach dem Speichern die Sidebar komplett neu laden
+    await loadBookmarks();
+    bookmarksLoaded = false;
+
   } catch (error) {
-      console.error("Error in saveBookmark:", error);
+    console.error("Error in saveBookmark:", error);
   }
 }
 window.saveBookmark = saveBookmark;
 
+
+
 async function saveBookmarkConsensus(question, consensusText, differencesText) {
   if (!auth.currentUser) return;
-  const id_token = localStorage.getItem("id_token");
+  const id_token = await auth.currentUser?.getIdToken(/* forceRefresh= */ false);
   if (!id_token) return;
   try {
     const res = await fetch("/bookmark/consensus", {
@@ -339,12 +354,11 @@ window.saveBookmarkConsensus = saveBookmarkConsensus;
 
 async function loadBookmarks() {
   if (!auth.currentUser) return;
-  
-  const id_token = localStorage.getItem("id_token");
-  if (!id_token) return;
-  
+
+  // Erzwinge hier ein frisches Token
+  const id_token = await auth.currentUser.getIdToken(/* forceRefresh= */ true);
+
   try {
-    // Abruf der Bookmarks über den Backend-Endpoint
     const res = await fetch("/bookmarks", {
       method: "GET",
       headers: {
@@ -353,7 +367,7 @@ async function loadBookmarks() {
       }
     });
     const data = await res.json();
-    
+
     if (!res.ok) {
       console.error("Error loading bookmarks:", data.detail);
       return;
@@ -475,24 +489,28 @@ window.loadBookmarks = loadBookmarks;
 
 async function deleteBookmark(bookmarkId) {
   if (!auth.currentUser) return;
-  const id_token = localStorage.getItem("id_token");
+  const id_token = await auth.currentUser.getIdToken(false);
   if (!id_token) return;
+
   try {
     const res = await fetch("/bookmark", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-         id_token: id_token,
-         bookmarkId: bookmarkId
-      })
+      body: JSON.stringify({ id_token, bookmarkId })
     });
     const data = await res.json();
+
     if (!res.ok) {
-       console.error("Error deleting bookmark:", data.detail);
-    } else {
-       console.log(data.message);
-       loadBookmarks();
+      console.error("Error deleting bookmark:", data.detail);
+      return;
     }
+
+    console.log("Bookmark gelöscht:", data.message);
+    // Lokales Array und DOM aktualisieren
+    window.bookmarksData = window.bookmarksData.filter(b => b.id !== bookmarkId);
+    const el = document.querySelector(`.bookmark[data-id="${bookmarkId}"]`);
+    if (el) el.remove();
+
   } catch (error) {
     console.error("Error in deleteBookmark:", error);
   }
@@ -543,3 +561,39 @@ function sendFeedback(message, email) {
 
 // Exponiere die Funktion, damit sie von index.html aus aufgerufen werden kann
 window.sendFeedback = sendFeedback;
+
+function addBookmarkToDOM(bookmark) {
+  const container = document.getElementById("bookmarksContainer");
+  const div = document.createElement("div");
+  div.className = "bookmark";
+  div.dataset.id = bookmark.id;
+  div.style.position = "relative";
+  div.innerHTML = `
+    <p>${truncateText(bookmark.query)}</p>
+    <span class="delete-bookmark" 
+          style="position:absolute; right:5px; top:50%; transform:translateY(-50%); cursor:pointer;">
+      x
+    </span>
+  `;
+
+  // Delete‑Button
+  div.querySelector(".delete-bookmark")
+     .addEventListener("click", e => { 
+       e.stopPropagation(); 
+       deleteBookmark(bookmark.id); 
+     });
+
+  // Click: Bookmark laden (wie in loadBookmarks)
+  div.addEventListener("click", () => {
+    // hier kannst du deine bestehende Logik kopieren,
+    // die beim Klick aus window.bookmarksData die Details
+    // in die Antwort‑Boxes schreibt.
+    loadSingleBookmarkUI(bookmark);
+  });
+
+  container.appendChild(div);
+
+  // Kurze Fade‑In‑Animation
+  div.classList.add("fade-in");
+  setTimeout(() => div.classList.remove("fade-in"), 500);
+}

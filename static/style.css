@@ -115,6 +115,17 @@ body::-webkit-scrollbar-thumb:hover {
   margin-right: 8px;
 }
 
+/* Icon‑Link */
+#logoLink {
+  text-decoration: none;  /* kein Unterstrich unter dem IMG */
+  display: inline-block;
+}
+
+/* Link‑Farbe erben */
+#logoLink img {
+  cursor: pointer;
+}
+
 .top-bar .mode-switch {
   position: relative;
   top: auto;

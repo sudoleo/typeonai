@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="consens.io – Don't ask just any AI. Ask all of them.">
+  <title>consens.io – Ask all of them</title>
+
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700&display=swap" rel="stylesheet">
+  <!-- Main CSS -->
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="/static/favicon.png" type="image/x-icon">
+
+  <style>
+    /* Color Variables for Light and Dark Mode */
+    :root {
+      --bg-color: #f4f4f4;
+      --container-bg: #fff;
+      --text-color: #333;
+      --accent-1: #0056b3;
+      --accent-2: #ffb400;
+      --input-bg: #fff;
+      --input-border: #ccc;
+      --response-bg: #e9e9e9;
+      --box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      --code-bg: #f7f7f7;
+      --feedback-text-color: #b3b3b3;
+      --feedback-text-hover-color: #666;
+      --clear-button-bg: #fce4e4;
+      --clear-button-border: #ffcdd2;
+      --clear-button-text: #b71c1c;
+      --clear-button-bg-hover: #f8bdbd;
+      --slider-bg: #ccc;
+      --email-icon-bg: #ddd;
+      --scrollbar-thumb: rgba(0,0,0,0.3);
+      --scrollbar-thumb-hover: rgba(0,0,0,0.5);
+      /* Button specific */
+      --cta-bg: #0056b3;            /* kräftiges Blau für Light‑Mode */
+      --cta-text: #ffffff;          /* weiße Schrift */
+      --cta-bg-hover: #004494;      /* dunkleres Blau beim Hover */
+      --cta-text-hover: #ffffff;
+    }
+    .dark-mode {
+      --bg-color: #121212;
+      --container-bg: #1e1e1e;
+      --text-color: #e0e0e0;
+      --accent-1: #3399ff;
+      --accent-2: #ffcf4d;
+      --input-bg: #333;
+      --input-border: #555;
+      --response-bg: #2c2c2c;
+      --box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+      --code-bg: #1e1e1e;
+      --feedback-text-color: #949494;
+      --feedback-text-hover-color: #bbb;
+      --clear-button-bg: #3d1f1f;
+      --clear-button-border: #633131;
+      --clear-button-text: #f8bdbd;
+      --clear-button-bg-hover: #5a2a2a;
+      --slider-bg: #636363;
+      --email-icon-bg: #555;
+      --scrollbar-thumb: rgba(255,255,255,0.3);
+      --scrollbar-thumb-hover: rgba(255,255,255,0.5);
+      --cta-bg: #7f5af0;            /* Lila für Dark‑Mode */
+      --cta-text: #ffffff;          /* weiße Schrift für besten Kontrast */
+      --cta-bg-hover: #6b46c1;      /* dunkleres Lila beim Hover */
+      --cta-text-hover: #ffffff;
+    }
+
+    /* Dark Mode: Links in einer helleren, gut lesbaren Farbe */
+    .dark-mode a {
+      color: #dfdfdf; /* Beispiel: ein sanftes Lila, passend zu deinem Button-Hintergrund */
+      text-decoration: underline;
+    }
+
+    /* Base Styles */
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+    }
+
+    /* Hero Section */
+    .hero {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      height: 100vh;
+      background-color: var(--container-bg);
+      box-shadow: var(--box-shadow);
+      padding: 0 1rem;
+    }
+    .hero h1 { font-size: 3rem; font-weight: 700; margin-bottom: 1rem; }
+    .hero .subtitle { font-size: 1.25rem; line-height: 1.4; margin-bottom: 2rem; }
+    .hero .subtitle .highlight {
+      background-color: rgba(255,215,0,0.4);
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      color: var(--text-color);
+    }
+    .hero .subtitle small {
+      font-size: 0.75rem;
+      display: block;
+      margin-top: 0.25rem;
+      opacity: 0.7;
+    }
+    .cta-button {
+      display: inline-block;
+      padding: 0.6rem 1.8rem;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--cta-text);
+      background: var(--cta-bg);
+      border: 2px solid transparent;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 86, 179, 0.3);
+      transition: background-color 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .cta-button:hover {
+      background: var(--cta-bg-hover);
+      color: var(--cta-text-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0, 68, 148, 0.35);
+      border-color: rgba(255,255,255,0.3);
+    }
+
+    .cta-button:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(0, 86, 179, 0.6);
+    }
+
+    /* Scroll Indicator */
+    .scroll-indicator {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 2rem;
+      color: var(--button-bg);
+      animation: bounce 2s infinite;
+      opacity: 1;
+      transition: opacity 0.3s ease;
+    }
+    @keyframes bounce {
+      0%,20%,50%,80%,100% { transform: translateX(-50%) translateY(0); }
+      40% { transform: translateX(-50%) translateY(10px); }
+      60% { transform: translateX(-50%) translateY(5px); }
+    }
+
+    /* Features Section */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px,1fr));
+      gap: 2rem;
+      max-width: 960px;
+      margin: 4rem auto;
+      padding: 0 1rem;
+    }
+    .feature {
+      background-color: var(--container-bg);
+      padding: 1.5rem;
+      border-radius: 8px;
+      box-shadow: var(--box-shadow);
+      transition: transform 0.2s;
+      text-align: center;
+    }
+    .feature:hover { transform: translateY(-3px); }
+    .feature-icon { font-size: 1.5rem; margin-bottom: 0.5rem; color: var(--cta-bg-hover); }
+    .feature h3 { font-size: 1.125rem; margin-bottom: 0.5rem; }
+    .feature p { font-size: 0.95rem; line-height: 1.4; }
+
+    /* Models Info Section */
+    .models-info {
+      max-width: 960px;
+      margin: 4rem auto;
+      padding: 1.5rem;
+    }
+    .models-info h2 {
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 2rem;
+    }
+    .model-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit,minmax(200px,1fr));
+      gap: 1.5rem;
+    }
+    .model-card {
+      background-color: var(--container-bg);
+      border-radius: 8px;
+      box-shadow: var(--box-shadow);
+      padding: 1.5rem;
+      text-align: center;
+      transition: transform 0.2s;
+    }
+    .model-card:hover { transform: translateY(-4px); }
+    .model-icon { width: 64px; height: 64px; object-fit: contain; margin-bottom: 0.75rem; }
+    .model-card h3 { font-size: 1.125rem; margin: 0.5rem 0; }
+    .model-card p { margin: 0.25rem 0; font-size: 0.9rem; line-height: 1.4; }
+
+    /* Consensus Cards Section */
+    .consensus-features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit,minmax(260px,1fr));
+      gap: 2rem;
+      max-width: 800px;
+      margin: 3rem auto;
+      padding: 0 1rem;
+    }
+    .consensus-card {
+      background-color: var(--container-bg);
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      padding: 2rem 1.5rem;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .consensus-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    }
+    .consensus-card:before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 6px;
+      background: linear-gradient(90deg,var(--accent-1),var(--accent-2));
+    }
+    .card-icon {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+      color: var(--accent-1);
+    }
+    .consensus-card h3 {
+      font-size: 1.25rem;
+      margin-bottom: 0.75rem;
+      color: var(--text-color);
+    }
+    .consensus-card p {
+      font-size: 1rem;
+      line-height: 1.5;
+      color: var(--text-color);
+      opacity: 0.85;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 2rem 1rem;
+      font-size: 0.85rem;
+      color: var(--feedback-text-color);
+      background-color: var(--container-bg);
+      box-shadow: var(--box-shadow);
+    }
+    .footer a { color: var(--text-color); text-decoration: none; font-weight: 500; }
+    .footer a:hover { color: var(--feedback-text-hover-color); }
+
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 2.5rem; }
+      .hero .subtitle { font-size: 1.1rem; }
+      .model-cards, .features, .consensus-features { grid-template-columns: 1fr; }
+    }
+  </style>
+
+  <script>
+    // Detect and apply dark mode based on user preference
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.classList.add('dark-mode');
+    }
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+      if (e.matches) document.documentElement.classList.add('dark-mode');
+      else document.documentElement.classList.remove('dark-mode');
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+      // Ausnahme‑Flag aus der Session
+      const skip = sessionStorage.getItem("skipLandingRedirect");
+      if (localStorage.getItem("visitedLanding") && !skip) {
+        // schon mal da gewesen und keine Ausnahme → weiter zu /app
+        window.location.replace("/app");
+        return;
+      }
+      // erstes Mal oder Ausnahme → Landing zeigen und Flag setzen
+      localStorage.setItem("visitedLanding", "true");
+      // Ausnahme nachladen löschen
+      sessionStorage.removeItem("skipLandingRedirect");
+
+      // Dein Scroll‑Indicator bleibt unverändert:
+      const indicator = document.querySelector('.scroll-indicator');
+      let lastScrollY = window.scrollY;
+      window.addEventListener('scroll', () => {
+        const currentY = window.scrollY;
+        indicator.style.opacity = currentY > lastScrollY ? '0' : '1';
+        lastScrollY = currentY;
+      });
+    });
+  </script>
+</head>
+<body>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <h1>consens.io</h1>
+    <p class="subtitle">
+      <span class="highlight">Don't ask just any AI.<br>Ask all of them.</span>
+      <small>(almost)</small>
+    </p>
+    <a id="ctaButton" href="/app" class="cta-button">Jetzt starten</a>
+    <div class="scroll-indicator">↓</div>
+  </section>
+
+  <!-- Features Section -->
+  <section class="features">
+    <div class="feature">
+      <div class="feature-icon">🤖</div>
+      <h3>Multiple Models</h3>
+      <p>Receive simultaneous responses from leading AI models.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">💡</div>
+      <h3>Unified Answers</h3>
+      <p>Robust consensus answer combining strengths of each model.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🔍</div>
+      <h3>Real-time Search</h3>
+      <p>Web-powered data for up-to-date, precise insights.</p>
+    </div>
+  </section>
+
+  <!-- Models Info Section -->
+  <section class="models-info">
+    <h2>Our Models – United for Better Answers</h2>
+    <div class="model-cards">
+      <div class="model-card">
+        <img src="./static/icons/chatgpt.png" alt="ChatGPT Logo" class="model-icon">
+        <h3>ChatGPT</h3>
+        <p><strong>Provider:</strong> OpenAI</p>
+        <p>Conversational fluency, broad knowledge, code generation.</p>
+      </div>
+      <div class="model-card">
+        <img src="./static/icons/mistral.png" alt="Mistral Logo" class="model-icon">
+        <h3>Mistral</h3>
+        <p><strong>Provider:</strong> Mistral AI</p>
+        <p>High throughput, memory efficient, open-source.</p>
+      </div>
+      <div class="model-card">
+        <img src="./static/icons/claude.png" alt="Claude Logo" class="model-icon">
+        <h3>Claude</h3>
+        <p><strong>Provider:</strong> Anthropic</p>
+        <p>Safety-focused, consistent reasoning, long-form summaries.</p>
+      </div>
+      <div class="model-card">
+        <img src="./static/icons/gemini.png" alt="Gemini Logo" class="model-icon">
+        <h3>Gemini</h3>
+        <p><strong>Provider:</strong> Google</p>
+        <p>Multimodal inputs, search integration, code assistance.</p>
+      </div>
+      <div class="model-card">
+        <img src="./static/icons/deepseek.png" alt="DeepSeek Logo" class="model-icon">
+        <h3>DeepSeek</h3>
+        <p><strong>Provider:</strong> DeepSeek</p>
+        <p>Real-time search relevance, up-to-the-minute data.</p>
+      </div>
+      <div class="model-card">
+        <img src="./static/icons/grok.png" alt="Grok Logo" class="model-icon">
+        <h3>Grok</h3>
+        <p><strong>Provider:</strong> xAI</p>
+        <p>Fast response times, social platform integration.</p>
+      </div>
+      <div class="model-card">
+        <img src="./static/icons/exa.png" alt="Exa Logo" class="model-icon">
+        <h3>Exa</h3>
+        <p><strong>Provider:</strong> Exa AI</p>
+        <p>Specialized domain performance, efficient architecture.</p>
+      </div>
+      <div class="model-card">
+        <img src="./static/icons/perplexity.png" alt="Perplexity Logo" class="model-icon">
+        <h3>Perplexity</h3>
+        <p><strong>Provider:</strong> Perplexity AI</p>
+        <p>Precise fact retrieval, rapid context understanding.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Consensus vs. Differences -->
+  <section class="consensus-features">
+    <div class="consensus-card">
+      <div class="card-icon">📊</div>
+      <h3>Consensus Answer</h3>
+      <p>We aggregate all model outputs into one rock‑solid response—minimizing hallucinations and amplifying agreement.</p>
+    </div>
+    <div class="consensus-card">
+      <div class="card-icon">🔍</div>
+      <h3>Differences</h3>
+      <p>We surface key divergences—so you see exactly where models disagree and why.</p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    © 2025 consens.io | <a href="/app">Go to App</a>
+  </footer>
+
+  <script>
+    // Wenn der Nutzer bewusst auf den Button klickt, setzen wir eine Ausnahme 
+    // und speichern sie nur in dieser Session.
+    document.getElementById("ctaButton").addEventListener("click", () => {
+      sessionStorage.setItem("skipLandingRedirect", "1");
+    });
+  </script>
+
+</body>
+</html>
+
