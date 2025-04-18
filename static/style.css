@@ -1716,7 +1716,7 @@ font-size: 0.9em;
   opacity: 0.8;
 }
 
-@media (max-width: 1400px) {
+@media (max-width: 1465px) {
   /* Top Bar & Body */
   .top-bar-logo {
     margin-left: 40px; /* Abstand, damit der Pfeil links Platz hat */
@@ -1889,7 +1889,7 @@ font-size: 0.9em;
   }
 
   #clearButton {
-    right: 50px;
+    right: 60px;
 }
 }
 

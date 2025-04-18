@@ -597,7 +597,7 @@
           const burgerButton = document.querySelector('.sidebar-toggle');
           
           // Nur auf kleinen Displays
-          if (window.innerWidth <= 1400 && sidebar.classList.contains("active")) {
+          if (window.innerWidth <= 1465 && sidebar.classList.contains("active")) {
             // Wenn der Klick weder innerhalb der Sidebar noch auf dem Burger-Button erfolgt
             if (!sidebar.contains(event.target) && !event.target.closest('.sidebar-toggle')) {
               sidebar.classList.remove("active");

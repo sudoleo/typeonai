@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 import openai
 import requests
 import base64, re
+import time, logging
 from mistralai import Mistral
 from dotenv import load_dotenv
 import google.generativeai as genai
@@ -719,13 +720,18 @@ db_firestore = firestore.client()
 
 def verify_user_token(token: str) -> str:
     """
-    Verifiziert das Firebase-ID-Token und gibt die uid zurück.
+    Verifiziert das Firebase-ID-Token mit etwas Clock-Skew-Toleranz
+    und gibt die uid zurück.
     """
     try:
-        decoded_token = auth.verify_id_token(token)
+        # Erlaube z.B. bis zu 5 Sekunden Drift
+        decoded_token = auth.verify_id_token(token, clock_skew_seconds=5)
         return decoded_token["uid"]
     except Exception as e:
-        # Logge den Originalfehler, um mehr Details zu erhalten
+        # Logge den Originalfehler inkl. Uhrzeit zum Debuggen
+        import time, logging
+        now = int(time.time())
+        logging.error(f"verify_user_token failed (server time={now}): {e}")
         raise Exception("Invalid token: " + str(e))
 
 
