@@ -278,7 +278,7 @@ def query_grok(question: str, api_key: str, system_prompt: str = None, deep_sear
     try:
         client = openai.OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
         response = client.chat.completions.create(
-            model="grok-2-latest",
+            model="grok-3-latest",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question}
@@ -507,7 +507,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
         elif consensus_model == "Grok":
             client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
             response = client.chat.completions.create(
-                model="grok-2-latest",
+                model="grok-3-latest",
                 messages=[
                     {"role": "system", "content": " "},
                     {"role": "user", "content": consensus_prompt}
@@ -673,7 +673,7 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
         elif differences_model == "Grok":
             client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
             response = client.chat.completions.create(
-                model="grok-2-latest",
+                model="grok-3-latest",
                 messages=[
                     {"role": "system", "content": "Answer in the exact same Langugage as the Model responses: "},
                     {"role": "user", "content": differences_prompt}
@@ -1965,7 +1965,7 @@ async def check_keys(request: Request, data: dict = Body(...)):
             if grok_key and len(grok_key) > 10:
                 client = openai.OpenAI(api_key=grok_key, base_url="https://api.x.ai/v1")
                 response = client.chat.completions.create(
-                    model="grok-2-latest",
+                    model="grok-3-latest",
                     messages=[
                         {"role": "system", "content": "ping"},
                         {"role": "user", "content": "ping"}
