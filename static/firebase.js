@@ -226,24 +226,26 @@ document.getElementById("closeLoginModal").addEventListener("click", () => {
 
 // Restlicher Firebase-Code (z.B. Leaderboard, Funktionen, etc.)
 const leaderboardRef = collection(db, "leaderboard");
-const leaderboardQuery = query(leaderboardRef, orderBy("best", "desc"));
+const leaderboardQuery = query(
+  leaderboardRef,
+  orderBy("BestModel", "desc")
+);
 onSnapshot(leaderboardQuery, (snapshot) => {
-  let html = '<table style="width:100%; table-layout: fixed; margin-left: -5px;">';
-  html += '<thead><tr><th style="width:40%;">Model</th><th style="width:60%;">Votes</th></tr></thead>';
-  html += '<tbody>';
+  let html = '<table><tbody>';
   snapshot.forEach((doc) => {
     const data = doc.data();
-    const bestVotes = data.best || 0;
-    const excludeVotes = data.exclude || 0;
+    const bestVotes      = data.best      || 0;
+    const excludeVotes   = data.exclude   || 0;
     const bestModelVotes = data.BestModel || 0;
+
     html += `<tr>
-               <td>${doc.id}</td>
-               <td>
-                 <span title="Best">&#10003; ${bestVotes}</span>&nbsp;&nbsp;
-                 <span title="Exclude">&#10005; ${excludeVotes}</span>&nbsp;&nbsp;
-                 <span title="BestModel">best ${bestModelVotes}</span>
-               </td>
-             </tr>`;
+      <td>${doc.id}</td>
+      <td>
+        <span class="vote BestModel" title="BestModel">★ ${bestModelVotes}</span>
+        <span class="vote best"      title="Best">&#10003; ${bestVotes}</span>
+        <span class="vote exclude"   title="Exclude">&#10005; ${excludeVotes}</span>
+      </td>
+    </tr>`;
   });
   html += '</tbody></table>';
   document.getElementById("leaderboardContent").innerHTML = html;

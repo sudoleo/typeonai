@@ -20,6 +20,13 @@
   --email-icon-bg: #ddd; /* Neue Variable: leicht grauer Hintergrund für Whitemode */
   --scrollbar-thumb: rgba(0, 0, 0, 0.3);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.5);
+  /* Vote-Badge-Variablen */
+  --vote-model-bg: #e6f0ff;
+  --vote-model-color: #1a4aa1;
+  --vote-best-bg: #e6ffed;
+  --vote-best-color: #2c7a2c;
+  --vote-exclude-bg: var(--clear-button-bg);
+  --vote-exclude-color: var(--clear-button-text);
 }
 
 .dark-mode {
@@ -43,6 +50,13 @@
   --email-icon-bg: #555; /* Passende dunkle Farbe im Dark Mode */
   --scrollbar-thumb: rgba(255, 255, 255, 0.3);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.5);
+  /* Override für Dark Mode falls gewünscht */
+  --vote-model-bg: #2c2f3c;
+  --vote-model-color: #82aaff;
+  --vote-best-bg: #203c20;
+  --vote-best-color: #8aff8a;
+  --vote-exclude-bg: var(--clear-button-bg);
+  --vote-exclude-color: var(--clear-button-text);
 }
 
 /* Dark Mode Anpassungen */
@@ -267,30 +281,6 @@ h1, h2 {
   font-size: 1.2em;
   margin: 5px 0;
   text-align: center;
-}
-
-/* Leaderboard an die Sidebar anpassen */
-#leaderboardContent table {
-width: 100%;
-border-collapse: collapse;
-table-layout: auto; /* statt fixed, damit der Inhalt nicht unnötig umbricht */
-}
-
-#leaderboardContent th,
-#leaderboardContent td {
-white-space: nowrap;      /* Alle Inhalte in einer Zeile anzeigen */
-text-align: left;
-padding: 4px 8px;         /* Feineres Padding, um den Platz optimal zu nutzen */
-font-size: 0.9em;         /* Schrift ggf. etwas kleiner */
-}
-
-#leaderboardContent th {
-border-bottom: 1px solid #ccc;
-}
-
-#leaderboardContent tr {
-border-bottom: 1px solid #eee;
-vertical-align: middle;
 }
 
 .title small {
@@ -607,10 +597,79 @@ transition-delay: 0.5s;
   top: -5px;  /* Verschiebt das Icon 2px nach oben */
   opacity: 0.5;
 }
+
 .dark-mode .info-icon {
   color: #bbb;
   border-color: #bbb;
 }
+
+  /* Container fürs Leaderboard */
+  #leaderboardContent {
+    max-width: 400px;
+    margin: 0 auto;
+    font-family: sans-serif;
+    font-size: 0.9rem;
+    color: var(--text-color);
+  }
+
+  /* Table-Grundlayout */
+  #leaderboardContent table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  #leaderboardContent thead {
+    display: none; /* Header ausblenden für sehr minimal */
+  }
+  #leaderboardContent tbody tr {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  #leaderboardContent tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  /* Spalten als Flex-Items */
+  #leaderboardContent td {
+    display: inline-flex;
+    align-items: center;
+  }
+  #leaderboardContent td:first-child {
+    flex: 1;
+    font-weight: 500;
+  }
+  #leaderboardContent td:last-child {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;       /* gleichmäßiger Abstand zwischen allen Badges */
+  }
+
+  #leaderboardContent .vote {
+    margin-left: 0.75rem;
+    font-size: 0.85rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 9999px;
+    background: var(--response-bg);      /* neutraler Hintergrund */
+    color: var(--text-color);           /* neutraler Text */
+    transition: background 0.2s;
+    margin: 0;  
+  }
+  #leaderboardContent .vote.best {
+    background: var(--vote-best-bg);
+    color: var(--vote-best-color);
+  }
+  #leaderboardContent .vote.exclude {
+    background: var(--vote-exclude-bg);
+    color: var(--vote-exclude-color);
+    border: 1px solid var(--clear-button-border);
+  }
+  /* BestModel */
+  #leaderboardContent .vote.BestModel {
+    background: var(--vote-model-bg);
+    color: var(--vote-model-color);
+    margin-left: 0;
+  }
 
 .sidebar-section h2 .info-icon,
 .sidebar-header h2 .info-icon {
@@ -1783,7 +1842,6 @@ font-size: 0.9em;
   #leaderboardContent td {
     white-space: nowrap;      /* Alle Inhalte in einer Zeile anzeigen */
     text-align: left;
-    padding: 4px 8px;         /* Feineres Padding, um den Platz optimal zu nutzen */
     font-size: 0.9em;         /* Schrift ggf. etwas kleiner */
   }
 
@@ -1984,7 +2042,7 @@ font-size: 0.9em;
   #leaderboardContent td {
     white-space: nowrap;      /* Alle Inhalte in einer Zeile anzeigen */
     text-align: left;
-    padding: 4px 8px;         /* Feineres Padding, um den Platz optimal zu nutzen */
+    padding: 2px;         /* Feineres Padding, um den Platz optimal zu nutzen */
     font-size: 0.9em;         /* Schrift ggf. etwas kleiner */
   }
 

@@ -7,6 +7,7 @@ import openai
 import requests
 import base64, re
 import time, logging
+import random
 from mistralai import Mistral
 from dotenv import load_dotenv
 import google.generativeai as genai
@@ -547,30 +548,67 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
         return f"Consensus error: {str(e)}"
     
 
-def query_differences(answer_openai: str, answer_mistral: str, answer_claude: str, answer_gemini: str, answer_deepseek: str, answer_grok: str, answer_exa: str, answer_perplexity: str, consensus_answer: str, api_keys: dict, differences_model: str, search_mode: bool = False) -> str:
+def query_differences(
+    answer_openai: str,
+    answer_mistral: str,
+    answer_claude: str,
+    answer_gemini: str,
+    answer_deepseek: str,
+    answer_grok: str,
+    answer_exa: str,
+    answer_perplexity: str,
+    consensus_answer: str,
+    api_keys: dict,
+    differences_model: str,
+    search_mode: bool = False
+) -> str:
     """
-    Extrahiert die Unterschiede zwischen den vier Expertenantworten mittels des angegebenen Konsens‑Modells.
+    Extrahiert die Unterschiede zwischen den Antworten mittels des angegebenen Konsens-Modells,
+    anonymisiert die Modellnamen und ordnet das bestbewertete Modell anschließend wieder zu.
     """
-    # Je nach Modus nur die relevanten Antworten in den Prompt aufnehmen:
-    if search_mode in [True, "true", "True"]:
-        responses_text = (
-            f"- GPT-4o: {answer_openai}\n"
-            f"- Gemini: {answer_gemini}\n"
-            f"- Exa: {answer_exa}\n"
-            f"- Perplexity: {answer_perplexity}\n"
-        )
-        best_models_instruction = "Choose from one of the following models: OpenAI or Gemini."
-    else:
-        responses_text = (
-            f"- GPT-4o: {answer_openai}\n"
-            f"- Mistral: {answer_mistral}\n"
-            f"- Claude: {answer_claude}\n"
-            f"- Gemini: {answer_gemini}\n"
-            f"- DeepSeek: {answer_deepseek}\n"
-            f"- Grok: {answer_grok}\n"
-        )
-        best_models_instruction = "Choose from one of the following models: Anthropic, Gemini, Mistral, or OpenAI."
 
+    # 1. Ursprüngliche Modelle und Antworten in einer Liste sammeln
+    if search_mode:
+        model_answers = [
+            ("OpenAI", answer_openai),
+            ("Gemini", answer_gemini),
+            ("Exa", answer_exa),
+            ("Perplexity", answer_perplexity),
+        ]
+    else:
+        model_answers = [
+            ("OpenAI", answer_openai),
+            ("Mistral", answer_mistral),
+            ("Claude", answer_claude),
+            ("Gemini", answer_gemini),
+            ("DeepSeek", answer_deepseek),
+            ("Grok", answer_grok),
+        ]
+
+    # 2. Modelle mischen für Unabhängigkeit
+    random.shuffle(model_answers)
+
+    # 3. Anonymisierung: Model A, B, C, ...
+    anon_map = {}
+    lines = []
+    labels = []
+    for idx, (name, text) in enumerate(model_answers):
+        label = chr(ord("A") + idx)      # A, B, C, ...
+        anon_label = f"Model {label}"
+        anon_map[anon_label] = name
+        labels.append(anon_label)
+        lines.append(f"- {anon_label}: {text}")
+
+    responses_text = "\n".join(lines)
+
+    # Dynamisch die erlaubten Labels in der Instruktion auflisten
+    if len(labels) > 1:
+        allowed_list = ", ".join(labels[:-1]) + " or " + labels[-1]
+    else:
+        allowed_list = labels[0]
+    best_models_instruction = f"Choose from one of the following labels: {allowed_list}."
+
+    # 4. Prompt zusammenbauen (vollständig anonymisiert)
     differences_prompt = (
         "Analyze the LLM responses and assess how strongly they differ from each other. "
         "If all models respond almost identically, the consensus is very credible. "
@@ -586,13 +624,12 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
         "- 'The consensus answer is **not** credible.'\n\n"
 
         "After the sentence, include a separator line and a **very brief explanation** of why these differences are relevant.\n\n"
-
         "Consensus answer:\n" + consensus_answer + "\n\n"
-
-        "Model responses:\n" + responses_text + "\n"
-
-        "Finally, subjectively determine which model provided the best answer. " + best_models_instruction + " "
-        "Include your decision at the end of the response on a separate line, starting with 'BestModel:' followed by the model name.\n\n"
+        "Model responses:\n" + responses_text + "\n\n"
+        "Finally, subjectively determine which model provided the best answer. "
+        + best_models_instruction + "\n"
+        "Include your decision at the end of the response on a separate line, "
+        "starting with 'BestModel:' followed by the **anonymized** model name.\n"
 
         "Response format:\n"
         "[Credibility statement]\n"
@@ -604,27 +641,30 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
         "BestModel: [Model name]"
     )
 
+    # 5. Anfrage ans Konsens-Modell
     try:
         if differences_model == "OpenAI":
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
             response = client.chat.completions.create(
                 model="gpt-4.1",
                 messages=[
-                    {"role": "system", "content": "Answer in the exact same Langugage as the Model responses: "},
+                    {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
                 ]
             )
-            return response.choices[0].message.content.strip()
+            result = response.choices[0].message.content.strip()
+
         elif differences_model == "Mistral":
             client = Mistral(api_keys.get("Mistral"))
             response = client.chat.complete(
                 model="mistral-large-latest",
                 messages=[
-                    {"role": "system", "content": "Answer in the exact same Langugage as the Model responses:  "},
+                    {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
                 ]
             )
-            return response.choices[0].message.content.strip()
+            result = response.choices[0].message.content.strip()
+
         elif differences_model == "Anthropic":
             url = "https://api.anthropic.com/v1/messages"
             headers = {
@@ -635,81 +675,88 @@ def query_differences(answer_openai: str, answer_mistral: str, answer_claude: st
             payload = {
                 "model": "claude-3-5-sonnet-20241022",
                 "max_tokens": 8192,
-                "system": "Answer in the exact same Langugage as the Model responses:  ",
+                "system": "Answer in the exact same language as the Model responses.",
                 "messages": [{"role": "user", "content": differences_prompt}]
             }
-            response = requests.post(url, json=payload, headers=headers)
-            if response.status_code == 200:
-                data = response.json()
-                if "content" in data and isinstance(data["content"], list) and len(data["content"]) > 0:
-                    return data["content"][0]["text"]
-                else:
-                    return "Error: No response found in the API response."
+            resp = requests.post(url, json=payload, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                result = data["content"][0]["text"] if data.get("content") else ""
             else:
-                return f"Error with Anthropic: {response.status_code} - {response.text}"
-            
+                return f"Error with Anthropic: {resp.status_code} - {resp.text}"
+
         elif differences_model == "Gemini":
             gemini_key = api_keys.get("Gemini")
-            if gemini_key and gemini_key.strip() != "":
+            if gemini_key:
                 genai.configure(api_key=gemini_key)
-            else:
-                genai.configure()
             model = genai.GenerativeModel("gemini-1.5-pro-latest")
-            response = model.generate_content(differences_prompt)
-            return response.text.strip()
-        
+            result = model.generate_content(differences_prompt).text.strip()
+
         elif differences_model == "DeepSeek":
             client = openai.OpenAI(api_key=api_keys.get("DeepSeek"), base_url="https://api.deepseek.com")
             response = client.chat.completions.create(
                 model="deepseek-chat",
                 messages=[
-                    {"role": "system", "content": "Answer in the exact same Langugage as the Model responses:  "},
+                    {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
-                ],
-                stream=False
+                ]
             )
-            return response.choices[0].message.content.strip()
-        
+            result = response.choices[0].message.content.strip()
+
         elif differences_model == "Grok":
             client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
             response = client.chat.completions.create(
                 model="grok-3-latest",
                 messages=[
-                    {"role": "system", "content": "Answer in the exact same Langugage as the Model responses: "},
+                    {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
                 ]
             )
-            return response.choices[0].message.content.strip()
-        
+            result = response.choices[0].message.content.strip()
+
         elif differences_model == "Exa":
             client = openai.OpenAI(api_key=api_keys.get("Exa"), base_url="https://api.exa.ai")
             response = client.chat.completions.create(
-                model="exa",  # oder "exa-pro" falls gewünscht
+                model="exa",
                 messages=[
-                    {"role": "system", "content": "Answer in the exact same language as the Model responses:"},
+                    {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
                 ],
-                extra_body={"text": True},
-                max_tokens=CONSENSUS_MAX_TOKENS
+                max_tokens=8192,
+                extra_body={"text": True}
             )
-            return response.choices[0].message.content.strip()
-        
+            result = response.choices[0].message.content.strip()
+
         elif differences_model == "Perplexity":
             client = openai.OpenAI(api_key=api_keys.get("Perplexity"), base_url="https://api.perplexity.ai")
             response = client.chat.completions.create(
                 model="sonar",
                 messages=[
-                    {"role": "system", "content": "Answer in the exact same language as the Model responses:"},
+                    {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
                 ],
-                max_tokens=CONSENSUS_MAX_TOKENS
+                max_tokens=8192
             )
-            return response.choices[0].message.content.strip()
+            result = response.choices[0].message.content.strip()
 
         else:
             return "Invalid model selected for difference comparison."
+
     except Exception as e:
-        return f"Error in comparison: {str(e)}"
+        return f"Error in comparison: {e}"
+
+    # 6. Anonyme BestModel-Zeile rückübersetzen
+    match = re.search(r"BestModel:\s*Model\s*([A-Z])", result)
+    if match:
+        anon_label = f"Model {match.group(1)}"
+        real_name = anon_map.get(anon_label, anon_label)
+        result = re.sub(
+            r"BestModel:\s*Model\s*[A-Z]",
+            f"BestModel: {real_name}",
+            result
+        )
+
+    return result
     
 # Initialisiere Firebase Admin (Beispiel, passe den Pfad zu deinem Service Account an)
 cred = credentials.Certificate("consensai-firebase-adminsdk-fbsvc-9064a77134.json")
