@@ -211,7 +211,7 @@ def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode:
             genai.configure()
         
         # Je nach Search Mode den passenden Modellnamen wählen:
-        model_name = "gemini-1.5-pro-002" if search_mode else "gemini-1.5-pro-latest"
+        model_name = "gemini-1.5-pro-002" if search_mode else "gemini-2.5-pro"
         model = genai.GenerativeModel(model_name)
         
         base_content = "Do not ask any questions.\n" + system_prompt + "\n---\n" + question
@@ -481,7 +481,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 genai.configure(api_key=gemini_key)
             else:
                 genai.configure()  # Service-Account-Modus
-            model = genai.GenerativeModel("gemini-1.5-pro-latest")
+            model = genai.GenerativeModel("gemini-2.5-pro")
             # Schalte auch hier zwischen Search und normalem Modus um:
             if search_mode:
                 response = model.generate_content(
@@ -655,7 +655,7 @@ def query_differences(
             result = response.choices[0].message.content.strip()
 
         elif differences_model == "Mistral":
-            client = Mistral(api_keys.get("Mistral"))
+            client = Mistral(api_key=api_keys.get("Mistral"))
             response = client.chat.complete(
                 model="mistral-large-latest",
                 messages=[
@@ -689,7 +689,7 @@ def query_differences(
             gemini_key = api_keys.get("Gemini")
             if gemini_key:
                 genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel("gemini-1.5-pro-latest")
+            model = genai.GenerativeModel("gemini-2.5-pro")
             result = model.generate_content(differences_prompt).text.strip()
 
         elif differences_model == "DeepSeek":
@@ -1422,10 +1422,22 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
         if use_own_keys:
             if not (api_key and api_key.strip()):
                 raise HTTPException(status_code=400, detail="Please log in or store your own API keys.")
-            answer = query_gemini(question, api_key.strip(), search_mode, system_prompt)
+            answer = query_gemini(
+                question,
+                api_key.strip(),          # oder None, je nach Zweig
+                search_mode=search_mode,  # bleibt wie bisher
+                deep_search=deep_search,  # jetzt korrekt belegt
+                system_prompt=system_prompt
+            )
             key_used = "User API Key"
         else:
-            answer = query_gemini(question, None, search_mode, system_prompt)
+            answer = query_gemini(
+                question,
+                None,          # oder None, je nach Zweig
+                search_mode=search_mode,  # bleibt wie bisher
+                deep_search=deep_search,  # jetzt korrekt belegt
+                system_prompt=system_prompt
+            )
             key_used = "Service Account"
         
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
@@ -1435,7 +1447,13 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
         # Nicht eingeloggte Nutzer müssen einen eigenen API Key bereitstellen.
         if not (api_key and api_key.strip()):
             raise HTTPException(status_code=400, detail="Please log in or store your own API keys.")
-        answer = query_gemini(question, api_key.strip(), search_mode, system_prompt)
+        answer = query_gemini(
+            question,
+            api_key.strip(),          # oder None, je nach Zweig
+            search_mode=search_mode,  # bleibt wie bisher
+            deep_search=deep_search,  # jetzt korrekt belegt
+            system_prompt=system_prompt
+        )
         return {"response": answer, "key_used": "User API Key"}
 
 # Angepasster Endpoint für DeepSeek

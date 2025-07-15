@@ -232,7 +232,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v1.0.0</span>
+    <span id="version-number">v1.1.0</span>
   </div>
 </div>
   <div class="container">
@@ -332,7 +332,7 @@
       <!-- Antwort Gemini -->
       <div class="response-box" id="geminiResponse" data-model="Gemini">
         <h2>
-          <span class="title">Response from Gemini <small>(gemini-1.5-pro)</small></span>
+          <span class="title">Response from Gemini <small>(gemini-2.5-pro)</small></span>
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('geminiResponse')" title="Mark as best answer">&#10003;</span>
             <span class="exclude-btn" onclick="toggleExclude('geminiResponse')" title="Exclude answer">&#10005;</span>
@@ -419,10 +419,10 @@
             <div class="select-wrapper">
               <select id="consensusModelDropdown">
                 <option value="Grok">Grok-3</option>
-                <option value="OpenAI">GPT‑4o</option>
+                <option value="OpenAI">GPT‑4.1</option>
                 <option value="Anthropic">claude-3-5</option>
                 <option value="Mistral">mistral-large-latest</option>
-                <option value="Gemini">gemini-1.5-pro</option>
+                <option value="Gemini">gemini-2.5-pro</option>
                 <option value="DeepSeek">DeepSeek-V3</option>
               </select>
             </div>
@@ -2331,10 +2331,12 @@
     </div>
   </div>
 </div>
+
 <!-- Hilfebutton (z.B. in der unteren rechten Ecke) -->
 <button id="helpButton" class="help-button" title="Hilfe & Erklärung">
   &#63;
 </button>
+
 <!-- FAQ Modal -->
 <div id="helpModal" class="modal">
   <div class="modal-content faq-modal">
@@ -2443,11 +2445,13 @@
   </div>
 </div>
 <div class="feedback-line">
-  <span class="feedback-note">This is still a work in progress. AI models can make mistakes.</span>
+  <span class="feedback-note">Inputs may be stored. Please avoid personal or sensitive data. This is a work in progress. AI models can make mistakes.</span>
   <button id="feedbackButton" class="feedback-button" title="Feedback senden">
     Got feedback?
   </button>
+  <span id="feedback-note"></span>
 </div>
+
 
 <!-- Feedback Modal -->
 <div id="feedbackModal" class="modal">

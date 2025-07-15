@@ -1772,7 +1772,6 @@ font-size: 0.9em;
 /* Nicht-klickbarer Text im gleichen Stil */
 .feedback-note {
   color: var(--feedback-text-color);
-  opacity: 0.8;
 }
 
 @media (max-width: 1465px) {
