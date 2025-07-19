@@ -66,6 +66,41 @@ MAX_TOKENS = 1024
 DEEP_SEARCH_MAX_TOKENS = 2048
 CONSENSUS_MAX_TOKENS = 2048
 
+# Modelle, die pro Anbieter erlaubt sind
+ALLOWED_OPENAI_MODELS = {
+    "gpt-4.1",
+    "gpt-4o",
+    "gpt-3.5-turbo",
+    "o3-mini",
+}
+
+ALLOWED_MISTRAL_MODELS = {
+    "mistral-large-latest",
+    "mistral-medium-latest",
+    "mistral-small-latest",
+}
+
+ALLOWED_ANTHROPIC_MODELS = {
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-haiku-20240307",
+}
+
+ALLOWED_GEMINI_MODELS = {
+    "gemini-2.5-pro",
+    "gemini-pro",
+    "gemini-1.5-flash-latest",
+}
+
+ALLOWED_DEEPSEEK_MODELS = {
+    "deepseek-chat",
+    "deepseek-coder",
+}
+
+ALLOWED_GROK_MODELS = {
+    "grok-3-latest",
+    "grok-1",
+}
+
 DEFAULT_SYSTEM_PROMPT = "Please respond briefly and precisely, focusing only on the essentials."
 DEEP_THINK_PROMPT = "Deep Think: Please provide a deep, detailed analysis. Focus as hard as you can!"
 
@@ -88,6 +123,14 @@ def is_valid_session(token: str) -> bool:
 
 def count_words(text: str) -> int:
     return len(text.strip().split())
+
+def validate_model(model: str, allowed: set, provider: str):
+    """Prüft, ob das angegebene Modell erlaubt ist."""
+    if model and model not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model '{model}' is not allowed for {provider}."
+        )
 
 def query_openai(question: str, api_key: str, search_mode: bool = False, deep_search: bool = False, system_prompt: str = None, model_override: str = None) -> str:
     if system_prompt is None:
@@ -1134,9 +1177,7 @@ async def ask_openai_post(request: Request, data: dict = Body(...)):
     id_token = data.get("id_token")
     api_key = data.get("api_key")
     model = data.get("model")
-    model = data.get("model")
-    model = data.get("model")
-    model = data.get("model")
+    validate_model(model, ALLOWED_OPENAI_MODELS, "OpenAI")
     # Lese den Status der Toggle-Switches aus
     search_mode = data.get("search_mode", False)
     active_count = data.get("active_count", 1)
@@ -1228,6 +1269,7 @@ async def ask_mistral_post(request: Request, data: dict = Body(...)):
     id_token = data.get("id_token")
     api_key = data.get("api_key")
     model = data.get("model")
+    validate_model(model, ALLOWED_MISTRAL_MODELS, "Mistral")
     active_count = data.get("active_count", 1)
     
     if id_token:
@@ -1305,6 +1347,7 @@ async def ask_claude_post(request: Request, data: dict = Body(...)):
     id_token = data.get("id_token")
     api_key = data.get("api_key")
     model = data.get("model")
+    validate_model(model, ALLOWED_DEEPSEEK_MODELS, "Anthropic")
     active_count = data.get("active_count", 1)
     
     if id_token:
@@ -1395,6 +1438,7 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
     id_token = data.get("id_token")
     api_key = data.get("api_key")  # von der Sidebar
     model = data.get("model")
+    validate_model(model, ALLOWED_GEMINI_MODELS, "Gemini")
     active_count = data.get("active_count", 1)
     search_mode = data.get("search_mode", False)
     
@@ -1494,6 +1538,7 @@ async def ask_deepseek_post(request: Request, data: dict = Body(...)):
     id_token = data.get("id_token")
     api_key = data.get("api_key")
     model = data.get("model")
+    validate_model(model, ALLOWED_DEEPSEEK_MODELS, "DeepSeek")
     active_count = data.get("active_count", 1)
     
     if id_token:
@@ -1582,6 +1627,7 @@ async def ask_grok_post(request: Request, data: dict = Body(...)):
     id_token = data.get("id_token")
     api_key = data.get("api_key")
     model = data.get("model")
+    validate_model(model, ALLOWED_GROK_MODELS, "Grok")
     active_count = data.get("active_count", 1)
     
     if id_token:
