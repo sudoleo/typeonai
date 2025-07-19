@@ -1360,6 +1360,34 @@ gap: 10px;
   pointer-events: none;
 }
 
+/* Kleiner Dropdown direkt neben dem Modellnamen */
+.model-picker-wrapper {
+  position: relative;
+  display: inline-block;
+  margin-left: 4px;
+}
+
+.model-picker-wrapper select {
+  padding: 2px 20px 2px 4px;
+  font-size: 0.8em;
+  background: var(--response-bg);
+  color: var(--text-color);
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  appearance: none;
+}
+
+.model-picker-wrapper::after {
+  content: "▼";
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: 0.6em;
+  color: var(--text-color);
+}
+
 /* Sidebar-Styling */
 .sidebar {
   position: fixed;

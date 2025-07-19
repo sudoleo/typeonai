@@ -89,7 +89,7 @@ def is_valid_session(token: str) -> bool:
 def count_words(text: str) -> int:
     return len(text.strip().split())
 
-def query_openai(question: str, api_key: str, search_mode: bool = False, deep_search: bool = False, system_prompt: str = None) -> str:
+def query_openai(question: str, api_key: str, search_mode: bool = False, deep_search: bool = False, system_prompt: str = None, model_override: str = None) -> str:
     if system_prompt is None:
         system_prompt = DEFAULT_SYSTEM_PROMPT
 
@@ -100,13 +100,15 @@ def query_openai(question: str, api_key: str, search_mode: bool = False, deep_se
 
     try:
         client = openai.OpenAI(api_key=api_key)
-        # Wähle das Modell abhängig von search_mode und deep_search:
-        if search_mode:
-            model_to_use = "gpt-4o-search-preview"
-        elif deep_search:
-            model_to_use = "o3-mini"
+        if model_override and not search_mode and not deep_search:
+            model_to_use = model_override
         else:
-            model_to_use = "gpt-4.1"
+            if search_mode:
+                model_to_use = "gpt-4o-search-preview"
+            elif deep_search:
+                model_to_use = "o3-mini"
+            else:
+                model_to_use = "gpt-4.1"
 
         # Verwende den korrekten Parameter basierend auf dem Modell
         if model_to_use == "o3-mini":
@@ -131,7 +133,7 @@ def query_openai(question: str, api_key: str, search_mode: bool = False, deep_se
     except Exception as e:
         return f"Error with OpenAI: {str(e)}"
 
-def query_mistral(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False) -> str:
+def query_mistral(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False, model_override: str = None) -> str:
     """Fragt die Mistral API zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit."""
     if system_prompt is None:
         system_prompt = DEFAULT_SYSTEM_PROMPT
@@ -144,7 +146,7 @@ def query_mistral(question: str, api_key: str, system_prompt: str = None, deep_s
 
     try:
         client = Mistral(api_key=api_key)
-        model = "mistral-large-latest"
+        model = model_override if (model_override and not deep_search) else "mistral-large-latest"
         response = client.chat.complete(
             model=model,
             messages=[
@@ -158,7 +160,7 @@ def query_mistral(question: str, api_key: str, system_prompt: str = None, deep_s
         return f"Error with Mistral: {str(e)}"
 
 
-def query_claude(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False) -> str:
+def query_claude(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False, model_override: str = None) -> str:
     """Fragt die Anthropic API (Claude) zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit.
        Da die Anthropic API ein Token-Limit erwartet, setzen wir einen sehr hohen Wert ein."""
     if system_prompt is None:
@@ -178,7 +180,7 @@ def query_claude(question: str, api_key: str, system_prompt: str = None, deep_se
             "anthropic-version": "2023-06-01"
         }
         payload = {
-            "model": "claude-3-5-sonnet-20241022",
+            "model": model_override if (model_override and not deep_search) else "claude-3-5-sonnet-20241022",
             "max_tokens": max_tokens,
             "system": system_prompt,
             "messages": [{"role": "user", "content": question}]
@@ -195,7 +197,7 @@ def query_claude(question: str, api_key: str, system_prompt: str = None, deep_se
     except Exception as e:
         return f"Error with Anthropic: {str(e)}"
 
-def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode: bool = False, deep_search: bool = False, system_prompt: str = None) -> str:
+def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode: bool = False, deep_search: bool = False, system_prompt: str = None, model_override: str = None) -> str:
     if system_prompt is None:
         system_prompt = DEFAULT_SYSTEM_PROMPT
 
@@ -211,7 +213,10 @@ def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode:
             genai.configure()
         
         # Je nach Search Mode den passenden Modellnamen wählen:
-        model_name = "gemini-1.5-pro-002" if search_mode else "gemini-2.5-pro"
+        if model_override and not search_mode and not deep_search:
+            model_name = model_override
+        else:
+            model_name = "gemini-1.5-pro-002" if search_mode else "gemini-2.5-pro"
         model = genai.GenerativeModel(model_name)
         
         base_content = "Do not ask any questions.\n" + system_prompt + "\n---\n" + question
@@ -237,7 +242,7 @@ def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode:
         return f"Error with Gemini: {str(e)}"
 
     
-def query_deepseek(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False) -> str:
+def query_deepseek(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False, model_override: str = None) -> str:
     """Fragt DeepSeek zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
     if system_prompt is None:
         system_prompt = DEFAULT_SYSTEM_PROMPT
@@ -250,8 +255,7 @@ def query_deepseek(question: str, api_key: str, system_prompt: str = None, deep_
 
     try:
         client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-        # Wähle das Modell: Falls deep_search aktiviert ist, nutze "deepseek-reasoner", sonst "deepseek-chat"
-        model_to_use = "deepseek-reasoner" if deep_search else "deepseek-chat"
+        model_to_use = "deepseek-reasoner" if deep_search else (model_override or "deepseek-chat")
         response = client.chat.completions.create(
             model=model_to_use,
             messages=[
@@ -265,7 +269,7 @@ def query_deepseek(question: str, api_key: str, system_prompt: str = None, deep_
     except Exception as e:
         return f"Error with DeepSeek: {str(e)}"
     
-def query_grok(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False) -> str:
+def query_grok(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False, model_override: str = None) -> str:
     """Fragt die Grok API zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
     if system_prompt is None:
         system_prompt = DEFAULT_SYSTEM_PROMPT
@@ -279,7 +283,7 @@ def query_grok(question: str, api_key: str, system_prompt: str = None, deep_sear
     try:
         client = openai.OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
         response = client.chat.completions.create(
-            model="grok-3-latest",
+            model=model_override if (model_override and not deep_search) else "grok-3-latest",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question}
@@ -1129,6 +1133,10 @@ async def ask_openai_post(request: Request, data: dict = Body(...)):
 
     id_token = data.get("id_token")
     api_key = data.get("api_key")
+    model = data.get("model")
+    model = data.get("model")
+    model = data.get("model")
+    model = data.get("model")
     # Lese den Status der Toggle-Switches aus
     search_mode = data.get("search_mode", False)
     active_count = data.get("active_count", 1)
@@ -1175,7 +1183,8 @@ async def ask_openai_post(request: Request, data: dict = Body(...)):
             developer_api_key,
             search_mode=search_mode,
             deep_search=deep_search,
-            system_prompt=system_prompt
+            system_prompt=system_prompt,
+            model_override=model
         )
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         deep_remaining = 12 - deep_search_usage.get(uid, 0)
@@ -1186,7 +1195,8 @@ async def ask_openai_post(request: Request, data: dict = Body(...)):
             api_key,
             search_mode=search_mode,
             deep_search=deep_search,
-            system_prompt=system_prompt
+            system_prompt=system_prompt,
+            model_override=model
         )
         # Auch hier beide Werte immer mitgeben
         return {
@@ -1217,6 +1227,7 @@ async def ask_mistral_post(request: Request, data: dict = Body(...)):
     system_prompt = data.get("system_prompt")
     id_token = data.get("id_token")
     api_key = data.get("api_key")
+    model = data.get("model")
     active_count = data.get("active_count", 1)
     
     if id_token:
@@ -1257,12 +1268,12 @@ async def ask_mistral_post(request: Request, data: dict = Body(...)):
         developer_api_key = os.environ.get("DEVELOPER_MISTRAL_API_KEY")
         if not developer_api_key:
             raise HTTPException(status_code=500, detail="Server error: API key not configured")
-        answer = query_mistral(question, developer_api_key, system_prompt, deep_search=deep_search)
+        answer = query_mistral(question, developer_api_key, system_prompt, deep_search=deep_search, model_override=model)
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         deep_remaining = 12 - deep_search_usage.get(uid, 0)
         return {"response": answer, "free_usage_remaining": free_remaining, "deep_remaining": deep_remaining, "key_used": "Developer API Key"}
     elif api_key:
-        answer = query_mistral(question, api_key, system_prompt, deep_search=deep_search)
+        answer = query_mistral(question, api_key, system_prompt, deep_search=deep_search, model_override=model)
         # Auch hier beide Werte immer mitgeben
         return {
             "response": answer,
@@ -1293,6 +1304,7 @@ async def ask_claude_post(request: Request, data: dict = Body(...)):
     system_prompt = data.get("system_prompt")
     id_token = data.get("id_token")
     api_key = data.get("api_key")
+    model = data.get("model")
     active_count = data.get("active_count", 1)
     
     if id_token:
@@ -1337,7 +1349,8 @@ async def ask_claude_post(request: Request, data: dict = Body(...)):
             question,
             developer_api_key,
             system_prompt,
-            deep_search=deep_search
+            deep_search=deep_search,
+            model_override=model
         )
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         deep_remaining = 12 - deep_search_usage.get(uid, 0)
@@ -1347,7 +1360,8 @@ async def ask_claude_post(request: Request, data: dict = Body(...)):
             question,
             api_key,
             system_prompt,
-            deep_search=deep_search
+            deep_search=deep_search,
+            model_override=model
         )
         # Auch hier beide Werte immer mitgeben
         return {
@@ -1380,6 +1394,7 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
         use_own_keys = use_own_keys.lower() == "true"
     id_token = data.get("id_token")
     api_key = data.get("api_key")  # von der Sidebar
+    model = data.get("model")
     active_count = data.get("active_count", 1)
     search_mode = data.get("search_mode", False)
     
@@ -1425,18 +1440,20 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
             answer = query_gemini(
                 question,
                 api_key.strip(),          # oder None, je nach Zweig
-                search_mode=search_mode,  # bleibt wie bisher
-                deep_search=deep_search,  # jetzt korrekt belegt
-                system_prompt=system_prompt
+                search_mode=search_mode,
+                deep_search=deep_search,
+                system_prompt=system_prompt,
+                model_override=model
             )
             key_used = "User API Key"
         else:
             answer = query_gemini(
                 question,
-                None,          # oder None, je nach Zweig
-                search_mode=search_mode,  # bleibt wie bisher
-                deep_search=deep_search,  # jetzt korrekt belegt
-                system_prompt=system_prompt
+                None,
+                search_mode=search_mode,
+                deep_search=deep_search,
+                system_prompt=system_prompt,
+                model_override=model
             )
             key_used = "Service Account"
         
@@ -1449,10 +1466,11 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
             raise HTTPException(status_code=400, detail="Please log in or store your own API keys.")
         answer = query_gemini(
             question,
-            api_key.strip(),          # oder None, je nach Zweig
-            search_mode=search_mode,  # bleibt wie bisher
-            deep_search=deep_search,  # jetzt korrekt belegt
-            system_prompt=system_prompt
+            api_key.strip(),
+            search_mode=search_mode,
+            deep_search=deep_search,
+            system_prompt=system_prompt,
+            model_override=model
         )
         return {"response": answer, "key_used": "User API Key"}
 
@@ -1475,6 +1493,7 @@ async def ask_deepseek_post(request: Request, data: dict = Body(...)):
     system_prompt = data.get("system_prompt")
     id_token = data.get("id_token")
     api_key = data.get("api_key")
+    model = data.get("model")
     active_count = data.get("active_count", 1)
     
     if id_token:
@@ -1519,7 +1538,8 @@ async def ask_deepseek_post(request: Request, data: dict = Body(...)):
             question,
             developer_api_key,
             system_prompt,
-            deep_search=deep_search
+            deep_search=deep_search,
+            model_override=model
         )
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         deep_remaining = 12 - deep_search_usage.get(uid, 0)
@@ -1529,7 +1549,8 @@ async def ask_deepseek_post(request: Request, data: dict = Body(...)):
             question,
             api_key,
             system_prompt,
-            deep_search=deep_search
+            deep_search=deep_search,
+            model_override=model
         )
         # Auch hier beide Werte immer mitgeben
         return {
@@ -1560,6 +1581,7 @@ async def ask_grok_post(request: Request, data: dict = Body(...)):
     system_prompt = data.get("system_prompt")
     id_token = data.get("id_token")
     api_key = data.get("api_key")
+    model = data.get("model")
     active_count = data.get("active_count", 1)
     
     if id_token:
@@ -1604,7 +1626,8 @@ async def ask_grok_post(request: Request, data: dict = Body(...)):
             question,
             developer_api_key,
             system_prompt,
-            deep_search=deep_search
+            deep_search=deep_search,
+            model_override=model
         )
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         deep_remaining = 12 - deep_search_usage.get(uid, 0)
@@ -1614,7 +1637,8 @@ async def ask_grok_post(request: Request, data: dict = Body(...)):
             question,
             api_key,
             system_prompt,
-            deep_search=deep_search
+            deep_search=deep_search,
+            model_override=model
         )
         # Auch hier beide Werte immer mitgeben
         return {
