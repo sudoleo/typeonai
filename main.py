@@ -1347,7 +1347,7 @@ async def ask_claude_post(request: Request, data: dict = Body(...)):
     id_token = data.get("id_token")
     api_key = data.get("api_key")
     model = data.get("model")
-    validate_model(model, ALLOWED_DEEPSEEK_MODELS, "Anthropic")
+    validate_model(model, ALLOWED_ANTHROPIC_MODELS, "Anthropic")
     active_count = data.get("active_count", 1)
     
     if id_token:

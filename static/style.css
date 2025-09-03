@@ -1364,23 +1364,44 @@ gap: 10px;
 .model-picker-wrapper {
   position: relative;
   display: inline-block;
+  min-width: 20px;
   margin-left: 4px;
 }
 
 .model-picker-wrapper select {
-  padding: 2px 20px 2px 4px;
-  font-size: 0.8em;
+  width: 20px;
+  height: 18px;
+  padding: 0px;
+  font-size: 0;
+  color: transparent;
   background: var(--response-bg);
-  color: var(--text-color);
-  border: 1px solid var(--input-border);
+  border: none;
   border-radius: 4px;
   appearance: none;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.model-picker-wrapper select:focus {
+  position: absolute;
+  left: 0;
+  width: 160px;
+  border: 1px solid var(--input-border);
+  color: transparent;
+  font-size: 0;
+  background: var(--response-bg);
+  z-index: 10;
+}
+
+.model-picker-wrapper select option {
+  font-size: 0.8em;
+  color: var(--text-color);
 }
 
 .model-picker-wrapper::after {
-  content: "▼";
+  content: "\25BC";
   position: absolute;
-  right: 6px;
+  right: 3px;
   top: 50%;
   transform: translateY(-50%);
   pointer-events: none;
