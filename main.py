@@ -65,9 +65,11 @@ DEEP_SEARCH_MAX_WORDS = 1000
 MAX_TOKENS = 1024
 DEEP_SEARCH_MAX_TOKENS = 2048
 CONSENSUS_MAX_TOKENS = 2048
+REASONING_EFFORT_FOR_DEEP = "low"
 
 # Modelle, die pro Anbieter erlaubt sind
 ALLOWED_OPENAI_MODELS = {
+    "gpt-5",
     "gpt-4.1",
     "gpt-4o",
     "gpt-3.5-turbo",
@@ -81,24 +83,25 @@ ALLOWED_MISTRAL_MODELS = {
 }
 
 ALLOWED_ANTHROPIC_MODELS = {
-    "claude-3-5-sonnet-20241022",
-    "claude-3-5-haiku-20240307",
+    "claude-sonnet-4-5-20250929",
+    "claude-sonnet-4-20250514",
+    "claude-3-7-sonnet-20250219",
+    "claude-3-5-haiku-20241022",
 }
 
 ALLOWED_GEMINI_MODELS = {
     "gemini-2.5-pro",
-    "gemini-pro",
-    "gemini-1.5-flash-latest",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
 }
 
 ALLOWED_DEEPSEEK_MODELS = {
     "deepseek-chat",
-    "deepseek-coder",
 }
 
 ALLOWED_GROK_MODELS = {
+    "grok-4-latest",
     "grok-3-latest",
-    "grok-1",
 }
 
 DEFAULT_SYSTEM_PROMPT = "Please respond briefly and precisely, focusing only on the essentials."
@@ -132,49 +135,93 @@ def validate_model(model: str, allowed: set, provider: str):
             detail=f"Model '{model}' is not allowed for {provider}."
         )
 
-def query_openai(question: str, api_key: str, search_mode: bool = False, deep_search: bool = False, system_prompt: str = None, model_override: str = None) -> str:
+def query_openai(
+    question: str,
+    api_key: str,
+    deep_search: bool = False,
+    system_prompt: str = None,
+    model_override: str = None
+) -> str:
     if system_prompt is None:
         system_prompt = DEFAULT_SYSTEM_PROMPT
-
     if deep_search:
         system_prompt += "\n" + DEEP_THINK_PROMPT
 
-    max_tokens = DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS
+    client = openai.OpenAI(api_key=api_key)
 
+    # Modell-Entscheidung: search_mode ist entfernt – nur deep_search & override steuern
+    model_to_use = model_override if (model_override and not deep_search) else "gpt-5"
+
+    user_msg = {"role": "user", "content": question}
+
+    # ===== Deep Reasoning: Responses API =====
+    if deep_search:
+        try:
+            resp = client.responses.create(
+                model=model_to_use,
+                reasoning={"effort": REASONING_EFFORT_FOR_DEEP},
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    user_msg,
+                ],
+                max_output_tokens=DEEP_SEARCH_MAX_TOKENS,
+            )
+
+            if getattr(resp, "status", None) == "incomplete":
+                details = getattr(resp, "incomplete_details", None)
+                reason = getattr(details, "reason", None) if details else None
+                prefix = "[Info] answer not finished"
+                if reason == "max_output_tokens":
+                    prefix += f" (max_output_tokens={DEEP_SEARCH_MAX_TOKENS} reached)."
+                partial = getattr(resp, "output_text", None)
+                return (prefix + "\n\n" + partial) if partial else prefix
+
+            if hasattr(resp, "output_text") and resp.output_text:
+                return resp.output_text.strip()
+
+            if hasattr(resp, "content") and resp.content:
+                try:
+                    text_parts = []
+                    for block in resp.content:
+                        if getattr(block, "type", "") in ("output_text", "text"):
+                            text_parts.append(getattr(block, "text", "") or getattr(block, "content", ""))
+                    if text_parts:
+                        return "".join(text_parts).strip()
+                except Exception:
+                    pass
+
+            return "Error: Empty response payload."
+
+        except Exception as e:
+            # Fallback: Chat Completions (ohne explicit reasoning)
+            try:
+                cmpl = client.chat.completions.create(
+                    model=model_to_use,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        user_msg
+                    ],
+                    # GPT-5 nutzt max_completion_tokens
+                    max_completion_tokens=DEEP_SEARCH_MAX_TOKENS
+                )
+                return cmpl.choices[0].message.content.strip()
+            except Exception as e2:
+                return f"Error with OpenAI (deep reasoning): {e} | fallback error: {e2}"
+
+    # ===== Normal: Chat Completions =====
     try:
-        client = openai.OpenAI(api_key=api_key)
-        if model_override and not search_mode and not deep_search:
-            model_to_use = model_override
-        else:
-            if search_mode:
-                model_to_use = "gpt-4o-search-preview"
-            elif deep_search:
-                model_to_use = "o3-mini"
-            else:
-                model_to_use = "gpt-4.1"
-
-        # Verwende den korrekten Parameter basierend auf dem Modell
-        if model_to_use == "o3-mini":
-            response = client.chat.completions.create(
-                model=model_to_use,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": question}
-                ],
-                max_completion_tokens=max_tokens
-            )
-        else:
-            response = client.chat.completions.create(
-                model=model_to_use,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": question}
-                ],
-                max_tokens=max_tokens
-            )
-        return response.choices[0].message.content.strip()
+        cmpl = client.chat.completions.create(
+            model=model_to_use,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                user_msg
+            ],
+            max_completion_tokens=MAX_TOKENS
+        )
+        return cmpl.choices[0].message.content.strip()
     except Exception as e:
-        return f"Error with OpenAI: {str(e)}"
+        return f"Error with OpenAI: {e}"
+
 
 def query_mistral(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False, model_override: str = None) -> str:
     """Fragt die Mistral API zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit."""
@@ -223,7 +270,7 @@ def query_claude(question: str, api_key: str, system_prompt: str = None, deep_se
             "anthropic-version": "2023-06-01"
         }
         payload = {
-            "model": model_override if (model_override and not deep_search) else "claude-3-5-sonnet-20241022",
+            "model": model_override if (model_override and not deep_search) else "claude-sonnet-4-20250514",
             "max_tokens": max_tokens,
             "system": system_prompt,
             "messages": [{"role": "user", "content": question}]
@@ -236,51 +283,43 @@ def query_claude(question: str, api_key: str, system_prompt: str = None, deep_se
             else:
                 return "Error: No response found in the API response."
         else:
-            return f"Error with Anthropice: {response.status_code} - {response.text}"
+            return f"Error with Anthropic: {response.status_code} - {response.text}"
     except Exception as e:
         return f"Error with Anthropic: {str(e)}"
 
-def query_gemini(question: str, user_api_key: Optional[str] = None, search_mode: bool = False, deep_search: bool = False, system_prompt: str = None, model_override: str = None) -> str:
+def query_gemini(
+    question: str,
+    user_api_key: Optional[str] = None,
+    deep_search: bool = False,
+    system_prompt: str = None,
+    model_override: str = None
+) -> str:
     if system_prompt is None:
         system_prompt = DEFAULT_SYSTEM_PROMPT
-
     if deep_search:
         system_prompt += "\n" + DEEP_THINK_PROMPT
 
     try:
-        # Wenn ein eigener API Key übergeben wurde, verwende ihn.
-        # Andernfalls – bei eingeloggten Nutzern – wird der Service-Account-Key aus der JSON genutzt.
+        # API-Key-Konfiguration
         if user_api_key and user_api_key.strip():
-            genai.configure(api_key=user_api_key)
+            genai.configure(api_key=user_api_key.strip())
         else:
             genai.configure()
-        
-        # Je nach Search Mode den passenden Modellnamen wählen:
-        if model_override and not search_mode and not deep_search:
-            model_name = model_override
-        else:
-            model_name = "gemini-1.5-pro-002" if search_mode else "gemini-2.5-pro"
+
+        # Modellwahl (ohne Search Mode)
+        model_name = model_override if model_override else "gemini-2.5-flash"
         model = genai.GenerativeModel(model_name)
-        
+
+        # Prompt bauen
         base_content = "Do not ask any questions.\n" + system_prompt + "\n---\n" + question
-        if search_mode:
-            # Hinweis im Prompt, der auch die Links (über Retrieval) liefern soll
-            base_content += "\nPlease include clickable links to the sources used at the end of your answer."
-            response = model.generate_content(
-                contents=base_content,
-                tools={"google_search_retrieval": {"dynamic_retrieval_config": {"mode": "MODE_DYNAMIC", "dynamic_threshold": 0.5}}}
-            )
-        else:
-            response = model.generate_content(base_content)
-        
-        answer_text = response.text.strip()
-        # Im Search Mode: Falls Grounding‑Metadata vorhanden, extrahiere die Links
-        if search_mode and hasattr(response.candidates[0], "grounding_metadata") and response.candidates[0].grounding_metadata:
-            grounding = response.candidates[0].grounding_metadata
-            if hasattr(grounding, "grounding_chunks") and grounding.grounding_chunks:
-                formatted_links = [f"[{chunk.web.title}]({chunk.web.uri})" for chunk in grounding.grounding_chunks]
-                answer_text += "\n\n" + "\n".join(formatted_links)
+
+        # Keine Tools mehr – reiner Generate-Call
+        response = model.generate_content(base_content)
+
+        # Text extrahieren
+        answer_text = (getattr(response, "text", "") or "").strip()
         return answer_text
+
     except Exception as e:
         return f"Error with Gemini: {str(e)}"
 
@@ -326,7 +365,7 @@ def query_grok(question: str, api_key: str, system_prompt: str = None, deep_sear
     try:
         client = openai.OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
         response = client.chat.completions.create(
-            model=model_override if (model_override and not deep_search) else "grok-3-latest",
+            model=model_override if (model_override and not deep_search) else "grok-4-latest",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question}
@@ -438,7 +477,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
     if "Mistral" not in excluded_models and answer_mistral:
         prompt_parts.append(f"Response from mistral-large-latest: {answer_mistral}\n\n")
     if "Anthropic" not in excluded_models and answer_claude:
-        prompt_parts.append(f"Response from claude-3-5-sonnet: {answer_claude}\n\n")
+        prompt_parts.append(f"Response from claude-4-sonnet: {answer_claude}\n\n")
     if "Gemini" not in excluded_models and answer_gemini:
         prompt_parts.append(f"Response from gemini-pro: {answer_gemini}\n\n")
     if "DeepSeek" not in excluded_models and answer_deepseek:
@@ -476,14 +515,14 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
     try:
         if consensus_model == "OpenAI":
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
-            model_to_use = "gpt-4.1" if search_mode else "gpt-4.1"
+            model_to_use = "gpt-5" if search_mode else "gpt-5"
             response = client.chat.completions.create(
                         model=model_to_use,
                         messages=[
                             {"role": "system", "content": ""},
                             {"role": "user", "content": consensus_prompt}
                         ],
-                        max_tokens=CONSENSUS_MAX_TOKENS
+                        max_completion_tokens=CONSENSUS_MAX_TOKENS
                     )
             return response.choices[0].message.content.strip()
         
@@ -507,7 +546,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 "anthropic-version": "2023-06-01"
             }
             payload = {
-                "model": "claude-3-5-sonnet-20241022",
+                "model": "claude-sonnet-4-20250514",
                 "max_tokens": 2048, 
                 "system": "",
                 "messages": [{"role": "user", "content": consensus_prompt}]
@@ -528,7 +567,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 genai.configure(api_key=gemini_key)
             else:
                 genai.configure()  # Service-Account-Modus
-            model = genai.GenerativeModel("gemini-2.5-pro")
+            model = genai.GenerativeModel("gemini-2.5-flash")
             # Schalte auch hier zwischen Search und normalem Modus um:
             if search_mode:
                 response = model.generate_content(
@@ -555,7 +594,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
         elif consensus_model == "Grok":
             client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
             response = client.chat.completions.create(
-                model="grok-3-latest",
+                model="grok-4-latest",
                 messages=[
                     {"role": "system", "content": " "},
                     {"role": "user", "content": consensus_prompt}
@@ -693,7 +732,7 @@ def query_differences(
         if differences_model == "OpenAI":
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
             response = client.chat.completions.create(
-                model="gpt-4.1",
+                model="gpt-5",
                 messages=[
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
@@ -720,7 +759,7 @@ def query_differences(
                 "anthropic-version": "2023-06-01"
             }
             payload = {
-                "model": "claude-3-5-sonnet-20241022",
+                "model": "claude-sonnet-4-20250514",
                 "max_tokens": 8192,
                 "system": "Answer in the exact same language as the Model responses.",
                 "messages": [{"role": "user", "content": differences_prompt}]
@@ -736,7 +775,7 @@ def query_differences(
             gemini_key = api_keys.get("Gemini")
             if gemini_key:
                 genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel("gemini-2.5-pro")
+            model = genai.GenerativeModel("gemini-2.5-flash")
             result = model.generate_content(differences_prompt).text.strip()
 
         elif differences_model == "DeepSeek":
@@ -753,7 +792,7 @@ def query_differences(
         elif differences_model == "Grok":
             client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
             response = client.chat.completions.create(
-                model="grok-3-latest",
+                model="grok-4-latest",
                 messages=[
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
@@ -1158,41 +1197,41 @@ async def delete_bookmark(data: dict):
 
     
 @app.post("/ask_openai")
-@limiter.limit("5/minute")  # Beispiel: maximal 20 Anfragen pro Minute pro IP
+@limiter.limit("5/minute")
 async def ask_openai_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
-    # Konvertiere deep_search vor der Wortzählung
+
+    # deep_search robust von String->Bool
     deep_search_raw = data.get("deep_search", False)
     deep_search = True if str(deep_search_raw).lower() == "true" else False
-    # Wähle das passende Wortlimit basierend auf deep_search
-    max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
 
+    max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
     if count_words(question) > max_words_limit:
         raise HTTPException(
             status_code=400,
             detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {max_words_limit} Wörtern."
         )
-    system_prompt = data.get("system_prompt")
 
+    system_prompt = data.get("system_prompt")
     id_token = data.get("id_token")
     api_key = data.get("api_key")
     model = data.get("model")
+
     validate_model(model, ALLOWED_OPENAI_MODELS, "OpenAI")
-    # Lese den Status der Toggle-Switches aus
-    search_mode = data.get("search_mode", False)
+
+    # NICHT mehr auslesen: search_mode
     active_count = data.get("active_count", 1)
-    
+
     if id_token:
         try:
             uid = verify_user_token(id_token)
         except Exception:
             raise HTTPException(status_code=401, detail="Authentication failed")
+
         increment = 1.0 / active_count
 
-        # --- Zuerst beide Quota-Checks durchführen ---
         current_usage = usage_counter.get(uid, 0)
         if current_usage + increment > FREE_USAGE_LIMIT:
-            # Auch im Fehlerfall die aktuellen Zählerwerte zurückgeben:
             deep_remaining = 12 - deep_search_usage.get(uid, 0)
             return {
                 "error": "Your free quota is exhausted. Please provide your own API keys.",
@@ -1204,14 +1243,13 @@ async def ask_openai_post(request: Request, data: dict = Body(...)):
             current_deep_usage = deep_search_usage.get(uid, 0)
             if current_deep_usage + increment > 12:
                 free_remaining = FREE_USAGE_LIMIT - current_usage
-                # Hier werden beide Werte mitgegeben, auch wenn deep search nicht verfügbar ist:
                 return {
                     "error": "Your free deep search quota is exhausted. Please store your own API keys.",
                     "free_usage_remaining": free_remaining,
                     "deep_remaining": 0
                 }
 
-        # --- Jetzt beide Zähler inkrementieren, da beide Checks bestanden sind ---
+        # Zähler erst nach allen Checks erhöhen
         usage_counter[uid] = current_usage + increment
         if deep_search:
             deep_search_usage[uid] = current_deep_usage + increment
@@ -1219,33 +1257,38 @@ async def ask_openai_post(request: Request, data: dict = Body(...)):
         developer_api_key = os.environ.get("DEVELOPER_OPENAI_API_KEY")
         if not developer_api_key:
             raise HTTPException(status_code=500, detail="Server error: API key not configured")
+
         answer = query_openai(
             question,
             developer_api_key,
-            search_mode=search_mode,
             deep_search=deep_search,
             system_prompt=system_prompt,
             model_override=model
         )
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         deep_remaining = 12 - deep_search_usage.get(uid, 0)
-        return {"response": answer, "free_usage_remaining": free_remaining, "deep_remaining": deep_remaining, "key_used": "Developer API Key"}
+        return {
+            "response": answer,
+            "free_usage_remaining": free_remaining,
+            "deep_remaining": deep_remaining,
+            "key_used": "Developer API Key"
+        }
+
     elif api_key:
         answer = query_openai(
             question,
             api_key,
-            search_mode=search_mode,
             deep_search=deep_search,
             system_prompt=system_prompt,
             model_override=model
         )
-        # Auch hier beide Werte immer mitgeben
         return {
             "response": answer,
             "free_usage_remaining": FREE_USAGE_LIMIT,
             "deep_remaining": 12,
             "key_used": "User API Key"
         }
+
     else:
         raise HTTPException(status_code=400, detail="No authentication parameter (id_token or api_key) specified")
 
@@ -1420,71 +1463,75 @@ async def ask_claude_post(request: Request, data: dict = Body(...)):
 @limiter.limit("3/minute")
 async def ask_gemini_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
-    # Konvertiere deep_search in einen Boolean
+
+    # deep_search bleibt erhalten
     deep_search_raw = data.get("deep_search", False)
     deep_search = True if str(deep_search_raw).lower() == "true" else False
-    # Wähle das entsprechende Wortlimit
-    max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
 
+    # Wortlimit
+    max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
     if count_words(question) > max_words_limit:
         raise HTTPException(
             status_code=400,
             detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {max_words_limit} Wörtern."
         )
+
     system_prompt = data.get("system_prompt")
     use_own_keys = data.get("useOwnKeys", False)
     if isinstance(use_own_keys, str):
         use_own_keys = use_own_keys.lower() == "true"
+
     id_token = data.get("id_token")
     api_key = data.get("api_key")  # von der Sidebar
     model = data.get("model")
     validate_model(model, ALLOWED_GEMINI_MODELS, "Gemini")
+
     active_count = data.get("active_count", 1)
-    search_mode = data.get("search_mode", False)
-    
+
+    # Abwärtskompatibilität: altes Feld ggf. ignorieren (kein Fehler)
+    # search_mode = data.get("search_mode", False)  # <-- bewusst NICHT verwendet
+
     if id_token:
         try:
             uid = verify_user_token(id_token)
         except Exception:
             raise HTTPException(status_code=401, detail="Authentication failed")
-        
+
         increment = 1.0 / active_count
 
-        # Zuerst: Prüfe, ob genügend allgemeine Free Requests vorhanden sind
+        # Free-Quota prüfen (unverändert)
         current_usage = usage_counter.get(uid, 0)
         if current_usage + increment > FREE_USAGE_LIMIT:
-            # Auch im Fehlerfall die aktuellen Zählerwerte zurückgeben:
             deep_remaining = 12 - deep_search_usage.get(uid, 0)
             return {
                 "error": "Your free quota is exhausted. Please provide your own API keys.",
                 "free_usage_remaining": 0,
                 "deep_remaining": deep_remaining
             }
-        
-        # Falls Deep Search angefordert wurde, auch den Deep Search Quota prüfen
+
+        # Deep-Quota prüfen (falls deep_search aktiv)
         if deep_search:
             current_deep_usage = deep_search_usage.get(uid, 0)
             if current_deep_usage + increment > 12:
                 free_remaining = FREE_USAGE_LIMIT - current_usage
-                # Hier werden beide Werte mitgegeben, auch wenn deep search nicht verfügbar ist:
                 return {
                     "error": "Your free deep search quota is exhausted. Please store your own API keys.",
                     "free_usage_remaining": free_remaining,
                     "deep_remaining": 0
                 }
-        
-        # Beide Quota-Checks bestanden – jetzt beide Zähler erhöhen
+
+        # Zähler erhöhen
         usage_counter[uid] = current_usage + increment
         if deep_search:
-            deep_search_usage[uid] = current_deep_usage + increment
+            deep_search_usage[uid] = deep_search_usage.get(uid, 0) + increment
 
+        # Key-Auswahl
         if use_own_keys:
             if not (api_key and api_key.strip()):
                 raise HTTPException(status_code=400, detail="Please log in or store your own API keys.")
             answer = query_gemini(
-                question,
-                api_key.strip(),          # oder None, je nach Zweig
-                search_mode=search_mode,
+                question=question,
+                user_api_key=api_key.strip(),
                 deep_search=deep_search,
                 system_prompt=system_prompt,
                 model_override=model
@@ -1492,31 +1539,36 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
             key_used = "User API Key"
         else:
             answer = query_gemini(
-                question,
-                None,
-                search_mode=search_mode,
+                question=question,
+                user_api_key=None,
                 deep_search=deep_search,
                 system_prompt=system_prompt,
                 model_override=model
             )
             key_used = "Service Account"
-        
+
         free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
         deep_remaining = 12 - deep_search_usage.get(uid, 0)
-        return {"response": answer, "free_usage_remaining": free_remaining, "deep_remaining": deep_remaining, "key_used": key_used}
+        return {
+            "response": answer,
+            "free_usage_remaining": free_remaining,
+            "deep_remaining": deep_remaining,
+            "key_used": key_used
+        }
+
     else:
-        # Nicht eingeloggte Nutzer müssen einen eigenen API Key bereitstellen.
+        # Nicht eingeloggte Nutzer: brauchen eigenen Key
         if not (api_key and api_key.strip()):
             raise HTTPException(status_code=400, detail="Please log in or store your own API keys.")
         answer = query_gemini(
-            question,
-            api_key.strip(),
-            search_mode=search_mode,
+            question=question,
+            user_api_key=api_key.strip(),
             deep_search=deep_search,
             system_prompt=system_prompt,
             model_override=model
         )
         return {"response": answer, "key_used": "User API Key"}
+
 
 # Angepasster Endpoint für DeepSeek
 @app.post("/ask_deepseek")
@@ -1981,6 +2033,23 @@ async def consensus(request: Request, data: dict = Body(...)):
 
     if missing:
         raise HTTPException(status_code=400, detail="Missing parameters: " + ", ".join(missing))
+    
+    # Engine-Key-Check (wichtig, um 401 der Engine zu vermeiden)
+    engine = consensus_model
+    engine_key_map = {
+        "OpenAI": "OpenAI",
+        "Mistral": "Mistral",
+        "Anthropic": "Anthropic",
+        "Gemini": "Gemini",
+        "DeepSeek": "DeepSeek",
+        "Grok": "Grok",
+    }
+    need_key_for = engine_key_map.get(engine)
+    if need_key_for and not api_keys.get(need_key_for):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing API key for selected consensus engine: {engine}."
+        )
 
     if best_model and best_model in excluded_models:
         raise HTTPException(status_code=400, detail="The answer marked as best must not be excluded.")
@@ -2060,7 +2129,7 @@ async def check_keys(request: Request, data: dict = Body(...)):
                     "anthropic-version": "2023-06-01"
                 }
                 payload = {
-                    "model": "claude-3-5-sonnet-20241022",
+                    "model": "claude-sonnet-4-20250514",
                     "max_tokens": 8192,
                     "system": "",
                     "messages": [{"role": "user", "content": "ping"}]
