@@ -65,6 +65,7 @@ DEEP_SEARCH_MAX_WORDS = 1000
 MAX_TOKENS = 1024
 DEEP_SEARCH_MAX_TOKENS = 2048
 CONSENSUS_MAX_TOKENS = 2048
+DIFFERENCES_MAX_TOKENS = 1024
 REASONING_EFFORT_FOR_DEEP = "low"
 
 # Modelle, die pro Anbieter erlaubt sind
@@ -292,7 +293,8 @@ def query_gemini(
     user_api_key: Optional[str] = None,
     deep_search: bool = False,
     system_prompt: str = None,
-    model_override: str = None
+    model_override: str = None,
+    max_output_tokens: Optional[int] = None,  # <-- NEU
 ) -> str:
     if system_prompt is None:
         system_prompt = DEFAULT_SYSTEM_PROMPT
@@ -304,22 +306,25 @@ def query_gemini(
         if user_api_key and user_api_key.strip():
             genai.configure(api_key=user_api_key.strip())
         else:
-            genai.configure()
+            genai.configure()  # Service-Account-Modus
 
-        # Modellwahl (ohne Search Mode)
         model_name = model_override if model_override else "gemini-2.5-flash"
         model = genai.GenerativeModel(model_name)
 
-        # Prompt bauen
         base_content = "Do not ask any questions.\n" + system_prompt + "\n---\n" + question
 
-        # Keine Tools mehr – reiner Generate-Call
-        response = model.generate_content(base_content)
+        generation_config = {}
+        if max_output_tokens is not None:
+            generation_config["max_output_tokens"] = int(max_output_tokens)
 
-        # Text extrahieren
+        # Reiner Generate-Call mit hartem Tokenlimit
+        response = model.generate_content(
+            base_content,
+            generation_config=generation_config if generation_config else None
+        )
+
         answer_text = (getattr(response, "text", "") or "").strip()
-        return answer_text
-
+        return answer_text or "Error: Empty response payload."
     except Exception as e:
         return f"Error with Gemini: {str(e)}"
 
@@ -566,18 +571,26 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
             if gemini_key and gemini_key.strip() != "":
                 genai.configure(api_key=gemini_key)
             else:
-                genai.configure()  # Service-Account-Modus
+                genai.configure()  # Service-Account
+
             model = genai.GenerativeModel("gemini-2.5-flash")
-            # Schalte auch hier zwischen Search und normalem Modus um:
+            generation_config = {"max_output_tokens": int(CONSENSUS_MAX_TOKENS)}
+
             if search_mode:
                 response = model.generate_content(
                     consensus_prompt,
-                    max_tokens=CONSENSUS_MAX_TOKENS,
-                    tools={"google_search_retrieval": {"dynamic_retrieval_config": {"mode": "MODE_DYNAMIC", "dynamic_threshold": 0.5}}}
+                    generation_config=generation_config,
+                    tools={"google_search_retrieval": {
+                        "dynamic_retrieval_config": {"mode": "MODE_DYNAMIC", "dynamic_threshold": 0.5}
+                    }}
                 )
             else:
-                response = model.generate_content(consensus_prompt)
-            return response.text.strip()
+                response = model.generate_content(
+                    consensus_prompt,
+                    generation_config=generation_config
+                )
+
+            return (response.text or "").strip() or "Error: Empty response payload."
 
         elif consensus_model == "DeepSeek":
             client = openai.OpenAI(api_key=api_keys.get("DeepSeek"), base_url="https://api.deepseek.com")
@@ -736,7 +749,8 @@ def query_differences(
                 messages=[
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
-                ]
+                ],
+                max_completion_tokens=DIFFERENCES_MAX_TOKENS
             )
             result = response.choices[0].message.content.strip()
 
@@ -747,7 +761,8 @@ def query_differences(
                 messages=[
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
-                ]
+                ],
+                max_tokens=DIFFERENCES_MAX_TOKENS
             )
             result = response.choices[0].message.content.strip()
 
@@ -760,7 +775,7 @@ def query_differences(
             }
             payload = {
                 "model": "claude-sonnet-4-20250514",
-                "max_tokens": 8192,
+                "max_tokens": 1024,
                 "system": "Answer in the exact same language as the Model responses.",
                 "messages": [{"role": "user", "content": differences_prompt}]
             }
@@ -775,8 +790,11 @@ def query_differences(
             gemini_key = api_keys.get("Gemini")
             if gemini_key:
                 genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel("gemini-2.5-flash")
-            result = model.generate_content(differences_prompt).text.strip()
+                model = genai.GenerativeModel("gemini-2.5-flash")
+                result = model.generate_content(
+                    differences_prompt,
+                    generation_config={"max_output_tokens": int(DIFFERENCES_MAX_TOKENS)}
+                ).text.strip()
 
         elif differences_model == "DeepSeek":
             client = openai.OpenAI(api_key=api_keys.get("DeepSeek"), base_url="https://api.deepseek.com")
@@ -785,7 +803,8 @@ def query_differences(
                 messages=[
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
-                ]
+                ],
+                max_tokens=DIFFERENCES_MAX_TOKENS
             )
             result = response.choices[0].message.content.strip()
 
@@ -796,7 +815,8 @@ def query_differences(
                 messages=[
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
-                ]
+                ],
+                max_tokens=DIFFERENCES_MAX_TOKENS
             )
             result = response.choices[0].message.content.strip()
 
@@ -880,6 +900,14 @@ async def landing(request: Request):
     
     # sonst Landingpage
     return templates.TemplateResponse("landing.html", {"request": request})
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy(req: Request):
+    return templates.TemplateResponse("privacy.html", {"request": req})
+
+@app.get("/imprint", response_class=HTMLResponse)
+def privacy(req: Request):
+    return templates.TemplateResponse("imprint.html", {"request": req})
 
 
 @app.get("/app", response_class=HTMLResponse)
@@ -1470,6 +1498,10 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
 
     # Wortlimit
     max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
+
+    # Tokenlimit passend zum Modus
+    max_tokens = DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS
+
     if count_words(question) > max_words_limit:
         raise HTTPException(
             status_code=400,
@@ -1534,7 +1566,8 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
                 user_api_key=api_key.strip(),
                 deep_search=deep_search,
                 system_prompt=system_prompt,
-                model_override=model
+                model_override=model,
+                max_output_tokens=max_tokens,   # <-- NEU
             )
             key_used = "User API Key"
         else:
@@ -1543,7 +1576,8 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
                 user_api_key=None,
                 deep_search=deep_search,
                 system_prompt=system_prompt,
-                model_override=model
+                model_override=model,
+                max_output_tokens=max_tokens,   # <-- NEU
             )
             key_used = "Service Account"
 
@@ -1565,7 +1599,8 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
             user_api_key=api_key.strip(),
             deep_search=deep_search,
             system_prompt=system_prompt,
-            model_override=model
+            model_override=model,
+            max_output_tokens=max_tokens,
         )
         return {"response": answer, "key_used": "User API Key"}
 
@@ -2002,11 +2037,12 @@ async def consensus(request: Request, data: dict = Body(...)):
         missing.append("question")
     if not consensus_model:
         missing.append("consensus_model")
-    # Immer prüfen: OpenAI und Gemini
-    if "OpenAI" not in excluded_models:
+    # OpenAI und Gemini NUR im Nicht-Search-Mode prüfen
+    if (not search_mode) and ("OpenAI" not in excluded_models):
         if not answer_openai or not api_keys.get("OpenAI"):
             missing.append("OpenAI")
-    if "Gemini" not in excluded_models:
+
+    if (not search_mode) and ("Gemini" not in excluded_models):
         if not answer_gemini or (use_own_keys and not api_keys.get("Gemini")):
             missing.append("Gemini")
     # Bei Search Mode: Exa UND Perplexity prüfen, ansonsten die anderen Modelle

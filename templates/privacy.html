@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Privacy & Data Processing – consens.io" />
+  <meta name="robots" content="noindex, noarchive" />
+  <title>consens.io – Privacy</title>
+  <link rel="icon" href="/static/favicon.png" type="image/x-icon">
+  <style>
+    :root { --bg:#fff; --text:#222; --muted:#666; --link:#0b57d0; --maxw:860px; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#111; --text:#e7e7e7; --muted:#a2a2a2; --link:#8ab4f8; }
+    }
+    html{box-sizing:border-box}
+    *,*:before,*:after{box-sizing:inherit}
+    body{margin:0;font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:var(--maxw);margin:0 auto;padding:24px 16px 56px}
+    header{margin:8px 0 16px;display:flex;align-items:flex-start;gap:12px}
+    h1{margin:0 0 6px;font-size:1.75rem}
+    .sub{margin:0;color:var(--muted);font-size:.95rem}
+    h2{margin:24px 0 8px;font-size:1.15rem}
+    p,ul{margin:8px 0}
+    ul{padding-left:20px}
+    a{color:var(--link)}
+    .note{border:1px solid #ddd;border-radius:6px;padding:10px 12px;margin:12px 0}
+    @media (prefers-color-scheme: dark){ .note{border-color:#333} }
+    .links{margin-top:20px;display:flex;gap:12px;flex-wrap:wrap}
+    .links a{text-decoration:none;border-bottom:1px solid currentColor;padding-bottom:2px}
+    .spacer{flex:1}
+    .lang-btn{
+      margin-top:2px; font-size:.9rem; padding:6px 10px; background:transparent; color:var(--link);
+      border:1px solid currentColor; border-radius:6px; cursor:pointer
+    }
+    footer{margin-top:40px;color:var(--muted);font-size:.95rem}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <div>
+        <h1 data-i18n="title">Privacy Notice</h1>
+        <p class="sub" data-i18n="subtitle">Short & clear – how consens.io handles data.</p>
+      </div>
+      <div class="spacer"></div>
+      <button id="langToggle" class="lang-btn" aria-label="Switch language">Switch to German</button>
+    </header>
+
+    <p class="note" data-i18n="banner">
+      Note: consens.io is a tool to <strong>compare answers from multiple AI models</strong>.
+      Please avoid entering <strong>personal or sensitive data</strong> in prompts.
+    </p>
+
+    <h2 data-i18n="sec1">1) Controller</h2>
+    <p data-i18n="sec1_body">
+      The controller under GDPR is <strong>consens.io</strong>.<br>
+      Contact: <a id="contactEmail" href="#" rel="nofollow" aria-label="Email (inserted via JavaScript)"></a>
+    </p>
+
+    <h2 data-i18n="sec2">2) Purposes & data we process</h2>
+    <ul>
+      <li data-i18n="sec2_li1"><strong>Prompts & model outputs:</strong> to provide the service (send to AI models, display answers).</li>
+      <li data-i18n="sec2_li2"><strong>Technical logs:</strong> timestamps and basic diagnostics for stability, security, and abuse prevention.</li>
+      <li data-i18n="sec2_li3"><strong>Optional account data:</strong> if you sign in (e.g., via Firebase) for access control and usage features.</li>
+      <li data-i18n="sec2_li4"><strong>Local storage:</strong> only for UX (e.g., toggles/session flags). <em>No</em> non-essential cookies.</li>
+      <li data-i18n="sec2_li5">
+        <strong>Your own API keys (optional):</strong> if you provide keys, they are stored <strong>only locally in your browser (LocalStorage)</strong>
+        and used <strong>exclusively</strong> to call the selected model provider.
+      </li>
+    </ul>
+
+    <h2 data-i18n="sec3">3) Legal bases (GDPR)</h2>
+    <ul>
+      <li data-i18n="sec3_li1"><strong>Art. 6(1)(b)</strong> – performance of the service you request.</li>
+      <li data-i18n="sec3_li2"><strong>Art. 6(1)(f)</strong> – legitimate interests in security, stability, abuse prevention, and product improvement (aggregated).</li>
+      <li data-i18n="sec3_li3"><strong>Art. 6(1)(a)</strong> – where we explicitly ask for consent.</li>
+    </ul>
+
+    <h2 data-i18n="sec4">4) Recipients / processors / international transfers</h2>
+    <p data-i18n="sec4_body">
+      To provide the service, we use infrastructure and model providers (e.g., hosting, authentication, AI models such as OpenAI,
+      Anthropic, Mistral, Google AI). They process data on our instructions as processors, or as independent providers when you use
+      their interfaces. Processing may occur <strong>outside the EU/EEA</strong>. In such cases, we rely on appropriate safeguards
+      (e.g., Standard Contractual Clauses) under Arts. 44 ff. GDPR.
+    </p>
+
+    <h2 data-i18n="sec5">5) Storage periods</h2>
+    <p data-i18n="sec5_body">
+      We retain data only as long as necessary for the stated purposes or as required by law. Technical logs are generally kept
+      <strong>short-term</strong>; model content only insofar as needed for stability, abuse defense, or aggregated/anonymized product
+      improvement. On request, we’ll review earlier deletion (see rights).
+    </p>
+
+    <h2 data-i18n="sec6">6) Your rights (EU/EEA)</h2>
+    <ul>
+      <li data-i18n="sec6_li1">Access, rectification, erasure, restriction, portability (subject to legal conditions).</li>
+      <li data-i18n="sec6_li2">Right to object to processing based on legitimate interests (Art. 21 GDPR).</li>
+      <li data-i18n="sec6_li3">Withdrawal of consent with future effect.</li>
+      <li data-i18n="sec6_li4">Right to lodge a complaint with a supervisory authority (e.g., Lower Saxony DPA).</li>
+    </ul>
+
+    <h2 data-i18n="sec7">7) Security</h2>
+    <p data-i18n="sec7_body">
+      We implement appropriate technical and organizational measures (e.g., access limitation, logging, up-to-date transport encryption).
+    </p>
+
+    <h2 data-i18n="sec8">8) Children</h2>
+    <p data-i18n="sec8_body">
+      consens.io is not directed at children. Use the service only if you are old enough to use online services under the law applicable to you.
+    </p>
+
+    <h2 data-i18n="sec9">9) Changes</h2>
+    <p data-i18n="sec9_body">
+      We may update this notice and indicate the “Last updated” date below.
+    </p>
+
+    <h2 data-i18n="contact">Contact</h2>
+    <p>
+      <span data-i18n="email_label">Email:</span>
+      <a id="contactEmail2" href="#" rel="nofollow" aria-label="Email (inserted via JavaScript)"></a>
+    </p>
+
+    <div class="links">
+      <a href="/app" data-i18n="link_app" title="Back to the App">Back to App</a>
+      <a href="/imprint" data-i18n="link_imprint" title="Imprint">Imprint</a>
+    </div>
+
+    <footer>
+      <p><em data-i18n="updated">Last updated: 11 Oct 2025</em></p>
+      <p>© 2025 consens.io</p>
+    </footer>
+  </main>
+
+  <script>
+    // Email obfuscation
+    (function () {
+      const parts = ['contact', 'consens', 'io'];
+      const addr = parts[0] + String.fromCharCode(64) + parts[1] + '.' + parts[2];
+      [document.getElementById('contactEmail'), document.getElementById('contactEmail2')]
+        .forEach(el => { if (el) { el.textContent = addr; el.href = 'mailto:' + addr; } });
+    })();
+
+    // I18N dictionary
+    const dict = {
+      en: {
+        title: "Privacy Notice",
+        subtitle: "Short & clear – how consens.io handles data.",
+        banner:
+          "Note: consens.io is a tool to <strong>compare answers from multiple AI models</strong>. " +
+          "Please avoid entering <strong>personal or sensitive data</strong> in prompts.",
+        sec1: "1) Controller",
+        sec1_body:
+          "The controller under GDPR is <strong>consens.io</strong>.<br>" +
+          "Contact: <a id=\"contactEmail\" href=\"#\" rel=\"nofollow\" aria-label=\"Email (inserted via JavaScript)\"></a>",
+        sec2: "2) Purposes & data we process",
+        sec2_li1: "<strong>Prompts & model outputs:</strong> to provide the service (send to AI models, display answers).",
+        sec2_li2: "<strong>Technical logs:</strong> timestamps and basic diagnostics for stability, security, and abuse prevention.",
+        sec2_li3: "<strong>Optional account data:</strong> if you sign in (e.g., via Firebase) for access control and usage features.",
+        sec2_li4: "<strong>Local storage:</strong> only for UX (e.g., toggles/session flags). <em>No</em> non-essential cookies.",
+        sec2_li5:
+          "<strong>Your own API keys (optional):</strong> if you provide keys, they are stored <strong>only locally in your browser (LocalStorage)</strong> " +
+          "and used <strong>exclusively</strong> to call the selected model provider.",
+        sec3: "3) Legal bases (GDPR)",
+        sec3_li1: "<strong>Art. 6(1)(b)</strong> – performance of the service you request.",
+        sec3_li2: "<strong>Art. 6(1)(f)</strong> – legitimate interests in security, stability, abuse prevention, and product improvement (aggregated).",
+        sec3_li3: "<strong>Art. 6(1)(a)</strong> – where we explicitly ask for consent.",
+        sec4: "4) Recipients / processors / international transfers",
+        sec4_body:
+          "To provide the service, we use infrastructure and model providers (e.g., hosting, authentication, AI models such as OpenAI, " +
+          "Anthropic, Mistral, Google AI). They process data on our instructions as processors, or as independent providers when you use " +
+          "their interfaces. Processing may occur <strong>outside the EU/EEA</strong>. In such cases, we rely on appropriate safeguards " +
+          "(e.g., Standard Contractual Clauses) under Arts. 44 ff. GDPR.",
+        sec5: "5) Storage periods",
+        sec5_body:
+          "We retain data only as long as necessary for the stated purposes or as required by law. Technical logs are generally kept " +
+          "<strong>short-term</strong>; model content only insofar as needed for stability, abuse defense, or aggregated/anonymized product " +
+          "improvement. On request, we’ll review earlier deletion (see rights).",
+        sec6: "6) Your rights (EU/EEA)",
+        sec6_li1: "Access, rectification, erasure, restriction, portability (subject to legal conditions).",
+        sec6_li2: "Right to object to processing based on legitimate interests (Art. 21 GDPR).",
+        sec6_li3: "Withdrawal of consent with future effect.",
+        sec6_li4: "Right to lodge a complaint with a supervisory authority (e.g., Lower Saxony DPA).",
+        sec7: "7) Security",
+        sec7_body:
+          "We implement appropriate technical and organizational measures (e.g., access limitation, logging, up-to-date transport encryption).",
+        sec8: "8) Children",
+        sec8_body:
+          "consens.io is not directed at children. Use the service only if you are old enough to use online services under the law applicable to you.",
+        sec9: "9) Changes",
+        sec9_body: "We may update this notice and indicate the “Last updated” date below.",
+        contact: "Contact",
+        email_label: "Email:",
+        link_app: "Back to App",
+        link_home: "Home",
+        link_imprint: "Imprint",
+        updated: "Last updated: 11 Oct 2025"
+      },
+      de: {
+        title: "Datenschutzhinweise",
+        subtitle: "Kurz & verständlich – wie consens.io mit Daten umgeht.",
+        banner:
+          "Hinweis: consens.io ist ein Tool zum <strong>Vergleichen von Antworten mehrerer KI-Modelle</strong>. " +
+          "Bitte gib <strong>keine persönlichen oder sensiblen Daten</strong> in Prompts ein.",
+        sec1: "1) Verantwortlicher",
+        sec1_body:
+          "Verantwortlich im Sinne der DSGVO ist <strong>consens.io</strong>.<br>" +
+          "Kontakt: <a id=\"contactEmail\" href=\"#\" rel=\"nofollow\" aria-label=\"E-Mail (per JavaScript eingefügt)\"></a>",
+        sec2: "2) Zweck der Verarbeitung & welche Daten anfallen",
+        sec2_li1: "<strong>Prompts & Modell-Ausgaben:</strong> Zur Erbringung des Dienstes (Anfrage an KI-Modelle, Anzeige der Antworten).",
+        sec2_li2: "<strong>Technische Protokolle:</strong> Zeitstempel und Basis-Diagnostik für Stabilität, Sicherheit und Missbrauchsvermeidung.",
+        sec2_li3: "<strong>Optionale Kontodaten:</strong> Bei Anmeldung (z. B. via Firebase) für Zugriffskontrolle und Nutzungsfunktionen.",
+        sec2_li4: "<strong>Lokaler Speicher (LocalStorage):</strong> Nur für UX (z. B. Schalter-/Sitzungs-Flags). <em>Keine</em> nicht notwendige Cookies.",
+        sec2_li5:
+          "<strong>Eigene API-Keys (optional):</strong> Wenn du Schlüssel hinterlegst, werden sie <strong>nur lokal in deinem Browser (LocalStorage)</strong> gespeichert " +
+          "und <strong>ausschließlich</strong> zum Aufruf des gewählten Modellanbieters verwendet.",
+        sec3: "3) Rechtsgrundlagen (Art. 6 DSGVO)",
+        sec3_li1: "<strong>Art. 6 Abs. 1 lit. b</strong> – zur Erbringung des Dienstes.",
+        sec3_li2: "<strong>Art. 6 Abs. 1 lit. f</strong> – berechtigte Interessen an Sicherheit, Stabilität, Missbrauchsprävention und Produktverbesserung (aggregiert).",
+        sec3_li3: "<strong>Art. 6 Abs. 1 lit. a</strong> – soweit wir dich ausnahmsweise ausdrücklich um Einwilligung bitten.",
+        sec4: "4) Empfänger / Auftragsverarbeiter / Drittlandübermittlung",
+        sec4_body:
+          "Zur Bereitstellung des Dienstes nutzen wir Infrastruktur- und Modell-Dienstleister (z. B. Hosting, Authentifizierung, KI-Modelle wie OpenAI, " +
+          "Anthropic, Mistral, Google AI). Diese verarbeiten Daten nach unseren Weisungen als Auftragsverarbeiter bzw. als eigenständige Anbieter, wenn du " +
+          "deren Schnittstellen nutzt. Eine Verarbeitung kann <strong>außerhalb der EU/EWR</strong> erfolgen. In diesen Fällen stützen wir uns auf geeignete " +
+          "Garantien (z. B. Standardvertragsklauseln) i. S. d. Art. 44 ff. DSGVO.",
+        sec5: "5) Speicherdauer",
+        sec5_body:
+          "Wir verarbeiten Daten nur so lange, wie es für die genannten Zwecke erforderlich ist oder gesetzliche Pflichten bestehen. Technische Protokolle " +
+          "werden in der Regel <strong>kurzfristig</strong> vorgehalten; Modell-Inhalte nur, soweit sie für Stabilität, Missbrauchsabwehr oder " +
+          "aggregierte/anonymisierte Produktverbesserung erforderlich sind. Auf Wunsch prüfen wir eine vorzeitige Löschung (siehe Rechte).",
+        sec6: "6) Deine Rechte (EU/EWR)",
+        sec6_li1: "Auskunft, Berichtigung, Löschung, Einschränkung, Übertragbarkeit (jeweils nach gesetzlichen Voraussetzungen).",
+        sec6_li2: "Widerspruch gegen Verarbeitungen auf Basis berechtigter Interessen (Art. 21 DSGVO).",
+        sec6_li3: "Widerruf erteilter Einwilligungen mit Wirkung für die Zukunft.",
+        sec6_li4: "Beschwerderecht bei einer Aufsichtsbehörde (z. B. LfD Niedersachsen).",
+        sec7: "7) Sicherheit",
+        sec7_body:
+          "Wir treffen angemessene technische und organisatorische Maßnahmen (z. B. Zugriffsbegrenzung, Protokollierung, aktuelle Transportverschlüsselung).",
+        sec8: "8) Minderjährige",
+        sec8_body:
+          "consens.io richtet sich nicht an Kinder. Nutze den Dienst nur, wenn du nach dem für dich geltenden Recht alt genug bist, Online-Dienste zu nutzen.",
+        sec9: "9) Änderungen",
+        sec9_body: "Wir können diese Hinweise anpassen und kennzeichnen unten das Datum „Zuletzt aktualisiert“.",
+        contact: "Kontakt",
+        email_label: "E-Mail:",
+        link_app: "Zur App",
+        updated: "Zuletzt aktualisiert: 11.10.2025"
+      }
+    };
+
+    // Apply language to all [data-i18n] nodes
+    function applyLang(lang) {
+      const strings = dict[lang] || dict.en;
+      document.documentElement.lang = lang === 'de' ? 'de' : 'en';
+      document.querySelectorAll('[data-i18n]').forEach(node => {
+        const key = node.getAttribute('data-i18n');
+        if (!strings[key]) return;
+        // If content includes markup, use innerHTML. Else textContent is fine.
+        const hasHTML = /<[^>]+>/.test(strings[key]);
+        if (hasHTML) node.innerHTML = strings[key];
+        else node.textContent = strings[key];
+      });
+      // Re-insert obfuscated email link after swapping innerHTML
+      (function () {
+        const parts = ['contact', 'consens', 'io'];
+        const addr = parts[0] + String.fromCharCode(64) + parts[1] + '.' + parts[2];
+        ['contactEmail','contactEmail2'].forEach(id=>{
+          const el = document.getElementById(id);
+          if (el) { el.textContent = addr; el.href = 'mailto:' + addr; }
+        });
+      })();
+      // Toggle button label
+      const btn = document.getElementById('langToggle');
+      btn.textContent = lang === 'de' ? 'Switch to English' : 'Switch to German';
+      localStorage.setItem('consens_lang', lang);
+    }
+
+    // Init language: default EN, or saved choice
+    const saved = localStorage.getItem('consens_lang');
+    applyLang(saved === 'de' ? 'de' : 'en');
+
+    // Toggle handler
+    document.getElementById('langToggle').addEventListener('click', () => {
+      const current = localStorage.getItem('consens_lang') === 'de' ? 'de' : 'en';
+      applyLang(current === 'de' ? 'en' : 'de');
+    });
+  </script>
+</body>
+</html>

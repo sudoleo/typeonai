@@ -358,7 +358,7 @@ async function loadBookmarks() {
   if (!auth.currentUser) return;
 
   // Erzwinge hier ein frisches Token
-  const id_token = await auth.currentUser.getIdToken(/* forceRefresh= */ true);
+  const id_token = await auth.currentUser.getIdToken(/* forceRefresh= */ false);
 
   try {
     const res = await fetch("/bookmarks", {

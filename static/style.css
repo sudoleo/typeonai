@@ -1818,6 +1818,18 @@ font-size: 0.9em;
   padding-right: 10px; /* adjust as needed */
 }
 
+/* Link-Styling passend zur Version */
+.privacy-inline-link {
+  background: none;
+  border: none;
+  color: var(--feedback-text-color);
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.3s ease;
+}
+
 .dark-mode #version-number {
   color: var(--text-color);
 }
@@ -2737,7 +2749,7 @@ display: none;
 
 /* Dark Mode: Links in einer helleren, gut lesbaren Farbe */
 .dark-mode a {
-  color: #bb86fc; /* Beispiel: ein sanftes Lila, passend zu deinem Button-Hintergrund */
+  color: var(--feedback-text-color);
   text-decoration: underline;
 }
 

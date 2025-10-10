@@ -232,8 +232,9 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v1.1.0</span>
+    <span id="version-number">v1.2.0</span>
   </div>
+  
 </div>
   <div class="container">
     <div class="input-section">
@@ -1943,7 +1944,9 @@
         let lastQuestion = "";
   
         window.getConsensus = async function() {
-          const question = lastQuestion.trim();
+          const question =
+            (document.getElementById("questionInput")?.value ?? lastQuestion ?? "")
+              .trim();
             // Status, ob eigene API Keys genutzt werden sollen
           const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
           let searchMode = document.getElementById("searchModeToggle").checked;
@@ -2040,26 +2043,28 @@
         const answer_perplexity = perplexityBox.querySelector(".collapsible-content").innerText.trim();
   
         // Überprüfe nur die Modelle, die nicht als "ausgeschlossen" markiert sind.
+        // Überprüfe nur Modelle, die im jeweiligen Modus relevant UND nicht "excluded" sind.
+        const needOpenAI       = !searchMode && !openaiBox.classList.contains("excluded");
+        const needGemini       = !searchMode && !geminiBox.classList.contains("excluded");
+        const needMistral      = !searchMode && !mistralBox.classList.contains("excluded");
+        const needClaude       = !searchMode && !claudeBox.classList.contains("excluded");
+        const needDeepseek     = !searchMode && !deepseekBox.classList.contains("excluded");
+        const needGrok         = !searchMode && !grokBox.classList.contains("excluded");
+
+        const needExa          =  searchMode && !exaBox.classList.contains("excluded");
+        const needPerplexity   =  searchMode && !perplexityBox.classList.contains("excluded");
+
         if (
           !question ||
           !consensus_model ||
-          // Überprüfe immer OpenAI und Gemini:
-          (!openaiBox.classList.contains("excluded") && !answer_openai) ||
-          (!geminiBox.classList.contains("excluded") && !answer_gemini) ||
-          // Wenn Search Mode aktiv ist, prüfe Exa UND Perplexity, ansonsten die anderen Modelle:
-          (searchMode 
-            ? (
-                (!exaBox.classList.contains("excluded") && !answer_exa) ||
-                (!perplexityBox.classList.contains("excluded") && !answer_perplexity)
-              )
-            : (
-                (!mistralBox.classList.contains("excluded") && !answer_mistral) ||
-                (!claudeBox.classList.contains("excluded") && !answer_claude) ||
-                (!deepseekBox.classList.contains("excluded") && !answer_deepseek) ||
-                (!grokBox.classList.contains("excluded") && !answer_grok) ||
-                (!geminiBox.classList.contains("excluded") && !answer_gemini)
-              )
-          )
+          (needOpenAI     && !answer_openai)       ||
+          (needGemini     && !answer_gemini)       ||
+          (needMistral    && !answer_mistral)      ||
+          (needClaude     && !answer_claude)       ||
+          (needDeepseek   && !answer_deepseek)     ||
+          (needGrok       && !answer_grok)         ||
+          (needExa        && !answer_exa)          ||
+          (needPerplexity && !answer_perplexity)
         ) {
           alert("Refresh the page. Please send a question first, retrieve all answers and select the consensus model.");
           return;
@@ -2548,6 +2553,23 @@
   <button id="feedbackButton" class="feedback-button" title="Feedback senden">
     Got feedback?
   </button>
+      <a href="/privacy"
+       target="_blank"
+       rel="noopener noreferrer"
+       class="privacy-inline-link"
+       title="Privacy Policy"
+       aria-label="Privacy Policy">
+      Privacy Policy
+    </a>
+      </button>
+      <a href="/imprint"
+       target="_blank"
+       rel="noopener noreferrer"
+       class="privacy-inline-link"
+       title="Imprint"
+       aria-label="Imprint">
+      Imprint
+    </a>
   <span id="feedback-note"></span>
 </div>
 

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Imprint – consens.io" />
+  <meta name="robots" content="noindex, noarchive" />
+  <title>consens.io – Imprint</title>
+  <link rel="icon" href="/static/favicon.png" type="image/x-icon">
+
+  <style>
+    :root { --bg:#fff; --text:#222; --muted:#666; --link:#0b57d0; --maxw:860px; --border:#ddd; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#111; --text:#e7e7e7; --muted:#a2a2a2; --link:#8ab4f8; --border:#333; }
+    }
+    html{box-sizing:border-box}
+    *,*:before,*:after{box-sizing:inherit}
+    body{
+      margin:0;
+      font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
+    .wrap{max-width:var(--maxw);margin:0 auto;padding:24px 16px 56px}
+    header{margin:8px 0 16px}
+    h1{margin:0 0 6px;font-size:1.75rem}
+    .sub{margin:0;color:var(--muted);font-size:.95rem}
+    h2{margin:24px 0 8px;font-size:1.15rem}
+    p,ul{margin:8px 0}
+    a{color:var(--link)}
+    canvas{display:block;margin-top:8px;margin-bottom:12px;max-width:100%;border-radius:4px}
+    .links{margin-top:24px;display:flex;gap:12px;flex-wrap:wrap}
+    .links a{text-decoration:none;border-bottom:1px solid currentColor;padding-bottom:2px;color:var(--link)}
+    footer{margin-top:40px;color:var(--muted);font-size:.95rem}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1>Imprint</h1>
+      <p class="sub">Provider identification according to § 5 German Telemedia Act (TMG).</p>
+    </header>
+
+    <h2>Service Provider</h2>
+    <!-- Address rendered as image (size is set dynamically via JS) -->
+    <canvas id="addressCanvas" aria-label="Service provider address"></canvas>
+
+    <h2>Contact</h2>
+    <!-- Email rendered as image (size is set dynamically via JS) -->
+    <canvas id="mailCanvas" aria-label="Email address"></canvas>
+    <p style="margin-top:-4px;">(Address and email rendered as images for privacy)</p>
+
+    <h2>Responsible for content under § 55 II RStV</h2>
+    <p>(same address as above)</p>
+
+    <h2>VAT ID</h2>
+    <p>Not applicable (private, non-commercial project)</p>
+
+    <h2>Disclaimer</h2>
+    <p>
+      The contents of our pages have been created with the utmost care. However, we cannot guarantee
+      the contents' accuracy, completeness, or topicality. As a service provider, we are responsible for
+      our own content on these pages according to § 7 (1) TMG. According to §§ 8–10 TMG, we are not
+      obliged to monitor transmitted or stored information or to investigate circumstances indicating
+      illegal activity.
+    </p>
+
+    <h2>Liability for Links</h2>
+    <p>
+      Our offer contains links to external websites of third parties on whose contents we have no
+      influence. Therefore, we cannot assume any liability for these external contents. The respective
+      provider or operator of the linked pages is always responsible for the contents.
+    </p>
+
+    <h2>Dispute Resolution</h2>
+    <p>
+      The European Commission provides a platform for Online Dispute Resolution (ODR): 
+      <a href="https://ec.europa.eu/consumers/odr/" rel="noopener noreferrer" target="_blank">https://ec.europa.eu/consumers/odr/</a>.<br>
+      We are not obliged or willing to participate in dispute resolution procedures before a consumer arbitration board.
+    </p>
+
+    <div class="links">
+      <a href="/app" title="Back to App">Back to App</a>
+      <a href="/" title="Home">Home</a>
+      <a href="/privacy" title="Privacy Notice">Privacy</a>
+    </div>
+
+    <footer>
+      <p><em>Last updated: 11 Oct 2025</em></p>
+      <p>© 2025 consens.io – All rights reserved</p>
+    </footer>
+  </main>
+
+  <script>
+    // Utility: draw multi-line text on a canvas with automatic sizing and HiDPI support
+    function drawLinesToCanvas(canvas, lines, opts = {}) {
+      const dpr = window.devicePixelRatio || 1;
+      const fontPx = opts.fontPx || 17;
+      const lineGap = opts.lineGap || 5;           // extra space between lines
+      const padX = opts.padX || 8;
+      const padY = opts.padY || 8;
+      const cssFont = `${fontPx}px system-ui, -apple-system, 'Segoe UI', Roboto, Arial`;
+      const color = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#222';
+
+      const ctx = canvas.getContext('2d');
+
+      // Measure max line width in CSS pixels
+      ctx.font = cssFont;
+      let maxWidth = 0;
+      for (const line of lines) {
+        const w = ctx.measureText(line).width;
+        if (w > maxWidth) maxWidth = w;
+      }
+
+      const lineHeight = fontPx + lineGap;
+      const cssWidth = Math.ceil(maxWidth + padX * 2);
+      const cssHeight = Math.ceil(lines.length * lineHeight + padY * 2);
+
+      // Set backing store size for HiDPI sharpness
+      canvas.width = Math.max(320, Math.ceil(cssWidth * dpr));
+      canvas.height = Math.max(60, Math.ceil(cssHeight * dpr));
+      // Set CSS size so it scales down correctly
+      canvas.style.width = `${Math.max(320, cssWidth)}px`;
+      canvas.style.height = `${Math.max(60, cssHeight)}px`;
+
+      // Scale context to DPR
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssWidth, cssHeight);
+      ctx.font = cssFont;
+      ctx.fillStyle = color;
+      ctx.textBaseline = "top";
+
+      // Optional light noise to hinder OCR a bit (very subtle)
+      for (let i = 0; i < 8; i++) {
+        ctx.beginPath();
+        ctx.moveTo(Math.random()*cssWidth, Math.random()*cssHeight);
+        ctx.lineTo(Math.random()*cssWidth, Math.random()*cssHeight);
+        ctx.lineWidth = 0.6;
+        ctx.strokeStyle = `rgba(120,120,120,${0.05 + Math.random()*0.04})`;
+        ctx.stroke();
+      }
+
+      // Draw text
+      let y = padY;
+      for (const line of lines) {
+        ctx.fillText(line, padX, y);
+        y += lineHeight;
+      }
+    }
+
+    // Address (obfuscated as char codes)
+    const addrParts = [
+      [99,111,110,115,101,110,115,46,105,111],                         // consens.io
+      [77,97,120,32,80,108,97,99,107],                                 // Max Plack
+      [76,117,116,104,101,114,115,116,114,97,223,101,32,55,57],        // Lutherstraße 79
+      [51,48,49,55,49,32,72,97,110,110,111,118,101,114],               // 30171 Hannover
+      [71,101,114,109,97,110,121]                                      // Germany
+    ];
+    const addressLines = addrParts.map(a => String.fromCharCode(...a));
+
+    // Email (obfuscated)
+    const mailParts = [
+      [99,111,110,116,97,99,116],     // contact
+      [99,111,110,115,101,110,115],   // consens
+      [105,111]                       // io
+    ];
+    const email = String.fromCharCode(...mailParts[0]) + String.fromCharCode(64) +
+                  String.fromCharCode(...mailParts[1]) + '.' + String.fromCharCode(...mailParts[2]);
+
+    // Render both canvases with auto-sizing & HiDPI
+    drawLinesToCanvas(document.getElementById('addressCanvas'), addressLines, { fontPx: 17, lineGap: 5, padX: 8, padY: 8 });
+    drawLinesToCanvas(document.getElementById('mailCanvas'), [email], { fontPx: 18, lineGap: 6, padX: 8, padY: 8 });
+
+    // Optional: Re-render on theme change for correct color (if your app toggles dark mode class)
+    const mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+    if (mq && mq.addEventListener) {
+      mq.addEventListener('change', () => {
+        drawLinesToCanvas(document.getElementById('addressCanvas'), addressLines);
+        drawLinesToCanvas(document.getElementById('mailCanvas'), [email]);
+      });
+    }
+  </script>
+</body>
+</html>
