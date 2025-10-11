@@ -1462,6 +1462,24 @@ gap: 10px;
   background: var(--response-bg);
 }
 
+/* Nur auf iOS: native Select-Darstellung komplett ausblenden */
+.ios .model-picker-wrapper select{
+  opacity: 0;                 /* statt color: transparent */
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;       /* bleibt klickbar */
+  position: absolute;
+  inset: 0;                   /* volle Fläche */
+  width: 100%;
+  height: 100%;
+}
+
+/* Sichtbares Fokus-Feedback, wenn das unsichtbare Select fokussiert ist */
+.model-picker-wrapper:has(select:focus){
+  background: var(--response-bg);
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, .22);
+}
+
 /* Sidebar-Styling */
 .sidebar {
   position: fixed;
