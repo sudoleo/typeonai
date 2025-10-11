@@ -2245,8 +2245,10 @@ font-size: 0.9em;
     transform: translateX(-2px); /* verschiebt das Icon leicht nach links */
     position: relative;
     z-index: 2;
-    color: var(--button-text); /* oder eine feste Farbe, z.B. #fff */
   }    
+
+  .burger-icon { color: #111; }  /* Light */
+  .dark-mode .burger-icon { color: #fff; }  /* Dark */
 
   /* Sidebar Toggle Button – nur in der Top Bar anzeigen */
   .sidebar-toggle {
