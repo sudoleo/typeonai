@@ -2,6 +2,32 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebas
 import { getFirestore, collection, query, orderBy, onSnapshot, doc, setDoc, getDoc, increment, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithCustomToken, signOut, onAuthStateChanged, sendPasswordResetEmail, sendEmailVerification, onIdTokenChanged } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 
+// --- Sichere Markdown-Render-Funktion ---
+// 1) Marked rendert Markdown zu HTML
+// 2) DOMPurify entfernt unsichere Tags/Attribute
+function renderMarkdownSafe(md) {
+  const html = marked.parse(md || "");
+  return DOMPurify.sanitize(html, {
+    // nur sichere Protokolle für Links erlauben
+    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:)/i
+  });
+}
+
+// Optional: Nach dem Einfügen alle Links "sicher" machen
+function enhanceLinks(rootEl) {
+  if (!rootEl) return;
+  rootEl.querySelectorAll("a[href]").forEach(a => {
+    a.setAttribute("target", "_blank");
+    a.setAttribute("rel", "noopener noreferrer");
+  });
+}
+
+// Convenience: Sicher einfügen + Links härten
+function injectHtmlSafe(containerEl, md) {
+  containerEl.innerHTML = renderMarkdownSafe(md);
+  enhanceLinks(containerEl);
+}
+
 // Initialisiere Firebase mit der globalen Konfiguration, die aus dem HTML kommt
 const app = initializeApp(window.FIREBASE_CONFIG);
 const db = getFirestore(app);
@@ -418,28 +444,48 @@ async function loadBookmarks() {
         const bookmark = window.bookmarksData.find(b => b.id === bookmarkId);
         if (bookmark && bookmark.responses) {
           // Update der Antwortboxen anhand der gespeicherten Antworten
-          document.getElementById("openaiResponse").querySelector(".collapsible-content").innerHTML =
-            marked.parse(bookmark.responses["OpenAI"] || "");
-          document.getElementById("mistralResponse").querySelector(".collapsible-content").innerHTML =
-            marked.parse(bookmark.responses["Mistral"] || "");
-          document.getElementById("claudeResponse").querySelector(".collapsible-content").innerHTML =
-            marked.parse(bookmark.responses["Anthropic"] || "");
-          document.getElementById("geminiResponse").querySelector(".collapsible-content").innerHTML =
-            marked.parse(bookmark.responses["Gemini"] || "");
-          document.getElementById("deepseekResponse").querySelector(".collapsible-content").innerHTML =
-            marked.parse(bookmark.responses["DeepSeek"] || "");
-          document.getElementById("grokResponse").querySelector(".collapsible-content").innerHTML =
-            marked.parse(bookmark.responses["Grok"] || "");
-          document.getElementById("exaResponse").querySelector(".collapsible-content").innerHTML =
-            marked.parse(bookmark.responses["Exa"] || "");
-          document.getElementById("perplexityResponse").querySelector(".collapsible-content").innerHTML =
-            marked.parse(bookmark.responses["Perplexity"] || "");
+          injectHtmlSafe(
+            document.getElementById("openaiResponse").querySelector(".collapsible-content"),
+            bookmark.responses["OpenAI"] || ""
+          );
+          injectHtmlSafe(
+            document.getElementById("mistralResponse").querySelector(".collapsible-content"),
+            bookmark.responses["Mistral"] || ""
+          );
+          injectHtmlSafe(
+            document.getElementById("claudeResponse").querySelector(".collapsible-content"),
+            bookmark.responses["Anthropic"] || ""
+          );
+          injectHtmlSafe(
+            document.getElementById("geminiResponse").querySelector(".collapsible-content"),
+            bookmark.responses["Gemini"] || ""
+          );
+          injectHtmlSafe(
+            document.getElementById("deepseekResponse").querySelector(".collapsible-content"),
+            bookmark.responses["DeepSeek"] || ""
+          );
+          injectHtmlSafe(
+            document.getElementById("grokResponse").querySelector(".collapsible-content"),
+            bookmark.responses["Grok"] || ""
+          );
+          injectHtmlSafe(
+            document.getElementById("exaResponse").querySelector(".collapsible-content"),
+            bookmark.responses["Exa"] || ""
+          );
+          injectHtmlSafe(
+            document.getElementById("perplexityResponse").querySelector(".collapsible-content"),
+            bookmark.responses["Perplexity"] || ""
+          );
           
           // Aktualisiere auch die Konsens-Boxen, falls vorhanden
-          document.getElementById("consensusResponse").querySelector(".consensus-main p").innerHTML =
-            marked.parse(bookmark.responses["consensus"] || "");
-          document.getElementById("consensusResponse").querySelector(".consensus-differences p").innerHTML =
-            marked.parse(bookmark.responses["differences"] || "");
+          injectHtmlSafe(
+            document.getElementById("consensusResponse").querySelector(".consensus-main p"),
+            bookmark.responses["consensus"] || ""
+          );
+          injectHtmlSafe(
+            document.getElementById("consensusResponse").querySelector(".consensus-differences p"),
+            bookmark.responses["differences"] || ""
+          );
 
           // Nun: UI-Modus festlegen, indem wir den entsprechenden Toggle simulieren
           if (bookmark.mode) {

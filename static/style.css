@@ -27,6 +27,12 @@
   --vote-best-color: #2c7a2c;
   --vote-exclude-bg: var(--clear-button-bg);
   --vote-exclude-color: var(--clear-button-text);
+    --accent: #418af5;
+  --accent-contrast: #0b234a;
+  --chip-bg: rgba(0,0,0,0.04);
+  --chip-border: rgba(0,0,0,0.12);
+  --chip-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.08);
+  --chip-shadow-active: 0 3px 10px rgba(65,138,245,0.25);
 }
 
 .dark-mode {
@@ -57,6 +63,12 @@
   --vote-best-color: #8aff8a;
   --vote-exclude-bg: var(--clear-button-bg);
   --vote-exclude-color: var(--clear-button-text);
+    --accent: #bb86fc;
+  --accent-contrast: #111;
+  --chip-bg: rgba(255,255,255,0.06);
+  --chip-border: rgba(255,255,255,0.16);
+  --chip-shadow: 0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(0,0,0,0.35);
+  --chip-shadow-active: 0 4px 16px rgba(187,134,252,0.35);
 }
 
 /* Dark Mode Anpassungen */
@@ -397,6 +409,22 @@ z-index: 2000;  /* höher als der toggleAllButton */
 
 .input-section button:hover {
   background-color: #0056b3;
+}
+
+/* Send-Icon im Button: schlanker Up-Arrow */
+.chat-input-container .button svg.send-icon {
+  width: 18px;     /* oder 20px wenn du’s etwas größer magst */
+  height: 18px;
+  display: block;
+}
+
+/* Falls irgendwo noch fill gesetzt wird, stellen wir es sicher aus */
+.chat-input-container .button svg.send-icon path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .input-icon {
@@ -1017,10 +1045,9 @@ pre .copy-btn:hover {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-right: -10px;
 }
 
-/* Best-Button & Ausschluss-Icon */
-/* Beide Icons sind immer sichtbar in Grau (#888) */
 .best-btn, .exclude-btn {
   display: inline-block;
   width: 20px;
@@ -1032,6 +1059,10 @@ pre .copy-btn:hover {
   transition: background-color 0.3s, border-color 0.3s, opacity 0.3s;
   color: #888;
 }
+
+  .exclude-btn {
+    font-size: small;
+  }
 
 /* Bei Auswahl: */
 .response-box.best .best-btn {
@@ -1053,32 +1084,46 @@ pre .copy-btn:hover {
   pointer-events: none;
 }
 
-/* Collapse-Button und moderner Pfeil */
+/* Minimaler Collapse-Button – an ✕ angelehnt */
 .collapse-btn {
-  background: var(--button-bg);
-  border: none;
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  display: flex;
+  background: transparent;        /* kein Kreis, kein Hintergrund */
+  border: none;                   /* kein Rahmen */
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  border-radius: 4px;             /* kleiner Fokus-Radius */
+  opacity: 0.6;                   /* dezent wie das ✕ */
   cursor: pointer;
-  transition: background 0.3s;
+  transition: opacity .15s ease, transform .12s ease;
 }
 
 .collapse-btn:hover {
-  background: #0056b3;
+  opacity: 0.9;                   /* nur leichte Aufhellung */
+  transform: translateY(0.5px);   /* Mini-Feedback statt Farbfläche */
+}
+
+.collapse-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--text-color) 35%, transparent);
+  outline-offset: 2px;            /* klarer Tastaturfokus, ohne Rahmen-Dauerzustand */
 }
 
 .collapse-btn .arrow {
-  color: var(--button-text);
-  font-size: 0.9em;
-  transition: transform 0.3s ease;
+  /* Nutzt weiterhin dein Unicode-Icon (▼) aus dem HTML */
+  font-size: 14px;                /* minimal kleiner als vorher */
+  line-height: 1;
+  color: var(--text-color);       /* passt sich Light/Dark automatisch an */
+  transition: transform .2s ease, opacity .15s ease;
+  margin-left: -5px;
+  margin-top: -2px;
 }
 
+/* Wenn eingeklappt: zeigt nach rechts (wie vorher bei dir) */
 .collapse-btn .arrow.rotated {
   transform: rotate(-90deg);
+  opacity: 0.9;                   /* leicht betonen, dass es 'aufklappbar' ist */
 }
 
 /* Einheitliche Header für beide Bereiche */
@@ -1846,6 +1891,7 @@ font-size: 0.9em;
   cursor: pointer;
   padding: 0;
   transition: color 0.3s ease;
+  text-align: center;
 }
 
 .dark-mode #version-number {
@@ -2243,225 +2289,243 @@ font-size: 0.9em;
   }
   
   /* ---------------------------------------
-     1) AUTO CONSENSUS
+     1) AUTO CONSENSUS – moderner Pill-Chip
      --------------------------------------- */
-  
+
   /* Alte Elemente ausblenden */
   .auto-consensus .slider,
   .auto-consensus .auto-consensus-label {
     display: none !important;
   }
-  
+
   .auto-consensus label.switch {
     position: relative;
     display: inline-block;
-    min-width: 60px;
-    height: 30px;
+    min-width: 78px;
+    height: 34px;
     cursor: pointer;
   }
-  
+
   /* Checkbox unsichtbar machen */
   .auto-consensus label.switch input[type="checkbox"] {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    margin: 0;
-    cursor: pointer;
+    position:absolute; inset:0; opacity:0; margin:0; cursor:pointer;
   }
-  
-  /* Text + Icon im ::before unterbringen */
+
+  /* Unchecked: Pill mit dezentem Schatten */
   .auto-consensus label.switch::before {
     content: "Auto Consens";
     display: inline-flex;
     align-items: center;
-    
-    /* Dünnere Linie, sehr dunkle Schrift & etwas dickere Schriftart */
-    border: 1px solid #aaa;
-    border-radius: 15px;
-    background-color: transparent;
-    color: #000;           /* jetzt reines Schwarz für bessere Lesbarkeit */
+    gap: 8px;
+
+    height: 34px;
+    padding: 0 12px 0 36px;   /* Platz fürs Icon links */
+    border-radius: 999px;
+    border: 1px solid var(--input-border);
+    background: var(--response-bg);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.08);
+
+    color: var(--text-color);
     font-weight: 600;
-    font-size: 0.7em;
-    height: 30px;
-    box-sizing: border-box;
-    
-    /* Icon */
-    background-image: url("./icons/consensus.png");
-    background-repeat: no-repeat;
-    background-size: 16px 16px;
-    background-position: 8px center;
-    
-    /* Padding für Icon-Abstand */
-    padding-left: 28px;
-    padding-right: 8px;
+    font-size: 12px;
+    letter-spacing: .2px;
+
+    transition: background .25s ease, box-shadow .25s ease, color .2s ease, transform .12s ease;
   }
-  
-  /* Aktivierter Zustand */
+
+  /* Linkes Icon (Mask) */
+  .auto-consensus label.switch::after {
+    content:"";
+    position:absolute; left:10px; top:50%;
+    width:16px; height:16px; transform:translateY(-50%);
+    background: currentColor;
+    opacity:.9;
+    -webkit-mask:url('./icons/consensus.png') no-repeat center; 
+    mask:url('./icons/consensus.png') no-repeat center;
+    -webkit-mask-size:contain; mask-size:contain;
+  }
+
+  /* Hover/Active */
+  .auto-consensus label.switch:hover::before {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+  }
+  .auto-consensus label.switch:active::before {
+    transform: translateY(0);
+  }
+
+  /* Checked: akzentuierter Hintergrund & Border in Button-Farbe */
   .auto-consensus label.switch:has(input:checked)::before {
-    background-color: rgba(65, 138, 245, 0.2);
-    color: #418af5;
-    border-color: #418af5;
-    font-weight: 600;
+    /* Fallback + progressive Enhancement */
+    background-color: rgba(65,138,245,0.18);
+    background-color: color-mix(in srgb, var(--button-bg) 25%, transparent);
+    border-color: var(--button-bg);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+    color: var(--text-color);
   }
-  
+
+  /* Tastatur-Fokus-Ring */
+  .auto-consensus label.switch:has(input:focus-visible)::before {
+    outline: 2px solid color-mix(in srgb, var(--button-bg) 60%, transparent);
+    outline-offset: 2px;
+  }
+
+
   /* ---------------------------------------
-     2) WEB SEARCH
+     2) WEB SEARCH – moderner Pill-Chip
      --------------------------------------- */
-  
+
   /* Alte Elemente ausblenden */
   .search-mode:not(.deep-search-mode) .slider,
   .search-mode:not(.deep-search-mode) .search-mode-label,
   .search-mode:not(.deep-search-mode) .deepthink-disclaimer {
     display: none !important;
   }
-  
+
   .search-mode:not(.deep-search-mode) label.switch {
     position: relative;
     display: inline-block;
-    min-width: 60px;
-    height: 30px;
+    min-width: 78px;
+    height: 34px;
     cursor: pointer;
   }
-  
+
   .search-mode:not(.deep-search-mode) label.switch input[type="checkbox"] {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    margin: 0;
-    cursor: pointer;
+    position:absolute; inset:0; opacity:0; margin:0; cursor:pointer;
   }
-  
+
   .search-mode:not(.deep-search-mode) label.switch::before {
     content: "Web Search";
     display: inline-flex;
     align-items: center;
-    
-    border: 1px solid #aaa;
-    border-radius: 15px;
-    background-color: transparent;
-    color: #000;    /* jetzt reines Schwarz */
+    gap: 8px;
+
+    height: 34px;
+    padding: 0 12px 0 36px;
+    border-radius: 999px;
+    border: 1px solid var(--input-border);
+    background: var(--response-bg);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.08);
+
+    color: var(--text-color);
     font-weight: 600;
-    font-size: 0.7em;
-    height: 30px;
-    box-sizing: border-box;
-    
-    background-image: url("./icons/search.png");
-    background-repeat: no-repeat;
-    background-size: 16px 16px;
-    background-position: 8px center;
-    
-    padding-left: 28px;
-    padding-right: 8px;
+    font-size: 12px;
+    letter-spacing: .2px;
+
+    transition: background .25s ease, box-shadow .25s ease, color .2s ease, transform .12s ease;
   }
-  
+
+  .search-mode:not(.deep-search-mode) label.switch::after {
+    content:"";
+    position:absolute; left:10px; top:50%;
+    width:16px; height:16px; transform:translateY(-50%);
+    background: currentColor; opacity:.9;
+    -webkit-mask:url('./icons/search.png') no-repeat center; 
+    mask:url('./icons/search.png') no-repeat center;
+    -webkit-mask-size:contain; mask-size:contain;
+  }
+
+  .search-mode:not(.deep-search-mode) label.switch:hover::before {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+  }
+  .search-mode:not(.deep-search-mode) label.switch:active::before {
+    transform: translateY(0);
+  }
+
   .search-mode:not(.deep-search-mode) label.switch:has(input:checked)::before {
-    background-color: rgba(65, 138, 245, 0.2);
-    color: #418af5;
-    border-color: #418af5;
-    font-weight: 600;
+    background-color: rgba(65,138,245,0.18);
+    background-color: color-mix(in srgb, var(--button-bg) 25%, transparent);
+    border-color: var(--button-bg);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+    color: var(--text-color);
   }
-  
+
+  .search-mode:not(.deep-search-mode) label.switch:has(input:focus-visible)::before {
+    outline: 2px solid color-mix(in srgb, var(--button-bg) 60%, transparent);
+    outline-offset: 2px;
+  }
+
+
   /* ---------------------------------------
-     3) DEEP SEARCH
+     3) DEEP THINK – moderner Pill-Chip
      --------------------------------------- */
-  
+
   /* Alte Elemente ausblenden */
   .deep-search-mode .slider,
   .deep-search-mode .deep-switch-label,
   .deep-search-mode .deep-deepthink-disclaimer {
     display: none !important;
   }
-  
+
   .deep-search-mode .deep-switch {
     position: relative;
     display: inline-block;
-    min-width: 60px;
-    height: 30px;
+    min-width: 78px;
+    height: 34px;
     cursor: pointer;
   }
-  
+
   .deep-search-mode .deep-switch input[type="checkbox"] {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    margin: 0;
-    cursor: pointer;
+    position:absolute; inset:0; opacity:0; margin:0; cursor:pointer;
   }
-  
+
   .deep-search-mode .deep-switch::before {
     content: "Deep Think";
     display: inline-flex;
     align-items: center;
-    
-    border: 1px solid #aaa;
-    border-radius: 15px;
-    background-color: transparent;
-    color: #000;    /* jetzt reines Schwarz */
+    gap: 8px;
+
+    height: 34px;
+    padding: 0 12px 0 36px;
+    border-radius: 999px;
+    border: 1px solid var(--input-border);
+    background: var(--response-bg);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.08);
+
+    color: var(--text-color);
     font-weight: 600;
-    font-size: 0.7em;
-    height: 30px;
-    box-sizing: border-box;
-    
-    background-image: url("./icons/deepsearch.png");
-    background-repeat: no-repeat;
-    background-size: 16px 16px;
-    background-position: 8px center;
-    
-    padding-left: 28px;
-    padding-right: 8px;
+    font-size: 12px;
+    letter-spacing: .2px;
+
+    transition: background .25s ease, box-shadow .25s ease, color .2s ease, transform .12s ease;
   }
-  
+
+  .deep-search-mode .deep-switch::after {
+    content:"";
+    position:absolute; left:10px; top:50%;
+    width:16px; height:16px; transform:translateY(-50%);
+    background: currentColor; opacity:.9;
+    -webkit-mask:url('./icons/deepsearch.png') no-repeat center; 
+    mask:url('./icons/deepsearch.png') no-repeat center;
+    -webkit-mask-size:contain; mask-size:contain;
+  }
+
+  .deep-search-mode .deep-switch:hover::before {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+  }
+  .deep-search-mode .deep-switch:active::before {
+    transform: translateY(0);
+  }
+
   .deep-search-mode .deep-switch:has(input:checked)::before {
-    background-color: rgba(65, 138, 245, 0.2);
-    color: #418af5;
-    border-color: #418af5;
-    font-weight: 600;
+    background-color: rgba(65,138,245,0.18);
+    background-color: color-mix(in srgb, var(--button-bg) 25%, transparent);
+    border-color: var(--button-bg);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+    color: var(--text-color);
   }
-  
+
+  .deep-search-mode .deep-switch:has(input:focus-visible)::before {
+    outline: 2px solid color-mix(in srgb, var(--button-bg) 60%, transparent);
+    outline-offset: 2px;
+  }
+
+
   /* ---------------------------------------
-     4) Dark Mode-Anpassungen
+     Rest wie gehabt
      --------------------------------------- */
-  /* Explizite Deklaration für Light Mode */
-  /* White Mode – explizit */
-  :root .auto-consensus label.switch::before,
-  :root .search-mode:not(.deep-search-mode) label.switch::before,
-  :root .deep-search-mode .deep-switch::before {
-    color: #000 !important;
-    border-color: var(--input-border) !important;
-  }
-
-  :root .auto-consensus label.switch:has(input:checked)::before,
-  :root .search-mode:not(.deep-search-mode) label.switch:has(input:checked)::before,
-  :root .deep-search-mode .deep-switch:has(input:checked)::before {
-    color: #000 !important;
-    background-color: rgba(65, 209, 245, 0.582) !important; /* bleibt wie gehabt */
-    border-color: var(--input-border) !important;
-  }
-
-  /* Dark Mode – explizit */
-  .dark-mode .auto-consensus label.switch::before,
-  .dark-mode .search-mode:not(.deep-search-mode) label.switch::before,
-  .dark-mode .deep-search-mode .deep-switch::before {
-    color: #fff !important;
-    border-color: var(--input-border) !important;
-  }
-
-  .dark-mode .auto-consensus label.switch:has(input:checked)::before,
-  .dark-mode .search-mode:not(.deep-search-mode) label.switch:has(input:checked)::before,
-  .dark-mode .deep-search-mode .deep-switch:has(input:checked)::before {
-    color: #fff !important;
-    background-color: rgba(242, 134, 252, 0.486) !important;
-    border-color: var(--input-border) !important;
-  }
 
   .login-text {
     cursor: pointer;
@@ -2678,7 +2742,63 @@ font-size: 0.9em;
     justify-content: center;
     font-size: 11px;
   }
-}  
+
+  /* === Compact chips & consistent spacing (OVERRIDES) === */
+
+  /* Einheitliche, etwas kleinere Chips */
+  .auto-consensus label.switch,
+  .search-mode:not(.deep-search-mode) label.switch,
+  .deep-search-mode .deep-switch {
+    min-width: 72px;        /* vorher 78px */
+    height: 30px;           /* vorher 34px */
+  }
+
+  /* Kompaktere Typo + weniger Innenabstand */
+  .auto-consensus label.switch::before,
+  .search-mode:not(.deep-search-mode) label.switch::before,
+  .deep-search-mode .deep-switch::before {
+    height: 30px;           /* vorher 34px */
+    padding: 0 10px 0 32px; /* vorher 0 12px 0 36px */
+    font-size: 11px;        /* vorher 12px */
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 4px 12px rgba(0,0,0,0.08); /* etwas leichter */
+  }
+
+  /* Kleinere Icons + näher an den Rand */
+  .auto-consensus label.switch::after,
+  .search-mode:not(.deep-search-mode) label.switch::after,
+  .deep-search-mode .deep-switch::after {
+    left: 8px;              /* vorher 10px */
+    width: 14px;            /* vorher 16px */
+    height: 14px;           /* vorher 16px */
+  }
+
+  /* Gleichmäßige Abstände zwischen allen drei Chips */
+  .consensus-controls {
+    gap: 8px;               /* vorher 10px */
+  }
+
+  /* Web Search hatte Extra-Rechtsabstand -> entfernen */
+  .search-mode label.switch {
+    margin-right: 0 !important;  /* überschreibt deine alte 8px-Regel */
+  }
+
+  /* Deep Think hatte negativen Linksabstand -> neutralisieren */
+  .deep-search-mode label.switch {
+    margin-left: 0 !important;   /* überschreibt -8px */
+  }
+
+  .auto-consensus label.switch::before,
+  .search-mode:not(.deep-search-mode) label.switch::before,
+  .deep-search-mode .deep-switch::before {
+    padding: 0 10px 0 32px;     /* Einheitlich – kein versteckter Extra-Platz */
+  }
+
+  .deep-search-mode .deep-switch::before {
+    margin-left: -9px;    /* Einheitlich – kein versteckter Extra-Platz */
+  }
+
+}
+
 
 @media (max-width: 480px) {
   .top-bar-title {
@@ -2689,7 +2809,6 @@ font-size: 0.9em;
 
 /* Toggle-Button für den API-Testbereich */
 #toggleApiTest {
-background: var(--button-bg);
 border: none;
 border-radius: 50%;
 width: 28px;
@@ -2699,10 +2818,6 @@ align-items: center;
 justify-content: center;
 cursor: pointer;
 transition: background 0.3s;
-}
-
-#toggleApiTest:hover {
-  background-color: #0056b3;
 }
 
 /* API-Key Gruppe: keine extra Einrückung und kleineres Padding */
@@ -2769,6 +2884,7 @@ display: none;
 .dark-mode a {
   color: var(--feedback-text-color);
   text-decoration: underline;
+  text-align: center;
 }
 
 .dark-mode a:hover {
@@ -2842,6 +2958,73 @@ margin-left: 5px; /* kleiner Abstand zum Button-Text */
   scrollbar-width: thin;
   scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
 }  
+
+/* Credibility badges – professional, subtle palette */
+.cred-badge{
+  display:inline-block;
+  padding:2px 8px;
+  border-radius:8px;
+  font-weight:600;
+  font-size:0.95rem;
+  line-height:1.2;
+  border:1px solid var(--cred-border);
+  background:var(--cred-bg);
+  color:var(--cred-fg);
+}
+
+/* Light theme colors */
+.cred-very{
+  --cred-bg:#e6f4ea;   /* soft green tint */
+  --cred-border:#cfe9d7;
+  --cred-fg:#196a35;   /* deep green */
+}
+.cred-largely{
+  --cred-bg:#eef6ef;   /* even softer green */
+  --cred-border:#dbeade;
+  --cred-fg:#2e7d32;   /* medium green */
+}
+.cred-partially{
+  --cred-bg:#fff4e5;   /* soft amber */
+  --cred-border:#ffe0b3;
+  --cred-fg:#8a4f00;   /* amber/brown */
+}
+.cred-hardly{
+  --cred-bg:#fde7e9;   /* light red */
+  --cred-border:#f6c7cc;
+  --cred-fg:#c62828;   /* strong red */
+}
+.cred-not{
+  --cred-bg:#fbeaea;   /* very light red */
+  --cred-border:#f0b9b9;
+  --cred-fg:#b71c1c;   /* dark red */
+}
+
+/* Dark mode overrides (du nutzt .dark-mode auf <body>) */
+.dark-mode .cred-very{
+  --cred-bg:rgba(25,106,53,0.18);
+  --cred-border:rgba(25,106,53,0.35);
+  --cred-fg:#7bd597;
+}
+.dark-mode .cred-largely{
+  --cred-bg:rgba(46,125,50,0.16);
+  --cred-border:rgba(46,125,50,0.32);
+  --cred-fg:#98e3a6;
+}
+.dark-mode .cred-partially{
+  --cred-bg:rgba(138,79,0,0.16);
+  --cred-border:rgba(138,79,0,0.34);
+  --cred-fg:#ffcf7a;
+}
+.dark-mode .cred-hardly{
+  --cred-bg:rgba(198,40,40,0.16);
+  --cred-border:rgba(198,40,40,0.34);
+  --cred-fg:#ff9a9a;
+}
+.dark-mode .cred-not{
+  --cred-bg:rgba(183,28,28,0.16);
+  --cred-border:rgba(183,28,28,0.34);
+  --cred-fg:#ff8080;
+}
 
 /* Für Firefox */
 .consensus-main,

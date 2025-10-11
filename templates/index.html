@@ -12,6 +12,10 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <!-- Optional für Sicherheit: -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
+  <!-- Marked (Markdown -> HTML) -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <!-- DOMPurify (HTML Sanitizer) -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
   <script type="module" src="/static/firebase.js"></script>
   <script>
@@ -589,22 +593,27 @@
 
           // Aktualisiere weiterhin die Modellnamen:
           const openaiModelText = (deepSearchActive && !searchModeActive) ? "GPT-5 reasoning" : "GPT-5";
-          document.querySelector("#openaiResponse .title small").textContent = "(" + openaiModelText + ")";
 
           const geminiModelText = deepSearchActive ? "gemini-2.5-pro" : "gemini-2.5-flash";
-          document.querySelector("#geminiResponse .title small").textContent = "(" + geminiModelText + ")";
 
           const claudeModelText = deepSearchActive ? "claude-sonnet-4-5-20250929" : "claude-sonnet-4-20250514";
-          document.querySelector("#claudeResponse .title small").textContent = "(" + claudeModelText + ")";
 
           const deepseekModelText = deepSearchActive ? "DeepSeek-R1" : "DeepSeek-V3";
-          document.querySelector("#deepseekResponse .title small").textContent = "(" + deepseekModelText + ")";
 
           const exaModelText = deepSearchActive ? "exa-pro" : "exa";
           document.querySelector("#exaResponse .title small").textContent = "(" + exaModelText + ")";
 
           const sonarModelText = deepSearchActive ? "sonar-pro" : "sonar";
           document.querySelector("#perplexityResponse .title small").textContent = "(" + sonarModelText + ")";
+
+          const setModelText = (id, txt) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = txt;        // nur das <span> updaten, nicht <small> überschreiben
+          };
+          setModelText("openaiModelText",  openaiModelText);
+          setModelText("geminiModelText",  geminiModelText);
+          setModelText("claudeModelText",  claudeModelText);
+          setModelText("deepseekModelText",deepseekModelText);
         }
 
         // Event-Listener registrieren:
@@ -2155,7 +2164,9 @@
           if (response.ok) {
             // Aktualisiere den Konsens-Bereich und den Unterschiede-Bereich
             consensusDiv.querySelector(".consensus-main p").innerHTML = marked.parse(data.consensus_response);
-            consensusDiv.querySelector(".consensus-differences p").innerHTML = marked.parse(data.differences || "No differences found.");
+            const diffsMD = data.differences || "No differences found.";
+            const diffsHTML = marked.parse(colorizeCredibility(diffsMD));
+            consensusDiv.querySelector(".consensus-differences p").innerHTML = diffsHTML;
             const consensusMainEl = consensusDiv.querySelector(".consensus-main p");
             consensusMainEl.innerHTML = marked.parse(data.consensus_response);
             addCopyButtons(consensusMainEl);
@@ -2593,6 +2604,38 @@
                   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS
     if (isIOS) document.documentElement.classList.add('ios');
   })();
+
+  function colorizeCredibility(md) {
+    if (!md) return md;
+    const lines = md.trim().split("\n");
+    if (!lines.length) return md;
+
+    const first = lines[0].toLowerCase();
+    const mapping = [
+      { key: " very ",     cls: "cred-very" },
+      { key: " largely ",  cls: "cred-largely" },
+      { key: " partially ",cls: "cred-partially" },
+      { key: " hardly ",   cls: "cred-hardly" },
+      { key: " not ",      cls: "cred-not" }
+    ];
+
+    // Robust: prüft auf vollständige Satzfragmente
+    let cls = null;
+    if (first.includes("the consensus answer is")) {
+      for (const m of mapping) {
+        if (first.includes(m.key.trim())) { cls = m.cls; break; }
+      }
+    }
+
+    if (cls) {
+      // Markdown-Bold **…** in der Badge vermeiden, damit die Farbe klar lesbar bleibt
+      const clean = lines[0].replace(/\*\*/g, "");
+      lines[0] = `<span class="cred-badge ${cls}">${clean}</span>`;
+      return lines.join("\n");
+    }
+    return md;
+  }
+
 </script>
 
 </body>
