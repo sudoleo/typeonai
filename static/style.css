@@ -1571,8 +1571,8 @@ gap: 10px;
   background: var(--button-bg);
   border: none;
   border-radius: 50%;
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   cursor: pointer;
   align-items: center;
   justify-content: center;
@@ -1952,6 +1952,20 @@ font-size: 0.9em;
   color: var(--feedback-text-color);
 }
 
+.burger-icon {
+  display: inline-block;
+  width: 40px;                 /* = Buttonbreite */
+  height: 40px;                /* = Buttonhöhe   */
+  line-height: 40px;           /* vertikal zentrieren */
+  font-size: 22px;             /* Icongröße */
+  text-align: center;
+  color: currentColor;         /* erbt von Button (Dark/Light) */
+  transform: translateX(0);    /* nicht nach links schieben */
+}
+
+.dark-mode .burger-icon { color: #fff; }  /* Dark */
+
+
 @media (max-width: 640px) {
   .model-picker-wrapper select:focus {
     width: min(240px, 85vw);
@@ -2041,7 +2055,7 @@ font-size: 0.9em;
   .sidebar-toggle {
     display: block !important;
     position: fixed;
-    top: 10px;
+    top: calc((45px - 40px) / 2); /* statt 10px */
     left: 10px;
     z-index: 1200;
   }
@@ -2135,15 +2149,34 @@ font-size: 0.9em;
 }
 
 @media (max-width: 768px) {
+  .burger-icon {
+    display: inline-block;
+    text-align: center;
+    line-height: 40px;       /* = Button-Höhe */
+    font-size: 22px;         /* Icon/Strichstärke */
+    transform: translateX(0);/* mittig lassen */
+    position: relative;
+    z-index: 2;
+    margin-top: -100%;
+    margin-left: -100%;
+  } 
+
+  .burger-icon { color: #111; }  /* Light */
+  .dark-mode .burger-icon { color: #fff; }  /* Dark */
 
   .top-bar-logo {
-    margin-left: 40px; /* Abstand anpassen, damit der Pfeil links Platz hat */
+    margin-left: 52px; /* vorher 40px */
   }
 
   .top-bar-favicon {
     width: 24px; /* oder eine andere passende Größe */
     height: auto;
     margin-top: 3px;
+    margin-left: -250%;
+  }
+
+  .dark-mode .top-bar-favicon {
+    margin-left: -450%;
   }
 
   body {
@@ -2241,20 +2274,22 @@ font-size: 0.9em;
   .burger-icon {
     display: inline-block;
     text-align: center;
-    line-height: 27px; /* entspricht der Höhe des Buttons */
-    transform: translateX(-2px); /* verschiebt das Icon leicht nach links */
+    line-height: 40px;       /* = Button-Höhe */
+    font-size: 22px;         /* Icon/Strichstärke */
+    transform: translateX(0);/* mittig lassen */
     position: relative;
     z-index: 2;
+    margin-top: -50%;
   }    
 
   .burger-icon { color: #111; }  /* Light */
-  .dark-mode .burger-icon { color: #fff; }  /* Dark */
+  .dark-mode .burger-icon { color: #fff;}  /* Dark */
 
   /* Sidebar Toggle Button – nur in der Top Bar anzeigen */
   .sidebar-toggle {
     display: block !important;
     position: fixed;
-    top: 10px;
+    top: calc((45px - 40px) / 2); /* statt 10px */
     left: 10px;
     z-index: 1200;
   }
@@ -2931,6 +2966,71 @@ display: inline-block;
 margin-left: 5px; /* kleiner Abstand zum Button-Text */
 }
 
+/* Thinking text + shimmer */
+.thinking-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;            /* Abstand zwischen Spinner und Text */
+  font-size: 0.95em;
+  opacity: 0.9;
+}
+
+.thinking {
+  position: relative;
+  display: inline-block;
+  line-height: 1.2;
+  color: var(--feedback-text-color, #8a8a8a); /* nutzt deine Variable, fallback grau */
+  /* subtile Punkte-Animation als Fallback */
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.thinking i.shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* Heller "Wischer", der durch den Textzug läuft */
+  background: linear-gradient(
+    100deg,
+    rgba(255,255,255,0) 20%,
+    rgba(255,255,255,0.65) 40%,
+    rgba(255,255,255,0) 60%
+  );
+  transform: translateX(-120%);
+  animation: thinking-shimmer 1.25s linear infinite;
+  mix-blend-mode: plus-lighter; /* wirkt dezent in light & dark */
+}
+
+/* Shimmer-Animation */
+@keyframes thinking-shimmer {
+  0%   { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+
+/* Respektiere reduzierte Bewegungen */
+@media (prefers-reduced-motion: reduce) {
+  .thinking i.shine { animation: none; display: none; }
+  .thinking::after {
+    content: '…';
+    animation: thinking-dots 1.6s steps(4, end) infinite;
+    margin-left: 2px;
+  }
+  @keyframes thinking-dots {
+    0%   { content: ''; }
+    25%  { content: '.'; }
+    50%  { content: '..'; }
+    75%  { content: '...'; }
+    100% { content: ''; }
+  }
+}
+
+/* Optional: sorge dafür, dass Spinner + Text schön in der Box mittig wirken */
+.response-box .collapsible-content .thinking-wrap,
+#consensusResponse .thinking-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
 .hidden {
   display: none;
 }
@@ -3041,6 +3141,95 @@ margin-left: 5px; /* kleiner Abstand zum Button-Text */
 .dark-mode .chat-input-container .input-field {
    scrollbar-color: rgba(255, 255, 255, 0.3) transparent; /* Angepasste Farbe für Dark Mode */
 }
+
+/* Basis: Button vorbereiten */
+.collapse-btn{
+  position: relative;
+  border: 1px solid transparent; /* verhindert Layout-Jumps */
+  border-radius: 999px;          /* Grundform rund */
+  overflow: visible;             /* falls Bubble minimal größer ist */
+}
+
+/* Pfeil etwas über die Bubble legen */
+.collapse-btn .arrow{
+  position: relative;
+  z-index: 1;
+}
+
+/* Die runde Bubble hinter dem Icon – standardmäßig unsichtbar */
+.collapse-btn::after{
+  content:"";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;                 /* Bubble-Größe: Icon-konform */
+  height: 22px;
+  transform: translate(-60%, -50%);
+  border-radius: 999px;        /* komplett rund */
+  background: transparent;     /* nur im aktiven Zustand einfärben */
+  box-shadow: none;
+  pointer-events: none;         /* nicht anklickbar */
+  transition: background .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+
+/* AKTIV: Einzelbox eingeklappt (Pfeil gedreht) -> Bubble zeigen */
+.collapse-btn:has(.arrow.rotated)::after{
+  background: color-mix(in srgb, var(--button-bg) 22%, transparent);
+  border-color: var(--button-bg);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+}
+
+/* Alternativ/zusätzlich über aria-expanded */
+.collapse-btn[aria-expanded="false"]::after{
+  background: color-mix(in srgb, var(--button-bg) 22%, transparent);
+  border-color: var(--button-bg);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+}
+
+/* Wenn der Container als 'collapsed' gilt, färbe den Button ebenfalls */
+.response-box:has(.collapsible-content.collapsed) .collapse-btn::after{
+  background: color-mix(in srgb, var(--button-bg) 22%, transparent);
+  border-color: var(--button-bg);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+}
+
+/* Hover/Focus für den aktiven Zustand (Bubble bleibt mittig hinter dem Icon) */
+.collapse-btn:has(.arrow.rotated):hover::after,
+.response-box:has(.collapsible-content.collapsed) .collapse-btn:hover::after,
+.collapse-btn[aria-expanded="false"]:hover::after{
+  box-shadow: 0 3px 12px rgba(0,0,0,0.22);
+}
+
+.collapse-btn:has(.arrow.rotated):focus-visible,
+.response-box:has(.collapsible-content.collapsed) .collapse-btn:focus-visible,
+.collapse-btn[aria-expanded="false"] :focus-visible{
+  outline: 2px solid color-mix(in srgb, var(--button-bg) 55%, transparent);
+  outline-offset: 2px;
+}
+
+/* Optional: Pfeilfarbe im aktiven Zustand minimal zum Akzent mischen */
+.collapse-btn:has(.arrow.rotated) .arrow,
+.collapse-btn[aria-expanded="false"] .arrow{
+  color: color-mix(in srgb, var(--text-color) 80%, var(--button-bg) 20%);
+}
+
+/* Globaler Toggle-Strich – etwas runder & eingefärbt, sobald min. eine Box zu ist */
+#toggleAllButton .toggle-visual{
+  border-radius: 6px; /* runder */
+}
+
+body:has(.response-box .collapsible-content.collapsed) #toggleAllButton .toggle-visual{
+  background-color: color-mix(in srgb, var(--button-bg) 30%, white);
+  border-color: var(--button-bg);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+
+/* Falls du per JS 'alle zu' markierst */
+body.all-collapsed #toggleAllButton .toggle-visual{
+  background-color: color-mix(in srgb, var(--button-bg) 45%, transparent);
+  border-color: var(--button-bg);
+}
+
 
 @keyframes spin {
 0% { transform: rotate(0deg); }

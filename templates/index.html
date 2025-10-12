@@ -356,7 +356,7 @@
       <!-- Antwort Gemini -->
       <div class="response-box" id="geminiResponse" data-model="Gemini">
         <h2>
-          <span class="title">Ressponse from Gemini <small>(<span id="geminiModelText">gemini-2.5-flash</span>)</small>
+          <span class="title">Response from Gemini <small>(<span id="geminiModelText">gemini-2.5-flash</span>)</small>
             <span class="model-picker-wrapper"><select id="geminiModelSelect" class="model-picker">
               <option value="gemini-2.5-flash">gemini-2.5-flash</option>
               <option value="gemini-2.0-flash">gemini-2.0-flash</option>
@@ -488,6 +488,14 @@
         // Dark/Light Mode Initialisierung
         // --------------------------
         // Zugriff auf die Checkboxen:
+
+        // Global verfügbar für alle Funktionen
+        window.spinnerHTML = `
+          <span class="thinking-wrap" role="status" aria-live="polite" aria-busy="true">
+            <span class="spinner"></span>
+            <span class="thinking">Thinking&nbsp;…<i class="shine" aria-hidden="true"></i></span>
+          </span>
+        `;
         const deepSearchToggle = document.getElementById("deepSearchToggle");
         const searchModeToggle = document.getElementById("searchModeToggle");
 
@@ -1029,7 +1037,7 @@
           document.getElementById("sendButton").disabled = true;
           // Konsens-Button wieder aktivieren, bevor eine neue Anfrage gesendet wird.
           document.getElementById("consensusButton").disabled = false;
-          const spinnerHTML = '<span class="spinner"></span>';
+          const spinnerHTML = window.spinnerHTML;
           // Lese den benutzerdefinierten Systemprompt aus oder nutze den Standardwert
           const customSystemPrompt = localStorage.getItem("systemPrompt") || "Please respond briefly and precisely, focusing only on the essentials.";
           console.log("Using system prompt:", customSystemPrompt);
@@ -2023,8 +2031,8 @@
   
           // Setze den Konsens-Bereich (Spinner etc.) und rufe anschließend deinen Konsens-Endpunkt auf.
           const consensusDiv = document.getElementById("consensusResponse");
-          const mainSpinner = '<span class="spinner"></span>';
-          const diffSpinner = '<span class="spinner"></span>';
+          const mainSpinner = window.spinnerHTML;
+          const diffSpinner = window.spinnerHTML;
   
           consensusDiv.querySelector(".consensus-main p").innerHTML = mainSpinner;
           consensusDiv.querySelector(".consensus-differences p").innerHTML = diffSpinner;
