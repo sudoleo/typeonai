@@ -68,6 +68,10 @@ CONSENSUS_MAX_TOKENS = 2048
 DIFFERENCES_MAX_TOKENS = 1024
 REASONING_EFFORT_FOR_DEEP = "low"
 
+# Erhöhe das Tokenlimit speziell für Gemini (Deep Think braucht mehr Luft)
+GEMINI_MAX_TOKENS = 2048
+GEMINI_DEEP_MAX_TOKENS = 4096   # <- vorher 2048, das war oft zu knapp
+
 # Modelle, die pro Anbieter erlaubt sind
 ALLOWED_OPENAI_MODELS = {
     "gpt-5",
@@ -106,7 +110,7 @@ ALLOWED_GROK_MODELS = {
 }
 
 DEFAULT_SYSTEM_PROMPT = "Please respond briefly and precisely, focusing only on the essentials."
-DEEP_THINK_PROMPT = "Deep Think: Please provide a deep, detailed analysis. Focus as hard as you can!"
+DEEP_THINK_PROMPT = "Deep Think: Focus as hard as you can! But only on the essentials."
 
 usage_counter = {}  # { uid: anzahl_anfragen }
 deep_search_usage = {}  # { uid: anzahl_deep_search_anfragen }
@@ -294,39 +298,72 @@ def query_gemini(
     deep_search: bool = False,
     system_prompt: str = None,
     model_override: str = None,
-    max_output_tokens: Optional[int] = None,  # <-- NEU
+    max_output_tokens: Optional[int] = None,
 ) -> str:
     if system_prompt is None:
         system_prompt = DEFAULT_SYSTEM_PROMPT
     if deep_search:
         system_prompt += "\n" + DEEP_THINK_PROMPT
 
+    # (A) API-Key setzen (bevorzugt expliziter Key)
     try:
-        # API-Key-Konfiguration
         if user_api_key and user_api_key.strip():
             genai.configure(api_key=user_api_key.strip())
+        elif os.environ.get("DEVELOPER_GEMINI_API_KEY"):
+            genai.configure(api_key=os.environ["DEVELOPER_GEMINI_API_KEY"])
         else:
-            genai.configure()  # Service-Account-Modus
+            genai.configure()  # falls Service Account genutzt wird
+    except Exception as e:
+        return f"Error with Gemini: configuration failed: {e}"
 
-        model_name = model_override if model_override else "gemini-2.5-flash"
-        model = genai.GenerativeModel(model_name)
-
-        base_content = "Do not ask any questions.\n" + system_prompt + "\n---\n" + question
-
-        generation_config = {}
-        if max_output_tokens is not None:
-            generation_config["max_output_tokens"] = int(max_output_tokens)
-
-        # Reiner Generate-Call mit hartem Tokenlimit
-        response = model.generate_content(
-            base_content,
-            generation_config=generation_config if generation_config else None
+    # (B) Modell & Config
+    model_name = model_override if model_override else "gemini-2.5-flash"
+    try:
+        model = genai.GenerativeModel(
+            model_name=model_name,
+            system_instruction=system_prompt,
+            safety_settings=[{"category":"HARM_CATEGORY_HARASSMENT","threshold":"BLOCK_ONLY_HIGH"}],
         )
 
-        answer_text = (getattr(response, "text", "") or "").strip()
-        return answer_text or "Error: Empty response payload."
+        # Tokenlimit defensiv erhöhen, falls nichts übergeben wurde
+        eff_max = int(max_output_tokens) if max_output_tokens is not None else (4096 if deep_search else 2048)
+        generation_config = {
+            "max_output_tokens": eff_max,
+            "temperature": 0.2,
+        }
+
+        # Große Eingaben leicht kappen, damit mehr Budget fürs Output bleibt
+        # (kein Helper – inline, nur bei extrem langen Fragen)
+        if question and len(question) > 12000:
+            question = question[:12000] + " … [truncated]"
+
+        # Anfrage
+        base_content = "Do not ask any questions.\n---\n" + question
+        resp = model.generate_content(base_content, generation_config=generation_config)
+
+        # (C) Text sicher auslesen oder finish_reason erklären
+        txt = (getattr(resp, "text", None) or "").strip()
+        if txt:
+            return txt
+
+        cand = (getattr(resp, "candidates", []) or [None])[0]
+        fr = getattr(cand, "finish_reason", None)
+        frs = str(fr)
+
+        # 2 = MAX_TOKENS → genau dein Fehlerfall
+        if frs in ("2", "MAX_TOKENS", "FinishReason.MAX_TOKENS"):
+            return "Error with Gemini: hit max tokens before producing text. Raise max_output_tokens or trim input."
+
+        # Häufige weitere Gründe
+        if frs in ("3", "SAFETY", "FinishReason.SAFETY"):
+            return "Error with Gemini: response was blocked by safety filters."
+        if frs in ("4", "RECITATION", "FinishReason.RECITATION"):
+            return "Error with Gemini: response suppressed by recitation policy."
+
+        return f"Error with Gemini: empty response payload (finish_reason={frs})."
+
     except Exception as e:
-        return f"Error with Gemini: {str(e)}"
+        return f"Error with Gemini: {e}"
 
     
 def query_deepseek(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False, model_override: str = None) -> str:
@@ -696,7 +733,7 @@ def query_differences(
         anon_label = f"Model {label}"
         anon_map[anon_label] = name
         labels.append(anon_label)
-        lines.append(f"- {anon_label}: {text}")
+        lines.append(f"- {anon_label}: {(text or '')[:4000]}")
 
     responses_text = "\n".join(lines)
 
@@ -1519,8 +1556,8 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
     # Wortlimit
     max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
 
-    # Tokenlimit passend zum Modus
-    max_tokens = DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS
+    # nachher:
+    max_tokens = GEMINI_DEEP_MAX_TOKENS if deep_search else GEMINI_MAX_TOKENS
 
     if count_words(question) > max_words_limit:
         raise HTTPException(
@@ -1534,7 +1571,7 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
         use_own_keys = use_own_keys.lower() == "true"
 
     id_token = data.get("id_token")
-    api_key = data.get("api_key")  # von der Sidebar
+    api_key = (data.get("api_key") or data.get("gemini_key"))
     model = data.get("model")
     validate_model(model, ALLOWED_GEMINI_MODELS, "Gemini")
 
@@ -1580,7 +1617,7 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
         # Key-Auswahl
         if use_own_keys:
             if not (api_key and api_key.strip()):
-                raise HTTPException(status_code=400, detail="Please log in or store your own API keys.")
+                raise HTTPException(status_code=400, detail="Gemini: Missing user API key.")
             answer = query_gemini(
                 question=question,
                 user_api_key=api_key.strip(),
@@ -1613,7 +1650,7 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
     else:
         # Nicht eingeloggte Nutzer: brauchen eigenen Key
         if not (api_key and api_key.strip()):
-            raise HTTPException(status_code=400, detail="Please log in or store your own API keys.")
+            raise HTTPException(status_code=400, detail="Gemini: No credentials provided. Log in or add a Gemini API key.")
         answer = query_gemini(
             question=question,
             user_api_key=api_key.strip(),
