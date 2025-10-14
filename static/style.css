@@ -1975,7 +1975,7 @@ font-size: 0.9em;
 @media (max-width: 1465px) {
   /* Top Bar & Body */
   .top-bar-logo {
-    margin-left: 40px; /* Abstand, damit der Pfeil links Platz hat */
+    margin-left: 0; /* Abstand, damit der Pfeil links Platz hat */
   }
   body {
     padding: 10px !important;
@@ -1991,6 +1991,9 @@ font-size: 0.9em;
     margin-left: 0 !important;
     padding-top: 10px;
   }
+
+  .top-bar { padding-left: 8px; }   /* vorher global: 20px */
+  .top-bar-favicon { margin-top: 4px; }
 
   /* Sidebar Overlay (aktiv sichtbar bei Klasse 'active') */
   .sidebar {
@@ -2051,13 +2054,19 @@ font-size: 0.9em;
     vertical-align: middle;
   }
 
-  /* Sidebar Toggle Button – nur in der Top Bar anzeigen */
   .sidebar-toggle {
     display: block !important;
-    position: fixed;
-    top: calc((45px - 40px) / 2); /* statt 10px */
-    left: 10px;
+    position: relative;  /* im Flex-Flow bleiben */
+    top: auto;
+    left: auto;
     z-index: 1200;
+    margin-right: 6px;   /* kleiner Abstand vor dem Logo */
+    width: 40px;         /* wichtig wg. .collapse-btn Defaults */
+    height: 40px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   /* Falls du einen doppelten Toggle außerhalb der Top Bar hast, blendest du ihn hier aus */
@@ -2152,31 +2161,26 @@ font-size: 0.9em;
   .burger-icon {
     display: inline-block;
     text-align: center;
-    line-height: 40px;       /* = Button-Höhe */
-    font-size: 22px;         /* Icon/Strichstärke */
-    transform: translateX(0);/* mittig lassen */
+    line-height: 40px;
+    font-size: 22px;
+    transform: none;
     position: relative;
     z-index: 2;
-    margin-top: -100%;
-    margin-left: -100%;
-  } 
+    margin: 0;              /* keine negativen Offsets */
+  }
 
   .burger-icon { color: #111; }  /* Light */
   .dark-mode .burger-icon { color: #fff; }  /* Dark */
 
   .top-bar-logo {
-    margin-left: 52px; /* vorher 40px */
+    margin-left: 6px; /* kleiner Spalt hinter dem Burger */
   }
 
   .top-bar-favicon {
-    width: 24px; /* oder eine andere passende Größe */
+    width: 24px;
     height: auto;
-    margin-top: 3px;
-    margin-left: -250%;
-  }
-
-  .dark-mode .top-bar-favicon {
-    margin-left: -450%;
+    margin: 0; 
+    margin-top: 6px;          /* keine negativen Offsets */
   }
 
   body {
@@ -2269,30 +2273,41 @@ font-size: 0.9em;
   #leaderboardContent tr {
     border-bottom: 1px solid #eee;
     vertical-align: middle;
-  }
+  } 
 
   .burger-icon {
     display: inline-block;
     text-align: center;
-    line-height: 40px;       /* = Button-Höhe */
-    font-size: 22px;         /* Icon/Strichstärke */
-    transform: translateX(0);/* mittig lassen */
+    line-height: 40px;  /* exakt Button-Höhe -> vertikal mittig/höher */
+    font-size: 22px;
+    transform: none;
     position: relative;
     z-index: 2;
-    margin-top: -50%;
-  }    
+    margin: 0;          /* keine Offsets */
+  }
 
   .burger-icon { color: #111; }  /* Light */
   .dark-mode .burger-icon { color: #fff;}  /* Dark */
 
-  /* Sidebar Toggle Button – nur in der Top Bar anzeigen */
   .sidebar-toggle {
     display: block !important;
-    position: fixed;
-    top: calc((45px - 40px) / 2); /* statt 10px */
-    left: 10px;
+    position: relative;  /* im Flex-Flow bleiben */
+    top: auto;
+    left: auto;
     z-index: 1200;
+    margin-right: 6px;
+    width: 40px;         /* .collapse-btn (24x24) überstimmen */
+    height: 40px;
+    padding: 0;
+    display: flex;
+    align-items: center;  /* -> Icon sitzt optisch höher/zentriert */
+    justify-content: center;
   }
+
+  /* Linksgruppe bündig, Rechtsgruppe nach rechts schieben */
+  .top-bar { justify-content: flex-start; }
+  .top-bar-right { margin-left: auto; }
+  .top-bar { padding-left: 8px; }   /* vorher global: 20px */
 
   #toggleAllButton {
     position: absolute;
@@ -2945,75 +2960,99 @@ display: none;
   padding-top: 20px; /* optionaler Abstand nach oben */
 }
 
-.container {
-  width: 80%;
-  max-width: 900px;
-  background: var(--container-bg);
-  padding: 15px 20px;
-  border-radius: 8px;
-  box-shadow: var(--box-shadow);
-}
+/* =========================
+   Thinking: Spinner + Text-Shimmer (nur in Glyphen)
+   ========================= */
 
-/* Spinner */
+/* Spinner (unverändert, optional größenanpassbar) */
 .spinner {
-border: 2px solid #f3f3f3; /* Heller Grauton für den Hintergrund */
-border-top: 2px solid grey; /* Grauer Farbton für den rotierenden Teil */
-border-radius: 50%;
-width: 16px;
-height: 16px;
-animation: spin 1s linear infinite;
-display: inline-block;
-margin-left: 5px; /* kleiner Abstand zum Button-Text */
+  border: 2px solid #f3f3f3;         /* heller Ring */
+  border-top: 2px solid grey;        /* rotierender Abschnitt */
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  animation: spin 1s linear infinite;
+  display: inline-block;
+  margin-left: 5px;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
-/* Thinking text + shimmer */
+/* Wrapper für Spinner + Text */
 .thinking-wrap {
   display: inline-flex;
   align-items: center;
-  gap: 8px;            /* Abstand zwischen Spinner und Text */
+  gap: 8px;                 /* Abstand zwischen Spinner und Text */
   font-size: 0.95em;
   opacity: 0.9;
 }
 
+/* Basis-Text (sichtbare Grundfarbe) */
 .thinking {
   position: relative;
   display: inline-block;
   line-height: 1.2;
-  color: var(--feedback-text-color, #8a8a8a); /* nutzt deine Variable, fallback grau */
-  /* subtile Punkte-Animation als Fallback */
+  color: var(--feedback-text-color, #8a8a8a);  /* nutze deine Variable */
   overflow: hidden;
   isolation: isolate;
+  white-space: nowrap;       /* verhindert Umbruch, Shimmer deckungsgleich */
 }
 
-.thinking i.shine {
+/* Spiegelnde, diagonale Glanzspur nur in den Glyphen */
+.thinking::after {
+  content: attr(data-text);
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* Heller "Wischer", der durch den Textzug läuft */
-  background: linear-gradient(
-    100deg,
-    rgba(255,255,255,0) 20%,
-    rgba(255,255,255,0.65) 40%,
-    rgba(255,255,255,0) 60%
-  );
-  transform: translateX(-120%);
-  animation: thinking-shimmer 1.25s linear infinite;
-  mix-blend-mode: plus-lighter; /* wirkt dezent in light & dark */
+
+  /* Diagonaler, stark fokussierter Glanz mit weichen Kanten */
+  background:
+    linear-gradient(
+      22deg,                               /* Winkel der Spiegelung */
+      rgba(255,255,255,0) 42%,
+      rgba(255,255,255,0.10) 45%,
+      rgba(255,255,255,0.35) 47%,
+      rgba(255,255,255,0.95) 50%,          /* heller, „metallischer“ Kern */
+      rgba(255,255,255,0.35) 53%,
+      rgba(255,255,255,0.10) 55%,
+      rgba(255,255,255,0) 58%
+    );
+  background-size: 260% 200%;
+  background-position: -140% 0;
+
+  animation: thinking-shimmer 1.35s ease-in-out infinite;
+
+  /* Clip auf Text → sichtbar nur in den Buchstaben */
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+
+  /* sorgt für stärkeren „Glanz“ auf dunklen Hintergründen */
+  mix-blend-mode: screen;
+  opacity: 0.9;
 }
 
-/* Shimmer-Animation */
+/* Animation: diagonale Spiegelung „wischt“ über das Wort */
 @keyframes thinking-shimmer {
-  0%   { transform: translateX(-120%); }
-  100% { transform: translateX(120%); }
+  0%   { background-position: -140% 0; }
+  50%  { background-position:  20%  0; }
+  100% { background-position: 160%  0; }
 }
 
-/* Respektiere reduzierte Bewegungen */
+/* Barrierearmut: Bewegtbild reduzieren → Shimmer aus, Punkte an */
 @media (prefers-reduced-motion: reduce) {
-  .thinking i.shine { animation: none; display: none; }
   .thinking::after {
+    content: none;
+    animation: none;
+  }
+  .thinking::before {
     content: '…';
-    animation: thinking-dots 1.6s steps(4, end) infinite;
+    position: static;
     margin-left: 2px;
+    animation: thinking-dots 1.6s steps(4, end) infinite;
+    color: currentColor;
   }
   @keyframes thinking-dots {
     0%   { content: ''; }
@@ -3021,6 +3060,17 @@ margin-left: 5px; /* kleiner Abstand zum Button-Text */
     50%  { content: '..'; }
     75%  { content: '...'; }
     100% { content: ''; }
+  }
+}
+
+/* Optional: Dark-Mode-Feintuning, falls du es getrennt steuern willst */
+@media (prefers-color-scheme: dark) {
+  .thinking {
+    color: var(--feedback-text-color, #a0a0a0);
+  }
+  /* Shine im Dark Mode minimal dezenter */
+  .thinking::after {
+    opacity: 0.8;
   }
 }
 

@@ -492,8 +492,8 @@
         // Global verfügbar für alle Funktionen
         window.spinnerHTML = `
           <span class="thinking-wrap" role="status" aria-live="polite" aria-busy="true">
-            <span class="spinner"></span>
-            <span class="thinking">Thinking&nbsp;…<i class="shine" aria-hidden="true"></i></span>
+            <span class="spinner" aria-hidden="true"></span>
+            <span class="thinking" data-text="Thinking …">Thinking&nbsp;…</span>
           </span>
         `;
         const deepSearchToggle = document.getElementById("deepSearchToggle");

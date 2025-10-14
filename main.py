@@ -787,14 +787,39 @@ def query_differences(
                 return f"Error with Anthropic: {resp.status_code} - {resp.text}"
 
         elif differences_model == "Gemini":
-            gemini_key = api_keys.get("Gemini")
-            if gemini_key:
-                genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel("gemini-2.5-flash")
-                result = model.generate_content(
-                    differences_prompt,
-                    generation_config={"max_output_tokens": int(DIFFERENCES_MAX_TOKENS)}
-                ).text.strip()
+            try:
+                if api_keys.get("Gemini"):
+                    genai.configure(api_key=api_keys["Gemini"])
+                elif os.environ.get("DEVELOPER_GEMINI_API_KEY"):
+                    genai.configure(api_key=os.environ["DEVELOPER_GEMINI_API_KEY"])
+                else:
+                    genai.configure()
+
+                model = genai.GenerativeModel(
+                    # nimm deinen bisherigen Modellnamen; dieser hier ist nur ein Beispiel
+                    model_name="gemini-2.5-flash",
+                    system_instruction="Answer in the exact same language as the Model responses.",
+                    # optional (1 Zeile): weniger striktes Blocking
+                    safety_settings=[{"category":"HARM_CATEGORY_HARASSMENT","threshold":"BLOCK_ONLY_HIGH"}],
+                    generation_config={"max_output_tokens": int(DIFFERENCES_MAX_TOKENS), "temperature": 0.2}
+                )
+
+                resp = model.generate_content(differences_prompt)
+
+                # --- Minimal robuster Reader (ohne Hilfsfunktion) ---
+                result = (getattr(resp, "text", None) or "").strip()
+                if not result:
+                    cand = (getattr(resp, "candidates", []) or [None])[0]
+                    fr = getattr(cand, "finish_reason", None)
+                    frs = str(fr)
+                    if frs in ("2","FinishReason.SAFETY","SAFETY"):
+                        return "Error with Gemini (differences): response was blocked by safety filters."
+                    if frs in ("3","FinishReason.MAX_TOKENS","MAX_TOKENS"):
+                        return "Error with Gemini (differences): hit max tokens before returning text. Increase DIFFERENCES_MAX_TOKENS or trim inputs."
+                    return f"Error with Gemini (differences): empty candidate (finish_reason={frs})."
+
+            except Exception as e:
+                return f"Error with Gemini (differences): {e}"
 
         elif differences_model == "DeepSeek":
             client = openai.OpenAI(api_key=api_keys.get("DeepSeek"), base_url="https://api.deepseek.com")
@@ -850,6 +875,9 @@ def query_differences(
 
     except Exception as e:
         return f"Error in comparison: {e}"
+    
+    if not result:
+        return "Error in comparison: empty result from differences engine."
 
     # 6. Anonyme BestModel-Zeile rückübersetzen
     match = re.search(r"BestModel:\s*Model\s*([A-Z])", result)
@@ -2073,11 +2101,28 @@ async def consensus(request: Request, data: dict = Body(...)):
         "Grok": "Grok",
     }
     need_key_for = engine_key_map.get(engine)
-    if need_key_for and not api_keys.get(need_key_for):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Missing API key for selected consensus engine: {engine}."
-        )
+    if need_key_for:
+        if engine == "Gemini":
+            # Erlaube drei Varianten:
+            # 1) expliziter Key (User- oder Dev-Key),
+            # 2) Dev-Key aus ENV,
+            # 3) Service Account via GOOGLE_APPLICATION_CREDENTIALS, aber NUR wenn nicht useOwnKeys
+            has_explicit_key = bool(api_keys.get("Gemini"))
+            has_dev_key      = bool(os.environ.get("DEVELOPER_GEMINI_API_KEY"))
+            using_service_acct = (not use_own_keys) and bool(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
+
+            if not (has_explicit_key or has_dev_key or using_service_acct):
+                raise HTTPException(
+                    status_code=400,
+                    detail=("Missing credentials for selected consensus engine: Gemini. "
+                            "Provide a Gemini API key or configure a Service Account on the server.")
+                )
+        else:
+            if not api_keys.get(need_key_for):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Missing API key for selected consensus engine: {engine}."
+                )
 
     if best_model and best_model in excluded_models:
         raise HTTPException(status_code=400, detail="The answer marked as best must not be excluded.")
