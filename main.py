@@ -1017,7 +1017,7 @@ async def load_bookmarks(request: Request):
 registered_ips = {}  # { ip_address: uid }
 
 @app.post("/register")
-@limiter.limit("1/minute")  # Beispiel: maximal 10 Registrierungen pro Minute pro IP
+@limiter.limit("3/minute")  # Beispiel: maximal 10 Registrierungen pro Minute pro IP
 async def register_user(request: Request, data: dict = Body(...)):
     ip_address = request.client.host
     # Prüfe, ob diese IP-Adresse bereits einen Account registriert hat
