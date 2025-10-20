@@ -951,6 +951,26 @@ def verify_user_token(token: str) -> str:
         now = int(time.time())
         logging.error(f"verify_user_token failed (server time={now}): {e}")
         raise Exception("Invalid token: " + str(e))
+    
+
+def extract_id_token(request: Request, data: dict) -> Optional[str]:
+    raw = data.get("id_token")
+    # Leere oder "null"/"undefined" wie "kein Token" behandeln
+    if raw is not None and str(raw).strip().lower() in {"", "null", "undefined"}:
+        raw = None
+    if raw:
+        return raw
+    # Fallback: Authorization-Header akzeptieren
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        token = auth[len("Bearer "):].strip()
+        if token:
+            return token
+    # Fallback: Cookie (falls du den mal setzt)
+    cookie_token = request.cookies.get("session")
+    if cookie_token:
+        return cookie_token
+    return None
 
 
 # 1) Landingpage unter '/'
@@ -1106,7 +1126,7 @@ last_feedback_time = {}
 async def submit_feedback(request: Request, data: dict = Body(...)):
     message = data.get("message")
     email = data.get("email")
-    id_token = data.get("id_token")
+    id_token = extract_id_token(request, data)
     
     if not id_token:
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -1148,7 +1168,7 @@ ALLOWED_VOTE_TYPES = {"best", "exclude", "BestModel"}
 @app.post("/vote")
 @limiter.limit("3/minute")
 async def record_vote(request: Request, data: dict = Body(...)):
-    id_token = data.get("id_token")
+    id_token = extract_id_token(request, data)
     model = data.get("model")
     vote_type = data.get("vote_type")
 
@@ -1230,7 +1250,7 @@ async def save_bookmark(request: Request, data: dict = Body(...)):
 @app.post("/bookmark/consensus")
 @limiter.limit("3/minute")
 async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
-    id_token = data.get("id_token")
+    id_token = extract_id_token(request, data)
     question = data.get("question")
     consensusText = data.get("consensusText")
     differencesText = data.get("differencesText")
@@ -1263,7 +1283,7 @@ async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
     
 @app.delete("/bookmark")
 async def delete_bookmark(data: dict):
-    id_token = data.get("id_token")
+    id_token = extract_id_token(request, data)
     bookmark_id = data.get("bookmarkId")
     
     if not id_token or not bookmark_id:
@@ -1298,7 +1318,7 @@ async def ask_openai_post(request: Request, data: dict = Body(...)):
         )
 
     system_prompt = data.get("system_prompt")
-    id_token = data.get("id_token")
+    id_token = extract_id_token(request, data)
     api_key = data.get("api_key")
     model = data.get("model")
 
@@ -1394,7 +1414,7 @@ async def ask_mistral_post(request: Request, data: dict = Body(...)):
             detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {max_words_limit} Wörtern."
         )
     system_prompt = data.get("system_prompt")
-    id_token = data.get("id_token")
+    id_token = extract_id_token(request, data)
     api_key = data.get("api_key")
     model = data.get("model")
     validate_model(model, ALLOWED_MISTRAL_MODELS, "Mistral")
@@ -1472,7 +1492,7 @@ async def ask_claude_post(request: Request, data: dict = Body(...)):
             detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {max_words_limit} Wörtern."
         )
     system_prompt = data.get("system_prompt")
-    id_token = data.get("id_token")
+    id_token = extract_id_token(request, data)
     api_key = data.get("api_key")
     model = data.get("model")
     validate_model(model, ALLOWED_ANTHROPIC_MODELS, "Anthropic")
@@ -1570,7 +1590,7 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
     if isinstance(use_own_keys, str):
         use_own_keys = use_own_keys.lower() == "true"
 
-    id_token = data.get("id_token")
+    id_token = extract_id_token(request, data)
     api_key = (data.get("api_key") or data.get("gemini_key"))
     model = data.get("model")
     validate_model(model, ALLOWED_GEMINI_MODELS, "Gemini")
@@ -1679,7 +1699,7 @@ async def ask_deepseek_post(request: Request, data: dict = Body(...)):
             detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {max_words_limit} Wörtern."
         )
     system_prompt = data.get("system_prompt")
-    id_token = data.get("id_token")
+    id_token = extract_id_token(request, data)
     api_key = data.get("api_key")
     model = data.get("model")
     validate_model(model, ALLOWED_DEEPSEEK_MODELS, "DeepSeek")
@@ -1768,7 +1788,7 @@ async def ask_grok_post(request: Request, data: dict = Body(...)):
             detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {max_words_limit} Wörtern."
         )
     system_prompt = data.get("system_prompt")
-    id_token = data.get("id_token")
+    id_token = extract_id_token(request, data)
     api_key = data.get("api_key")
     model = data.get("model")
     validate_model(model, ALLOWED_GROK_MODELS, "Grok")
@@ -1861,7 +1881,7 @@ async def ask_exa_post(request: Request, data: dict = Body(...)):
             detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {max_words_limit} Wörtern."
         )
     system_prompt = data.get("system_prompt")
-    id_token = data.get("id_token")
+    id_token = extract_id_token(request, data)
     api_key = data.get("api_key")
     active_count = data.get("active_count", 1)
     # Exa wird ausschließlich im Search Mode eingesetzt – daher setzen wir search_mode auf True.
@@ -1954,7 +1974,7 @@ async def ask_perplexity_post(request: Request, data: dict = Body(...)):
             detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {max_words_limit} Wörtern."
         )
     system_prompt = data.get("system_prompt")
-    id_token = data.get("id_token")
+    id_token = extract_id_token(request, data)
     api_key = data.get("api_key")
     active_count = data.get("active_count", 1)
     
@@ -2031,7 +2051,7 @@ async def ask_perplexity_post(request: Request, data: dict = Body(...)):
 @app.post("/consensus")
 @limiter.limit("3/minute")
 async def consensus(request: Request, data: dict = Body(...)):
-    id_token = data.get("id_token")
+    id_token = extract_id_token(request, data)
     use_own_keys = data.get("useOwnKeys", False)
     # Neuer Parameter: search_mode
     search_mode = data.get("search_mode", False)
