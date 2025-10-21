@@ -1283,7 +1283,7 @@ async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
     
 @app.delete("/bookmark")
 async def delete_bookmark(data: dict):
-    id_token = extract_id_token(request, data)
+    id_token = data.get("id_token")
     bookmark_id = data.get("bookmarkId")
     
     if not id_token or not bookmark_id:
@@ -1314,7 +1314,7 @@ async def ask_openai_post(request: Request, data: dict = Body(...)):
     if count_words(question) > max_words_limit:
         raise HTTPException(
             status_code=400,
-            detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {max_words_limit} Wörtern."
+            detail=f"The input exceeds the allowed word limit of {max_words_limit} words."
         )
 
     system_prompt = data.get("system_prompt")
@@ -1411,7 +1411,7 @@ async def ask_mistral_post(request: Request, data: dict = Body(...)):
     if count_words(question) > max_words_limit:
         raise HTTPException(
             status_code=400,
-            detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {max_words_limit} Wörtern."
+            detail=f"The input exceeds the allowed word limit of {max_words_limit} words."
         )
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
@@ -1489,7 +1489,7 @@ async def ask_claude_post(request: Request, data: dict = Body(...)):
     if count_words(question) > max_words_limit:
         raise HTTPException(
             status_code=400,
-            detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {max_words_limit} Wörtern."
+            detail=f"The input exceeds the allowed word limit of {max_words_limit} words."
         )
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
@@ -1582,7 +1582,7 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
     if count_words(question) > max_words_limit:
         raise HTTPException(
             status_code=400,
-            detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {max_words_limit} Wörtern."
+            detail=f"The input exceeds the allowed word limit of {max_words_limit} words."
         )
 
     system_prompt = data.get("system_prompt")
@@ -1696,7 +1696,7 @@ async def ask_deepseek_post(request: Request, data: dict = Body(...)):
     if count_words(question) > max_words_limit:
         raise HTTPException(
             status_code=400,
-            detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {max_words_limit} Wörtern."
+            detail=f"The input exceeds the allowed word limit of {max_words_limit} words."
         )
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
@@ -1785,7 +1785,7 @@ async def ask_grok_post(request: Request, data: dict = Body(...)):
     if count_words(question) > max_words_limit:
         raise HTTPException(
             status_code=400,
-            detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {max_words_limit} Wörtern."
+            detail=f"The input exceeds the allowed word limit of {max_words_limit} words."
         )
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
@@ -1878,7 +1878,7 @@ async def ask_exa_post(request: Request, data: dict = Body(...)):
     if count_words(question) > max_words_limit:
         raise HTTPException(
             status_code=400,
-            detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {max_words_limit} Wörtern."
+            detail=f"The input exceeds the allowed word limit of {max_words_limit} words."
         )
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
@@ -1971,7 +1971,7 @@ async def ask_perplexity_post(request: Request, data: dict = Body(...)):
     if count_words(question) > max_words_limit:
         raise HTTPException(
             status_code=400,
-            detail=f"Die Eingabe überschreitet das erlaubte Wortlimit von {max_words_limit} Wörtern."
+            detail=f"The input exceeds the allowed word limit of {max_words_limit} words."
         )
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
