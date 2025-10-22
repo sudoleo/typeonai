@@ -496,6 +496,317 @@
             <span class="thinking" data-text="Thinking …">Thinking&nbsp;…</span>
           </span>
         `;
+
+      /* === DEMO: Data & Utilities ======================================= */
+      const DEMO_SCENARIO_PROMPT =
+        "Should vegetarians take supplements? If yes, which ones?";
+
+      const DEMO_DATA = {
+        // realistic, staggered loading
+        delays: { OpenAI: 1400, Mistral: 2500, Anthropic: 2900, Gemini: 3600, DeepSeek: 4300, Grok: 5000 },
+
+        // short but differentiated answers to create real signal for Consensus & Differences
+        // short but differentiated answers to create real signal for Consensus & Differences
+        responses: {
+          OpenAI:
+        `<div class="ai-block">
+          <p><u>Vegetarian supplementation (evidence-tiered)</u></p>
+          <ul>
+            <li><em>Core gap (near-universal):</em> Vitamin B12 → 50–100 µg/day or 1,000 µg once weekly (prefer cyanocobalamin for stability). Re-check B12 or MMA in 8–12 weeks.</li>
+            <li><em>Likely gaps (context):</em> Vitamin D3 1,000–2,000 IU/day if little sun; monitor 25-OH D. Iodine 150 µg/day if no iodized salt/seaweed. Omega-3 (algae EPA+DHA) 250–500 mg/day; up to 1 g/day if triglycerides high.</li>
+            <li><em>Possible gaps (diet pattern):</em> Iron only if labs show deficiency (check ferritin). Calcium to ~1,000 mg/day total; add 300–500 mg if short. Zinc 5–10 mg/day in phytate-heavy diets; ensure dietary copper ~1–2 mg/day long-term. Selenium 50–100 µg/day if uncertain; avoid &gt;200 µg long-term.</li>
+            <li><em>Performance add-on:</em> Creatine monohydrate 3–5 g/day; vegetarians often respond strongly.</li>
+          </ul>
+          <p><small>Safety: third-party tested brands; watch interactions (e.g., levothyroxine ↔ iron/calcium; separate ≥4 h). General info, not medical advice.</small></p>
+        </div>`,
+
+          Mistral:
+        `<div class="ai-block">
+          <p><u>Vegetarian decision tree (if-this-then-that)</u></p>
+          <ol>
+            <li>Vegan or mostly plant-only days? → B12 50–100 µg/day (or 1,000 µg/week) = yes.</li>
+            <li>Low sun / winter / indoor? → D3 1,000–2,000 IU/day → re-test in 8–12 weeks.</li>
+            <li>No iodized salt / seaweed &lt;1–2×/week? → Iodine 150 µg/day (caution with thyroid disease).</li>
+            <li>No fish + low ALA (flax/chia/walnuts)? → Algae EPA+DHA 250–500 mg/day.</li>
+            <li>Heavy training or sprint/strength goals? → Creatine 3 g/day (monohydrate).</li>
+            <li>Heavy periods/fatigue? → Labs first; iron only if ferritin low.</li>
+            <li>Low dairy/fortified milk? → Add Calcium 300–500 mg to hit ~1,000 mg/day.</li>
+          </ol>
+          <p><small>Rules: keep stack small, test → trial → re-test; swap forms for tolerance (e.g., magnesium glycinate/citrate).</small></p>
+        </div>`,
+
+          Anthropic:
+        `<div class="ai-block">
+          <p><u>Clinical workflow (vegetarian)</u></p>
+          <ul>
+            <li><em>Default:</em> B12 (50–100 µg/day or 1,000 µg weekly). Confirm correction with B12/MMA after 8–12 weeks.</li>
+            <li><em>Common additions (risk-based):</em> D3 1,000–2,000 IU/day with 25-OH D monitoring; Iodine 150 µg/day if not using iodized salt/seaweed (seek clinician input if thyroid disease); Algae EPA+DHA 250–500 mg/day if fish-free.</li>
+            <li><em>Conditional:</em> Iron only when deficient (dose/duration per labs). Calcium to ~1,000 mg/day total; small supplement if shortfall. Zinc 5–10 mg/day with phytate-heavy intake; consider dietary copper balance. Creatine 3–5 g/day for performance/cognition potential.</li>
+          </ul>
+          <p><small>Process: baseline labs → targeted 8–12 week trial → follow-up labs; document symptoms, side effects, and drug–nutrient interactions (e.g., levothyroxine spacing).</small></p>
+        </div>`,
+
+          Gemini:
+        `<div class="ai-block">
+          <p><u>Persona matrix (vegetarian)</u></p>
+          <ul>
+            <li><em>Lacto-ovo office worker:</em> B12 50–100 µg/day; D3 in winter; Algae EPA+DHA 250–500 mg/day if omega-3 intake low.</li>
+            <li><em>Endurance/strength athlete:</em> B12; Creatine 3–5 g/day; D3 if low; consider magnesium 200–400 mg at night (glycinate/citrate).</li>
+            <li><em>Trying/pregnant:</em> Folate 400 µg/day, B12, ensure iodine 150 µg/day; iron per labs; choose a moderate-dose prenatal.</li>
+            <li><em>South/SE-Asian vegetarian pattern:</em> prioritize iodine 150 µg/day, B12, D3.</li>
+            <li><em>Low-dairy:</em> reach ~1,000 mg/day calcium via foods/fortified milks; add 300–500 mg if needed.</li>
+          </ul>
+          <p><small>Notes: Algae EPA+DHA = vegetarian; lanolin-derived D3 is vegetarian (lichen-D3 if vegan). Reassess quarterly.</small></p>
+        </div>`,
+
+          DeepSeek:
+        `<div class="ai-block">
+          <p><u>Ops &amp; safety checklist</u></p>
+          <ul>
+            <li><em>Do:</em> use USP/NSF/IFOS-certified brands; keep a start-date/dose log; set a 12-week review.</li>
+            <li><em>Separate:</em> iron/calcium from levothyroxine by ≥4 h; calcium can blunt iron absorption — don’t take together.</li>
+            <li><em>Avoid:</em> megadoses of A/D/E/K; assuming “sea salt” is iodized (often not).</li>
+          </ul>
+          <p><em>Minimal viable vegetarian stack (by scenario)</em></p>
+          <ul>
+            <li>Default: B12; D3 if low sun.</li>
+            <li>No iodized salt/seaweed: Iodine 150 µg/day.</li>
+            <li>No fish &amp; low ALA: Algae EPA+DHA 250–500 mg/day.</li>
+            <li>Performance: Creatine 3 g/day.</li>
+            <li>Low dairy: Calcium 300–500 mg to reach ~1,000 mg/day.</li>
+          </ul>
+        </div>`,
+
+          Grok:
+        `<div class="ai-block">
+          <p><u>Straight-talk (vegetarian)</u></p>
+          <ul>
+            <li>If you eat well and see the sun, your baseline is B12; most else is “it depends”.</li>
+            <li>Add D3 when winter hits, algae EPA+DHA if fish = zero, iodine if your salt isn’t iodized.</li>
+            <li>Iron only with labs. Creatine if you actually train.</li>
+            <li>Keep doses sane; skip influencer mega-stacks. Your body isn’t a supplement shelf.</li>
+          </ul>
+        </div>`
+        },
+
+        consensus:
+        `<div class="ai-consensus">
+          <p><u>Consensus (Demo — vegetarian focus)</u></p>
+          <p>Vegetarians benefit from a <em>targeted</em> supplement approach rather than large stacks. The near-universal baseline is <span>B12 50–100 µg/day</span> or <span>1,000 µg weekly</span>. Add context-dependent items:</p>
+          <ul>
+            <li>D3 1,000–2,000 IU/day if sun exposure or blood levels are low.</li>
+            <li>Iodine 150 µg/day if you don’t use iodized salt/seaweed (seek clinical guidance with thyroid disease).</li>
+            <li>Algae EPA+DHA 250–500 mg/day if fish-free.</li>
+            <li>Iron only with confirmed deficiency (use labs; check ferritin).</li>
+            <li>Calcium to reach ~1,000 mg/day total; consider a small supplement if dietary intake is short.</li>
+            <li>Zinc 5–10 mg/day for phytate-heavy patterns; mind copper intake over the long term.</li>
+            <li>Creatine 3–5 g/day for athletic/performance goals.</li>
+          </ul>
+          <p><small>Choose third-party tested products, check interactions (e.g., spacing levothyroxine from iron/calcium), and re-test labs after an 8–12 week trial. General info, not medical advice.</small></p>
+        </div>`,
+
+      differences:
+      `<div class="ai-differences">
+        <p><span class="cred-badge cred-largely">The consensus answer is largely credible.</span></p>
+        <hr>
+        <p>Most models agree on the core stack (B12 baseline; D3, iodine, algae EPA+DHA as context; iron only with labs; calcium to ~1,000 mg; creatine for athletes). Minor content nuances appear (e.g., zinc/copper balance, magnesium for sleep/performance, process/QA details) without contradictions.</p>
+        <p><br>BestModel: Anthropic</p>
+      </div>`
+      };
+
+      /* === DEMO: Timing & Typing Configuration =============================== */
+      const DEMO_PHASES = {
+        preType: true,
+        order: ["OpenAI","Anthropic","Gemini","Mistral","DeepSeek","Grok"],
+        typeChars: 90,         // how many prompt characters to "type"
+        typeSpeed: 40,         // ms per character
+        gapBetweenModels: 540, // pause between models
+        pauseAfterTypingAll: 650
+      };
+
+      const DEMO_CONSENSUS_DELAY_MS = 4200;
+      const DEMO_CONSENSUS_JITTER_MS = 600;
+
+      // Ladezeiten etwas länger machen (ohne alles neu zu tippen)
+      const DEMO_DELAY_BOOST_MS = 1800;
+      Object.keys(DEMO_DATA.delays).forEach(k => {
+        DEMO_DATA.delays[k] = (DEMO_DATA.delays[k] || 1500) + DEMO_DELAY_BOOST_MS;
+      });
+
+      const MODEL_TO_BOX = {
+        OpenAI: "openaiResponse",
+        Mistral: "mistralResponse",
+        Anthropic: "claudeResponse",
+        Gemini: "geminiResponse",
+        DeepSeek: "deepseekResponse",
+        Grok: "grokResponse"
+      };
+
+      const sleep = (ms)=> new Promise(r=>setTimeout(r, ms));
+
+      // Tippt Text in das Input/Textarea-Feld
+      async function typeIntoInput(inputEl, text, speed = 14) {
+        if (!inputEl) return;
+        inputEl.focus();
+        inputEl.value = "";
+        inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+        for (let i = 0; i < text.length; i++) {
+          inputEl.value += text[i];
+          inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+          const jitter = Math.random() * 6 - 3; // -3..+3ms
+          await sleep(Math.max(4, speed + jitter));
+          if (typeof inputEl.scrollTop === "number") inputEl.scrollTop = inputEl.scrollHeight;
+        }
+      }
+
+      function getBox(model){
+        const id = MODEL_TO_BOX[model];
+        const box = document.getElementById(id);
+        if (!box || box.classList.contains("excluded") || box.style.display === "none") return null;
+        return box;
+      }
+
+      async function typeInto(el, text, speed){
+        el.textContent = "";
+        for (let i=0;i<text.length;i++){
+          el.textContent += text[i];
+          // kleine Randomisierung wirkt natürlicher
+          const jitter = Math.random()*6 - 3; // -3..+3
+          await sleep(Math.max(4, speed + jitter));
+        }
+      }
+
+        function setSpinnerEl(box){
+          const p = box.querySelector(".collapsible-content");
+          if (p) p.innerHTML = window.spinnerHTML;
+        }
+
+        // Utils: Markdown → HTML (sanitised) + deine Addons
+        function injectMarkdown(el, md) {
+          el.innerHTML = DOMPurify.sanitize(marked.parse(md || ""));
+          if (window.addCopyButtons) window.addCopyButtons(el);
+          if (window.addNewTabToLinks) window.addNewTabToLinks(el);
+        }
+
+        function setSpinner(boxId) {
+          const box = document.getElementById(boxId);
+          if (!box || box.classList.contains("excluded") || box.style.display === "none") return;
+          const p = box.querySelector(".collapsible-content");
+          if (p) p.innerHTML = window.spinnerHTML;
+        }
+
+        function setSpinnersForActive() {
+          ["openaiResponse","mistralResponse","claudeResponse","geminiResponse","deepseekResponse","grokResponse"]
+            .forEach(setSpinner);
+        }
+
+      // Der eigentliche Demo-Lauf
+      async function runDemoFlow() {
+        // Buttons blocken
+        const sendBtn = document.getElementById("sendButton");
+        const consensusBtn = document.getElementById("consensusButton");
+        if (sendBtn) sendBtn.disabled = true;
+        if (consensusBtn) consensusBtn.disabled = true;
+
+        // Prompt in das Eingabefeld setzen
+        const qi = document.getElementById("questionInput");
+        if (qi && !qi.value.trim()) qi.value = DEMO_SCENARIO_PROMPT;
+
+        // === 1) Vorphase: so tun, als würden wir an Modelle „eingeben“ ==========
+        // === 1) Vorphase: Prompt in das Input-Feld „tippen“ ======================
+        if (DEMO_PHASES.preType) {
+          const qiEl = document.getElementById("questionInput");
+          const snippet =
+            DEMO_SCENARIO_PROMPT.slice(0, DEMO_PHASES.typeChars) +
+            (DEMO_SCENARIO_PROMPT.length > DEMO_PHASES.typeChars ? "…" : "");
+          await typeIntoInput(qiEl, snippet, DEMO_PHASES.typeSpeed);
+          await sleep(DEMO_PHASES.pauseAfterTypingAll);
+        }
+
+        // === 2) Jetzt erst Spinners in alle aktiven Boxen =======================
+        Object.keys(MODEL_TO_BOX).forEach(key => {
+          const box = getBox(key);
+          if (box) setSpinnerEl(box);
+        });
+
+        // === 3) Gestaffelte Antworten „einlaufen“ lassen ========================
+        await Promise.all(Object.keys(MODEL_TO_BOX).map(model =>
+          new Promise(resolve => {
+            setTimeout(() => {
+              const box = getBox(model);
+              if (box){
+                const p = box.querySelector(".collapsible-content");
+                if (p) injectMarkdown(p, DEMO_DATA.responses[model]);
+              }
+              resolve();
+            }, DEMO_DATA.delays[model] || 1800);
+          })
+        ));
+
+        // === 4) Consensus/Differences – wie gehabt ==============================
+        const consensusDiv = document.getElementById("consensusResponse");
+        const mainP = consensusDiv?.querySelector(".consensus-main p");
+        const diffP = consensusDiv?.querySelector(".consensus-differences p");
+        const auto = document.getElementById("autoConsensusToggle")?.checked;
+
+        const renderConsensus = () => {
+          if (mainP) injectMarkdown(mainP, DEMO_DATA.consensus);
+          if (diffP) {
+            const html = marked.parse((window.colorizeCredibility?.(DEMO_DATA.differences) ?? DEMO_DATA.differences));
+            diffP.innerHTML = DOMPurify.sanitize(html);
+          }
+          const best = (DEMO_DATA.differences.match(/BestModel:\s*(.*)/i)?.[1] || "").trim();
+          if (best) window.recordModelVote?.(best, "BestModel");
+        };
+
+        if (auto){
+          if (mainP) mainP.innerHTML = window.spinnerHTML;
+          if (diffP) diffP.innerHTML = window.spinnerHTML;
+          setTimeout(
+            renderConsensus,
+            DEMO_CONSENSUS_DELAY_MS + Math.floor(Math.random() * DEMO_CONSENSUS_JITTER_MS)
+          );
+
+        } else if (consensusBtn){
+          const originalOnclick = consensusBtn.onclick;
+          consensusBtn.onclick = () => {
+            if (mainP) mainP.innerHTML = window.spinnerHTML;
+            if (diffP) diffP.innerHTML = window.spinnerHTML;
+            setTimeout(
+              renderConsensus,
+              DEMO_CONSENSUS_DELAY_MS + Math.floor(Math.random() * DEMO_CONSENSUS_JITTER_MS)
+            );
+            consensusBtn.onclick = originalOnclick;
+          };
+        }
+
+        // Buttons wieder freigeben
+        if (sendBtn) sendBtn.disabled = false;
+        if (consensusBtn) consensusBtn.disabled = false;
+      }
+
+        // “Start Demo”-Chip erzeugen (einmalig pro Gerät)
+        function createStartDemoChip() {
+          if (localStorage.getItem("demoChipDismissed")) return;
+          const container = document.querySelector(".chat-input-container");
+          if (!container || container.querySelector(".demo-chip")) return;
+
+          const btn = document.createElement("button");
+          btn.className = "demo-chip";
+          btn.type = "button";
+          btn.setAttribute("aria-label","Start interactive demo");
+          btn.textContent = "Start Demo";
+
+          btn.addEventListener("click", async () => {
+            localStorage.setItem("demoChipDismissed","1");
+            btn.remove();
+            await runDemoFlow();
+          });
+
+          container.appendChild(btn);
+        }
+        /* === DEMO Ende ====================================================== */
+
         const deepSearchToggle = document.getElementById("deepSearchToggle");
         const searchModeToggle = document.getElementById("searchModeToggle");
 
@@ -651,7 +962,10 @@
         // Popup schließen, wenn der "Jetzt starten"-Button geklickt wird
         document.getElementById("startNowButton").addEventListener("click", function() {
           document.getElementById("marketingPopup").style.display = "none";
+          document.body.classList.remove("modal-open");
           localStorage.setItem("marketingPopupShown", "true");
+          // >>> Nur Chip einblenden, kein Auto-Start
+          createStartDemoChip();
         });
   
         document.addEventListener("click", function(event) {
@@ -1018,6 +1332,11 @@
         // Globale Variable
         let consensusGenerated = false;
         document.getElementById("consensusButton").disabled = true;
+
+        // Strikte Demo-Erkennung: Nur exakt "demo" (Groß/Klein egal).
+        function isDemoQuery(q) {
+          return (q || "").trim().toLowerCase() === "demo";
+        }
         
         // Senden der Frage an die aktiven Modelle
         window.sendQuestion = async function() {
@@ -1028,6 +1347,19 @@
           }
           const question = document.getElementById("questionInput").value;
           lastQuestion = question;  // Speichern in einer globalen Variable
+
+          // === DEMO: Früh raus, wenn "Demo" ===
+          if (isDemoQuery(question)) {
+            // optional: Free/Deep Counter im Sidebar auf einen sicheren Dummy setzen
+            document.getElementById("freeUsageDisplay").innerHTML = "Free requests: 25 / 25";
+            document.getElementById("deepUsageDisplay").innerHTML = "Deep Think: 12 / 12";
+
+            // Spinners zeigen und Demo durchspielen
+            await runDemoFlow(question);
+            return; // WICHTIG: keine echten API-Calls ausführen
+          }
+          // === DEMO: Früh raus, wenn "Demo" ===
+
           // clearResponseBoxes();
           consensusGenerated = false;
           if (!question) {
@@ -2410,6 +2742,11 @@
           localStorage.removeItem("visitedLanding");
           // und damit gilt beim nächsten Laden der Landing-Seite wieder first-view
         });
+
+        // Demo-Chip automatisch beim ersten echten Besuch (wenn noch nie benutzt)
+        if (!localStorage.getItem("marketingPopupShown") || !localStorage.getItem("demoChipDismissed")) {
+          createStartDemoChip();
+        }
 
       });
 

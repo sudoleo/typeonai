@@ -961,6 +961,138 @@ pre .copy-btn:hover {
   box-shadow: 0 2px 5px rgba(0,0,0,0.3);
 }
 
+.chat-input-container .demo-chip{
+  /* sanfter Reset, ohne Accessibility zu verlieren */
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+
+  /* Größe & Typo */
+  height: 26px;
+  padding: 0 10px;                /* kein vertikales Padding -> saubere Vertikalmitte */
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  line-height: 1;
+  font-family: inherit;           /* gleiche Schrift wie Input */
+  font-size: clamp(12px, 0.84rem, 14px);
+  font-weight: 400;               /* nicht fett */
+  letter-spacing: .01em;
+  text-transform: none;
+  white-space: nowrap;
+
+  /* Outline-Style */
+  color: var(--button-bg);
+  background: transparent;
+  border: 1.5px solid var(--button-bg);
+  border-radius: 10px;
+
+  /* Interaktion */
+  cursor: pointer;
+  user-select: none;
+  opacity: .95;
+  z-index: 5;
+
+  /* Smooth feedback */
+  transition:
+    opacity .15s ease,
+    transform .12s ease,
+    box-shadow .2s ease,
+    background-color .2s ease,
+    border-color .2s ease;
+}
+
+.chat-input-container .demo-chip:hover,
+.chat-input-container .demo-chip:focus-visible{
+  background-color: color-mix(in srgb, var(--button-bg) 6%, transparent);
+  border-color: color-mix(in srgb, var(--button-bg) 85%, white 15%);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--button-bg) 10%, transparent);
+  opacity: 1;
+}
+
+.chat-input-container .demo-chip:active{
+  transform: translateY(calc(-50% + 1px)) scale(0.985);
+}
+
+/* Beim Tippen/bei Inhalt ausblenden */
+.chat-input-container:has(.input-field:focus) .demo-chip{ opacity: .7; }
+.chat-input-container .input-field:not(:placeholder-shown) ~ .demo-chip{
+  opacity: 0; pointer-events: none; transform: translateY(calc(-50% - 2px));
+}
+
+/* 1) Subtile Pulse-Variablen + Animation aktivieren */
+.chat-input-container .demo-chip{
+  /* ... deine bestehenden Regeln ... */
+
+  /* Pulse-Feintuning */
+  --pulse-size: 6px;                  /* Halo-Größe */
+  --pulse-alpha: 10%;                 /* Intensität im Idle */
+  --pulse-alpha-hover: 16%;           /* etwas stärker beim Hover/Focus */
+  --pulse-border-boost: 6%;           /* leichte Border-Tönung im Peak */
+
+  animation: chipPulse 2.6s ease-in-out infinite both;
+}
+
+/* 3) Beim Tippen/bei Inhalt → Pulse pausieren (plus bestehendes Ausblenden) */
+.chat-input-container:has(.input-field:focus) .demo-chip{
+  opacity: .7;
+  animation-play-state: paused;
+}
+.chat-input-container .input-field:not(:placeholder-shown) ~ .demo-chip{
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(calc(-50% - 2px));
+  animation-play-state: paused;
+}
+
+/* 4) Respektiere „reduced motion“ */
+@media (prefers-reduced-motion: reduce){
+  .chat-input-container .demo-chip{ animation: none !important; }
+}
+
+/* 5) Keyframes für den Halo-Puls */
+@keyframes chipPulse{
+  0%, 100%{
+    /* Idle: sehr dezente Halo */
+    box-shadow:
+      0 0 0 var(--pulse-size)
+      color-mix(in srgb, var(--button-bg) var(--pulse-alpha), transparent);
+    border-color: var(--button-bg);
+    transform: translateY(-50%) scale(1);
+  }
+  50%{
+    /* Peak: etwas kräftiger + ganz leichte Border-Tönung */
+    box-shadow:
+      0 0 0 calc(var(--pulse-size) + 3px)
+      color-mix(in srgb, var(--button-bg) var(--pulse-alpha-hover), transparent);
+    border-color: color-mix(in srgb, var(--button-bg) calc(100% - var(--pulse-border-boost)), white var(--pulse-border-boost));
+    transform: translateY(-50%) scale(1.01); /* 1% Scale für lebendiges Gefühl */
+  }
+}
+
+/* Demo: pseudo-Eingabe in den Modellboxen */
+.demo-typing{
+  display:flex; align-items:center; gap:8px;
+  padding:6px 8px;
+  border:1px dashed var(--input-border);
+  border-radius:8px;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  opacity:.9; background: var(--input-bg);
+}
+.demo-typing .label{opacity:.8; white-space:nowrap;}
+.demo-typing .text{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.demo-typing .caret{
+  display:inline-block; width:1px; height:1em; background: currentColor; margin-left:1px;
+  animation: demoCaretBlink 1s steps(1) infinite;
+}
+.demo-typing .sent{margin-left:6px; opacity:.75;}
+@keyframes demoCaretBlink{50%{opacity:0}}
+
 /* Grüne Umrandung bei Best-Auswahl */
 .response-box.best {
   border: 2px solid green;
@@ -2187,6 +2319,13 @@ font-size: 0.9em;
     padding: 5px !important;
     padding-top: 60px;
   }
+
+  .demo-chip {
+    padding: 7px 12px;
+    font-size: 0.88rem;
+    gap: 6px;
+  }
+  .demo-chip::before { width: 13px; height: 13px; }
 
   .container {
     width: 90% !important;
