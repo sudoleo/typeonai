@@ -1567,42 +1567,71 @@
             payload.api_key = localStorage.getItem("openaiKey");
           }
   
-          fetch('/ask_openai', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            keepalive: true
-          })
-            .then(response => response.json())
-            .then(data => {
-              const outputEl = document.getElementById("openaiResponse").querySelector(".collapsible-content");
-              if (data.response) {
-                outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
-                addCopyButtons(outputEl);
-                addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
-                if (auth.currentUser) {
-                  saveBookmark(question, data.response, "OpenAI", mode);
-                }
-              } else if (data.error) {
-                outputEl.innerText = data.error;
-              } else {
-                outputEl.innerText = "Please log in or store your own API keys.";
-              }
-              // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
-              const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
-              const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
-              
-              document.getElementById("freeUsageDisplay").innerHTML =
-                "Free requests: " + freeRemaining + " / " + FREE_USAGE_LIMIT;
-              document.getElementById("deepUsageDisplay").innerHTML =
-                "Deep Think: " + deepRemaining + " / 12";
+        fetch('/ask_openai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          keepalive: true
+        })
+          .then(async (response) => {
+            // Parse JSON (auch bei Non-2xx), aber werte response.ok aus
+            let data = {};
+            try {
+              data = await response.json();
+            } catch (_) {
+              // keine JSON-Antwort (selten) -> leeres Objekt lassen
+            }
 
-              checkAllResponses();
-            })
-            .catch(error => {
-              console.error("Fehler bei OpenAI:", error);
-              checkAllResponses();
-            });
+            if (!response.ok) {
+              // FastAPI gibt "detail" zurück; wir normalisieren auf eine Error-Message
+              const msg =
+                (data && (data.error || data.detail)) ||
+                `OpenAI HTTP ${response.status}`;
+              throw new Error(msg);
+            }
+
+            return data;
+          })
+          .then((data) => {
+            const outputEl = document
+              .getElementById("openaiResponse")
+              .querySelector(".collapsible-content");
+
+            if (data.response) {
+              outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
+              addCopyButtons(outputEl);
+              addNewTabToLinks(outputEl);
+              if (auth.currentUser) {
+                saveBookmark(question, data.response, "OpenAI", mode);
+              }
+            } else if (data.error) {
+              outputEl.innerText = data.error;
+            } else if (data.detail) {
+              // Falls dein Backend irgendwo noch "detail" liefert
+              outputEl.innerText = data.detail;
+            } else {
+              outputEl.innerText = "Unexpected empty response from server.";
+            }
+
+            const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
+            const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
+
+            document.getElementById("freeUsageDisplay").innerHTML =
+              "Free requests: " + freeRemaining + " / " + FREE_USAGE_LIMIT;
+            document.getElementById("deepUsageDisplay").innerHTML =
+              "Deep Think: " + deepRemaining + " / 12";
+
+            checkAllResponses();
+          })
+          .catch((error) => {
+            const outputEl = document
+              .getElementById("openaiResponse")
+              .querySelector(".collapsible-content");
+            // Zeig den echten Grund statt des generischen Login-Texts
+            outputEl.innerText = `OpenAI error: ${error.message}`;
+            console.error("Error at OpenAI:", error);
+            checkAllResponses();
+          });
         }
   
   

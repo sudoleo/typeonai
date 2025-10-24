@@ -1,8 +1,10 @@
 import os
 from fastapi import FastAPI, Query, Request, HTTPException, Body
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY
 import openai
 import requests
 import base64, re
@@ -59,12 +61,25 @@ app.state.limiter = limiter
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+    
+@app.exception_handler(HTTPException)
+async def handle_http_exception(request, exc: HTTPException):
+    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
+
+@app.exception_handler(RequestValidationError)
+async def handle_validation_exception(request, exc: RequestValidationError):
+    # Angenehmer JSON-Körper für Validierungsfehler
+    return JSONResponse(
+        status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"error": "Validation failed", "details": exc.errors()},
+    )
+
 FREE_USAGE_LIMIT = 25
 MAX_WORDS = 300
 DEEP_SEARCH_MAX_WORDS = 1000
-MAX_TOKENS = 1024
-DEEP_SEARCH_MAX_TOKENS = 2048
-CONSENSUS_MAX_TOKENS = 2048
+MAX_TOKENS = 2048
+DEEP_SEARCH_MAX_TOKENS = 4096
+CONSENSUS_MAX_TOKENS = 4096
 DIFFERENCES_MAX_TOKENS = 1024
 REASONING_EFFORT_FOR_DEEP = "low"
 
