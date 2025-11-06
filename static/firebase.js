@@ -46,21 +46,26 @@ onIdTokenChanged(auth, async (user) => {
   const usageOptions   = document.getElementById("usageOptions");
 
   if (user) {
-    // 1) Immer frisches Token holen
+    // **NEU: Harte Client-Gate—kein Token persistieren, keine Calls, wenn unverified**
+    if (!user.emailVerified) {
+      localStorage.removeItem("id_token");
+      if (usageOptions) usageOptions.style.display = "none";
+      if (loginContainer) loginContainer.innerText = "Verify your e-mail to continue";
+      return; // <--- ganz wichtig
+    }
+
+    // ab hier nur noch verifizierte Nutzer
     const token = await user.getIdToken(/* forceRefresh= */ true);
     localStorage.setItem("id_token", token);
 
-    // 1a) Nur bei verifizierter E‑Mail: IP im Backend sperren lassen
-    if (user.emailVerified) {
-      try {
-        await fetch("/confirm-registration", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id_token: token })
-        });
-      } catch (err) {
-        console.error("Error during confirm-registration:", err);
-      }
+    try {
+      await fetch("/confirm-registration", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_token: token })
+      });
+    } catch (err) {
+      console.error("Error during confirm-registration:", err);
     }
 
     // 2) Usage laden
@@ -144,6 +149,25 @@ function fetchUsageData(token) {
     .catch(err => console.error("Error when retrieving the quota:", err));
 }
 
+onAuthStateChanged(auth, async (user) => {
+  if (!user) return;
+  await user.reload();
+
+  if (user.emailVerified) {
+    try {
+      const idToken = await user.getIdToken();
+      await fetch("/confirm-registration", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_token: idToken })
+      });
+      // optional: UI-Flag setzen, Badge “verified”, etc.
+    } catch (e) {
+      console.error("confirm-registration failed:", e);
+    }
+  }
+});
+
 // Login-Funktion
 document.getElementById("loginButton").addEventListener("click", () => {
   const email = document.getElementById("loginEmail").value;
@@ -170,6 +194,7 @@ document.getElementById("loginButton").addEventListener("click", () => {
           window.location.href = "/";
         });
       } else {
+        try { localStorage.removeItem("id_token"); } catch {}
         alert("Please verify your e-mail address first. Check your inbox for the confirmation link.");
         signOut(auth);
       }
@@ -179,43 +204,133 @@ document.getElementById("loginButton").addEventListener("click", () => {
     });
 });
 
-document.getElementById("registerButton").addEventListener("click", () => {
-  const email = document.getElementById("loginEmail").value;
-  const password = document.getElementById("loginPassword").value;
-  
+// --- Minimal-invasive Register-/Login-Umschaltung + Registrierung ---
+
+const formEl = document.getElementById("loginForm");
+const titleEl = document.getElementById("authTitle");
+const singleMailNoteEl = document.getElementById("singleMailNote");
+
+const emailEl = document.getElementById("loginEmail");
+const emailConfirmEl = document.getElementById("loginEmailConfirm");
+const passEl = document.getElementById("loginPassword");
+const passConfirmEl = document.getElementById("loginPasswordConfirm");
+
+const toggleRegisterBtn = document.getElementById("toggleRegister");
+const confirmRegisterBtn = document.getElementById("confirmRegisterButton");
+
+const loginBtn = document.getElementById("loginButton");
+const registerErr = document.getElementById("registerError");
+const loginErr = document.getElementById("loginError");
+
+const forgotBtn = document.getElementById("forgotPasswordButton");
+
+function setMode(mode) {
+  formEl.dataset.mode = mode;
+
+  const isRegister = mode === "register";
+  // Titel & Hinweise
+  titleEl.textContent = isRegister ? "Create account" : "Login";
+  singleMailNoteEl.style.display = isRegister ? "block" : "block"; // ggf. "none" im Login
+
+  // Felder ein-/ausblenden
+  emailConfirmEl.style.display = isRegister ? "" : "none";
+  passConfirmEl.style.display = isRegister ? "" : "none";
+
+  // Primär-Buttons
+  confirmRegisterBtn.style.display = isRegister ? "" : "none";
+  loginBtn.style.display = isRegister ? "none" : "";
+
+  // Forgot Password ausblenden im Register-Modus
+  if (forgotBtn) forgotBtn.style.display = isRegister ? "none" : "";
+
+  // Toggle-Text
+  toggleRegisterBtn.textContent = isRegister
+    ? "Back to login"
+    : "New here? Create account";
+
+  // Fehler leeren
+  registerErr.textContent = "";
+  loginErr.textContent = "";
+}
+
+toggleRegisterBtn.addEventListener("click", () => {
+  const current = formEl.dataset.mode === "register" ? "register" : "login";
+  setMode(current === "login" ? "register" : "login");
+});
+
+// --- Registrierung (läuft NICHT über loginButton, sondern über confirmRegisterButton) ---
+confirmRegisterBtn.addEventListener("click", () => {
+  registerErr.textContent = "";
+
+  const email = (emailEl.value || "").trim();
+  const email2 = (emailConfirmEl.value || "").trim();
+  const password = passEl.value || "";
+  const password2 = passConfirmEl.value || "";
+
+  // Client-Side-Validierung
+  if (!email || !email2) {
+    registerErr.textContent = "Please enter your e-mail twice.";
+    return;
+  }
+  if (email !== email2) {
+    registerErr.textContent = "E-mail addresses do not match.";
+    return;
+  }
+  if (!password || !password2) {
+    registerErr.textContent = "Please enter your password twice.";
+    return;
+  }
+  if (password !== password2) {
+    registerErr.textContent = "Passwords do not match.";
+    return;
+  }
+  if (password.length < 8) {
+    registerErr.textContent = "Password must be at least 8 characters.";
+    return;
+  }
+
+  // Request an Backend
   fetch("/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: email, password: password })
   })
-  .then(response => response.json())
-  .then(data => {
-    if (data.customToken) {
-      // Nutzer mit dem Custom Token anmelden
-      signInWithCustomToken(auth, data.customToken)
-        .then((userCredential) => {
-          // Sende nach erfolgreichem Login den Verifizierungs-Link
-          sendEmailVerification(auth.currentUser)
-            .then(() => {
-              alert("Registration successful! Please confirm your e-mail address by clicking on the link in the e-mail.");
-              // Optional: Nach dem Versenden der Verifizierungs-Mail den Nutzer abmelden
-              signOut(auth);
-            })
-            .catch((error) => {
-              document.getElementById("registerError").innerText = "Error sending the verification e-mail: " + error.message;
-            });
-        })
-        .catch((error) => {
-          document.getElementById("registerError").innerText = error.message;
-        });
-    } else if (data.detail) {
-      document.getElementById("registerError").innerText = data.detail;
-    }
-  })
-  .catch(error => {
-    document.getElementById("registerError").innerText = error.message;
-  });
+    .then((response) => response.json())
+    .then((data) => {
+      if (data.customToken) {
+        // Nutzer mit dem Custom Token anmelden
+        signInWithCustomToken(auth, data.customToken)
+          .then(() => {
+            // Verifizierungs-Mail senden
+            sendEmailVerification(auth.currentUser)
+              .then(() => {
+                alert("Registration successful! Please confirm your e-mail address by clicking on the link in the e-mail.");
+                // Optional: Nach dem Versenden der Verifizierungs-Mail den Nutzer abmelden
+                signOut(auth);
+                // Zurück in Login-Modus gehen
+                setMode("login");
+              })
+              .catch((error) => {
+                registerErr.textContent =
+                  "Error sending the verification e-mail: " + error.message;
+              });
+          })
+          .catch((error) => {
+            registerErr.textContent = error.message;
+          });
+      } else if (data.detail) {
+        registerErr.textContent = data.detail;
+      } else {
+        registerErr.textContent = "Unexpected response from server.";
+      }
+    })
+    .catch((error) => {
+      registerErr.textContent = error.message;
+    });
 });
+
+// Standard: beim Öffnen im Login-Modus
+setMode("login");
 
 // "Passwort vergessen?"-Funktion hinzufügen
 document.getElementById("forgotPasswordButton").addEventListener("click", () => {

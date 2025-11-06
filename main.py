@@ -796,13 +796,14 @@ def query_differences(
     try:
         if differences_model == "OpenAI":
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
+            # GPT-5 nicht per chat.completions ansprechen → auf gpt-4.1 ausweichen
             response = client.chat.completions.create(
-                model="gpt-5",
+                model="gpt-4.1",
                 messages=[
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
                 ],
-                max_completion_tokens=DIFFERENCES_MAX_TOKENS
+                max_tokens=DIFFERENCES_MAX_TOKENS
             )
             result = response.choices[0].message.content.strip()
 
@@ -951,20 +952,18 @@ firebase_admin.initialize_app(cred)
 # Erstelle einen Firestore-Client
 db_firestore = firestore.client()
 
-def verify_user_token(token: str) -> str:
+def verify_user_token(token: str, allow_unverified: bool = False) -> str:
     """
-    Verifiziert das Firebase-ID-Token mit etwas Clock-Skew-Toleranz
-    und gibt die uid zurück.
+    Verifiziert das Firebase-ID-Token. Standardmäßig NUR verifizierte E-Mails zulassen.
+    Mit allow_unverified=True kann man Endpoints wie /confirm-registration erlauben.
     """
     try:
-        # Erlaube z.B. bis zu 5 Sekunden Drift
         decoded_token = auth.verify_id_token(token, clock_skew_seconds=5)
+        if not allow_unverified and not decoded_token.get("email_verified", False):
+            raise Exception("Email not verified")
         return decoded_token["uid"]
     except Exception as e:
-        # Logge den Originalfehler inkl. Uhrzeit zum Debuggen
-        import time, logging
-        now = int(time.time())
-        logging.error(f"verify_user_token failed (server time={now}): {e}")
+        logging.error(f"verify_user_token failed: {e}")
         raise Exception("Invalid token: " + str(e))
     
 
@@ -1053,12 +1052,7 @@ registered_ips = {}  # { ip_address: uid }
 
 @app.post("/register")
 @limiter.limit("3/minute")  # Beispiel: maximal 10 Registrierungen pro Minute pro IP
-async def register_user(request: Request, data: dict = Body(...)):
-    ip_address = request.client.host
-    # Prüfe, ob diese IP-Adresse bereits einen Account registriert hat
-    if ip_address in registered_ips:
-        raise HTTPException(status_code=400, detail="Only one account per user is allowed.")
-    
+async def register_user(request: Request, data: dict = Body(...)):    
     email = data.get("email")
     password = data.get("password")
     if not email or not password:
@@ -1087,28 +1081,27 @@ async def register_user(request: Request, data: dict = Body(...)):
 
 @app.post("/confirm-registration")
 async def confirm_registration(request: Request, data: dict = Body(...)):
-    """
-    Einmaliger Aufruf beim ersten Login nach erfolgreicher E‑Mail‑Bestätigung.
-    Trägt die IP in registered_ips ein, wenn emailVerified == True.
-    """
     token = data.get("id_token")
     if not token:
         raise HTTPException(status_code=400, detail="id_token fehlt.")
 
     try:
-        uid = verify_user_token(token)
+        uid = verify_user_token(token, allow_unverified=True)
         user = auth.get_user(uid)
     except Exception as e:
         raise HTTPException(status_code=401, detail="Token ungültig: " + str(e))
 
     if not user.email_verified:
-        raise HTTPException(status_code=400, detail="E‑Mail noch nicht bestätigt.")
+        raise HTTPException(status_code=400, detail="E-Mail noch nicht bestätigt.")
 
     ip_address = request.client.host
-    if ip_address in registered_ips:
-        # falls schon eingetragen, nichts tun
-        return {"status": "already_registered"}
 
+    # >>> HIER wird tatsächlich die Einmaligkeit pro IP durchgesetzt <<<
+    if ip_address in registered_ips and registered_ips[ip_address] != uid:
+        # Es gibt bereits einen *anderen* bestätigten Account von dieser IP
+        raise HTTPException(status_code=400, detail="Only one confirmed account per user/IP is allowed.")
+
+    # IP auf diesen UID “claimen”
     registered_ips[ip_address] = uid
     return {"status": "registered", "ip": ip_address}
 

@@ -1975,13 +1975,13 @@ color: var(--text-color);
 
 /* Login Button im Modal */
 .modal-content button {
-background-color: var(--button-bg);
-border: none;
-border-radius: 4px;
-padding: 10px;
-color: var(--button-text);
-cursor: pointer;
-width: 100%;
+  background-color: var(--button-bg);
+  border: none;
+  border-radius: 4px;
+  padding: 10px;
+  color: var(--button-text);
+  cursor: pointer;
+  width: 100%;
 }
 
 /* Schließ-Button für das Modal */

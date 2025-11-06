@@ -2783,28 +2783,76 @@
 
 <!-- Login Modal -->
 <div id="loginModal" class="modal">
-  <div class="modal-content">
+  <div class="modal-content" id="loginModalContent">
     <span class="close" id="closeLoginModal">&times;</span>
-    <h2>Login</h2>
+    <h2 id="authTitle">Login</h2>
+  </br>
     <!-- Das Login-Formular hat autocomplete="on" -->
-    <form id="loginForm" autocomplete="on">
-      <p style="color: red;">
+    <form id="loginForm" autocomplete="on" data-mode="login">
+      <p id="singleMailNote" style="margin-top: 0;">
         Important: Only one e-mail can be registered – check carefully!
       </p>
-      <p style="font-size: 0.9em; color: #666; margin-top: -10px; margin-bottom: 20px; font-size: small;">
-        No spam — just to make it work.
-      </p>
-      <input type="email" id="loginEmail" name="email" placeholder="Email" autocomplete="username">
-      <input type="password" id="loginPassword" name="password" placeholder="Password" autocomplete="current-password">
-      <button type="button" id="loginButton">Log in</button>
-      <div id="loginError" class="error-message"></div><br/>
-      <!-- Neuer Registrierungs-Button -->
-      <button type="button" id="registerButton">Register</button>
-      <div id="registerError" class="error-message"></div><br/>
-      <a href="#" id="forgotPasswordButton">Forgot Password?</a>
+
+      <!-- Login / shared fields -->
+      <input type="email" id="loginEmail" name="email" placeholder="Email" autocomplete="username" />
+
+      <!-- Confirm email (register-only) -->
+      <input
+        type="email"
+        id="loginEmailConfirm"
+        name="email_confirm"
+        placeholder="Confirm Email"
+        autocomplete="username"
+        style="display:none;"
+      />
+
+      <input
+        type="password"
+        id="loginPassword"
+        name="password"
+        placeholder="Password"
+        autocomplete="current-password"
+      />
+
+      <!-- Confirm password (register-only) -->
+      <input
+        type="password"
+        id="loginPasswordConfirm"
+        name="password_confirm"
+        placeholder="Confirm Password"
+        autocomplete="new-password"
+        style="display:none;"
+      />
+
+      <!-- Primary actions -->
+      <div style="display:flex; gap:10px; align-items:center; margin-top:6px;">
+        <button type="button" id="loginButton">Log in</button>
+        <button type="button" id="confirmRegisterButton" style="display:none;">Create account</button>
+      </div>
+
+      <!-- Inline errors -->
+      <div id="loginError" class="error-message" style="margin-top:8px;"></div>
+      <div id="registerError" class="error-message" style="margin-top:4px;"></div>
+
+      <!-- Secondary row -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+        <a href="#" id="forgotPasswordButton">Forgot Password?</a>
+
+        <!-- Small link-style toggle -->
+        <button
+          type="button"
+          id="toggleRegister"
+          class="link-btn"
+          style="background:none; border:none; color:#666; text-decoration:underline; padding:4px 6px; cursor:pointer; font-size:0.95em;"
+          title="Create a new account"
+        >
+          New here? Create account
+        </button>
+      </div>
     </form>
   </div>
 </div>
+
 <div id="disclaimerPopup" class="popup">
   <p>Deep Think Mode!</p>
 </div>
