@@ -1,6 +1,18 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
 import { getFirestore, collection, query, orderBy, onSnapshot, doc, setDoc, getDoc, increment, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithCustomToken, signOut, onAuthStateChanged, sendPasswordResetEmail, sendEmailVerification, onIdTokenChanged } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+import {
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  setPersistence,
+  browserLocalPersistence,
+} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+
+const googleProvider = new GoogleAuthProvider();
+// Optional: Kontoauswahl erzwingen
+googleProvider.setCustomParameters({ prompt: "select_account" });
 
 // --- Sichere Markdown-Render-Funktion ---
 // 1) Marked rendert Markdown zu HTML
@@ -364,6 +376,56 @@ document.getElementById("loginContainer").addEventListener("click", () => {
 document.getElementById("closeLoginModal").addEventListener("click", () => {
   document.getElementById("loginModal").style.display = "none";
 });
+
+async function handleGoogleSignIn() {
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      await afterGoogleLogin(result.user);
+    } catch (popupErr) {
+      // z.B. in Safari: Popups geblockt → Redirect verwenden
+      if (popupErr?.code === "auth/popup-blocked" || popupErr?.code === "auth/popup-closed-by-user") {
+        await signInWithRedirect(auth, googleProvider);
+      } else {
+        throw popupErr;
+      }
+    }
+  } catch (err) {
+    console.error("Google sign-in failed:", err);
+    const loginErr = document.getElementById("loginError");
+    if (loginErr) loginErr.textContent = err.message || "Google sign-in failed.";
+  }
+}
+
+document.getElementById("googleLoginButton")?.addEventListener("click", handleGoogleSignIn);
+
+// Nach Redirect zurück auf deiner Seite aufrufen (z. B. am Ende deiner firebase.js):
+getRedirectResult(auth).then(async (result) => {
+  if (result && result.user) {
+    await afterGoogleLogin(result.user);
+  }
+}).catch(err => console.error("getRedirectResult error:", err));
+
+async function afterGoogleLogin(user) {
+  // Google liefert verifizierte E-Mail; dein onIdTokenChanged-Flow übernimmt den Rest.
+  const token = await user.getIdToken(true);
+
+  // optional: sofort dein Backend informieren (parallel zu onIdTokenChanged)
+  try {
+    await fetch("/confirm-registration", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_token: token })
+    });
+  } catch (e) {
+    console.error("confirm-registration (google) failed:", e);
+  }
+
+  // falls du den „reload“/redirect willst wie beim E-Mail-Login:
+  window.location.href = "/";
+}
 
 // Restlicher Firebase-Code (z.B. Leaderboard, Funktionen, etc.)
 const leaderboardRef = collection(db, "leaderboard");

@@ -34,10 +34,11 @@ class CustomSecurityMiddleware:
                 headers = dict(message.get("headers", []))
                 csp = (
                     "default-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net https://www.gstatic.com; "
-                    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.gstatic.com; "
+                    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://accounts.google.com; "
                     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-                    "img-src 'self' data:; "
-                    "connect-src 'self' https://firestore.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://apis.google.com https://api.openai.com https://api.mistral.ai https://api.anthropic.com https://api.x.ai https://api.deepseek.com https://api.perplexity.ai https://api.exa.ai;"
+                    "img-src 'self' data: https://lh3.googleusercontent.com https:; "
+                    "connect-src 'self' https://firestore.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://apis.google.com https://accounts.google.com https://www.googleapis.com https://api.openai.com https://api.mistral.ai https://api.anthropic.com https://api.x.ai https://api.deepseek.com https://api.perplexity.ai https://api.exa.ai; "
+                    "frame-src 'self' https://accounts.google.com https://*.google.com https://*.gstatic.com https://*.firebaseapp.com https://*.web.app;"
                 )
                 headers[b"Content-Security-Policy"] = csp.encode("utf-8")
                 headers[b"X-Content-Type-Options"] = b"nosniff"

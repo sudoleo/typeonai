@@ -2852,20 +2852,60 @@
         #singleMailNote { display:none !important; }
       </style>
 
-      <!-- Secondary row -->
+      <!-- Secondary row (links only) -->
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
         <a href="#" id="forgotPasswordButton">Forgot Password?</a>
 
-        <!-- Small link-style toggle -->
         <button
           type="button"
           id="toggleRegister"
           class="link-btn"
-          style="background:none; border:none; color:#666; text-decoration:underline; padding:4px 6px; cursor:pointer; font-size:0.95em;"
+          style="background:none; border:none; color:#666; text-decoration:underline; padding:4px 6px; cursor:pointer; font-size:1em;"
           title="Create a new account"
         >
           New here? Create account
         </button>
+      </div></br>
+
+      <!-- Subtle divider -->
+      <div id="oauthDivider" style="height:1px; background:#e5e7eb; margin:12px 0 10px;"></div>
+    </br>
+      <!-- Google OAuth Button (full width) -->
+      <button
+        type="button"
+        id="googleLoginButton"
+        aria-label="Continue with Google"
+        style="
+          width:95%;
+          margin: left 9px;
+          display:flex; align-items:center; justify-content:center; gap:10px;
+          padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px;
+          background:#ffffff; box-shadow:0 1px 2px rgba(0,0,0,0.04);
+          font-size:0.95rem; line-height:1; color:#111827;
+          cursor:pointer; transition:background .15s ease, box-shadow .15s ease, transform .02s ease;
+          user-select:none;
+        "
+      >
+        <img src="/static/icons/google.png" alt="" width="18" height="18" style="display:block;" />
+        <span style="white-space:nowrap;">Continue with Google</span>
+      </button>
+      </br>
+      <!-- Lightweight states + dark mode -->
+      <style>
+        #googleLoginButton:hover { background:#f9fafb; box-shadow:0 2px 6px rgba(0,0,0,0.06); }
+        #googleLoginButton:active { transform:translateY(0.5px); }
+        #googleLoginButton:focus { outline:2px solid #2563eb33; outline-offset:2px; }
+
+        @media (prefers-color-scheme: dark) {
+          #oauthDivider { background:#26272b; }
+          #googleLoginButton {
+            background:#0b0b0c; border-color:#26272b; color:#e5e7eb;
+            box-shadow:0 1px 2px rgba(0,0,0,0.6);
+          }
+          #googleLoginButton:hover { background:#131316; box-shadow:0 2px 6px rgba(0,0,0,0.7); }
+          #googleLoginButton:focus { outline:2px solid #60a5fa33; }
+        }
+      </style>
       </div>
     </form>
   </div>
