@@ -2785,14 +2785,20 @@
 <div id="loginModal" class="modal">
   <div class="modal-content" id="loginModalContent">
     <span class="close" id="closeLoginModal">&times;</span>
-    <h2 id="authTitle">Login</h2>
-  </br>
+
+    <!-- Brand (inline styles) -->
+    <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin:8px 0 10px;">
+      <img src="/static/favicon.png" alt="consens.io"
+           style="width:28px; height:28px; border-radius:6px; display:block;" />
+      <span style="font-size:1.15rem; font-weight:200; letter-spacing:.2px; opacity:.95;">
+        consens.io
+      </span>
+    </div>
+    </br>
+    <h2 id="authTitle" style="margin:6px 0 4px; font-size:1.15rem;">Login</h2>
     <!-- Das Login-Formular hat autocomplete="on" -->
     <form id="loginForm" autocomplete="on" data-mode="login">
-      <p id="singleMailNote" style="margin-top: 0;">
-        Important: Only one e-mail can be registered – check carefully!
-      </p>
-
+      
       <!-- Login / shared fields -->
       <input type="email" id="loginEmail" name="email" placeholder="Email" autocomplete="username" />
 
@@ -2825,14 +2831,26 @@
       />
 
       <!-- Primary actions -->
-      <div style="display:flex; gap:10px; align-items:center; margin-top:6px;">
+      <div style="display:flex; gap:10px; align-items:center; margin-top:15px;">
         <button type="button" id="loginButton">Log in</button>
         <button type="button" id="confirmRegisterButton" style="display:none;">Create account</button>
       </div>
-
+      
       <!-- Inline errors -->
       <div id="loginError" class="error-message" style="margin-top:8px;"></div>
       <div id="registerError" class="error-message" style="margin-top:4px;"></div>
+
+      <div id="singleMailNote"
+          style="font-size:.8rem; color:#6b7280; text-align:center; margin:2px auto 10px; max-width:280px; line-height:1.35;">
+        Important: Only one e-mail can be registered
+      </div>
+      </br>
+
+      <style>
+        #loginForm[data-mode="register"] #singleMailNote { display:block !important; }
+        #loginForm[data-mode="register"] #forgotPasswordButton { visibility:hidden; }
+        #singleMailNote { display:none !important; }
+      </style>
 
       <!-- Secondary row -->
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">

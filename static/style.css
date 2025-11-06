@@ -33,6 +33,7 @@
   --chip-border: rgba(0,0,0,0.12);
   --chip-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.08);
   --chip-shadow-active: 0 3px 10px rgba(65,138,245,0.25);
+  --overlay-dim: rgba(0, 0, 0, 0.38);
 }
 
 .dark-mode {
@@ -69,6 +70,7 @@
   --chip-border: rgba(255,255,255,0.16);
   --chip-shadow: 0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(0,0,0,0.35);
   --chip-shadow-active: 0 4px 16px rgba(187,134,252,0.35);
+  --overlay-dim: rgba(0, 0, 0, 0.62);
 }
 
 /* Dark Mode Anpassungen */
@@ -1909,18 +1911,29 @@ width: 100%;
 height: 100%;
 overflow: auto;
 background-color: rgba(0,0,0,0.5); /* Halbtransparentes Schwarz */
+background-color: var(--overlay-dim);
+backdrop-filter: blur(6px);
+transition: background-color 160ms ease, backdrop-filter 160ms ease;
 }
 
 .modal-content {
-background-color: var(--container-bg);
-margin: 10% auto;
-padding: 20px;
-border: 1px solid var(--input-border);
-width: 90%;
-max-width: 300px;
-max-height: 450px;
-border-radius: 8px;
-text-align: center;
+  background: color-mix(in oklab, var(--container-bg) 100%, transparent);
+  margin: clamp(24px, 8vh, 80px) auto;
+  padding: 22px 20px;
+  width: min(92vw, 360px);
+  max-height: min(80vh, 560px);
+  border-radius: 12px;
+  text-align: center;
+
+  /* dezente Tiefe + sanfte Interaktion */
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.06),
+    0 10px 30px rgba(0,0,0,0.12);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background-color 150ms ease,
+    border-color 150ms ease;
 }
 
 .modal-content h2 {
@@ -1981,7 +1994,8 @@ color: var(--text-color);
   padding: 10px;
   color: var(--button-text);
   cursor: pointer;
-  width: 100%;
+  width: 95%;
+  margin-left: 9px;
 }
 
 /* Schließ-Button für das Modal */
