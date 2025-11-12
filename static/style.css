@@ -267,6 +267,8 @@ body::-webkit-scrollbar-thumb:hover {
   position: relative;
 }
 
+
+
 /* Überschriften */
 h1, h2 {
   text-align: center;
@@ -1920,7 +1922,7 @@ transition: background-color 160ms ease, backdrop-filter 160ms ease;
   background: color-mix(in oklab, var(--container-bg) 100%, transparent);
   margin: clamp(24px, 8vh, 80px) auto;
   padding: 22px 20px;
-  width: min(92vw, 360px);
+  width: min(92vw, 340px);
   max-height: min(80vh, 560px);
   border-radius: 12px;
   text-align: center;
@@ -2085,12 +2087,31 @@ font-size: 0.9em;
   box-sizing: border-box;
 }
 
-.feedback-line {
-  display: flex;
+/* ersetze deine aktuelle .feedback-line-Regel durch das hier */
+.feedback-line{
+  position: relative;           /* oder sticky; top:45px; wenn sie unter der Topbar 'kleben' soll */
+  z-index: 1600;
+
+  display: flex;                /* sicherstellen, dass es nicht 'grid' greift */
   align-items: center;
-  gap: 8px; /* Abstand zwischen Text & Button */
   justify-content: center;
+  gap: 8px;
+
+  /* Breite & Zentrierung analog zur .container */
+  width: min(92vw, 900px);      /* gleiche max-breite wie .container */
+  box-sizing: border-box;
+  padding: 6px 20px;
+  margin: -25px auto 8px;       /* auto -> mittig, leicht hochgezogen */
+
   font-size: 11px;
+}
+
+@media (max-width: 768px){
+  .feedback-line{
+    width: min(94vw, 900px);
+    margin: auto 6px;
+    display: flex !important;   /* falls irgendwo 'grid' aktiviert war */
+  }
 }
 
 /* Nicht-klickbarer Text im gleichen Stil */
@@ -3431,6 +3452,35 @@ body:has(.response-box .collapsible-content.collapsed) #toggleAllButton .toggle-
 body.all-collapsed #toggleAllButton .toggle-visual{
   background-color: color-mix(in srgb, var(--button-bg) 45%, transparent);
   border-color: var(--button-bg);
+}
+
+#toggleRegister.secondary-link:hover { color: var(--feedback-text-hover-color) !important; }
+
+/* Einheitliche Linkfarbe im Modal (gut lesbar in Light & Dark) */
+:root       { --link-color: color-mix(in srgb, var(--text-color) 85%, transparent); }
+.dark-mode  { --link-color: color-mix(in srgb, var(--text-color) 92%, transparent); }
+
+/* A und Button-Links im Modal angleichen */
+.modal-content a.secondary-link,
+.modal-content button.link-btn {
+  color: var(--link-color) !important;
+  text-decoration: underline;
+}
+
+/* Button wirklich „link-artig“ machen und die breite Button-Regel neutralisieren */
+.modal-content button.link-btn {
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  width: auto !important;
+  box-shadow: none !important;
+  font: inherit;
+  cursor: pointer;
+  opacity: .95;
+}
+.modal-content a.secondary-link:hover,
+.modal-content button.link-btn:hover {
+  opacity: 1;
 }
 
 

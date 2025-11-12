@@ -161,25 +161,6 @@ function fetchUsageData(token) {
     .catch(err => console.error("Error when retrieving the quota:", err));
 }
 
-onAuthStateChanged(auth, async (user) => {
-  if (!user) return;
-  await user.reload();
-
-  if (user.emailVerified) {
-    try {
-      const idToken = await user.getIdToken();
-      await fetch("/confirm-registration", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id_token: idToken })
-      });
-      // optional: UI-Flag setzen, Badge “verified”, etc.
-    } catch (e) {
-      console.error("confirm-registration failed:", e);
-    }
-  }
-});
-
 // Login-Funktion
 document.getElementById("loginButton").addEventListener("click", () => {
   const email = document.getElementById("loginEmail").value;
@@ -377,24 +358,25 @@ document.getElementById("closeLoginModal").addEventListener("click", () => {
   document.getElementById("loginModal").style.display = "none";
 });
 
-function isiOS() { return /iP(hone|ad|od)/i.test(navigator.userAgent); }
-
 async function handleGoogleSignIn() {
   try {
     await setPersistence(auth, browserLocalPersistence);
-    if (isiOS()) {
-      await signInWithRedirect(auth, googleProvider);
-      return;
-    }
+
     try {
       const result = await signInWithPopup(auth, googleProvider);
       await afterGoogleLogin(result.user);
-    } catch (e) {
-      await signInWithRedirect(auth, googleProvider);
+    } catch (popupErr) {
+      // z.B. in Safari: Popups geblockt → Redirect verwenden
+      if (popupErr?.code === "auth/popup-blocked" || popupErr?.code === "auth/popup-closed-by-user") {
+        await signInWithRedirect(auth, googleProvider);
+      } else {
+        throw popupErr;
+      }
     }
   } catch (err) {
     console.error("Google sign-in failed:", err);
-    document.getElementById("loginError").textContent = err.message || "Google sign-in failed.";
+    const loginErr = document.getElementById("loginError");
+    if (loginErr) loginErr.textContent = err.message || "Google sign-in failed.";
   }
 }
 
@@ -408,7 +390,21 @@ getRedirectResult(auth).then(async (result) => {
 }).catch(err => console.error("getRedirectResult error:", err));
 
 async function afterGoogleLogin(user) {
-  // nur redirect; confirm-registration macht onIdTokenChanged
+  // Google liefert verifizierte E-Mail; dein onIdTokenChanged-Flow übernimmt den Rest.
+  const token = await user.getIdToken(true);
+
+  // optional: sofort dein Backend informieren (parallel zu onIdTokenChanged)
+  try {
+    await fetch("/confirm-registration", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_token: token })
+    });
+  } catch (e) {
+    console.error("confirm-registration (google) failed:", e);
+  }
+
+  // falls du den „reload“/redirect willst wie beim E-Mail-Login:
   window.location.href = "/";
 }
 

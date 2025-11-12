@@ -84,7 +84,7 @@
     </div>
   </header>
    
-  <br/><br/><br/>
+ <br/><br/><br/> 
 <!-- Sidebar für API Keys -->
 <div class="sidebar">
   <div class="sidebar-content">
@@ -236,7 +236,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v1.4.2</span>
+    <span id="version-number">v1.4.4</span>
   </div>
   
 </div>
@@ -2854,17 +2854,10 @@
 
       <!-- Secondary row (links only) -->
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
-        <a href="#" id="forgotPasswordButton">Forgot Password?</a>
-
-        <button
-          type="button"
-          id="toggleRegister"
-          class="link-btn"
-          style="background:none; border:none; color:#666; text-decoration:underline; padding:4px 6px; cursor:pointer; font-size:1em;"
-          title="Create a new account"
-        >
-          New here? Create account
-        </button>
+      <a href="#" id="forgotPasswordButton" class="secondary-link">Forgot Password?</a>
+      <button type="button" id="toggleRegister" class="link-btn secondary-link">
+        New here? Create account
+      </button>
       </div></br>
 
       <!-- Subtle divider -->
@@ -3040,30 +3033,14 @@
   </div>
 </div>
 <div class="feedback-line">
-  <span class="feedback-note">Inputs may be stored. Please avoid personal or sensitive data. This is a work in progress. AI models can make mistakes.</span>
-  <button id="feedbackButton" class="feedback-button" title="Feedback senden">
-    Got feedback?
-  </button>
-      <a href="/privacy"
-       target="_blank"
-       rel="noopener noreferrer"
-       class="privacy-inline-link"
-       title="Privacy Policy"
-       aria-label="Privacy Policy">
-      Privacy Policy
-    </a>
-      </button>
-      <a href="/imprint"
-       target="_blank"
-       rel="noopener noreferrer"
-       class="privacy-inline-link"
-       title="Imprint"
-       aria-label="Imprint">
-      Imprint
-    </a>
+  <span class="feedback-note">
+    Inputs may be stored. Please avoid personal or sensitive data. This is a work in progress. AI models can make mistakes.
+  </span>
+  <button id="feedbackButton" class="feedback-button" title="Feedback senden">Got feedback?</button>
+  <a href="/privacy"  target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Privacy Policy" aria-label="Privacy Policy">Privacy Policy</a>
+  <a href="/imprint"  target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Imprint"        aria-label="Imprint">Imprint</a>
   <span id="feedback-note"></span>
 </div>
-
 
 <!-- Feedback Modal -->
 <div id="feedbackModal" class="modal">
