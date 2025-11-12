@@ -55,6 +55,8 @@ const FREE_USAGE_LIMIT = 25;
 let bookmarksLoaded = false;
 
 onIdTokenChanged(auth, async (user) => {
+  console.log("[onIdTokenChanged] user?", !!user);
+
   const loginContainer = document.getElementById("loginContainer");
   const usageOptions   = document.getElementById("usageOptions");
 
@@ -399,15 +401,21 @@ async function handleGoogleSignIn() {
 
 document.getElementById("googleLoginButton")?.addEventListener("click", handleGoogleSignIn);
 
-// Nach Redirect zurück auf deiner Seite aufrufen (z. B. am Ende deiner firebase.js):
-getRedirectResult(auth).then(async (result) => {
-  if (result && result.user) {
-    await afterGoogleLogin(result.user);
-  }
-}).catch(err => console.error("getRedirectResult error:", err));
+window.addEventListener("load", () => {
+  getRedirectResult(auth)
+    .then(async (result) => {
+      if (result && result.user) {
+        await afterGoogleLogin(result.user);
+      }
+    })
+    .catch(err => console.error("getRedirectResult error:", err));
+});
 
 async function afterGoogleLogin(user) {
+  console.log("[afterGoogleLogin] platform=iOS?", isIOS(), "emailVerified=", user.emailVerified);
+  // Token holen & persistieren (auch wenn onIdTokenChanged gleich feuert)
   const token = await user.getIdToken(true);
+  try { localStorage.setItem("id_token", token); } catch {}
 
   try {
     await fetch("/confirm-registration", {
@@ -417,9 +425,10 @@ async function afterGoogleLogin(user) {
     });
   } catch (e) {
     console.error("confirm-registration (google) failed:", e);
+    // nicht aborten – wir redirecten trotzdem
   }
 
-  // Sauberer Redirect
+  // iOS: replace statt assign (hast du schon richtig)
   location.replace("/");
 }
 
