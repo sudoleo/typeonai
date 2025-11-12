@@ -372,42 +372,43 @@ function isIOS() {
 
 async function handleGoogleSignIn() {
   try {
+    // Persistenz setzen (wie bisher)
     await setPersistence(auth, browserLocalPersistence).catch(() =>
       setPersistence(auth, browserSessionPersistence)
     );
 
-    // 1) POPUP zuerst – auch auf iOS
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      await afterGoogleLogin(result.user);   // dein bestehender Code
-      return;
-    } catch (popupErr) {
-      // 2) Fallback: Redirect (z.B. wenn Popup geblockt wurde)
-      if (popupErr?.code === "auth/popup-blocked" || popupErr?.code === "auth/popup-closed-by-user") {
-        await signInWithRedirect(auth, googleProvider);
-        return;
-      }
-      throw popupErr; // echte Fehler weiterreichen
-    }
+    // Nur noch POPUP verwenden
+    const result = await signInWithPopup(auth, googleProvider);
+    await afterGoogleLogin(result.user);
+
   } catch (err) {
     console.error("Google sign-in failed:", err);
-    document.getElementById("loginError")?.textContent =
-      err.message || "Google sign-in failed.";
+
+    const loginErrorEl = document.getElementById("loginError");
+
+    // Spezieller Hinweis, wenn Safari/Browser das Popup blockiert
+    if (err.code === "auth/popup-blocked") {
+      if (loginErrorEl) {
+        loginErrorEl.textContent =
+          "Your browser blocked the Google login popup. Please allow pop-ups for consens.io or try another browser.";
+      }
+      return;
+    }
+
+    if (err.code === "auth/popup-closed-by-user") {
+      if (loginErrorEl) {
+        loginErrorEl.textContent = "The login window was closed before completing sign-in.";
+      }
+      return;
+    }
+
+    if (loginErrorEl) {
+      loginErrorEl.textContent = err.message || "Google sign-in failed.";
+    }
   }
 }
 
-
 document.getElementById("googleLoginButton")?.addEventListener("click", handleGoogleSignIn);
-
-window.addEventListener("load", () => {
-  getRedirectResult(auth)
-    .then(async (result) => {
-      if (result && result.user) {
-        await afterGoogleLogin(result.user);
-      }
-    })
-    .catch(err => console.error("getRedirectResult error:", err));
-});
 
 async function afterGoogleLogin(user) {
   console.log("[afterGoogleLogin] platform=iOS?", isIOS(), "emailVerified=", user.emailVerified);
