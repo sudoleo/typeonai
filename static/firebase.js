@@ -377,25 +377,24 @@ document.getElementById("closeLoginModal").addEventListener("click", () => {
   document.getElementById("loginModal").style.display = "none";
 });
 
+function isiOS() { return /iP(hone|ad|od)/i.test(navigator.userAgent); }
+
 async function handleGoogleSignIn() {
   try {
     await setPersistence(auth, browserLocalPersistence);
-
+    if (isiOS()) {
+      await signInWithRedirect(auth, googleProvider);
+      return;
+    }
     try {
       const result = await signInWithPopup(auth, googleProvider);
       await afterGoogleLogin(result.user);
-    } catch (popupErr) {
-      // z.B. in Safari: Popups geblockt → Redirect verwenden
-      if (popupErr?.code === "auth/popup-blocked" || popupErr?.code === "auth/popup-closed-by-user") {
-        await signInWithRedirect(auth, googleProvider);
-      } else {
-        throw popupErr;
-      }
+    } catch (e) {
+      await signInWithRedirect(auth, googleProvider);
     }
   } catch (err) {
     console.error("Google sign-in failed:", err);
-    const loginErr = document.getElementById("loginError");
-    if (loginErr) loginErr.textContent = err.message || "Google sign-in failed.";
+    document.getElementById("loginError").textContent = err.message || "Google sign-in failed.";
   }
 }
 
@@ -409,21 +408,7 @@ getRedirectResult(auth).then(async (result) => {
 }).catch(err => console.error("getRedirectResult error:", err));
 
 async function afterGoogleLogin(user) {
-  // Google liefert verifizierte E-Mail; dein onIdTokenChanged-Flow übernimmt den Rest.
-  const token = await user.getIdToken(true);
-
-  // optional: sofort dein Backend informieren (parallel zu onIdTokenChanged)
-  try {
-    await fetch("/confirm-registration", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id_token: token })
-    });
-  } catch (e) {
-    console.error("confirm-registration (google) failed:", e);
-  }
-
-  // falls du den „reload“/redirect willst wie beim E-Mail-Login:
+  // nur redirect; confirm-registration macht onIdTokenChanged
   window.location.href = "/";
 }
 

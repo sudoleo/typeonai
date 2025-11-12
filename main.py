@@ -37,7 +37,13 @@ class CustomSecurityMiddleware:
                     "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://accounts.google.com; "
                     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                     "img-src 'self' data: https://lh3.googleusercontent.com https:; "
-                    "connect-src 'self' https://firestore.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://apis.google.com https://accounts.google.com https://www.googleapis.com https://api.openai.com https://api.mistral.ai https://api.anthropic.com https://api.x.ai https://api.deepseek.com https://api.perplexity.ai https://api.exa.ai; "
+                    "connect-src 'self' https://firestore.googleapis.com https://*.firebaseio.com "
+                    "https://identitytoolkit.googleapis.com https://securetoken.googleapis.com "
+                    "https://firebaseinstallations.googleapis.com https://www.gstatic.com "
+                    "https://apis.google.com https://accounts.google.com https://www.googleapis.com "
+                    "https://api.openai.com https://api.mistral.ai https://api.anthropic.com "
+                    "https://api.x.ai https://api.deepseek.com https://api.perplexity.ai https://api.exa.ai "
+                    "https://cdn.jsdelivr.net; "   # <— hinzugefügt
                     "frame-src 'self' https://accounts.google.com https://*.google.com https://*.gstatic.com https://*.firebaseapp.com https://*.web.app;"
                 )
                 headers[b"Content-Security-Policy"] = csp.encode("utf-8")
