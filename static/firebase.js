@@ -372,21 +372,19 @@ function isIOS() {
 
 async function handleGoogleSignIn() {
   try {
-    // Persistenz setzen (wie bisher)
+    // Persistenz wie gehabt
     await setPersistence(auth, browserLocalPersistence).catch(() =>
       setPersistence(auth, browserSessionPersistence)
     );
 
-    // Nur noch POPUP verwenden
+    // Nur noch Popup benutzen
     const result = await signInWithPopup(auth, googleProvider);
     await afterGoogleLogin(result.user);
 
   } catch (err) {
     console.error("Google sign-in failed:", err);
-
     const loginErrorEl = document.getElementById("loginError");
 
-    // Spezieller Hinweis, wenn Safari/Browser das Popup blockiert
     if (err.code === "auth/popup-blocked") {
       if (loginErrorEl) {
         loginErrorEl.textContent =
@@ -397,16 +395,19 @@ async function handleGoogleSignIn() {
 
     if (err.code === "auth/popup-closed-by-user") {
       if (loginErrorEl) {
-        loginErrorEl.textContent = "The login window was closed before completing sign-in.";
+        loginErrorEl.textContent =
+          "The login window was closed before completing sign-in.";
       }
       return;
     }
 
     if (loginErrorEl) {
-      loginErrorEl.textContent = err.message || "Google sign-in failed.";
+      loginErrorEl.textContent =
+        err.message || "Google sign-in failed.";
     }
   }
 }
+
 
 document.getElementById("googleLoginButton")?.addEventListener("click", handleGoogleSignIn);
 
