@@ -8,6 +8,7 @@ import {
   getRedirectResult,
   setPersistence,
   browserLocalPersistence,
+  browserSessionPersistence,
 } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 
 const googleProvider = new GoogleAuthProvider();
@@ -135,15 +136,6 @@ onIdTokenChanged(auth, async (user) => {
     bookmarksLoaded = false;
   }
 });
-
-// WICHTIG: sehr früh im Script aufrufen:
-getRedirectResult(auth)
-  .then(async (result) => {
-    if (result?.user) {
-      await afterGoogleLogin(result.user); // kein redirect hier
-    }
-  })
-  .catch(err => console.error("getRedirectResult error:", err));
 
 function fetchUsageData(token) {
   // DOM-Elemente innerhalb der Funktion abrufen:
@@ -371,28 +363,35 @@ function isIOS() {
   return /iP(ad|hone|od)/i.test(navigator.userAgent);
 }
 
+import {
+  getAuth,
+  // ...
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
+} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+
+// ...
+
 async function handleGoogleSignIn() {
   try {
-    // Persistence mit Fallback (Safari Private Mode kann zicken)
+    // 1) Persistence mit sauberem Fallback (v9: Funktionsform, nicht Instanzmethode!)
     try {
       await setPersistence(auth, browserLocalPersistence);
     } catch {
-      // Fallback: Session
-      const { browserSessionPersistence } =
-        await import("https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js");
-      await auth.setPersistence(browserSessionPersistence);
+      await setPersistence(auth, browserSessionPersistence);
     }
 
+    // 2) iOS => immer Redirect (Popup wird oft blockiert)
     if (isIOS()) {
-      // iOS: Geh direkt in Redirect
       await signInWithRedirect(auth, googleProvider);
       return;
     }
 
-    // Desktop/Android: Popup versuchen, sonst Redirect
+    // 3) Desktop/Android: Popup, sonst Redirect
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      await afterGoogleLogin(result.user); // kein redirect hier
+      await afterGoogleLogin(result.user);
     } catch (popupErr) {
       if (popupErr?.code === "auth/popup-blocked" || popupErr?.code === "auth/popup-closed-by-user") {
         await signInWithRedirect(auth, googleProvider);
@@ -407,6 +406,7 @@ async function handleGoogleSignIn() {
   }
 }
 
+
 document.getElementById("googleLoginButton")?.addEventListener("click", handleGoogleSignIn);
 
 // Nach Redirect zurück auf deiner Seite aufrufen (z. B. am Ende deiner firebase.js):
@@ -417,10 +417,8 @@ getRedirectResult(auth).then(async (result) => {
 }).catch(err => console.error("getRedirectResult error:", err));
 
 async function afterGoogleLogin(user) {
-  // Google liefert verifizierte E-Mail; dein onIdTokenChanged-Flow übernimmt den Rest.
   const token = await user.getIdToken(true);
 
-  // optional: sofort dein Backend informieren (parallel zu onIdTokenChanged)
   try {
     await fetch("/confirm-registration", {
       method: "POST",
@@ -431,8 +429,8 @@ async function afterGoogleLogin(user) {
     console.error("confirm-registration (google) failed:", e);
   }
 
-  // falls du den „reload“/redirect willst wie beim E-Mail-Login:
-  window.location.href = "/";
+  // Sauberer Redirect
+  location.replace("/");
 }
 
 // Restlicher Firebase-Code (z.B. Leaderboard, Funktionen, etc.)
