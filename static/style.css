@@ -1922,7 +1922,7 @@ transition: background-color 160ms ease, backdrop-filter 160ms ease;
   background: color-mix(in oklab, var(--container-bg) 100%, transparent);
   margin: clamp(24px, 8vh, 80px) auto;
   padding: 22px 20px;
-  width: min(92vw, 340px);
+  width: min(92vw, 360px);
   max-height: min(80vh, 560px);
   border-radius: 12px;
   text-align: center;
@@ -2321,7 +2321,29 @@ font-size: 0.9em;
 
   #clearButton {
     right: 60px;
-}
+  }
+  /* A und Button-Links im Modal angleichen */
+  .modal-content a.secondary-link,
+  .modal-content button.link-btn {
+    color: var(--link-color) !important;
+    text-decoration: underline;
+  }
+
+  /* Button wirklich „link-artig“ machen und die breite Button-Regel neutralisieren */
+  .modal-content button.link-btn {
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+    width: auto !important;
+    box-shadow: none !important;
+    font: inherit;
+    cursor: pointer;
+    opacity: .95;
+  }
+  .modal-content a.secondary-link:hover,
+  .modal-content button.link-btn:hover {
+    opacity: 1;
+  }
 }
 
 @media (max-width: 768px) {
@@ -2753,6 +2775,10 @@ font-size: 0.9em;
      Rest wie gehabt
      --------------------------------------- */
 
+  .modal-content {
+    width: min(92vw, 320px);
+  }
+
   .login-text {
     cursor: pointer;
     font-size: 0.8em; /* vorher 1em */
@@ -3021,6 +3047,29 @@ font-size: 0.9em;
 
   .deep-search-mode .deep-switch::before {
     margin-left: -9px;    /* Einheitlich – kein versteckter Extra-Platz */
+  }
+
+  /* A und Button-Links im Modal angleichen */
+  .modal-content a.secondary-link,
+  .modal-content button.link-btn {
+    color: var(--link-color) !important;
+    text-decoration: underline;
+  }
+
+  /* Button wirklich „link-artig“ machen und die breite Button-Regel neutralisieren */
+  .modal-content button.link-btn {
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+    width: auto !important;
+    box-shadow: none !important;
+    font: inherit;
+    cursor: pointer;
+    opacity: .95;
+  }
+  .modal-content a.secondary-link:hover,
+  .modal-content button.link-btn:hover {
+    opacity: 1;
   }
 
 }

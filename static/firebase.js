@@ -136,6 +136,15 @@ onIdTokenChanged(auth, async (user) => {
   }
 });
 
+// WICHTIG: sehr früh im Script aufrufen:
+getRedirectResult(auth)
+  .then(async (result) => {
+    if (result?.user) {
+      await afterGoogleLogin(result.user); // kein redirect hier
+    }
+  })
+  .catch(err => console.error("getRedirectResult error:", err));
+
 function fetchUsageData(token) {
   // DOM-Elemente innerhalb der Funktion abrufen:
   const freeDisplay = document.getElementById("freeUsageDisplay");
@@ -358,15 +367,33 @@ document.getElementById("closeLoginModal").addEventListener("click", () => {
   document.getElementById("loginModal").style.display = "none";
 });
 
+function isIOS() {
+  return /iP(ad|hone|od)/i.test(navigator.userAgent);
+}
+
 async function handleGoogleSignIn() {
   try {
-    await setPersistence(auth, browserLocalPersistence);
+    // Persistence mit Fallback (Safari Private Mode kann zicken)
+    try {
+      await setPersistence(auth, browserLocalPersistence);
+    } catch {
+      // Fallback: Session
+      const { browserSessionPersistence } =
+        await import("https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js");
+      await auth.setPersistence(browserSessionPersistence);
+    }
 
+    if (isIOS()) {
+      // iOS: Geh direkt in Redirect
+      await signInWithRedirect(auth, googleProvider);
+      return;
+    }
+
+    // Desktop/Android: Popup versuchen, sonst Redirect
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      await afterGoogleLogin(result.user);
+      await afterGoogleLogin(result.user); // kein redirect hier
     } catch (popupErr) {
-      // z.B. in Safari: Popups geblockt → Redirect verwenden
       if (popupErr?.code === "auth/popup-blocked" || popupErr?.code === "auth/popup-closed-by-user") {
         await signInWithRedirect(auth, googleProvider);
       } else {
