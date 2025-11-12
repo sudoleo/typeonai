@@ -363,16 +363,6 @@ function isIOS() {
   return /iP(ad|hone|od)/i.test(navigator.userAgent);
 }
 
-import {
-  getAuth,
-  // ...
-  setPersistence,
-  browserLocalPersistence,
-  browserSessionPersistence,
-} from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
-
-// ...
-
 async function handleGoogleSignIn() {
   try {
     // 1) Persistence mit sauberem Fallback (v9: Funktionsform, nicht Instanzmethode!)
