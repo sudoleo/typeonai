@@ -413,9 +413,27 @@ window.addEventListener("load", () => {
 
 async function afterGoogleLogin(user) {
   console.log("[afterGoogleLogin] platform=iOS?", isIOS(), "emailVerified=", user.emailVerified);
-  // Token holen & persistieren (auch wenn onIdTokenChanged gleich feuert)
+
   const token = await user.getIdToken(true);
   try { localStorage.setItem("id_token", token); } catch {}
+
+  try {
+    // Wichtig: keepalive verhindert, dass der POST beim Navigieren abbricht (<=64KB Body)
+    await fetch("/confirm-registration", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_token: token }),
+      keepalive: true
+    });
+    // optional: minimale Wartezeit, damit iOS wirklich „durch“ ist
+    await new Promise(r => setTimeout(r, 150));
+  } catch (e) {
+    console.error("confirm-registration (google) failed:", e);
+    // Trotzdem weiter – onIdTokenChanged fängt den Rest auf
+  }
+
+  // Jetzt *nach* erfolgreichem/versuchtem POST navigieren
+  location.replace("/");
 }
 
 // Restlicher Firebase-Code (z.B. Leaderboard, Funktionen, etc.)
