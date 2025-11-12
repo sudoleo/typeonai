@@ -31,9 +31,6 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 window.auth = auth;
 
-// --- Sichere Markdown-Render-Funktion ---
-// 1) Marked rendert Markdown zu HTML
-// 2) DOMPurify entfernt unsichere Tags/Attribute
 function renderMarkdownSafe(md) {
   const html = marked.parse(md || "");
   return DOMPurify.sanitize(html, {
@@ -375,34 +372,27 @@ function isIOS() {
 
 async function handleGoogleSignIn() {
   try {
-    // 1) Persistence mit sauberem Fallback (v9: Funktionsform, nicht Instanzmethode!)
-    try {
-      await setPersistence(auth, browserLocalPersistence);
-    } catch {
-      await setPersistence(auth, browserSessionPersistence);
-    }
+    await setPersistence(auth, browserLocalPersistence).catch(() =>
+      setPersistence(auth, browserSessionPersistence)
+    );
 
-    // 2) iOS => immer Redirect (Popup wird oft blockiert)
-    if (isIOS()) {
-      await signInWithRedirect(auth, googleProvider);
-      return;
-    }
-
-    // 3) Desktop/Android: Popup, sonst Redirect
+    // 1) POPUP zuerst – auch auf iOS
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      await afterGoogleLogin(result.user);
+      await afterGoogleLogin(result.user);   // dein bestehender Code
+      return;
     } catch (popupErr) {
+      // 2) Fallback: Redirect (z.B. wenn Popup geblockt wurde)
       if (popupErr?.code === "auth/popup-blocked" || popupErr?.code === "auth/popup-closed-by-user") {
         await signInWithRedirect(auth, googleProvider);
-      } else {
-        throw popupErr;
+        return;
       }
+      throw popupErr; // echte Fehler weiterreichen
     }
   } catch (err) {
     console.error("Google sign-in failed:", err);
-    const loginErr = document.getElementById("loginError");
-    if (loginErr) loginErr.textContent = err.message || "Google sign-in failed.";
+    document.getElementById("loginError")?.textContent =
+      err.message || "Google sign-in failed.";
   }
 }
 
