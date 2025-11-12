@@ -31,6 +31,16 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 window.auth = auth;
 
+// Standard-Persistenz global setzen (beim Laden, nicht im Click-Handler)
+setPersistence(auth, browserLocalPersistence)
+  .catch(() => setPersistence(auth, browserSessionPersistence))
+  .then(() => {
+    console.log("[Auth] Persistence initialized");
+  })
+  .catch(err => {
+    console.error("[Auth] Failed to set persistence:", err);
+  });
+
 function renderMarkdownSafe(md) {
   const html = marked.parse(md || "");
   return DOMPurify.sanitize(html, {
@@ -370,42 +380,38 @@ function isIOS() {
   return /iP(ad|hone|od)/i.test(navigator.userAgent);
 }
 
-async function handleGoogleSignIn() {
-  try {
-    // Persistenz wie gehabt
-    await setPersistence(auth, browserLocalPersistence).catch(() =>
-      setPersistence(auth, browserSessionPersistence)
-    );
+function handleGoogleSignIn() {
+  const loginErrorEl = document.getElementById("loginError");
+  if (loginErrorEl) loginErrorEl.textContent = "";
 
-    // Nur noch Popup benutzen
-    const result = await signInWithPopup(auth, googleProvider);
-    await afterGoogleLogin(result.user);
+  // GANZ WICHTIG: signInWithPopup wird direkt im Click-Handler aufgerufen,
+  // ohne vorherige await-/Promise-Ketten.
+  signInWithPopup(auth, googleProvider)
+    .then(result => {
+      return afterGoogleLogin(result.user);
+    })
+    .catch(err => {
+      console.error("Google sign-in failed:", err);
 
-  } catch (err) {
-    console.error("Google sign-in failed:", err);
-    const loginErrorEl = document.getElementById("loginError");
+      if (!loginErrorEl) return;
 
-    if (err.code === "auth/popup-blocked") {
-      if (loginErrorEl) {
+      if (err.code === "auth/popup-blocked") {
+        // Erster Klick auf Safari kann trotzdem noch geblockt werden,
+        // aber wir geben einen klaren Hinweis.
         loginErrorEl.textContent =
-          "Your browser blocked the Google login popup. Please allow pop-ups for consens.io or try another browser.";
+          "Your browser blocked the Google login popup. Please allow pop-ups for consens.io and try again.";
+        return;
       }
-      return;
-    }
 
-    if (err.code === "auth/popup-closed-by-user") {
-      if (loginErrorEl) {
+      if (err.code === "auth/popup-closed-by-user") {
         loginErrorEl.textContent =
-          "The login window was closed before completing sign-in.";
+          "The login window was closed before completing the sign-in.";
+        return;
       }
-      return;
-    }
 
-    if (loginErrorEl) {
       loginErrorEl.textContent =
         err.message || "Google sign-in failed.";
-    }
-  }
+    });
 }
 
 
