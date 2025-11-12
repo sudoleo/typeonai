@@ -15,6 +15,22 @@ const googleProvider = new GoogleAuthProvider();
 // Optional: Kontoauswahl erzwingen
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
+if (!window.FIREBASE_CONFIG || !window.FIREBASE_CONFIG.apiKey) {
+  console.error("[FATAL] FIREBASE_CONFIG fehlt/leer. Abbruch (kein Auto-Init).", window.FIREBASE_CONFIG);
+  // Optional: UI-Hinweis anzeigen
+  const el = document.getElementById("loginError");
+  if (el) el.textContent = "Init failed: Missing Firebase config.";
+  // return;  // <- wenn du sicher abbrechen willst
+}
+
+// Initialisiere Firebase mit der globalen Konfiguration, die aus dem HTML kommt
+const app = initializeApp(window.FIREBASE_CONFIG);
+const db = getFirestore(app);
+
+// Initialisiere Auth
+const auth = getAuth(app);
+window.auth = auth;
+
 // --- Sichere Markdown-Render-Funktion ---
 // 1) Marked rendert Markdown zu HTML
 // 2) DOMPurify entfernt unsichere Tags/Attribute
@@ -40,14 +56,6 @@ function injectHtmlSafe(containerEl, md) {
   containerEl.innerHTML = renderMarkdownSafe(md);
   enhanceLinks(containerEl);
 }
-
-// Initialisiere Firebase mit der globalen Konfiguration, die aus dem HTML kommt
-const app = initializeApp(window.FIREBASE_CONFIG);
-const db = getFirestore(app);
-
-// Initialisiere Auth
-const auth = getAuth(app);
-window.auth = auth;
 
 const FREE_USAGE_LIMIT = 25;
 
