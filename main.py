@@ -1025,6 +1025,9 @@ def privacy(req: Request):
 def privacy(req: Request):
     return templates.TemplateResponse("imprint.html", {"request": req})
 
+@app.get("/about", response_class=HTMLResponse)
+def privacy(req: Request):
+    return templates.TemplateResponse("about.html", {"request": req})
 
 @app.get("/app", response_class=HTMLResponse)
 async def read_root(request: Request):

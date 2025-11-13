@@ -146,7 +146,7 @@ onIdTokenChanged(auth, async (user) => {
   } else {
     // Cleanup bei Logout
     localStorage.removeItem("id_token");
-    loginContainer.innerText = "Log in and use for free";
+    loginContainer.innerText = "Log in";
     if (usageOptions) usageOptions.style.display = "none";
 
     document.getElementById("bookmarksContainer").innerHTML = "";

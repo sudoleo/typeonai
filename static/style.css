@@ -143,6 +143,41 @@ body::-webkit-scrollbar-thumb:hover {
   margin-right: 8px;
 }
 
+/* About-Link in der Top-Bar */
+.top-bar-about {
+  font-size: 1em;
+  color: var(--text-color);
+  opacity: 0.8;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+  color: var(--text-color);
+  font-family: 'Roboto', Arial, sans-serif;
+}
+
+.top-bar-about:hover {
+  opacity: 1;
+}
+
+/* Dünner vertikaler Trenner */
+.top-bar-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(128, 128, 128, 0.4);
+}
+
+.top-bar a,
+.top-bar-about {
+  text-decoration: none !important;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.top-bar a:hover,
+.top-bar-about:hover {
+  opacity: 1;
+}
+
 /* Icon‑Link */
 #logoLink {
   text-decoration: none;  /* kein Unterstrich unter dem IMG */
@@ -161,6 +196,7 @@ body::-webkit-scrollbar-thumb:hover {
 }  
 
 /* Container als flex-Container für die rechte Seite */
+.top-bar-about, 
 #loginContainer {
   display: flex;
   align-items: center;
@@ -2787,7 +2823,8 @@ font-size: 0.9em;
 
   #loginContainer,
   .login-text,
-  .logout-text {
+  .logout-text,
+  .top-bar-about {
     font-size: 0.7em !important;
   }
 

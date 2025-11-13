@@ -60,29 +60,37 @@
     <button id="startNowButton" class="cta-button">Get started</button>
   </div>
 </div>
-  <header class="top-bar">
-    <!-- Sidebar Toggle Button -->
-    <button id="toggleSidebarButton" class="sidebar-toggle collapse-btn">
-      <span class="burger-icon">&#9776;</span>
-    </button>
-    <!-- Logo und Titel: nur das IMG im Link -->
-    <div class="top-bar-logo">
-      <a href="/" id="logoLink">
-        <img src="/static/favicon.png" alt="Favicon" class="top-bar-favicon">
-      </a>
-      <span class="top-bar-title">consens.io</span>
+<header class="top-bar">
+  <!-- Sidebar Toggle Button -->
+  <button id="toggleSidebarButton" class="sidebar-toggle collapse-btn">
+    <span class="burger-icon">&#9776;</span>
+  </button>
+
+  <!-- Logo und Titel -->
+  <div class="top-bar-logo">
+    <a href="/" id="logoLink">
+      <img src="/static/favicon.png" alt="Favicon" class="top-bar-favicon">
+    </a>
+    <span class="top-bar-title">consens.io</span>
+  </div>
+
+  <!-- Rechte Seite -->
+  <div class="top-bar-right">
+    <!-- Neuer About-Link -->
+    <div id="loginContainer" class="login-text">Log in</div>
+    <!-- Dünner vertikaler Strich -->
+    <span class="top-bar-divider" aria-hidden="true"></span>
+    <!-- Bisheriger Login-Text -->
+    <a href="/about" class="top-bar-about">About us</a>
+    <!-- Dark/Light Toggle -->
+    <div class="mode-switch">
+      <label class="switch">
+        <input type="checkbox" id="modeToggle">
+        <span class="slider"></span>
+      </label>
     </div>
-    <!-- Container für rechte Elemente -->
-    <div class="top-bar-right">
-      <div id="loginContainer" class="login-text">Log in and use for free</div>
-      <div class="mode-switch">
-        <label class="switch">
-          <input type="checkbox" id="modeToggle">
-          <span class="slider"></span>
-        </label>
-      </div>
-    </div>
-  </header>
+  </div>
+</header>
    
  <br/><br/><br/> 
 <!-- Sidebar für API Keys -->
@@ -236,7 +244,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v1.5.5</span>
+    <span id="version-number">v1.6.5</span>
   </div>
   
 </div>
@@ -2936,109 +2944,158 @@
       <div class="faq-intro">
         <p>
           <strong>What is consens.io?</strong><br>
-          consens.io instantly queries multiple leading AI models, creating a unified "consensus" answer. It also integrates real-time web search for accurate, up-to-date results.
+          consens.io runs your query in parallel across multiple large language models and presents their answers side by side. In addition, it can integrate external search systems to retrieve current and verifiable information.
         </p>
-        <p>
-          <strong>Benefits:</strong><br>
-          ✓ Reliable consensus answers<br>
-          ✓ Real-time web search<br>
-          ✓ Easy query bookmarking
-        </p>
-      </div>
-
-      <div class="faq-item">
-        <h3><span class="faq-number">1.</span> 🤖 What is Auto Consensus? <span class="faq-toggle-icon">＋</span></h3>
-        <p>
-          Auto Consensus automatically combines and compares answers from multiple AI models, highlighting differences, correcting errors, and providing a reliable final response.
-        </p>
-      </div>
-      
-      <div class="faq-item">
-        <h3><span class="faq-number">2.</span> 🔘 What is the Consensus Button? <span class="faq-toggle-icon">＋</span></h3>
-        <p>
-          The Consensus Button generates a unified answer by merging responses from selected models. You can include (✅) or exclude (❌) specific model outputs before clicking the button. It ensures that only trusted answers influence the final result.
-        </p>
-      </div>
-      
-      <div class="faq-item">
-        <h3><span class="faq-number">3.</span> 🧠 What is the Consensus Model? <span class="faq-toggle-icon">＋</span></h3>
-        <p>
-          The Consensus Model is a special AI that processes and synthesizes responses from other models. It analyzes agreement, corrects inconsistencies, and creates a coherent final answer based on the selected responses.
-        </p>
-      </div>
-      
-      <div class="faq-item">
-        <h3><span class="faq-number">4.</span> 🧩 What are Differences? <span class="faq-toggle-icon">＋</span></h3>
-        <p>
-          Differences highlight conflicting or unique parts across model responses. This lets you quickly spot where models disagree or contribute distinct perspectives—helping you make informed decisions before generating a consensus.
+        <p><strong>Benefits:</strong><br>
+          ✓ Systematic comparison of Models<br>
+          ✓ Structured consensus building<br>
+          ✓ Integration of web-based research sources<br>
         </p>
       </div>
 
       <div class="faq-item">
-        <h3><span class="faq-number">5.</span> 💡 What is Deep Think Mode? <span class="faq-toggle-icon">＋</span></h3>
+        <h3>
+          <span class="faq-number">1.</span>
+          What is Auto Consensus?
+          <span class="faq-toggle-icon">＋</span>
+        </h3>
         <p>
-          Deep Think Mode provides an in-depth, step-by-step reasoning from selected AI models, offering detailed explanations and deeper insights into complex queries.
+          Auto Consensus automatically analyses several model responses, identifies agreements and discrepancies, and generates a consolidated answer. The goal is a transparent and robust synthesis of the available outputs.
         </p>
       </div>
       
       <div class="faq-item">
-        <h3><span class="faq-number">6.</span> 🌐 What is Web Search? <span class="faq-toggle-icon">＋</span></h3>
+        <h3>
+          <span class="faq-number">2.</span>
+          What does Consensus Button do?
+          <span class="faq-toggle-icon">＋</span>
+        </h3>
         <p>
-          Web Search sends your query to GPT, Gemini, Exa (an AI model optimized for detailed document retrieval), and Perplexity (specialized in concise, trustworthy answers from diverse internet sources), providing real-time and accurate results directly within consens.io.
+          The Consensus Button combines the selected model responses into a single joint answer. Before running it, you can include or exclude individual responses so that only the models you consider relevant contribute to the final result.
         </p>
       </div>
       
       <div class="faq-item">
-        <h3><span class="faq-number">7.</span> ✅❌ What are the checkmarks and crosses? <span class="faq-toggle-icon">＋</span></h3>
+        <h3>
+          <span class="faq-number">3.</span>
+          What is the Consensus Model?
+          <span class="faq-toggle-icon">＋</span>
+        </h3>
         <p>
-          The checkmark (✅) selects an answer to be included in the consensus generation. The cross (❌) excludes an answer from influencing the final consensus.
+          The Consensus Model is a dedicated model that does not answer user queries directly. Instead, it evaluates, structures, and synthesises the already generated model responses into a coherent overall statement.
         </p>
       </div>
       
       <div class="faq-item">
-        <h3><span class="faq-number">8.</span> 🔑 When do I need to enter API keys? <span class="faq-toggle-icon">＋</span></h3>
+        <h3>
+          <span class="faq-number">4.</span>
+          What does “Differences” show?
+          <span class="faq-toggle-icon">＋</span>
+        </h3>
         <p>
-          You only need to enter your own API keys if you're not logged in or wish to use your personal model access.
-        </p>
-      </div>
-      
-      <div class="faq-item">
-        <h3><span class="faq-number">9.</span> 🧠 Which AI models are available? <span class="faq-toggle-icon">＋</span></h3>
-        <p>
-          consens.io provides access to top-tier LLMs including OpenAI, Mistral, Anthropic, Gemini, Exa, Perplexity, and more.
-        </p>
-      </div>
-      
-      <div class="faq-item">
-        <h3><span class="faq-number">10.</span> 📌 How do Bookmarks & Leaderboards work? <span class="faq-toggle-icon">＋</span></h3>
-        <p>
-          Logged-in users can bookmark queries for future reference, and view popular queries on leaderboards, comparing their results with other users.
+          Differences highlights substantive deviations between the model responses. This makes it easier to see where models arrive at different conclusions or add distinct perspectives.
         </p>
       </div>
 
       <div class="faq-item">
-        <h3><span class="faq-number">11.</span> 🔢 How many queries can I make? <span class="faq-toggle-icon">＋</span></h3>
+        <h3>
+          <span class="faq-number">5.</span>
+          What is Deep Think Mode?
+          <span class="faq-toggle-icon">＋</span>
+        </h3>
         <p>
-          Free users can make up to 25 standard AI-powered queries (including consensus generations, web searches, and direct model prompts), plus 12 Deep Think queries. You can track your remaining quota in the sidebar.
+          Deep Think Mode produces a detailed, step-by-step reasoning trace for selected models. It is intended for complex or explanation-heavy tasks where the reasoning process is as important as the final answer.
+        </p>
+      </div>
+      
+      <div class="faq-item">
+        <h3>
+          <span class="faq-number">6.</span>
+          What does Web Search include?
+          <span class="faq-toggle-icon">＋</span>
+        </h3>
+        <p>
+          Web Search forwards your query to models and systems with access to current information, including GPT, Gemini, Exa (document-oriented retrieval), and Perplexity (aggregated, source-based answers). The results are displayed directly within consens.io.
+        </p>
+      </div>
+      
+      <div class="faq-item">
+        <h3>
+          <span class="faq-number">7.</span>
+          What is the purpose of including or excluding answers?
+          <span class="faq-toggle-icon">＋</span>
+        </h3>
+        <p>
+          By including or excluding individual model answers, you control which outputs are used in the consensus generation. This allows you to filter out low-quality or irrelevant responses before they influence the final result.
+        </p>
+      </div>
+      
+      <div class="faq-item">
+        <h3>
+          <span class="faq-number">8.</span>
+          When do I need to enter API keys?
+          <span class="faq-toggle-icon">＋</span>
+        </h3>
+        <p>
+          API keys are only required if you want to use your own model access or if you are not logged in and still wish to query certain providers through your personal credentials.
+        </p>
+      </div>
+      
+      <div class="faq-item">
+        <h3>
+          <span class="faq-number">9.</span>
+          Which AI models are available?
+          <span class="faq-toggle-icon">＋</span>
+        </h3>
+        <p>
+          consens.io provides access to current large language models from several providers, including OpenAI, Mistral, Anthropic, Google Gemini, Exa, and Perplexity.
+        </p>
+      </div>
+      
+      <div class="faq-item">
+        <h3>
+          <span class="faq-number">10.</span>
+          How do Bookmarks and Leaderboards work?
+          <span class="faq-toggle-icon">＋</span>
+        </h3>
+        <p>
+          Logged-in users can bookmark specific queries and revisit them later. Leaderboards present frequently used or particularly interesting queries by other users, enabling comparison of prompts and outcomes.
+        </p>
+      </div>
+
+      <div class="faq-item">
+        <h3>
+          <span class="faq-number">11.</span>
+          How many queries can I make?
+          <span class="faq-toggle-icon">＋</span>
+        </h3>
+        <p>
+          Users without their own subscription or external keys can run up to 25 standard AI-powered queries and an additional 12 queries in Deep Think Mode. The remaining quota is displayed in the sidebar.
         </p>        
       </div>
       
       <div class="faq-item">
-        <h3><span class="faq-number">12.</span> 💸 Why are the first 25 queries free? <span class="faq-toggle-icon">＋</span></h3>
+        <h3>
+          <span class="faq-number">12.</span>
+          Why is there a free quota?
+          <span class="faq-toggle-icon">＋</span>
+        </h3>
         <p>
-          We want you to explore consens.io with no commitment. That's why we offer 25 free standard queries and 12 Deep Think queries—so you can test features, compare models, and experience consensus answers without providing payment information.
+          The free quota is intended to allow an initial, non-committal exploration of consens.io. It enables you to test model comparison, consensus building, and web search features before deciding whether you want to use your own API keys or extended access.
         </p>        
       </div>      
     </div>
   </div>
 </div>
+
 <div class="feedback-line">
   <span class="feedback-note">
-    Inputs may be stored. Please avoid personal or sensitive data. This is a work in progress. AI models can make mistakes.
+    Inputs may be stored. Please avoid personal or sensitive data. AI models can make mistakes.
   </span>
-  <button id="feedbackButton" class="feedback-button" title="Feedback senden">Got feedback?</button>
-  <a href="/privacy"  target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Privacy Policy" aria-label="Privacy Policy">Privacy Policy</a>
+  <button id="feedbackButton" class="feedback-button" title="Feedback senden">Feedback</button>
+  <a href="/privacy"  target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Privacy Policy" aria-label="Privacy Policy">Privacy</a>
   <a href="/imprint"  target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Imprint"        aria-label="Imprint">Imprint</a>
+  <a href="/about"  target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="About"        aria-label="About">About</a>
   <span id="feedback-note"></span>
 </div>
 
