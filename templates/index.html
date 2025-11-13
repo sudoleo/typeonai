@@ -303,12 +303,13 @@
       <!-- Antwort OpenAI -->
       <div class="response-box" id="openaiResponse" data-model="OpenAI">
         <h2>
-          <span class="title">Response from ChatGPT <small>(<span id="openaiModelText">GPT-5</span>)</small>
+          <span class="title">Response from ChatGPT <small>(<span id="openaiModelText">GPT-5-mini</span>)</small>
             <span class="model-picker-wrapper"><select id="openaiModelSelect" class="model-picker">
-              <option value="gpt-5">GPT-5</option>
+              <option value="gpt-5-mini">GPT-5-mini</option>
+              <option value="gpt-5-nano">GPT-5-nano</option>
               <option value="gpt-4.1">GPT-4.1</option>
               <option value="gpt-4o">GPT-4o</option>
-              <option value="gpt-3.5-turbo">GPT-3.5</option>
+              <option value="gpt-3.5-turbo">GPT-3.5-turbo</option>
             </select></span>
           </span>
           <div class="control-icons">
@@ -344,8 +345,10 @@
       <!-- Antwort Anthropic Claude -->
       <div class="response-box" id="claudeResponse" data-model="Anthropic">
         <h2>
-          <span class="title">Response from Claude <small>(<span id="claudeModelText">claude-4-sonnet</span>)</small>
+          <span class="title">Response from Claude <small>(<span id="claudeModelText">claude-haiku-4-5</span>)</small>
             <span class="model-picker-wrapper"><select id="claudeModelSelect" class="model-picker">
+              <option value="claude-haiku-4-5">claude-haiku-4-5</option>
+              <option value="claude-sonnet-4-5-20250929">claude-sonnet-4-5</option>
               <option value="claude-sonnet-4-20250514">claude-4-sonnet</option>
               <option value="claude-3-7-sonnet-20250219">claude-3-7-sonnet</option>
               <option value="claude-3-5-haiku-20241022">claude-3-5-haiku</option>
@@ -401,9 +404,9 @@
       <!-- Antwort Grok -->
       <div class="response-box" id="grokResponse" data-model="Grok">
         <h2>
-          <span class="title">Response from Grok <small>(<span id="grokModelText">grok-4</span>)</small>
+          <span class="title">Response from Grok <small>(<span id="grokModelText">grok-4-fast</span>)</small>
             <span class="model-picker-wrapper"><select id="grokModelSelect" class="model-picker">
-              <option value="grok-4-latest">grok-4</option>
+              <option value="grok-4-fast-non-reasoning-latest">grok-4-fast-non-reasoning-latest</option>
               <option value="grok-3-latest">grok-3</option>
             </select></span>
           </span>
@@ -464,9 +467,9 @@
             <label for="consensusModelDropdown" class="consensus-label">Consensus Model:</label>
             <div class="select-wrapper">
               <select id="consensusModelDropdown">
-                <option value="Grok">Grok-4</option>
-                <option value="OpenAI">GPT‑5</option>
-                <option value="Anthropic">claude-4</option>
+                <option value="Grok">Grok-4-fast</option>
+                <option value="OpenAI">GPT-5-mini</option>
+                <option value="Anthropic">claude-haiku-4-5</option>
                 <option value="Mistral">mistral-large-latest</option>
                 <option value="Gemini">gemini-2.5-flash</option>
                 <option value="DeepSeek">DeepSeek-V3</option>
@@ -919,13 +922,15 @@
           });
 
           // Aktualisiere weiterhin die Modellnamen:
-          const openaiModelText = (deepSearchActive && !searchModeActive) ? "GPT-5 reasoning" : "GPT-5";
+          const openaiModelText = (deepSearchActive && !searchModeActive) ? "GPT-5" : "GPT-5-mini";
 
           const geminiModelText = deepSearchActive ? "gemini-2.5-pro" : "gemini-2.5-flash";
 
-          const claudeModelText = deepSearchActive ? "claude-sonnet-4-5-20250929" : "claude-sonnet-4-20250514";
+          const claudeModelText = deepSearchActive ? "claude-sonnet-4-5-20250929" : "claude-haiku-4-5";
 
           const deepseekModelText = deepSearchActive ? "DeepSeek-R1" : "DeepSeek-V3";
+
+          const grokModelText = deepSearchActive ? "grok-4-latest" : "grok-4-fast-non-reasoning";
 
           const exaModelText = deepSearchActive ? "exa-pro" : "exa";
           document.querySelector("#exaResponse .title small").textContent = "(" + exaModelText + ")";
@@ -941,6 +946,7 @@
           setModelText("geminiModelText",  geminiModelText);
           setModelText("claudeModelText",  claudeModelText);
           setModelText("deepseekModelText",deepseekModelText);
+          setModelText("grokModelText",grokModelText);
         }
 
         // Event-Listener registrieren:

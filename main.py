@@ -72,6 +72,8 @@ app.add_middleware(CustomSecurityMiddleware)
 
 load_dotenv()
 
+logging.basicConfig(level=logging.INFO)
+
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 
@@ -107,10 +109,12 @@ GEMINI_DEEP_MAX_TOKENS = 4096   # <- vorher 2048, das war oft zu knapp
 # Modelle, die pro Anbieter erlaubt sind
 ALLOWED_OPENAI_MODELS = {
     "gpt-5",
+    "gpt-5-chat-latest",
+    "gpt-5-nano",
+    "gpt-5-mini",
     "gpt-4.1",
     "gpt-4o",
     "gpt-3.5-turbo",
-    "o3-mini",
 }
 
 ALLOWED_MISTRAL_MODELS = {
@@ -121,6 +125,7 @@ ALLOWED_MISTRAL_MODELS = {
 
 ALLOWED_ANTHROPIC_MODELS = {
     "claude-sonnet-4-5-20250929",
+    "claude-haiku-4-5",
     "claude-sonnet-4-20250514",
     "claude-3-7-sonnet-20250219",
     "claude-3-5-haiku-20241022",
@@ -134,10 +139,12 @@ ALLOWED_GEMINI_MODELS = {
 
 ALLOWED_DEEPSEEK_MODELS = {
     "deepseek-chat",
+    "deepseek-reasoner",
 }
 
 ALLOWED_GROK_MODELS = {
     "grok-4-latest",
+    "grok-4-fast-non-reasoning-latest",
     "grok-3-latest",
 }
 
@@ -187,7 +194,9 @@ def query_openai(
     client = openai.OpenAI(api_key=api_key)
 
     # Modell-Entscheidung: search_mode ist entfernt – nur deep_search & override steuern
-    model_to_use = model_override if (model_override and not deep_search) else "gpt-5"
+    model_to_use = "gpt-5" if deep_search else (model_override or "gpt-5-mini")
+
+    print(f"[MODEL] OpenAI -> {model_to_use} | deep_search={deep_search} | override={model_override}")
 
     user_msg = {"role": "user", "content": question}
 
@@ -274,6 +283,9 @@ def query_mistral(question: str, api_key: str, system_prompt: str = None, deep_s
     try:
         client = Mistral(api_key=api_key)
         model = model_override if (model_override and not deep_search) else "mistral-large-latest"
+
+        print(f"[MODEL] Mistral -> {model} | deep_search={deep_search} | override={model_override}")
+
         response = client.chat.complete(
             model=model,
             messages=[
@@ -307,11 +319,14 @@ def query_claude(question: str, api_key: str, system_prompt: str = None, deep_se
             "anthropic-version": "2023-06-01"
         }
         payload = {
-            "model": model_override if (model_override and not deep_search) else "claude-sonnet-4-20250514",
+            "model": model_override if (model_override and not deep_search) else "claude-sonnet-4-5-20250929",
             "max_tokens": max_tokens,
             "system": system_prompt,
             "messages": [{"role": "user", "content": question}]
         }
+
+        print(f"[MODEL] Claude -> {payload['model']} | deep_search={deep_search} | override={model_override}")
+
         response = requests.post(url, json=payload, headers=headers)
         if response.status_code == 200:
             data = response.json()
@@ -349,7 +364,10 @@ def query_gemini(
         return f"Error with Gemini: configuration failed: {e}"
 
     # (B) Modell & Config
-    model_name = model_override if model_override else "gemini-2.5-flash"
+    model_name = "gemini-2.5-pro" if deep_search else (model_override or "gemini-2.5-flash")
+
+    print(f"[MODEL] Gemini -> {model_name} | deep_search={deep_search} | override={model_override}")
+
     try:
         model = genai.GenerativeModel(
             model_name=model_name,
@@ -412,6 +430,7 @@ def query_deepseek(question: str, api_key: str, system_prompt: str = None, deep_
     try:
         client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         model_to_use = "deepseek-reasoner" if deep_search else (model_override or "deepseek-chat")
+        print(f"[MODEL] DeepSeek -> {model_to_use} | deep_search={deep_search} | override={model_override}")
         response = client.chat.completions.create(
             model=model_to_use,
             messages=[
@@ -438,8 +457,12 @@ def query_grok(question: str, api_key: str, system_prompt: str = None, deep_sear
 
     try:
         client = openai.OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
+        model_to_use = "grok-4-latest" if deep_search else (model_override or "grok-4-fast-non-reasoning-latest")
+
+        print(f"[MODEL] Grok -> {model_to_use} | deep_search={deep_search} | override={model_override}")
+
         response = client.chat.completions.create(
-            model=model_override if (model_override and not deep_search) else "grok-4-latest",
+            model=model_to_use,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question}
@@ -589,7 +612,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
     try:
         if consensus_model == "OpenAI":
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
-            model_to_use = "gpt-5" if search_mode else "gpt-5"
+            model_to_use = "gpt-5-mini" if search_mode else "gpt-5-mini"
             response = client.chat.completions.create(
                         model=model_to_use,
                         messages=[
@@ -620,7 +643,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 "anthropic-version": "2023-06-01"
             }
             payload = {
-                "model": "claude-sonnet-4-20250514",
+                "model": "claude-haiku-4-5",
                 "max_tokens": 2048, 
                 "system": "",
                 "messages": [{"role": "user", "content": consensus_prompt}]
@@ -676,7 +699,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
         elif consensus_model == "Grok":
             client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
             response = client.chat.completions.create(
-                model="grok-4-latest",
+                model="grok-4-fast-non-reasoning-latest",
                 messages=[
                     {"role": "system", "content": " "},
                     {"role": "user", "content": consensus_prompt}
@@ -844,7 +867,7 @@ def query_differences(
                 "anthropic-version": "2023-06-01"
             }
             payload = {
-                "model": "claude-sonnet-4-20250514",
+                "model": "claude-haiku-4-5",
                 "max_tokens": 1024,
                 "system": "Answer in the exact same language as the Model responses.",
                 "messages": [{"role": "user", "content": differences_prompt}]
@@ -906,7 +929,7 @@ def query_differences(
         elif differences_model == "Grok":
             client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
             response = client.chat.completions.create(
-                model="grok-4-latest",
+                model="grok-4-fast-non-reasoning-latest",
                 messages=[
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
@@ -2287,7 +2310,7 @@ async def check_keys(request: Request, data: dict = Body(...)):
                     "anthropic-version": "2023-06-01"
                 }
                 payload = {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-haiku-4-5",
                     "max_tokens": 8192,
                     "system": "",
                     "messages": [{"role": "user", "content": "ping"}]
