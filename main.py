@@ -52,7 +52,7 @@ class CustomSecurityMiddleware:
                     "https://*.googleapis.com "
                     "https://firebasestorage.googleapis.com "
                     "https://api.openai.com https://api.mistral.ai https://api.anthropic.com "
-                    "https://api.x.ai https://api.deepseek.com https://api.perplexity.ai https://api.exa.ai "
+                    "https://api.x.ai https://api.deepseek.com https://api.exa.ai "
                     "https://cdn.jsdelivr.net; "
                     "frame-src 'self' https://accounts.google.com https://*.google.com https://*.gstatic.com https://*.firebaseapp.com https://*.web.app;"
                 )
@@ -472,133 +472,175 @@ def query_grok(question: str, api_key: str, system_prompt: str = None, deep_sear
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Error with Grok: {str(e)}"
-    
-    
-def query_exa(question: str, api_key: str, search_mode: bool, system_prompt: str = None, deep_search: bool = False) -> str:
-    if not search_mode:
-        # Falls der Search Mode nicht aktiv ist, wird Exa nicht angefragt.
+        
+
+def exa_search(query: str, num_results: int = 3):
+    search_url = "https://api.exa.ai/search"
+    headers = {"Content-Type": "application/json", "x-api-key": os.getenv("DEVELOPER_EXA_API_KEY")}
+    payload = {"query": query, "num_results": num_results}
+
+    resp = requests.post(search_url, json=payload, headers=headers, timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
+    results = data.get("results", [])
+    if not results:
+        return {"results": []}
+
+    ids = [r["id"] for r in results]
+
+    # Inhalte holen
+    contents_resp = requests.post(
+        "https://api.exa.ai/contents",
+        json={"ids": ids, "contents": {"max_characters": 1200, "include_html": False}},
+        headers=headers,
+        timeout=10
+    )
+    contents_resp.raise_for_status()
+    contents_data = contents_resp.json()
+    contents_by_id = {c["id"]: c for c in contents_data.get("results", contents_data.get("contents", []))}
+
+    merged = []
+    for r in results:
+        cid = r["id"]
+        c = contents_by_id.get(cid, {})
+        merged.append({
+            "id": r["id"],
+            "title": r.get("title"),
+            "url": r.get("url"),
+            "text": c.get("text") or c.get("content") or c.get("snippet") or ""
+        })
+    return {"results": merged}
+
+
+def clean_exa_text(raw: str) -> str:
+    if not raw:
         return ""
-    if system_prompt is None:
-        system_prompt = DEFAULT_SYSTEM_PROMPT
+    text = raw.replace("\r", "\n").strip()
 
-    if deep_search:
-        system_prompt += "\n" + DEEP_THINK_PROMPT
-    
-    # Setze max_tokens basierend auf dem deep_search Flag
-    max_tokens = DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS
+    # Navigation Müll raus
+    drop_prefixes = (
+        "[Skip to", "- [Skip to", "[Jump to", "- [Jump to",
+        "[LIVING ROOM IDEAS", "[HALLWAY IDEAS"
+    )
+    lines = []
+    for line in text.split("\n"):
+        s = line.strip()
+        if not s:
+            continue
+        if any(s.startswith(p) for p in drop_prefixes):
+            continue
+        lines.append(s)
 
-    # Wähle das Model abhängig vom deep_search Flag
-    model_to_use = "exa-pro" if deep_search else "exa"
+    text = " ".join(lines)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    return re.sub(r"\s+", " ", text).strip()
 
-    try:
-        client = openai.OpenAI(api_key=api_key, base_url="https://api.exa.ai")
-        response = client.chat.completions.create(
-            model=model_to_use,  # Alternativ: "exa-pro", falls gewünscht
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": question}
-            ],
-            extra_body={"text": True},  # Stellt sicher, dass als Text geantwortet wird
-            max_tokens=max_tokens
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f"Error with Exa: {str(e)}"
-    
 
-def query_perplexity(question: str, api_key: str, search_mode: bool, system_prompt: str = None, deep_search: bool = False) -> str:
-    # Falls der Search Mode nicht aktiv ist, wird Perplexity nicht angefragt.
+def build_evidence_block(exa_results, max_sources: int = 3):
+    sources = []
+    for i, r in enumerate(exa_results.get("results", [])[:max_sources], start=1):
+        cleaned = clean_exa_text(r.get("text", ""))
+        extract = cleaned[:800]
+        sources.append({
+            "id": f"S{i}",
+            "title": r["title"],
+            "url": r["url"],
+            "extract": extract
+        })
+
+    block_lines = ["Relevant web sources:"]
+    for s in sources:
+        block_lines.append(f"[{s['id']}] {s['title']} – {s['url']}\n{s['extract']}\n")
+
+    return "\n".join(block_lines), sources
+
+def prepare_prompt_with_websearch(question: str, search_mode: bool, base_system_prompt: str):
     if not search_mode:
-        return ""
-    if system_prompt is None:
-        system_prompt = (
-            "You are an artificial intelligence assistant and you need to "
-            "Answer shortly."
-        )
+        return base_system_prompt, None
 
-    if deep_search:
-        system_prompt += "\n" + DEEP_THINK_PROMPT
-    
-    # Setze max_tokens basierend auf dem deep_search Flag
-    max_tokens = DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS
+    exa_key = os.getenv("DEVELOPER_EXA_API_KEY")
+    if not exa_key:
+        raise HTTPException(status_code=500, detail="Exa API key missing")
 
-    # Wähle das Model abhängig vom deep_search Flag
-    model_to_use = "sonar-pro" if deep_search else "sonar"
+    raw = exa_search(question, num_results=6)
+    evidence_block, sources = build_evidence_block(raw)
 
-    try:
-        # Erstelle den Client mit der Perplexity-URL
-        client = openai.OpenAI(api_key=api_key, base_url="https://api.perplexity.ai")
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": question},
-        ]
-        response = client.chat.completions.create(
-            model=model_to_use,
-            messages=messages,
-            max_tokens=max_tokens,
-        )
-        
-        # Extrahiere den Antworttext und die citations (sofern vorhanden)
-        result_text = response.choices[0].message.content.strip()
-        citations = getattr(response, "citations", [])
-        
-        # Ersetze Zitations-Marker [1], [2], ... durch HTML-Links
-        def replace_citation(match):
-            # Die Ziffern in den Klammern sind 1-indexiert, während die Liste 0-indexiert ist.
-            index = int(match.group(1)) - 1
-            if 0 <= index < len(citations):
-                url = citations[index]
-                return f'<a href="{url}" target="_blank">[{match.group(1)}]</a>'
-            return match.group(0)
-        
-        processed_text = re.sub(r'\[([0-9]+)\]', replace_citation, result_text)
-        return processed_text
-    except Exception as e:
-        return f"Error with Perplexity: {str(e)}"
+    enriched_prompt = f"""
+You are an AI assistant that must ground its answers in the web sources below.
+
+Guidelines:
+- Use ONLY the information from the sources as factual evidence.
+- Cite sources as [S1], [S2], etc.
+- If information is missing, say so.
+
+Web sources:
+{evidence_block}
+
+Original instructions:
+{base_system_prompt}
+""".strip()
+
+    return enriched_prompt, sources
 
 
-def query_consensus(question: str, answer_openai: str, answer_mistral: str, answer_claude: str, 
-                    answer_gemini: str, answer_deepseek: str, answer_grok: str, answer_exa: str, answer_perplexity: str,
-                    best_model: str, excluded_models: list, consensus_model: str, 
-                    api_keys: dict, search_mode: bool = False) -> str:
+
+def query_consensus(
+    question: str,
+    answer_openai: str,
+    answer_mistral: str,
+    answer_claude: str,
+    answer_gemini: str,
+    answer_deepseek: str,
+    answer_grok: str,
+    best_model: str,
+    excluded_models: list,
+    consensus_model: str,
+    api_keys: dict,
+    search_mode: bool = False
+) -> str:
     """
-    Uses a model to consolidate responses from multiple models into a consistent consensus answer using chain-of-thought logic.
-    The API keys provided are retrieved from the 'api_keys' dictionary.
+    Konsolidiert die Antworten der 6 Haupt-LLMs zu einer Konsensantwort.
+    Web Search (search_mode) bedeutet: Antworten basieren schon auf Web-Context,
+    aber Exa ist KEIN eigenes Modell mehr.
     """
     prompt_parts = []
     if search_mode:
-        prompt_parts.append("Note: The following responses are based on current real-time data. Please include links from the responses in your final consensus answer.\n\n")
-    prompt_parts.append(f"Please provide your answer in the same language as the user's question. The question is: {question}\n\n")
+        prompt_parts.append(
+            "Note: The following responses are based on additional web context. "
+            "If URLs are present in the model answers, include the most relevant ones in the final answer.\n\n"
+        )
+
+    prompt_parts.append(
+        f"Please provide your answer in the same language as the user's question. "
+        f"The question is: {question}\n\n"
+    )
+
     if "OpenAI" not in excluded_models and answer_openai:
-        prompt_parts.append(f"Response from GPT-4o: {answer_openai}\n\n")
+        prompt_parts.append(f"Response from GPT (OpenAI): {answer_openai}\n\n")
     if "Mistral" not in excluded_models and answer_mistral:
-        prompt_parts.append(f"Response from mistral-large-latest: {answer_mistral}\n\n")
+        prompt_parts.append(f"Response from Mistral: {answer_mistral}\n\n")
     if "Anthropic" not in excluded_models and answer_claude:
-        prompt_parts.append(f"Response from claude-4-sonnet: {answer_claude}\n\n")
+        prompt_parts.append(f"Response from Claude: {answer_claude}\n\n")
     if "Gemini" not in excluded_models and answer_gemini:
-        prompt_parts.append(f"Response from gemini-pro: {answer_gemini}\n\n")
+        prompt_parts.append(f"Response from Gemini: {answer_gemini}\n\n")
     if "DeepSeek" not in excluded_models and answer_deepseek:
-        prompt_parts.append(f"Response from deepseek-chat: {answer_deepseek}\n\n")
+        prompt_parts.append(f"Response from DeepSeek: {answer_deepseek}\n\n")
     if "Grok" not in excluded_models and answer_grok:
         prompt_parts.append(f"Response from Grok: {answer_grok}\n\n")
-    if "Exa" not in excluded_models and answer_exa:
-        prompt_parts.append(f"Response from Exa: {answer_exa}\n\n")
-    if "Perplexity" not in excluded_models and answer_perplexity:
-        prompt_parts.append(f"Response from Perplexity: {answer_perplexity}\n\n")
 
     if best_model:
         prompt_parts.append(
             f"The user marked the Answer from the Model: {best_model} as the best one. "
-            "You receive four expert opinions on a specific question. "
+            "You receive multiple expert opinions on a specific question. "
             "Your task is to combine these responses into a comprehensive, correct, and coherent answer. "
             "Note: Experts can also make mistakes. Therefore, try to identify and exclude possible errors by comparing the answers. "
             "If the answers strongly contradict each other at any point, logically determine which variant is most plausible. "
             "Structure the answer clearly and coherently. "
-            "Provide only the final, balanced answer. Adapt the "
+            "Provide only the final, balanced answer."
         )
     else:
         prompt_parts.append(
-            "You receive four expert opinions on a specific question. "
+            "You receive multiple expert opinions on a specific question. "
             "Treat all expert opinions equally. Do not focus on the answer of one model. "
             "Your task is to combine these responses into a comprehensive, correct, and coherent answer. "
             "Note: Experts can also make mistakes. Therefore, try to identify and exclude possible errors by comparing the answers. "
@@ -608,26 +650,25 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
         )
 
     consensus_prompt = "".join(prompt_parts)
-    
+
     try:
         if consensus_model == "OpenAI":
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
-            model_to_use = "gpt-5-mini" if search_mode else "gpt-5-mini"
+            model_to_use = "gpt-5-mini"
             response = client.chat.completions.create(
-                        model=model_to_use,
-                        messages=[
-                            {"role": "system", "content": ""},
-                            {"role": "user", "content": consensus_prompt}
-                        ],
-                        max_completion_tokens=CONSENSUS_MAX_TOKENS
-                    )
+                model=model_to_use,
+                messages=[
+                    {"role": "system", "content": ""},
+                    {"role": "user", "content": consensus_prompt}
+                ],
+                max_completion_tokens=CONSENSUS_MAX_TOKENS
+            )
             return response.choices[0].message.content.strip()
-        
+
         elif consensus_model == "Mistral":
             client = Mistral(api_key=api_keys.get("Mistral"))
-            model = "mistral-large-latest"
             response = client.chat.complete(
-                model=model,
+                model="mistral-large-latest",
                 messages=[
                     {"role": "system", "content": ""},
                     {"role": "user", "content": consensus_prompt}
@@ -635,6 +676,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 max_tokens=CONSENSUS_MAX_TOKENS
             )
             return response.choices[0].message.content.strip()
+
         elif consensus_model == "Anthropic":
             url = "https://api.anthropic.com/v1/messages"
             headers = {
@@ -644,7 +686,7 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
             }
             payload = {
                 "model": "claude-haiku-4-5",
-                "max_tokens": 2048, 
+                "max_tokens": 2048,
                 "system": "",
                 "messages": [{"role": "user", "content": consensus_prompt}]
             }
@@ -657,30 +699,21 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                     return "Error: No response found in the API response."
             else:
                 return f"Error with Anthropic: {response.status_code} - {response.text}"
-            
+
         elif consensus_model == "Gemini":
             gemini_key = api_keys.get("Gemini")
             if gemini_key and gemini_key.strip() != "":
                 genai.configure(api_key=gemini_key)
             else:
-                genai.configure()  # Service-Account
+                genai.configure()
 
             model = genai.GenerativeModel("gemini-2.5-flash")
             generation_config = {"max_output_tokens": int(CONSENSUS_MAX_TOKENS)}
 
-            if search_mode:
-                response = model.generate_content(
-                    consensus_prompt,
-                    generation_config=generation_config,
-                    tools={"google_search_retrieval": {
-                        "dynamic_retrieval_config": {"mode": "MODE_DYNAMIC", "dynamic_threshold": 0.5}
-                    }}
-                )
-            else:
-                response = model.generate_content(
-                    consensus_prompt,
-                    generation_config=generation_config
-                )
+            response = model.generate_content(
+                consensus_prompt,
+                generation_config=generation_config
+            )
 
             return (response.text or "").strip() or "Error: Empty response payload."
 
@@ -695,38 +728,13 @@ def query_consensus(question: str, answer_openai: str, answer_mistral: str, answ
                 max_tokens=CONSENSUS_MAX_TOKENS
             )
             return response.choices[0].message.content.strip()
-        
+
         elif consensus_model == "Grok":
             client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
             response = client.chat.completions.create(
                 model="grok-4-fast-non-reasoning-latest",
                 messages=[
                     {"role": "system", "content": " "},
-                    {"role": "user", "content": consensus_prompt}
-                ],
-                max_tokens=CONSENSUS_MAX_TOKENS
-            )
-            return response.choices[0].message.content.strip()
-        
-        elif consensus_model == "Exa":
-            client = openai.OpenAI(api_key=api_keys.get("Exa"), base_url="https://api.exa.ai")
-            response = client.chat.completions.create(
-                model="exa",  # Alternativ "exa-pro", falls gewünscht
-                messages=[
-                    {"role": "system", "content": ""},
-                    {"role": "user", "content": consensus_prompt}
-                ],
-                extra_body={"text": True},
-                max_tokens=CONSENSUS_MAX_TOKENS
-            )
-            return response.choices[0].message.content.strip()
-        
-        elif consensus_model == "Perplexity":
-            client = openai.OpenAI(api_key=api_keys.get("Perplexity"), base_url="https://api.perplexity.ai")
-            response = client.chat.completions.create(
-                model="sonar",
-                messages=[
-                    {"role": "system", "content": ""},
                     {"role": "user", "content": consensus_prompt}
                 ],
                 max_tokens=CONSENSUS_MAX_TOKENS
@@ -746,40 +754,33 @@ def query_differences(
     answer_gemini: str,
     answer_deepseek: str,
     answer_grok: str,
-    answer_exa: str,
-    answer_perplexity: str,
     consensus_answer: str,
     api_keys: dict,
-    differences_model: str,
-    search_mode: bool = False
+    differences_model: str
 ) -> str:
     """
-    Extrahiert die Unterschiede zwischen den Antworten mittels des angegebenen Konsens-Modells,
+    Extrahiert die Unterschiede zwischen den Antworten der 6 Hauptmodelle,
     anonymisiert die Modellnamen und ordnet das bestbewertete Modell anschließend wieder zu.
+    Web Search ist bereits in den Antworten eingebacken, Exa selbst taucht hier nicht mehr auf.
     """
 
-    # 1. Ursprüngliche Modelle und Antworten in einer Liste sammeln
-    if search_mode:
-        model_answers = [
-            ("OpenAI", answer_openai),
-            ("Gemini", answer_gemini),
-            ("Exa", answer_exa),
-            ("Perplexity", answer_perplexity),
-        ]
-    else:
-        model_answers = [
-            ("OpenAI", answer_openai),
-            ("Mistral", answer_mistral),
-            ("Claude", answer_claude),
-            ("Gemini", answer_gemini),
-            ("DeepSeek", answer_deepseek),
-            ("Grok", answer_grok),
-        ]
+    model_answers = [
+        ("OpenAI",   answer_openai),
+        ("Mistral",  answer_mistral),
+        ("Claude",   answer_claude),
+        ("Gemini",   answer_gemini),
+        ("DeepSeek", answer_deepseek),
+        ("Grok",     answer_grok),
+    ]
 
-    # 2. Modelle mischen für Unabhängigkeit
+    # Leere Antworten filtern
+    model_answers = [(n, a) for (n, a) in model_answers if a]
+
+    if not model_answers:
+        return "Error in comparison: no model responses available."
+
     random.shuffle(model_answers)
 
-    # 3. Anonymisierung: Model A, B, C, ...
     anon_map = {}
     lines = []
     labels = []
@@ -792,14 +793,12 @@ def query_differences(
 
     responses_text = "\n".join(lines)
 
-    # Dynamisch die erlaubten Labels in der Instruktion auflisten
     if len(labels) > 1:
         allowed_list = ", ".join(labels[:-1]) + " or " + labels[-1]
     else:
         allowed_list = labels[0]
     best_models_instruction = f"Choose from one of the following labels: {allowed_list}."
 
-    # 4. Prompt zusammenbauen (vollständig anonymisiert)
     differences_prompt = (
         "Analyze the LLM responses and assess how strongly they differ from each other. "
         "If all models respond almost identically, the consensus is very credible. "
@@ -828,15 +827,13 @@ def query_differences(
         "_____________\n"
         "\n"
         "[Very brief explanation of why these differences affect credibility.]\n\n"
-        "(Info: Mark the model closest to the consensus as Best Model)"
+        "(Info: Mark the model closest to the consensus as Best Model)\n"
         "BestModel: [Model name]"
     )
 
-    # 5. Anfrage ans Konsens-Modell
     try:
         if differences_model == "OpenAI":
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
-            # GPT-5 nicht per chat.completions ansprechen → auf gpt-4.1 ausweichen
             response = client.chat.completions.create(
                 model="gpt-4.1",
                 messages=[
@@ -889,17 +886,13 @@ def query_differences(
                     genai.configure()
 
                 model = genai.GenerativeModel(
-                    # nimm deinen bisherigen Modellnamen; dieser hier ist nur ein Beispiel
                     model_name="gemini-2.5-flash",
                     system_instruction="Answer in the exact same language as the Model responses.",
-                    # optional (1 Zeile): weniger striktes Blocking
                     safety_settings=[{"category":"HARM_CATEGORY_HARASSMENT","threshold":"BLOCK_ONLY_HIGH"}],
                     generation_config={"max_output_tokens": int(DIFFERENCES_MAX_TOKENS), "temperature": 0.2}
                 )
 
                 resp = model.generate_content(differences_prompt)
-
-                # --- Minimal robuster Reader (ohne Hilfsfunktion) ---
                 result = (getattr(resp, "text", None) or "").strip()
                 if not result:
                     cand = (getattr(resp, "candidates", []) or [None])[0]
@@ -908,7 +901,7 @@ def query_differences(
                     if frs in ("2","FinishReason.SAFETY","SAFETY"):
                         return "Error with Gemini (differences): response was blocked by safety filters."
                     if frs in ("3","FinishReason.MAX_TOKENS","MAX_TOKENS"):
-                        return "Error with Gemini (differences): hit max tokens before returning text. Increase DIFFERENCES_MAX_TOKENS or trim inputs."
+                        return "Error with Gemini (differences): hit max tokens before returning text."
                     return f"Error with Gemini (differences): empty candidate (finish_reason={frs})."
 
             except Exception as e:
@@ -938,41 +931,16 @@ def query_differences(
             )
             result = response.choices[0].message.content.strip()
 
-        elif differences_model == "Exa":
-            client = openai.OpenAI(api_key=api_keys.get("Exa"), base_url="https://api.exa.ai")
-            response = client.chat.completions.create(
-                model="exa",
-                messages=[
-                    {"role": "system", "content": "Answer in the exact same language as the Model responses."},
-                    {"role": "user", "content": differences_prompt}
-                ],
-                max_tokens=8192,
-                extra_body={"text": True}
-            )
-            result = response.choices[0].message.content.strip()
-
-        elif differences_model == "Perplexity":
-            client = openai.OpenAI(api_key=api_keys.get("Perplexity"), base_url="https://api.perplexity.ai")
-            response = client.chat.completions.create(
-                model="sonar",
-                messages=[
-                    {"role": "system", "content": "Answer in the exact same language as the Model responses."},
-                    {"role": "user", "content": differences_prompt}
-                ],
-                max_tokens=8192
-            )
-            result = response.choices[0].message.content.strip()
-
         else:
             return "Invalid model selected for difference comparison."
 
     except Exception as e:
         return f"Error in comparison: {e}"
-    
+
     if not result:
         return "Error in comparison: empty result from differences engine."
 
-    # 6. Anonyme BestModel-Zeile rückübersetzen
+    # BestModel-Zeile rückübersetzen
     match = re.search(r"BestModel:\s*Model\s*([A-Z])", result)
     if match:
         anon_label = f"Model {match.group(1)}"
@@ -984,6 +952,7 @@ def query_differences(
         )
 
     return result
+
     
 # Initialisiere Firebase Admin (Beispiel, passe den Pfad zu deinem Service Account an)
 cred = credentials.Certificate("consensai-firebase-adminsdk-fbsvc-9064a77134.json")
@@ -1910,193 +1879,57 @@ async def ask_grok_post(request: Request, data: dict = Body(...)):
         }
     else:
         raise HTTPException(status_code=400, detail="No id_token or api_key specified.")
-    
 
-@app.post("/ask_exa")
-@limiter.limit("3/minute")
-async def ask_exa_post(request: Request, data: dict = Body(...)):
-    """
-    Endpoint für Exa im Search Mode.
-    Nutzt entweder den Developer-API-Key (bei eingeloggten Nutzern) oder einen vom User gelieferten API-Key.
-    """
-    question = data.get("question")
-    # Konvertiere deep_search in einen Boolean
-    deep_search_raw = data.get("deep_search", False)
-    deep_search = True if str(deep_search_raw).lower() == "true" else False
-    # Wähle das entsprechende Wortlimit
-    max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
+@app.post("/prepare")
+async def prepare(request: Request, data: dict = Body(...)):
+    question = (data.get("question") or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Missing 'question' in request body.")
 
-    if count_words(question) > max_words_limit:
-        raise HTTPException(
-            status_code=400,
-            detail=f"The input exceeds the allowed word limit of {max_words_limit} words."
-        )
-    system_prompt = data.get("system_prompt")
-    id_token = extract_id_token(request, data)
-    api_key = data.get("api_key")
-    active_count = data.get("active_count", 1)
-    # Exa wird ausschließlich im Search Mode eingesetzt – daher setzen wir search_mode auf True.
-    search_mode = True
+    # search_mode robust von String → Bool
+    search_mode_raw = data.get("search_mode", False)
+    search_mode = True if str(search_mode_raw).lower() == "true" else bool(search_mode_raw)
 
-    if id_token:
-        try:
-            uid = verify_user_token(id_token)
-        except Exception:
-            raise HTTPException(status_code=401, detail="Authentication failed")
+    base_system_prompt = data.get("system_prompt") or DEFAULT_SYSTEM_PROMPT
 
-        increment = 1.0 / active_count
-
-        # --- Zuerst beide Quota-Checks durchführen ---
-        current_usage = usage_counter.get(uid, 0)
-        if current_usage + increment > FREE_USAGE_LIMIT:
-            # Auch im Fehlerfall die aktuellen Zählerwerte zurückgeben:
-            deep_remaining = 12 - deep_search_usage.get(uid, 0)
-            return {
-                "error": "Your free quota is exhausted. Please provide your own API keys.",
-                "free_usage_remaining": 0,
-                "deep_remaining": deep_remaining
-            }
-
-        if deep_search:
-            current_deep_usage = deep_search_usage.get(uid, 0)
-            if current_deep_usage + increment > 12:
-                free_remaining = FREE_USAGE_LIMIT - current_usage
-                # Hier werden beide Werte mitgegeben, auch wenn deep search nicht verfügbar ist:
-                return {
-                    "error": "Your free deep search quota is exhausted. Please store your own API keys.",
-                    "free_usage_remaining": free_remaining,
-                    "deep_remaining": 0
-                }
-
-        # --- Jetzt beide Zähler inkrementieren, da beide Checks bestanden sind ---
-        usage_counter[uid] = current_usage + increment
-        if deep_search:
-            deep_search_usage[uid] = current_deep_usage + increment
-
-        developer_api_key = os.environ.get("DEVELOPER_EXA_API_KEY")
-        if not developer_api_key:
-            raise HTTPException(status_code=500, detail="Server error: API key not configured")
-        answer = query_exa(
-            question,
-            developer_api_key,
-            search_mode,          # Search mode ist True
-            system_prompt,
-            deep_search=deep_search
-        )
-        free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
-        deep_remaining = 12 - deep_search_usage.get(uid, 0)
-        return {"response": answer, "free_usage_remaining": free_remaining, "deep_remaining": deep_remaining, "key_used": "Developer API Key"}
-    elif api_key:
-        answer = query_exa(
-            question,
-            api_key,
-            search_mode,          # Search mode ist True
-            system_prompt,
-            deep_search=deep_search
-        )
-        # Auch hier beide Werte immer mitgeben
+    # Wenn Web Search nicht aktiv ist: keine Exa-Suche, keine Quota-Prüfung nötig
+    if not search_mode:
         return {
-            "response": answer,
-            "free_usage_remaining": FREE_USAGE_LIMIT,
-            "deep_remaining": 12,
-            "key_used": "User API Key"
+            "system_prompt": base_system_prompt,
+            "sources": []
         }
-    else:
-        raise HTTPException(status_code=400, detail="No authentication parameter (id_token or api_key) specified")
 
-
-@app.post("/ask_perplexity")
-@limiter.limit("3/minute")
-async def ask_perplexity_post(request: Request, data: dict = Body(...)):
-    """
-    Endpoint für Perplexity im Search Mode.
-    Nutzt entweder den Developer-API-Key (bei eingeloggten Nutzern) oder einen vom User gelieferten API-Key.
-    """
-    question = data.get("question")
-    # Konvertiere deep_search in einen Boolean
-    deep_search_raw = data.get("deep_search", False)
-    deep_search = True if str(deep_search_raw).lower() == "true" else False
-    # Wähle das entsprechende Wortlimit
-    max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
-
-    if count_words(question) > max_words_limit:
-        raise HTTPException(
-            status_code=400,
-            detail=f"The input exceeds the allowed word limit of {max_words_limit} words."
-        )
-    system_prompt = data.get("system_prompt")
+    # Ab hier: Web Search aktiv → Auth + FREE_USAGE_LIMIT-Check
     id_token = extract_id_token(request, data)
-    api_key = data.get("api_key")
-    active_count = data.get("active_count", 1)
-    
-    # Da Perplexity ausschließlich im Search Mode genutzt wird, setzen wir search_mode auf True.
-    search_mode = True
-    
-    if id_token:
-        try:
-            uid = verify_user_token(id_token)
-        except Exception:
-            raise HTTPException(status_code=401, detail="Authentication failed")
+    if not id_token:
+        # Frontend wertet das wie gehabt als error aus
+        raise HTTPException(status_code=401, detail="Authentication required for web search.")
 
-        increment = 1.0 / active_count
+    try:
+        uid = verify_user_token(id_token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Authentication failed for web search.")
 
-        # --- Zuerst beide Quota-Checks durchführen ---
-        current_usage = usage_counter.get(uid, 0)
-        if current_usage + increment > FREE_USAGE_LIMIT:
-            # Auch im Fehlerfall die aktuellen Zählerwerte zurückgeben:
-            deep_remaining = 12 - deep_search_usage.get(uid, 0)
-            return {
-                "error": "Your free quota is exhausted. Please provide your own API keys.",
-                "free_usage_remaining": 0,
-                "deep_remaining": deep_remaining
-            }
-
-        if deep_search:
-            current_deep_usage = deep_search_usage.get(uid, 0)
-            if current_deep_usage + increment > 12:
-                free_remaining = FREE_USAGE_LIMIT - current_usage
-                # Hier werden beide Werte mitgegeben, auch wenn deep search nicht verfügbar ist:
-                return {
-                    "error": "Your free deep search quota is exhausted. Please store your own API keys.",
-                    "free_usage_remaining": free_remaining,
-                    "deep_remaining": 0
-                }
-
-        # --- Jetzt beide Zähler inkrementieren, da beide Checks bestanden sind ---
-        usage_counter[uid] = current_usage + increment
-        if deep_search:
-            deep_search_usage[uid] = current_deep_usage + increment
-
-        developer_api_key = os.environ.get("DEVELOPER_PERPLEXITY_API_KEY")
-        if not developer_api_key:
-            raise HTTPException(status_code=500, detail="Server error: API key not configured")
-        answer = query_perplexity(
-            question,
-            developer_api_key,
-            search_mode,
-            system_prompt,
-            deep_search=deep_search
+    # Nur prüfen, NICHT erhöhen – Exa zählt nicht am usage_counter
+    current_usage = usage_counter.get(uid, 0)
+    if current_usage >= FREE_USAGE_LIMIT:
+        # Ganz wichtig: Exa wird hier NICHT aufgerufen
+        raise HTTPException(
+            status_code=403,
+            detail="Your free quota is exhausted. Web search is only available with your own API keys."
         )
-        free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
-        deep_remaining = 12 - deep_search_usage.get(uid, 0)
-        return {"response": answer, "free_usage_remaining": free_remaining, "deep_remaining": deep_remaining, "key_used": "Developer API Key"}
-    elif api_key:
-        answer = query_perplexity(
-            question,
-            api_key,
-            search_mode,
-            system_prompt,
-            deep_search=deep_search
-        )
-        # Auch hier beide Werte immer mitgeben
-        return {
-            "response": answer,
-            "free_usage_remaining": FREE_USAGE_LIMIT,
-            "deep_remaining": 12,
-            "key_used": "User API Key"
-        }
-    else:
-        raise HTTPException(status_code=400, detail="No authentication parameter (id_token or api_key) specified")
+
+    # Quota ok → Exa-Suche durchführen und Evidence-Block bauen
+    final_prompt, sources = prepare_prompt_with_websearch(
+        question=question,
+        search_mode=search_mode,
+        base_system_prompt=base_system_prompt
+    )
+
+    return {
+        "system_prompt": final_prompt,
+        "sources": sources or []
+    }
 
 
 @app.post("/consensus")
@@ -2124,15 +1957,13 @@ async def consensus(request: Request, data: dict = Body(...)):
         use_own_keys = True
 
     # Parameter extrahieren
-    question = data.get("question")
+    question        = data.get("question")
     answer_openai   = data.get("answer_openai")
     answer_mistral  = data.get("answer_mistral")
     answer_claude   = data.get("answer_claude")
     answer_gemini   = data.get("answer_gemini")
     answer_deepseek = data.get("answer_deepseek")
     answer_grok     = data.get("answer_grok")
-    answer_exa     = data.get("answer_exa")
-    answer_perplexity     = data.get("answer_perplexity")
     best_model      = data.get("best_model", "")
     consensus_model = data.get("consensus_model")
     excluded_models = data.get("excluded_models", [])
@@ -2148,7 +1979,7 @@ async def consensus(request: Request, data: dict = Body(...)):
         api_keys["DeepSeek"] = data.get("deepseek_key")
         api_keys["Grok"] = data.get("grok_key")
         api_keys["Exa"] = data.get("exa_key")
-        api_keys["Perplexity"] = data.get("perplexity_key")
+
     else:
         api_keys["OpenAI"] = data.get("openai_key") or os.environ.get("DEVELOPER_OPENAI_API_KEY")
         api_keys["Mistral"] = data.get("mistral_key") or os.environ.get("DEVELOPER_MISTRAL_API_KEY")
@@ -2157,7 +1988,6 @@ async def consensus(request: Request, data: dict = Body(...)):
         api_keys["DeepSeek"] = data.get("deepseek_key") or os.environ.get("DEVELOPER_DEEPSEEK_API_KEY")
         api_keys["Grok"] = data.get("grok_key") or os.environ.get("DEVELOPER_GROK_API_KEY")
         api_keys["Exa"] = data.get("exa_key") or os.environ.get("DEVELOPER_EXA_API_KEY")
-        api_keys["Perplexity"] = data.get("perplexity_key") or os.environ.get("DEVELOPER_PERPLEXITY_API_KEY")
 
     # Validierung der erforderlichen Parameter (nur für Modelle, die nicht ausgeschlossen wurden)
     missing = []
@@ -2165,35 +1995,19 @@ async def consensus(request: Request, data: dict = Body(...)):
         missing.append("question")
     if not consensus_model:
         missing.append("consensus_model")
-    # OpenAI und Gemini NUR im Nicht-Search-Mode prüfen
-    if (not search_mode) and ("OpenAI" not in excluded_models):
-        if not answer_openai or not api_keys.get("OpenAI"):
-            missing.append("OpenAI")
 
-    if (not search_mode) and ("Gemini" not in excluded_models):
-        if not answer_gemini or (use_own_keys and not api_keys.get("Gemini")):
-            missing.append("Gemini")
-    # Bei Search Mode: Exa UND Perplexity prüfen, ansonsten die anderen Modelle
-    if search_mode:
-        if "Exa" not in excluded_models:
-            if not answer_exa or not api_keys.get("Exa"):
-                missing.append("Exa")
-        if "Perplexity" not in excluded_models:
-            if not answer_perplexity or not api_keys.get("Perplexity"):
-                missing.append("Perplexity")
-    else:
-        if "Mistral" not in excluded_models:
-            if not answer_mistral or not api_keys.get("Mistral"):
-                missing.append("Mistral")
-        if "Anthropic" not in excluded_models:
-            if not answer_claude or not api_keys.get("Anthropic"):
-                missing.append("Anthropic")
-        if "DeepSeek" not in excluded_models:
-            if not answer_deepseek or not api_keys.get("DeepSeek"):
-                missing.append("DeepSeek")
-        if "Grok" not in excluded_models:
-            if not answer_grok or not api_keys.get("Grok"):
-                missing.append("Grok")
+    if "OpenAI" not in excluded_models and not answer_openai:
+        missing.append("OpenAI")
+    if "Mistral" not in excluded_models and not answer_mistral:
+        missing.append("Mistral")
+    if "Anthropic" not in excluded_models and not answer_claude:
+        missing.append("Anthropic")
+    if "Gemini" not in excluded_models and not answer_gemini:
+        missing.append("Gemini")
+    if "DeepSeek" not in excluded_models and not answer_deepseek:
+        missing.append("DeepSeek")
+    if "Grok" not in excluded_models and not answer_grok:
+        missing.append("Grok")
 
     if missing:
         raise HTTPException(status_code=400, detail="Missing parameters: " + ", ".join(missing))
@@ -2235,15 +2049,32 @@ async def consensus(request: Request, data: dict = Body(...)):
     if best_model and best_model in excluded_models:
         raise HTTPException(status_code=400, detail="The answer marked as best must not be excluded.")
 
-    # Konsens-Antwort generieren
     consensus_answer = query_consensus(
-        question, answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok, answer_exa, answer_perplexity,
-        best_model, excluded_models, consensus_model, api_keys, search_mode)
+        question,
+        answer_openai,
+        answer_mistral,
+        answer_claude,
+        answer_gemini,
+        answer_deepseek,
+        answer_grok,
+        best_model,
+        excluded_models,
+        consensus_model,
+        api_keys,
+        search_mode
+    )
 
-    # Unterschiede ermitteln
     differences = query_differences(
-        answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok, answer_exa, answer_perplexity,
-        consensus_answer, api_keys, differences_model=consensus_model, search_mode=search_mode)
+        answer_openai,
+        answer_mistral,
+        answer_claude,
+        answer_gemini,
+        answer_deepseek,
+        answer_grok,
+        consensus_answer,
+        api_keys,
+        differences_model=consensus_model
+    )
 
     return {"consensus_response": consensus_answer, "differences": differences}
 
@@ -2264,7 +2095,6 @@ async def check_keys(request: Request, data: dict = Body(...)):
         deepseek_key = data.get("deepseek_key")
         grok_key = data.get("grok_key")
         exa_key = data.get("exa_key")
-        perplexity_key = data.get("perplexity_key")
         
         results = {}
         
@@ -2393,23 +2223,6 @@ async def check_keys(request: Request, data: dict = Body(...)):
                 results["Exa"] = "invalid"
         except Exception as e:
             results["Exa"] = "invalid"
-
-        # Perplexity Handshake
-        try:
-            if perplexity_key and len(perplexity_key) > 10:
-                client = openai.OpenAI(api_key=perplexity_key, base_url="https://api.perplexity.ai")
-                response = client.chat.completions.create(
-                    model="sonar",
-                    messages=[
-                        {"role": "system", "content": "ping"},
-                        {"role": "user", "content": "ping"}
-                    ]
-                )
-                results["Perplexity"] = "valid"
-            else:
-                results["Perplexity"] = "invalid"
-        except Exception as e:
-            results["Perplexity"] = "invalid"
         
         return {"results": results}
 

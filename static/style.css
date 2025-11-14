@@ -2662,7 +2662,7 @@ font-size: 0.9em;
   /* Alte Elemente ausblenden */
   .search-mode:not(.deep-search-mode) .slider,
   .search-mode:not(.deep-search-mode) .search-mode-label,
-  .search-mode:not(.deep-search-mode) .deepthink-disclaimer {
+  .search-mode:not(.deep-search-mode) .deepthink-disclaimer{
     display: none !important;
   }
 
@@ -2909,7 +2909,8 @@ font-size: 0.9em;
     line-height: 24px; /* entspricht der Höhe des Switches */
   }
 
-  .deepthink-disclaimer {
+  .deepthink-disclaimer, 
+  .search-disclaimer{
     font-size: 0.8em;
     margin-left: 5px;
     line-height: 24px;

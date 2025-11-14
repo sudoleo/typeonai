@@ -132,15 +132,7 @@
       <div class="api-key-group">
         <label for="grokKey">Grok API Key <span id="grokFeedback" class="feedback"></span></label>
         <input type="text" id="grokKey" placeholder="Your Grok Key" autocomplete="off">
-      </div>
-      <div class="api-key-group">
-        <label for="eaxKey">Exa API Key <span id="exaFeedback" class="feedback"></span></label>
-        <input type="text" id="exaKey" placeholder="Your Exa Key" autocomplete="off">
-      </div>
-      <div class="api-key-group">
-        <label for="eaxKey">Perplexity API Key <span id="perplexityFeedback" class="feedback"></span></label>
-        <input type="text" id="perplexityKey" placeholder="Your Perplexity Key" autocomplete="off">
-      </div>            
+      </div>          
       <div class="sidebar-tooltip">
         <button onclick="testAllKeys()">
           Save/Test all APIs 
@@ -196,13 +188,7 @@
       </label>
       <label for="selectGrok">
         <input type="checkbox" id="selectGrok" checked> Grok
-      </label>
-      <label for="selectExa">
-        <input type="checkbox" id="selectExa" checked> Exa
-      </label>
-      <label for="selectPerplexity">
-        <input type="checkbox" id="selectPerplexity" checked> Perplexity
-      </label>           
+      </label>         
     </div>
 
     <!-- Trennstrich zwischen API Keys und Leaderboard -->
@@ -274,7 +260,7 @@
             <span class="search-mode-label">Web Search</span>
             <!-- Disclaimer, der nur beim Aktivieren angezeigt wird -->
             <span id="searchDisclaimer" class="search-disclaimer" style="display: none; font-size: 0.8em; margin-left: 5px;">
-              test
+              Models have access to the Internet.
             </span>
           </div>
           <div class="search-mode deep-search-mode">
@@ -419,35 +405,7 @@
           </div>
         </h2>
         <p class="collapsible-content"></p>
-      </div>
-      <!-- Antwort Exa -->
-      <div class="response-box" id="exaResponse" data-model="Exa">
-        <h2>
-          <span class="title">Response from Exa <small>(exa)</small></span>
-          <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('exaResponse')" title="Mark as best answer">&#9733;</span>
-            <span class="exclude-btn" onclick="toggleExclude('exaResponse')" title="Exclude answer">&#10005;</span>
-            <button class="collapse-btn" onclick="toggleCollapse('exaResponse')">
-              <span class="arrow">&#9660;</span>
-            </button>
-          </div>
-        </h2>
-        <p class="collapsible-content"></p>
-      </div>
-      <!-- Antwort Perplexity -->
-      <div class="response-box" id="perplexityResponse" data-model="Perplexity">
-        <h2>
-          <span class="title">Response from Perplexity <small>(sonar)</small></span>
-          <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('perplexityResponse')" title="Mark as best answer">&#9733;</span>
-            <span class="exclude-btn" onclick="toggleExclude('perplexityResponse')" title="Exclude answer">&#10005;</span>
-            <button class="collapse-btn" onclick="toggleCollapse('perplexityResponse')">
-              <span class="arrow">&#9660;</span>
-            </button>
-          </div>
-        </h2>
-        <p class="collapsible-content"></p>
-      </div>  
+      </div> 
     </div>
     
     <!-- Konsens-Section -->
@@ -507,6 +465,8 @@
             <span class="thinking" data-text="Thinking …">Thinking&nbsp;…</span>
           </span>
         `;
+
+        window.currentEvidenceSources = [];
 
       /* === DEMO: Data & Utilities ======================================= */
       const DEMO_SCENARIO_PROMPT =
@@ -695,9 +655,35 @@
         // Utils: Markdown → HTML (sanitised) + deine Addons
         function injectMarkdown(el, md) {
           el.innerHTML = DOMPurify.sanitize(marked.parse(md || ""));
+
           if (window.addCopyButtons) window.addCopyButtons(el);
           if (window.addNewTabToLinks) window.addNewTabToLinks(el);
+
+          if (window.currentEvidenceSources && window.currentEvidenceSources.length && window.linkifySourceTags) {
+            window.linkifySourceTags(el, window.currentEvidenceSources);
+          }
         }
+
+        function linkifySourceTags(containerEl, sources) {
+          if (!sources || !sources.length) return;
+
+          let html = containerEl.innerHTML;
+
+          html = html.replace(/\[(S[1-9]\d*)\]/g, (match, id) => {
+            const index = parseInt(id.slice(1), 10) - 1; // S1 -> 0
+            const src = sources[index];
+            if (!src || !src.url) return match;
+
+            const url = src.url;
+            const safeId = id; // "S1"
+            return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="source-link">[${safeId}]</a>`;
+          });
+
+          containerEl.innerHTML = html;
+        }
+
+        window.linkifySourceTags = linkifySourceTags;
+
 
         function setSpinner(boxId) {
           const box = document.getElementById(boxId);
@@ -875,9 +861,7 @@
                           localStorage.getItem("anthropicKey") ||
                           localStorage.getItem("geminiKey") ||
                           localStorage.getItem("deepseekKey") ||
-                          localStorage.getItem("grokKey") ||
-                          localStorage.getItem("exaKey") ||
-                          localStorage.getItem("perplexityKey");
+                          localStorage.getItem("grokKey");
         
         if (isLoggedIn || hasApiKeys) {
           questionInput.placeholder = "Enter your question";
@@ -885,74 +869,93 @@
           questionInput.placeholder = "Please log in or store your own API keys.";
         }
 
-        function updateDeepThinkText() {
-          const deepSearchToggle = document.getElementById("deepSearchToggle");
-          const deepSearchActive = deepSearchToggle.checked;
-          const deepthinkDisclaimer = document.getElementById("deepthinkDisclaimer");
+      function updateDeepThinkText() {
+        const deepSearchToggle = document.getElementById("deepSearchToggle");
+        const searchToggle     = document.getElementById("searchModeToggle");
 
-          let searchModeActive = false;
-          const searchToggle = document.getElementById("searchModeToggle");
-          if (searchToggle) {
-            searchModeActive = searchToggle.checked;
-          }
+        const deepSearchActive = !!deepSearchToggle && deepSearchToggle.checked;
+        const searchModeActive = !!searchToggle && searchToggle.checked;
 
-          const text = searchModeActive
-            ? "DeepSearch models. More thoughtful responses."
-            : "Reasoning models. More thoughtful responses.";
+        const deepthinkDisclaimer = document.getElementById("deepthinkDisclaimer");
+        const searchDisclaimer    = document.getElementById("searchDisclaimer"); // wird nur versteckt
 
+        // -------------------------
+        // Texte vorbereiten
+        // -------------------------
+        const deepText = searchModeActive
+          ? "DeepSearch models. Thoughtful plus internet."
+          : "Reasoning models. More thoughtful responses.";
+
+        const searchText = "Models have access to the Internet.";
+
+        // -------------------------
+        // Mobile / kleine Screens: Popup
+        // -------------------------
+        if (window.innerWidth < 1400) {
+          // Priorität Deep Think: wenn beides an ist, nur Deep Think Text zeigen
           if (deepSearchActive) {
-            if (window.innerWidth < 1400) {
-              // Auf kleinen Displays: Popup anzeigen
-              showPopup(text);
-              // Den Inline-Disclaimer ausblenden
-              deepthinkDisclaimer.style.display = "none";
-            } else {
-              // Auf größeren Displays: Inline-Disclaimer aktualisieren
-              deepthinkDisclaimer.textContent = text;
-              deepthinkDisclaimer.style.display = "inline-block";
-            }
-          } else {
-            // Falls Deep Think nicht aktiv ist, ausblenden:
-            deepthinkDisclaimer.style.display = "none";
+            showPopup(deepText);
+          } else if (searchModeActive) {
+            showPopup(searchText);
           }
 
-          const showPickers = !deepSearchActive && !searchModeActive;
-          document.querySelectorAll('.model-picker-wrapper').forEach(el => {
-            el.style.display = showPickers ? 'inline-flex' : 'none';
-          });
+          if (deepthinkDisclaimer) deepthinkDisclaimer.style.display = "none";
+          if (searchDisclaimer)    searchDisclaimer.style.display    = "none";
+        } else {
+          // -------------------------
+          // Desktop: Text RECHTS vom Deep-Think-Toggle
+          // -------------------------
+          if (deepthinkDisclaimer) {
+            if (deepSearchActive || searchModeActive) {
+              // Priorität:
+              // 1) Deep Think aktiv -> Deep Text
+              // 2) Nur Web Search aktiv -> Web-Search-Text
+              if (deepSearchActive) {
+                deepthinkDisclaimer.textContent = deepText;
+              } else {
+                deepthinkDisclaimer.textContent = searchText;
+              }
+              deepthinkDisclaimer.style.display = "inline-block";
+            } else {
+              deepthinkDisclaimer.style.display = "none";
+            }
+          }
 
-          // Aktualisiere weiterhin die Modellnamen:
-          const openaiModelText = (deepSearchActive && !searchModeActive) ? "GPT-5" : "GPT-5-mini";
-
-          const geminiModelText = deepSearchActive ? "gemini-2.5-pro" : "gemini-2.5-flash";
-
-          const claudeModelText = deepSearchActive ? "claude-sonnet-4-5-20250929" : "claude-haiku-4-5";
-
-          const deepseekModelText = deepSearchActive ? "DeepSeek-R1" : "DeepSeek-V3";
-
-          const grokModelText = deepSearchActive ? "grok-4-latest" : "grok-4-fast-non-reasoning";
-
-          const exaModelText = deepSearchActive ? "exa-pro" : "exa";
-          document.querySelector("#exaResponse .title small").textContent = "(" + exaModelText + ")";
-
-          const sonarModelText = deepSearchActive ? "sonar-pro" : "sonar";
-          document.querySelector("#perplexityResponse .title small").textContent = "(" + sonarModelText + ")";
-
-          const setModelText = (id, txt) => {
-            const el = document.getElementById(id);
-            if (el) el.textContent = txt;        // nur das <span> updaten, nicht <small> überschreiben
-          };
-          setModelText("openaiModelText",  openaiModelText);
-          setModelText("geminiModelText",  geminiModelText);
-          setModelText("claudeModelText",  claudeModelText);
-          setModelText("deepseekModelText",deepseekModelText);
-          setModelText("grokModelText",grokModelText);
+          // Den ursprünglichen Web-Search-Disclaimer-Span ausblenden
+          if (searchDisclaimer) {
+            searchDisclaimer.style.display = "none";
+          }
         }
+
+        // -------------------------
+        // Model-Picker zeigen/verstecken
+        // -------------------------
+        const showPickers = !deepSearchActive;
+        document.querySelectorAll(".model-picker-wrapper").forEach(el => {
+          el.style.display = showPickers ? "inline-flex" : "none";
+        });
+
+        const openaiModelText   = (deepSearchActive && !searchModeActive) ? "GPT-5" : "GPT-5-mini";
+        const geminiModelText   = deepSearchActive ? "gemini-2.5-pro" : "gemini-2.5-flash";
+        const claudeModelText   = deepSearchActive ? "claude-sonnet-4-5-20250929" : "claude-haiku-4-5";
+        const deepseekModelText = deepSearchActive ? "DeepSeek-R1" : "DeepSeek-V3";
+        const grokModelText     = deepSearchActive ? "grok-4-latest" : "grok-4-fast-non-reasoning";
+
+        const setModelText = (id, txt) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = txt;
+        };
+        setModelText("openaiModelText",   openaiModelText);
+        setModelText("geminiModelText",   geminiModelText);
+        setModelText("claudeModelText",   claudeModelText);
+        setModelText("deepseekModelText", deepseekModelText);
+        setModelText("grokModelText",     grokModelText);
+      }
 
         // Event-Listener registrieren:
         document.getElementById("deepSearchToggle").addEventListener("change", updateDeepThinkText);
         document.getElementById("searchModeToggle").addEventListener("change", updateDeepThinkText);
-        document.addEventListener("DOMContentLoaded", updateDeepThinkText);
+        updateDeepThinkText();
 
         // --------------------------
         // Marketing Popup Initialisierung
@@ -1008,8 +1011,6 @@
         const geminiCheckbox = document.getElementById("selectGemini");
         const deepseekCheckbox = document.getElementById("selectDeepSeek");
         const grokCheckbox = document.getElementById("selectGrok");
-        const exaCheckbox = document.getElementById("selectExa");
-        const perplexityCheckbox = document.getElementById("selectPerplexity");
   
         // Label-Container der Checkboxen:
         const openaiLabel = document.querySelector("label[for='selectOpenAI']");
@@ -1018,18 +1019,6 @@
         const deepseekLabel = document.querySelector("label[for='selectDeepSeek']");
         const grokLabel = document.querySelector("label[for='selectGrok']");
         const geminiLabel = document.querySelector("label[for='selectGemini']");
-        const exaLabel = document.querySelector("label[for='selectExa']");
-        const perplexityLabel = document.querySelector("label[for='selectPerplexity']");
-  
-        // Exa & Perplexity standardmäßig ausblenden, da es nur im Search Mode verwendet wird:
-        exaCheckbox.checked = false;
-        exaCheckbox.disabled = true;
-        exaLabel.style.display = "none";
-        perplexityCheckbox.checked = false;
-        perplexityCheckbox.disabled = true;
-        perplexityLabel.style.display = "none";
-        setResponseBoxDisplay("exaResponse", "none");
-        setResponseBoxDisplay("perplexityResponse", "none");
   
         // Funktion, um Response-Boxen komplett auszublenden oder einzublenden:
         function setResponseBoxDisplay(id, displayValue) {
@@ -1232,6 +1221,59 @@
             }, 300);
           }, 3000);
         }
+
+        function renderEvidenceSources(sources) {
+          const container = document.getElementById("evidenceContainer");
+          const listEl = document.getElementById("evidenceList");
+
+          if (!container || !listEl) {
+            // Wenn du das UI noch nicht eingebaut hast, einfach leise aussteigen
+            return;
+          }
+
+          listEl.innerHTML = "";
+
+          if (!sources || !sources.length) {
+            container.style.display = "none";
+            return;
+          }
+
+          sources.forEach((src, idx) => {
+            const li = document.createElement("li");
+            li.className = "evidence-item";
+
+            const titleRow = document.createElement("div");
+            titleRow.className = "evidence-title-row";
+
+            const indexSpan = document.createElement("span");
+            indexSpan.className = "evidence-index";
+            indexSpan.textContent = (idx + 1) + ". ";
+
+            const link = document.createElement("a");
+            link.href = src.url || "#";
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.textContent = src.title || src.url || "Source " + (idx + 1);
+
+            titleRow.appendChild(indexSpan);
+            titleRow.appendChild(link);
+            li.appendChild(titleRow);
+
+            if (src.snippet || src.text) {
+              const snippetDiv = document.createElement("div");
+              snippetDiv.className = "evidence-snippet";
+              snippetDiv.textContent = src.snippet || src.text;
+              li.appendChild(snippetDiv);
+            }
+
+            listEl.appendChild(li);
+          });
+
+          container.style.display = "block";
+        }
+
+        // global machen, falls du es anderswo brauchst
+        window.renderEvidenceSources = renderEvidenceSources;
       
         // --------------------------
         // Globale Funktionen (für Inline-Aufrufe)
@@ -1347,7 +1389,6 @@
         let consensusGenerated = false;
         document.getElementById("consensusButton").disabled = true;
 
-        // Strikte Demo-Erkennung: Nur exakt "demo" (Groß/Klein egal).
         function isDemoQuery(q) {
           return (q || "").trim().toLowerCase() === "demo";
         }
@@ -1380,23 +1421,113 @@
             alert("Please enter a question.");
             return;
           }
+          
           document.getElementById("sendButton").disabled = true;
           // Konsens-Button wieder aktivieren, bevor eine neue Anfrage gesendet wird.
           document.getElementById("consensusButton").disabled = false;
-          const spinnerHTML = window.spinnerHTML;
-          // Lese den benutzerdefinierten Systemprompt aus oder nutze den Standardwert
-          const customSystemPrompt = localStorage.getItem("systemPrompt") || "Please respond briefly and precisely, focusing only on the essentials.";
-          console.log("Using system prompt:", customSystemPrompt);
-          
-          // Beispiel für den Payload für OpenAI:
-          const payload = {
-            question: question,
-            active_count: 1,
-            search_mode: document.getElementById("searchModeToggle").checked,
-            deep_search: document.getElementById("deepSearchToggle").checked,
-            system_prompt: customSystemPrompt,
-            mode: mode
-          };
+
+          // Basis-Systemprompt laden
+          const storedSystemPrompt =
+            localStorage.getItem("systemPrompt") ||
+            "Please respond briefly and precisely, focusing only on the essentials.";
+
+          // Dieser Wert wird ggf. durch /prepare überschrieben
+          let effectiveSystemPrompt = storedSystemPrompt;
+          console.log("Using base system prompt:", storedSystemPrompt);
+
+          // 🔹 ZUERST: Search/Web-Search-Status lesen
+          const searchModeEnabled = document.getElementById("searchModeToggle").checked;
+          const deepSearchFlag    = document.getElementById("deepSearchToggle").checked;
+
+          // 🔹 Spinner-Basis sichern
+          const baseSpinnerHTML = window.spinnerHTML;
+          const webSearchSpinnerHTML = `
+            <div class="thinking-wrap">
+              <div class="spinner"></div>
+              <span class="thinking" data-text="Web search">Web search</span>
+            </div>
+          `;
+
+          const modelBoxes = [
+            document.getElementById("openaiResponse"),
+            document.getElementById("claudeResponse"),
+            document.getElementById("mistralResponse"),
+            document.getElementById("geminiResponse"),
+            document.getElementById("deepseekResponse"),
+            document.getElementById("grokResponse")
+          ].filter(Boolean);
+
+          // 🔸 PHASE 1: Während Exa-Websuche → "Web search ..."
+          if (searchModeEnabled) { window.spinnerHTML = webSearchSpinnerHTML; } else { window.spinnerHTML = baseSpinnerHTML; } modelBoxes.forEach(box => setSpinnerEl(box));
+          // Falls Web Search aktiv ist: einmal /prepare aufrufen
+          if (searchModeEnabled) {
+            try {
+              // 🔹 Firebase-ID-Token holen (falls eingeloggt)
+              let idToken = null;
+              if (window.auth && auth.currentUser) {
+                try {
+                  idToken = await auth.currentUser.getIdToken();
+                } catch (e) {
+                  console.error("Failed to get id_token for /prepare:", e);
+                }
+              }
+
+              const preparePayload = {
+                question: question,
+                system_prompt: storedSystemPrompt,
+                search_mode: true,
+                deep_search: deepSearchFlag,
+                mode: mode
+              };
+
+              // Nur anhängen, wenn wirklich vorhanden
+              if (idToken) {
+                preparePayload.id_token = idToken;
+              }
+
+              const prepareResp = await fetch("/prepare", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(preparePayload),
+                keepalive: true
+              });
+
+              const prepareData = await prepareResp.json();
+
+              if (prepareResp.ok && prepareData.system_prompt) {
+                effectiveSystemPrompt = prepareData.system_prompt;
+                console.log("Using enriched system prompt from /prepare.");
+              } else {
+                console.warn(
+                  "No enriched system_prompt from /prepare, fallback to base.",
+                  prepareData
+                );
+              }
+
+              window.currentEvidenceSources = prepareData.sources || [];
+
+              // Quellen im UI anzeigen (falls Container vorhanden)
+              if (prepareData.sources && window.renderEvidenceSources) {
+                window.renderEvidenceSources(prepareData.sources);
+              }
+            } catch (err) {
+              console.error("Error during /prepare:", err);
+              // Fallback: effectiveSystemPrompt bleibt der gespeicherte Prompt
+              window.currentEvidenceSources = [];
+            }
+          } else {
+            // Wenn Web Search nicht aktiv ist, ggf. alte Quellen ausblenden
+            if (window.renderEvidenceSources) {
+              window.renderEvidenceSources([]);
+            }
+          }
+
+
+          // 🔸 PHASE 2: Exa fertig → zurück auf "Thinking ..." für die LLMs
+          window.spinnerHTML = baseSpinnerHTML;
+          modelBoxes.forEach(box => setSpinnerEl(box));
+
+          console.log("Using system prompt:", effectiveSystemPrompt);
 
           const deepSearchActive = document.getElementById("deepSearchToggle").checked;
   
@@ -1411,8 +1542,6 @@
           const geminiBox = document.getElementById("geminiResponse");
           const deepseekBox = document.getElementById("deepseekResponse");
           const grokBox = document.getElementById("grokResponse");
-          const exaBox = document.getElementById("exaResponse");
-          const perplexityBox = document.getElementById("perplexityResponse");
           
           // Zähle nur die Modelle, die nicht als "ausgeschlossen" markiert sind
           if (!openaiBox.classList.contains("excluded")) totalRequiredResponses++;
@@ -1421,8 +1550,6 @@
           if (!geminiBox.classList.contains("excluded")) totalRequiredResponses++;
           if (!deepseekBox.classList.contains("excluded")) totalRequiredResponses++;
           if (!grokBox.classList.contains("excluded")) totalRequiredResponses++;
-          if (document.getElementById("searchModeToggle").checked && !exaBox.classList.contains("excluded")) totalRequiredResponses++;
-          if (document.getElementById("searchModeToggle").checked && !perplexityBox.classList.contains("excluded")) totalRequiredResponses++;
   
           let activeModels = [];
           if (document.getElementById("selectOpenAI").checked) activeModels.push("OpenAI");
@@ -1431,8 +1558,6 @@
           if (document.getElementById("selectGemini").checked) activeModels.push("Gemini");
           if (document.getElementById("selectDeepSeek").checked) activeModels.push("DeepSeek");
           if (document.getElementById("selectGrok").checked) activeModels.push("Grok");
-          if (document.getElementById("selectExa").checked && document.getElementById("searchModeToggle").checked) activeModels.push("Exa");
-          if (document.getElementById("selectPerplexity").checked && document.getElementById("searchModeToggle").checked) activeModels.push("Perplexity");
       
           // Spinner in den jeweiligen Response-Boxen setzen
           if (activeModels.includes("OpenAI")) {
@@ -1453,12 +1578,6 @@
           if (activeModels.includes("Grok")) {
             document.getElementById("grokResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
           }
-          if (activeModels.includes("Exa")) {
-            document.getElementById("exaResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
-          }
-          if (activeModels.includes("Perplexity")) {
-            document.getElementById("perplexityResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
-          }
           if (document.getElementById("autoConsensusToggle").checked) {
             document.getElementById("consensusResponse").querySelector("p").innerHTML = spinnerHTML;
           } else {
@@ -1472,8 +1591,6 @@
           const geminiKey = localStorage.getItem("geminiKey") || "";
           const deepseekKey = localStorage.getItem("deepseekKey") || "";
           const grokKey = localStorage.getItem("grokKey") || "";
-          const exaKey = localStorage.getItem("exaKey") || "";
-          const perplexityKey = localStorage.getItem("perplexityKey") || "";
       
           let responsesReceived = 0;
           const totalActive = activeModels.length;
@@ -1555,14 +1672,14 @@
           const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
           const payload = {
             question: question,
-            active_count: 1,  // Passe diesen Wert ggf. dynamisch an
-            // Hier wird der neue Parameter hinzugefügt:
-            search_mode: document.getElementById("searchModeToggle").checked,
-            deep_search: document.getElementById("deepSearchToggle").checked,
-            system_prompt: customSystemPrompt,
+            active_count: 1,
+            search_mode: searchModeEnabled,   // oben definiert
+            deep_search: deepSearchFlag,      // oben definiert
+            system_prompt: effectiveSystemPrompt,
             mode: mode,
             model: document.getElementById("openaiModelSelect").value
           };
+
   
           if (!useOwnKeys) {
             let id_token = localStorage.getItem("id_token");
@@ -1612,9 +1729,7 @@
               .querySelector(".collapsible-content");
 
             if (data.response) {
-              outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
-              addCopyButtons(outputEl);
-              addNewTabToLinks(outputEl);
+              injectMarkdown(outputEl, data.response);
               if (auth.currentUser) {
                 saveBookmark(question, data.response, "OpenAI", mode);
               }
@@ -1654,9 +1769,9 @@
           const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
           const payload = {
             question: question,
-            deep_search: document.getElementById("deepSearchToggle").checked,
+            deep_search: deepSearchFlag,
             active_count: 1,
-            system_prompt: customSystemPrompt,
+            system_prompt: effectiveSystemPrompt,
             mode: mode,
             model: document.getElementById("mistralModelSelect").value
           };
@@ -1688,9 +1803,8 @@
             .then(data => {
               let outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
               if (data.response) {
-                outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
-                addCopyButtons(outputEl);
-                addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
+              injectMarkdown(outputEl, data.response);
+
                 if (auth.currentUser) {
                   saveBookmark(question, data.response, "Mistral", mode);
                 }
@@ -1720,9 +1834,9 @@
           const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
           const payload = {
             question: question,
-            deep_search: document.getElementById("deepSearchToggle").checked,
+            deep_search: deepSearchFlag,
             active_count: 1,
-            system_prompt: customSystemPrompt,
+            system_prompt: effectiveSystemPrompt,
             mode: mode,
             model: document.getElementById("claudeModelSelect").value
           };
@@ -1754,9 +1868,7 @@
             .then(data => {
               const outputEl = document.getElementById("claudeResponse").querySelector(".collapsible-content");
               if (data.response) {
-                outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
-                addCopyButtons(outputEl);
-                addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
+                injectMarkdown(outputEl, data.response);
                 if (auth.currentUser) {
                   saveBookmark(question, data.response, "Anthropic", mode);
                 }
@@ -1787,9 +1899,8 @@
             const payload = {
               question: question,
               active_count: 1,
-              // Suche-Parameter hinzufügen:
-              deep_search: document.getElementById("deepSearchToggle").checked,
-              system_prompt: customSystemPrompt,
+              deep_search: deepSearchFlag,
+              system_prompt: effectiveSystemPrompt,
               mode: mode,
               model: document.getElementById("geminiModelSelect").value
             };
@@ -1822,9 +1933,7 @@
             .then(data => {
               const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
               if (data.response) {
-                outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
-                addCopyButtons(outputEl);
-                addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
+                injectMarkdown(outputEl, data.response);
                 if (auth.currentUser) {
                   saveBookmark(question, data.response, "Gemini", mode);
                 }
@@ -1854,9 +1963,9 @@
           const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
           const payload = {
             question: question,
-            deep_search: document.getElementById("deepSearchToggle").checked,
+            deep_search: deepSearchFlag,
             active_count: 1,
-            system_prompt: customSystemPrompt,
+            system_prompt: effectiveSystemPrompt,
             mode: mode,
             model: document.getElementById("deepseekModelSelect").value
           };
@@ -1888,9 +1997,7 @@
             .then(data => {
               const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
               if (data.response) {
-                outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
-                addCopyButtons(outputEl);
-                addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
+                injectMarkdown(outputEl, data.response);
                 if (auth.currentUser) {
                   saveBookmark(question, data.response, "DeepSeek", mode);
                 }
@@ -1920,12 +2027,13 @@
           const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
           const payload = {
             question: question,
-            deep_search: document.getElementById("deepSearchToggle").checked,
+            deep_search: deepSearchFlag,
             active_count: 1,
-            system_prompt: customSystemPrompt,
+            system_prompt: effectiveSystemPrompt,
             mode: mode,
             model: document.getElementById("grokModelSelect").value
           };
+
           if (!useOwnKeys) {
             let id_token = localStorage.getItem("id_token");
             if (id_token) {
@@ -1952,9 +2060,7 @@
           .then(data => {
             const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
             if (data.response) {
-              outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
-              addCopyButtons(outputEl);
-              addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
+              injectMarkdown(outputEl, data.response);
               if (auth.currentUser) {
                 saveBookmark(question, data.response, "Grok", mode);
               }
@@ -1978,140 +2084,6 @@
             checkAllResponses();
           });
         }
-  
-        // Exa
-        if (activeModels.includes("Exa")) {
-          const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
-          const payload = {
-            question: question,
-            active_count: 1,
-            system_prompt: customSystemPrompt,
-            deep_search: document.getElementById("deepSearchToggle").checked,
-            search_mode: document.getElementById("searchModeToggle").checked,
-            mode: mode  // optional, falls benötigt
-          };
-  
-          if (!useOwnKeys) {
-            let id_token = localStorage.getItem("id_token");
-            if (id_token) {
-              payload.id_token = id_token;
-            } else {
-              // Nehme hier den Exa API-Key (z. B. gespeichert unter "exaKey")
-              payload.api_key = localStorage.getItem("exaKey") || "";
-            }
-          } else {
-            if (!validateUserKey("exaKey")) {
-              const outputEl = document.getElementById("exaResponse").querySelector(".collapsible-content");
-              outputEl.innerHTML = "Please log in or store your own API keys.";
-              alert("Please enter a valid Exa API key.");
-              return;
-            }
-            payload.api_key = localStorage.getItem("exaKey");
-          }
-  
-          fetch('/ask_exa', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            keepalive: true
-          })
-            .then(response => response.json())
-            .then(data => {
-              const outputEl = document.getElementById("exaResponse").querySelector(".collapsible-content");
-              if (data.response) {
-                outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
-                addCopyButtons(outputEl);
-                addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
-                if (auth.currentUser) {
-                  saveBookmark(question, data.response, "Exa", mode);
-                }
-              } else if (data.error) {
-                outputEl.innerText = data.error;
-              } else {
-                outputEl.innerText = "Please log in or store your own API keys.";
-              }
-              // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
-              const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
-              const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
-              
-              document.getElementById("freeUsageDisplay").innerHTML =
-                "Free requests: " + freeRemaining + " / " + FREE_USAGE_LIMIT;
-              document.getElementById("deepUsageDisplay").innerHTML =
-                "Deep Think: " + deepRemaining + " / 12";
-              checkAllResponses();
-            })
-            .catch(error => {
-              console.error("Error with Exa:", error);
-              checkAllResponses();
-            });
-          }
-  
-          // Perplexity
-          if (activeModels.includes("Perplexity")) {
-            const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
-            const payload = {
-              question: question,
-              active_count: 1,
-              system_prompt: customSystemPrompt,
-              deep_search: document.getElementById("deepSearchToggle").checked,
-              search_mode: document.getElementById("searchModeToggle").checked,
-              mode: mode  // optional, falls benötigt
-            };
-  
-            if (!useOwnKeys) {
-              let id_token = localStorage.getItem("id_token");
-              if (id_token) {
-                payload.id_token = id_token;
-              } else {
-                // Nehme hier den Perplexity API-Key (z. B. gespeichert unter "perplexityKey")
-                payload.api_key = localStorage.getItem("perplexityKey") || "";
-              }
-            } else {
-              if (!validateUserKey("perplexityKey")) {
-                const outputEl = document.getElementById("perplexityResponse").querySelector(".collapsible-content");
-                outputEl.innerHTML = "Please log in or store your own API keys.";
-                alert("Please enter a valid Perplexity API key.");
-                return;
-              }
-              payload.api_key = localStorage.getItem("perplexityKey");
-            }
-  
-            fetch('/ask_perplexity', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-              keepalive: true
-            })
-              .then(response => response.json())
-              .then(data => {
-                const outputEl = document.getElementById("perplexityResponse").querySelector(".collapsible-content");
-                if (data.response) {
-                  outputEl.innerHTML = DOMPurify.sanitize(marked.parse(data.response));
-                  addCopyButtons(outputEl);
-                  addNewTabToLinks(outputEl); // Hier werden alle Links angepasst
-                  if (auth.currentUser) {
-                    saveBookmark(question, data.response, "Perplexity", mode);
-                  }
-                } else if (data.error) {
-                  outputEl.innerText = data.error;
-                } else {
-                  outputEl.innerText = "Please log in or store your own API keys.";
-                }
-                // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
-                const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
-                const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
-                
-                document.getElementById("freeUsageDisplay").innerHTML =
-                  "Free requests: " + freeRemaining + " / " + FREE_USAGE_LIMIT;
-                document.getElementById("deepUsageDisplay").innerHTML =
-                  "Deep Think: " + deepRemaining + " / 12";
-                checkAllResponses();
-              })
-              .catch(error => {
-                console.error("Error with Perplexity:", error);
-                checkAllResponses();
-              });
-          }
       };
       
         // Modelle (Checkboxen) ein-/ausschalten
@@ -2140,12 +2112,6 @@
         });
         document.getElementById("selectGrok").addEventListener("change", function() {
           toggleModel("grokResponse", this.checked);
-        });
-        document.getElementById("selectExa").addEventListener("change", function() {
-          toggleModel("exaResponse", this.checked);
-        });
-        document.getElementById("selectPerplexity").addEventListener("change", function() {
-          toggleModel("perplexityResponse", this.checked);
         });
 
         // Modell-Dropdowns aktualisieren die angezeigten Namen
@@ -2176,7 +2142,7 @@
         });
       
         // Erneut API Keys in Felder schreiben (falls benötigt)
-        ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey", "grokKey", "exaKey", "perplexityKey"].forEach(function(key) {
+        ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey", "grokKey"].forEach(function(key) {
           const stored = localStorage.getItem(key);
           if (stored) {
             document.getElementById(key).value = stored;
@@ -2198,138 +2164,10 @@
   
       searchModeToggle.addEventListener("change", function() {
         const isSearchMode = this.checked;
-  
-        // Hole das Konsens-Dropdown
-        const consensusDropdown = document.getElementById("consensusModelDropdown");
-  
-        if (isSearchMode) {
-          // searchDisclaimer.style.display = "inline-block";
-  
-          // Deaktiviere und deaktiviere die nicht benötigten Modelle (Mistral, Anthropic/Claude, DeepSeek, Grok)
-          openaiCheckbox.checked = false;
-          mistralCheckbox.checked = false;
-          claudeCheckbox.checked = false;
-          deepseekCheckbox.checked = false;
-          grokCheckbox.checked = false;
-          geminiCheckbox.checked = false;
-  
-          openaiCheckbox.disabled = true;
-          mistralCheckbox.disabled = true;
-          claudeCheckbox.disabled = true;
-          deepseekCheckbox.disabled = true;
-          grokCheckbox.disabled = true;
-          geminiCheckbox.disabled = true;
-  
-          // Optional: Setze die zugehörigen Response-Boxen als "ausgeschlossen" (hier zusätzlich komplett ausblenden)
-          setResponseBoxDisplay("openaiResponse", "none");
-          setResponseBoxDisplay("mistralResponse", "none");
-          setResponseBoxDisplay("claudeResponse", "none");
-          setResponseBoxDisplay("deepseekResponse", "none");
-          setResponseBoxDisplay("grokResponse", "none");
-          setResponseBoxDisplay("geminiResponse", "none");
-  
-          // Blende auch die zugehörigen Labels aus:
-          openaiLabel.style.display = "none";
-          mistralLabel.style.display = "none";
-          claudeLabel.style.display = "none";
-          deepseekLabel.style.display = "none";
-          grokLabel.style.display = "none";
-          geminiLabel.style.display = "none";
-  
-          // Deaktiviere zusätzlich die Buttons in den Response-Boxen (falls noch sichtbar)
-          updateButtons("#openaiResponse .best-btn, #openaiResponse .exclude-btn", true);
-          updateButtons("#mistralResponse .best-btn, #mistralResponse .exclude-btn", true);
-          updateButtons("#claudeResponse .best-btn, #claudeResponse .exclude-btn", true);
-          updateButtons("#deepseekResponse .best-btn, #deepseekResponse .exclude-btn", true);
-          updateButtons("#grokResponse .best-btn, #grokResponse .exclude-btn", true);
-          updateButtons("#geminiResponse .best-btn, #geminiResponse .exclude-btn", true);
-  
-          // Zeige Exa und reaktiviere sie:
-          exaCheckbox.disabled = false;
-          exaCheckbox.checked = true;
-          exaLabel.style.removeProperty("display");
-          exaCheckbox.style.removeProperty("display");
-          setResponseBoxDisplay("exaResponse", "block");
-  
-          // Zeige Perplexity und reaktiviere sie:
-          perplexityCheckbox.disabled = false;
-          perplexityCheckbox.checked = true;
-          perplexityLabel.style.removeProperty("display");
-          perplexityCheckbox.style.removeProperty("display");
-          setResponseBoxDisplay("perplexityResponse", "block");
-  
-          // Setze das Konsens-Dropdown automatisch auf OpenAI und deaktiviere die Auswahl:
-          consensusDropdown.value = "OpenAI";
-          consensusDropdown.disabled = true;
-  
-        // Auf kleinen Bildschirmen: Popup statt Inline-Disclaimer
-        if (window.innerWidth < 1400) {
-          deepthinkDisclaimer.style.display = "none";
-        }
-        } else {
-          // Suchmodus ist deaktiviert:
-          // Blende den Disclaimer aus
-          // deepthinkDisclaimer.style.display = "none";
-  
-          // Reaktiviere alle Modelle:
-          openaiCheckbox.disabled = false;
-          mistralCheckbox.disabled = false;
-          claudeCheckbox.disabled = false;
-          deepseekCheckbox.disabled = false;
-          grokCheckbox.disabled = false;
-          geminiCheckbox.disabled = false;
-  
-          // Setze die Checkboxen der Modelle (außer Exa) auf "angewählt":
-          openaiCheckbox.checked = true;
-          mistralCheckbox.checked = true;
-          claudeCheckbox.checked = true;
-          deepseekCheckbox.checked = true;
-          grokCheckbox.checked = true;
-          geminiCheckbox.checked = true;
-  
-          // Zeige die Response-Boxen wieder:
-          setResponseBoxDisplay("openaiResponse", "block");
-          setResponseBoxDisplay("mistralResponse", "block");
-          setResponseBoxDisplay("claudeResponse", "block");
-          setResponseBoxDisplay("deepseekResponse", "block");
-          setResponseBoxDisplay("grokResponse", "block");
-          setResponseBoxDisplay("geminiResponse", "block");
-  
-          // Zeige die zugehörigen Labels wieder an – einmalig, ohne Duplikate:
-          openaiLabel.style.removeProperty("display");
-          mistralLabel.style.removeProperty("display");
-          claudeLabel.style.removeProperty("display");
-          deepseekLabel.style.removeProperty("display");
-          grokLabel.style.removeProperty("display");
-          geminiLabel.style.removeProperty("display");
-          //exaLabel.style.removeProperty("display");
-  
-          // (Exa wird bereits unten ausgeblendet.)
-          exaCheckbox.disabled = true;
-          exaCheckbox.checked = false;
-          setResponseBoxDisplay("exaResponse", "none");
-          exaCheckbox.style.display = "none";
-          exaLabel.style.display = "none";
-  
-          perplexityCheckbox.disabled = true;
-          perplexityCheckbox.checked = false;
-          setResponseBoxDisplay("perplexityResponse", "none");
-          perplexityCheckbox.style.display = "none";
-          perplexityLabel.style.display = "none";
-  
-          // Reaktiviere die Buttons in den Response-Boxen:
-          updateButtons("#openaiResponse .best-btn, #openaiResponse .exclude-btn", false);
-          updateButtons("#mistralResponse .best-btn, #mistralResponse .exclude-btn", false);
-          updateButtons("#claudeResponse .best-btn, #claudeResponse .exclude-btn", false);
-          updateButtons("#deepseekResponse .best-btn, #deepseekResponse .exclude-btn", false);
-          updateButtons("#grokResponse .best-btn, #grokResponse .exclude-btn", false);
-          updateButtons("#geminiResponse .best-btn, #geminiResponse .exclude-btn", false);
-  
-          consensusButton.disabled = true;
-  
-          // Reaktiviere das Konsens-Dropdown:
-          consensusDropdown.disabled = false;
-        }
+        consensusDropdown.disabled = false;
+
+        // 4) DeepThink-Text / Hinweis aktualisieren (damit Web Search Text passt)
+        updateDeepThinkText();
       });
       
         // Globale Variable, um die letzte verarbeitete Frage zu speichern.
@@ -2367,12 +2205,6 @@
             if (document.getElementById("grokResponse").classList.contains("best")) {
               recordModelVote("Grok", "best");
             }
-            if (searchMode && document.getElementById("exaResponse").classList.contains("best")) {
-              recordModelVote("Exa", "best");
-            }
-            if (searchMode && document.getElementById("perplexityResponse").classList.contains("best")) {
-              recordModelVote("Perplexity", "best");
-            }
   
             // Ebenso für "excluded" (sofern du das separat erfassen möchtest).
             if (document.getElementById("openaiResponse").classList.contains("excluded")) {
@@ -2392,12 +2224,6 @@
             }
             if (document.getElementById("grokResponse").classList.contains("excluded")) {
               recordModelVote("Grok", "exclude");
-            }
-            if (searchMode && document.getElementById("exaResponse").classList.contains("excluded")) {
-              recordModelVote("Exa", "exclude");
-            }
-            if (searchMode && document.getElementById("perplexityResponse").classList.contains("excluded")) {
-              recordModelVote("Perplexity", "exclude");
             }
   
             // Aktualisiere die letzte verarbeitete Frage.
@@ -2421,8 +2247,6 @@
         const geminiBox = document.getElementById("geminiResponse");
         const deepseekBox = document.getElementById("deepseekResponse");
         const grokBox = document.getElementById("grokResponse");
-        const exaBox = document.getElementById("exaResponse");
-        const perplexityBox = document.getElementById("perplexityResponse");
   
         // Lies die Antworten (trim für überflüssige Leerzeichen)
         const answer_openai = openaiBox.querySelector(".collapsible-content").innerText.trim();
@@ -2431,8 +2255,6 @@
         const answer_gemini = geminiBox.querySelector(".collapsible-content").innerText.trim();
         const answer_deepseek = deepseekBox.querySelector(".collapsible-content").innerText.trim();
         const answer_grok = grokBox.querySelector(".collapsible-content").innerText.trim();
-        const answer_exa = exaBox.querySelector(".collapsible-content").innerText.trim();
-        const answer_perplexity = perplexityBox.querySelector(".collapsible-content").innerText.trim();
   
         // Überprüfe nur die Modelle, die nicht als "ausgeschlossen" markiert sind.
         // Überprüfe nur Modelle, die im jeweiligen Modus relevant UND nicht "excluded" sind.
@@ -2443,9 +2265,6 @@
         const needDeepseek     = !searchMode && !deepseekBox.classList.contains("excluded");
         const needGrok         = !searchMode && !grokBox.classList.contains("excluded");
 
-        const needExa          =  searchMode && !exaBox.classList.contains("excluded");
-        const needPerplexity   =  searchMode && !perplexityBox.classList.contains("excluded");
-
         if (
           !question ||
           !consensus_model ||
@@ -2454,9 +2273,7 @@
           (needMistral    && !answer_mistral)      ||
           (needClaude     && !answer_claude)       ||
           (needDeepseek   && !answer_deepseek)     ||
-          (needGrok       && !answer_grok)         ||
-          (needExa        && !answer_exa)          ||
-          (needPerplexity && !answer_perplexity)
+          (needGrok       && !answer_grok)
         ) {
           alert("Refresh the page. Please send a question first, retrieve all answers and select the consensus model.");
           return;
@@ -2486,12 +2303,6 @@
         if (grokBox.classList.contains("excluded")) {
           excludedModels.push(grokBox.getAttribute("data-model"));
         }
-        if (exaBox.classList.contains("excluded")) {
-          excludedModels.push(exaBox.getAttribute("data-model"));
-        }
-        if (perplexityBox.classList.contains("excluded")) {
-          excludedModels.push(perplexityBox.getAttribute("data-model"));
-        }
   
         // Hole API Keys aus localStorage
         const openaiKey = localStorage.getItem("openaiKey") || "";
@@ -2500,8 +2311,6 @@
         const geminiKey = localStorage.getItem("geminiKey") || "";
         const deepseekKey= localStorage.getItem("deepseekKey") || "";
         const grokKey= localStorage.getItem("grokKey") || "";
-        const exaKey= localStorage.getItem("exaKey") || "";
-        const perplexityKey= localStorage.getItem("perplexityKey") || "";
   
         try {
           const response = await fetch("/consensus", {
@@ -2520,8 +2329,6 @@
               answer_gemini: answer_gemini,
               answer_deepseek: answer_deepseek,
               answer_grok: answer_grok,
-              answer_exa: answer_exa,
-              answer_perplexity: answer_perplexity,
               best_model: best_model,
               consensus_model: consensus_model,
               excluded_models: excludedModels,
@@ -2531,8 +2338,6 @@
               gemini_key: geminiKey,
               deepseek_key: deepseekKey,
               grok_key: grokKey,
-              exa_key: exaKey,
-              perplexity_key: perplexityKey,
               keepalive: true
             })
           });
@@ -2545,20 +2350,28 @@
           }
 
           if (response.ok) {
-            // Aktualisiere den Konsens-Bereich und den Unterschiede-Bereich
-            consensusDiv.querySelector(".consensus-main p").innerHTML = marked.parse(data.consensus_response);
-            const diffsMD = data.differences || "No differences found.";
-            const diffsHTML = marked.parse(colorizeCredibility(diffsMD));
-            consensusDiv.querySelector(".consensus-differences p").innerHTML = diffsHTML;
-            const consensusMainEl = consensusDiv.querySelector(".consensus-main p");
-            consensusMainEl.innerHTML = marked.parse(data.consensus_response);
-            addCopyButtons(consensusMainEl);
-  
+            const mainEl = consensusDiv.querySelector(".consensus-main p");
+            const diffEl = consensusDiv.querySelector(".consensus-differences p");
+
+            if (mainEl) {
+              // Konsens-Text inkl. [S1]-Links, Copy-Buttons usw.
+              injectMarkdown(mainEl, data.consensus_response);
+            }
+
+            if (diffEl) {
+              const diffsMD = data.differences || "No differences found.";
+              const colored = window.colorizeCredibility
+                ? window.colorizeCredibility(diffsMD)
+                : diffsMD;
+
+              // Differences auch über injectMarkdown → [S1]-Links inkl.
+              injectMarkdown(diffEl, colored);
+            }
+
             if (auth.currentUser) {
               saveBookmarkConsensus(question, data.consensus_response, data.differences);
             }
-  
-            // Parse den BestModel-Wert aus den Unterschieden und aktualisiere das Leaderboard in Firebase
+
             const bestModelFromConsensus = parseBestModel(data.differences);
             if (bestModelFromConsensus) {
               recordModelVote(bestModelFromConsensus, "BestModel");
@@ -2567,6 +2380,7 @@
             consensusDiv.querySelector(".consensus-main p").innerText = "Error: " + data.detail;
             consensusDiv.querySelector(".consensus-differences p").innerText = "";
           }
+
         } catch (error) {
           console.error("Error fetching consensus:", error);
           consensusDiv.querySelector(".consensus-main p").innerText = "Error in the consensus calculation.";
@@ -2582,16 +2396,12 @@
           const geminiKey = document.getElementById("geminiKey").value;
           const deepseekKey = document.getElementById("deepseekKey").value;
           const grokKey = document.getElementById("grokKey").value;
-          const exaKey = document.getElementById("exaKey").value;
-          const perplexityKey = document.getElementById("perplexityKey").value;
           localStorage.setItem("openaiKey", openaiKey);
           localStorage.setItem("mistralKey", mistralKey);
           localStorage.setItem("anthropicKey", anthropicKey);
           localStorage.setItem("geminiKey", geminiKey);
           localStorage.setItem("deepseekKey", deepseekKey);
           localStorage.setItem("grokKey", grokKey);
-          localStorage.setItem("exaKey", exaKey);
-          localStorage.setItem("perplexityKey", perplexityKey);
           const spinner = document.getElementById("apiSpinner");
           spinner.style.display = "inline-block";
           try {
@@ -2604,9 +2414,7 @@
                 anthropic_key: anthropicKey,
                 gemini_key: geminiKey,
                 deepseek_key: deepseekKey,
-                grok_key: grokKey,
-                exa_key: exaKey,
-                perplexity_key: perplexityKey
+                grok_key: grokKey
               })
             });
             if (!response.ok) {
@@ -2624,16 +2432,12 @@
             const geminiResult = data.results["Gemini"];
             const deepseekResult = data.results["DeepSeek"];
             const grokResult = data.results["Grok"];
-            const exaResult = data.results["Exa"];
-            const perplexityResult = data.results["Perplexity"];
             const openaiFeedback = document.getElementById("openaiFeedback");
             const mistralFeedback = document.getElementById("mistralFeedback");
             const anthropicFeedback = document.getElementById("anthropicFeedback");
             const geminiFeedback = document.getElementById("geminiFeedback");
             const deepseekFeedback = document.getElementById("deepseekFeedback");
             const grokFeedback = document.getElementById("grokFeedback");
-            const exaFeedback = document.getElementById("exaFeedback");
-            const perplexityFeedback = document.getElementById("perplexityFeedback");
             openaiFeedback.innerHTML = openaiResult === "valid" ? "&#9734;" : "&#10007;";
             openaiFeedback.style.color = openaiResult === "valid" ? "green" : "red";
             mistralFeedback.innerHTML = mistralResult === "valid" ? "&#9734;" : "&#10007;";
@@ -2646,10 +2450,6 @@
             deepseekFeedback.style.color = deepseekResult === "valid" ? "green" : "red";
             grokFeedback.innerHTML = grokResult === "valid" ? "&#9734;" : "&#10007;";
             grokFeedback.style.color = grokResult === "valid" ? "green" : "red";
-            exaFeedback.innerHTML = exaResult === "valid" ? "&#9734;" : "&#10007;";
-            exaFeedback.style.color = exaResult === "valid" ? "green" : "red";
-            perplexityFeedback.innerHTML = perplexityResult === "valid" ? "&#9734;" : "&#10007;";
-            perplexityFeedback.style.color = perplexityResult === "valid" ? "green" : "red";
           } catch (error) {
             console.error("Fehler beim Testen der API Keys:", error);
             alert("Fehler beim Testen der API Keys: " + error.message);
@@ -2688,9 +2488,7 @@
             "claudeResponse",
             "geminiResponse",
             "deepseekResponse",
-            "grokResponse",
-            "exaResponse",
-            "perplexityResponse"
+            "grokResponse"
           ];
           
           // Deaktiviere den Consensus-Button, sofern nötig.

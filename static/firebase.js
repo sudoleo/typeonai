@@ -660,14 +660,6 @@ async function loadBookmarks() {
             document.getElementById("grokResponse").querySelector(".collapsible-content"),
             bookmark.responses["Grok"] || ""
           );
-          injectHtmlSafe(
-            document.getElementById("exaResponse").querySelector(".collapsible-content"),
-            bookmark.responses["Exa"] || ""
-          );
-          injectHtmlSafe(
-            document.getElementById("perplexityResponse").querySelector(".collapsible-content"),
-            bookmark.responses["Perplexity"] || ""
-          );
           
           // Aktualisiere auch die Konsens-Boxen, falls vorhanden
           injectHtmlSafe(
