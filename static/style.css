@@ -1380,18 +1380,13 @@ pre .copy-btn:hover {
 }
 
 .consensus-section button {
-  padding: 10px 16px;
+  padding: 4px 4px;
   font-size: 1em;
-  background-color: var(--button-bg);
-  color: var(--button-text);
+  color: var(--text-color);
   border: none;
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.3s;
-}
-
-.consensus-section button:hover {
-  background-color: #0056b3;
 }
 
 .mode-switch {
@@ -2142,11 +2137,97 @@ font-size: 0.9em;
   font-size: 11px;
 }
 
+/* Überschrift + Inline-Buttons */
+.consensus-main h2 {
+  display: inline-flex;              /* statt inline-flex */
+  align-items: center;
+  gap: 20px;
+  padding-left: 10px;
+}
+
+/* Container, der direkt im H2 hängt */
+.consensus-copy-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;      /* schiebt die Buttons nach rechts */
+}
+
+/* Buttons: transparent, lean */
+.consensus-copy-icon-btn {
+  border: none;
+  background: transparent;
+  padding: 0 4px;
+  margin: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: inherit;
+  opacity: 0.6;  
+}
+
+.consensus-copy-icon-btn .copy-label {
+  font-size: 0.7rem;
+}
+
+/* Hover-Effekt nur über Opacity/Underline, kein Background */
+.consensus-copy-icon-btn:hover {
+  opacity: 1;
+}
+
+.consensus-copy-icon-btn:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 2px;
+}
+
+.copy-icon {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  display: inline-block;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
+.copy-icon::before {
+  content: "";
+  position: absolute;
+  top: -3px;     /* 👉 höher als vorher (-2px) */
+  left: 2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+  opacity: 0.45;
+  box-sizing: border-box;
+}
+
+/* damit Icon + Text schön kompakt wirken */
+.consensus-copy-icon-btn {
+  line-height: 1;
+  gap: 4px;
+}
+
 @media (max-width: 768px){
   .feedback-line{
     width: min(94vw, 900px);
     margin: auto 6px;
     display: flex !important;   /* falls irgendwo 'grid' aktiviert war */
+  }
+  .consensus-main h2 {
+    flex-wrap: wrap;          /* erlaubt Umbrechen */
+  }
+
+  .consensus-copy-inline {
+    flex-direction: column;   /* Buttons untereinander */
+    align-items: flex-end;    /* weiter rechts ausrichten */
+    gap: 4px;                 /* etwas weniger Abstand */
+    margin-left: auto;        /* bleibt an der rechten Seite */
+    margin-top: -70px;
   }
 }
 
@@ -2379,6 +2460,13 @@ font-size: 0.9em;
   .modal-content a.secondary-link:hover,
   .modal-content button.link-btn:hover {
     opacity: 1;
+  }
+  /* Überschrift + Inline-Buttons */
+  .consensus-main h2 {
+    display: inline-flex;              /* statt inline-flex */
+    align-items: center;
+    gap: 20px;
+    padding-left: 10px;
   }
 }
 

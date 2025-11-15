@@ -94,7 +94,7 @@ async def handle_validation_exception(request, exc: RequestValidationError):
     )
 
 FREE_USAGE_LIMIT = 25
-MAX_WORDS = 300
+MAX_WORDS = 500
 DEEP_SEARCH_MAX_WORDS = 1000
 MAX_TOKENS = 2048
 DEEP_SEARCH_MAX_TOKENS = 4096
@@ -102,9 +102,8 @@ CONSENSUS_MAX_TOKENS = 4096
 DIFFERENCES_MAX_TOKENS = 1024
 REASONING_EFFORT_FOR_DEEP = "low"
 
-# Erhöhe das Tokenlimit speziell für Gemini (Deep Think braucht mehr Luft)
 GEMINI_MAX_TOKENS = 2048
-GEMINI_DEEP_MAX_TOKENS = 4096   # <- vorher 2048, das war oft zu knapp
+GEMINI_DEEP_MAX_TOKENS = 4096
 
 # Modelle, die pro Anbieter erlaubt sind
 ALLOWED_OPENAI_MODELS = {
@@ -474,7 +473,7 @@ def query_grok(question: str, api_key: str, system_prompt: str = None, deep_sear
         return f"Error with Grok: {str(e)}"
         
 
-def exa_search(query: str, num_results: int = 3):
+def exa_search(query: str, num_results: int = 5):
     search_url = "https://api.exa.ai/search"
     headers = {"Content-Type": "application/json", "x-api-key": os.getenv("DEVELOPER_EXA_API_KEY")}
     payload = {"query": query, "num_results": num_results}
@@ -536,7 +535,7 @@ def clean_exa_text(raw: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def build_evidence_block(exa_results, max_sources: int = 3):
+def build_evidence_block(exa_results, max_sources: int = 5):
     sources = []
     for i, r in enumerate(exa_results.get("results", [])[:max_sources], start=1):
         cleaned = clean_exa_text(r.get("text", ""))
@@ -634,7 +633,6 @@ def query_consensus(
             "You receive multiple expert opinions on a specific question. "
             "Your task is to combine these responses into a comprehensive, correct, and coherent answer. "
             "Note: Experts can also make mistakes. Therefore, try to identify and exclude possible errors by comparing the answers. "
-            "If the answers strongly contradict each other at any point, logically determine which variant is most plausible. "
             "Structure the answer clearly and coherently. "
             "Provide only the final, balanced answer."
         )
@@ -644,8 +642,7 @@ def query_consensus(
             "Treat all expert opinions equally. Do not focus on the answer of one model. "
             "Your task is to combine these responses into a comprehensive, correct, and coherent answer. "
             "Note: Experts can also make mistakes. Therefore, try to identify and exclude possible errors by comparing the answers. "
-            "If the answers strongly contradict each other at any point, logically determine which variant is most plausible. "
-            "Structure the answer clearly and coherently. "
+            "Structure the answer clearly and coherently."
             "Provide only the final, balanced answer."
         )
 

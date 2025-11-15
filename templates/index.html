@@ -230,7 +230,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v1.6.5</span>
+    <span id="version-number">v1.7.0</span>
   </div>
   
 </div>
@@ -334,7 +334,6 @@
           <span class="title">Response from Claude <small>(<span id="claudeModelText">claude-haiku-4-5</span>)</small>
             <span class="model-picker-wrapper"><select id="claudeModelSelect" class="model-picker">
               <option value="claude-haiku-4-5">claude-haiku-4-5</option>
-              <option value="claude-sonnet-4-5-20250929">claude-sonnet-4-5</option>
               <option value="claude-sonnet-4-20250514">claude-4-sonnet</option>
               <option value="claude-3-7-sonnet-20250219">claude-3-7-sonnet</option>
               <option value="claude-3-5-haiku-20241022">claude-3-5-haiku</option>
@@ -2311,6 +2310,60 @@
         const geminiKey = localStorage.getItem("geminiKey") || "";
         const deepseekKey= localStorage.getItem("deepseekKey") || "";
         const grokKey= localStorage.getItem("grokKey") || "";
+
+        // --------- NEU: genaue Konsensus-Metadaten für Zitation speichern ---------
+        const includedModelsDetailed = [];
+
+        function addModelForCitation(boxId, selectId, label) {
+          const box = document.getElementById(boxId);
+          if (!box) return;
+          if (box.classList.contains("excluded")) return;
+
+          const contentEl = box.querySelector(".collapsible-content");
+          const text = contentEl ? contentEl.innerText.trim() : "";
+          if (!text) return; // nur Modelle mit Antwort
+
+          const select = document.getElementById(selectId);
+          let modelName = "";
+          if (select) {
+            const val = select.value || "";
+            const optText = select.options[select.selectedIndex]?.text || "";
+            modelName = optText || val;
+          }
+
+          includedModelsDetailed.push(modelName ? `${label}: ${modelName}` : label);
+        }
+
+        addModelForCitation("openaiResponse",  "openaiModelSelect",  "OpenAI");
+        addModelForCitation("mistralResponse", "mistralModelSelect", "Mistral");
+        addModelForCitation("claudeResponse",  "claudeModelSelect",  "Anthropic Claude");
+        addModelForCitation("geminiResponse",  "geminiModelSelect",  "Google Gemini");
+        addModelForCitation("deepseekResponse","deepseekModelSelect","DeepSeek");
+        addModelForCitation("grokResponse",    "grokModelSelect",    "Grok");
+
+        const consensusSelect = document.getElementById("consensusModelDropdown");
+        const consensusModelValue = consensusSelect ? consensusSelect.value : "";
+        const consensusModelLabel = consensusSelect
+          ? (consensusSelect.options[consensusSelect.selectedIndex]?.text || consensusModelValue)
+          : consensusModelValue;
+
+        // URL für die Zitation „aufgeräumt“
+        let cleanUrl = window.location.href;
+        try {
+          const urlObj = new URL(window.location.href);
+          cleanUrl = urlObj.origin + urlObj.pathname;
+        } catch (e) {
+          // falls URL-Parsing scheitert, nimm einfach href
+        }
+
+        window.consensusCitationMeta = {
+          question,
+          includedModels: includedModelsDetailed,
+          consensusModel: consensusModelLabel || consensusModelValue,
+          dateISO: new Date().toISOString(),
+          url: cleanUrl
+        };
+        // --------- ENDE NEU ------------------------------------------------------
   
         try {
           const response = await fetch("/consensus", {
@@ -2589,6 +2642,205 @@
           createStartDemoChip();
         }
 
+                // -----------------------------------
+        // Consensus: Copy Answer & Copy Citation
+        // -----------------------------------
+
+        function getIncludedModelNamesForCitation() {
+          const map = [
+            { boxId: "openaiResponse",  label: "OpenAI" },
+            { boxId: "mistralResponse", label: "Mistral" },
+            { boxId: "claudeResponse",  label: "Anthropic Claude" },
+            { boxId: "geminiResponse",  label: "Google Gemini" },
+            { boxId: "deepseekResponse",label: "DeepSeek" },
+            { boxId: "grokResponse",    label: "Grok" }
+          ];
+
+          const names = [];
+          map.forEach(({ boxId, label }) => {
+            const box = document.getElementById(boxId);
+            if (!box) return;
+            if (box.classList.contains("excluded")) return;
+
+            const txtEl = box.querySelector(".collapsible-content");
+            const txt = txtEl ? txtEl.innerText.trim() : "";
+            if (txt) {
+              names.push(label);
+            }
+          });
+
+          return names;
+        }
+
+        function buildConsensusCitation() {
+          const meta = window.consensusCitationMeta;
+
+          // Noch kein Consensus berechnet → keine Zitation
+          if (!meta || !meta.includedModels || !meta.includedModels.length) {
+            return "";
+          }
+
+          const date = meta.dateISO ? new Date(meta.dateISO) : new Date();
+          const yyyy = date.getFullYear();
+          const mm = String(date.getMonth() + 1).padStart(2, "0");
+          const dd = String(date.getDate()).padStart(2, "0");
+          const dateStr = `${yyyy}-${mm}-${dd}`;
+
+          const question       = (meta.question || "").trim();
+          const modelsPart     = meta.includedModels.join(", ");
+          const consensusModel = meta.consensusModel || "";
+          const cleanUrl       = meta.url || window.location.href;
+
+          const parts = [];
+
+          // „Autor“ / Seite + Datum
+          parts.push(`consens.io. (${dateStr}).`);
+
+          // „Titel“
+          if (question) {
+            parts.push(`Consensus answer to "${question}".`);
+          } else {
+            parts.push("Consensus answer.");
+          }
+
+          // Modelle genau wie genutzt
+          parts.push(`Models consulted: ${modelsPart}.`);
+
+          // Consensus-Modell
+          if (consensusModel) {
+            parts.push(`Consensus model: ${consensusModel}.`);
+          }
+
+          // --- NEU: Links aus der Consensus-Antwort einsammeln ---
+          const consensusBox = document.getElementById("consensusResponse");
+          const mainPara = consensusBox?.querySelector(".consensus-main p");
+
+          const hrefSet = new Set();
+          if (mainPara) {
+            mainPara.querySelectorAll("a[href]").forEach(a => {
+              const href = a.getAttribute("href");
+              if (!href) return;
+              // interne Anker (#foo) ignorieren
+              if (href.startsWith("#")) return;
+              hrefSet.add(href);
+            });
+          }
+
+          const links = Array.from(hrefSet);
+          if (links.length) {
+            parts.push(`Sources: ${links.join(", ")}`);
+          }
+          // --- ENDE NEU ---
+
+          // Seite selbst
+          parts.push(`Retrieved from ${cleanUrl}`);
+
+          // Eine Zeile, keine Zeilenumbrüche
+          return parts.join(" ");
+        }
+
+        function initConsensusCopyButtons() {
+          const consensusBox = document.getElementById("consensusResponse");
+          if (!consensusBox) return;
+
+          const mainSection = consensusBox.querySelector(".consensus-main");
+          if (!mainSection) return;
+
+          const heading = mainSection.querySelector("h2");
+          if (!heading) return;
+
+          // Nicht doppelt einfügen
+          if (heading.querySelector(".consensus-copy-inline")) return;
+
+          // Wrapper für die Inline-Buttons
+          const inlineBar = document.createElement("span");
+          inlineBar.className = "consensus-copy-inline";
+
+          // 📋 Copy consensus (nur Text aus <p> der Consensus-Antwort)
+          const copyAnswerBtn = document.createElement("button");
+          copyAnswerBtn.type = "button";
+          copyAnswerBtn.className = "consensus-copy-icon-btn consensus-copy-btn";
+          copyAnswerBtn.innerHTML = `
+            <span class="copy-icon" aria-hidden="true"></span>
+            <span class="copy-label">&nbsp;consensus</span>
+          `;
+          copyAnswerBtn.title = "Copy consensus answer";
+
+          copyAnswerBtn.addEventListener("click", () => {
+            const mainPara = consensusBox
+              .querySelector(".consensus-main p");
+
+            const mainText = mainPara ? mainPara.innerText.trim() : "";
+
+            if (!mainText) {
+              alert("No consensus available yet.");
+              return;
+            }
+
+            const toCopy = mainText;
+
+            if (!navigator.clipboard) {
+              const ta = document.createElement("textarea");
+              ta.value = toCopy;
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand("copy");
+              document.body.removeChild(ta);
+              showPopup("Consensus copied to clipboard.");
+            } else {
+              navigator.clipboard.writeText(toCopy).then(() => {
+                showPopup("Consensus copied to clipboard.");
+              }).catch(() => {
+                alert("Copy to clipboard failed.");
+              });
+            }
+          });
+
+          // 📎 Copy citation
+          const copyCitationBtn = document.createElement("button");
+          copyCitationBtn.type = "button";
+          copyCitationBtn.className = "consensus-copy-icon-btn consensus-citation-btn";
+          copyCitationBtn.innerHTML = `
+            <span class="copy-icon" aria-hidden="true"></span>
+            <span class="copy-label">&nbsp;citation</span>
+          `;
+          copyCitationBtn.title = "Copy consensus citation";
+
+          copyCitationBtn.addEventListener("click", () => {
+            const citation = buildConsensusCitation();
+
+            if (!citation) {
+              alert("No citation available yet.");
+              return;
+            }
+
+            if (!navigator.clipboard) {
+              const ta = document.createElement("textarea");
+              ta.value = citation;
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand("copy");
+              document.body.removeChild(ta);
+              showPopup("Citation copied to clipboard.");
+            } else {
+              navigator.clipboard.writeText(citation).then(() => {
+                showPopup("Citation copied to clipboard.");
+              }).catch(() => {
+                alert("Copy to clipboard failed.");
+              });
+            }
+          });
+
+          inlineBar.appendChild(copyAnswerBtn);
+          inlineBar.appendChild(copyCitationBtn);
+
+          // In dieselbe Zeile wie den Text "Consensus Answer" hängen
+          heading.appendChild(inlineBar);
+        }
+
+        // am Ende deines DOMContentLoaded-Blocks aufrufen:
+        initConsensusCopyButtons();
+
       });
 
 </script>
@@ -2819,7 +3071,7 @@
           <span class="faq-toggle-icon">＋</span>
         </h3>
         <p>
-          Web Search forwards your query to models and systems with access to current information, including GPT, Gemini, Exa (document-oriented retrieval), and Perplexity (aggregated, source-based answers). The results are displayed directly within consens.io.
+          Web Search forwards your query to a grounding Model in the background. The crawled webpages are passed to all the models. The results are displayed directly within consens.io.
         </p>
       </div>
       
@@ -2852,7 +3104,7 @@
           <span class="faq-toggle-icon">＋</span>
         </h3>
         <p>
-          consens.io provides access to current large language models from several providers, including OpenAI, Mistral, Anthropic, Google Gemini, Exa, and Perplexity.
+          consens.io provides access to current large language models from several providers, including OpenAI, Mistral, Anthropic, Grok, DeepSeek and Google Gemini.
         </p>
       </div>
       
