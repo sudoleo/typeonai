@@ -2145,43 +2145,103 @@ font-size: 0.9em;
   padding-left: 10px;
 }
 
-/* Container, der direkt im H2 hängt */
+/* Container, der direkt im H2 hängt, neben "Consensus Answer" */
 .consensus-copy-inline {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin-left: auto;      /* schiebt die Buttons nach rechts */
+  margin-left: 8px;
 }
 
-/* Buttons: transparent, lean */
-.consensus-copy-icon-btn {
+/* Wrapper im Pill-Look (angelehnt an model-picker-wrapper) */
+.consensus-actions-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0;
+  background: transparent;
+  transition: background .15s ease, box-shadow .15s ease;
+}
+
+.consensus-actions-wrapper:hover,
+.consensus-actions-wrapper.open {
+  background: var(--response-bg);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+/* Trigger: nur Icon + Caret, keine Beschriftung */
+.consensus-actions-toggle {
   border: none;
   background: transparent;
-  padding: 0 4px;
-  margin: 0;
-  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.7rem;
-  color: inherit;
-  opacity: 0.6;  
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--text-color);
 }
 
-.consensus-copy-icon-btn .copy-label {
+/* kleines Caret (wie im Model-Picker) */
+.consensus-actions-toggle .caret {
   font-size: 0.7rem;
+  line-height: 1;
+  opacity: 0.7;
+  transition: color .15s ease, transform .15s ease, opacity .15s ease;
 }
 
-/* Hover-Effekt nur über Opacity/Underline, kein Background */
-.consensus-copy-icon-btn:hover {
+.consensus-actions-wrapper.open .caret {
+  transform: translateY(1px) rotate(180deg);
   opacity: 1;
 }
 
-.consensus-copy-icon-btn:focus-visible {
+/* Globales Dropdown-Panel (Overlay auf oberster Ebene) */
+.consensus-actions-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  min-width: 180px;
+  padding: 6px 0;
+  background: var(--container-bg);
+  border-radius: 12px;
+  border: 1px solid var(--input-border);
+  box-shadow: 0 16px 30px rgba(0,0,0,.18);
+  display: none;
+  z-index: 9999; /* ganz oben */
+}
+
+.consensus-actions-menu.open {
+  display: block;
+}
+
+/* Einträge im Menü */
+.consensus-actions-menu .consensus-copy-icon-btn {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  margin: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-color);
+  opacity: 0.9;
+}
+
+.consensus-actions-menu .consensus-copy-icon-btn:hover {
+  opacity: 1;
+  background: var(--response-bg);
+}
+
+.consensus-actions-menu .consensus-copy-icon-btn:focus-visible {
   outline: 1px solid currentColor;
   outline-offset: 2px;
 }
 
+/* Icon bleibt kompakt */
 .copy-icon {
   position: relative;
   width: 10px;
@@ -2196,7 +2256,7 @@ font-size: 0.9em;
 .copy-icon::before {
   content: "";
   position: absolute;
-  top: -3px;     /* 👉 höher als vorher (-2px) */
+  top: -3px;
   left: 2px;
   width: 9px;
   height: 9px;
@@ -2206,11 +2266,12 @@ font-size: 0.9em;
   box-sizing: border-box;
 }
 
-/* damit Icon + Text schön kompakt wirken */
-.consensus-copy-icon-btn {
-  line-height: 1;
-  gap: 4px;
+/* Label nur im Menü (nicht im Trigger) */
+.consensus-copy-icon-btn .copy-label {
+  font-size: 0.8rem;
+  line-height: 1.1;
 }
+
 
 @media (max-width: 768px){
   .feedback-line{
@@ -2227,7 +2288,6 @@ font-size: 0.9em;
     align-items: flex-end;    /* weiter rechts ausrichten */
     gap: 4px;                 /* etwas weniger Abstand */
     margin-left: auto;        /* bleibt an der rechten Seite */
-    margin-top: -70px;
   }
 }
 

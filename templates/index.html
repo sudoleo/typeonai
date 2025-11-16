@@ -2739,37 +2739,28 @@
           return parts.join(" ");
         }
 
-        function initConsensusCopyButtons() {
-          const consensusBox = document.getElementById("consensusResponse");
-          if (!consensusBox) return;
+        let consensusMenuEl = null;
 
-          const mainSection = consensusBox.querySelector(".consensus-main");
-          if (!mainSection) return;
+        function ensureConsensusActionsMenu() {
+          if (consensusMenuEl) return consensusMenuEl;
 
-          const heading = mainSection.querySelector("h2");
-          if (!heading) return;
+          const menu = document.createElement("div");
+          menu.id = "consensusActionsMenuGlobal";
+          menu.className = "consensus-actions-menu";
 
-          // Nicht doppelt einfügen
-          if (heading.querySelector(".consensus-copy-inline")) return;
-
-          // Wrapper für die Inline-Buttons
-          const inlineBar = document.createElement("span");
-          inlineBar.className = "consensus-copy-inline";
-
-          // 📋 Copy consensus (nur Text aus <p> der Consensus-Antwort)
+          // 📋 Copy consensus
           const copyAnswerBtn = document.createElement("button");
           copyAnswerBtn.type = "button";
           copyAnswerBtn.className = "consensus-copy-icon-btn consensus-copy-btn";
           copyAnswerBtn.innerHTML = `
             <span class="copy-icon" aria-hidden="true"></span>
-            <span class="copy-label">&nbsp;consensus</span>
+            <span class="copy-label">Copy consensus</span>
           `;
           copyAnswerBtn.title = "Copy consensus answer";
 
           copyAnswerBtn.addEventListener("click", () => {
-            const mainPara = consensusBox
-              .querySelector(".consensus-main p");
-
+            const consensusBox = document.getElementById("consensusResponse");
+            const mainPara = consensusBox?.querySelector(".consensus-main p");
             const mainText = mainPara ? mainPara.innerText.trim() : "";
 
             if (!mainText) {
@@ -2802,7 +2793,7 @@
           copyCitationBtn.className = "consensus-copy-icon-btn consensus-citation-btn";
           copyCitationBtn.innerHTML = `
             <span class="copy-icon" aria-hidden="true"></span>
-            <span class="copy-label">&nbsp;citation</span>
+            <span class="copy-label">Copy citation</span>
           `;
           copyCitationBtn.title = "Copy consensus citation";
 
@@ -2831,11 +2822,105 @@
             }
           });
 
-          inlineBar.appendChild(copyAnswerBtn);
-          inlineBar.appendChild(copyCitationBtn);
+          menu.appendChild(copyAnswerBtn);
+          menu.appendChild(copyCitationBtn);
+          document.body.appendChild(menu);
 
-          // In dieselbe Zeile wie den Text "Consensus Answer" hängen
+          consensusMenuEl = menu;
+          return menu;
+        }
+
+        function initConsensusCopyButtons() {
+          const consensusBox = document.getElementById("consensusResponse");
+          if (!consensusBox) return;
+
+          const mainSection = consensusBox.querySelector(".consensus-main");
+          if (!mainSection) return;
+
+          const heading = mainSection.querySelector("h2");
+          if (!heading) return;
+
+          // Nicht doppelt einfügen
+          if (heading.querySelector(".consensus-copy-inline")) return;
+
+          // Container direkt im H2 (steht neben "Consensus Answer")
+          const inlineBar = document.createElement("span");
+          inlineBar.className = "consensus-copy-inline";
+
+          // Wrapper im Pill-Look
+          const actionsWrapper = document.createElement("div");
+          actionsWrapper.className = "consensus-actions-wrapper";
+
+          // Sichtbarer Trigger: NUR Icon + Caret, KEINE Beschriftung
+          const toggleBtn = document.createElement("button");
+          toggleBtn.type = "button";
+          toggleBtn.className = "consensus-actions-toggle";
+          toggleBtn.setAttribute("aria-label", "Copy options");
+          toggleBtn.innerHTML = `
+            <span class="copy-icon" aria-hidden="true"></span>
+            <span class="caret">▾</span>
+          `;
+
+          actionsWrapper.appendChild(toggleBtn);
+          inlineBar.appendChild(actionsWrapper);
           heading.appendChild(inlineBar);
+
+          const menu = ensureConsensusActionsMenu();
+
+          function closeMenu() {
+            if (!menu) return;
+            menu.classList.remove("open");
+            menu.style.display = "none";
+            actionsWrapper.classList.remove("open");
+          }
+
+          function openMenu() {
+            // evtl. vorher schließen (falls irgendwann mehrere Trigger …)
+            closeMenu();
+
+            // anzeigen, aber unsichtbar, um Breite zu messen
+            menu.style.display = "block";
+            menu.style.visibility = "hidden";
+            menu.classList.add("open");
+            actionsWrapper.classList.add("open");
+
+            const rect = toggleBtn.getBoundingClientRect();
+            const menuWidth = menu.offsetWidth || 180;
+
+            const top = rect.bottom + 6; // 6px unter dem Button
+            let left = rect.right - menuWidth; // rechtsbündig unter dem Button
+            left = Math.max(8, left);          // nicht komplett aus dem Viewport schieben
+
+            menu.style.top = `${top}px`;
+            menu.style.left = `${left}px`;
+            menu.style.visibility = "visible";
+          }
+
+          toggleBtn.addEventListener("click", (evt) => {
+            evt.stopPropagation();
+            const isOpen = menu.classList.contains("open");
+            if (isOpen) {
+              closeMenu();
+            } else {
+              openMenu();
+            }
+          });
+
+          // Klick außerhalb schließt das Menü
+          document.addEventListener("click", (evt) => {
+            if (!menu.classList.contains("open")) return;
+            if (menu.contains(evt.target) || actionsWrapper.contains(evt.target)) return;
+            closeMenu();
+          });
+
+          // Bei Scroll / Resize schließen, damit es nicht „in der Luft“ hängt
+          window.addEventListener("scroll", () => {
+            if (menu.classList.contains("open")) closeMenu();
+          }, { passive: true });
+
+          window.addEventListener("resize", () => {
+            if (menu.classList.contains("open")) closeMenu();
+          });
         }
 
         // am Ende deines DOMContentLoaded-Blocks aufrufen:
