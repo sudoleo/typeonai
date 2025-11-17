@@ -230,7 +230,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v1.7.2</span>
+    <span id="version-number">v1.7.3</span>
   </div>
   
 </div>
@@ -934,7 +934,7 @@
           el.style.display = showPickers ? "inline-flex" : "none";
         });
 
-        const openaiModelText   = (deepSearchActive && !searchModeActive) ? "GPT-5" : "GPT-5-mini";
+        const openaiModelText   = deepSearchActive ? "GPT-5" : "GPT-5-mini";
         const geminiModelText   = deepSearchActive ? "gemini-2.5-pro" : "gemini-2.5-flash";
         const claudeModelText   = deepSearchActive ? "claude-sonnet-4-5-20250929" : "claude-haiku-4-5";
         const deepseekModelText = deepSearchActive ? "DeepSeek-R1" : "DeepSeek-V3";
@@ -3297,7 +3297,7 @@
 
 <div class="feedback-line">
   <span class="feedback-note">
-    Inputs may be stored. Please avoid personal or sensitive data. AI models can make mistakes.
+    Please avoid personal or sensitive data. AI models can make mistakes.
   </span>
   <button id="feedbackButton" class="feedback-button" title="Feedback senden">Feedback</button>
   <a href="/privacy"  target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Privacy Policy" aria-label="Privacy Policy">Privacy</a>
