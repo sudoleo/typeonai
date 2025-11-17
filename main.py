@@ -979,8 +979,10 @@ def verify_user_token(token: str, allow_unverified: bool = False) -> str:
             raise Exception("Email not verified")
         return decoded_token["uid"]
     except Exception as e:
+        # Detailiert loggen, aber nach außen nichts leaken
         logging.error(f"verify_user_token failed: {e}")
-        raise Exception("Invalid token: " + str(e))
+        # Nur eine generische Exception werfen – der Aufrufer entscheidet über HTTP-Status
+        raise Exception("Invalid token")
     
 
 def extract_id_token(request: Request, data: dict) -> Optional[str]:
@@ -1041,17 +1043,18 @@ async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "free_limit": FREE_USAGE_LIMIT, **firebase_config})
 
 @app.get("/bookmarks")
-@limiter.limit("20/minute")  # Beispiel: maximal 10 Anfragen pro Minute pro IP
+@limiter.limit("20/minute")
 async def load_bookmarks(request: Request):
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
-    
+        raise HTTPException(status_code=401, detail="Authentication failed")
+
     id_token = auth_header.split(" ")[1]
     try:
         uid = verify_user_token(id_token)
     except Exception as e:
-        raise HTTPException(status_code=401, detail="Authentication failed: " + str(e))
+        logging.error(f"/bookmarks auth failed: {e}")
+        raise HTTPException(status_code=401, detail="Authentication failed")
     
     try:
         bookmarks_ref = db_firestore.collection("users").document(uid).collection("bookmarks")
@@ -1064,13 +1067,14 @@ async def load_bookmarks(request: Request):
             bookmarks.append(bookmark_data)
         return {"status": "success", "bookmarks": bookmarks}
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Error loading bookmarks: " + str(e))
+        logging.error(f"Error loading bookmarks for uid={uid}: {e}")
+        raise HTTPException(status_code=500, detail="Error loading bookmarks")
 
 # Globales Dictionary zum Speichern der IP-Adressen registrierter Nutzer
 registered_ips = {}  # { ip_address: uid }
 
 @app.post("/register")
-@limiter.limit("3/minute")  # Beispiel: maximal 10 Registrierungen pro Minute pro IP
+@limiter.limit("3/minute")
 async def register_user(request: Request, data: dict = Body(...)):    
     email = data.get("email")
     password = data.get("password")
@@ -1087,40 +1091,42 @@ async def register_user(request: Request, data: dict = Body(...)):
             # Keine Registrierung mit dieser E-Mail gefunden, also weiter
             pass
 
-        # Erstelle den Nutzer über Firebase Admin
         user = auth.create_user(email=email, password=password)
-        # Erzeuge ein Custom Token für den neuen Nutzer
         custom_token = auth.create_custom_token(user.uid)
-        # Das Token ist ein Bytes-Objekt – in einen String konvertieren
         custom_token_str = custom_token.decode("utf-8")
         return {"uid": user.uid, "email": user.email, "customToken": custom_token_str}
+
+    except HTTPException:
+        # bereits bewusst gesetzte Meldungen (z.B. "already registered") durchreichen
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logging.error(f"/register failed for {email}: {e}")
+        # generische Meldung an den Client
+        raise HTTPException(status_code=400, detail="Registration failed. Please try again later.")
     
 
 @app.post("/confirm-registration")
 async def confirm_registration(request: Request, data: dict = Body(...)):
     token = data.get("id_token")
     if not token:
-        raise HTTPException(status_code=400, detail="id_token fehlt.")
+        raise HTTPException(status_code=400, detail="Authentication failed")
 
     try:
         uid = verify_user_token(token, allow_unverified=True)
         user = auth.get_user(uid)
     except Exception as e:
-        raise HTTPException(status_code=401, detail="Token ungültig: " + str(e))
+        logging.error(f"/confirm-registration token error: {e}")
+        raise HTTPException(status_code=401, detail="Authentication failed")
 
     if not user.email_verified:
-        raise HTTPException(status_code=400, detail="E-Mail noch nicht bestätigt.")
+        # Diese Info ist okay, weil sie nichts über Passwort / Existenz aussagt
+        raise HTTPException(status_code=400, detail="E-mail address not yet verified.")
 
     ip_address = request.client.host
 
-    # >>> HIER wird tatsächlich die Einmaligkeit pro IP durchgesetzt <<<
     if ip_address in registered_ips and registered_ips[ip_address] != uid:
-        # Es gibt bereits einen *anderen* bestätigten Account von dieser IP
         raise HTTPException(status_code=400, detail="Only one confirmed account per user/IP is allowed.")
 
-    # IP auf diesen UID “claimen”
     registered_ips[ip_address] = uid
     return {"status": "registered", "ip": ip_address}
 

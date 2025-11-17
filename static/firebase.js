@@ -179,11 +179,67 @@ function fetchUsageData(token) {
     .catch(err => console.error("Error when retrieving the quota:", err));
 }
 
+function mapFirebaseLoginError(error) {
+  console.error("Firebase login failed, code:", error?.code || "unknown");
+
+  // Sicherheitsfreundliche, generische Messages
+  switch (error.code) {
+    case "auth/user-not-found":
+    case "auth/wrong-password":
+    case "auth/invalid-email":
+      return "Login failed. Please check your e-mail and password.";
+
+    case "auth/too-many-requests":
+      return "Too many login attempts. Please try again later.";
+
+    case "auth/network-request-failed":
+      return "Network error. Please check your internet connection and try again.";
+
+    default:
+      return "An error occurred while logging in. Please try again.";
+  }
+}
+
+function mapFirebaseRegisterError(error) {
+  console.error("Firebase login failed, code:", error?.code || "unknown");
+
+  switch (error.code) {
+    case "auth/email-already-in-use":
+      return "This e-mail address is already in use.";
+    case "auth/invalid-email":
+      return "Please enter a valid e-mail address.";
+    case "auth/weak-password":
+      return "Password is too weak. Please choose a stronger password.";
+    case "auth/network-request-failed":
+      return "Network error. Please check your internet connection and try again.";
+    default:
+      return "Registration failed. Please try again.";
+  }
+}
+
+function mapPasswordResetError(error) {
+  console.error("Firebase login failed, code:", error?.code || "unknown");
+
+  switch (error.code) {
+    case "auth/user-not-found":
+      return "No account was found for this e-mail address.";
+    case "auth/invalid-email":
+      return "Please enter a valid e-mail address.";
+    case "auth/network-request-failed":
+      return "Network error. Please check your internet connection and try again.";
+    default:
+      return "An error occurred while resetting the password. Please try again.";
+  }
+}
+
 // Login-Funktion
 document.getElementById("loginButton").addEventListener("click", () => {
   const email = document.getElementById("loginEmail").value;
   const password = document.getElementById("loginPassword").value;
   
+  // Fehleranzeige erstmal leeren
+  loginErr.textContent = "";
+
   signInWithEmailAndPassword(auth, email, password)
     .then((userCredential) => {
       const user = userCredential.user;
@@ -192,15 +248,14 @@ document.getElementById("loginButton").addEventListener("click", () => {
         user.getIdToken().then((token) => {
           localStorage.setItem("id_token", token);
 
-          // ❶ Bestätige Registrierung beim Backend, damit die IP gesperrt wird
           fetch("/confirm-registration", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id_token: token })
           })
-          .then(res => res.json())
-          .then(info => console.log("Confirm-Registration:", info))
-          .catch(err => console.error("Confirm-Registration-Fehler:", err));
+            .then(res => res.json())
+            .then(info => console.log("Confirm-Registration:", info))
+            .catch(err => console.error("Confirm-Registration-Fehler:", err));
 
           window.location.href = "/";
         });
@@ -211,7 +266,9 @@ document.getElementById("loginButton").addEventListener("click", () => {
       }
     })
     .catch((error) => {
-      document.getElementById("loginError").innerText = error.message;
+      // Statt error.message → gemappte, neutrale Meldung
+      const msg = mapFirebaseLoginError(error);
+      loginErr.textContent = msg;
     });
 });
 
@@ -312,22 +369,21 @@ confirmRegisterBtn.addEventListener("click", () => {
         // Nutzer mit dem Custom Token anmelden
         signInWithCustomToken(auth, data.customToken)
           .then(() => {
-            // Verifizierungs-Mail senden
             sendEmailVerification(auth.currentUser)
               .then(() => {
                 alert("Registration successful! Please confirm your e-mail address by clicking on the link in the e-mail.");
-                // Optional: Nach dem Versenden der Verifizierungs-Mail den Nutzer abmelden
                 signOut(auth);
-                // Zurück in Login-Modus gehen
                 setMode("login");
               })
               .catch((error) => {
-                registerErr.textContent =
-                  "Error sending the verification e-mail: " + error.message;
+                // Keine rohen Firebase-Texte
+                console.error("Error sending verification e-mail:", error);
+                registerErr.textContent = "Error sending the verification e-mail. Please try again later.";
               });
           })
           .catch((error) => {
-            registerErr.textContent = error.message;
+            const msg = mapFirebaseRegisterError(error);
+            registerErr.textContent = msg;
           });
       } else if (data.detail) {
         registerErr.textContent = data.detail;
@@ -343,11 +399,10 @@ confirmRegisterBtn.addEventListener("click", () => {
 // Standard: beim Öffnen im Login-Modus
 setMode("login");
 
-// "Passwort vergessen?"-Funktion hinzufügen
 document.getElementById("forgotPasswordButton").addEventListener("click", () => {
   const email = document.getElementById("loginEmail").value;
   if (!email) {
-    alert("Please enter your e-mail address to reset the password. Check your Spam Folder.");
+    alert("Please enter your e-mail address to reset the password. Check your spam folder.");
     return;
   }
   sendPasswordResetEmail(auth, email)
@@ -355,8 +410,8 @@ document.getElementById("forgotPasswordButton").addEventListener("click", () => 
       alert("An e-mail to reset your password has been sent to " + email);
     })
     .catch((error) => {
-      console.error("Error sending the password reset email:", error);
-      alert("Fehler: " + error.message);
+      const msg = mapPasswordResetError(error);
+      alert(msg);
     });
 });
 
@@ -409,8 +464,8 @@ function handleGoogleSignIn() {
         return;
       }
 
-      loginErrorEl.textContent =
-        err.message || "Google sign-in failed.";
+      // statt err.message
+      loginErrorEl.textContent = "Google sign-in failed. Please try again later.";
     });
 }
 
