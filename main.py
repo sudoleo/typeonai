@@ -17,6 +17,7 @@ import firebase_admin
 from firebase_admin import credentials, auth, firestore
 from typing import Optional
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -147,7 +148,16 @@ ALLOWED_GROK_MODELS = {
     "grok-3-latest",
 }
 
-DEFAULT_SYSTEM_PROMPT = "Please respond briefly and precisely, focusing only on the essentials."
+def get_system_prompt() -> str:
+    # Aktuelles Datum in deiner Zeitzone (z.B. Europe/Berlin)
+    now = datetime.now(ZoneInfo("Europe/Berlin"))
+    today_str = now.strftime("%Y-%m-%d")
+
+    return (
+        f"Today is {today_str}. "
+        "Please respond briefly and precisely, focusing only on the essentials."
+    )
+
 DEEP_THINK_PROMPT = "Deep Think: Focus as hard as you can! But only on the essentials."
 
 usage_counter = {}  # { uid: anzahl_anfragen }
@@ -186,7 +196,7 @@ def query_openai(
     model_override: str = None
 ) -> str:
     if system_prompt is None:
-        system_prompt = DEFAULT_SYSTEM_PROMPT
+        system_prompt = get_system_prompt()
     if deep_search:
         system_prompt += "\n" + DEEP_THINK_PROMPT
 
@@ -271,7 +281,7 @@ def query_openai(
 def query_mistral(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False, model_override: str = None) -> str:
     """Fragt die Mistral API zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit."""
     if system_prompt is None:
-        system_prompt = DEFAULT_SYSTEM_PROMPT
+        system_prompt = get_system_prompt()
 
     if deep_search:
         system_prompt += "\n" + DEEP_THINK_PROMPT
@@ -302,7 +312,7 @@ def query_claude(question: str, api_key: str, system_prompt: str = None, deep_se
     """Fragt die Anthropic API (Claude) zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit.
        Da die Anthropic API ein Token-Limit erwartet, setzen wir einen sehr hohen Wert ein."""
     if system_prompt is None:
-        system_prompt = DEFAULT_SYSTEM_PROMPT
+        system_prompt = get_system_prompt()
 
     if deep_search:
         system_prompt += "\n" + DEEP_THINK_PROMPT
@@ -347,7 +357,7 @@ def query_gemini(
     max_output_tokens: Optional[int] = None,
 ) -> str:
     if system_prompt is None:
-        system_prompt = DEFAULT_SYSTEM_PROMPT
+        system_prompt = get_system_prompt()
     if deep_search:
         system_prompt += "\n" + DEEP_THINK_PROMPT
 
@@ -418,7 +428,7 @@ def query_gemini(
 def query_deepseek(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False, model_override: str = None) -> str:
     """Fragt DeepSeek zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
     if system_prompt is None:
-        system_prompt = DEFAULT_SYSTEM_PROMPT
+        system_prompt = get_system_prompt()
 
     if deep_search:
         system_prompt += "\n" + DEEP_THINK_PROMPT
@@ -446,7 +456,7 @@ def query_deepseek(question: str, api_key: str, system_prompt: str = None, deep_
 def query_grok(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False, model_override: str = None) -> str:
     """Fragt die Grok API zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
     if system_prompt is None:
-        system_prompt = DEFAULT_SYSTEM_PROMPT
+        system_prompt = get_system_prompt()
 
     if deep_search:
         system_prompt += "\n" + DEEP_THINK_PROMPT
@@ -1887,7 +1897,7 @@ async def prepare(request: Request, data: dict = Body(...)):
     search_mode_raw = data.get("search_mode", False)
     search_mode = True if str(search_mode_raw).lower() == "true" else bool(search_mode_raw)
 
-    base_system_prompt = data.get("system_prompt") or DEFAULT_SYSTEM_PROMPT
+    base_system_prompt = data.get("system_prompt") or get_system_prompt()
 
     # Wenn Web Search nicht aktiv ist: keine Exa-Suche, keine Quota-Prüfung nötig
     if not search_mode:

@@ -1426,11 +1426,19 @@
           document.getElementById("consensusButton").disabled = false;
 
           // Basis-Systemprompt laden
-          const storedSystemPrompt =
-            localStorage.getItem("systemPrompt") ||
+          const savedPrompt = localStorage.getItem("systemPrompt");
+
+          // heutiges Datum (YYYY-MM-DD)
+          const todayStr = new Date().toISOString().slice(0, 10);
+
+          // Basis-Text, falls kein eigener Prompt gespeichert ist
+          const basePrompt =
+            savedPrompt ||
             "Please respond briefly and precisely, focusing only on the essentials.";
 
-          // Dieser Wert wird ggf. durch /prepare überschrieben
+          // Prompt, der wirklich verwendet wird (immer mit Datum vorne)
+          const storedSystemPrompt = `Today is ${todayStr}. ${basePrompt}`;
+
           let effectiveSystemPrompt = storedSystemPrompt;
           console.log("Using base system prompt:", storedSystemPrompt);
 
@@ -1447,14 +1455,33 @@
             </div>
           `;
 
-          const modelBoxes = [
-            document.getElementById("openaiResponse"),
-            document.getElementById("claudeResponse"),
-            document.getElementById("mistralResponse"),
-            document.getElementById("geminiResponse"),
-            document.getElementById("deepseekResponse"),
-            document.getElementById("grokResponse")
-          ].filter(Boolean);
+          // Nur Boxen der aktuell ausgewählten Modelle
+          const modelBoxes = [];
+
+          if (document.getElementById("selectOpenAI")?.checked) {
+            const box = document.getElementById("openaiResponse");
+            if (box) modelBoxes.push(box);
+          }
+          if (document.getElementById("selectMistral")?.checked) {
+            const box = document.getElementById("mistralResponse");
+            if (box) modelBoxes.push(box);
+          }
+          if (document.getElementById("selectClaude")?.checked) {
+            const box = document.getElementById("claudeResponse");
+            if (box) modelBoxes.push(box);
+          }
+          if (document.getElementById("selectGemini")?.checked) {
+            const box = document.getElementById("geminiResponse");
+            if (box) modelBoxes.push(box);
+          }
+          if (document.getElementById("selectDeepSeek")?.checked) {
+            const box = document.getElementById("deepseekResponse");
+            if (box) modelBoxes.push(box);
+          }
+          if (document.getElementById("selectGrok")?.checked) {
+            const box = document.getElementById("grokResponse");
+            if (box) modelBoxes.push(box);
+          }
 
           // 🔸 PHASE 1: Während Exa-Websuche → "Web search ..."
           if (searchModeEnabled) { window.spinnerHTML = webSearchSpinnerHTML; } else { window.spinnerHTML = baseSpinnerHTML; } modelBoxes.forEach(box => setSpinnerEl(box));
