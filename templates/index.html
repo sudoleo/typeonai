@@ -230,7 +230,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v1.7.0</span>
+    <span id="version-number">v1.7.2</span>
   </div>
   
 </div>
@@ -1010,6 +1010,19 @@
         const geminiCheckbox = document.getElementById("selectGemini");
         const deepseekCheckbox = document.getElementById("selectDeepSeek");
         const grokCheckbox = document.getElementById("selectGrok");
+
+        // Mapping: Response-Box → zugehörige Sidebar-Checkbox
+        function getCheckboxForResponse(responseId) {
+          switch (responseId) {
+            case "openaiResponse":   return openaiCheckbox;
+            case "mistralResponse":  return mistralCheckbox;
+            case "claudeResponse":   return claudeCheckbox;
+            case "geminiResponse":   return geminiCheckbox;
+            case "deepseekResponse": return deepseekCheckbox;
+            case "grokResponse":     return grokCheckbox;
+            default: return null;
+          }
+        }
   
         // Label-Container der Checkboxen:
         const openaiLabel = document.querySelector("label[for='selectOpenAI']");
@@ -1365,14 +1378,40 @@
         };
       
         // Exclude/Include einer Antwort-Box (falls nicht als "best" markiert)
+        // ➜ steuert jetzt auch die Sidebar-Checkboxen / modelSelectionArea mit
         window.toggleExclude = function(responseId) {
           const box = document.getElementById(responseId);
+          if (!box) return;
+
+          // "Best" bleibt unverändert
           if (box.classList.contains("best")) return;
-          // Nur Popup anzeigen, wenn die Antwort nicht bereits ausgeschlossen ist
-          if (!box.classList.contains("excluded")) {
+
+          const checkbox = getCheckboxForResponse(responseId);
+
+          // Fallback: falls aus irgendeinem Grund keine Checkbox gefunden wird,
+          // verhalte dich wie früher (nur .excluded toggeln).
+          if (!checkbox) {
+            if (!box.classList.contains("excluded")) {
+              showPopup("You have excluded this answer. It will be removed from the view and not included in the consensus.");
+            }
+            box.classList.toggle("excluded");
+            return;
+          }
+
+          // Aktuellen Zustand der Sidebar-Checkbox auslesen
+          const currentlyChecked = checkbox.checked;
+          const willBeChecked    = !currentlyChecked;   // toggle
+
+          // Nur beim Wechsel von "inkludiert" → "exkludiert" Popup zeigen
+          if (currentlyChecked && !box.classList.contains("excluded")) {
             showPopup("You have excluded this answer. It will be removed from the view and not included in the consensus.");
           }
-          box.classList.toggle("excluded");
+
+          // Sidebar-Checkbox umschalten
+          checkbox.checked = willBeChecked;
+
+          // Und **immer** über toggleModel gehen, damit .excluded in Sync bleibt
+          window.toggleModel(responseId, willBeChecked);
         };
       
         let leaderboardInterval; // Variable zum Speichern des Interval-IDs
