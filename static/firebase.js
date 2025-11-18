@@ -469,7 +469,6 @@ function handleGoogleSignIn() {
     });
 }
 
-
 document.getElementById("googleLoginButton")?.addEventListener("click", handleGoogleSignIn);
 
 async function afterGoogleLogin(user) {

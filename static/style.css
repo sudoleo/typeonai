@@ -2418,17 +2418,6 @@ font-size: 0.9em;
     display: none;
   }
 
-  /* Weitere Anpassungen (z. B. für Antwortfelder, Eingabecontainer etc.) */
-  .response-section,
-  .consensus-box {
-    flex-direction: column;
-    gap: 10px;
-  }
-  .response-box,
-  .consensus-box {
-    width: 100% !important;
-    box-sizing: border-box;
-  }
 
   .chat-input-container {
     display: flex;
@@ -2466,12 +2455,6 @@ font-size: 0.9em;
     z-index: 1300;
   }
   .consensus-controls {
-    gap: 10px;
-  }
-  /* Antwortfelder und Konsens-Box untereinander */
-  .response-section,
-  .consensus-box {
-    flex-direction: column;
     gap: 10px;
   }
 
