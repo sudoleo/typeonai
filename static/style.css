@@ -2317,10 +2317,34 @@ font-size: 0.9em;
 }
 
 @media (max-width: 1465px) {
-  /* Top Bar & Body */
-  .top-bar-logo {
-    margin-left: 0; /* Abstand, damit der Pfeil links Platz hat */
+  .top-bar {
+    display: flex;
+    align-items: center;
   }
+
+  /* Burger bleibt links */
+  .sidebar-toggle {
+    order: 0;
+    margin-right: 6px; /* hast du ja schon */
+  }
+
+  /* Logo direkt neben dem Burger, NICHT mehr zentrieren */
+  .top-bar-logo {
+    order: 1;
+    margin: 0;              /* alle auto-Margins killen */
+    margin-left: 6px;       /* kleiner Abstand vom Burger */
+    flex: 0 0 auto;         /* falls global flex: 1 gesetzt war */
+    text-align: left;
+  }
+
+  /* Rechte Gruppe (Avatar, About us, Toggle) bleibt rechts */
+  .top-bar-right, 
+  .top-bar-nav, 
+  .top-bar-actions {  /* nimm die Klasse, die bei dir passt */
+    order: 2;
+    margin-left: auto;     /* schiebt diese Gruppe ganz nach rechts */
+  }
+
   body {
     padding: 10px !important;
     padding-top: 70px;
