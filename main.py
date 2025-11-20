@@ -591,8 +591,6 @@ Original instructions:
 
     return enriched_prompt, sources
 
-
-
 def query_consensus(
     question: str,
     answer_openai: str,
@@ -960,7 +958,6 @@ def query_differences(
 
     return result
 
-    
 # Initialisiere Firebase Admin (Beispiel, passe den Pfad zu deinem Service Account an)
 cred = credentials.Certificate("consensai-firebase-adminsdk-fbsvc-9064a77134.json")
 firebase_admin.initialize_app(cred)
