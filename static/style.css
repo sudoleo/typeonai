@@ -3186,6 +3186,7 @@ font-size: 0.9em;
     gap: 8px; /* Abstand zwischen Text & Button */
     justify-content: center;
     font-size: 11px;
+    z-index: 100;
   }
 
   /* === Compact chips & consistent spacing (OVERRIDES) === */
