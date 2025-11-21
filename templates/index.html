@@ -76,6 +76,9 @@
 
   <!-- Rechte Seite -->
   <div class="top-bar-right">
+    <h2>
+        <span id="proBadge" style="display: none; background: #d4af37; color: white; font-size: 0.5em; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 5px; margin-top: -20px;">PRO</span>
+    </h2>
     <!-- Neuer About-Link -->
     <div id="loginContainer" class="login-text">Log in</div>
     <!-- Dünner vertikaler Strich -->
@@ -286,17 +289,20 @@
     </div>
     
     <div class="response-section" style="position: relative;">
-      <!-- Antwort OpenAI -->
       <div class="response-box" id="openaiResponse" data-model="OpenAI">
         <h2>
           <span class="title">Response from ChatGPT <small>(<span id="openaiModelText">GPT-5-mini</span>)</small>
-            <span class="model-picker-wrapper"><select id="openaiModelSelect" class="model-picker">
-              <option value="gpt-5-mini">GPT-5-mini</option>
-              <option value="gpt-5-nano">GPT-5-nano</option>
-              <option value="gpt-4.1">GPT-4.1</option>
-              <option value="gpt-4o">GPT-4o</option>
-              <option value="gpt-3.5-turbo">GPT-3.5-turbo</option>
-            </select></span>
+            <span class="model-picker-wrapper">
+              <select id="openaiModelSelect" class="model-picker">
+                <option value="gpt-5-mini">GPT-5-mini</option>
+                <option value="gpt-5-nano">GPT-5-nano</option>
+                <option value="gpt-4.1">GPT-4.1</option>
+                <option value="gpt-4o">GPT-4o</option>
+                <option value="gpt-3.5-turbo">GPT-3.5-turbo</option>
+                <option value="gpt-5" disabled class="premium-option">GPT-5 (Pro only)</option>
+                <option value="gpt-5-chat-latest" disabled class="premium-option">GPT-5-chat-latest (Pro only)</option>
+              </select>
+            </span>
           </span>
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('openaiResponse')" title="Mark as best answer">&#9733;</span>
@@ -308,15 +314,17 @@
         </h2>
         <p class="collapsible-content"></p>
       </div>
-      <!-- Antwort Mistral -->
+
       <div class="response-box" id="mistralResponse" data-model="Mistral">
         <h2>
           <span class="title">Response from Mistral <small>(<span id="mistralModelText">mistral-large-latest</span>)</small>
-            <span class="model-picker-wrapper"><select id="mistralModelSelect" class="model-picker">
-              <option value="mistral-large-latest">mistral-large-latest</option>
-              <option value="mistral-medium-latest">mistral-medium-latest</option>
-              <option value="mistral-small-latest">mistral-small-latest</option>
-            </select></span>
+            <span class="model-picker-wrapper">
+              <select id="mistralModelSelect" class="model-picker">
+                <option value="mistral-large-latest">mistral-large-latest</option>
+                <option value="mistral-medium-latest">mistral-medium-latest</option>
+                <option value="mistral-small-latest">mistral-small-latest</option>
+              </select>
+            </span>
           </span>
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('mistralResponse')" title="Mark as best answer">&#9733;</span>
@@ -328,16 +336,19 @@
         </h2>
         <p class="collapsible-content"></p>
       </div>
-      <!-- Antwort Anthropic Claude -->
+
       <div class="response-box" id="claudeResponse" data-model="Anthropic">
         <h2>
           <span class="title">Response from Claude <small>(<span id="claudeModelText">claude-haiku-4-5</span>)</small>
-            <span class="model-picker-wrapper"><select id="claudeModelSelect" class="model-picker">
-              <option value="claude-haiku-4-5">claude-haiku-4-5</option>
-              <option value="claude-sonnet-4-20250514">claude-4-sonnet</option>
-              <option value="claude-3-7-sonnet-20250219">claude-3-7-sonnet</option>
-              <option value="claude-3-5-haiku-20241022">claude-3-5-haiku</option>
-            </select></span>
+            <span class="model-picker-wrapper">
+              <select id="claudeModelSelect" class="model-picker">
+                <option value="claude-haiku-4-5">claude-haiku-4-5</option>
+                <option value="claude-sonnet-4-20250514">claude-4-sonnet</option>
+                <option value="claude-3-7-sonnet-20250219">claude-3-7-sonnet</option>
+                <option value="claude-3-5-haiku-20241022">claude-3-5-haiku</option>
+                <option value="claude-sonnet-4-5-20250929" disabled class="premium-option">claude-sonnet-4-5 (Pro only)</option>
+              </select>
+            </span>
           </span>
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('claudeResponse')" title="Mark as best answer">&#9733;</span>
@@ -349,14 +360,17 @@
         </h2>
         <p class="collapsible-content"></p>
       </div>
-      <!-- Antwort Gemini -->
+
       <div class="response-box" id="geminiResponse" data-model="Gemini">
         <h2>
           <span class="title">Response from Gemini <small>(<span id="geminiModelText">gemini-2.5-flash</span>)</small>
-            <span class="model-picker-wrapper"><select id="geminiModelSelect" class="model-picker">
-              <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-              <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-            </select></span>
+            <span class="model-picker-wrapper">
+              <select id="geminiModelSelect" class="model-picker">
+                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                <option value="gemini-2.5-pro" disabled class="premium-option">gemini-2.5-pro (Pro only)</option>
+              </select>
+            </span>
           </span>
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('geminiResponse')" title="Mark as best answer">&#9733;</span>
@@ -368,13 +382,16 @@
         </h2>
         <p class="collapsible-content"></p>
       </div>
-      <!-- Antwort DeepSeek -->
+
       <div class="response-box" id="deepseekResponse" data-model="DeepSeek">
         <h2>
           <span class="title">Response from DeepSeek <small>(<span id="deepseekModelText">DeepSeek-V3</span>)</small>
-            <span class="model-picker-wrapper"><select id="deepseekModelSelect" class="model-picker">
-              <option value="deepseek-chat">DeepSeek-V3</option>
-            </select></span>
+            <span class="model-picker-wrapper">
+              <select id="deepseekModelSelect" class="model-picker">
+                <option value="deepseek-chat">DeepSeek-V3</option>
+                <option value="deepseek-reasoner" disabled class="premium-option">DeepSeek-R1/Reasoner (Pro only)</option>
+              </select>
+            </span>
           </span>
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('deepseekResponse')" title="Mark as best answer">&#9733;</span>
@@ -386,14 +403,17 @@
         </h2>
         <p class="collapsible-content"></p>
       </div>
-      <!-- Antwort Grok -->
+
       <div class="response-box" id="grokResponse" data-model="Grok">
         <h2>
           <span class="title">Response from Grok <small>(<span id="grokModelText">grok-4-fast</span>)</small>
-            <span class="model-picker-wrapper"><select id="grokModelSelect" class="model-picker">
-              <option value="grok-4-fast-non-reasoning-latest">grok-4-fast-non-reasoning-latest</option>
-              <option value="grok-3-latest">grok-3</option>
-            </select></span>
+            <span class="model-picker-wrapper">
+              <select id="grokModelSelect" class="model-picker">
+                <option value="grok-4-fast-non-reasoning-latest">grok-4-fast</option>
+                <option value="grok-4-latest" disabled class="premium-option">grok-4-latest (Pro only)</option>
+                <option value="grok-3-latest" disabled class="premium-option">grok-3-latest (Pro only)</option>
+              </select>
+            </span>
           </span>
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('grokResponse')" title="Mark as best answer">&#9733;</span>
@@ -404,7 +424,7 @@
           </div>
         </h2>
         <p class="collapsible-content"></p>
-      </div> 
+      </div>
     </div>
     
     <!-- Konsens-Section -->
@@ -430,6 +450,12 @@
                 <option value="Mistral">mistral-large-latest</option>
                 <option value="Gemini">gemini-2.5-flash</option>
                 <option value="DeepSeek">DeepSeek-V3</option>
+
+                <option value="Grok-Pro" class="premium-option">Grok-4-latest</option>
+                <option value="OpenAI-Pro" class="premium-option">GPT-5</option>
+                <option value="Anthropic-Pro" class="premium-option">claude-sonnet-4-5</option>
+                <option value="Gemini-Pro" class="premium-option">gemini-2.5-pro</option>
+                <option value="DeepSeek-Pro" class="premium-option">DeepSeek-R1</option>
               </select>
             </div>
           </div>
@@ -960,8 +986,69 @@
         // Marketing Popup Initialisierung
         // --------------------------
         // Überprüfen, ob das Popup schon angezeigt wurde
-  
-        const FREE_USAGE_LIMIT = 25;
+
+        // Globale Variablen Limits (Standard: Free)
+        const LIMITS = {
+            FREE: { NORMAL: 25, DEEP: 12 },
+            PRO:  { NORMAL: 500, DEEP: 50 }
+        };
+        let currentMaxLimit = LIMITS.FREE.NORMAL;
+        let currentDeepLimit = LIMITS.FREE.DEEP;
+
+        // Diese Funktion prüft den Status sofort beim Laden
+        async function checkUserStatusOnLoad(user) {
+            if (!user) return;
+
+            try {
+                const token = await user.getIdToken();
+                
+                // Aufruf an den neuen Backend-Endpoint
+                const response = await fetch("/user_status", {
+                    method: "GET",
+                    headers: {
+                        "Authorization": "Bearer " + token,
+                        "Content-Type": "application/json"
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // 1. UI sofort umschalten (Badge an, Modelle frei)
+                    updateUserTierUI(data.is_pro); 
+
+                    // 2. Limits sofort aktualisieren (verhindert den 500/25 Fehler)
+                    currentMaxLimit = data.limit;
+                    currentDeepLimit = data.deep_limit;
+
+                    // 3. Sidebar Text initial befüllen (damit dort nicht 25 steht bis zum ersten Klick)
+                    // Wir rufen hier kurz den Usage-Endpoint auf, um die aktuellen Zahlen zu haben
+                    refreshUsageDisplay(token);
+                }
+            } catch (error) {
+                console.error("Fehler beim Laden des User-Status:", error);
+            }
+        }
+
+        // Hilfsfunktion um Sidebar zu aktualisieren (Refactoring)
+        async function refreshUsageDisplay(token) {
+            try {
+                const resp = await fetch("/usage", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id_token: token })
+                });
+                const data = await resp.json();
+                
+                // Hier nutzen wir die GLOBALE Variable, die durch checkUserStatusOnLoad korrekt gesetzt wurde
+                document.getElementById("freeUsageDisplay").innerHTML = 
+                    "Requests: " + data.remaining + " / " + currentMaxLimit;
+
+                document.getElementById("deepUsageDisplay").innerHTML = 
+                    "Deep Think: " + data.deep_remaining + " / " + currentDeepLimit;
+                    
+            } catch(e) { console.error(e); }
+        }
   
         if (!localStorage.getItem("marketingPopupShown")) {
           document.getElementById("marketingPopup").style.display = "block";
@@ -1810,10 +1897,17 @@
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
             const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
 
-            document.getElementById("freeUsageDisplay").innerHTML =
-              "Free requests: " + freeRemaining + " / " + FREE_USAGE_LIMIT;
-            document.getElementById("deepUsageDisplay").innerHTML =
-              "Deep Think: " + deepRemaining + " / 12";
+            const likelyPro = (freeRemaining > 25) || (deepRemaining > 12); 
+
+            // UI updaten
+            updateUserTierUI(likelyPro); // Oder true/false basierend auf Auth
+
+            // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
+            document.getElementById("freeUsageDisplay").innerHTML = 
+                "Requests: " + freeRemaining + " / " + currentMaxLimit;
+
+            document.getElementById("deepUsageDisplay").innerHTML = 
+                "Deep Think: " + deepRemaining + " / " + currentDeepLimit;
 
             checkAllResponses();
           })
@@ -1882,10 +1976,18 @@
               const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
               const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
               
-              document.getElementById("freeUsageDisplay").innerHTML =
-                "Free requests: " + freeRemaining + " / " + FREE_USAGE_LIMIT;
-              document.getElementById("deepUsageDisplay").innerHTML =
-                "Deep Think: " + deepRemaining + " / 12";
+              const likelyPro = (freeRemaining > 25) || (deepRemaining > 12); 
+
+              // UI updaten
+              updateUserTierUI(likelyPro); // Oder true/false basierend auf Auth
+
+              // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
+              document.getElementById("freeUsageDisplay").innerHTML = 
+                  "Requests: " + freeRemaining + " / " + currentMaxLimit;
+
+              document.getElementById("deepUsageDisplay").innerHTML = 
+                  "Deep Think: " + deepRemaining + " / " + currentDeepLimit;
+
               checkAllResponses();
             })
             .catch(error => {
@@ -1946,10 +2048,18 @@
               const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
               const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
               
-              document.getElementById("freeUsageDisplay").innerHTML =
-                "Free requests: " + freeRemaining + " / " + FREE_USAGE_LIMIT;
-              document.getElementById("deepUsageDisplay").innerHTML =
-                "Deep Think: " + deepRemaining + " / 12";
+            const likelyPro = (freeRemaining > 25) || (deepRemaining > 12); 
+
+            // UI updaten
+            updateUserTierUI(likelyPro); // Oder true/false basierend auf Auth
+
+            // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
+            document.getElementById("freeUsageDisplay").innerHTML = 
+                "Requests: " + freeRemaining + " / " + currentMaxLimit;
+
+            document.getElementById("deepUsageDisplay").innerHTML = 
+                "Deep Think: " + deepRemaining + " / " + currentDeepLimit;
+
               checkAllResponses();
             })
             .catch(error => {
@@ -2011,10 +2121,18 @@
               const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
               const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
               
-              document.getElementById("freeUsageDisplay").innerHTML =
-                "Free requests: " + freeRemaining + " / " + FREE_USAGE_LIMIT;
-              document.getElementById("deepUsageDisplay").innerHTML =
-                "Deep Think: " + deepRemaining + " / 12";
+              const likelyPro = (freeRemaining > 25) || (deepRemaining > 12); 
+
+              // UI updaten
+              updateUserTierUI(likelyPro); // Oder true/false basierend auf Auth
+
+              // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
+              document.getElementById("freeUsageDisplay").innerHTML = 
+                  "Requests: " + freeRemaining + " / " + currentMaxLimit;
+
+              document.getElementById("deepUsageDisplay").innerHTML = 
+                  "Deep Think: " + deepRemaining + " / " + currentDeepLimit;
+
               checkAllResponses();
             })
             .catch(error => {
@@ -2075,10 +2193,18 @@
               const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
               const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
               
-              document.getElementById("freeUsageDisplay").innerHTML =
-                "Free requests: " + freeRemaining + " / " + FREE_USAGE_LIMIT;
-              document.getElementById("deepUsageDisplay").innerHTML =
-                "Deep Think: " + deepRemaining + " / 12";
+              const likelyPro = (freeRemaining > 25) || (deepRemaining > 12); 
+
+              // UI updaten
+              updateUserTierUI(likelyPro); // Oder true/false basierend auf Auth
+
+              // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
+              document.getElementById("freeUsageDisplay").innerHTML = 
+                  "Requests: " + freeRemaining + " / " + currentMaxLimit;
+
+              document.getElementById("deepUsageDisplay").innerHTML = 
+                  "Deep Think: " + deepRemaining + " / " + currentDeepLimit;
+
               checkAllResponses();
             })
             .catch(error => {
@@ -2138,10 +2264,18 @@
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
             const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
             
-            document.getElementById("freeUsageDisplay").innerHTML =
-              "Free requests: " + freeRemaining + " / " + FREE_USAGE_LIMIT;
-            document.getElementById("deepUsageDisplay").innerHTML =
-              "Deep Think: " + deepRemaining + " / 12";
+            const likelyPro = (freeRemaining > 25) || (deepRemaining > 12); 
+
+            // UI updaten
+            updateUserTierUI(likelyPro); // Oder true/false basierend auf Auth
+
+            // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
+            document.getElementById("freeUsageDisplay").innerHTML = 
+                "Requests: " + freeRemaining + " / " + currentMaxLimit;
+
+            document.getElementById("deepUsageDisplay").innerHTML = 
+                "Deep Think: " + deepRemaining + " / " + currentDeepLimit;
+
             checkAllResponses();
           })
           .catch(error => {
@@ -2992,6 +3126,67 @@
         // am Ende deines DOMContentLoaded-Blocks aufrufen:
         initConsensusCopyButtons();
 
+        // Initialer Aufruf: Alles sperren (Standard)
+        updatePremiumModelsState(false);
+
+        function updateUserTierUI(isPro) {
+          const badge = document.getElementById("proBadge");
+          
+          if (isPro) {
+              // 1. Badge anzeigen
+              if(badge) badge.style.display = "inline-block";
+              
+              // 2. Limits auf Pro setzen
+              currentMaxLimit = LIMITS.PRO.NORMAL;
+              currentDeepLimit = LIMITS.PRO.DEEP;
+
+              // 3. Premium Modelle im Dropdown entsperren (vom vorigen Schritt)
+              updatePremiumModelsState(true); 
+
+          } else {
+              // 1. Badge verstecken
+              if(badge) badge.style.display = "none";
+
+              // 2. Limits auf Free setzen
+              currentMaxLimit = LIMITS.FREE.NORMAL;
+              currentDeepLimit = LIMITS.FREE.DEEP;
+
+              // 3. Premium Modelle sperren
+              updatePremiumModelsState(false);
+          }
+      }
+
+      function updatePremiumModelsState(isPro) {
+          // 1. Logik für das Consensus Dropdown (Dropdown-Optionen)
+          const consensusDropdown = document.getElementById("consensusModelDropdown");
+          if (consensusDropdown) {
+              // Wir suchen direkt nach den Optionen mit der Klasse 'premium-option' im Dropdown
+              const premiumOptions = consensusDropdown.querySelectorAll('option.premium-option');
+              
+              premiumOptions.forEach(option => {
+                  if (isPro) {
+                      // PRO USER: Option freischalten
+                      option.disabled = false;
+                      // Entferne den "(Pro only)" Text, falls er schon da steht
+                      option.textContent = option.textContent.replace(' (Pro only)', '');
+                  } else {
+                      // FREE USER: Option sperren
+                      option.disabled = true;
+                      // Falls "(Pro only)" noch nicht da steht, hinzufügen
+                      if (!option.textContent.includes('(Pro only)')) {
+                          option.textContent += ' (Pro only)';
+                      }
+                      
+                      // Falls ein Free-User versehentlich ein Pro-Modell ausgewählt hat (z.B. durch Cache),
+                      // setzen wir das Dropdown auf das erste Element (Standard-Modell) zurück.
+                      if (option.selected) {
+                          consensusDropdown.selectedIndex = 0;
+                      }
+                  }
+              });
+          }
+      }
+
       });
 
 </script>
@@ -3101,7 +3296,6 @@
         <a href="/privacy"  target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Privacy Policy" aria-label="Privacy Policy">Privacy</a>
         <a href="/imprint"  target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Imprint"        aria-label="Imprint">Imprint</a>
         <a href="/about"  target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="About"        aria-label="About">About</a>
-      <!-- Lightweight states + dark mode -->
       <style>
         #googleLoginButton:hover { background:#f9fafb; box-shadow:0 2px 6px rgba(0,0,0,0.06); }
         #googleLoginButton:active { transform:translateY(0.5px); }

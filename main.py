@@ -102,14 +102,14 @@ DEEP_SEARCH_MAX_TOKENS = 4096
 CONSENSUS_MAX_TOKENS = 4096
 DIFFERENCES_MAX_TOKENS = 1024
 REASONING_EFFORT_FOR_DEEP = "low"
-
 GEMINI_MAX_TOKENS = 2048
 GEMINI_DEEP_MAX_TOKENS = 4096
 
+PRO_USAGE_LIMIT = 500
+PRO_DEEP_SEARCH_LIMIT = 50
+
 # Modelle, die pro Anbieter erlaubt sind
 ALLOWED_OPENAI_MODELS = {
-    "gpt-5",
-    "gpt-5-chat-latest",
     "gpt-5-nano",
     "gpt-5-mini",
     "gpt-4.1",
@@ -124,7 +124,6 @@ ALLOWED_MISTRAL_MODELS = {
 }
 
 ALLOWED_ANTHROPIC_MODELS = {
-    "claude-sonnet-4-5-20250929",
     "claude-haiku-4-5",
     "claude-sonnet-4-20250514",
     "claude-3-7-sonnet-20250219",
@@ -132,19 +131,85 @@ ALLOWED_ANTHROPIC_MODELS = {
 }
 
 ALLOWED_GEMINI_MODELS = {
-    "gemini-2.5-pro",
     "gemini-2.5-flash",
     "gemini-2.0-flash",
 }
 
 ALLOWED_DEEPSEEK_MODELS = {
     "deepseek-chat",
+}
+
+ALLOWED_GROK_MODELS = {
+    "grok-4-fast-non-reasoning-latest",
+}
+
+# Modelle, die pro Anbieter erlaubt sind
+# WICHTIG: Hier müssen AUCH die Premium-Modelle rein, damit validate_model sie erkennt.
+
+ALLOWED_OPENAI_MODELS = {
+    "gpt-5-nano",
+    "gpt-5-mini",
+    "gpt-4.1",
+    "gpt-4o",
+    "gpt-3.5-turbo",
+    # Premium Modelle hinzufügen:
+    "gpt-5",
+    "gpt-5-chat-latest",
+}
+
+ALLOWED_MISTRAL_MODELS = {
+    "mistral-large-latest",
+    "mistral-medium-latest",
+    "mistral-small-latest",
+}
+
+ALLOWED_ANTHROPIC_MODELS = {
+    "claude-haiku-4-5",
+    "claude-sonnet-4-20250514",
+    "claude-3-7-sonnet-20250219",
+    "claude-3-5-haiku-20241022",
+    # Premium Modelle hinzufügen:
+    "claude-sonnet-4-5-20250929",
+    "claude-sonnet-4-5", # Fallback falls Frontend Kurzform sendet
+}
+
+ALLOWED_GEMINI_MODELS = {
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    # Premium Modelle hinzufügen:
+    "gemini-2.5-pro",
+}
+
+ALLOWED_DEEPSEEK_MODELS = {
+    "deepseek-chat",
+    # Premium Modelle hinzufügen:
     "deepseek-reasoner",
 }
 
 ALLOWED_GROK_MODELS = {
-    "grok-4-latest",
     "grok-4-fast-non-reasoning-latest",
+    # Premium Modelle hinzufügen:
+    "grok-4-latest",
+    "grok-3-latest",
+}
+
+PREMIUM_MODELS = {
+    # OpenAI High-End
+    "gpt-5",
+    "gpt-5-chat-latest",
+
+    # Anthropic High-End
+    "claude-sonnet-4-5-20250929",
+    "claude-sonnet-4-5",
+    
+    # Gemini Pro
+    "gemini-2.5-pro",
+    
+    # DeepSeek Reasoner
+    "deepseek-reasoner",
+    
+    # Grok
+    "grok-4-latest",
     "grok-3-latest",
 }
 
@@ -180,14 +245,24 @@ def is_valid_session(token: str) -> bool:
 def count_words(text: str) -> int:
     return len(text.strip().split())
 
-def validate_model(model: str, allowed: set, provider: str):
-    """Prüft, ob das angegebene Modell erlaubt ist."""
+def validate_model(model: str, allowed: set, provider: str, is_pro: bool = False):
+    """
+    Prüft, ob das Modell existiert UND ob der Nutzer berechtigt ist.
+    """
+    # 1. Ist das Modell überhaupt technisch erlaubt?
     if model and model not in allowed:
         raise HTTPException(
             status_code=400,
             detail=f"Model '{model}' is not allowed for {provider}."
         )
-
+    
+    # 2. Ist es ein Premium-Modell und der Nutzer ist NICHT Pro?
+    if model in PREMIUM_MODELS and not is_pro:
+        raise HTTPException(
+            status_code=403, # Forbidden
+            detail=f"The model '{model}' is reserved for Premium users. Please upgrade your plan."
+        )
+    
 def query_openai(
     question: str,
     api_key: str,
@@ -1001,6 +1076,23 @@ def extract_id_token(request: Request, data: dict) -> Optional[str]:
         return cookie_token
     return None
 
+def is_user_pro(uid: str) -> bool:
+    """
+    Liest aus Firestore, ob das Feld 'tier' auf 'premium' (oder 'pro') steht.
+    """
+    try:
+        doc_ref = db_firestore.collection("users").document(uid)
+        doc = doc_ref.get()
+        
+        if doc.exists:
+            data = doc.to_dict()
+            tier = data.get("tier", "").lower()
+            # Prüfen auf "premium" (wie im Text beschrieben) oder "pro" zur Sicherheit
+            return tier in ["premium", "pro"]
+        return False
+    except Exception as e:
+        logging.error(f"Pro-Check Fehler für {uid}: {e}")
+        return False
 
 # 1) Landingpage unter '/'
 @app.get("/", response_class=HTMLResponse)
@@ -1038,6 +1130,42 @@ async def read_root(request: Request):
         "firebase_app_id": os.environ.get("FIREBASE_APP_ID")
     }
     return templates.TemplateResponse("index.html", {"request": request, "free_limit": FREE_USAGE_LIMIT, **firebase_config})
+
+@app.get("/user_status")
+@limiter.limit("20/minute")
+async def get_user_status(request: Request):
+    """
+    Prüft den Status des Nutzers (Free vs. Pro) basierend auf dem ID-Token.
+    Wird beim Seiten-Load (checkUserStatusOnLoad) aufgerufen.
+    """
+    # Token aus dem Authorization Header holen (Bearer <token>)
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    token = auth_header.split(" ")[1]
+
+    try:
+        # 1. UID verifizieren
+        uid = verify_user_token(token)
+        
+        # 2. Status aus Firestore holen
+        pro_status = is_user_pro(uid)
+
+        # 3. Limits basierend auf Status setzen
+        limit_regular = PRO_USAGE_LIMIT if pro_status else FREE_USAGE_LIMIT
+        limit_deep = PRO_DEEP_SEARCH_LIMIT if pro_status else 0  # Free User haben 0 Deep Search
+
+        return {
+            "uid": uid,
+            "is_pro": pro_status,
+            "limit": limit_regular,
+            "deep_limit": limit_deep
+        }
+
+    except Exception as e:
+        logging.error(f"User status check failed: {e}")
+        raise HTTPException(status_code=401, detail="Authentication failed")
 
 @app.get("/bookmarks")
 @limiter.limit("20/minute")
@@ -1129,24 +1257,41 @@ async def confirm_registration(request: Request, data: dict = Body(...)):
 
     
 @app.post("/usage")
-@limiter.limit("20/minute")  # Beispiel: maximal 20 Anfragen pro Minute pro IP
+@limiter.limit("20/minute")
 async def get_usage_post(request: Request):
-    # JSON-Daten aus dem Request abrufen
+    """
+    Liefert die verbleibenden Anfragen dynamisch zurück.
+    Rechnet: (Limit_basierend_auf_Tier) - (Bisherige_Nutzung).
+    """
     data = await request.json()
-    
     token = data.get("id_token")
+    
     try:
         uid = verify_user_token(token)
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed")
     
+    # 1. Status prüfen
+    pro_status = is_user_pro(uid)
+
+    # 2. Limits festlegen
+    limit_regular = PRO_USAGE_LIMIT if pro_status else FREE_USAGE_LIMIT
+    limit_deep = PRO_DEEP_SEARCH_LIMIT if pro_status else 0
+
+    # 3. Verbrauch abrufen
     current_usage = usage_counter.get(uid, 0)
-    remaining = FREE_USAGE_LIMIT - current_usage
-
     current_deep_usage = deep_search_usage.get(uid, 0)
-    deep_remaining = 12 - current_deep_usage  # Deep Search Limit: 12
 
-    return {"remaining": remaining, "deep_remaining": deep_remaining}
+    # 4. Verbleibend berechnen (verhindert negative Zahlen in der UI, falls mal überzogen wurde)
+    remaining = int(limit_regular - current_usage)
+    deep_remaining = int(limit_deep - current_deep_usage)
+
+    return {
+        "remaining": remaining,
+        "deep_remaining": deep_remaining,
+        "is_pro": pro_status,
+        "total_limit": limit_regular
+    }
     
 # Globales Dictionary zum Speichern des letzten Feedback-Zeitstempels pro Nutzer
 last_feedback_time = {}
@@ -1336,559 +1481,475 @@ async def delete_bookmark(data: dict):
 async def ask_openai_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
 
-    # deep_search robust von String->Bool
+    # deep_search robust konvertieren
     deep_search_raw = data.get("deep_search", False)
     deep_search = True if str(deep_search_raw).lower() == "true" else False
 
     max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
     if count_words(question) > max_words_limit:
-        raise HTTPException(
-            status_code=400,
-            detail=f"The input exceeds the allowed word limit of {max_words_limit} words."
-        )
+        raise HTTPException(status_code=400, detail=f"Input exceeds word limit of {max_words_limit}.")
 
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
     api_key = data.get("api_key")
     model = data.get("model")
 
-    validate_model(model, ALLOWED_OPENAI_MODELS, "OpenAI")
-
-    # NICHT mehr auslesen: search_mode
-    active_count = data.get("active_count", 1)
+    # --- 1. Auth & Status Check ---
+    is_pro_user = False
+    uid = None
 
     if id_token:
         try:
             uid = verify_user_token(id_token)
+            is_pro_user = is_user_pro(uid)
         except Exception:
             raise HTTPException(status_code=401, detail="Authentication failed")
 
-        increment = 1.0 / active_count
-
-        current_usage = usage_counter.get(uid, 0)
-        if current_usage + increment > FREE_USAGE_LIMIT:
-            deep_remaining = 12 - deep_search_usage.get(uid, 0)
-            return {
-                "error": "Your free quota is exhausted. Please provide your own API keys.",
-                "free_usage_remaining": 0,
-                "deep_remaining": deep_remaining
-            }
-
-        if deep_search:
-            current_deep_usage = deep_search_usage.get(uid, 0)
-            if current_deep_usage + increment > 12:
-                free_remaining = FREE_USAGE_LIMIT - current_usage
-                return {
-                    "error": "Your free deep search quota is exhausted. Please store your own API keys.",
-                    "free_usage_remaining": free_remaining,
-                    "deep_remaining": 0
-                }
-
-        # Zähler erst nach allen Checks erhöhen
-        usage_counter[uid] = current_usage + increment
-        if deep_search:
-            deep_search_usage[uid] = current_deep_usage + increment
-
-        developer_api_key = os.environ.get("DEVELOPER_OPENAI_API_KEY")
-        if not developer_api_key:
-            raise HTTPException(status_code=500, detail="Server error: API key not configured")
-
-        answer = query_openai(
-            question,
-            developer_api_key,
-            deep_search=deep_search,
-            system_prompt=system_prompt,
-            model_override=model
-        )
-        free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
-        deep_remaining = 12 - deep_search_usage.get(uid, 0)
-        return {
-            "response": answer,
-            "free_usage_remaining": free_remaining,
-            "deep_remaining": deep_remaining,
-            "key_used": "Developer API Key"
-        }
-
-    elif api_key:
-        answer = query_openai(
-            question,
-            api_key,
-            deep_search=deep_search,
-            system_prompt=system_prompt,
-            model_override=model
-        )
-        return {
-            "response": answer,
-            "free_usage_remaining": FREE_USAGE_LIMIT,
-            "deep_remaining": 12,
-            "key_used": "User API Key"
-        }
-
-    else:
-        raise HTTPException(status_code=400, detail="No authentication parameter (id_token or api_key) specified")
-
-# Angepasster Endpoint für Mistral
-@app.post("/ask_mistral")
-@limiter.limit("5/minute")
-async def ask_mistral_post(request: Request, data: dict = Body(...)):
-    question = data.get("question")
-    # Konvertiere deep_search in einen Boolean
-    deep_search_raw = data.get("deep_search", False)
-    deep_search = True if str(deep_search_raw).lower() == "true" else False
-    # Wähle das passende Wortlimit: DEEP_SEARCH_MAX_WORDS, wenn deep_search aktiv ist, sonst MAX_WORDS
-    max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
-
-    if count_words(question) > max_words_limit:
+    # --- 2. Deep Search Check (Strictly Pro Only) ---
+    if deep_search and not is_pro_user:
         raise HTTPException(
-            status_code=400,
-            detail=f"The input exceeds the allowed word limit of {max_words_limit} words."
-        )
-    system_prompt = data.get("system_prompt")
-    id_token = extract_id_token(request, data)
-    api_key = data.get("api_key")
-    model = data.get("model")
-    validate_model(model, ALLOWED_MISTRAL_MODELS, "Mistral")
-    active_count = data.get("active_count", 1)
-    
-    if id_token:
-        try:
-            uid = verify_user_token(id_token)
-        except Exception:
-            raise HTTPException(status_code=401, detail="Authentication failed")
-
-        increment = 1.0 / active_count
-
-        # --- Zuerst beide Quota-Checks durchführen ---
-        current_usage = usage_counter.get(uid, 0)
-        if current_usage + increment > FREE_USAGE_LIMIT:
-            # Auch im Fehlerfall die aktuellen Zählerwerte zurückgeben:
-            deep_remaining = 12 - deep_search_usage.get(uid, 0)
-            return {
-                "error": "Your free quota is exhausted. Please provide your own API keys.",
-                "free_usage_remaining": 0,
-                "deep_remaining": deep_remaining
-            }
-
-        if deep_search:
-            current_deep_usage = deep_search_usage.get(uid, 0)
-            if current_deep_usage + increment > 12:
-                free_remaining = FREE_USAGE_LIMIT - current_usage
-                # Hier werden beide Werte mitgegeben, auch wenn deep search nicht verfügbar ist:
-                return {
-                    "error": "Your free deep search quota is exhausted. Please store your own API keys.",
-                    "free_usage_remaining": free_remaining,
-                    "deep_remaining": 0
-                }
-
-        # --- Jetzt beide Zähler inkrementieren, da beide Checks bestanden sind ---
-        usage_counter[uid] = current_usage + increment
-        if deep_search:
-            deep_search_usage[uid] = current_deep_usage + increment
-
-        developer_api_key = os.environ.get("DEVELOPER_MISTRAL_API_KEY")
-        if not developer_api_key:
-            raise HTTPException(status_code=500, detail="Server error: API key not configured")
-        answer = query_mistral(question, developer_api_key, system_prompt, deep_search=deep_search, model_override=model)
-        free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
-        deep_remaining = 12 - deep_search_usage.get(uid, 0)
-        return {"response": answer, "free_usage_remaining": free_remaining, "deep_remaining": deep_remaining, "key_used": "Developer API Key"}
-    elif api_key:
-        answer = query_mistral(question, api_key, system_prompt, deep_search=deep_search, model_override=model)
-        # Auch hier beide Werte immer mitgeben
-        return {
-            "response": answer,
-            "free_usage_remaining": FREE_USAGE_LIMIT,
-            "deep_remaining": 12,
-            "key_used": "User API Key"
-        }
-    else:
-        raise HTTPException(status_code=400, detail="No id_token or api_key specified.")
-
-
-# Angepasster Endpoint für Anthropic
-@app.post("/ask_claude")
-@limiter.limit("3/minute")
-async def ask_claude_post(request: Request, data: dict = Body(...)):
-    question = data.get("question")
-    # Konvertiere deep_search in einen Boolean
-    deep_search_raw = data.get("deep_search", False)
-    deep_search = True if str(deep_search_raw).lower() == "true" else False
-    # Wähle das entsprechende Wortlimit
-    max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
-
-    if count_words(question) > max_words_limit:
-        raise HTTPException(
-            status_code=400,
-            detail=f"The input exceeds the allowed word limit of {max_words_limit} words."
-        )
-    system_prompt = data.get("system_prompt")
-    id_token = extract_id_token(request, data)
-    api_key = data.get("api_key")
-    model = data.get("model")
-    validate_model(model, ALLOWED_ANTHROPIC_MODELS, "Anthropic")
-    active_count = data.get("active_count", 1)
-    
-    if id_token:
-        try:
-            uid = verify_user_token(id_token)
-        except Exception:
-            raise HTTPException(status_code=401, detail="Authentication failed")
-
-        increment = 1.0 / active_count
-
-        # --- Zuerst beide Quota-Checks durchführen ---
-        current_usage = usage_counter.get(uid, 0)
-        if current_usage + increment > FREE_USAGE_LIMIT:
-            # Auch im Fehlerfall die aktuellen Zählerwerte zurückgeben:
-            deep_remaining = 12 - deep_search_usage.get(uid, 0)
-            return {
-                "error": "Your free quota is exhausted. Please provide your own API keys.",
-                "free_usage_remaining": 0,
-                "deep_remaining": deep_remaining
-            }
-
-        if deep_search:
-            current_deep_usage = deep_search_usage.get(uid, 0)
-            if current_deep_usage + increment > 12:
-                free_remaining = FREE_USAGE_LIMIT - current_usage
-                # Hier werden beide Werte mitgegeben, auch wenn deep search nicht verfügbar ist:
-                return {
-                    "error": "Your free deep search quota is exhausted. Please store your own API keys.",
-                    "free_usage_remaining": free_remaining,
-                    "deep_remaining": 0
-                }
-
-        # --- Jetzt beide Zähler inkrementieren, da beide Checks bestanden sind ---
-        usage_counter[uid] = current_usage + increment
-        if deep_search:
-            deep_search_usage[uid] = current_deep_usage + increment
-
-        developer_api_key = os.environ.get("DEVELOPER_ANTHROPIC_API_KEY")
-        if not developer_api_key:
-            raise HTTPException(status_code=500, detail="Server error: API key not configured")
-        answer = query_claude(
-            question,
-            developer_api_key,
-            system_prompt,
-            deep_search=deep_search,
-            model_override=model
-        )
-        free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
-        deep_remaining = 12 - deep_search_usage.get(uid, 0)
-        return {"response": answer, "free_usage_remaining": free_remaining, "deep_remaining": deep_remaining, "key_used": "Developer API Key"}
-    elif api_key:
-        answer = query_claude(
-            question,
-            api_key,
-            system_prompt,
-            deep_search=deep_search,
-            model_override=model
-        )
-        # Auch hier beide Werte immer mitgeben
-        return {
-            "response": answer,
-            "free_usage_remaining": FREE_USAGE_LIMIT,
-            "deep_remaining": 12,
-            "key_used": "User API Key"
-        }
-    else:
-        raise HTTPException(status_code=400, detail="No id_token or api_key specified.")
-
-@app.post("/ask_gemini")
-@limiter.limit("3/minute")
-async def ask_gemini_post(request: Request, data: dict = Body(...)):
-    question = data.get("question")
-
-    # deep_search bleibt erhalten
-    deep_search_raw = data.get("deep_search", False)
-    deep_search = True if str(deep_search_raw).lower() == "true" else False
-
-    # Wortlimit
-    max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
-
-    # nachher:
-    max_tokens = GEMINI_DEEP_MAX_TOKENS if deep_search else GEMINI_MAX_TOKENS
-
-    if count_words(question) > max_words_limit:
-        raise HTTPException(
-            status_code=400,
-            detail=f"The input exceeds the allowed word limit of {max_words_limit} words."
+            status_code=403, 
+            detail="Deep Think is exclusively available for Pro users."
         )
 
-    system_prompt = data.get("system_prompt")
-    use_own_keys = data.get("useOwnKeys", False)
-    if isinstance(use_own_keys, str):
-        use_own_keys = use_own_keys.lower() == "true"
-
-    id_token = extract_id_token(request, data)
-    api_key = (data.get("api_key") or data.get("gemini_key"))
-    model = data.get("model")
-    validate_model(model, ALLOWED_GEMINI_MODELS, "Gemini")
+    # --- 3. Modell Validierung ---
+    validate_model(model, ALLOWED_OPENAI_MODELS, "OpenAI", is_pro=is_pro_user)
 
     active_count = data.get("active_count", 1)
 
-    # Abwärtskompatibilität: altes Feld ggf. ignorieren (kein Fehler)
-    # search_mode = data.get("search_mode", False)  # <-- bewusst NICHT verwendet
-
-    if id_token:
-        try:
-            uid = verify_user_token(id_token)
-        except Exception:
-            raise HTTPException(status_code=401, detail="Authentication failed")
-
+    # --- 4. Quota Management ---
+    if uid:
         increment = 1.0 / active_count
+        
+        # Limits festlegen basierend auf Status
+        limit_regular = PRO_USAGE_LIMIT if is_pro_user else FREE_USAGE_LIMIT
+        limit_deep = PRO_DEEP_SEARCH_LIMIT if is_pro_user else 0  # Free hat 0 Zugriff
 
-        # Free-Quota prüfen (unverändert)
         current_usage = usage_counter.get(uid, 0)
-        if current_usage + increment > FREE_USAGE_LIMIT:
-            deep_remaining = 12 - deep_search_usage.get(uid, 0)
+        current_deep_usage = deep_search_usage.get(uid, 0)
+
+        # Prüfung Regular Usage
+        if current_usage + increment > limit_regular:
+            msg = "Pro usage limit reached." if is_pro_user else "Free usage limit reached. Upgrade to Pro."
             return {
-                "error": "Your free quota is exhausted. Please provide your own API keys.",
+                "error": msg,
                 "free_usage_remaining": 0,
-                "deep_remaining": deep_remaining
+                "deep_remaining": int(limit_deep - current_deep_usage)
             }
 
-        # Deep-Quota prüfen (falls deep_search aktiv)
+        # Prüfung Deep Search Usage (nur relevant wenn deep_search=True)
         if deep_search:
-            current_deep_usage = deep_search_usage.get(uid, 0)
-            if current_deep_usage + increment > 12:
-                free_remaining = FREE_USAGE_LIMIT - current_usage
+            if current_deep_usage + increment > limit_deep:
                 return {
-                    "error": "Your free deep search quota is exhausted. Please store your own API keys.",
-                    "free_usage_remaining": free_remaining,
+                    "error": "Your Deep Think quota is exhausted for this period.",
+                    "free_usage_remaining": int(limit_regular - current_usage),
                     "deep_remaining": 0
                 }
 
         # Zähler erhöhen
         usage_counter[uid] = current_usage + increment
         if deep_search:
-            deep_search_usage[uid] = deep_search_usage.get(uid, 0) + increment
+            deep_search_usage[uid] = current_deep_usage + increment
 
-        # Key-Auswahl
-        if use_own_keys:
-            if not (api_key and api_key.strip()):
-                raise HTTPException(status_code=400, detail="Gemini: Missing user API key.")
-            answer = query_gemini(
-                question=question,
-                user_api_key=api_key.strip(),
-                deep_search=deep_search,
-                system_prompt=system_prompt,
-                model_override=model,
-                max_output_tokens=max_tokens,   # <-- NEU
-            )
-            key_used = "User API Key"
-        else:
-            answer = query_gemini(
-                question=question,
-                user_api_key=None,
-                deep_search=deep_search,
-                system_prompt=system_prompt,
-                model_override=model,
-                max_output_tokens=max_tokens,   # <-- NEU
-            )
-            key_used = "Service Account"
+        # API Call
+        developer_api_key = os.environ.get("DEVELOPER_OPENAI_API_KEY")
+        if not developer_api_key:
+            raise HTTPException(status_code=500, detail="Server error: API key missing")
 
-        free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
-        deep_remaining = 12 - deep_search_usage.get(uid, 0)
+        answer = query_openai(
+            question, developer_api_key, deep_search=deep_search,
+            system_prompt=system_prompt, model_override=model
+        )
+
+        # Remaining berechnen
+        remaining_regular = int(limit_regular - usage_counter[uid])
+        remaining_deep = int(limit_deep - deep_search_usage.get(uid, 0))
+
         return {
             "response": answer,
-            "free_usage_remaining": free_remaining,
-            "deep_remaining": deep_remaining,
-            "key_used": key_used
+            "free_usage_remaining": remaining_regular,
+            "deep_remaining": remaining_deep,
+            "key_used": "Developer API Key"
+        }
+
+    # --- 5. Eigener API Key (Bypass Limits) ---
+    elif api_key:
+        answer = query_openai(
+            question, api_key, deep_search=deep_search,
+            system_prompt=system_prompt, model_override=model
+        )
+        return {
+            "response": answer,
+            "free_usage_remaining": "Unlimited",
+            "deep_remaining": "Unlimited",
+            "key_used": "User API Key"
         }
 
     else:
-        # Nicht eingeloggte Nutzer: brauchen eigenen Key
-        if not (api_key and api_key.strip()):
-            raise HTTPException(status_code=400, detail="Gemini: No credentials provided. Log in or add a Gemini API key.")
-        answer = query_gemini(
-            question=question,
-            user_api_key=api_key.strip(),
-            deep_search=deep_search,
-            system_prompt=system_prompt,
-            model_override=model,
-            max_output_tokens=max_tokens,
-        )
-        return {"response": answer, "key_used": "User API Key"}
+        raise HTTPException(status_code=400, detail="No auth provided.")
 
 
-# Angepasster Endpoint für DeepSeek
-@app.post("/ask_deepseek")
-@limiter.limit("3/minute")
-async def ask_deepseek_post(request: Request, data: dict = Body(...)):
+@app.post("/ask_mistral")
+@limiter.limit("5/minute")
+async def ask_mistral_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
-    # Konvertiere deep_search in einen Boolean
     deep_search_raw = data.get("deep_search", False)
     deep_search = True if str(deep_search_raw).lower() == "true" else False
-    # Wähle das entsprechende Wortlimit
     max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
 
     if count_words(question) > max_words_limit:
-        raise HTTPException(
-            status_code=400,
-            detail=f"The input exceeds the allowed word limit of {max_words_limit} words."
-        )
+        raise HTTPException(status_code=400, detail=f"Input exceeds word limit.")
+
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
     api_key = data.get("api_key")
     model = data.get("model")
-    validate_model(model, ALLOWED_DEEPSEEK_MODELS, "DeepSeek")
-    active_count = data.get("active_count", 1)
-    
+
+    is_pro_user = False
+    uid = None
+
     if id_token:
         try:
             uid = verify_user_token(id_token)
+            is_pro_user = is_user_pro(uid)
         except Exception:
             raise HTTPException(status_code=401, detail="Authentication failed")
 
+    if deep_search and not is_pro_user:
+        raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
+
+    validate_model(model, ALLOWED_MISTRAL_MODELS, "Mistral", is_pro=is_pro_user)
+
+    active_count = data.get("active_count", 1)
+
+    if uid:
         increment = 1.0 / active_count
+        limit_regular = PRO_USAGE_LIMIT if is_pro_user else FREE_USAGE_LIMIT
+        limit_deep = PRO_DEEP_SEARCH_LIMIT if is_pro_user else 0
 
-        # --- Zuerst beide Quota-Checks durchführen ---
         current_usage = usage_counter.get(uid, 0)
-        if current_usage + increment > FREE_USAGE_LIMIT:
-            # Auch im Fehlerfall die aktuellen Zählerwerte zurückgeben:
-            deep_remaining = 12 - deep_search_usage.get(uid, 0)
-            return {
-                "error": "Your free quota is exhausted. Please provide your own API keys.",
-                "free_usage_remaining": 0,
-                "deep_remaining": deep_remaining
-            }
+        current_deep_usage = deep_search_usage.get(uid, 0)
 
+        if current_usage + increment > limit_regular:
+             return {"error": "Usage limit reached.", "free_usage_remaining": 0, "deep_remaining": int(limit_deep - current_deep_usage)}
+
+        if deep_search and (current_deep_usage + increment > limit_deep):
+             return {"error": "Deep Think quota exhausted.", "free_usage_remaining": int(limit_regular - current_usage), "deep_remaining": 0}
+
+        usage_counter[uid] = current_usage + increment
         if deep_search:
-            current_deep_usage = deep_search_usage.get(uid, 0)
-            if current_deep_usage + increment > 12:
-                free_remaining = FREE_USAGE_LIMIT - current_usage
-                # Hier werden beide Werte mitgegeben, auch wenn deep search nicht verfügbar ist:
-                return {
-                    "error": "Your free deep search quota is exhausted. Please store your own API keys.",
-                    "free_usage_remaining": free_remaining,
-                    "deep_remaining": 0
-                }
+            deep_search_usage[uid] = current_deep_usage + increment
 
-        # --- Jetzt beide Zähler inkrementieren, da beide Checks bestanden sind ---
+        developer_api_key = os.environ.get("DEVELOPER_MISTRAL_API_KEY")
+        if not developer_api_key:
+             raise HTTPException(status_code=500, detail="Server error: API key missing")
+        
+        answer = query_mistral(question, developer_api_key, system_prompt, deep_search=deep_search, model_override=model)
+        
+        return {
+            "response": answer,
+            "free_usage_remaining": int(limit_regular - usage_counter[uid]),
+            "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
+            "key_used": "Developer API Key"
+        }
+
+    elif api_key:
+        answer = query_mistral(question, api_key, system_prompt, deep_search=deep_search, model_override=model)
+        return {"response": answer, "free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "key_used": "User API Key"}
+    else:
+        raise HTTPException(status_code=400, detail="No auth provided.")
+
+
+@app.post("/ask_claude")
+@limiter.limit("3/minute")
+async def ask_claude_post(request: Request, data: dict = Body(...)):
+    question = data.get("question")
+    deep_search_raw = data.get("deep_search", False)
+    deep_search = True if str(deep_search_raw).lower() == "true" else False
+    max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
+
+    if count_words(question) > max_words_limit:
+        raise HTTPException(status_code=400, detail="Input exceeds word limit.")
+
+    system_prompt = data.get("system_prompt")
+    id_token = extract_id_token(request, data)
+    api_key = data.get("api_key")
+    model = data.get("model")
+
+    is_pro_user = False
+    uid = None
+
+    if id_token:
+        try:
+            uid = verify_user_token(id_token)
+            is_pro_user = is_user_pro(uid)
+        except Exception:
+            raise HTTPException(status_code=401, detail="Authentication failed")
+
+    if deep_search and not is_pro_user:
+        raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
+
+    validate_model(model, ALLOWED_ANTHROPIC_MODELS, "Anthropic", is_pro=is_pro_user)
+
+    active_count = data.get("active_count", 1)
+
+    if uid:
+        increment = 1.0 / active_count
+        limit_regular = PRO_USAGE_LIMIT if is_pro_user else FREE_USAGE_LIMIT
+        limit_deep = PRO_DEEP_SEARCH_LIMIT if is_pro_user else 0
+
+        current_usage = usage_counter.get(uid, 0)
+        current_deep_usage = deep_search_usage.get(uid, 0)
+
+        if current_usage + increment > limit_regular:
+             return {"error": "Usage limit reached.", "free_usage_remaining": 0, "deep_remaining": int(limit_deep - current_deep_usage)}
+
+        if deep_search and (current_deep_usage + increment > limit_deep):
+             return {"error": "Deep Think quota exhausted.", "free_usage_remaining": int(limit_regular - current_usage), "deep_remaining": 0}
+
+        usage_counter[uid] = current_usage + increment
+        if deep_search:
+            deep_search_usage[uid] = current_deep_usage + increment
+
+        developer_api_key = os.environ.get("DEVELOPER_ANTHROPIC_API_KEY")
+        if not developer_api_key:
+             raise HTTPException(status_code=500, detail="Server error: API key missing")
+
+        answer = query_claude(question, developer_api_key, system_prompt, deep_search=deep_search, model_override=model)
+        
+        return {
+            "response": answer,
+            "free_usage_remaining": int(limit_regular - usage_counter[uid]),
+            "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
+            "key_used": "Developer API Key"
+        }
+
+    elif api_key:
+        answer = query_claude(question, api_key, system_prompt, deep_search=deep_search, model_override=model)
+        return {"response": answer, "free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "key_used": "User API Key"}
+    else:
+        raise HTTPException(status_code=400, detail="No auth provided.")
+
+
+@app.post("/ask_gemini")
+@limiter.limit("3/minute")
+async def ask_gemini_post(request: Request, data: dict = Body(...)):
+    question = data.get("question")
+    deep_search_raw = data.get("deep_search", False)
+    deep_search = True if str(deep_search_raw).lower() == "true" else False
+    max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
+    max_tokens = GEMINI_DEEP_MAX_TOKENS if deep_search else GEMINI_MAX_TOKENS
+
+    if count_words(question) > max_words_limit:
+        raise HTTPException(status_code=400, detail="Input exceeds word limit.")
+
+    system_prompt = data.get("system_prompt")
+    use_own_keys = str(data.get("useOwnKeys", "false")).lower() == "true"
+    id_token = extract_id_token(request, data)
+    api_key = (data.get("api_key") or data.get("gemini_key"))
+    model = data.get("model")
+
+    is_pro_user = False
+    uid = None
+
+    if id_token:
+        try:
+            uid = verify_user_token(id_token)
+            is_pro_user = is_user_pro(uid)
+        except Exception:
+            raise HTTPException(status_code=401, detail="Authentication failed")
+
+    if deep_search and not is_pro_user:
+        raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
+
+    validate_model(model, ALLOWED_GEMINI_MODELS, "Gemini", is_pro=is_pro_user)
+
+    active_count = data.get("active_count", 1)
+
+    if uid:
+        increment = 1.0 / active_count
+        limit_regular = PRO_USAGE_LIMIT if is_pro_user else FREE_USAGE_LIMIT
+        limit_deep = PRO_DEEP_SEARCH_LIMIT if is_pro_user else 0
+
+        current_usage = usage_counter.get(uid, 0)
+        current_deep_usage = deep_search_usage.get(uid, 0)
+
+        if current_usage + increment > limit_regular:
+             return {"error": "Usage limit reached.", "free_usage_remaining": 0, "deep_remaining": int(limit_deep - current_deep_usage)}
+
+        if deep_search and (current_deep_usage + increment > limit_deep):
+             return {"error": "Deep Think quota exhausted.", "free_usage_remaining": int(limit_regular - current_usage), "deep_remaining": 0}
+
+        usage_counter[uid] = current_usage + increment
+        if deep_search:
+            deep_search_usage[uid] = current_deep_usage + increment
+
+        # Entscheidung: Key oder Service Account
+        if use_own_keys:
+            if not (api_key and api_key.strip()):
+                raise HTTPException(status_code=400, detail="Missing user API key for Gemini.")
+            answer = query_gemini(question, user_api_key=api_key.strip(), deep_search=deep_search, system_prompt=system_prompt, model_override=model, max_output_tokens=max_tokens)
+            key_info = "User API Key"
+        else:
+            # Service Account (SaaS Budget)
+            answer = query_gemini(question, user_api_key=None, deep_search=deep_search, system_prompt=system_prompt, model_override=model, max_output_tokens=max_tokens)
+            key_info = "Service Account"
+
+        return {
+            "response": answer,
+            "free_usage_remaining": int(limit_regular - usage_counter[uid]),
+            "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
+            "key_used": key_info
+        }
+
+    else:
+        # Guest mit eigenem Key
+        if not (api_key and api_key.strip()):
+            raise HTTPException(status_code=400, detail="No credentials provided.")
+        answer = query_gemini(question, user_api_key=api_key.strip(), deep_search=deep_search, system_prompt=system_prompt, model_override=model, max_output_tokens=max_tokens)
+        return {"response": answer, "key_used": "User API Key"}
+
+
+@app.post("/ask_deepseek")
+@limiter.limit("3/minute")
+async def ask_deepseek_post(request: Request, data: dict = Body(...)):
+    question = data.get("question")
+    deep_search_raw = data.get("deep_search", False)
+    deep_search = True if str(deep_search_raw).lower() == "true" else False
+    max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
+
+    if count_words(question) > max_words_limit:
+        raise HTTPException(status_code=400, detail="Input exceeds word limit.")
+
+    system_prompt = data.get("system_prompt")
+    id_token = extract_id_token(request, data)
+    api_key = data.get("api_key")
+    model = data.get("model")
+
+    is_pro_user = False
+    uid = None
+
+    if id_token:
+        try:
+            uid = verify_user_token(id_token)
+            is_pro_user = is_user_pro(uid)
+        except Exception:
+            raise HTTPException(status_code=401, detail="Authentication failed")
+
+    if deep_search and not is_pro_user:
+        raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
+
+    validate_model(model, ALLOWED_DEEPSEEK_MODELS, "DeepSeek", is_pro=is_pro_user)
+
+    active_count = data.get("active_count", 1)
+
+    if uid:
+        increment = 1.0 / active_count
+        limit_regular = PRO_USAGE_LIMIT if is_pro_user else FREE_USAGE_LIMIT
+        limit_deep = PRO_DEEP_SEARCH_LIMIT if is_pro_user else 0
+
+        current_usage = usage_counter.get(uid, 0)
+        current_deep_usage = deep_search_usage.get(uid, 0)
+
+        if current_usage + increment > limit_regular:
+             return {"error": "Usage limit reached.", "free_usage_remaining": 0, "deep_remaining": int(limit_deep - current_deep_usage)}
+
+        if deep_search and (current_deep_usage + increment > limit_deep):
+             return {"error": "Deep Think quota exhausted.", "free_usage_remaining": int(limit_regular - current_usage), "deep_remaining": 0}
+
         usage_counter[uid] = current_usage + increment
         if deep_search:
             deep_search_usage[uid] = current_deep_usage + increment
 
         developer_api_key = os.environ.get("DEVELOPER_DEEPSEEK_API_KEY")
         if not developer_api_key:
-            raise HTTPException(status_code=500, detail="Server error: API key not configured")
-        answer = query_deepseek(
-            question,
-            developer_api_key,
-            system_prompt,
-            deep_search=deep_search,
-            model_override=model
-        )
-        free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
-        deep_remaining = 12 - deep_search_usage.get(uid, 0)
-        return {"response": answer, "free_usage_remaining": free_remaining, "deep_remaining": deep_remaining, "key_used": "Developer API Key"}
-    elif api_key:
-        answer = query_deepseek(
-            question,
-            api_key,
-            system_prompt,
-            deep_search=deep_search,
-            model_override=model
-        )
-        # Auch hier beide Werte immer mitgeben
+             raise HTTPException(status_code=500, detail="Server error: API key missing")
+
+        answer = query_deepseek(question, developer_api_key, system_prompt, deep_search=deep_search, model_override=model)
+        
         return {
             "response": answer,
-            "free_usage_remaining": FREE_USAGE_LIMIT,
-            "deep_remaining": 12,
-            "key_used": "User API Key"
+            "free_usage_remaining": int(limit_regular - usage_counter[uid]),
+            "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
+            "key_used": "Developer API Key"
         }
-    else:
-        raise HTTPException(status_code=400, detail="No id_token or api_key specified.")
 
-    
+    elif api_key:
+        answer = query_deepseek(question, api_key, system_prompt, deep_search=deep_search, model_override=model)
+        return {"response": answer, "free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "key_used": "User API Key"}
+    else:
+        raise HTTPException(status_code=400, detail="No auth provided.")
+
+
 @app.post("/ask_grok")
 @limiter.limit("3/minute")
 async def ask_grok_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
-    # Konvertiere deep_search in einen Boolean
     deep_search_raw = data.get("deep_search", False)
     deep_search = True if str(deep_search_raw).lower() == "true" else False
-    # Wähle das entsprechende Wortlimit
     max_words_limit = DEEP_SEARCH_MAX_WORDS if deep_search else MAX_WORDS
 
     if count_words(question) > max_words_limit:
-        raise HTTPException(
-            status_code=400,
-            detail=f"The input exceeds the allowed word limit of {max_words_limit} words."
-        )
+        raise HTTPException(status_code=400, detail="Input exceeds word limit.")
+
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
     api_key = data.get("api_key")
     model = data.get("model")
-    validate_model(model, ALLOWED_GROK_MODELS, "Grok")
-    active_count = data.get("active_count", 1)
-    
+
+    is_pro_user = False
+    uid = None
+
     if id_token:
         try:
             uid = verify_user_token(id_token)
+            is_pro_user = is_user_pro(uid)
         except Exception:
             raise HTTPException(status_code=401, detail="Authentication failed")
 
+    if deep_search and not is_pro_user:
+        raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
+
+    validate_model(model, ALLOWED_GROK_MODELS, "Grok", is_pro=is_pro_user)
+
+    active_count = data.get("active_count", 1)
+
+    if uid:
         increment = 1.0 / active_count
+        limit_regular = PRO_USAGE_LIMIT if is_pro_user else FREE_USAGE_LIMIT
+        limit_deep = PRO_DEEP_SEARCH_LIMIT if is_pro_user else 0
 
-        # --- Zuerst beide Quota-Checks durchführen ---
         current_usage = usage_counter.get(uid, 0)
-        if current_usage + increment > FREE_USAGE_LIMIT:
-            # Auch im Fehlerfall die aktuellen Zählerwerte zurückgeben:
-            deep_remaining = 12 - deep_search_usage.get(uid, 0)
-            return {
-                "error": "Your free quota is exhausted. Please provide your own API keys.",
-                "free_usage_remaining": 0,
-                "deep_remaining": deep_remaining
-            }
+        current_deep_usage = deep_search_usage.get(uid, 0)
 
-        if deep_search:
-            current_deep_usage = deep_search_usage.get(uid, 0)
-            if current_deep_usage + increment > 12:
-                free_remaining = FREE_USAGE_LIMIT - current_usage
-                # Hier werden beide Werte mitgegeben, auch wenn deep search nicht verfügbar ist:
-                return {
-                    "error": "Your free deep search quota is exhausted. Please store your own API keys.",
-                    "free_usage_remaining": free_remaining,
-                    "deep_remaining": 0
-                }
+        if current_usage + increment > limit_regular:
+             return {"error": "Usage limit reached.", "free_usage_remaining": 0, "deep_remaining": int(limit_deep - current_deep_usage)}
 
-        # --- Jetzt beide Zähler inkrementieren, da beide Checks bestanden sind ---
+        if deep_search and (current_deep_usage + increment > limit_deep):
+             return {"error": "Deep Think quota exhausted.", "free_usage_remaining": int(limit_regular - current_usage), "deep_remaining": 0}
+
         usage_counter[uid] = current_usage + increment
         if deep_search:
             deep_search_usage[uid] = current_deep_usage + increment
 
         developer_api_key = os.environ.get("DEVELOPER_GROK_API_KEY")
         if not developer_api_key:
-            raise HTTPException(status_code=500, detail="Server error: API key not configured")
-        answer = query_grok(
-            question,
-            developer_api_key,
-            system_prompt,
-            deep_search=deep_search,
-            model_override=model
-        )
-        free_remaining = FREE_USAGE_LIMIT - usage_counter[uid]
-        deep_remaining = 12 - deep_search_usage.get(uid, 0)
-        return {"response": answer, "free_usage_remaining": free_remaining, "deep_remaining": deep_remaining, "key_used": "Developer API Key"}
-    elif api_key:
-        answer = query_grok(
-            question,
-            api_key,
-            system_prompt,
-            deep_search=deep_search,
-            model_override=model
-        )
-        # Auch hier beide Werte immer mitgeben
+             raise HTTPException(status_code=500, detail="Server error: API key missing")
+
+        answer = query_grok(question, developer_api_key, system_prompt, deep_search=deep_search, model_override=model)
+        
         return {
             "response": answer,
-            "free_usage_remaining": FREE_USAGE_LIMIT,
-            "deep_remaining": 12,
-            "key_used": "User API Key"
+            "free_usage_remaining": int(limit_regular - usage_counter[uid]),
+            "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
+            "key_used": "Developer API Key"
         }
+
+    elif api_key:
+        answer = query_grok(question, api_key, system_prompt, deep_search=deep_search, model_override=model)
+        return {"response": answer, "free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "key_used": "User API Key"}
     else:
-        raise HTTPException(status_code=400, detail="No id_token or api_key specified.")
+        raise HTTPException(status_code=400, detail="No auth provided.")
 
 @app.post("/prepare")
 async def prepare(request: Request, data: dict = Body(...)):

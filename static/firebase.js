@@ -64,10 +64,71 @@ function injectHtmlSafe(containerEl, md) {
   enhanceLinks(containerEl);
 }
 
-const FREE_USAGE_LIMIT = 25;
+// --- ÄNDERUNG 1: Statische Konstante durch dynamisches Objekt ersetzen ---
+
+// Globale Limits Definition
+window.LIMITS = {
+  FREE: { NORMAL: 25, DEEP: 12 },
+  PRO:  { NORMAL: 500, DEEP: 50 }
+};
+
+// Globale Variablen für den aktuellen Zustand (Startwert: Free)
+window.currentMaxLimit = window.LIMITS.FREE.NORMAL;
+window.currentDeepLimit = window.LIMITS.FREE.DEEP;
 
 // merken, dass wir Bookmarks schon einmal geladen haben
 let bookmarksLoaded = false;
+
+// --- ÄNDERUNG 2: Neue Funktion zum Prüfen des User-Status ---
+async function checkUserStatusOnLoad(user, token) {
+  if (!user || !token) return;
+
+  try {
+    // Call an dein neues Backend /user_status
+    const response = await fetch("/user_status", {
+      method: "GET",
+      headers: {
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json"
+      }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+
+      // 1. Globale Limits sofort aktualisieren
+      window.currentMaxLimit = data.limit;
+      window.currentDeepLimit = data.deep_limit;
+
+    if (data.is_pro) {
+          console.log("User ist PRO -> Aktiviere UI");
+          
+          // A) Versuch über die zentrale Funktion (falls vorhanden)
+          if (typeof window.updateUserTierUI === "function") {
+              window.updateUserTierUI(true);
+          }
+
+          // B) FALLBACK (DAS LÖST DEIN PROBLEM): 
+          // Wir greifen das Badge direkt hier, egal ob die andere Funktion schon da ist.
+          const badge = document.getElementById("proBadge");
+          if (badge) {
+              badge.style.display = "inline-block"; // Macht es sofort sichtbar
+          }
+          
+          // Optional: Auch die Dropdown-Optionen hier direkt freischalten, falls nötig
+          const premiumOptions = document.querySelectorAll('.premium-option');
+          premiumOptions.forEach(option => {
+             option.disabled = false;
+             option.textContent = option.textContent.replace(' (Pro only)', '');
+          });
+      } 
+      // ------------------------
+      
+    }
+  } catch (error) {
+    console.error("Fehler beim User-Status Check:", error);
+  }
+}
 
 onIdTokenChanged(auth, async (user) => {
   console.log("[onIdTokenChanged] user?", !!user);
@@ -85,18 +146,27 @@ onIdTokenChanged(auth, async (user) => {
     }
 
     // ab hier nur noch verifizierte Nutzer
-    const token = await user.getIdToken(/* forceRefresh= */ true);
+    const token = await user.getIdToken(/* forceRefresh= */ false);
     localStorage.setItem("id_token", token);
 
     try {
-      await fetch("/confirm-registration", {
+      // Dieser Call übernimmt nun die Arbeit für ALLE Login-Arten (Google, Email, Reload)
+      const res = await fetch("/confirm-registration", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id_token: token })
       });
+      
+      if (!res.ok) {
+        // Hilft dir beim Debuggen: Was genau sagt das Backend?
+        const errData = await res.json();
+        console.warn("Registration Check Failed:", errData);
+      }
     } catch (err) {
       console.error("Error during confirm-registration:", err);
     }
+
+    await checkUserStatusOnLoad(user, token);
 
     // 2) Usage laden
     fetchUsageData(token);
@@ -147,10 +217,34 @@ onIdTokenChanged(auth, async (user) => {
     // Cleanup bei Logout
     localStorage.removeItem("id_token");
     loginContainer.innerText = "Log in";
-    if (usageOptions) usageOptions.style.display = "none";
 
-    document.getElementById("bookmarksContainer").innerHTML = "";
-    bookmarksLoaded = false;
+      if (usageOptions) usageOptions.style.display = "none";
+
+        document.getElementById("bookmarksContainer").innerHTML = "";
+        bookmarksLoaded = false;
+        // A) Badge verstecken (Direkter Zugriff)
+        const badge = document.getElementById("proBadge");
+        
+      if (badge) badge.style.display = "none";
+
+        // B) Limits auf Free zurücksetzen (Wichtig, falls er sich als Free-User direkt wieder einloggt)
+        window.currentMaxLimit = window.LIMITS.FREE.NORMAL;
+        window.currentDeepLimit = window.LIMITS.FREE.DEEP;
+
+        // C) Premium Modelle wieder sperren
+        const premiumOptions = document.querySelectorAll('.premium-option');
+        premiumOptions.forEach(option => {
+        option.disabled = true;
+        // "(Pro only)" Suffix wieder anhängen, falls es fehlt
+        if (!option.textContent.includes('(Pro only)')) {
+             option.textContent += ' (Pro only)';
+        }
+    });
+
+    // D) Falls du die Hilfsfunktion hast, auch diese aufrufen (doppelt hält besser)
+    if (typeof window.updateUserTierUI === "function") {
+        window.updateUserTierUI(false);
+    }
   }
 });
 
@@ -173,8 +267,8 @@ function fetchUsageData(token) {
   })
     .then(response => response.json())
     .then(data => {
-      freeDisplay.innerHTML = 'Free requests: <strong>' + data.remaining + ' / ' + FREE_USAGE_LIMIT + '</strong>';
-      deepDisplay.innerHTML = 'Deep Think: <strong>' + data.deep_remaining + ' / 12</strong>';
+      freeDisplay.innerHTML = 'Requests: <strong>' + data.remaining + ' / ' + window.currentMaxLimit + '</strong>';
+      deepDisplay.innerHTML = 'Deep Think: <strong>' + data.deep_remaining + ' / ' + window.currentDeepLimit + '</strong>';
     })
     .catch(err => console.error("Error when retrieving the quota:", err));
 }
@@ -473,25 +567,6 @@ document.getElementById("googleLoginButton")?.addEventListener("click", handleGo
 
 async function afterGoogleLogin(user) {
   console.log("[afterGoogleLogin] platform=iOS?", isIOS(), "emailVerified=", user.emailVerified);
-
-  const token = await user.getIdToken(true);
-  try { localStorage.setItem("id_token", token); } catch {}
-
-  try {
-    // Wichtig: keepalive verhindert, dass der POST beim Navigieren abbricht (<=64KB Body)
-    await fetch("/confirm-registration", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id_token: token }),
-      keepalive: true
-    });
-    // optional: minimale Wartezeit, damit iOS wirklich „durch“ ist
-    await new Promise(r => setTimeout(r, 150));
-  } catch (e) {
-    console.error("confirm-registration (google) failed:", e);
-    // Trotzdem weiter – onIdTokenChanged fängt den Rest auf
-  }
-
   // Jetzt *nach* erfolgreichem/versuchtem POST navigieren
   location.replace("/");
 }

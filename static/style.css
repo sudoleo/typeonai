@@ -1954,7 +1954,7 @@ transition: background-color 160ms ease, backdrop-filter 160ms ease;
   margin: clamp(24px, 8vh, 80px) auto;
   padding: 22px 20px;
   width: min(92vw, 360px);
-  max-height: min(80vh, 560px);
+  max-height: min(80vh, 590px);
   border-radius: 12px;
   text-align: center;
 
