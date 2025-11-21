@@ -100,6 +100,8 @@ async function checkUserStatusOnLoad(user, token) {
       window.currentMaxLimit = data.limit;
       window.currentDeepLimit = data.deep_limit;
 
+      window.isUserPro = data.is_pro;
+
     if (data.is_pro) {
           console.log("User ist PRO -> Aktiviere UI");
           

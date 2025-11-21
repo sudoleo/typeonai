@@ -980,14 +980,22 @@
         // Event-Listener registrieren:
         document.getElementById("deepSearchToggle").addEventListener("change", updateDeepThinkText);
         document.getElementById("searchModeToggle").addEventListener("change", updateDeepThinkText);
+        // --- NEU: Deep Search Toggle Sperre für Nicht-Pro User ---
+        document.getElementById("deepSearchToggle").addEventListener("click", function(event) {
+            // Wir prüfen die globale Variable window.isUserPro
+            if (!window.isUserPro) {
+                event.preventDefault(); // Verhindert das Umschalten visuell
+                // Zeige dein Popup oder Alert
+                if (typeof showPopup === "function") {
+                    showPopup("Deep Think is a Pro feature. Please upgrade to use reasoning models.");
+                } else {
+                    alert("Deep Think is a Pro feature.");
+                }
+            }
+        });
+
         updateDeepThinkText();
 
-        // --------------------------
-        // Marketing Popup Initialisierung
-        // --------------------------
-        // Überprüfen, ob das Popup schon angezeigt wurde
-
-        // Globale Variablen Limits (Standard: Free)
         const LIMITS = {
             FREE: { NORMAL: 25, DEEP: 12 },
             PRO:  { NORMAL: 500, DEEP: 50 }
@@ -3129,32 +3137,72 @@
         // Initialer Aufruf: Alles sperren (Standard)
         updatePremiumModelsState(false);
 
-        function updateUserTierUI(isPro) {
-          const badge = document.getElementById("proBadge");
-          
-          if (isPro) {
-              // 1. Badge anzeigen
-              if(badge) badge.style.display = "inline-block";
-              
-              // 2. Limits auf Pro setzen
-              currentMaxLimit = LIMITS.PRO.NORMAL;
-              currentDeepLimit = LIMITS.PRO.DEEP;
+        window.isUserPro = false;
 
-              // 3. Premium Modelle im Dropdown entsperren (vom vorigen Schritt)
-              updatePremiumModelsState(true); 
+        window.updateUserTierUI = function(isPro) {
+            // 1. Globalen Status aktualisieren
+            window.isUserPro = isPro; 
 
-          } else {
-              // 1. Badge verstecken
-              if(badge) badge.style.display = "none";
+            // 2. Elemente referenzieren
+            const badge = document.getElementById("proBadge");
+            
+            // --- HIER WAR DER FEHLER: DIESE ZEILE HAT GEFEHLT ---
+            // Wir suchen das Label-Element, das die Klasse "deep-switch" hat
+            const deepSearchLabel = document.querySelector('.switch.deep-switch'); 
 
-              // 2. Limits auf Free setzen
-              currentMaxLimit = LIMITS.FREE.NORMAL;
-              currentDeepLimit = LIMITS.FREE.DEEP;
+            if (isPro) {
+                // === PRO USER ===
+                if(badge) badge.style.display = "inline-block";
+                
+                // Limits setzen
+                currentMaxLimit = LIMITS.PRO.NORMAL;
+                currentDeepLimit = LIMITS.PRO.DEEP;
 
-              // 3. Premium Modelle sperren
-              updatePremiumModelsState(false);
-          }
-      }
+                // Dropdowns entsperren
+                if (typeof updatePremiumModelsState === "function") {
+                    updatePremiumModelsState(true); 
+                }
+
+                // --- SPERRE AUFHEBEN ---
+                if (deepSearchLabel) {
+                    deepSearchLabel.classList.remove("locked");
+                    deepSearchLabel.title = "Deep Think enabled";
+                    // Input wieder interaktiv machen
+                    const input = deepSearchLabel.querySelector('input');
+                    if(input) input.style.pointerEvents = "auto"; 
+                }
+
+            } else {
+                // === FREE USER ===
+                if(badge) badge.style.display = "none";
+
+                // Limits setzen
+                currentMaxLimit = LIMITS.FREE.NORMAL;
+                currentDeepLimit = LIMITS.FREE.DEEP;
+
+                // Dropdowns sperren
+                if (typeof updatePremiumModelsState === "function") {
+                    updatePremiumModelsState(false);
+                }
+
+                // Deep Search ausschalten, falls an
+                const deepToggle = document.getElementById("deepSearchToggle");
+                if (deepToggle && deepToggle.checked) {
+                    deepToggle.checked = false;
+                    if (typeof updateDeepThinkText === 'function') updateDeepThinkText(); 
+                }
+
+                // --- SPERRE AKTIVIEREN (AUSGRAUEN) ---
+                if (deepSearchLabel) {
+                    deepSearchLabel.classList.add("locked");
+                    deepSearchLabel.title = "Pro feature only"; 
+                    
+                    // Input muss klickbar bleiben für das Popup-Event, aber visuell inaktiv wirken
+                    const input = deepSearchLabel.querySelector('input');
+                    if(input) input.style.pointerEvents = "auto"; 
+                }
+            }
+        };
 
       function updatePremiumModelsState(isPro) {
           // 1. Logik für das Consensus Dropdown (Dropdown-Optionen)

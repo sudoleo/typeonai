@@ -360,6 +360,16 @@ z-index: 2000;  /* höher als der toggleAllButton */
   background-color: rgba(255, 255, 255, 0.04);
 }
 
+/* CSS für gesperrten Switch */
+.switch.deep-switch.locked {
+    opacity: 0.5;
+    filter: grayscale(100%);
+    cursor: not-allowed;
+}
+.switch.deep-switch.locked .slider {
+    cursor: not-allowed;
+}
+
 /* Input-Section */
 .input-section {
   text-align: center;
