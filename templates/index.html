@@ -77,7 +77,8 @@
   <!-- Rechte Seite -->
   <div class="top-bar-right">
     <h2>
-        <span id="proBadge" style="display: none; background: #d4af37; color: white; font-size: 0.5em; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 5px; margin-top: -20px;">PRO</span>
+        <span id="proBadge" style="display: none; background: #d4af37; color: white; font-size: 0.5em; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 5px; margin-top: -18px;">PRO</span>
+        <a id="upgradeLink" href="#" style="display: none; color: #999; font-size: 0.5em; text-decoration: none; vertical-align: middle; margin-left: 5px; margin-top: -18px; cursor: pointer; border: 1px solid #444; padding: 1px 5px; border-radius: 4px; margin-right: -10px;">upgrade</a>
     </h2>
     <!-- Neuer About-Link -->
     <div id="loginContainer" class="login-text">Log in</div>
@@ -233,7 +234,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v1.7.4.1</span>
+    <span id="version-number">v1.8.0.1</span>
   </div>
   
 </div>
@@ -977,17 +978,92 @@
         setModelText("grokModelText",     grokModelText);
       }
 
-        // Event-Listener registrieren:
+        // ---------------------------------------------------------
+        // DEEP THINK & SMOKE TEST LOGIK
+        // ---------------------------------------------------------
+        
+        // Deep Search Toggle Text Update (bestehender Code)
         document.getElementById("deepSearchToggle").addEventListener("change", updateDeepThinkText);
         document.getElementById("searchModeToggle").addEventListener("change", updateDeepThinkText);
-        // --- NEU: Deep Search Toggle Sperre für Nicht-Pro User ---
+
+        // --- NEU: Pro Modal Referenzen ---
+        const proModal = document.getElementById("proFeatureModal");
+        const closeProBtn = document.getElementById("closeProModal");
+        const keepFreeBtn = document.getElementById("keepFreeBtn");
+        const upgradeBtn = document.getElementById("smokeTestUpgradeBtn");
+
+        // Funktion zum Schließen des Modals
+        function closeProModal() {
+            proModal.style.display = "none";
+        }
+
+        // Event Listener für Schließen-Buttons
+        if (closeProBtn) closeProBtn.addEventListener("click", closeProModal);
+        if (keepFreeBtn) keepFreeBtn.addEventListener("click", closeProModal);
+
+        // Klick außerhalb schließt Modal
+        window.addEventListener("click", (event) => {
+            if (event.target === proModal) {
+                closeProModal();
+            }
+        });
+
+// smoke test
+        if (upgradeBtn) {
+            upgradeBtn.addEventListener("click", async (event) => {
+                // 1. Verhindert, dass die Seite neu lädt
+                event.preventDefault(); 
+                
+                console.log("Upgrade Button clicked"); // Debugging
+
+                // Zugriff über window.auth ist sicherer
+                const currentUser = window.auth ? window.auth.currentUser : null;
+
+                // --- ÄNDERUNG: Prüfung ZUERST durchführen ---
+                if (currentUser) {
+                    // A) USER IST EINGELOGGT
+                    
+                    // UI Feedback (Erfolg)
+                    alert("Thanks for your support! We are still early in development and hard at work building this feature. We've noted your interest to help us prioritize it!");
+                    closeProModal();
+
+                    try {
+                        console.log("Sending request to backend...");
+                        const id_token = await currentUser.getIdToken(false);
+                        
+                        const response = await fetch("/track-interest", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ 
+                                id_token: id_token,
+                                source: "smoke_test_modal" 
+                            })
+                        });
+                        
+                        // Antwort prüfen
+                        const result = await response.json();
+                        console.log("Backend Response:", result);
+                        
+                        localStorage.setItem("proInterestShown", "true");
+
+                    } catch (err) {
+                        console.error("Tracking failed:", err);
+                    }
+                } else {
+                          alert("Please log in to register your interest. We can only track your request if you are signed into your account.");                    
+                }
+            });
+        }
+
+        // --- DEEP THINK TOGGLE SPERRE ---
         document.getElementById("deepSearchToggle").addEventListener("click", function(event) {
             // Wir prüfen die globale Variable window.isUserPro
             if (!window.isUserPro) {
-                event.preventDefault(); // Verhindert das Umschalten visuell
-                // Zeige dein Popup oder Alert
-                if (typeof showPopup === "function") {
-                    showPopup("Deep Think is a Pro feature. Please upgrade to use reasoning models.");
+                event.preventDefault(); // Verhindert das Umschalten des Toggles
+                
+                // Modal anzeigen
+                if (proModal) {
+                    proModal.style.display = "block";
                 } else {
                     alert("Deep Think is a Pro feature.");
                 }
@@ -3141,40 +3217,39 @@
 
         window.updateUserTierUI = function(isPro) {
             // 1. Globalen Status aktualisieren
-            window.isUserPro = isPro; 
+            window.isUserPro = isPro;
 
             // 2. Elemente referenzieren
             const badge = document.getElementById("proBadge");
-            
-            // --- HIER WAR DER FEHLER: DIESE ZEILE HAT GEFEHLT ---
-            // Wir suchen das Label-Element, das die Klasse "deep-switch" hat
-            const deepSearchLabel = document.querySelector('.switch.deep-switch'); 
+            const upgradeLink = document.getElementById("upgradeLink"); // NEU
+            const deepSearchLabel = document.querySelector('.switch.deep-switch');
 
             if (isPro) {
                 // === PRO USER ===
                 if(badge) badge.style.display = "inline-block";
-                
+                if(upgradeLink) upgradeLink.style.display = "none"; // Upgrade verstecken
+
                 // Limits setzen
                 currentMaxLimit = LIMITS.PRO.NORMAL;
                 currentDeepLimit = LIMITS.PRO.DEEP;
 
                 // Dropdowns entsperren
                 if (typeof updatePremiumModelsState === "function") {
-                    updatePremiumModelsState(true); 
+                    updatePremiumModelsState(true);
                 }
 
                 // --- SPERRE AUFHEBEN ---
                 if (deepSearchLabel) {
                     deepSearchLabel.classList.remove("locked");
                     deepSearchLabel.title = "Deep Think enabled";
-                    // Input wieder interaktiv machen
                     const input = deepSearchLabel.querySelector('input');
-                    if(input) input.style.pointerEvents = "auto"; 
+                    if(input) input.style.pointerEvents = "auto";
                 }
 
             } else {
-                // === FREE USER ===
+                // === FREE USER (oder ausgeloggt) ===
                 if(badge) badge.style.display = "none";
+                if(upgradeLink) upgradeLink.style.display = "inline-block"; // Upgrade anzeigen
 
                 // Limits setzen
                 currentMaxLimit = LIMITS.FREE.NORMAL;
@@ -3189,17 +3264,15 @@
                 const deepToggle = document.getElementById("deepSearchToggle");
                 if (deepToggle && deepToggle.checked) {
                     deepToggle.checked = false;
-                    if (typeof updateDeepThinkText === 'function') updateDeepThinkText(); 
+                    if (typeof updateDeepThinkText === 'function') updateDeepThinkText();
                 }
 
-                // --- SPERRE AKTIVIEREN (AUSGRAUEN) ---
+                // --- SPERRE AKTIVIEREN ---
                 if (deepSearchLabel) {
                     deepSearchLabel.classList.add("locked");
-                    deepSearchLabel.title = "Pro feature only"; 
-                    
-                    // Input muss klickbar bleiben für das Popup-Event, aber visuell inaktiv wirken
+                    deepSearchLabel.title = "Pro feature only";
                     const input = deepSearchLabel.querySelector('input');
-                    if(input) input.style.pointerEvents = "auto"; 
+                    if(input) input.style.pointerEvents = "auto";
                 }
             }
         };
@@ -3233,6 +3306,19 @@
                   }
               });
           }
+      }
+
+      // Event Listener für den neuen Upgrade-Link im Header
+      const headerUpgradeLink = document.getElementById("upgradeLink");
+
+      if (headerUpgradeLink) {
+          headerUpgradeLink.addEventListener("click", function(e) {
+              e.preventDefault(); // Verhindert Springen nach oben (#)
+              const modal = document.getElementById("proFeatureModal");
+              if (modal) {
+                  modal.style.display = "block";
+              }
+          });
       }
 
       });
@@ -3561,6 +3647,62 @@
       <input type="email" name="email" placeholder="Your email (optional)">
       <button type="submit">Submit</button>
     </form>
+  </div>
+</div>
+
+<div id="proFeatureModal" class="modal">
+  <div class="modal-content pro-modal-content">
+    <span class="close" id="closeProModal">&times;</span>
+    
+    <div class="pro-header">
+      <h2>Unlock <span class="highlight-tech">Deep Think</span></h2>
+      <p>Complex reasoning requires advanced compute power. <br>Upgrade to access the smartest AI models.</p>
+    </div>
+
+    <div class="pricing-grid">
+      
+      <div class="pricing-header">
+        <div class="col-feature">Features</div>
+        <div class="col-plan">Free</div>
+        <div class="col-plan">Pro</div> </div>
+
+      <div class="pricing-row">
+        <div class="col-feature">Fast Queries</div>
+        <div class="col-plan">25 / day</div>
+        <div class="col-plan bold">500 / day</div>
+      </div>
+
+      <div class="pricing-row">
+        <div class="col-feature">Deep Think</div>
+        <div class="col-plan">none</div>
+        <div class="col-plan bold">50 / day</div>
+      </div>
+
+      <div class="pricing-row">
+        <div class="col-feature">Models</div>
+        <div class="col-plan">Lightweight<br><small>GPT-5 mini, Gemini 2.5 Flash...</small></div>
+        <div class="col-plan bold">Frontier<br><small>Gemini 3 Pro, GPT-5.1...</small></div>
+      </div>
+
+      <div class="pricing-row">
+        <div class="col-feature">Web Search</div>
+        <div class="col-plan">25</div> <div class="col-plan bold">500</div>
+      </div>
+
+       <div class="pricing-footer">
+        <div class="col-feature"></div> <div class="col-plan price-block">
+            <span class="price">€0</span>
+            <button class="btn-free" id="keepFreeBtn">Stay Free</button>
+        </div>
+        
+        <div class="col-plan price-block">
+            <span class="price">€10<small>/mo</small></span>
+            <button id="smokeTestUpgradeBtn" class="btn-pro">Upgrade</button>
+            <div class="guarantee">Cancel anytime</div>
+        </div>
+      </div>
+
+    </div>
   </div>
 </div>
 

@@ -1476,6 +1476,45 @@ async def delete_bookmark(data: dict):
         raise HTTPException(status_code=500, detail="Error deleting bookmark: " + str(e))
 
     
+# --- NEU: Tracking Endpoint in main.py ---
+
+@app.post("/track-interest")
+@limiter.limit("5/minute")
+async def track_interest(request: Request, data: dict = Body(...)):
+    """
+    Speichert das Interesse an der Pro-Version in der DB.
+    """
+    token = data.get("id_token")
+    source = data.get("source", "unknown")
+    
+    if not token:
+         raise HTTPException(status_code=401, detail="Authentication failed")
+
+    try:
+        # 1. User verifizieren (deine existierende Funktion nutzen)
+        uid = verify_user_token(token)
+        user_email = auth.get_user(uid).email
+        
+        # 2. Daten vorbereiten
+        interest_data = {
+            "uid": uid,
+            "email": user_email,
+            "timestamp": firestore.SERVER_TIMESTAMP,
+            "source": source,
+            "ip": request.client.host, # IP auch nützlich für Spamschutz
+            "user_agent": request.headers.get("user-agent")
+        }
+        
+        # 3. In "pro_waitlist" Collection schreiben (Backend Admin SDK hat immer Schreibrechte)
+        db_firestore.collection("pro_waitlist").add(interest_data)
+        
+        return {"status": "success", "message": "Interest tracked"}
+
+    except Exception as e:
+        logging.error(f"Tracking error for token prefix {token[:10]}...: {e}")
+        return {"status": "error", "detail": str(e)}
+    
+
 @app.post("/ask_openai")
 @limiter.limit("5/minute")
 async def ask_openai_post(request: Request, data: dict = Body(...)):

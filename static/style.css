@@ -1824,6 +1824,206 @@ text-decoration: underline;
   color: #66b2ff;
 }
 
+/* --- CLEAN PRO MODAL --- */
+
+/* Modal Container - Breiter, aber luftiger */
+.pro-modal-content {
+  width: min(95vw, 750px) !important;
+  max-width: 95% !important;
+  padding: 40px !important; /* Mehr Padding wirkt luxuriöser */
+  background: var(--container-bg, #ffffff) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15) !important; /* Weicherer Schatten */
+  border: 1px solid rgba(0,0,0,0.05) !important; /* Fast unsichtbarer Rand */
+}
+
+/* Header - Zentriert und minimalistisch */
+.pro-header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.pro-header h2 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+  letter-spacing: -0.5px;
+  color: var(--text-color, #111);
+}
+
+.pro-header p {
+  color: #666; 
+  font-size: 1rem;
+  line-height: 1.5;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+/* Highlight Text - Statt Gold lieber eine dezente Farbe oder einfach fett */
+.highlight-tech {
+  color: var(--button-bg, #007bff); /* Nutzt deine Hauptfarbe */
+  /* Oder falls du es ganz neutral willst: color: inherit; */
+}
+
+/* --- GRID LAYOUT (Clean) --- */
+.pricing-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr; /* Feature-Spalte etwas breiter */
+  gap: 0;
+  margin-top: 20px;
+}
+
+/* Zeilen Styling - KEINE vertikalen Linien, nur horizontale Haarlinien */
+.pricing-header, .pricing-row, .pricing-footer {
+  display: grid;
+  grid-template-columns: subgrid; /* Erbt Spalten vom Parent */
+  grid-column: 1 / -1;
+  align-items: center;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+.pricing-header {
+  border-bottom: 2px solid rgba(0,0,0,0.08); /* Etwas dickerer Header-Strich */
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #888;
+  font-weight: 600;
+  padding-bottom: 15px;
+}
+
+/* Letzte Zeile ohne Strich */
+.pricing-footer {
+  border-bottom: none;
+  padding-top: 30px;
+  align-items: start;
+}
+
+/* Spalten Styling */
+.col-feature {
+  text-align: left;
+  font-weight: 500;
+  font-size: 0.95rem;
+  color: var(--text-color, #333);
+}
+
+.col-plan {
+  text-align: center;
+  font-size: 1rem;
+  color: var(--text-color, #333);
+}
+
+/* Pro Spalte - Subtile Hervorhebung durch Hintergrund */
+.pricing-grid > div > div:nth-child(3) {
+  position: relative;
+}
+
+/* Ein subtiler Hintergrundstreifen für die Pro-Spalte über alle Zeilen hinweg wäre komplex im Grid.
+   Stattdessen machen wir den Text/Font einfach stärker. */
+
+.col-plan.bold {
+  font-weight: 700;
+  color: var(--text-color, #000);
+}
+
+.col-plan small {
+  display: block;
+  font-size: 0.8rem;
+  color: #888;
+  font-weight: normal;
+  margin-top: 4px;
+}
+
+/* --- PREIS & BUTTONS --- */
+.price-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  width: 100%;
+}
+
+.price {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.price small {
+  font-size: 0.9rem;
+  color: #666;
+  font-weight: 400;
+  display: inline-block;
+}
+
+/* Buttons - Minimalistisch */
+.btn-free {
+  background: transparent !important;
+  border: none !important;
+  color: #888 !important;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(0,0,0,0.2);
+  text-underline-offset: 4px;
+}
+
+.btn-free:hover {
+  color: var(--text-color) !important;
+}
+
+.btn-pro {
+  /* Solider, dunkler Button für Seriosität (oder deine Primärfarbe) */
+  background-color: var(--text-color, #111) !important; 
+  color: var(--container-bg, #fff) !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  padding: 12px 24px !important;
+  font-size: 0.95rem !important;
+  font-weight: 600 !important;
+  width: 100% !important;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.btn-pro:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+  opacity: 0.9;
+}
+
+.guarantee {
+  font-size: 0.75rem;
+  color: #999;
+  margin-top: 8px;
+}
+
+/* --- DARK MODE ANPASSUNGEN --- */
+body.dark-mode .pro-modal-content {
+  background: #151515 !important; /* Sehr dunkles Grau statt tiefschwarz */
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5) !important;
+}
+
+body.dark-mode .pricing-header,
+body.dark-mode .pricing-row {
+  border-bottom-color: rgba(255,255,255,0.08);
+}
+
+body.dark-mode .pro-header p {
+  color: #aaa;
+}
+
+body.dark-mode .pricing-header {
+  color: #666;
+}
+
+body.dark-mode .btn-pro {
+  background-color: #fff !important; /* Weißer Button im Darkmode */
+  color: #000 !important;
+}
+
 .faq-modal {
   position: relative;
   width: 850px;
@@ -3274,6 +3474,108 @@ font-size: 0.9em;
   .modal-content a.secondary-link:hover,
   .modal-content button.link-btn:hover {
     opacity: 1;
+  }
+
+  /* 1. Container: Platz sparen */
+  .pro-modal-content {
+    width: 85vw !important;
+    padding: 20px 15px 60px 15px !important;
+  }
+
+  /* 2. Header: Kompakter */
+  .pro-header {
+    margin-bottom: 25px;
+  }
+  
+  .pro-header h2 {
+    font-size: 1.4rem; /* Kleinerer Titel */
+  }
+  
+  .pro-header p {
+    font-size: 0.9rem;
+  }
+
+  /* 3. Das Grid: Spaltenverhältnisse anpassen */
+  .pricing-grid {
+    /* Wir geben der Feature-Spalte (links) etwas mehr Platz, 
+       und machen die Plan-Spalten (rechts) so schmal wie möglich */
+    grid-template-columns: 1.2fr 0.8fr 0.8fr; 
+    column-gap: 4px; /* Lücken verkleinern */
+  }
+
+  .pricing-header, .pricing-row {
+    padding: 12px 0; /* Weniger vertikaler Platz pro Zeile */
+  }
+
+  /* 4. Schriften in der Tabelle verkleinern */
+  .col-feature {
+    font-size: 0.8rem; /* Kleiner, damit längere Wörter passen */
+    padding-left: 5px;
+  }
+
+  .col-plan {
+    font-size: 0.8rem;
+  }
+  
+  /* Falls du Icons nutzt, stell sicher, dass sie zentriert bleiben */
+  .col-plan i, 
+  .col-plan svg {
+    font-size: 1rem; 
+  }
+  
+  /* Header Beschriftungen (Feature, Free, Pro) kleiner */
+  .pricing-header {
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+  }
+
+  /* --- 5. DER WICHTIGSTE TEIL: FOOTER (Preise & Buttons) --- */
+  /* Hier brechen wir das Grid auf, damit die Buttons gut klickbar sind */
+  
+  .pricing-footer {
+    display: flex !important; /* Grid überschreiben */
+    flex-direction: column;   /* Untereinander stapeln */
+    gap: 20px;
+    padding-top: 25px;
+    text-align: center;
+  }
+
+  /* Wir müssen die Struktur "Feature | Free | Pro" hier auflösen */
+  /* Das leere erste Div (Feature Spalte im Footer) verstecken wir */
+  .pricing-footer > div:first-child {
+    display: none; 
+  }
+
+  /* Der Free-Bereich (jetzt als Block untereinander) */
+  .pricing-footer > div:nth-child(2) {
+    order: 2; /* Free Button nach unten */
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* Der Pro-Bereich (Highlight) */
+  .pricing-footer > div:nth-child(3) {
+    order: 1; /* Pro Button nach oben (wichtiger!) */
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  
+  /* Buttons volle Breite für bessere Touch-Bedienung */
+  .btn-pro {
+    width: 100% !important;
+    padding: 14px !important;
+  }
+  
+  .price-block {
+    flex-direction: row; /* Preis und "per month" nebeneinander statt untereinander um Platz zu sparen */
+    justify-content: center;
+    align-items: baseline;
+    margin-bottom: 10px;
   }
 
 }

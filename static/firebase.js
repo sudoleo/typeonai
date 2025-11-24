@@ -80,6 +80,7 @@ window.currentDeepLimit = window.LIMITS.FREE.DEEP;
 let bookmarksLoaded = false;
 
 // --- ÄNDERUNG 2: Neue Funktion zum Prüfen des User-Status ---
+// --- ÄNDERUNG 2: Neue Funktion zum Prüfen des User-Status ---
 async function checkUserStatusOnLoad(user, token) {
   if (!user || !token) return;
 
@@ -99,32 +100,47 @@ async function checkUserStatusOnLoad(user, token) {
       // 1. Globale Limits sofort aktualisieren
       window.currentMaxLimit = data.limit;
       window.currentDeepLimit = data.deep_limit;
-
       window.isUserPro = data.is_pro;
 
-    if (data.is_pro) {
-          console.log("User ist PRO -> Aktiviere UI");
-          
-          // A) Versuch über die zentrale Funktion (falls vorhanden)
-          if (typeof window.updateUserTierUI === "function") {
-              window.updateUserTierUI(true);
-          }
+      // 2. UI AKTUALISIEREN (Für BEIDE Fälle: Pro und Free)
+      
+      // A) Der saubere Weg: Rufe deine globale UI-Funktion auf
+      if (typeof window.updateUserTierUI === "function") {
+          window.updateUserTierUI(data.is_pro);
+      }
 
-          // B) FALLBACK (DAS LÖST DEIN PROBLEM): 
-          // Wir greifen das Badge direkt hier, egal ob die andere Funktion schon da ist.
-          const badge = document.getElementById("proBadge");
-          if (badge) {
-              badge.style.display = "inline-block"; // Macht es sofort sichtbar
-          }
-          
-          // Optional: Auch die Dropdown-Optionen hier direkt freischalten, falls nötig
-          const premiumOptions = document.querySelectorAll('.premium-option');
+      // B) FALLBACK (Falls updateUserTierUI noch nicht geladen ist):
+      // Wir manipulieren die DOM-Elemente direkt hier sicherheitshalber.
+      const badge = document.getElementById("proBadge");
+      const upgradeLink = document.getElementById("upgradeLink"); // <--- Das hier hat gefehlt
+      const premiumOptions = document.querySelectorAll('.premium-option');
+
+      if (data.is_pro) {
+          // === IST PRO ===
+          console.log("User ist PRO -> Zeige Badge");
+          if (badge) badge.style.display = "inline-block";
+          if (upgradeLink) upgradeLink.style.display = "none"; // Upgrade weg
+
+          // Dropdowns entsperren
           premiumOptions.forEach(option => {
              option.disabled = false;
              option.textContent = option.textContent.replace(' (Pro only)', '');
           });
-      } 
-      // ------------------------
+
+      } else {
+          // === IST FREE ===
+          console.log("User ist FREE -> Zeige Upgrade Link");
+          if (badge) badge.style.display = "none"; // Badge weg
+          if (upgradeLink) upgradeLink.style.display = "inline-block"; // Upgrade da
+
+          // Dropdowns sperren (Sicherheitshalber)
+          premiumOptions.forEach(option => {
+             option.disabled = true;
+             if (!option.textContent.includes('(Pro only)')) {
+                 option.textContent += ' (Pro only)';
+             }
+          });
+      }
       
     }
   } catch (error) {
