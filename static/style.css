@@ -3477,6 +3477,7 @@ font-size: 0.9em;
   .pro-modal-content {
     width: 85vw !important;
     padding: 20px 15px 70px 15px !important;
+    margin-top: 15px;
   }
 
   /* 2. Header: Kompakter */
