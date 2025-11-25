@@ -146,72 +146,90 @@ ALLOWED_GROK_MODELS = {
 # Modelle, die pro Anbieter erlaubt sind
 # WICHTIG: Hier müssen AUCH die Premium-Modelle rein, damit validate_model sie erkennt.
 
+# --- OPENAI ---
 ALLOWED_OPENAI_MODELS = {
     "gpt-5-nano",
     "gpt-5-mini",
     "gpt-4.1",
     "gpt-4o",
     "gpt-3.5-turbo",
-    # Premium Modelle hinzufügen:
+    # Premium:
     "gpt-5",
     "gpt-5-chat-latest",
 }
 
+# --- MISTRAL ---
 ALLOWED_MISTRAL_MODELS = {
     "mistral-large-latest",
     "mistral-medium-latest",
     "mistral-small-latest",
+    # Falls Mistral Large "Premium" sein soll, hier sicherstellen:
+    # (Aktuell ist es oben als Standard drin, falls es Pro sein soll, in PREMIUM_MODELS aufnehmen)
 }
 
+# --- ANTHROPIC ---
 ALLOWED_ANTHROPIC_MODELS = {
     "claude-haiku-4-5",
     "claude-sonnet-4-20250514",
     "claude-3-7-sonnet-20250219",
     "claude-3-5-haiku-20241022",
-    # Premium Modelle hinzufügen:
+    # Premium:
     "claude-sonnet-4-5-20250929",
-    "claude-sonnet-4-5", # Fallback falls Frontend Kurzform sendet
+    "claude-sonnet-4-5", 
 }
 
+# --- GEMINI ---
 ALLOWED_GEMINI_MODELS = {
     "gemini-2.5-flash",
     "gemini-2.0-flash",
-    # Premium Modelle hinzufügen:
+    # Premium:
     "gemini-2.5-pro",
 }
 
+# --- DEEPSEEK ---
 ALLOWED_DEEPSEEK_MODELS = {
     "deepseek-chat",
-    # Premium Modelle hinzufügen:
-    "deepseek-reasoner",
+    # Premium:
+    "deepseek-reasoner", # (Das ist oft das R1 Modell)
 }
 
+# --- GROK ---
 ALLOWED_GROK_MODELS = {
     "grok-4-fast-non-reasoning-latest",
-    # Premium Modelle hinzufügen:
+    # Premium:
     "grok-4-latest",
     "grok-3-latest",
 }
 
 PREMIUM_MODELS = {
-    # OpenAI High-End
+    # OpenAI
     "gpt-5",
     "gpt-5-chat-latest",
 
-    # Anthropic High-End
+    # Anthropic
     "claude-sonnet-4-5-20250929",
     "claude-sonnet-4-5",
     
-    # Gemini Pro
+    # Gemini
     "gemini-2.5-pro",
     
-    # DeepSeek Reasoner
+    # DeepSeek
     "deepseek-reasoner",
     
     # Grok
     "grok-4-latest",
     "grok-3-latest",
 }
+
+# Alle erlaubten Modelle in einem Set für einfache Validierung
+ALL_ALLOWED_MODELS = (
+    ALLOWED_OPENAI_MODELS |
+    ALLOWED_MISTRAL_MODELS |
+    ALLOWED_ANTHROPIC_MODELS |
+    ALLOWED_GEMINI_MODELS |
+    ALLOWED_DEEPSEEK_MODELS |
+    ALLOWED_GROK_MODELS
+)
 
 def get_system_prompt() -> str:
     # Aktuelles Datum in deiner Zeitzone (z.B. Europe/Berlin)
@@ -682,8 +700,7 @@ def query_consensus(
 ) -> str:
     """
     Konsolidiert die Antworten der 6 Haupt-LLMs zu einer Konsensantwort.
-    Web Search (search_mode) bedeutet: Antworten basieren schon auf Web-Context,
-    aber Exa ist KEIN eigenes Modell mehr.
+    Unterscheidet jetzt zwischen Standard- und Pro-Modellen.
     """
     prompt_parts = []
     if search_mode:
@@ -732,9 +749,13 @@ def query_consensus(
     consensus_prompt = "".join(prompt_parts)
 
     try:
-        if consensus_model == "OpenAI":
+        # --- OPENAI ---
+        # Prüft auf "OpenAI" (Standard) oder "OpenAI-Pro" (Premium)
+        if consensus_model in ["OpenAI", "OpenAI-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
-            model_to_use = "gpt-5-mini"
+            # WICHTIG: Hier wird das Modell gewählt
+            model_to_use = "gpt-5" if consensus_model == "OpenAI-Pro" else "gpt-5-mini"
+            
             response = client.chat.completions.create(
                 model=model_to_use,
                 messages=[
@@ -745,10 +766,14 @@ def query_consensus(
             )
             return response.choices[0].message.content.strip()
 
-        elif consensus_model == "Mistral":
+        # --- MISTRAL ---
+        elif consensus_model in ["Mistral", "Mistral-Pro"]:
             client = Mistral(api_key=api_keys.get("Mistral"))
+            # Standard & Pro nutzen aktuell beide 'large', ansonsten hier anpassen
+            model_to_use = "mistral-large-latest" 
+            
             response = client.chat.complete(
-                model="mistral-large-latest",
+                model=model_to_use,
                 messages=[
                     {"role": "system", "content": ""},
                     {"role": "user", "content": consensus_prompt}
@@ -757,15 +782,19 @@ def query_consensus(
             )
             return response.choices[0].message.content.strip()
 
-        elif consensus_model == "Anthropic":
+        # --- ANTHROPIC ---
+        elif consensus_model in ["Anthropic", "Anthropic-Pro"]:
             url = "https://api.anthropic.com/v1/messages"
             headers = {
                 "x-api-key": api_keys.get("Anthropic"),
                 "Content-Type": "application/json",
                 "anthropic-version": "2023-06-01"
             }
+            # Haiku vs Sonnet 4.5
+            model_to_use = "claude-sonnet-4-5" if consensus_model == "Anthropic-Pro" else "claude-haiku-4-5"
+            
             payload = {
-                "model": "claude-haiku-4-5",
+                "model": model_to_use,
                 "max_tokens": 2048,
                 "system": "",
                 "messages": [{"role": "user", "content": consensus_prompt}]
@@ -780,27 +809,34 @@ def query_consensus(
             else:
                 return f"Error with Anthropic: {response.status_code} - {response.text}"
 
-        elif consensus_model == "Gemini":
+        # --- GEMINI ---
+        elif consensus_model in ["Gemini", "Gemini-Pro"]:
             gemini_key = api_keys.get("Gemini")
             if gemini_key and gemini_key.strip() != "":
                 genai.configure(api_key=gemini_key)
             else:
                 genai.configure()
 
-            model = genai.GenerativeModel("gemini-2.5-flash")
+            # Flash vs Pro
+            model_name = "gemini-2.5-pro" if consensus_model == "Gemini-Pro" else "gemini-2.5-flash"
+            
+            model = genai.GenerativeModel(model_name)
             generation_config = {"max_output_tokens": int(CONSENSUS_MAX_TOKENS)}
 
             response = model.generate_content(
                 consensus_prompt,
                 generation_config=generation_config
             )
-
             return (response.text or "").strip() or "Error: Empty response payload."
 
-        elif consensus_model == "DeepSeek":
+        # --- DEEPSEEK ---
+        elif consensus_model in ["DeepSeek", "DeepSeek-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("DeepSeek"), base_url="https://api.deepseek.com")
+            # Chat vs Reasoner
+            model_to_use = "deepseek-reasoner" if consensus_model == "DeepSeek-Pro" else "deepseek-chat"
+            
             response = client.chat.completions.create(
-                model="deepseek-chat",
+                model=model_to_use,
                 messages=[
                     {"role": "system", "content": " "},
                     {"role": "user", "content": consensus_prompt}
@@ -809,10 +845,14 @@ def query_consensus(
             )
             return response.choices[0].message.content.strip()
 
-        elif consensus_model == "Grok":
+        # --- GROK ---
+        elif consensus_model in ["Grok", "Grok-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
+            # Fast vs Latest (Strong)
+            model_to_use = "grok-4-latest" if consensus_model == "Grok-Pro" else "grok-4-fast-non-reasoning-latest"
+            
             response = client.chat.completions.create(
-                model="grok-4-fast-non-reasoning-latest",
+                model=model_to_use,
                 messages=[
                     {"role": "system", "content": " "},
                     {"role": "user", "content": consensus_prompt}
@@ -822,7 +862,7 @@ def query_consensus(
             return response.choices[0].message.content.strip()
 
         else:
-            return "Invalid consensus model selected."
+            return f"Invalid consensus model selected: {consensus_model}"
     except Exception as e:
         return f"Consensus error: {str(e)}"
     
@@ -912,10 +952,12 @@ def query_differences(
     )
 
     try:
-        if differences_model == "OpenAI":
+        # OPENAI
+        if differences_model in ["OpenAI", "OpenAI-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
+            # Für die Analyse reicht meist GPT-4o oder mini, auch wenn Pro ausgewählt wurde
             response = client.chat.completions.create(
-                model="gpt-4.1",
+                model="gpt-4.1", 
                 messages=[
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
@@ -924,7 +966,8 @@ def query_differences(
             )
             result = response.choices[0].message.content.strip()
 
-        elif differences_model == "Mistral":
+        # MISTRAL
+        elif differences_model in ["Mistral", "Mistral-Pro"]:
             client = Mistral(api_key=api_keys.get("Mistral"))
             response = client.chat.complete(
                 model="mistral-large-latest",
@@ -936,7 +979,7 @@ def query_differences(
             )
             result = response.choices[0].message.content.strip()
 
-        elif differences_model == "Anthropic":
+        elif differences_model in ["Anthropic", "Anthropic-Pro"]:
             url = "https://api.anthropic.com/v1/messages"
             headers = {
                 "x-api-key": api_keys.get("Anthropic"),
@@ -956,7 +999,7 @@ def query_differences(
             else:
                 return f"Error with Anthropic: {resp.status_code} - {resp.text}"
 
-        elif differences_model == "Gemini":
+        elif differences_model in ["Gemini", "Gemini-Pro"]:
             try:
                 if api_keys.get("Gemini"):
                     genai.configure(api_key=api_keys["Gemini"])
@@ -987,7 +1030,7 @@ def query_differences(
             except Exception as e:
                 return f"Error with Gemini (differences): {e}"
 
-        elif differences_model == "DeepSeek":
+        elif differences_model in ["DeepSeek", "DeepSeek-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("DeepSeek"), base_url="https://api.deepseek.com")
             response = client.chat.completions.create(
                 model="deepseek-chat",
@@ -999,7 +1042,7 @@ def query_differences(
             )
             result = response.choices[0].message.content.strip()
 
-        elif differences_model == "Grok":
+        elif differences_model in ["Grok", "Grok-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
             response = client.chat.completions.create(
                 model="grok-4-fast-non-reasoning-latest",
@@ -1608,6 +1651,7 @@ async def ask_openai_post(request: Request, data: dict = Body(...)):
             "response": answer,
             "free_usage_remaining": remaining_regular,
             "deep_remaining": remaining_deep,
+            "is_pro_user": is_pro_user,
             "key_used": "Developer API Key"
         }
 
@@ -1621,6 +1665,7 @@ async def ask_openai_post(request: Request, data: dict = Body(...)):
             "response": answer,
             "free_usage_remaining": "Unlimited",
             "deep_remaining": "Unlimited",
+            "is_pro_user": False,
             "key_used": "User API Key"
         }
 
@@ -1689,12 +1734,13 @@ async def ask_mistral_post(request: Request, data: dict = Body(...)):
             "response": answer,
             "free_usage_remaining": int(limit_regular - usage_counter[uid]),
             "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
+            "is_pro_user": is_pro_user,
             "key_used": "Developer API Key"
         }
 
     elif api_key:
         answer = query_mistral(question, api_key, system_prompt, deep_search=deep_search, model_override=model)
-        return {"response": answer, "free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "key_used": "User API Key"}
+        return {"response": answer, "free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": False, "key_used": "User API Key"}
     else:
         raise HTTPException(status_code=400, detail="No auth provided.")
 
@@ -1760,12 +1806,13 @@ async def ask_claude_post(request: Request, data: dict = Body(...)):
             "response": answer,
             "free_usage_remaining": int(limit_regular - usage_counter[uid]),
             "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
+            "is_pro_user": is_pro_user,
             "key_used": "Developer API Key"
         }
 
     elif api_key:
         answer = query_claude(question, api_key, system_prompt, deep_search=deep_search, model_override=model)
-        return {"response": answer, "free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "key_used": "User API Key"}
+        return {"response": answer, "free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": False, "key_used": "User API Key"}
     else:
         raise HTTPException(status_code=400, detail="No auth provided.")
 
@@ -1838,6 +1885,7 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
             "response": answer,
             "free_usage_remaining": int(limit_regular - usage_counter[uid]),
             "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
+            "is_pro_user": is_pro_user,
             "key_used": key_info
         }
 
@@ -1846,7 +1894,7 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
         if not (api_key and api_key.strip()):
             raise HTTPException(status_code=400, detail="No credentials provided.")
         answer = query_gemini(question, user_api_key=api_key.strip(), deep_search=deep_search, system_prompt=system_prompt, model_override=model, max_output_tokens=max_tokens)
-        return {"response": answer, "key_used": "User API Key"}
+        return {"response": answer, "key_used": "User API Key", "is_pro_user": False}
 
 
 @app.post("/ask_deepseek")
@@ -1910,12 +1958,13 @@ async def ask_deepseek_post(request: Request, data: dict = Body(...)):
             "response": answer,
             "free_usage_remaining": int(limit_regular - usage_counter[uid]),
             "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
+            "is_pro_user": is_pro_user,
             "key_used": "Developer API Key"
         }
 
     elif api_key:
         answer = query_deepseek(question, api_key, system_prompt, deep_search=deep_search, model_override=model)
-        return {"response": answer, "free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "key_used": "User API Key"}
+        return {"response": answer, "free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": False, "key_used": "User API Key"}
     else:
         raise HTTPException(status_code=400, detail="No auth provided.")
 
@@ -1981,12 +2030,13 @@ async def ask_grok_post(request: Request, data: dict = Body(...)):
             "response": answer,
             "free_usage_remaining": int(limit_regular - usage_counter[uid]),
             "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
+            "is_pro_user": is_pro_user,
             "key_used": "Developer API Key"
         }
 
     elif api_key:
         answer = query_grok(question, api_key, system_prompt, deep_search=deep_search, model_override=model)
-        return {"response": answer, "free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "key_used": "User API Key"}
+        return {"response": answer, "free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": False, "key_used": "User API Key"}
     else:
         raise HTTPException(status_code=400, detail="No auth provided.")
 
@@ -2125,13 +2175,14 @@ async def consensus(request: Request, data: dict = Body(...)):
     # Engine-Key-Check (wichtig, um 401 der Engine zu vermeiden)
     engine = consensus_model
     engine_key_map = {
-        "OpenAI": "OpenAI",
-        "Mistral": "Mistral",
-        "Anthropic": "Anthropic",
-        "Gemini": "Gemini",
-        "DeepSeek": "DeepSeek",
-        "Grok": "Grok",
+        "OpenAI": "OpenAI",       "OpenAI-Pro": "OpenAI",
+        "Mistral": "Mistral",     "Mistral-Pro": "Mistral",
+        "Anthropic": "Anthropic", "Anthropic-Pro": "Anthropic",
+        "Gemini": "Gemini",       "Gemini-Pro": "Gemini",
+        "DeepSeek": "DeepSeek",   "DeepSeek-Pro": "DeepSeek",
+        "Grok": "Grok",           "Grok-Pro": "Grok",
     }
+    
     need_key_for = engine_key_map.get(engine)
     if need_key_for:
         if engine == "Gemini":

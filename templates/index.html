@@ -60,6 +60,7 @@
     <button id="startNowButton" class="cta-button">Get started</button>
   </div>
 </div>
+
 <header class="top-bar">
   <!-- Sidebar Toggle Button -->
   <button id="toggleSidebarButton" class="sidebar-toggle collapse-btn">
@@ -453,7 +454,7 @@
                 <option value="DeepSeek">DeepSeek-V3</option>
 
                 <option value="Grok-Pro" class="premium-option">Grok-4-latest</option>
-                <option value="OpenAI-Pro" class="premium-option">GPT-5</option>
+                <option value="OpenAI-Pro" class="premium-option">gpt-5</option>
                 <option value="Anthropic-Pro" class="premium-option">claude-sonnet-4-5</option>
                 <option value="Gemini-Pro" class="premium-option">gemini-2.5-pro</option>
                 <option value="DeepSeek-Pro" class="premium-option">DeepSeek-R1</option>
@@ -691,23 +692,27 @@
         }
 
         function linkifySourceTags(containerEl, sources) {
-          if (!sources || !sources.length) return;
+            if (!sources || !sources.length) return;
+            let html = containerEl.innerHTML;
+            const regex = /\[(S\d+(?:,\s*S\d+)*)\]/g;
 
-          let html = containerEl.innerHTML;
+            html = html.replace(regex, (match, innerContent) => {
+                const parts = innerContent.split(',');
 
-          html = html.replace(/\[(S[1-9]\d*)\]/g, (match, id) => {
-            const index = parseInt(id.slice(1), 10) - 1; // S1 -> 0
-            const src = sources[index];
-            if (!src || !src.url) return match;
-
-            const url = src.url;
-            const safeId = id; // "S1"
-            return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="source-link">[${safeId}]</a>`;
-          });
-
-          containerEl.innerHTML = html;
+                const linkedParts = parts.map(part => {
+                    const trimmedPart = part.trim();
+                    const idNum = parseInt(trimmedPart.slice(1), 10); 
+                    const index = idNum - 1; 
+                    const src = sources[index];
+                    if (src && src.url) {
+                        return `<a href="${src.url}" target="_blank" rel="noopener noreferrer" class="source-link">${trimmedPart}</a>`;
+                    }
+                    return trimmedPart;
+                });
+                return `[${linkedParts.join(', ')}]`;
+            });
+            containerEl.innerHTML = html;
         }
-
         window.linkifySourceTags = linkifySourceTags;
 
 
@@ -953,19 +958,17 @@
           }
         }
 
-        // -------------------------
         // Model-Picker zeigen/verstecken
-        // -------------------------
         const showPickers = !deepSearchActive;
         document.querySelectorAll(".model-picker-wrapper").forEach(el => {
           el.style.display = showPickers ? "inline-flex" : "none";
         });
 
-        const openaiModelText   = deepSearchActive ? "GPT-5" : "GPT-5-mini";
-        const geminiModelText   = deepSearchActive ? "gemini-2.5-pro" : "gemini-2.5-flash";
-        const claudeModelText   = deepSearchActive ? "claude-sonnet-4-5-20250929" : "claude-haiku-4-5";
-        const deepseekModelText = deepSearchActive ? "DeepSeek-R1" : "DeepSeek-V3";
-        const grokModelText     = deepSearchActive ? "grok-4-latest" : "grok-4-fast-non-reasoning";
+        const openaiModelText   = deepSearchActive ? "GPT-5" : document.getElementById("openaiModelSelect").value;
+        const geminiModelText   = deepSearchActive ? "gemini-2.5-pro" : document.getElementById("geminiModelSelect").value;
+        const claudeModelText   = deepSearchActive ? "claude-sonnet-4-5-20250929" : document.getElementById("claudeModelSelect").value;
+        const deepseekModelText = deepSearchActive ? "DeepSeek-R1" : document.getElementById("deepseekModelSelect").value;
+        const grokModelText     = deepSearchActive ? "grok-4-latest" : document.getElementById("grokModelSelect").value;
 
         const setModelText = (id, txt) => {
           const el = document.getElementById(id);
@@ -978,10 +981,7 @@
         setModelText("grokModelText",     grokModelText);
       }
 
-        // ---------------------------------------------------------
         // DEEP THINK & SMOKE TEST LOGIK
-        // ---------------------------------------------------------
-        
         // Deep Search Toggle Text Update (bestehender Code)
         document.getElementById("deepSearchToggle").addEventListener("change", updateDeepThinkText);
         document.getElementById("searchModeToggle").addEventListener("change", updateDeepThinkText);
@@ -1008,7 +1008,7 @@
             }
         });
 
-// smoke test
+        // smoke test
         if (upgradeBtn) {
             upgradeBtn.addEventListener("click", async (event) => {
                 // 1. Verhindert, dass die Seite neu lädt
@@ -1329,10 +1329,7 @@
           }
         });
   
-        // --------------------------
         // Event-Listener für Eingabefelder und Buttons
-        // --------------------------
-      
         // Frage per Enter (ohne Zeilenumbruch) absenden
         document.getElementById("questionInput").addEventListener("keydown", function(event) {
           if (event.key === "Enter" && !event.shiftKey) {
@@ -1458,10 +1455,7 @@
         // global machen, falls du es anderswo brauchst
         window.renderEvidenceSources = renderEvidenceSources;
       
-        // --------------------------
         // Globale Funktionen (für Inline-Aufrufe)
-        // --------------------------
-  
         window.toggleBest = function(responseId) {
           const box = document.getElementById(responseId);
           if (box.classList.contains("excluded")) return;
@@ -1569,19 +1563,15 @@
             return;
           }
 
-          // Aktuellen Zustand der Sidebar-Checkbox auslesen
           const currentlyChecked = checkbox.checked;
-          const willBeChecked    = !currentlyChecked;   // toggle
+          const willBeChecked    = !currentlyChecked;
 
-          // Nur beim Wechsel von "inkludiert" → "exkludiert" Popup zeigen
           if (currentlyChecked && !box.classList.contains("excluded")) {
             showPopup("You have excluded this answer. It will be removed from the view and not included in the consensus.");
           }
 
-          // Sidebar-Checkbox umschalten
           checkbox.checked = willBeChecked;
 
-          // Und **immer** über toggleModel gehen, damit .excluded in Sync bleibt
           window.toggleModel(responseId, willBeChecked);
         };
       
@@ -1652,11 +1642,9 @@
           let effectiveSystemPrompt = storedSystemPrompt;
           console.log("Using base system prompt:", storedSystemPrompt);
 
-          // 🔹 ZUERST: Search/Web-Search-Status lesen
           const searchModeEnabled = document.getElementById("searchModeToggle").checked;
           const deepSearchFlag    = document.getElementById("deepSearchToggle").checked;
 
-          // 🔹 Spinner-Basis sichern
           const baseSpinnerHTML = window.spinnerHTML;
           const webSearchSpinnerHTML = `
             <div class="thinking-wrap">
@@ -1981,10 +1969,13 @@
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
             const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
 
-            const likelyPro = (freeRemaining > 25) || (deepRemaining > 12); 
+            const isProConfirmed = (data.is_pro_user === true);
 
-            // UI updaten
-            updateUserTierUI(likelyPro); // Oder true/false basierend auf Auth
+            // 2. Auth Status prüfen (WICHTIG, damit der 2. Parameter stimmt)
+            const isLoggedIn = !!auth.currentUser;
+
+            // 3. UI updaten
+            updateUserTierUI(isProConfirmed, isLoggedIn);
 
             // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
             document.getElementById("freeUsageDisplay").innerHTML = 
@@ -2060,10 +2051,13 @@
               const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
               const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
               
-              const likelyPro = (freeRemaining > 25) || (deepRemaining > 12); 
+              const isProConfirmed = (data.is_pro_user === true);
 
-              // UI updaten
-              updateUserTierUI(likelyPro); // Oder true/false basierend auf Auth
+              // 2. Auth Status prüfen (WICHTIG, damit der 2. Parameter stimmt)
+              const isLoggedIn = !!auth.currentUser;
+
+              // 3. UI updaten
+              updateUserTierUI(isProConfirmed, isLoggedIn);
 
               // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
               document.getElementById("freeUsageDisplay").innerHTML = 
@@ -2132,10 +2126,13 @@
               const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
               const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
               
-            const likelyPro = (freeRemaining > 25) || (deepRemaining > 12); 
+              const isProConfirmed = (data.is_pro_user === true);
 
-            // UI updaten
-            updateUserTierUI(likelyPro); // Oder true/false basierend auf Auth
+              // 2. Auth Status prüfen (WICHTIG, damit der 2. Parameter stimmt)
+              const isLoggedIn = !!auth.currentUser;
+
+              // 3. UI updaten
+              updateUserTierUI(isProConfirmed, isLoggedIn);
 
             // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
             document.getElementById("freeUsageDisplay").innerHTML = 
@@ -2205,10 +2202,13 @@
               const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
               const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
               
-              const likelyPro = (freeRemaining > 25) || (deepRemaining > 12); 
+              const isProConfirmed = (data.is_pro_user === true);
 
-              // UI updaten
-              updateUserTierUI(likelyPro); // Oder true/false basierend auf Auth
+              // 2. Auth Status prüfen (WICHTIG, damit der 2. Parameter stimmt)
+              const isLoggedIn = !!auth.currentUser;
+
+              // 3. UI updaten
+              updateUserTierUI(isProConfirmed, isLoggedIn);
 
               // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
               document.getElementById("freeUsageDisplay").innerHTML = 
@@ -2277,10 +2277,13 @@
               const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
               const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
               
-              const likelyPro = (freeRemaining > 25) || (deepRemaining > 12); 
+              const isProConfirmed = (data.is_pro_user === true);
 
-              // UI updaten
-              updateUserTierUI(likelyPro); // Oder true/false basierend auf Auth
+              // 2. Auth Status prüfen (WICHTIG, damit der 2. Parameter stimmt)
+              const isLoggedIn = !!auth.currentUser;
+
+              // 3. UI updaten
+              updateUserTierUI(isProConfirmed, isLoggedIn);
 
               // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
               document.getElementById("freeUsageDisplay").innerHTML = 
@@ -2348,10 +2351,13 @@
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
             const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
             
-            const likelyPro = (freeRemaining > 25) || (deepRemaining > 12); 
+            const isProConfirmed = (data.is_pro_user === true);
 
-            // UI updaten
-            updateUserTierUI(likelyPro); // Oder true/false basierend auf Auth
+            // 2. Auth Status prüfen (WICHTIG, damit der 2. Parameter stimmt)
+            const isLoggedIn = !!auth.currentUser;
+
+            // 3. UI updaten
+            updateUserTierUI(isProConfirmed, isLoggedIn);
 
             // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
             document.getElementById("freeUsageDisplay").innerHTML = 
@@ -2926,9 +2932,7 @@
           createStartDemoChip();
         }
 
-                // -----------------------------------
         // Consensus: Copy Answer & Copy Citation
-        // -----------------------------------
 
         function getIncludedModelNamesForCitation() {
           const map = [
@@ -3215,30 +3219,46 @@
 
         window.isUserPro = false;
 
-        window.updateUserTierUI = function(isPro) {
+        window.updateUserTierUI = function(isPro, isLoggedIn = false) { // Standardmäßig false
             // 1. Globalen Status aktualisieren
             window.isUserPro = isPro;
 
             // 2. Elemente referenzieren
             const badge = document.getElementById("proBadge");
-            const upgradeLink = document.getElementById("upgradeLink"); // NEU
+            const upgradeLink = document.getElementById("upgradeLink");
             const deepSearchLabel = document.querySelector('.switch.deep-switch');
 
-            if (isPro) {
-                // === PRO USER ===
-                if(badge) badge.style.display = "inline-block";
-                if(upgradeLink) upgradeLink.style.display = "none"; // Upgrade verstecken
+            // === CASE 1: NICHT EINGELOGGT ===
+            if (!isLoggedIn) {
+                // Alles verstecken
+                if(badge) badge.style.display = "none";
+                if(upgradeLink) upgradeLink.style.display = "none"; 
 
-                // Limits setzen
+                // Optional: Standard-Limits (Free) oder ganz sperren
+                currentMaxLimit = LIMITS.FREE.NORMAL; 
+                
+                // Deep Search sperren (wie bei Free User)
+                if (deepSearchLabel) {
+                    deepSearchLabel.classList.add("locked");
+                    deepSearchLabel.title = "Login required";
+                }
+                return; // Funktion hier beenden!
+            }
+
+            // === CASE 2: EINGELOGGT (Pro oder Free) ===
+            if (isPro) {
+                // --- PRO USER ---
+                if(badge) badge.style.display = "inline-block";
+                if(upgradeLink) upgradeLink.style.display = "none";
+
+                // Limits
                 currentMaxLimit = LIMITS.PRO.NORMAL;
                 currentDeepLimit = LIMITS.PRO.DEEP;
 
                 // Dropdowns entsperren
-                if (typeof updatePremiumModelsState === "function") {
-                    updatePremiumModelsState(true);
-                }
+                if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(true);
 
-                // --- SPERRE AUFHEBEN ---
+                // Deep Search entsperren
                 if (deepSearchLabel) {
                     deepSearchLabel.classList.remove("locked");
                     deepSearchLabel.title = "Deep Think enabled";
@@ -3247,27 +3267,23 @@
                 }
 
             } else {
-                // === FREE USER (oder ausgeloggt) ===
+                // --- FREE USER (EINGELOGGT) ---
                 if(badge) badge.style.display = "none";
-                if(upgradeLink) upgradeLink.style.display = "inline-block"; // Upgrade anzeigen
+                if(upgradeLink) upgradeLink.style.display = "inline-block"; // Hier zeigen wir Upgrade
 
-                // Limits setzen
+                // Limits
                 currentMaxLimit = LIMITS.FREE.NORMAL;
                 currentDeepLimit = LIMITS.FREE.DEEP;
 
                 // Dropdowns sperren
-                if (typeof updatePremiumModelsState === "function") {
-                    updatePremiumModelsState(false);
-                }
+                if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false);
 
-                // Deep Search ausschalten, falls an
+                // Deep Search ausschalten & sperren
                 const deepToggle = document.getElementById("deepSearchToggle");
                 if (deepToggle && deepToggle.checked) {
                     deepToggle.checked = false;
                     if (typeof updateDeepThinkText === 'function') updateDeepThinkText();
                 }
-
-                // --- SPERRE AKTIVIEREN ---
                 if (deepSearchLabel) {
                     deepSearchLabel.classList.add("locked");
                     deepSearchLabel.title = "Pro feature only";
@@ -3673,6 +3689,11 @@
       </div>
 
       <div class="pricing-row">
+        <div class="col-feature">Web Search</div>
+        <div class="col-plan">25 / day</div> <div class="col-plan bold">500 / day</div>
+      </div>
+
+      <div class="pricing-row">
         <div class="col-feature">Deep Think</div>
         <div class="col-plan">none</div>
         <div class="col-plan bold">50 / day</div>
@@ -3681,12 +3702,7 @@
       <div class="pricing-row">
         <div class="col-feature">Models</div>
         <div class="col-plan">Lightweight<br><small>GPT-5 mini, Gemini 2.5 Flash...</small></div>
-        <div class="col-plan bold">Frontier<br><small>Gemini 3 Pro, GPT-5.1...</small></div>
-      </div>
-
-      <div class="pricing-row">
-        <div class="col-feature">Web Search</div>
-        <div class="col-plan">25</div> <div class="col-plan bold">500</div>
+        <div class="col-plan bold"><span class="highlight-tech">Frontier</span><br><small>Gemini 3 Pro, GPT-5.1...</small></div>
       </div>
 
        <div class="pricing-footer">

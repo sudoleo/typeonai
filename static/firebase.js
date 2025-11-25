@@ -104,9 +104,10 @@ async function checkUserStatusOnLoad(user, token) {
 
       // 2. UI AKTUALISIEREN (Für BEIDE Fälle: Pro und Free)
       
-      // A) Der saubere Weg: Rufe deine globale UI-Funktion auf
+      // A) Der saubere Weg:
       if (typeof window.updateUserTierUI === "function") {
-          window.updateUserTierUI(data.is_pro);
+          // Wir übergeben 'true' als zweiten Parameter für isLoggedIn
+          window.updateUserTierUI(data.is_pro, true); 
       }
 
       // B) FALLBACK (Falls updateUserTierUI noch nicht geladen ist):
@@ -259,10 +260,9 @@ onIdTokenChanged(auth, async (user) => {
         }
     });
 
-    // D) Falls du die Hilfsfunktion hast, auch diese aufrufen (doppelt hält besser)
     if (typeof window.updateUserTierUI === "function") {
-        window.updateUserTierUI(false);
-    }
+            window.updateUserTierUI(false, false); // isPro=false, isLoggedIn=false
+        }
   }
 });
 

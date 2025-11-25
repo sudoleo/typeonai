@@ -2343,7 +2343,7 @@ font-size: 0.9em;
   box-sizing: border-box;
   padding: 6px 20px;
   margin: -25px auto 8px;       /* auto -> mittig, leicht hochgezogen */
-
+  z-index: 100;
   font-size: 11px;
 }
 
@@ -2600,6 +2600,7 @@ font-size: 0.9em;
   }
   .sidebar.active {
     transform: translateX(0);
+    z-index: 120;
   }
 
   .sidebar-content {
@@ -3381,10 +3382,6 @@ font-size: 0.9em;
     --consensus-button-text: #eee;
   }
 
-  .modal-content {
-    margin-top: 80px; /* Erhöht den Abstand vom oberen Rand */
-  }
-
   .explanation-popup {
     width: 65%;  /* Nimmt 90% der Bildschirmbreite ein */
     max-width: 400px; /* Begrenzung, damit es nicht zu groß wird */
@@ -3479,7 +3476,7 @@ font-size: 0.9em;
   /* 1. Container: Platz sparen */
   .pro-modal-content {
     width: 85vw !important;
-    padding: 20px 15px 60px 15px !important;
+    padding: 20px 15px 70px 15px !important;
   }
 
   /* 2. Header: Kompakter */
