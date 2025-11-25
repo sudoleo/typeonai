@@ -64,8 +64,6 @@ function injectHtmlSafe(containerEl, md) {
   enhanceLinks(containerEl);
 }
 
-// --- ÄNDERUNG 1: Statische Konstante durch dynamisches Objekt ersetzen ---
-
 // Globale Limits Definition
 window.LIMITS = {
   FREE: { NORMAL: 25, DEEP: 12 },
@@ -79,8 +77,6 @@ window.currentDeepLimit = window.LIMITS.FREE.DEEP;
 // merken, dass wir Bookmarks schon einmal geladen haben
 let bookmarksLoaded = false;
 
-// --- ÄNDERUNG 2: Neue Funktion zum Prüfen des User-Status ---
-// --- ÄNDERUNG 2: Neue Funktion zum Prüfen des User-Status ---
 async function checkUserStatusOnLoad(user, token) {
   if (!user || !token) return;
 
@@ -232,39 +228,48 @@ onIdTokenChanged(auth, async (user) => {
       }
     });
 
-  } else {
-    // Cleanup bei Logout
-    localStorage.removeItem("id_token");
-    loginContainer.innerText = "Log in";
+    } else {
+        // Cleanup bei Logout
+        localStorage.removeItem("id_token");
+        loginContainer.innerText = "Log in";
 
-      if (usageOptions) usageOptions.style.display = "none";
+        if (usageOptions) usageOptions.style.display = "none";
 
         document.getElementById("bookmarksContainer").innerHTML = "";
         bookmarksLoaded = false;
+        
         // A) Badge verstecken (Direkter Zugriff)
         const badge = document.getElementById("proBadge");
-        
-      if (badge) badge.style.display = "none";
+        if (badge) badge.style.display = "none";
 
-        // B) Limits auf Free zurücksetzen (Wichtig, falls er sich als Free-User direkt wieder einloggt)
+        // B) Limits auf Free zurücksetzen
         window.currentMaxLimit = window.LIMITS.FREE.NORMAL;
         window.currentDeepLimit = window.LIMITS.FREE.DEEP;
 
-        // C) Premium Modelle wieder sperren
+        // C) Premium Modelle wieder sperren (HIER WAR DER FEHLER)
         const premiumOptions = document.querySelectorAll('.premium-option');
         premiumOptions.forEach(option => {
-        option.disabled = true;
-        // "(Pro only)" Suffix wieder anhängen, falls es fehlt
-        if (!option.textContent.includes('(Pro only)')) {
-             option.textContent += ' (Pro only)';
-        }
-    });
+            option.disabled = true;
 
-    if (typeof window.updateUserTierUI === "function") {
+            // 1. Zuerst den alten "(Pro only)" Text entfernen, falls er da ist
+            option.textContent = option.textContent.replace(' (Pro only)', '');
+
+            // 2. Stattdessen "Pro: " vorne hinzufügen, falls es fehlt
+            if (!option.textContent.startsWith('Pro: ')) {
+                option.textContent = 'Pro: ' + option.textContent;
+            }
+            
+            // Falls ausgewählt (Cache-Problem), zurücksetzen auf Standard
+            if (option.selected) {
+                option.parentNode.selectedIndex = 0; 
+            }
+        });
+
+        if (typeof window.updateUserTierUI === "function") {
             window.updateUserTierUI(false, false); // isPro=false, isLoggedIn=false
         }
-  }
-});
+      }
+    });
 
 function fetchUsageData(token) {
   // DOM-Elemente innerhalb der Funktion abrufen:

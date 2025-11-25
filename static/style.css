@@ -1824,7 +1824,28 @@ text-decoration: underline;
   color: #66b2ff;
 }
 
-/* --- CLEAN PRO MODAL --- */
+option.premium-option {
+    /* Farbe vom Anfang (Blau/Purple) */
+    color: var(--button-bg, #007bff);
+    
+    /* Hintergrund beibehalten (fixiert den Dark Mode) */
+    background-color: var(--vote-model-bg);
+    
+    /* Schrift nicht fett (Standard) */
+    font-weight: normal;
+}
+
+/* --- PREMIUM MODELLE (Gesperrt / Free User) --- */
+option.premium-option:disabled {
+    /* Auch hier die Farbe vom Anfang (statt Grau) */
+    color: var(--button-bg, #007bff) !important;
+    
+    /* Hintergrund passend zum Theme (kein weißer Balken im Dark Mode) */
+    background-color: var(--bg-color) !important;
+    
+    /* Optional: Etwas transparenter, damit es nicht "aktiv" wirkt, aber farbig bleibt */
+    opacity: 0.7; 
+}
 
 /* Modal Container - Breiter, aber luftiger */
 .pro-modal-content {
@@ -1861,11 +1882,9 @@ text-decoration: underline;
 
 /* Highlight Text - Statt Gold lieber eine dezente Farbe oder einfach fett */
 .highlight-tech {
-  color: var(--button-bg, #007bff); /* Nutzt deine Hauptfarbe */
-  /* Oder falls du es ganz neutral willst: color: inherit; */
+  color: var(--button-bg, #007bff);
 }
 
-/* --- GRID LAYOUT (Clean) --- */
 .pricing-grid {
   display: grid;
   grid-template-columns: 1.5fr 1fr 1fr; /* Feature-Spalte etwas breiter */
@@ -3476,8 +3495,7 @@ font-size: 0.9em;
   /* 1. Container: Platz sparen */
   .pro-modal-content {
     width: 85vw !important;
-    padding: 20px 15px 70px 15px !important;
-    margin-top: 15px;
+    padding: 20px 15px 0px 15px !important;
   }
 
   /* 2. Header: Kompakter */
@@ -3574,6 +3592,10 @@ font-size: 0.9em;
     justify-content: center;
     align-items: baseline;
     margin-bottom: 10px;
+  }
+
+  .pricing-footer > div:nth-child(2) {
+    display: none !important; 
   }
 
 }

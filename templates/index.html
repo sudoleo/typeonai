@@ -293,7 +293,7 @@
     <div class="response-section" style="position: relative;">
       <div class="response-box" id="openaiResponse" data-model="OpenAI">
         <h2>
-          <span class="title">Response from ChatGPT <small>(<span id="openaiModelText">GPT-5-mini</span>)</small>
+          <span class="title">Response from ChatGPT<small>(<span id="openaiModelText">GPT-5-mini</span>)</small>
             <span class="model-picker-wrapper">
               <select id="openaiModelSelect" class="model-picker">
                 <option value="gpt-5-mini">GPT-5-mini</option>
@@ -301,8 +301,8 @@
                 <option value="gpt-4.1">GPT-4.1</option>
                 <option value="gpt-4o">GPT-4o</option>
                 <option value="gpt-3.5-turbo">GPT-3.5-turbo</option>
-                <option value="gpt-5" disabled class="premium-option">GPT-5 (Pro only)</option>
-                <option value="gpt-5-chat-latest" disabled class="premium-option">GPT-5-chat-latest (Pro only)</option>
+                <option value="gpt-5" disabled class="premium-option">GPT-5</option>
+                <option value="gpt-5-chat-latest" disabled class="premium-option">GPT-5-chat-latest</option>
               </select>
             </span>
           </span>
@@ -319,7 +319,7 @@
 
       <div class="response-box" id="mistralResponse" data-model="Mistral">
         <h2>
-          <span class="title">Response from Mistral <small>(<span id="mistralModelText">mistral-large-latest</span>)</small>
+          <span class="title">Response from Mistral<small>(<span id="mistralModelText">mistral-large-latest</span>)</small>
             <span class="model-picker-wrapper">
               <select id="mistralModelSelect" class="model-picker">
                 <option value="mistral-large-latest">mistral-large-latest</option>
@@ -348,7 +348,7 @@
                 <option value="claude-sonnet-4-20250514">claude-4-sonnet</option>
                 <option value="claude-3-7-sonnet-20250219">claude-3-7-sonnet</option>
                 <option value="claude-3-5-haiku-20241022">claude-3-5-haiku</option>
-                <option value="claude-sonnet-4-5-20250929" disabled class="premium-option">claude-sonnet-4-5 (Pro only)</option>
+                <option value="claude-sonnet-4-5-20250929" disabled class="premium-option">claude-sonnet-4-5</option>
               </select>
             </span>
           </span>
@@ -370,7 +370,8 @@
               <select id="geminiModelSelect" class="model-picker">
                 <option value="gemini-2.5-flash">gemini-2.5-flash</option>
                 <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-                <option value="gemini-2.5-pro" disabled class="premium-option">gemini-2.5-pro (Pro only)</option>
+                <option value="gemini-2.5-pro" disabled class="premium-option">gemini-2.5-pro</option>
+                <option value="gemini-3-pro-preview" disabled class="premium-option">gemini-3-pro-preview</option>
               </select>
             </span>
           </span>
@@ -391,7 +392,7 @@
             <span class="model-picker-wrapper">
               <select id="deepseekModelSelect" class="model-picker">
                 <option value="deepseek-chat">DeepSeek-V3</option>
-                <option value="deepseek-reasoner" disabled class="premium-option">DeepSeek-R1/Reasoner (Pro only)</option>
+                <option value="deepseek-reasoner" disabled class="premium-option">DeepSeek-R1/Reasoner</option>
               </select>
             </span>
           </span>
@@ -412,8 +413,8 @@
             <span class="model-picker-wrapper">
               <select id="grokModelSelect" class="model-picker">
                 <option value="grok-4-fast-non-reasoning-latest">grok-4-fast</option>
-                <option value="grok-4-latest" disabled class="premium-option">grok-4-latest (Pro only)</option>
-                <option value="grok-3-latest" disabled class="premium-option">grok-3-latest (Pro only)</option>
+                <option value="grok-4-latest" disabled class="premium-option">grok-4-latest</option>
+                <option value="grok-3-latest" disabled class="premium-option">grok-3-latest</option>
               </select>
             </span>
           </span>
@@ -456,7 +457,7 @@
                 <option value="Grok-Pro" class="premium-option">Grok-4-latest</option>
                 <option value="OpenAI-Pro" class="premium-option">gpt-5</option>
                 <option value="Anthropic-Pro" class="premium-option">claude-sonnet-4-5</option>
-                <option value="Gemini-Pro" class="premium-option">gemini-2.5-pro</option>
+                <option value="Gemini-Pro" class="premium-option">gemini-3-pro-preview</option>
                 <option value="DeepSeek-Pro" class="premium-option">DeepSeek-R1</option>
               </select>
             </div>
@@ -965,7 +966,7 @@
         });
 
         const openaiModelText   = deepSearchActive ? "GPT-5" : document.getElementById("openaiModelSelect").value;
-        const geminiModelText   = deepSearchActive ? "gemini-2.5-pro" : document.getElementById("geminiModelSelect").value;
+        const geminiModelText   = deepSearchActive ? "gemini-3-pro-preview" : document.getElementById("geminiModelSelect").value;
         const claudeModelText   = deepSearchActive ? "claude-sonnet-4-5-20250929" : document.getElementById("claudeModelSelect").value;
         const deepseekModelText = deepSearchActive ? "DeepSeek-R1" : document.getElementById("deepseekModelSelect").value;
         const grokModelText     = deepSearchActive ? "grok-4-latest" : document.getElementById("grokModelSelect").value;
@@ -3294,34 +3295,43 @@
         };
 
       function updatePremiumModelsState(isPro) {
-          // 1. Logik für das Consensus Dropdown (Dropdown-Optionen)
-          const consensusDropdown = document.getElementById("consensusModelDropdown");
-          if (consensusDropdown) {
-              // Wir suchen direkt nach den Optionen mit der Klasse 'premium-option' im Dropdown
-              const premiumOptions = consensusDropdown.querySelectorAll('option.premium-option');
+          // Dropdown-IDs definieren (Consensus und OpenAI)
+          const dropdownIds = ["consensusModelDropdown", "openaiModelSelect"];
+
+          dropdownIds.forEach(id => {
+              const dropdown = document.getElementById(id);
+              if (!dropdown) return;
+
+              const premiumOptions = dropdown.querySelectorAll('option.premium-option');
               
               premiumOptions.forEach(option => {
+
                   if (isPro) {
-                      // PRO USER: Option freischalten
+                      // --- PRO USER ---
                       option.disabled = false;
-                      // Entferne den "(Pro only)" Text, falls er schon da steht
-                      option.textContent = option.textContent.replace(' (Pro only)', '');
+                      
+                      // Optional: Entferne auch das "Pro: " vorne, wenn der User bezahlt hat
+                      // Damit er nur "GPT-5" sieht statt "Pro: GPT-5"
+                      if (option.textContent.startsWith('Pro: ')) {
+                          option.textContent = option.textContent.substring(5); // Entfernt "Pro: "
+                      }
+
                   } else {
-                      // FREE USER: Option sperren
+                      // --- FREE USER ---
                       option.disabled = true;
-                      // Falls "(Pro only)" noch nicht da steht, hinzufügen
-                      if (!option.textContent.includes('(Pro only)')) {
-                          option.textContent += ' (Pro only)';
+
+                      // Stelle sicher, dass vorne "Pro: " steht
+                      if (!option.textContent.startsWith('Pro: ')) {
+                          option.textContent = 'Pro: ' + option.textContent;
                       }
                       
-                      // Falls ein Free-User versehentlich ein Pro-Modell ausgewählt hat (z.B. durch Cache),
-                      // setzen wir das Dropdown auf das erste Element (Standard-Modell) zurück.
+                      // Falls durch einen Fehler (Cache) ausgewählt -> Reset
                       if (option.selected) {
-                          consensusDropdown.selectedIndex = 0;
+                          dropdown.selectedIndex = 0;
                       }
                   }
               });
-          }
+          });
       }
 
       // Event Listener für den neuen Upgrade-Link im Header

@@ -97,13 +97,13 @@ async def handle_validation_exception(request, exc: RequestValidationError):
 FREE_USAGE_LIMIT = 25
 MAX_WORDS = 500
 DEEP_SEARCH_MAX_WORDS = 1000
-MAX_TOKENS = 2048
-DEEP_SEARCH_MAX_TOKENS = 4096
-CONSENSUS_MAX_TOKENS = 4096
-DIFFERENCES_MAX_TOKENS = 1024
+MAX_TOKENS = 4096
+DEEP_SEARCH_MAX_TOKENS = 8192
+CONSENSUS_MAX_TOKENS = 8192
+DIFFERENCES_MAX_TOKENS = 4096
 REASONING_EFFORT_FOR_DEEP = "low"
-GEMINI_MAX_TOKENS = 2048
-GEMINI_DEEP_MAX_TOKENS = 4096
+GEMINI_MAX_TOKENS = 4096
+GEMINI_DEEP_MAX_TOKENS = 8192
 
 PRO_USAGE_LIMIT = 500
 PRO_DEEP_SEARCH_LIMIT = 50
@@ -184,6 +184,7 @@ ALLOWED_GEMINI_MODELS = {
     "gemini-2.0-flash",
     # Premium:
     "gemini-2.5-pro",
+    "gemini-3-pro-preview",
 }
 
 # --- DEEPSEEK ---
@@ -212,6 +213,7 @@ PREMIUM_MODELS = {
     
     # Gemini
     "gemini-2.5-pro",
+    "gemini-3-pro-preview"
     
     # DeepSeek
     "deepseek-reasoner",
@@ -466,7 +468,7 @@ def query_gemini(
         return f"Error with Gemini: configuration failed: {e}"
 
     # (B) Modell & Config
-    model_name = "gemini-2.5-pro" if deep_search else (model_override or "gemini-2.5-flash")
+    model_name = "gemini-3-pro-preview" if deep_search else (model_override or "gemini-2.5-flash")
 
     print(f"[MODEL] Gemini -> {model_name} | deep_search={deep_search} | override={model_override}")
 
@@ -818,7 +820,7 @@ def query_consensus(
                 genai.configure()
 
             # Flash vs Pro
-            model_name = "gemini-2.5-pro" if consensus_model == "Gemini-Pro" else "gemini-2.5-flash"
+            model_name = "gemini-3-pro-preview" if consensus_model == "Gemini-Pro" else "gemini-2.5-flash"
             
             model = genai.GenerativeModel(model_name)
             generation_config = {"max_output_tokens": int(CONSENSUS_MAX_TOKENS)}
@@ -2185,7 +2187,8 @@ async def consensus(request: Request, data: dict = Body(...)):
     
     need_key_for = engine_key_map.get(engine)
     if need_key_for:
-        if engine == "Gemini":
+        # ÄNDERUNG: Prüfe auf "Gemini" ODER "Gemini-Pro"
+        if engine in ["Gemini", "Gemini-Pro"]:
             # Erlaube drei Varianten:
             # 1) expliziter Key (User- oder Dev-Key),
             # 2) Dev-Key aus ENV,
