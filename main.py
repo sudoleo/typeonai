@@ -108,6 +108,12 @@ GEMINI_DEEP_MAX_TOKENS = 8192
 PRO_USAGE_LIMIT = 500
 PRO_DEEP_SEARCH_LIMIT = 50
 
+VALID_LEADERBOARD_MODELS = {
+    "OpenAI", "Mistral", "Claude", "Gemini", "DeepSeek", "Grok", 
+    "OpenAI-Pro", "Mistral-Pro", "Anthropic-Pro", "Gemini-Pro", "DeepSeek-Pro", "Grok-Pro",
+    "Exa" # Falls Exa auch gevotet werden kann
+}
+
 # Modelle, die pro Anbieter erlaubt sind
 ALLOWED_OPENAI_MODELS = {
     "gpt-5-nano",
@@ -1069,12 +1075,16 @@ def query_differences(
     match = re.search(r"BestModel:\s*Model\s*([A-Z])", result)
     if match:
         anon_label = f"Model {match.group(1)}"
-        real_name = anon_map.get(anon_label, anon_label)
-        result = re.sub(
-            r"BestModel:\s*Model\s*[A-Z]",
-            f"BestModel: {real_name}",
-            result
-        )
+        # Sicherstellen, dass wir den echten Namen haben
+        if anon_label in anon_map:
+            real_name = anon_map[anon_label]
+            result = re.sub(
+                r"BestModel:\s*Model\s*[A-Z]",
+                f"BestModel: {real_name}",
+                result
+            )
+        else:
+            logging.warning(f"LLM hallucinated ID {anon_label} in differences.")
 
     return result
 
@@ -1396,6 +1406,16 @@ async def record_vote(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=400, detail="Missing required fields: id_token, model or vote_type.")
     if vote_type not in ALLOWED_VOTE_TYPES:
         raise HTTPException(status_code=400, detail="Invalid vote type provided.")
+    # Verhindert, dass jemand "Unfug" in die DB schreibt
+    if model not in VALID_LEADERBOARD_MODELS:
+         # Optional: Loggen, wer das versucht hat
+         logging.warning(f"Invalid vote attempt for model '{model}'")
+         raise HTTPException(status_code=400, detail="Invalid model name.")
+
+    try:
+        uid = verify_user_token(id_token)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Authentication failed: " + str(e))
 
     try:
         uid = verify_user_token(id_token)
@@ -2258,7 +2278,6 @@ async def check_keys(request: Request, data: dict = Body(...)):
         gemini_key = data.get("gemini_key")
         deepseek_key = data.get("deepseek_key")
         grok_key = data.get("grok_key")
-        exa_key = data.get("exa_key")
         
         results = {}
         
@@ -2368,25 +2387,6 @@ async def check_keys(request: Request, data: dict = Body(...)):
                 results["Gemini"] = "invalid"
         except Exception as e:
             results["Gemini"] = "invalid"
-
-        # Exa Handshake
-        try:
-            exa_key = data.get("exa_key")
-            if exa_key and len(exa_key) > 10:
-                client = openai.OpenAI(api_key=exa_key, base_url="https://api.exa.ai")
-                response = client.chat.completions.create(
-                    model="exa",  # Alternativ "exa-pro" falls gewünscht
-                    messages=[
-                        {"role": "system", "content": "ping"},
-                        {"role": "user", "content": "ping"}
-                    ],
-                    extra_body={"text": True}
-                )
-                results["Exa"] = "valid"
-            else:
-                results["Exa"] = "invalid"
-        except Exception as e:
-            results["Exa"] = "invalid"
         
         return {"results": results}
 

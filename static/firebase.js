@@ -81,7 +81,6 @@ async function checkUserStatusOnLoad(user, token) {
   if (!user || !token) return;
 
   try {
-    // Call an dein neues Backend /user_status
     const response = await fetch("/user_status", {
       method: "GET",
       headers: {
@@ -98,44 +97,51 @@ async function checkUserStatusOnLoad(user, token) {
       window.currentDeepLimit = data.deep_limit;
       window.isUserPro = data.is_pro;
 
-      // 2. UI AKTUALISIEREN (Für BEIDE Fälle: Pro und Free)
+      // 2. UI AKTUALISIEREN
       
-      // A) Der saubere Weg:
+      // A) Der saubere Weg (falls vorhanden):
       if (typeof window.updateUserTierUI === "function") {
-          // Wir übergeben 'true' als zweiten Parameter für isLoggedIn
           window.updateUserTierUI(data.is_pro, true); 
       }
 
-      // B) FALLBACK (Falls updateUserTierUI noch nicht geladen ist):
-      // Wir manipulieren die DOM-Elemente direkt hier sicherheitshalber.
+      // B) FALLBACK (Hier war der Fehler):
       const badge = document.getElementById("proBadge");
-      const upgradeLink = document.getElementById("upgradeLink"); // <--- Das hier hat gefehlt
+      const upgradeLink = document.getElementById("upgradeLink");
       const premiumOptions = document.querySelectorAll('.premium-option');
 
       if (data.is_pro) {
           // === IST PRO ===
           console.log("User ist PRO -> Zeige Badge");
           if (badge) badge.style.display = "inline-block";
-          if (upgradeLink) upgradeLink.style.display = "none"; // Upgrade weg
+          if (upgradeLink) upgradeLink.style.display = "none";
 
-          // Dropdowns entsperren
           premiumOptions.forEach(option => {
-             option.disabled = false;
-             option.textContent = option.textContent.replace(' (Pro only)', '');
+              option.disabled = false;
+              
+              // Entferne "Pro: " vorne, wenn der User zahlt (optional, sieht sauberer aus)
+              if (option.textContent.startsWith('Pro: ')) {
+                  option.textContent = option.textContent.substring(5);
+              }
+              // Sicherstellen, dass "(Pro only)" weg ist (falls es im HTML stand)
+              option.textContent = option.textContent.replace(' (Pro only)', '');
           });
 
       } else {
           // === IST FREE ===
           console.log("User ist FREE -> Zeige Upgrade Link");
-          if (badge) badge.style.display = "none"; // Badge weg
-          if (upgradeLink) upgradeLink.style.display = "inline-block"; // Upgrade da
+          if (badge) badge.style.display = "none";
+          if (upgradeLink) upgradeLink.style.display = "inline-block";
 
-          // Dropdowns sperren (Sicherheitshalber)
           premiumOptions.forEach(option => {
-             option.disabled = true;
-             if (!option.textContent.includes('(Pro only)')) {
-                 option.textContent += ' (Pro only)';
-             }
+              option.disabled = true;
+
+              // 1. Entferne "(Pro only)", falls es fälschlicherweise da ist
+              option.textContent = option.textContent.replace(' (Pro only)', '');
+
+              // 2. Füge "Pro: " vorne hinzu, falls es noch nicht da ist
+              if (!option.textContent.startsWith('Pro: ')) {
+                  option.textContent = 'Pro: ' + option.textContent;
+              }
           });
       }
       
