@@ -2220,7 +2220,7 @@ transition: background-color 160ms ease, backdrop-filter 160ms ease;
   margin: clamp(24px, 8vh, 80px) auto;
   padding: 22px 20px;
   width: min(92vw, 360px);
-  max-height: min(80vh, 590px);
+  max-height: min(80vh, 630px);
   border-radius: 12px;
   text-align: center;
 
@@ -3537,7 +3537,7 @@ font-size: 0.9em;
 
   /* 2. Header: Kompakter */
   .pro-header {
-    margin-bottom: 25px;
+    margin-bottom: 15px;
   }
   
   .pro-header h2 {
