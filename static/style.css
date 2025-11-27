@@ -2403,19 +2403,37 @@ font-size: 0.9em;
   font-size: 11px;
 }
 
-/* Überschrift + Inline-Buttons */
 .consensus-main h2 {
-  display: inline-flex;              /* statt inline-flex */
-  align-items: center;
-  gap: 20px;
-  padding-left: 10px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+    padding-right: 40px; /* Platzhalter für den absoluten Button rechts */
+    padding-left: 40px;
 }
 
-/* Container, der direkt im H2 hängt, neben "Consensus Answer" */
+.consensus-main h2 img {
+    display: inline-block !important;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+/* Button schwebt auf Desktop rechts */
 .consensus-copy-inline {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 8px;
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+}
+
+.consensus-differences h2 {
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 /* Wrapper im Pill-Look (angelehnt an model-picker-wrapper) */
@@ -3076,12 +3094,55 @@ font-size: 0.9em;
     outline-offset: 2px;
   }
 
+.consensus-main h2 {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+    padding-right: 40px;
+    padding-left: 40px;
+}
 
-  /* ---------------------------------------
+.consensus-main h2 img {
+    display: inline-block !important;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.consensus-copy-inline {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.consensus-differences h2 {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+@media only screen and (max-width: 480px) {
+    .consensus-main h2 {
+        justify-content: flex-start;
+        padding-left: 0;
+        padding-right: 35px;
+        font-size: 1.1rem;
+    }
+
+    .consensus-differences h2 {
+        justify-content: flex-start;
+        padding-left: 0;
+        font-size: 1.1rem;
+    }
+}
+
+  /* 
      2) WEB SEARCH – moderner Pill-Chip
-     --------------------------------------- */
+ */
 
-  /* Alte Elemente ausblenden */
   .search-mode:not(.deep-search-mode) .slider,
   .search-mode:not(.deep-search-mode) .search-mode-label,
   .search-mode:not(.deep-search-mode) .deepthink-disclaimer{
