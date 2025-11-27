@@ -1702,6 +1702,43 @@ gap: 10px;
   box-shadow: 0 0 0 2px rgba(0, 123, 255, .22);
 }
 
+/* Neues CSS für die Icons */
+.model-icon {
+  width: 16px;         /* Sehr klein, wie gewünscht */
+  height: 16px;
+  object-fit: contain; /* Verhindert Verzerren */
+  vertical-align: middle;
+  margin-right: 4px;   /* Abstand zum Text */
+  margin-bottom: 2px;  /* Optische Korrektur der Höhe */
+  border-radius: 3px;
+}
+
+/* Optional: Damit das Icon im Dark Mode gut aussieht (falls Icons transparent sind) */
+.dark-mode .model-icon {
+  filter: brightness(1.1);
+}
+
+/* 1. Basis-Anpassung für alle Icons im Dark Mode (leicht aufhellen) */
+body.dark-mode .model-icon,
+html[data-theme='dark'] .model-icon {
+  filter: brightness(1.1);
+}
+
+/* 2. Spezifische Invertierung für schwarze Logos (ChatGPT & Grok) */
+/* Hier werden beide Logos angesprochen */
+body.dark-mode .chatgpt-logo,
+body.dark-mode .grok-logo,
+html[data-theme='dark'] .chatgpt-logo,
+html[data-theme='dark'] .grok-logo {
+    /* Macht Schwarz zu Weiß */
+    filter: invert(1); 
+    
+    /* TIPP: Falls das Grok-Logo danach grau statt weiß wirkt, 
+       lösche die Zeile oben und nimm diese hier: */
+    /* filter: brightness(0) invert(1); */
+}
+
+
 /* Sidebar-Styling */
 .sidebar {
   position: fixed;

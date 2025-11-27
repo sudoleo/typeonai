@@ -293,7 +293,15 @@
     <div class="response-section" style="position: relative;">
       <div class="response-box" id="openaiResponse" data-model="OpenAI">
         <h2>
-          <span class="title">Response from ChatGPT<small>(<span id="openaiModelText">GPT-5-mini</span>)</small>
+          <span class="title">Response from ChatGPT
+          <small>
+            <img 
+              src="/static/icons/chat_icons/chatgpt.png" 
+              class="model-icon chatgpt-logo" 
+              alt="icon"
+            >
+            <span id="openaiModelText">GPT-5-mini</span>
+          </small>
             <span class="model-picker-wrapper">
               <select id="openaiModelSelect" class="model-picker">
                 <option value="gpt-5-mini">GPT-5-mini</option>
@@ -319,7 +327,8 @@
 
       <div class="response-box" id="mistralResponse" data-model="Mistral">
         <h2>
-          <span class="title">Response from Mistral<small>(<span id="mistralModelText">mistral-large-latest</span>)</small>
+          <span class="title">Response from Mistral
+            <small><img src="/static/icons/chat_icons/mistral.png" class="model-icon" alt="icon"><span id="mistralModelText">mistral-large-latest</span></small>
             <span class="model-picker-wrapper">
               <select id="mistralModelSelect" class="model-picker">
                 <option value="mistral-large-latest">mistral-large-latest</option>
@@ -341,7 +350,8 @@
 
       <div class="response-box" id="claudeResponse" data-model="Anthropic">
         <h2>
-          <span class="title">Response from Claude <small>(<span id="claudeModelText">claude-haiku-4-5</span>)</small>
+          <span class="title">Response from Claude
+            <small><img src="/static/icons/chat_icons/claude.png" class="model-icon" alt="icon"><span id="claudeModelText">claude-haiku-4-5</span></small>
             <span class="model-picker-wrapper">
               <select id="claudeModelSelect" class="model-picker">
                 <option value="claude-haiku-4-5">claude-haiku-4-5</option>
@@ -365,7 +375,8 @@
 
       <div class="response-box" id="geminiResponse" data-model="Gemini">
         <h2>
-          <span class="title">Response from Gemini <small>(<span id="geminiModelText">gemini-2.5-flash</span>)</small>
+          <span class="title">Response from Gemini
+            <small><img src="/static/icons/chat_icons/google.png" class="model-icon" alt="icon"><span id="geminiModelText">gemini-2.5-flash</span></small>
             <span class="model-picker-wrapper">
               <select id="geminiModelSelect" class="model-picker">
                 <option value="gemini-2.5-flash">gemini-2.5-flash</option>
@@ -388,7 +399,8 @@
 
       <div class="response-box" id="deepseekResponse" data-model="DeepSeek">
         <h2>
-          <span class="title">Response from DeepSeek <small>(<span id="deepseekModelText">DeepSeek-V3</span>)</small>
+          <span class="title">Response from DeepSeek
+            <small><img src="/static/icons/chat_icons/deepseek.png" class="model-icon" alt="icon"><span id="deepseekModelText">DeepSeek-V3</span></small>
             <span class="model-picker-wrapper">
               <select id="deepseekModelSelect" class="model-picker">
                 <option value="deepseek-chat">DeepSeek-V3</option>
@@ -409,7 +421,11 @@
 
       <div class="response-box" id="grokResponse" data-model="Grok">
         <h2>
-          <span class="title">Response from Grok <small>(<span id="grokModelText">grok-4-fast</span>)</small>
+          <span class="title">Response from Grok
+          <small>
+            <img src="/static/icons/chat_icons/grok.png" class="model-icon grok-logo" alt="Grok icon">
+            <span id="grokModelText">Grok-4-fast</span>
+          </small>
             <span class="model-picker-wrapper">
               <select id="grokModelSelect" class="model-picker">
                 <option value="grok-4-fast-non-reasoning-latest">grok-4-fast</option>
