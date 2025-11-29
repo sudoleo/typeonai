@@ -1540,8 +1540,6 @@ async def delete_bookmark(data: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error deleting bookmark: " + str(e))
 
-    
-# --- NEU: Tracking Endpoint in main.py ---
 
 @app.post("/track-interest")
 @limiter.limit("5/minute")
@@ -1598,7 +1596,6 @@ async def ask_openai_post(request: Request, data: dict = Body(...)):
     api_key = data.get("api_key")
     model = data.get("model")
 
-    # --- 1. Auth & Status Check ---
     is_pro_user = False
     uid = None
 
@@ -1616,12 +1613,10 @@ async def ask_openai_post(request: Request, data: dict = Body(...)):
             detail="Deep Think is exclusively available for Pro users."
         )
 
-    # --- 3. Modell Validierung ---
     validate_model(model, ALLOWED_OPENAI_MODELS, "OpenAI", is_pro=is_pro_user)
 
     active_count = data.get("active_count", 1)
 
-    # --- 4. Quota Management ---
     if uid:
         increment = 1.0 / active_count
         

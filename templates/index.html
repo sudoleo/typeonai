@@ -506,7 +506,7 @@
         window.spinnerHTML = `
           <span class="thinking-wrap" role="status" aria-live="polite" aria-busy="true">
             <span class="spinner" aria-hidden="true"></span>
-            <span class="thinking" data-text="Thinking …">Thinking&nbsp;…</span>
+            <span class="thinking" data-text="Typing …">Typing&nbsp;…</span>
           </span>
         `;
 
@@ -1334,7 +1334,7 @@
           const maxWords = deepSearchActive ? DEEP_SEARCH_MAX_WORDS : DEFAULT_MAX_WORDS;
           
           if (wordCount > maxWords) {
-            alert(`Die Eingabe überschreitet das erlaubte Wortlimit von ${maxWords} Wörtern (aktuell ${wordCount}).`);
+            alert(`The query is above the limit of ${maxWords} words (you entered ${wordCount}).`);
             return false;
           }
           return true;
@@ -1642,6 +1642,28 @@
           // Konsens-Button wieder aktivieren, bevor eine neue Anfrage gesendet wird.
           document.getElementById("consensusButton").disabled = false;
 
+          // 1. Definiere useOwnKeys frühzeitig
+          const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
+
+          // --- NEU: Frisches Token holen ---
+          let validIdToken = null;
+
+          // Nur versuchen, ein Token zu holen, wenn wir keine eigenen Keys nutzen UND ein User da ist
+          if (!useOwnKeys && window.auth && window.auth.currentUser) {
+            try {
+              // true erzwingt Refresh, false (Standard) nimmt Cache wenn gültig.
+              // false reicht meistens, aber bei Fehlern ist das SDK smart genug.
+              validIdToken = await window.auth.currentUser.getIdToken(); 
+              
+              // Optional: LocalStorage updaten, damit er nicht komplett asynchron läuft
+              localStorage.setItem("id_token", validIdToken); 
+            } catch (e) {
+              console.error("Fehler beim Abrufen des frischen Tokens:", e);
+              // Fallback: Versuche es trotzdem mit dem alten Token aus dem Storage, falls vorhanden
+              validIdToken = localStorage.getItem("id_token");
+            }
+          }
+
           // Basis-Systemprompt laden
           const savedPrompt = localStorage.getItem("systemPrompt");
 
@@ -1923,12 +1945,12 @@
 
   
           if (!useOwnKeys) {
-            let id_token = localStorage.getItem("id_token");
-            if (id_token) {
-              payload.id_token = id_token;
-            } else {
-              payload.api_key = localStorage.getItem("openaiKey") || "";
-            }
+            if (validIdToken) {
+                  payload.id_token = validIdToken; // Nimm das frische Token Variable
+                } else {
+                  // Fallback, falls kein User eingeloggt ist aber auch keine Keys da sind
+                  payload.api_key = localStorage.getItem("openaiKey") || "";
+                }
           } else {
             if (!validateUserKey("openaiKey")) {
               const outputEl = document.getElementById("openaiResponse").querySelector(".collapsible-content");
@@ -2028,12 +2050,12 @@
           };
   
           if (!useOwnKeys) {
-            let id_token = localStorage.getItem("id_token");
-            if (id_token) {
-              payload.id_token = id_token;
-            } else {
-              payload.api_key = localStorage.getItem("mistralKey") || "";
-            }
+            if (validIdToken) {
+                  payload.id_token = validIdToken; // Nimm das frische Token Variable
+                } else {
+                  // Fallback, falls kein User eingeloggt ist aber auch keine Keys da sind
+                  payload.api_key = localStorage.getItem("mistralKey") || "";
+                }
           } else {
             if (!validateUserKey("mistralKey")) {
               const outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
@@ -2104,12 +2126,12 @@
           };
   
           if (!useOwnKeys) {
-            let id_token = localStorage.getItem("id_token");
-            if (id_token) {
-              payload.id_token = id_token;
-            } else {
-              payload.api_key = localStorage.getItem("anthropicKey") || "";
-            }
+            if (validIdToken) {
+                  payload.id_token = validIdToken; // Nimm das frische Token Variable
+                } else {
+                  // Fallback, falls kein User eingeloggt ist aber auch keine Keys da sind
+                  payload.api_key = localStorage.getItem("anthropicKey") || "";
+                }
           } else {
             if (!validateUserKey("anthropicKey")) {
               const outputEl = document.getElementById("claudeResponse").querySelector(".collapsible-content");
@@ -2178,13 +2200,13 @@
               model: document.getElementById("geminiModelSelect").value
             };
   
-            if (!useOwnKeys) {
-              let id_token = localStorage.getItem("id_token");
-              if (id_token) {
-                payload.id_token = id_token;
-              } else {
-                payload.api_key = localStorage.getItem("geminiKey") || "";
-              }
+          if (!useOwnKeys) {
+            if (validIdToken) {
+                  payload.id_token = validIdToken; // Nimm das frische Token Variable
+                } else {
+                  // Fallback, falls kein User eingeloggt ist aber auch keine Keys da sind
+                  payload.api_key = localStorage.getItem("geminiKey") || "";
+                }
             } else {
               if (!validateUserKey("geminiKey")) 
               {
@@ -2255,12 +2277,12 @@
           };
   
           if (!useOwnKeys) {
-            let id_token = localStorage.getItem("id_token");
-            if (id_token) {
-              payload.id_token = id_token;
-            } else {
-              payload.api_key = localStorage.getItem("deepseekKey") || "";
-            }
+            if (validIdToken) {
+                  payload.id_token = validIdToken; // Nimm das frische Token Variable
+                } else {
+                  // Fallback, falls kein User eingeloggt ist aber auch keine Keys da sind
+                  payload.api_key = localStorage.getItem("deepseekKey") || "";
+                }
           } else {
             if (!validateUserKey("deepseekKey")) {
               const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
@@ -2330,12 +2352,12 @@
           };
 
           if (!useOwnKeys) {
-            let id_token = localStorage.getItem("id_token");
-            if (id_token) {
-              payload.id_token = id_token;
-            } else {
-              payload.api_key = localStorage.getItem("grokKey") || "";
-            }
+            if (validIdToken) {
+                  payload.id_token = validIdToken; // Nimm das frische Token Variable
+                } else {
+                  // Fallback, falls kein User eingeloggt ist aber auch keine Keys da sind
+                  payload.api_key = localStorage.getItem("grokKey") || "";
+                }
           } else {
             if (!validateUserKey("grokKey")) {
               const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
@@ -2487,8 +2509,14 @@
           const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
           let searchMode = document.getElementById("searchModeToggle").checked;
           
-          // Nur im Gratis-Modus id_token abrufen
-          const id_token = useOwnKeys ? null : localStorage.getItem("id_token");
+          let id_token = null;
+            if (!useOwnKeys && window.auth && window.auth.currentUser) {
+                try {
+                    id_token = await window.auth.currentUser.getIdToken();
+                } catch (e) {
+                    console.error("Token refresh error in consensus:", e);
+                }
+            }
   
           // Wenn die Frage neu oder geändert ist, werden Firebase-Votes aktualisiert.
           if (question !== lastQuestion) {
@@ -2670,7 +2698,6 @@
           dateISO: new Date().toISOString(),
           url: cleanUrl
         };
-        // --------- ENDE NEU ------------------------------------------------------
   
         try {
           const response = await fetch("/consensus", {
