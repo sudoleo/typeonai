@@ -21,6 +21,8 @@ from zoneinfo import ZoneInfo
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from tool_heuristics import inject_weather_context, inject_market_context
+
 class CustomSecurityMiddleware:
     def __init__(self, app):
         self.app = app
@@ -242,7 +244,9 @@ ALL_ALLOWED_MODELS = (
 def get_system_prompt() -> str:
     # Aktuelles Datum in deiner Zeitzone (z.B. Europe/Berlin)
     now = datetime.now(ZoneInfo("Europe/Berlin"))
-    today_str = now.strftime("%Y-%m-%d")
+    
+    # %A fügt den Wochentag hinzu (z.B. "Tuesday, 2025-12-02")
+    today_str = now.strftime("%A, %Y-%m-%d")
 
     return (
         f"Today is {today_str}. "
@@ -288,6 +292,7 @@ def validate_model(model: str, allowed: set, provider: str, is_pro: bool = False
             status_code=403, # Forbidden
             detail=f"The model '{model}' is reserved for Premium users. Please upgrade your plan."
         )
+    
     
 def query_openai(
     question: str,
@@ -676,19 +681,19 @@ def prepare_prompt_with_websearch(question: str, search_mode: bool, base_system_
     evidence_block, sources = build_evidence_block(raw)
 
     enriched_prompt = f"""
-You are an AI assistant that must ground its answers in the web sources below.
+        Synthesize the web sources below into a natural, coherent answer.
 
-Guidelines:
-- Use ONLY the information from the sources as factual evidence.
-- Cite sources as [S1], [S2], etc.
-- If information is missing, say so.
+        Guidelines:
+        - Focus on answering the question; do not simply list links or snippets.
+        - Integrate facts fluently and cite them strictly as [S1], [S2].
+        - Base your factual claims on the provided sources.
 
-Web sources:
-{evidence_block}
+        Web sources:
+        {evidence_block}
 
-Original instructions:
-{base_system_prompt}
-""".strip()
+        Original instructions:
+        {base_system_prompt}
+        """.strip()
 
     return enriched_prompt, sources
 
@@ -1592,6 +1597,8 @@ async def ask_openai_post(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=400, detail=f"Input exceeds word limit of {max_words_limit}.")
 
     system_prompt = data.get("system_prompt")
+    # DEBUGGING ZEILE
+    print(f"DEBUG: System Prompt received from Frontend: '{system_prompt}'")
     id_token = extract_id_token(request, data)
     api_key = data.get("api_key")
     model = data.get("model")
@@ -2067,9 +2074,42 @@ async def prepare(request: Request, data: dict = Body(...)):
     search_mode_raw = data.get("search_mode", False)
     search_mode = True if str(search_mode_raw).lower() == "true" else bool(search_mode_raw)
 
-    base_system_prompt = data.get("system_prompt") or get_system_prompt()
+    # Basis-Systemprompt holen
+    raw_system_prompt = data.get("system_prompt")
 
-    # Wenn Web Search nicht aktiv ist: keine Exa-Suche, keine Quota-Prüfung nötig
+    if not raw_system_prompt or not str(raw_system_prompt).strip():
+        base_system_prompt = get_system_prompt()
+    else:
+        base_system_prompt = str(raw_system_prompt).strip()
+
+    # --- CONTEXT INJECTION START ---
+    injected_contexts = []
+
+    # 1. Wetter-Check
+    weather_context = inject_weather_context(question)
+    if weather_context:
+        injected_contexts.append(weather_context)
+
+    # 2. Markt-Check (Stocks + Crypto in einer Heuristik)
+    market_context = inject_market_context(question)
+    if market_context:
+        injected_contexts.append(market_context)
+
+    # Wenn Daten gefunden wurden, Prompt anreichern
+    if injected_contexts:
+        logging.info(f"Injecting {len(injected_contexts)} contexts into system prompt.")
+        context_string = "\n\n".join(injected_contexts)
+
+        base_system_prompt = (
+            f"REAL-TIME DATA:\n{context_string}\n\n"
+            "INSTRUCTIONS:\n"
+            "Use the real-time data provided above to answer the user's question directly. "
+            "Evaluate whether the provided data actually answers the user's specific question.\n\n"
+            f"{base_system_prompt}"
+        )
+    # --- CONTEXT INJECTION END ---
+
+    # Wenn Web Search nicht aktiv ist: keine Exa-Suche
     if not search_mode:
         return {
             "system_prompt": base_system_prompt,
@@ -2079,7 +2119,6 @@ async def prepare(request: Request, data: dict = Body(...)):
     # Ab hier: Web Search aktiv → Auth + FREE_USAGE_LIMIT-Check
     id_token = extract_id_token(request, data)
     if not id_token:
-        # Frontend wertet das wie gehabt als error aus
         raise HTTPException(status_code=401, detail="Authentication required for web search.")
 
     try:
@@ -2087,16 +2126,14 @@ async def prepare(request: Request, data: dict = Body(...)):
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed for web search.")
 
-    # Nur prüfen, NICHT erhöhen – Exa zählt nicht am usage_counter
     current_usage = usage_counter.get(uid, 0)
     if current_usage >= FREE_USAGE_LIMIT:
-        # Ganz wichtig: Exa wird hier NICHT aufgerufen
         raise HTTPException(
             status_code=403,
             detail="Your free quota is exhausted. Web search is only available with your own API keys."
         )
 
-    # Quota ok → Exa-Suche durchführen und Evidence-Block bauen
+    # Exa-Suche durchführen
     final_prompt, sources = prepare_prompt_with_websearch(
         question=question,
         search_mode=search_mode,
