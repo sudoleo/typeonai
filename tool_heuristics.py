@@ -1,89 +1,190 @@
 # tool_heuristics.py
 
+import os
 import re
+import json
 import logging
-from typing import Optional, Tuple
-
 import requests
 import yfinance as yf
 from datetime import datetime
+from typing import Optional
+from openai import OpenAI
+from dotenv import load_dotenv
+
+import time
+from datetime import datetime, timedelta
+
+# Env laden (wichtig für lokalen Test)
+load_dotenv()
 
 # ==========================================
-#              CONFIGURATION
+#               CONFIGURATION
 # ==========================================
 
-# Standardized Error Messages (constants used for logic checks)
+# API Client Setup
+api_key = os.getenv("DEVELOPER_OPENAI_API_KEY")
+client = OpenAI(api_key=api_key)
+
+# Standardized Error Messages
 MSG_STOCK_NOT_FOUND = "I recognized the stock intent, but couldn't find a matching ticker."
 MSG_CRYPTO_NOT_FOUND = "I recognized the crypto intent, but couldn't find a matching coin."
 MSG_NO_SYMBOL_FOUND = "I recognized the intent, but couldn't extract a valid symbol or name."
 
 # WMO Weather Codes (English)
 WMO_CODES = {
-    0: "Clear ☀️",
-    1: "Mainly clear 🌤️", 2: "Partly cloudy ⛅", 3: "Overcast ☁️",
-    45: "Fog 🌫️", 48: "Fog 🌫️",
-    51: "Drizzle 🌧️", 53: "Drizzle 🌧️", 55: "Drizzle 🌧️",
-    61: "Rain 🌧️", 63: "Rain 🌧️", 65: "Heavy Rain 🌧️",
-    71: "Snow ❄️", 73: "Snow ❄️", 75: "Snow ❄️",
-    80: "Showers 🌦️", 81: "Showers 🌦️", 82: "Violent Showers ⛈️",
+    0: "Clear ☀️", 1: "Mainly clear 🌤️", 2: "Partly cloudy ⛅", 3: "Overcast ☁️",
+    45: "Fog 🌫️", 48: "Fog 🌫️", 51: "Drizzle 🌧️", 53: "Drizzle 🌧️", 55: "Drizzle 🌧️",
+    61: "Rain 🌧️", 63: "Rain 🌧️", 65: "Heavy Rain 🌧️", 71: "Snow ❄️", 73: "Snow ❄️",
+    75: "Snow ❄️", 80: "Showers 🌦️", 81: "Showers 🌦️", 82: "Violent Showers ⛈️",
     95: "Thunderstorm ⚡", 96: "Thunderstorm/Hail ⛈️", 99: "Thunderstorm/Hail ⛈️"
 }
+
+# Suffixes to remove for better stock search
+COMPANY_SUFFIXES = [
+    " inc", " corp", " corporation", " plc", " ltd", " limited",
+    " ag", " se", " gmbh", " nv", " sa", " s.a."
+]
+
+# ==========================================
+#               ROUTER PROMPT
+# ==========================================
+
+ROUTER_SYSTEM_PROMPT = """
+You are a precise Intent Router for a real-time data system.
+Analyze the user's question and decide if one of the following tools is absolutely necessary to answer it.
+
+TOOLS:
+- "weather": Current weather, forecasts, temperature (City needed).
+- "stock": Stock prices, ETFs, Indices, Market Cap (Ticker/Company needed).
+- "crypto": Cryptocurrency prices, Coins (Coin name/Symbol needed).
+
+INSTRUCTIONS:
+1. Identify the Intent.
+2. Extract the SEARCH TERM (City, Company Name or Coin Name).
+3. If no tool is needed (e.g. general knowledge, greetings), return null.
+4. If ambiguous (e.g. "Solana"), prioritize Crypto. If it looks like a standard company, prioritize Stock.
+
+OUTPUT JSON FORMAT:
+{
+  "tool": "weather" | "stock" | "crypto" | null,
+  "query": "extracted_search_term_or_null"
+}
+"""
+
+# ==========================================
+#               SIMPLE CACHE
+# ==========================================
+
+# Struktur: { key: (timestamp, value) }
+ROUTER_CACHE = {}
+WEATHER_CACHE = {}
+STOCK_CACHE = {}
+CRYPTO_CACHE = {}
+
+def _cache_get(cache: dict, key: str, max_age_seconds: int):
+    """Return cached value or None if missing/expired."""
+    now = time.time()
+    entry = cache.get(key)
+    if not entry:
+        return None
+    ts, value = entry
+    if now - ts > max_age_seconds:
+        # abgelaufen -> löschen
+        cache.pop(key, None)
+        return None
+    return value
+
+def _cache_set(cache: dict, key: str, value):
+    """Store value in cache with current timestamp."""
+    cache[key] = (time.time(), value)
+
+
+def get_intent_from_llm(question: str) -> dict:
+    """
+    Calls gpt-4.1-mini to decide tool usage, with simple caching.
+    """
+    normalized_q = (question or "").strip().lower()
+    if not normalized_q:
+        return {"tool": None, "query": None}
+
+    # 1. Cache-Check (z.B. 10 Minuten gültig)
+    cached = _cache_get(ROUTER_CACHE, normalized_q, max_age_seconds=600)
+    if cached is not None:
+        return cached
+
+    # 2. LLM-Call
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {"role": "system", "content": ROUTER_SYSTEM_PROMPT},
+                {"role": "user", "content": question}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.0,
+            max_tokens=100
+        )
+        
+        response_content = completion.choices[0].message.content
+        parsed = json.loads(response_content)
+
+        # 3. In Cache legen
+        _cache_set(ROUTER_CACHE, normalized_q, parsed)
+        return parsed
+
+    except Exception as e:
+        logging.error(f"[Router] LLM call failed: {e}")
+        return {"tool": None, "query": None}
+
 
 # ==========================================
 #              WEATHER LOGIC
 # ==========================================
 
-WEATHER_INTENT_REGEX = re.compile(
-    r"(?i)\b(wetter|weather|temperature|rain|sun|forecast|grad|degrees|snow|cloudy|wind|humidity|regen|sonne)\b"
-)
-
-# Verbessertes Regex: Erlaubt Kleinbuchstaben und Leerzeichen (z.B. "New York")
-# Stoppt erst bei Satzzeichen oder Zeilenende.
-LOCATION_REGEX = re.compile(
-    r"(?i)\b(?:in|at|for|near|bei|für)\s+"      # Präposition
-    r"([a-zäöüß\s\.-]+?)"                       # Der Ort (Capture Group)
-    r"(?=\s+(?:tomorrow|morgen|today|heute|next|übermorgen)|[\?\.!,]|$)", # Stoppt vor Zeitwörtern oder Satzzeichen
-    re.UNICODE
-)
-
 def get_weather_condition(code: int) -> str:
     """Helper to get text from WMO code."""
-    return WMO_CODES.get(code, "Unbekannt")
-
+    return WMO_CODES.get(code, "Unknown")
 
 def get_weather_data(city_name: str) -> str:
     """
-    Fetches 3-day forecast from Open-Meteo.
-    Output is token-optimized (compact list).
+    Fetches 3-day forecast from Open-Meteo, with caching.
     """
+    key = (city_name or "").strip().lower()
+    if not key:
+        return "⚠️ Weather: Invalid city name."
+
+    # 1. Cache-Check (z.B. 10 Minuten)
+    cached = _cache_get(WEATHER_CACHE, key, max_age_seconds=600)
+    if cached is not None:
+        return cached
+
     try:
-        # 1. Geocoding
+        # 2. Geocoding
         geo_url = "https://geocoding-api.open-meteo.com/v1/search"
         geo_res = requests.get(
             geo_url,
-            # 'language': 'en' ensures we get "Munich" instead of "München" for consistency
             params={"name": city_name, "count": 1, "language": "en", "format": "json"},
             timeout=5
         )
         geo_data = geo_res.json()
 
         if not geo_data.get("results"):
-            return f"⚠️ Weather: Could not find location '{city_name}'."
+            result = f"⚠️ Weather: Could not find location '{city_name}'."
+            _cache_set(WEATHER_CACHE, key, result)  # negative Cache
+            return result
 
         location = geo_data["results"][0]
         lat, lon = location["latitude"], location["longitude"]
         resolved_name = location["name"]
-        country = location.get("country_code", "") # Uses short code like "US" or "DE" to save tokens
+        country = location.get("country_code", "")
 
-        # 2. Fetch Weather (3 Days)
+        # 3. Fetch Weather (3 Days)
         weather_url = "https://api.open-meteo.com/v1/forecast"
         params = {
-            "latitude": lat,
-            "longitude": lon,
+            "latitude": lat, "longitude": lon,
             "current": ["temperature_2m", "weather_code"],
             "daily": ["temperature_2m_max", "temperature_2m_min", "precipitation_probability_max", "weather_code"],
-            "timezone": "auto",
-            "forecast_days": 3
+            "timezone": "auto", "forecast_days": 3
         }
         w_res = requests.get(weather_url, params=params, timeout=5)
         w_data = w_res.json()
@@ -91,17 +192,14 @@ def get_weather_data(city_name: str) -> str:
         current = w_data.get("current", {})
         daily = w_data.get("daily", {})
 
-        # Header with Current Weather
         cur_temp = current.get('temperature_2m')
         cur_cond = get_weather_condition(current.get('weather_code'))
         
-        # Compact Header: "Weather London, GB: Overcast ☁️ 12.5°C"
         output_lines = [
             f"**Weather {resolved_name}, {country}:** {cur_cond}, {cur_temp}°C",
             "Forecast:"
         ]
 
-        # Loop 3 days
         times = daily.get("time", [])
         codes = daily.get("weather_code", [])
         max_temps = daily.get("temperature_2m_max", [])
@@ -109,192 +207,108 @@ def get_weather_data(city_name: str) -> str:
         rain_probs = daily.get("precipitation_probability_max", [])
 
         for i in range(len(times)):
-            # Convert date to short Day Name (Mon, Tue, Wed)
             date_obj = datetime.strptime(times[i], "%Y-%m-%d")
-            day_name = date_obj.strftime("%a") # %a = Mon, Tue... (Short saves tokens)
-            
+            day_name = date_obj.strftime("%a")
             cond = get_weather_condition(codes[i])
-            
-            # Compact Line: "> Tue: Snow ❄️ -11°/-2° (20%)"
             line = f"> {day_name}: {cond} {min_temps[i]}°/{max_temps[i]}° ({rain_probs[i]}% rain)"
             output_lines.append(line)
 
-        return "\n".join(output_lines)
+        result = "\n".join(output_lines)
+        _cache_set(WEATHER_CACHE, key, result)
+        return result
 
     except Exception as e:
         logging.error(f"Weather fetch failed: {e}")
         return "⚠️ Error fetching weather data."
 
 
-def inject_weather_context(question: str) -> Optional[str]:
-    if not WEATHER_INTENT_REGEX.search(question):
-        return None
-
-    location_match = LOCATION_REGEX.search(question)
-    if not location_match:
-        return None
-
-    # Strip whitespace
-    city = location_match.group(1).strip()
-    
-    # ZUSATZ: Manuelles Herausfiltern bekannter Zeitwörter (Falls Regex versagt)
-    ignore_words = ["tomorrow", "morgen", "today", "heute", "next week"]
-    for word in ignore_words:
-        if city.lower().endswith(" " + word):
-            city = city[:-(len(word)+1)].strip()
-
-    return get_weather_data(city)
-
-
-# ==========================================
-#           STOCKS & CRYPTO SHARED
-# ==========================================
-
-STOCK_INTENT_REGEX = re.compile(
-    r"(?i)\b("
-    r"stock|stocks|share|shares|equity|equities|dividend|dividends|ticker|isin|wkn|market\s*cap|earnings|pe\s*ratio"
-    r"|price|quote|chart|value|valuation"
-    r"|etf|fund|index|nasdaq|dow|sp500|dax"
-    r"|costs|trading|listed"
-    r")\b"
-)
-
-CRYPTO_INTENT_REGEX = re.compile(
-    r"(?i)\b("
-    r"crypto|cryptocurrency|coin|token|blockchain"
-    r"|btc|eth|xrp|sol|ada|dot|bnb"
-    r"|bitcoin|ethereum|ripple|solana|cardano|binance"
-    r"|altcoin|memecoin"
-    r")\b"
-)
-
-# Strong hints to resolve ambiguity
-STOCK_STRONG_HINTS_REGEX = re.compile(
-    r"(?i)\b(stock|shares|dividend|etf|index|corp|inc|ag|plc)\b"
-)
-
-CRYPTO_STRONG_HINTS_REGEX = re.compile(
-    r"(?i)\b(crypto|coin|token|chain|btc|eth|sol|xrp)\b"
-)
-
-STOPWORDS = {
-    # English
-    "the", "a", "an", "current", "currently", "today", "now", "please", "show", "me", "tell",
-    "what", "is", "are", "how", "much", "does", "cost", "value", "of", "for", "at", "in", "on",
-    "price", "quote", "symbol", "ticker", "about",
-    # German (included for mixed input robustness)
-    "der", "die", "das", "den", "dem", "ein", "eine", "einen", "aktuell", "heute", "jetzt",
-    "bitte", "zeig", "zeige", "mir", "uns", "sag", "sage",
-    "wie", "viel", "was", "kostet", "steht", "wert", "von", "für", "bei",
-    "aktie", "kurs", "preis",
-    # Fillers
-    "just", "approx", "about"
-    # NEW: Quantities & Numbers
-    "one", "two", "three", "amount", "quantity", "anzahl", "1", "10", "100"
-}
-
-COMPANY_SUFFIXES = [
-    " inc", " corp", " corporation", " plc", " ltd", " limited",
-    " ag", " se", " gmbh", " nv", " sa", " s.a."
-]
-
-def clean_query(text: str) -> str:
-    """
-    Removes punctuation and stopwords to isolate the search term.
-    """
-    # Keep $ for tickers, remove other punctuation
-    text = re.sub(r"[^\w\s\-\$]", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-
-    words = text.split()
-    cleaned_words = [w for w in words if w.lower() not in STOPWORDS]
-
-    if not cleaned_words:
-        return ""
-
-    return " ".join(cleaned_words).strip()
-
-
 # ==========================================
 #               STOCKS LOGIC
 # ==========================================
 
-def extract_potential_symbol(text: str) -> Optional[str]:
-    """
-    Tries to find specific ticker patterns ($TSLA, ISIN, WKN).
-    """
-    # 1. Explicit Ticker ($TSLA)
-    match_explicit = re.search(r"\$([A-Za-z.\-]{1,6})\b", text)
-    if match_explicit:
-        return match_explicit.group(1).upper()
-
-    # 2. ISIN
-    match_isin = re.search(r"\b([A-Z]{2}[A-Z0-9]{9}[0-9])\b", text)
-    if match_isin:
-        return match_isin.group(1)
-
-    # 3. WKN (6 chars, alphanum, usually uppercase) - heuristic
-    match_wkn = re.search(r"\b([A-Z0-9]{6})\b", text, flags=re.IGNORECASE)
-    if match_wkn:
-        # Filter out common English words that are 6 letters (e.g. "PLEASE")
-        candidate = match_wkn.group(1).upper()
-        if candidate not in {"PLEASE", "THANKS", "STOCKS", "CRYPTO"}:
-            return candidate
-
-    return None
+TICKER_SEARCH_CACHE = {}
 
 def search_ticker_symbol(search_term: str) -> Optional[str]:
     """
-    Searches Yahoo Finance for a ticker.
+    Searches Yahoo Finance for a ticker, with caching.
     """
     try:
-        clean_search = search_term.strip()
-        lower = clean_search.lower()
-        
-        # Remove suffixes for better search results
-        for suffix in COMPANY_SUFFIXES:
-            if lower.endswith(suffix):
-                clean_search = clean_search[:-(len(suffix))].strip()
-                break
+        raw = (search_term or "").strip()
+        if not raw:
+            return None
+
+        # Normalisierte Key für Cache
+        cache_key = raw.lower()
+        cached = _cache_get(TICKER_SEARCH_CACHE, cache_key, max_age_seconds=3600)  # 1 Stunde
+        if cached is not None:
+            return cached  # darf auch None sein (negativer Cache)
+
+        clean_search = re.sub(
+            r'\s+(inc\.?|corp\.?|ag|se|gmbh|nv|sa|s\.a\.|ltd\.?|plc)\b', 
+            '', 
+            raw, 
+            flags=re.IGNORECASE
+        ).strip()
 
         url = "https://query2.finance.yahoo.com/v1/finance/search"
         headers = {"User-Agent": "Mozilla/5.0 (compatible; ConsensBot/1.0)"}
-        params = {
-            "q": clean_search,
-            "quotesCount": 3,
-            "newsCount": 0,
-            "enableFuzzyQuery": "true"
-        }
+        params = {"q": clean_search, "quotesCount": 3, "newsCount": 0, "enableFuzzyQuery": "true"}
 
         res = requests.get(url, params=params, headers=headers, timeout=4)
         data = res.json()
-
         quotes = data.get("quotes") or []
+        
         if not quotes:
+            _cache_set(TICKER_SEARCH_CACHE, cache_key, None)
             return None
 
-        # Prioritize Equity/ETFs
+        symbol = None
         for q in quotes:
             qt = (q.get("quoteType") or "").lower()
-            symbol = q.get("symbol")
-            if qt in {"equity", "etf", "mutualfund", "index"} and symbol:
-                return symbol
+            s = q.get("symbol")
+            if qt in {"equity", "etf", "mutualfund", "index"} and s:
+                symbol = s
+                break
 
-        # Fallback
-        return quotes[0].get("symbol")
+        if symbol is None:
+            symbol = quotes[0].get("symbol")
+
+        _cache_set(TICKER_SEARCH_CACHE, cache_key, symbol)
+        return symbol
 
     except Exception as e:
         logging.error(f"[Stocks] Ticker search failed for '{search_term}': {e}")
         return None
 
-def get_stock_data(symbol: str) -> str:
+
+def get_stock_data(query: str) -> str:
     """
-    Fetches price data via yfinance.
+    Main Stock Function: Search -> Fetch -> Format, with caching.
     """
+    # normalize key for cache (unabhängig vom Ticker selbst, sondern der User-Query)
+    cache_key = (query or "").strip().lower()
+    if not cache_key:
+        return MSG_STOCK_NOT_FOUND
+
+    # 1. Cache-Check (z.B. 30 Sekunden – Kurse sind relativ dynamisch)
+    cached = _cache_get(STOCK_CACHE, cache_key, max_age_seconds=30)
+    if cached is not None:
+        return cached
+
+    # 2. Resolve Query to Ticker
+    symbol = search_ticker_symbol(query)
+    
+    if not symbol:
+        if len(query) <= 6 and query.isupper():
+            symbol = query
+        else:
+            result = f"{MSG_STOCK_NOT_FOUND} (Searched for: '{query}')"
+            _cache_set(STOCK_CACHE, cache_key, result)
+            return result
+
     try:
         ticker = yf.Ticker(symbol)
         
-        # Initialize variables
         current_price = None
         prev_close = None
         currency = "USD"
@@ -318,7 +332,7 @@ def get_stock_data(symbol: str) -> str:
             currency = info.get("currency", currency)
             short_name = info.get("shortName", short_name)
 
-        # Attempt 3: history (fallback)
+        # Attempt 3: history
         if current_price is None:
             hist = ticker.history(period="2d")
             if not hist.empty:
@@ -327,138 +341,104 @@ def get_stock_data(symbol: str) -> str:
                     prev_close = float(hist["Close"].iloc[-2])
 
         if current_price is None:
-            return f"📉 Could not retrieve data for {symbol} at the moment."
+            result = f"📉 Could not retrieve data for {symbol}."
+            _cache_set(STOCK_CACHE, cache_key, result)
+            return result
 
-        # Calculate Change
         change_str = ""
         if prev_close and prev_close != 0:
             change_p = ((current_price - prev_close) / prev_close) * 100
             sign = "+" if change_p >= 0 else ""
             change_str = f" ({sign}{change_p:.2f}%)"
 
-        return (
+        result = (
             f"📈 **{short_name} ({symbol})**\n"
             f"Current Price: {current_price:.2f} {currency}{change_str}"
         )
+        _cache_set(STOCK_CACHE, cache_key, result)
+        return result
 
     except Exception as e:
         logging.error(f"[Stocks] Error fetching data for {symbol}: {e}")
-        return f"An error occurred while retrieving data for {symbol}."
-
-def inject_stock_context(question: str) -> str:
-    """
-    Handles stock queries. Returns a string message (data or error).
-    """
-    if not STOCK_INTENT_REGEX.search(question):
-        return "" # Should not happen if called correctly
-
-    ticker_candidate = extract_potential_symbol(question)
-    search_term = None
-    found_symbol = None
-
-    if ticker_candidate:
-        search_term = ticker_candidate
-        # Check if it's already a valid symbol via search
-        found_symbol = search_ticker_symbol(search_term)
-        # If search returns nothing but we had a short explicit ticker, try strictly that
-        if not found_symbol and len(ticker_candidate) <= 6:
-            found_symbol = ticker_candidate
-    else:
-        search_term = clean_query(question)
-        if len(search_term) > 1:
-            found_symbol = search_ticker_symbol(search_term)
-        else:
-            return MSG_NO_SYMBOL_FOUND
-
-    if found_symbol:
-        return get_stock_data(found_symbol)
-    
-    # Return specific failure message for the router to detect
-    if search_term:
-        return f"{MSG_STOCK_NOT_FOUND} (Search term: '{search_term}')"
-    
-    return MSG_STOCK_NOT_FOUND
+        result = f"An error occurred while retrieving data for {symbol}."
+        _cache_set(STOCK_CACHE, cache_key, result)
+        return result
 
 
 # ==========================================
 #               CRYPTO LOGIC
 # ==========================================
 
-CRYPTO_NAME_MAP = {
-    "bitcoin": "btc", "ethereum": "eth", "solana": "sol", "ripple": "xrp",
-    "cardano": "ada", "binance": "bnb", "polkadot": "dot", "dogecoin": "doge"
-}
-
-def extract_crypto_symbol(text: str) -> Optional[str]:
-    """
-    Extracts crypto symbol candidates.
-    Handles punctuation correctly (e.g. "btc?" -> "btc").
-    """
-    # 1. Explicit Ticker ($BTC)
-    match_explicit = re.search(r"\$([A-Za-z0-9]{2,10})\b", text)
-    if match_explicit:
-        return match_explicit.group(1).lower()
-
-    lower_text = text.lower()
-    
-    # FIX: Nutze Regex findall statt split().
-    # \w+ findet nur Wörter (Buchstaben/Zahlen) und ignoriert ?, !, ., etc.
-    tokens = set(re.findall(r"\w+", lower_text))
-
-    # 2. Check Name AND Symbol in Map
-    for name, symbol in CRYPTO_NAME_MAP.items():
-        # Check if full name is in text (e.g. "bitcoin price")
-        if name in lower_text:
-            return symbol
-        # Check if symbol is a standalone token (e.g. "one btc?")
-        if symbol in tokens:
-            return symbol
-
-    # 3. Uppercase tokens (SOL) - Fallback
-    if not text.islower():
-        match_upper = re.search(r"\b([A-Z]{2,10})\b", text)
-        if match_upper:
-            candidate = match_upper.group(1).lower()
-            if candidate not in {"USD", "EUR", "ETF", "NOW", "ONE"}:
-                return candidate
-    return None
+CRYPTO_SEARCH_CACHE = {}
 
 def search_crypto_symbol(search_term: str) -> Optional[str]:
     """
-    Uses CoinGecko Search to find an ID (e.g., "bitcoin") from a query.
+    Uses CoinGecko Search to find an ID (e.g., "bitcoin") from a query, with caching.
     """
     try:
+        raw = (search_term or "").strip()
+        if not raw:
+            return None
+
+        cache_key = raw.lower()
+        cached = _cache_get(CRYPTO_SEARCH_CACHE, cache_key, max_age_seconds=3600)
+        if cached is not None:
+            return cached  # darf None sein
+
         url = "https://api.coingecko.com/api/v3/search"
         res = requests.get(url, params={"query": search_term}, timeout=4)
         data = res.json()
 
         coins = data.get("coins") or []
         if not coins:
+            _cache_set(CRYPTO_SEARCH_CACHE, cache_key, None)
             return None
         
-        # Return the API ID of the top result
-        return coins[0].get("id")
+        coin_id = coins[0].get("id")
+        _cache_set(CRYPTO_SEARCH_CACHE, cache_key, coin_id)
+        return coin_id
 
     except Exception as e:
         logging.error(f"[Crypto] Search failed: {e}")
         return None
 
-def get_crypto_data(coin_id: str) -> str:
+def get_crypto_data(query: str) -> str:
     """
-    Fetches market data from CoinGecko.
+    Main Crypto Function: Search -> Fetch -> Format, with caching.
     """
+    cache_key = (query or "").strip().lower()
+    if not cache_key:
+        return MSG_CRYPTO_NOT_FOUND
+
+    # Cache-Check (z.B. 60 Sekunden)
+    cached = _cache_get(CRYPTO_CACHE, cache_key, max_age_seconds=60)
+    if cached is not None:
+        return cached
+
+    # 1. Resolve Query to Coin ID
+    coin_id = search_crypto_symbol(query)
+    
+    if not coin_id:
+        result = f"{MSG_CRYPTO_NOT_FOUND} (Searched for: '{query}')"
+        _cache_set(CRYPTO_CACHE, cache_key, result)
+        return result
+
     try:
         url = "https://api.coingecko.com/api/v3/coins/markets"
         params = {"vs_currency": "usd", "ids": coin_id}
         res = requests.get(url, params=params, timeout=4)
         
         if res.status_code == 429:
-            return "⚠️ CoinGecko API limit reached. Please try again later."
+            result = "⚠️ CoinGecko API limit reached. Please try again later."
+            _cache_set(CRYPTO_CACHE, cache_key, result)
+            return result
             
         data = res.json()
 
         if not data:
-            return f"🪙 No data found for '{coin_id}'."
+            result = f"🪙 No data found for '{coin_id}'."
+            _cache_set(CRYPTO_CACHE, cache_key, result)
+            return result
 
         c = data[0]
         name = c.get("name", coin_id)
@@ -471,88 +451,53 @@ def get_crypto_data(coin_id: str) -> str:
         change_str = f"{change:+.2f}%" if change is not None else "n/a"
         mc_str = f"${mc:,.0f}" if mc is not None else "n/a"
 
-        return (
+        result = (
             f"🪙 **{name} ({symbol})**\n"
             f"Price: {price_str}\n"
             f"24h Change: {change_str}\n"
             f"Market Cap: {mc_str}"
         )
+        _cache_set(CRYPTO_CACHE, cache_key, result)
+        return result
 
     except Exception as e:
         logging.error(f"[Crypto] Data fetch error: {e}")
-        return f"Error fetching crypto data for '{coin_id}'."
+        result = f"Error fetching crypto data for '{coin_id}'."
+        _cache_set(CRYPTO_CACHE, cache_key, result)
+        return result
 
-def inject_crypto_context(question: str) -> str:
-    if not CRYPTO_INTENT_REGEX.search(question):
-        return ""
 
-    coin_candidate = extract_crypto_symbol(question)
-    search_term = None
-    coin_id = None
+# ==========================================
+#           MAIN ENTRY POINT
+# ==========================================
 
-    if coin_candidate:
-        search_term = coin_candidate
-        coin_id = search_crypto_symbol(search_term)
-    else:
-        search_term = clean_query(question)
-        if len(search_term) > 1:
-            coin_id = search_crypto_symbol(search_term)
-        else:
-            return MSG_NO_SYMBOL_FOUND
-
-    if coin_id:
-        return get_crypto_data(coin_id)
+def get_realtime_context(question: str) -> Optional[str]:
+    """
+    This is the ONE function called by main.py.
+    """
+    # 1. Router Call
+    decision = get_intent_from_llm(question)
+    tool = decision.get("tool")
+    query = decision.get("query")
     
-    if search_term:
-        return f"{MSG_CRYPTO_NOT_FOUND} (Search term: '{search_term}')"
-
-    return MSG_CRYPTO_NOT_FOUND
-
-
-# ==========================================
-#             MASTER ROUTER
-# ==========================================
-
-def inject_market_context(question: str) -> Optional[str]:
-    """
-    Main entry point. Decides between Stocks and Crypto.
-    """
-    stock_intent = bool(STOCK_INTENT_REGEX.search(question))
-    crypto_intent = bool(CRYPTO_INTENT_REGEX.search(question))
-
-    if not (stock_intent or crypto_intent):
+    if not tool or not query:
         return None
-
-    logging.info(f"[Market] Intent: Stocks={stock_intent}, Crypto={crypto_intent}")
-
-    # 1. Unambiguous Intents
-    if stock_intent and not crypto_intent:
-        return inject_stock_context(question)
-    
-    if crypto_intent and not stock_intent:
-        return inject_crypto_context(question)
-
-    # 2. Ambiguous - Check strong hints
-    if CRYPTO_STRONG_HINTS_REGEX.search(question):
-        return inject_crypto_context(question)
-    
-    if STOCK_STRONG_HINTS_REGEX.search(question):
-        return inject_stock_context(question)
-
-    # 3. Ambiguous - Try Stock first, then Crypto
-    logging.info("[Market] Ambiguous query. Trying Stock first.")
-    stock_response = inject_stock_context(question)
-
-    # Check against constants if the stock lookup failed
-    if stock_response.startswith(MSG_STOCK_NOT_FOUND) or stock_response == MSG_NO_SYMBOL_FOUND:
-        logging.info("[Market] Stock lookup failed. Fallback to Crypto.")
-        crypto_response = inject_crypto_context(question)
         
-        # If crypto also fails, just return the Stock error message 
-        # (or a generic one) to avoid confusing the user too much.
-        if crypto_response.startswith(MSG_CRYPTO_NOT_FOUND) or crypto_response == MSG_NO_SYMBOL_FOUND:
-             return stock_response 
-        
-        return crypto_response
+    logging.info(f"[Router] Tool: {tool}, Query: {query}")
 
-    return stock_response
+    # 2. Dispatch
+    try:
+        if tool == "weather":
+            return get_weather_data(query)
+        elif tool == "stock":
+            # Hier übergeben wir jetzt den Namen/Query, die Funktion sucht selbst
+            return get_stock_data(query) 
+        elif tool == "crypto":
+            # Hier übergeben wir jetzt den Namen/Query, die Funktion sucht selbst
+            return get_crypto_data(query)
+            
+    except Exception as e:
+        logging.error(f"Tool execution failed: {e}")
+        return None
+    
+    return None

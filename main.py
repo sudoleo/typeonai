@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from tool_heuristics import inject_weather_context, inject_market_context
+from tool_heuristics import get_realtime_context
 
 class CustomSecurityMiddleware:
     def __init__(self, app):
@@ -2082,32 +2082,19 @@ async def prepare(request: Request, data: dict = Body(...)):
     else:
         base_system_prompt = str(raw_system_prompt).strip()
 
-    # --- CONTEXT INJECTION START ---
-    injected_contexts = []
-
-    # 1. Wetter-Check
-    weather_context = inject_weather_context(question)
-    if weather_context:
-        injected_contexts.append(weather_context)
-
-    # 2. Markt-Check (Stocks + Crypto in einer Heuristik)
-    market_context = inject_market_context(question)
-    if market_context:
-        injected_contexts.append(market_context)
-
-    # Wenn Daten gefunden wurden, Prompt anreichern
-    if injected_contexts:
-        logging.info(f"Injecting {len(injected_contexts)} contexts into system prompt.")
-        context_string = "\n\n".join(injected_contexts)
-
+    # --- NEW CONTEXT INJECTION ---
+    # Ein einziger Call erledigt alles (Router + Fetching)
+    realtime_data = get_realtime_context(question)
+    
+    if realtime_data:
+        logging.info("Injecting realtime context.")
         base_system_prompt = (
-            f"REAL-TIME DATA:\n{context_string}\n\n"
+            f"REAL-TIME DATA:\n{realtime_data}\n\n"
             "INSTRUCTIONS:\n"
-            "Use the real-time data provided above to answer the user's question directly. "
-            "Evaluate whether the provided data actually answers the user's specific question.\n\n"
+            "Use the real-time data provided above to answer the user's question directly.\n\n"
             f"{base_system_prompt}"
         )
-    # --- CONTEXT INJECTION END ---
+    # -----------------------------
 
     # Wenn Web Search nicht aktiv ist: keine Exa-Suche
     if not search_mode:
