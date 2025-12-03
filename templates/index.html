@@ -1731,7 +1731,7 @@
             const isLoggedIn = !!auth.currentUser;
 
             // 3. UI updaten
-            updateUserTierUI(isProConfirmed, isLoggedIn);
+            window.updateUserTierUI(isProConfirmed, isLoggedIn);
 
             // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
             document.getElementById("freeUsageDisplay").innerHTML = 
@@ -1813,7 +1813,7 @@
               const isLoggedIn = !!auth.currentUser;
 
               // 3. UI updaten
-              updateUserTierUI(isProConfirmed, isLoggedIn);
+              window.updateUserTierUI(isProConfirmed, isLoggedIn);
 
               // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
               document.getElementById("freeUsageDisplay").innerHTML = 
@@ -1888,7 +1888,7 @@
               const isLoggedIn = !!auth.currentUser;
 
               // 3. UI updaten
-              updateUserTierUI(isProConfirmed, isLoggedIn);
+              window.updateUserTierUI(isProConfirmed, isLoggedIn);
 
             // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
             document.getElementById("freeUsageDisplay").innerHTML = 
@@ -1964,7 +1964,7 @@
               const isLoggedIn = !!auth.currentUser;
 
               // 3. UI updaten
-              updateUserTierUI(isProConfirmed, isLoggedIn);
+              window.updateUserTierUI(isProConfirmed, isLoggedIn);
 
               // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
               document.getElementById("freeUsageDisplay").innerHTML = 
@@ -2039,7 +2039,7 @@
               const isLoggedIn = !!auth.currentUser;
 
               // 3. UI updaten
-              updateUserTierUI(isProConfirmed, isLoggedIn);
+              window.updateUserTierUI(isProConfirmed, isLoggedIn);
 
               // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
               document.getElementById("freeUsageDisplay").innerHTML = 
@@ -2113,7 +2113,7 @@
             const isLoggedIn = !!auth.currentUser;
 
             // 3. UI updaten
-            updateUserTierUI(isProConfirmed, isLoggedIn);
+            window.updateUserTierUI(isProConfirmed, isLoggedIn);
 
             // Text setzen mit den neuen Variablen currentMaxLimit und currentDeepLimit
             document.getElementById("freeUsageDisplay").innerHTML = 
@@ -3054,8 +3054,6 @@
             }
         };
 
-        window.updateUserTierUI = updateUserTierUI;
-
       function updatePremiumModelsState(isPro) {
           // Dropdown-IDs definieren (Consensus und OpenAI)
           const dropdownIds = ["consensusModelDropdown", "openaiModelSelect"];
@@ -3108,9 +3106,8 @@
               }
           });
       }
-
+window.updateUserTierUI = updateUserTierUI;
       });
-
 </script>
 
 <!-- Login Modal -->

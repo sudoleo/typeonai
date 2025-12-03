@@ -2,7 +2,6 @@
 
 // Alles in DOMContentLoaded kapseln, damit das DOM fertig ist,
 // wenn wir auf Elemente zugreifen
-document.addEventListener("DOMContentLoaded", () => {
   // Globale Spinner-HTML, falls du sie nur für die Demo brauchst
   window.spinnerHTML = `
     <span class="thinking-wrap" role="status" aria-live="polite" aria-busy="true">
@@ -367,9 +366,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     container.appendChild(btn);
   }
-
-  createStartDemoChip();
-
-  window.runDemoFlow = runDemoFlow;
   window.createStartDemoChip = createStartDemoChip;
-});
+  createStartDemoChip();
+  window.runDemoFlow = runDemoFlow;
+  
