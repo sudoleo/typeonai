@@ -236,7 +236,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v1.8.2.0</span>
+    <span id="version-number">v1.9.2</span>
   </div>
   
 </div>
@@ -1318,6 +1318,75 @@
           return (q || "").trim().toLowerCase() === "demo";
         }
 
+        function predictSearchIntent(question) {
+          if (!question) return false;
+          const q = question.toLowerCase().trim();
+
+          // Helper: Prüft gegen eine Liste von Regex-Patterns
+          const check = (patterns) => patterns.some(pattern => pattern.test(q));
+
+          // 1. Wetter / Weather
+          // Matcht: wetter, weather, vorhersage, forecast, temp, rain, regnet, sonne, sun, grad, degrees
+          const weatherPatterns = [
+            /wetter/, /weather/, 
+            /vorhersage/, /forecast/,
+            /temp(eratur|erature)?/, // matcht temp, temperatur, temperature
+            /\b(regen|rain|regnet|raining|sonne|sun|wolken|clouds)\b/,
+            /\b(grad|degrees?|celsius|fahrenheit)\b/
+          ];
+          if (check(weatherPatterns)) return true;
+
+          // 2. Finanzen / Finance (Crypto & Stock)
+          // Matcht: aktie(n), stock(s), kurs, price, bitcoin, btc, eur, usd, cap, etf
+          const financePatterns = [
+            /akti[en]/, /stock[s]?/, /share[s]?/, // Aktien
+            /\b(kurs|price|wert|value)\b/,         // Preis/Wert (mit Boundary, damit "wert" nicht in "bewerten" matcht)
+            /\b(market\s?cap|chart|invest|kaufen|buy|sell|verkaufen)\b/,
+            // Crypto specific
+            /bitcoin|btc|eth|ethereum|solana|xrp/,
+            /krypto|crypto|coin[s]?|token/,
+            // Währungen
+            /\b(dollar|euro|eur|usd|chf)\b/
+          ];
+          if (check(financePatterns)) return true;
+
+          // 3. News & Zeitgeschehen / News & Factual
+          // Hier nutzen wir flexiblere Matches für Endungen
+          const newsPatterns = [
+            // Signalwörter für "Neuigkeiten"
+            /news/, /nachricht(en)?/, /neuigkeit(en)?/,
+            /update/, /ticker/, /schlagzeile[n]?/, /headline[s]?/,
+            
+            // Zeitbezug (Wichtig für Search Intent)
+            /aktuell[a-z]*/, // Matcht: aktuell, aktuelle, aktuelles, etc.
+            /latest/, /recent/, /current/,
+            /\b(heute|today|gestern|yesterday|morgen|tomorrow)\b/,
+            /\b(jetzt|now|live)\b/,
+
+            // Fakten-Abfragen (Entities)
+            /wer (ist|war)/, /who (is|was)/,
+            /wie (viele|hoch|alt)/, /how (many|much|old|tall)/,
+            /wann/, /when/,
+            
+            // Spezifische Domänen-Keywords
+            /einwohner|population/, 
+            /präsident|president/, /kanzler|chancellor/, /ceo/,
+            /ergebnis|result/, /spielstand|score/, /tabelle|standing/,
+            /gewinner|winner/, /statistik|statistic/
+          ];
+          if (check(newsPatterns)) return true;
+
+          // 4. Dynamische Jahreszahlen (Vergangenheit & Zukunft)
+          // Wir prüfen auf letztes, aktuelles und nächstes Jahr.
+          // Regex \b stellt sicher, dass "2024" nicht in "020240" gefunden wird.
+          const currentYear = new Date().getFullYear();
+          const yearPattern = new RegExp(`\\b(${currentYear - 1}|${currentYear}|${currentYear + 1})\\b`);
+          
+          if (yearPattern.test(q)) return true;
+
+          return false;
+        }
+
         let effectiveSystemPrompt = "";
         
         // Senden der Frage an die aktiven Modelle
@@ -1436,12 +1505,18 @@
             if (box) modelBoxes.push(box);
           }
 
-        // 🔸 PHASE 1: UI Feedback setzen
-          if (searchModeEnabled) { 
+          const autoSearchActive = true; // Oder checke hier: document.getElementById("autoConsensusToggle").checked o.ä.
+          const looksLikeSearch = predictSearchIntent(question);
+
+          // Hier kombinieren wir manuellen Modus ODER die Heuristik
+          const showSearchSpinner = searchModeEnabled || (autoSearchActive && looksLikeSearch);
+
+          // 🔸 PHASE 1: UI Feedback setzen
+          if (showSearchSpinner) {  // <--- Änderung: Wir nutzen die berechnete Variable
               window.spinnerHTML = webSearchSpinnerHTML; 
           } else { 
               window.spinnerHTML = baseSpinnerHTML; 
-          } 
+          }
           modelBoxes.forEach(box => setSpinnerEl(box));
 
           // Wir rufen /prepare IMMER auf, damit Wetter-Infos etc. injiziert werden können.
@@ -1541,22 +1616,22 @@
       
           // Spinner in den jeweiligen Response-Boxen setzen
           if (activeModels.includes("OpenAI")) {
-            document.getElementById("openaiResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
+            document.getElementById("openaiResponse").querySelector(".collapsible-content").innerHTML = window.spinnerHTML;
           }
           if (activeModels.includes("Mistral")) {
-            document.getElementById("mistralResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
+            document.getElementById("mistralResponse").querySelector(".collapsible-content").innerHTML = window.spinnerHTML;
           }
           if (activeModels.includes("Anthropic")) {
-            document.getElementById("claudeResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
+            document.getElementById("claudeResponse").querySelector(".collapsible-content").innerHTML = window.spinnerHTML;
           }
           if (activeModels.includes("Gemini")) {
-            document.getElementById("geminiResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
+            document.getElementById("geminiResponse").querySelector(".collapsible-content").innerHTML = window.spinnerHTML;
           }
           if (activeModels.includes("DeepSeek")) {
-            document.getElementById("deepseekResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
+            document.getElementById("deepseekResponse").querySelector(".collapsible-content").innerHTML = window.spinnerHTML;
           }
           if (activeModels.includes("Grok")) {
-            document.getElementById("grokResponse").querySelector(".collapsible-content").innerHTML = spinnerHTML;
+            document.getElementById("grokResponse").querySelector(".collapsible-content").innerHTML = window.spinnerHTML;
           }
           if (document.getElementById("autoConsensusToggle").checked) {
             document.getElementById("consensusResponse").querySelector("p").innerHTML = spinnerHTML;

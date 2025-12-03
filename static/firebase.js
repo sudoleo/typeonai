@@ -690,17 +690,28 @@ async function saveBookmark(question, response, modelName, mode) {
     }
 
     console.log("Bookmark gespeichert:", data.message);
-    // Neu: nach dem Speichern die Sidebar komplett neu laden
-    await loadBookmarks();
-    bookmarksLoaded = false;
+    if (data.bookmark) {
+        // Initialisiere Array falls leer
+        if (!window.bookmarksData) window.bookmarksData = [];
+        const existingIndex = window.bookmarksData.findIndex(b => b.id === data.bookmark.id);
+
+        if (existingIndex > -1) {
+            window.bookmarksData[existingIndex] = data.bookmark;
+
+        } else {
+            // Neu: Vorne ins Array
+            window.bookmarksData.unshift(data.bookmark);
+            // Und ins UI einfügen
+            addBookmarkToDOM(data.bookmark);
+        }
+    }
 
   } catch (error) {
     console.error("Error in saveBookmark:", error);
   }
 }
+
 window.saveBookmark = saveBookmark;
-
-
 
 async function saveBookmarkConsensus(question, consensusText, differencesText) {
   if (!auth.currentUser) return;
@@ -729,12 +740,62 @@ async function saveBookmarkConsensus(question, consensusText, differencesText) {
 }
 window.saveBookmarkConsensus = saveBookmarkConsensus;
 
+// Diese Funktion füllt die UI mit den Daten eines Bookmarks
+function loadSingleBookmarkUI(bookmark) {
+    // Konsens-Button deaktivieren
+    const conBtn = document.getElementById("consensusButton");
+    if(conBtn) conBtn.disabled = true;
+
+    console.log("Loading bookmark into UI:", bookmark.id);
+
+    if (bookmark && bookmark.responses) {
+        // Hilfsfunktion zum sicheren Einfügen (hast du wahrscheinlich schon irgendwo, sonst definieren)
+        // Falls du injectHtmlSafe nicht global hast, nutze hier einfache Zuweisung oder deine Logik
+        const setContent = (id, text) => {
+            const el = document.getElementById(id);
+            if (el) {
+                const contentArea = el.querySelector(".collapsible-content");
+                if (contentArea) contentArea.innerHTML = text || ""; 
+            }
+        };
+
+        setContent("openaiResponse", bookmark.responses["OpenAI"]);
+        setContent("mistralResponse", bookmark.responses["Mistral"]);
+        setContent("claudeResponse", bookmark.responses["Anthropic"]);
+        setContent("geminiResponse", bookmark.responses["Gemini"]);
+        setContent("deepseekResponse", bookmark.responses["DeepSeek"]);
+        setContent("grokResponse", bookmark.responses["Grok"]);
+
+        // Konsens Boxen
+        const conMain = document.querySelector("#consensusResponse .consensus-main p");
+        if(conMain) conMain.innerHTML = bookmark.responses["consensus"] || "";
+        
+        const conDiff = document.querySelector("#consensusResponse .consensus-differences p");
+        if(conDiff) conDiff.innerHTML = bookmark.responses["differences"] || "";
+
+        // Toggles setzen (Deep Think / Web Search)
+        if (bookmark.mode) {
+            const deepToggle = document.getElementById("deepSearchToggle");
+            const searchToggle = document.getElementById("searchModeToggle");
+
+            if (bookmark.mode === "Deep Think") {
+                if (deepToggle && !deepToggle.checked) deepToggle.click();
+                if (searchToggle && searchToggle.checked) searchToggle.click();
+            } else if (bookmark.mode === "Web Search") {
+                if (searchToggle && !searchToggle.checked) searchToggle.click();
+                if (deepToggle && deepToggle.checked) deepToggle.click();
+            } else {
+                // Reset
+                if (deepToggle && deepToggle.checked) deepToggle.click();
+                if (searchToggle && searchToggle.checked) searchToggle.click();
+            }
+        }
+    }
+}
 
 async function loadBookmarks() {
   if (!auth.currentUser) return;
-
-  // Erzwinge hier ein frisches Token
-  const id_token = await auth.currentUser.getIdToken(/* forceRefresh= */ false);
+  const id_token = await auth.currentUser.getIdToken(false);
 
   try {
     const res = await fetch("/bookmarks", {
@@ -745,130 +806,19 @@ async function loadBookmarks() {
       }
     });
     const data = await res.json();
-
-    if (!res.ok) {
-      console.error("Error loading bookmarks:", data.detail);
-      return;
-    }
+    if (!res.ok) return;
     
-    // Speichere die abgerufenen Bookmarks global, um später darauf zugreifen zu können
+    // Global speichern
     window.bookmarksData = data.bookmarks;
     
-    let bookmarksHTML = "";
-    data.bookmarks.forEach(bookmark => {
-      bookmarksHTML += `
-        <div class="bookmark" data-id="${bookmark.id}" style="position: relative;">
-          <p>${truncateText(bookmark.query)}</p>
-          <span class="delete-bookmark" style="position: absolute; right: 5px; top: 50%; transform: translateY(-50%); cursor: pointer;">x</span>
-        </div>`;
-    });
-    
+    // Container leeren
     const container = document.getElementById("bookmarksContainer");
-    container.innerHTML = bookmarksHTML;
+    container.innerHTML = ""; 
     
-    // Füge die fade-in Klasse hinzu, um Animation zu triggern
-    container.classList.add("fade-in");
-    // Entferne die Klasse nach der Animation (0.5s entspricht der Animationsdauer)
-    setTimeout(() => container.classList.remove("fade-in"), 500);
-    
-    // Löschen-Event hinzufügen
-    document.querySelectorAll(".delete-bookmark").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        // Verhindert, dass das Klick-Event auch das Bookmark selbst auslöst
-        e.stopPropagation();
-        const bookmarkId = btn.parentElement.getAttribute("data-id");
-        deleteBookmark(bookmarkId);
-      });
+    data.bookmarks.forEach(bookmark => {
     });
     
-    // Klick-Event hinzufügen: Beim Klick auf ein Bookmark werden alle Antwortboxen aktualisiert
-    document.querySelectorAll(".bookmark").forEach(item => {
-      item.addEventListener("click", () => {
-        // Konsens-Button deaktivieren, da hier ein Bookmark geladen wird
-        document.getElementById("consensusButton").disabled = true;
-        
-        const bookmarkId = item.getAttribute("data-id");
-        console.log("Bookmark clicked with ID:", bookmarkId);
-        
-        // Finde das Bookmark-Objekt in den global gespeicherten Daten
-        const bookmark = window.bookmarksData.find(b => b.id === bookmarkId);
-        if (bookmark && bookmark.responses) {
-          // Update der Antwortboxen anhand der gespeicherten Antworten
-          injectHtmlSafe(
-            document.getElementById("openaiResponse").querySelector(".collapsible-content"),
-            bookmark.responses["OpenAI"] || ""
-          );
-          injectHtmlSafe(
-            document.getElementById("mistralResponse").querySelector(".collapsible-content"),
-            bookmark.responses["Mistral"] || ""
-          );
-          injectHtmlSafe(
-            document.getElementById("claudeResponse").querySelector(".collapsible-content"),
-            bookmark.responses["Anthropic"] || ""
-          );
-          injectHtmlSafe(
-            document.getElementById("geminiResponse").querySelector(".collapsible-content"),
-            bookmark.responses["Gemini"] || ""
-          );
-          injectHtmlSafe(
-            document.getElementById("deepseekResponse").querySelector(".collapsible-content"),
-            bookmark.responses["DeepSeek"] || ""
-          );
-          injectHtmlSafe(
-            document.getElementById("grokResponse").querySelector(".collapsible-content"),
-            bookmark.responses["Grok"] || ""
-          );
-          
-          // Aktualisiere auch die Konsens-Boxen, falls vorhanden
-          injectHtmlSafe(
-            document.getElementById("consensusResponse").querySelector(".consensus-main p"),
-            bookmark.responses["consensus"] || ""
-          );
-          injectHtmlSafe(
-            document.getElementById("consensusResponse").querySelector(".consensus-differences p"),
-            bookmark.responses["differences"] || ""
-          );
-
-          // Nun: UI-Modus festlegen, indem wir den entsprechenden Toggle simulieren
-          if (bookmark.mode) {
-            // Für "Deep Think" – Wenn deepSearchToggle noch nicht aktiv ist, klicke darauf.
-            if (bookmark.mode === "Deep Think") {
-              const deepToggle = document.getElementById("deepSearchToggle");
-              if (!deepToggle.checked) {
-                deepToggle.click();  // Löst den Click-Handler aus, der die UI anpasst
-              }
-              // Gleichzeitig sicherstellen, dass der Web Search Toggle deaktiviert ist:
-              const searchToggle = document.getElementById("searchModeToggle");
-              if (searchToggle.checked) {
-                searchToggle.click();
-              }
-            }
-            // Für "Web Search"
-            else if (bookmark.mode === "Web Search") {
-              const searchToggle = document.getElementById("searchModeToggle");
-              if (!searchToggle.checked) {
-                searchToggle.click();
-              }
-              // Gleichfalls den Deep Think Toggle deaktivieren, falls aktiv:
-              const deepToggle = document.getElementById("deepSearchToggle");
-              if (deepToggle.checked) {
-                deepToggle.click();
-              }
-            }
-            // Wenn dein Bookmark einen anderen oder einen Standardmodus hat,
-            // kannst du hier auch einen Default-Zustand setzen, z. B. beide Toggles deaktiviert:
-            else {
-              const deepToggle = document.getElementById("deepSearchToggle");
-              if (deepToggle.checked) deepToggle.click();
-              const searchToggle = document.getElementById("searchModeToggle");
-              if (searchToggle.checked) searchToggle.click();
-            }
-          }
-        } else {
-          console.log("No responses found in this bookmark.");
-        }
-      });
-    });
+    [...data.bookmarks].reverse().forEach(bm => addBookmarkToDOM(bm));
     
   } catch (error) {
     console.error("Error in loadBookmarks:", error);
@@ -954,6 +904,14 @@ window.sendFeedback = sendFeedback;
 
 function addBookmarkToDOM(bookmark) {
   const container = document.getElementById("bookmarksContainer");
+  
+  // Prüfen, ob das Bookmark schon existiert (Update-Fall), um Duplikate zu vermeiden
+  const existing = document.querySelector(`.bookmark[data-id="${bookmark.id}"]`);
+  if (existing) {
+      // Optional: Update Text falls er sich geändert hat
+      return; 
+  }
+
   const div = document.createElement("div");
   div.className = "bookmark";
   div.dataset.id = bookmark.id;
@@ -966,24 +924,24 @@ function addBookmarkToDOM(bookmark) {
     </span>
   `;
 
-  // Delete‑Button
-  div.querySelector(".delete-bookmark")
-     .addEventListener("click", e => { 
+  // Delete-Event
+  div.querySelector(".delete-bookmark").addEventListener("click", e => { 
        e.stopPropagation(); 
        deleteBookmark(bookmark.id); 
-     });
-
-  // Click: Bookmark laden (wie in loadBookmarks)
-  div.addEventListener("click", () => {
-    // hier kannst du deine bestehende Logik kopieren,
-    // die beim Klick aus window.bookmarksData die Details
-    // in die Antwort‑Boxes schreibt.
-    loadSingleBookmarkUI(bookmark);
   });
 
-  container.appendChild(div);
+  // Click-Event -> Ruft jetzt die ausgelagerte Funktion auf
+  div.addEventListener("click", () => {
+    // Wir holen uns die aktuellsten Daten aus dem globalen Array (falls vorhanden), 
+    // oder nehmen das übergebene Objekt.
+    const currentData = window.bookmarksData.find(b => b.id === bookmark.id) || bookmark;
+    loadSingleBookmarkUI(currentData);
+  });
 
-  // Kurze Fade‑In‑Animation
+  // WICHTIG: prepend statt appendChild, damit es oben erscheint
+  container.prepend(div);
+
+  // Animation
   div.classList.add("fade-in");
   setTimeout(() => div.classList.remove("fade-in"), 500);
 }

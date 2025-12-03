@@ -7,7 +7,7 @@ import logging
 import requests
 import yfinance as yf
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -57,16 +57,21 @@ TOOLS:
 - "weather": Current weather, forecasts, temperature (City needed).
 - "stock": Stock prices, ETFs, Indices, Market Cap (Ticker/Company needed).
 - "crypto": Cryptocurrency prices, Coins (Coin name/Symbol needed).
+- "web": General web search for factual questions that require up-to-date or external information
+         (e.g. current events, very specific statistics, niche facts).
 
 INSTRUCTIONS:
 1. Identify the Intent.
-2. Extract the SEARCH TERM (City, Company Name or Coin Name).
+2. Extract the SEARCH TERM (City, Company Name, Coin Name, or Websearch query).
 3. If no tool is needed (e.g. general knowledge, greetings), return null.
 4. If ambiguous (e.g. "Solana"), prioritize Crypto. If it looks like a standard company, prioritize Stock.
+5. Use "weather", "stock", or "crypto" for those domains, even if the question could also be answered via the web.
+6. Use "web" only if the question clearly needs *external* or *current* factual information
+   and does not fit into weather/stock/crypto.
 
 OUTPUT JSON FORMAT:
 {
-  "tool": "weather" | "stock" | "crypto" | null,
+  "tool": "weather" | "stock" | "crypto" | "web" | null,
   "query": "extracted_search_term_or_null"
 }
 """
@@ -95,7 +100,9 @@ def _cache_get(cache: dict, key: str, max_age_seconds: int):
     return value
 
 def _cache_set(cache: dict, key: str, value):
-    """Store value in cache with current timestamp."""
+    # Einfacher Schutz gegen Memory Leaks
+    if len(cache) > 1000:
+        cache.clear() # Brutal, aber effektiv für simple Zwecke
     cache[key] = (time.time(), value)
 
 
@@ -411,7 +418,7 @@ def get_crypto_data(query: str) -> str:
         return MSG_CRYPTO_NOT_FOUND
 
     # Cache-Check (z.B. 60 Sekunden)
-    cached = _cache_get(CRYPTO_CACHE, cache_key, max_age_seconds=60)
+    cached = _cache_get(CRYPTO_SEARCH_CACHE, cache_key, max_age_seconds=86400)
     if cached is not None:
         return cached
 
@@ -471,33 +478,32 @@ def get_crypto_data(query: str) -> str:
 #           MAIN ENTRY POINT
 # ==========================================
 
-def get_realtime_context(question: str) -> Optional[str]:
+def get_realtime_context(question: str, decision: Optional[Dict] = None) -> Optional[str]:
     """
-    This is the ONE function called by main.py.
+    Main entry point for realtime tools (weather/stock/crypto).
+    Optionally takes a router decision to avoid a second LLM call.
     """
-    # 1. Router Call
-    decision = get_intent_from_llm(question)
+    if decision is None:
+        decision = get_intent_from_llm(question)
+
     tool = decision.get("tool")
     query = decision.get("query")
-    
+
     if not tool or not query:
         return None
-        
+
     logging.info(f"[Router] Tool: {tool}, Query: {query}")
 
-    # 2. Dispatch
     try:
         if tool == "weather":
             return get_weather_data(query)
         elif tool == "stock":
-            # Hier übergeben wir jetzt den Namen/Query, die Funktion sucht selbst
-            return get_stock_data(query) 
+            return get_stock_data(query)
         elif tool == "crypto":
-            # Hier übergeben wir jetzt den Namen/Query, die Funktion sucht selbst
             return get_crypto_data(query)
-            
+        # Wenn "web" oder etwas anderes: hier NICHTS tun → None
+        else:
+            return None
     except Exception as e:
         logging.error(f"Tool execution failed: {e}")
         return None
-    
-    return None

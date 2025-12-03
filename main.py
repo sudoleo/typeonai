@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
+from fastapi.concurrency import run_in_threadpool
 from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY
 import openai
 import requests
@@ -21,7 +22,7 @@ from zoneinfo import ZoneInfo
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from tool_heuristics import get_realtime_context
+from tool_heuristics import get_realtime_context, get_intent_from_llm
 
 class CustomSecurityMiddleware:
     def __init__(self, app):
@@ -1585,7 +1586,7 @@ async def track_interest(request: Request, data: dict = Body(...)):
 
 @app.post("/ask_openai")
 @limiter.limit("5/minute")
-async def ask_openai_post(request: Request, data: dict = Body(...)):
+def ask_openai_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
 
     # deep_search robust konvertieren
@@ -1597,8 +1598,6 @@ async def ask_openai_post(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=400, detail=f"Input exceeds word limit of {max_words_limit}.")
 
     system_prompt = data.get("system_prompt")
-    # DEBUGGING ZEILE
-    print(f"DEBUG: System Prompt received from Frontend: '{system_prompt}'")
     id_token = extract_id_token(request, data)
     api_key = data.get("api_key")
     model = data.get("model")
@@ -1699,7 +1698,7 @@ async def ask_openai_post(request: Request, data: dict = Body(...)):
 
 @app.post("/ask_mistral")
 @limiter.limit("5/minute")
-async def ask_mistral_post(request: Request, data: dict = Body(...)):
+def ask_mistral_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
     deep_search_raw = data.get("deep_search", False)
     deep_search = True if str(deep_search_raw).lower() == "true" else False
@@ -1771,7 +1770,7 @@ async def ask_mistral_post(request: Request, data: dict = Body(...)):
 
 @app.post("/ask_claude")
 @limiter.limit("3/minute")
-async def ask_claude_post(request: Request, data: dict = Body(...)):
+def ask_claude_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
     deep_search_raw = data.get("deep_search", False)
     deep_search = True if str(deep_search_raw).lower() == "true" else False
@@ -1843,7 +1842,7 @@ async def ask_claude_post(request: Request, data: dict = Body(...)):
 
 @app.post("/ask_gemini")
 @limiter.limit("3/minute")
-async def ask_gemini_post(request: Request, data: dict = Body(...)):
+def ask_gemini_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
     deep_search_raw = data.get("deep_search", False)
     deep_search = True if str(deep_search_raw).lower() == "true" else False
@@ -1923,7 +1922,7 @@ async def ask_gemini_post(request: Request, data: dict = Body(...)):
 
 @app.post("/ask_deepseek")
 @limiter.limit("3/minute")
-async def ask_deepseek_post(request: Request, data: dict = Body(...)):
+def ask_deepseek_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
     deep_search_raw = data.get("deep_search", False)
     deep_search = True if str(deep_search_raw).lower() == "true" else False
@@ -1995,7 +1994,7 @@ async def ask_deepseek_post(request: Request, data: dict = Body(...)):
 
 @app.post("/ask_grok")
 @limiter.limit("3/minute")
-async def ask_grok_post(request: Request, data: dict = Body(...)):
+def ask_grok_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
     deep_search_raw = data.get("deep_search", False)
     deep_search = True if str(deep_search_raw).lower() == "true" else False
@@ -2070,22 +2069,28 @@ async def prepare(request: Request, data: dict = Body(...)):
     if not question:
         raise HTTPException(status_code=400, detail="Missing 'question' in request body.")
 
-    # search_mode robust von String → Bool
+    # search_mode robust von String → Bool  (User-Toggle!)
     search_mode_raw = data.get("search_mode", False)
-    search_mode = True if str(search_mode_raw).lower() == "true" else bool(search_mode_raw)
+    user_search_mode = True if str(search_mode_raw).lower() == "true" else bool(search_mode_raw)
 
     # Basis-Systemprompt holen
     raw_system_prompt = data.get("system_prompt")
-
     if not raw_system_prompt or not str(raw_system_prompt).strip():
         base_system_prompt = get_system_prompt()
     else:
         base_system_prompt = str(raw_system_prompt).strip()
 
-    # --- NEW CONTEXT INJECTION ---
-    # Ein einziger Call erledigt alles (Router + Fetching)
-    realtime_data = get_realtime_context(question)
-    
+    # --- 1) Router-Entscheidung holen ---
+    decision = await run_in_threadpool(get_intent_from_llm, question)
+    tool = decision.get("tool")
+    query = decision.get("query")
+
+    # --- 2) Realtime-Context injizieren (nur weather/stock/crypto) ---
+    realtime_data = None
+    if tool in {"weather", "stock", "crypto"}:
+        # Auch hier: Tool-Abruf ist blockierend (requests/yfinance), also auslagern
+        realtime_data = await run_in_threadpool(get_realtime_context, question, decision=decision)
+
     if realtime_data:
         logging.info("Injecting realtime context.")
         base_system_prompt = (
@@ -2094,36 +2099,76 @@ async def prepare(request: Request, data: dict = Body(...)):
             "Use the real-time data provided above to answer the user's question directly.\n\n"
             f"{base_system_prompt}"
         )
-    # -----------------------------
 
-    # Wenn Web Search nicht aktiv ist: keine Exa-Suche
-    if not search_mode:
+    # --- 3) Auto-Websearch durch Router? ---
+
+    if tool in {"weather", "stock", "crypto"}:
+        # Wenn wir zwar ein Tool wollten, aber KEINE Daten bekommen haben (Fehler),
+        # sollten wir vielleicht doch suchen?
+        if realtime_data and ("not found" in realtime_data.lower() or "error" in realtime_data.lower()):
+             # Fallback: Wenn Tool failt, probieren wir Websearch (sofern User nicht explizit ausgeschlossen)
+             auto_search_needed = True 
+        else:
+             auto_search_needed = False
+    else:
+        auto_search_needed = (tool == "web")
+
+    # Effektiver Search-Mode:
+    # - User hat explizit eingeschaltet ODER
+    # - Router sagt: web
+    effective_search_mode = user_search_mode or auto_search_needed
+
+    # Wenn Websearch effektiv NICHT genutzt werden soll → direkt zurückgeben
+    if not effective_search_mode:
         return {
             "system_prompt": base_system_prompt,
             "sources": []
         }
 
-    # Ab hier: Web Search aktiv → Auth + FREE_USAGE_LIMIT-Check
+    # --- 4) Auth & Quoten nur für Websearch ---
     id_token = extract_id_token(request, data)
     if not id_token:
-        raise HTTPException(status_code=401, detail="Authentication required for web search.")
+        if user_search_mode:
+            raise HTTPException(status_code=401, detail="Authentication required for web search.")
+        else:
+            # auto-search, aber keine Auth → stiller Fallback
+            logging.info("Auto websearch requested but no auth token; skipping Exa.")
+            return {
+                "system_prompt": base_system_prompt,
+                "sources": []
+            }
 
     try:
         uid = verify_user_token(id_token)
     except Exception:
-        raise HTTPException(status_code=401, detail="Authentication failed for web search.")
+        if user_search_mode:
+            raise HTTPException(status_code=401, detail="Authentication failed for web search.")
+        else:
+            logging.info("Auto websearch requested but auth failed; skipping Exa.")
+            return {
+                "system_prompt": base_system_prompt,
+                "sources": []
+            }
 
     current_usage = usage_counter.get(uid, 0)
     if current_usage >= FREE_USAGE_LIMIT:
-        raise HTTPException(
-            status_code=403,
-            detail="Your free quota is exhausted. Web search is only available with your own API keys."
-        )
+        if user_search_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Your free quota is exhausted. Web search is only available with your own API keys."
+            )
+        else:
+            logging.info("Auto websearch requested but quota exhausted; skipping Exa.")
+            return {
+                "system_prompt": base_system_prompt,
+                "sources": []
+            }
 
-    # Exa-Suche durchführen
-    final_prompt, sources = prepare_prompt_with_websearch(
+    # --- 5) Exa-Suche wirklich ausführen ---
+    final_prompt, sources = await run_in_threadpool(
+        prepare_prompt_with_websearch,
         question=question,
-        search_mode=search_mode,
+        search_mode=True,
         base_system_prompt=base_system_prompt
     )
 
@@ -2135,7 +2180,7 @@ async def prepare(request: Request, data: dict = Body(...)):
 
 @app.post("/consensus")
 @limiter.limit("3/minute")
-async def consensus(request: Request, data: dict = Body(...)):
+def consensus(request: Request, data: dict = Body(...)):
     id_token = extract_id_token(request, data)
     use_own_keys = data.get("useOwnKeys", False)
     # Neuer Parameter: search_mode
