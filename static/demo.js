@@ -371,4 +371,5 @@ document.addEventListener("DOMContentLoaded", () => {
   createStartDemoChip();
 
   window.runDemoFlow = runDemoFlow;
+  window.createStartDemoChip = createStartDemoChip;
 });
