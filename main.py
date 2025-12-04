@@ -2069,6 +2069,28 @@ async def prepare(request: Request, data: dict = Body(...)):
     if not question:
         raise HTTPException(status_code=400, detail="Missing 'question' in request body.")
 
+    # --- 2. SECURITY FIX: Authentifizierung ZUERST prüfen ---
+    id_token = extract_id_token(request, data)
+    
+    if not id_token:
+        raise HTTPException(status_code=401, detail="Authentication required to analyze intent.")
+
+    try:
+        uid = verify_user_token(id_token)
+
+        is_pro = is_user_pro(uid)
+        limit = PRO_USAGE_LIMIT if is_pro else FREE_USAGE_LIMIT
+        current_usage = usage_counter.get(uid, 0)
+        
+        if current_usage >= limit:
+            raise HTTPException(status_code=403, detail="Usage limit exhausted.")
+            
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logging.error(f"Auth failed in /prepare: {e}")
+        raise HTTPException(status_code=401, detail="Authentication failed.")
+
     # search_mode robust von String → Bool  (User-Toggle!)
     search_mode_raw = data.get("search_mode", False)
     user_search_mode = True if str(search_mode_raw).lower() == "true" else bool(search_mode_raw)
@@ -2096,7 +2118,7 @@ async def prepare(request: Request, data: dict = Body(...)):
         base_system_prompt = (
             f"REAL-TIME DATA:\n{realtime_data}\n\n"
             "INSTRUCTIONS:\n"
-            "Use the real-time data provided above to answer the user's question directly.\n\n"
+            "You can use the real-time data provided above to answer the user's question.\n\n"
             f"{base_system_prompt}"
         )
 
