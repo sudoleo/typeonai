@@ -163,6 +163,19 @@ body::-webkit-scrollbar-thumb:hover {
   filter: invert(0);
 }
 
+#loginModalContent img {
+  filter: invert(1);
+  transition: filter 0.3s ease;
+}
+
+#loginModalContent #googleLoginButton img {
+  filter: none; 
+}
+
+.dark-mode #loginModalContent img {
+  filter: invert(0);
+}
+
 /* About-Link in der Top-Bar */
 .top-bar-about {
   font-size: 1em;
