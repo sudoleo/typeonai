@@ -141,6 +141,26 @@ body::-webkit-scrollbar-thumb:hover {
   width: 24px; /* oder eine andere passende Größe */
   height: auto;
   margin-right: 8px;
+/* TRICK: Da das Bild weiß ist, drehen wir die Farben im Light Mode um -> Es wird Schwarz */
+  filter: invert(1); 
+  transition: filter 0.3s ease;
+}
+.dark-mode .top-bar-favicon {
+  filter: invert(0);
+}
+
+/* --- Fix für das Icon im Consensus-Bereich --- */
+
+/* Standard (Light Mode): Das weiße Icon wird schwarz invertiert */
+.consensus-main h2 img {
+  margin-right: 8px;
+  filter: invert(1);
+  transition: filter 0.3s ease;
+}
+
+/* Dark Mode: Der Filter wird entfernt, das Icon ist wieder original weiß */
+.dark-mode .consensus-main h2 img {
+  filter: invert(0);
 }
 
 /* About-Link in der Top-Bar */
@@ -2408,7 +2428,7 @@ font-size: 0.9em;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 20px;
     flex-wrap: nowrap;
     padding-right: 40px; /* Platzhalter für den absoluten Button rechts */
     padding-left: 40px;
@@ -2445,6 +2465,7 @@ font-size: 0.9em;
   padding: 0;
   background: transparent;
   transition: background .15s ease, box-shadow .15s ease;
+  margin-left: -20px;
 }
 
 .consensus-actions-wrapper:hover,
@@ -2815,7 +2836,6 @@ font-size: 0.9em;
   }
   /* Überschrift + Inline-Buttons */
   .consensus-main h2 {
-    display: inline-flex;              /* statt inline-flex */
     align-items: center;
     gap: 20px;
     padding-left: 10px;
