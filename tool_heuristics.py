@@ -106,41 +106,76 @@ def _cache_set(cache: dict, key: str, value):
     cache[key] = (time.time(), value)
 
 
+# --- HILFSFUNKTION FÜR DEEP THINK OUTPUTS ---
+def extract_json_robust(text: str) -> dict:
+    """
+    Sucht nach dem ersten '{' und dem letzten '}' im Text,
+    um JSON auch aus Markdown-Blöcken oder Deep-Think-Logs zu extrahieren.
+    """
+    try:
+        # 1. Versuch: Direktes Parsing (falls das LLM sauberes JSON liefert)
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # 2. Versuch: Regex Suche nach JSON-Objekt Pattern
+    # DOTALL sorgt dafür, dass . auch Zeilenumbrüche matcht
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match:
+        json_str = match.group(0)
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            pass
+    
+    # Wenn alles fehlschlägt
+    raise ValueError("No valid JSON found in LLM response")
+
+
 def get_intent_from_llm(question: str) -> dict:
     """
-    Calls gpt-4.1-mini to decide tool usage, with simple caching.
+    Calls the LLM to decide tool usage.
+    Robust against 'Deep Think' output (Chain-of-Thought text before JSON).
     """
     normalized_q = (question or "").strip().lower()
     if not normalized_q:
         return {"tool": None, "query": None}
 
-    # 1. Cache-Check (z.B. 10 Minuten gültig)
+    # 1. Cache-Check
     cached = _cache_get(ROUTER_CACHE, normalized_q, max_age_seconds=600)
     if cached is not None:
         return cached
 
     # 2. LLM-Call
     try:
+        # HINWEIS: Bei echten "Deep Think" Modellen (wie o1 oder deepseek-reasoner)
+        # sollte man oft 'response_format' WEGLASSEN, da sie sonst Fehler werfen,
+        # wenn sie Thinking-Tags ausgeben wollen.
         completion = client.chat.completions.create(
-            model="gpt-4.1-mini",
+            model="gpt-4.1-mini", # Oder dein Deep-Think Modellname
             messages=[
                 {"role": "system", "content": ROUTER_SYSTEM_PROMPT},
                 {"role": "user", "content": question}
             ],
-            response_format={"type": "json_object"},
             temperature=0.0,
-            max_tokens=100
+            max_tokens=500 # Etwas erhöht, um Platz für "Deep Think" Text zu lassen
         )
         
         response_content = completion.choices[0].message.content
-        parsed = json.loads(response_content)
+        
+        # 3. Robustes Parsing (ignoriert Think-Tags und Markdown)
+        parsed = extract_json_robust(response_content)
 
-        # 3. In Cache legen
+        # Sicherheitscheck: Hat das JSON die erwarteten Felder?
+        if not isinstance(parsed, dict):
+             parsed = {"tool": None, "query": None}
+
+        # 4. In Cache legen
         _cache_set(ROUTER_CACHE, normalized_q, parsed)
         return parsed
 
     except Exception as e:
-        logging.error(f"[Router] LLM call failed: {e}")
+        logging.error(f"[Router] LLM call or parsing failed: {e}")
         return {"tool": None, "query": None}
 
 

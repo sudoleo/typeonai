@@ -103,17 +103,13 @@
 <div class="sidebar">
   <div class="sidebar-content">
     <div class="sidebar-header">
-      <h2>
+      <h2 data-tooltip="Enter your own API keys – only necessary without login or when your quota is exhausted.">
         Endpoints
-        <span class="sidebar-tooltip">
-          <span class="info-icon">?</span>
-          <span class="sidebar-tooltiptext">Enter your own API keys – only necessary without login or when your quota is exhausted.</span>
-        </span>
       </h2>
       <button id="toggleApiTest" onclick="toggleApiTest()" class="collapse-btn">
         <span class="arrow">&#9660;</span>
       </button>
-    </div>    
+    </div>   
     <div id="apiTestArea" class="api-test-area">
       <div class="api-key-group">
         <label for="openaiKey">OpenAI API Key <span id="openaiFeedback" class="feedback"></span></label>
@@ -165,17 +161,13 @@
 
     <!-- Verwendete Modelle (einklappbar) -->
     <div class="sidebar-header">
-      <h2>
+      <h2 data-tooltip="Choose the models you want to use.">
         Models
-        <span class="sidebar-tooltip">
-          <span class="info-icon">?</span>
-          <span class="sidebar-tooltiptext">Choose the models you want to use.</span>
-        </span>
       </h2>
       <button id="toggleModelSelection" onclick="toggleModelSelection()" class="collapse-btn">
         <span class="arrow">&#9660;</span>
       </button>
-    </div>    
+    </div>  
     <div id="modelSelectionArea" class="model-selection">
       <label for="selectOpenAI">
         <input type="checkbox" id="selectOpenAI" checked> OpenAI
@@ -202,12 +194,8 @@
 
     <!-- Leaderboard -->
     <div class="sidebar-header">
-      <h2>
-        Leaderboard 
-        <span class="sidebar-tooltip">
-          <span class="info-icon">?</span>
-          <span class="sidebar-tooltiptext">Displays the user leaderboard based on their results.</span>
-        </span>
+      <h2 data-tooltip="Displays the user leaderboard based on their results.">
+        Leaderboard
       </h2>
       <button id="toggleLeaderboard" onclick="toggleLeaderboard()" class="collapse-btn">
         <span class="arrow">&#9660;</span>
@@ -221,11 +209,8 @@
     <div class="sidebar-separator"></div>
 
     <div class="sidebar-section">
-      <h2>Bookmarks
-        <span class="sidebar-tooltip">
-          <span class="info-icon">?</span>
-          <span class="sidebar-tooltiptext">All your chats if you are logged in.</span>
-        </span>
+      <h2 data-tooltip="All your chats if you are logged in.">
+        Bookmarks
       </h2>
       <div id="bookmarksContainer"></div>
     </div>
@@ -1300,6 +1285,94 @@
 
           window.toggleModel(responseId, willBeChecked);
         };
+
+                // --- MODEL PREFERENCES WIEDERHERSTELLUNG ---
+
+        // Definition der Modelle und IDs
+        const modelPrefs = [
+          { key: "OpenAI",   checkId: "selectOpenAI",   selectId: "openaiModelSelect",   responseId: "openaiResponse",   textId: "openaiModelText" },
+          { key: "Mistral",  checkId: "selectMistral",  selectId: "mistralModelSelect",  responseId: "mistralResponse",  textId: "mistralModelText" },
+          { key: "Anthropic",checkId: "selectClaude",   selectId: "claudeModelSelect",   responseId: "claudeResponse",   textId: "claudeModelText" },
+          { key: "Gemini",   checkId: "selectGemini",   selectId: "geminiModelSelect",   responseId: "geminiResponse",   textId: "geminiModelText" },
+          { key: "DeepSeek", checkId: "selectDeepSeek", selectId: "deepseekModelSelect", responseId: "deepseekResponse", textId: "deepseekModelText" },
+          { key: "Grok",     checkId: "selectGrok",     selectId: "grokModelSelect",     responseId: "grokResponse",     textId: "grokModelText" }
+        ];
+
+        window.restoreModelSelections = function() {
+          // 1. Bestehende Logik für die Chat-Boxen (OpenAI, Mistral etc.)
+          modelPrefs.forEach(pref => {
+            const checkbox = document.getElementById(pref.checkId);
+            const select   = document.getElementById(pref.selectId);
+            const labelText= document.getElementById(pref.textId);
+
+            // Checkboxen wiederherstellen
+            const savedCheck = localStorage.getItem("pref_check_" + pref.key);
+            if (savedCheck !== null && checkbox) {
+              const isChecked = (savedCheck === "true");
+              if (checkbox.checked !== isChecked) {
+                checkbox.checked = isChecked;
+                if (window.toggleModel) window.toggleModel(pref.responseId, isChecked);
+              }
+            }
+
+            // Dropdowns wiederherstellen
+            const savedSelect = localStorage.getItem("pref_select_" + pref.key);
+            if (savedSelect !== null && select) {
+              const option = select.querySelector(`option[value="${savedSelect}"]`);
+              if (option && !option.disabled) {
+                  select.value = savedSelect;
+                  if (labelText) labelText.textContent = savedSelect;
+              }
+            }
+          });
+
+          // --- NEU: Consensus Modell wiederherstellen ---
+          const consensusSelect = document.getElementById("consensusModelDropdown");
+          const savedConsensus = localStorage.getItem("pref_select_consensus"); // Eigener Key
+          
+          if (consensusSelect && savedConsensus) {
+              // Prüfen, ob die Option existiert und für den User freigeschaltet ist
+              const option = consensusSelect.querySelector(`option[value="${savedConsensus}"]`);
+              if (option && !option.disabled) {
+                  consensusSelect.value = savedConsensus;
+              }
+          }
+        };
+
+        // 1. Initialer Aufruf beim Laden der Seite
+        window.restoreModelSelections();
+
+        // 2. Event Listener zum Speichern hinzufügen (bleibt gleich)
+        modelPrefs.forEach(pref => {
+          const checkbox = document.getElementById(pref.checkId);
+          const select   = document.getElementById(pref.selectId);
+          const labelText= document.getElementById(pref.textId);
+
+          if (checkbox) {
+            checkbox.addEventListener("change", function() {
+              localStorage.setItem("pref_check_" + pref.key, this.checked);
+            });
+          }
+
+          if (select) {
+            select.addEventListener("change", function() {
+              localStorage.setItem("pref_select_" + pref.key, this.value);
+              if (labelText) labelText.textContent = this.value;
+            });
+          }
+        });
+
+        // --- NEU: Event Listener für Consensus Dropdown ---
+        const consensusSelect = document.getElementById("consensusModelDropdown");
+        if (consensusSelect) {
+          consensusSelect.addEventListener("change", function() {
+            // Speichere die Auswahl im LocalStorage, sobald der User sie ändert
+            localStorage.setItem("pref_select_consensus", this.value);
+            
+            // Optional: Fokus entfernen, wie bei den anderen Pickern
+            this.blur(); 
+          });
+        }
       
         let leaderboardInterval; // Variable zum Speichern des Interval-IDs
   
@@ -3131,7 +3204,15 @@
 
       function updatePremiumModelsState(isPro) {
           // Dropdown-IDs definieren (Consensus und OpenAI)
-          const dropdownIds = ["consensusModelDropdown", "openaiModelSelect"];
+          const dropdownIds = [
+            "consensusModelDropdown", 
+            "openaiModelSelect", 
+            "mistralModelSelect", 
+            "claudeModelSelect", 
+            "geminiModelSelect", 
+            "deepseekModelSelect", 
+            "grokModelSelect"
+          ];
 
           dropdownIds.forEach(id => {
               const dropdown = document.getElementById(id);
@@ -3167,6 +3248,9 @@
                   }
               });
           });
+          if (window.restoreModelSelections) {
+              window.restoreModelSelections();
+          }
       }
 
       // Event Listener für den neuen Upgrade-Link im Header
@@ -3181,7 +3265,64 @@
               }
           });
       }
-window.updateUserTierUI = updateUserTierUI;
+
+      // 1. Tooltip Element einmalig erstellen
+      const tooltip = document.createElement('div');
+      tooltip.className = 'global-tooltip';
+      document.body.appendChild(tooltip);
+
+      // Funktion zum Anzeigen
+      const showTooltip = (e) => {
+          const target = e.target.closest('[data-tooltip]');
+          if (!target) return;
+
+          const text = target.getAttribute('data-tooltip');
+          if (!text) return;
+
+          // Text setzen
+          tooltip.textContent = text;
+          tooltip.classList.add('visible');
+
+          // Position berechnen
+          const rect = target.getBoundingClientRect();
+          
+          // Standard: Links am Text ausgerichtet, unterhalb des Textes
+          let top = rect.bottom + 5; 
+          let left = rect.left;
+
+          // Sicherheitscheck: Falls Tooltip rechts aus dem Bild ragt (Mobile)
+          // Wir setzen ihn temporär, um die Breite zu messen
+          tooltip.style.left = left + 'px';
+          tooltip.style.top = top + 'px';
+          
+          const tooltipRect = tooltip.getBoundingClientRect();
+          if (tooltipRect.right > window.innerWidth) {
+              // Nach links schieben, damit er im Bild bleibt
+              left = window.innerWidth - tooltipRect.width - 10;
+          }
+
+          tooltip.style.left = left + 'px';
+          tooltip.style.top = top + 'px';
+      };
+
+      // Funktion zum Verstecken
+      const hideTooltip = () => {
+          tooltip.classList.remove('visible');
+      };
+
+      // Event Listener für alle Elemente mit data-tooltip
+      document.body.addEventListener('mouseover', (e) => {
+          if(e.target.closest('[data-tooltip]')) showTooltip(e);
+      });
+
+      document.body.addEventListener('mouseout', (e) => {
+          if(e.target.closest('[data-tooltip]')) hideTooltip();
+      });
+      
+      // Optional: Beim Scrollen verstecken, damit er nicht "floated"
+      window.addEventListener('scroll', hideTooltip, true);
+      
+      window.updateUserTierUI = updateUserTierUI;
       });
 </script>
 
