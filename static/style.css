@@ -131,7 +131,7 @@ body::-webkit-scrollbar-thumb:hover {
   /* NEU: Das ist der Trick. Es schiebt dieses Element ganz nach rechts */
   margin-left: auto; 
   
-  margin-right: 40px; /* Optionaler Abstand zum Bildschirmrand */
+  margin-right: 30px; /* Optionaler Abstand zum Bildschirmrand */
 }
 
 /* Standard-Styling für das Logo-Element */
@@ -1239,6 +1239,103 @@ pre .copy-btn:hover {
   line-height: 1.2; /* ggf. anpassen */
 }
 
+/* --- Settings Modal Layout (Sticky Header) --- */
+
+.settings-modal-content {
+  width: min(95vw, 550px);
+  height: min(85vh, 800px); /* Maximale Höhe des Modals */
+  padding: 0 !important;    /* Padding vom Container entfernen, wir machen das innen */
+  display: flex;            /* Flexbox für Sticky Header */
+  flex-direction: column;   /* Untereinander */
+  overflow: hidden;         /* Verhindert Scrollen des gesamten Containers */
+  text-align: left;
+}
+
+/* 1. Header Bereich (Fixiert) */
+.settings-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--input-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--container-bg); /* Wichtig damit Content nicht durchscheint */
+  flex-shrink: 0; /* Darf nicht schrumpfen */
+  z-index: 10;
+}
+
+.settings-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.settings-header .close {
+  float: none; /* Reset float */
+  font-size: 28px;
+  line-height: 1;
+}
+
+/* 2. Body Bereich (Scrollbar) */
+.settings-body {
+  flex: 1;              /* Nimmt restlichen Platz ein */
+  overflow-y: auto;     /* Nur hier wird gescrollt */
+  padding: 20px;
+}
+
+/* --- Styling für Collapsible Section --- */
+.collapse-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding: 10px;
+  background-color: var(--response-bg);
+  border-radius: 6px;
+  transition: background-color 0.2s;
+}
+
+.collapse-header:hover {
+  background-color: rgba(0,0,0,0.05);
+}
+
+.collapse-header h3 {
+  margin: 0;
+  border: none;
+  font-size: 1.1em;
+  padding: 0;
+}
+
+.collapse-header .arrow {
+  transition: transform 0.3s ease;
+}
+
+/* Klasse zum Drehen des Pfeils */
+.arrow.rotated {
+  transform: rotate(180deg);
+}
+
+/* Allgemeine Inputs im Modal */
+.settings-body input[type="text"],
+.settings-body textarea {
+  width: 95%;
+  padding: 10px;
+  border: 1px solid var(--input-border);
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  border-radius: 6px;
+}
+
+.settings-divider {
+  border: 0;
+  border-top: 1px solid var(--input-border);
+  margin: 20px 0;
+  opacity: 0.5;
+}
+
+/* Checkbox Label Anpassung */
+.settings-body .custom-checkbox-label input {
+  width: auto; /* Checkbox soll nicht 100% breit sein */
+}
+
 /* Header & Control Icons */
 .response-box h2 {
   display: flex;
@@ -1810,6 +1907,7 @@ html[data-theme='dark'] .grok-logo {
   margin-bottom: 80px;
   overflow-y: auto;
   overflow-x: hidden;
+  margin-top: 50px;
 }
 
 
@@ -3033,7 +3131,6 @@ font-size: 0.9em;
 
   /* Linksgruppe bündig, Rechtsgruppe nach rechts schieben */
   .top-bar { justify-content: flex-start; }
-  .top-bar-right { margin-left: 25px;; }
   .top-bar { padding-left: 8px; }   /* vorher global: 20px */
   #toggleAllButton {
     position: absolute;

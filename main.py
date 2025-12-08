@@ -118,41 +118,6 @@ VALID_LEADERBOARD_MODELS = {
 }
 
 # Modelle, die pro Anbieter erlaubt sind
-ALLOWED_OPENAI_MODELS = {
-    "gpt-5-nano",
-    "gpt-5-mini",
-    "gpt-4.1",
-    "gpt-4o",
-    "gpt-3.5-turbo",
-}
-
-ALLOWED_MISTRAL_MODELS = {
-    "mistral-large-latest",
-    "mistral-medium-latest",
-    "mistral-small-latest",
-}
-
-ALLOWED_ANTHROPIC_MODELS = {
-    "claude-haiku-4-5",
-    "claude-sonnet-4-20250514",
-    "claude-3-7-sonnet-20250219",
-    "claude-3-5-haiku-20241022",
-}
-
-ALLOWED_GEMINI_MODELS = {
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-}
-
-ALLOWED_DEEPSEEK_MODELS = {
-    "deepseek-chat",
-}
-
-ALLOWED_GROK_MODELS = {
-    "grok-4-fast-non-reasoning-latest",
-}
-
-# Modelle, die pro Anbieter erlaubt sind
 # WICHTIG: Hier müssen AUCH die Premium-Modelle rein, damit validate_model sie erkennt.
 
 # --- OPENAI ---
@@ -165,6 +130,7 @@ ALLOWED_OPENAI_MODELS = {
     # Premium:
     "gpt-5",
     "gpt-5-chat-latest",
+    "gpt-5.1",
 }
 
 # --- MISTRAL ---
@@ -172,8 +138,6 @@ ALLOWED_MISTRAL_MODELS = {
     "mistral-large-latest",
     "mistral-medium-latest",
     "mistral-small-latest",
-    # Falls Mistral Large "Premium" sein soll, hier sicherstellen:
-    # (Aktuell ist es oben als Standard drin, falls es Pro sein soll, in PREMIUM_MODELS aufnehmen)
 }
 
 # --- ANTHROPIC ---
@@ -206,15 +170,18 @@ ALLOWED_DEEPSEEK_MODELS = {
 # --- GROK ---
 ALLOWED_GROK_MODELS = {
     "grok-4-fast-non-reasoning-latest",
+    "grok-4-1-fast-non-reasoning-latest",
     # Premium:
     "grok-4-latest",
     "grok-3-latest",
+    "grok-4-fast-reasoning-latest",
 }
 
 PREMIUM_MODELS = {
     # OpenAI
     "gpt-5",
     "gpt-5-chat-latest",
+    "gpt-5.1",
 
     # Anthropic
     "claude-sonnet-4-5-20250929",
@@ -230,6 +197,7 @@ PREMIUM_MODELS = {
     # Grok
     "grok-4-latest",
     "grok-3-latest",
+    "grok-4-fast-reasoning-latest",
 }
 
 # Alle erlaubten Modelle in einem Set für einfache Validierung
@@ -573,7 +541,7 @@ def query_grok(question: str, api_key: str, system_prompt: str = None, deep_sear
 
     try:
         client = openai.OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
-        model_to_use = "grok-4-latest" if deep_search else (model_override or "grok-4-fast-non-reasoning-latest")
+        model_to_use = "grok-4-latest" if deep_search else (model_override or "grok-4-1-fast-non-reasoning-latest")
 
         print(f"[MODEL] Grok -> {model_to_use} | deep_search={deep_search} | override={model_override}")
 
@@ -768,7 +736,7 @@ def query_consensus(
         if consensus_model in ["OpenAI", "OpenAI-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
             # WICHTIG: Hier wird das Modell gewählt
-            model_to_use = "gpt-5" if consensus_model == "OpenAI-Pro" else "gpt-5-mini"
+            model_to_use = "gpt-5-chat-latest" if consensus_model == "OpenAI-Pro" else "gpt-5-mini"
             
             response = client.chat.completions.create(
                 model=model_to_use,
@@ -863,7 +831,7 @@ def query_consensus(
         elif consensus_model in ["Grok", "Grok-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
             # Fast vs Latest (Strong)
-            model_to_use = "grok-4-latest" if consensus_model == "Grok-Pro" else "grok-4-fast-non-reasoning-latest"
+            model_to_use = "grok-4-latest" if consensus_model == "Grok-Pro" else "grok-4-1-fast-non-reasoning-latest"
             
             response = client.chat.completions.create(
                 model=model_to_use,
@@ -1059,7 +1027,7 @@ def query_differences(
         elif differences_model in ["Grok", "Grok-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
             response = client.chat.completions.create(
-                model="grok-4-fast-non-reasoning-latest",
+                model="grok-4-1-fast-non-reasoning-latest",
                 messages=[
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
@@ -2077,11 +2045,15 @@ async def prepare(request: Request, data: dict = Body(...)):
 
     try:
         uid = verify_user_token(id_token)
-
-        is_pro = is_user_pro(uid)
+        
+        # Status hier ermitteln
+        is_pro = is_user_pro(uid) 
+        
+        # Limit basierend auf Status setzen
         limit = PRO_USAGE_LIMIT if is_pro else FREE_USAGE_LIMIT
         current_usage = usage_counter.get(uid, 0)
         
+        # Erster Check: Ist das Limit generell erreicht?
         if current_usage >= limit:
             raise HTTPException(status_code=403, detail="Usage limit exhausted.")
             
@@ -2148,36 +2120,12 @@ async def prepare(request: Request, data: dict = Body(...)):
         }
 
     # --- 4) Auth & Quoten nur für Websearch ---
-    id_token = extract_id_token(request, data)
-    if not id_token:
-        if user_search_mode:
-            raise HTTPException(status_code=401, detail="Authentication required for web search.")
-        else:
-            # auto-search, aber keine Auth → stiller Fallback
-            logging.info("Auto websearch requested but no auth token; skipping Exa.")
-            return {
-                "system_prompt": base_system_prompt,
-                "sources": []
-            }
-
-    try:
-        uid = verify_user_token(id_token)
-    except Exception:
-        if user_search_mode:
-            raise HTTPException(status_code=401, detail="Authentication failed for web search.")
-        else:
-            logging.info("Auto websearch requested but auth failed; skipping Exa.")
-            return {
-                "system_prompt": base_system_prompt,
-                "sources": []
-            }
-
-    current_usage = usage_counter.get(uid, 0)
-    if current_usage >= FREE_USAGE_LIMIT:
+    # WICHTIG: Hier nutzen wir nur noch die oben definierten Variablen (uid, limit, is_pro)
+    if current_usage >= limit:
         if user_search_mode:
             raise HTTPException(
                 status_code=403,
-                detail="Your free quota is exhausted. Web search is only available with your own API keys."
+                detail=f"Your {'Pro' if is_pro else 'free'} quota is exhausted. Web search is only available with your own API keys."
             )
         else:
             logging.info("Auto websearch requested but quota exhausted; skipping Exa.")

@@ -369,4 +369,23 @@
   window.createStartDemoChip = createStartDemoChip;
   createStartDemoChip();
   window.runDemoFlow = runDemoFlow;
+
+function toggleSettingsCollapse(contentId, arrowId) {
+  const content = document.getElementById(contentId);
+  const arrow = document.getElementById(arrowId);
+  
+  if (content.style.display === "none") {
+    // Einblenden
+    content.style.display = "block";
+    if(arrow) arrow.classList.add("rotated"); // Pfeil drehen (optional, siehe CSS)
+    if(arrow) arrow.innerHTML = "&#9650;";    // Oder Pfeil-Zeichen ändern (hoch)
+  } else {
+    // Ausblenden
+    content.style.display = "none";
+    if(arrow) arrow.classList.remove("rotated");
+    if(arrow) arrow.innerHTML = "&#9660;";    // Pfeil-Zeichen ändern (runter)
+  }
+}
+
+window.toggleSettingsCollapse = toggleSettingsCollapse;
   

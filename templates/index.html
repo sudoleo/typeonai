@@ -97,66 +97,18 @@
     </div>
   </div>
 </header>
-   
- <br/><br/><br/> 
-<!-- Sidebar für API Keys -->
+<br><br><br>
 <div class="sidebar">
   <div class="sidebar-content">
-    <div class="sidebar-header">
-      <h2 data-tooltip="Enter your own API keys – only necessary without login or when your quota is exhausted.">
-        Endpoints
-      </h2>
-      <button id="toggleApiTest" onclick="toggleApiTest()" class="collapse-btn">
-        <span class="arrow">&#9660;</span>
-      </button>
-    </div>   
-    <div id="apiTestArea" class="api-test-area">
-      <div class="api-key-group">
-        <label for="openaiKey">OpenAI API Key <span id="openaiFeedback" class="feedback"></span></label>
-        <input type="text" id="openaiKey" placeholder="Your OpenAI Key" autocomplete="off">
-      </div>
-      <div class="api-key-group">
-        <label for="mistralKey">Mistral API Key <span id="mistralFeedback" class="feedback"></span></label>
-        <input type="text" id="mistralKey" placeholder="Your Mistral Key" autocomplete="off">
-      </div>
-      <div class="api-key-group">
-        <label for="anthropicKey">Anthropic API Key <span id="anthropicFeedback" class="feedback"></span></label>
-        <input type="text" id="anthropicKey" placeholder="Your Anthropic Key" autocomplete="off">
-      </div>
-      <div class="api-key-group">
-        <label for="geminiKey">Google API Key <span id="geminiFeedback" class="feedback"></span></label>
-        <input type="text" id="geminiKey" placeholder="Your Gemini Key" autocomplete="off">
-      </div>
-      <div class="api-key-group">
-        <label for="deepseekKey">DeepSeek API Key <span id="deepseekFeedback" class="feedback"></span></label>
-        <input type="text" id="deepseekKey" placeholder="Your DeepSeek Key" autocomplete="off">
-      </div>
-      <div class="api-key-group">
-        <label for="grokKey">Grok API Key <span id="grokFeedback" class="feedback"></span></label>
-        <input type="text" id="grokKey" placeholder="Your Grok Key" autocomplete="off">
-      </div>          
-      <div class="sidebar-tooltip">
-        <button onclick="testAllKeys()">
-          Save/Test all APIs 
-          <span id="apiSpinner" class="spinner" style="display: none;"></span>
-        </button>
-        <div class="sidebar-tooltiptext">~1 min.</div>
-      </div>      
-    </div>
-    <div id="usageOptions">
-      <label for="useOwnKeysSwitch" class="custom-checkbox-label">
-        Use your own API keys
-        <input type="checkbox" id="useOwnKeysSwitch">
-      </label>
+    
+    <div id="usageOptions" style="margin-top: 0;">
       <div id="usageDisplay">
         <span id="freeUsageDisplay">Free requests: ...</span><br>
         <span id="deepUsageDisplay">Deep Think: ...</span><br>
-        <!-- Countdown-Timer -->
         <span id="countdownDisplay"></span>
       </div>
-    </div>      
-
-    <!-- Trennstrich zwischen API Keys und Modelle -->
+    </div>  
+    
     <div class="sidebar-separator"></div>
 
     <!-- Verwendete Modelle (einklappbar) -->
@@ -221,7 +173,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v1.9.2</span>
+    <span id="version-number">v1.9.4</span>
   </div>
   
 </div>
@@ -297,6 +249,7 @@
                 <option value="gpt-3.5-turbo">GPT-3.5-turbo</option>
                 <option value="gpt-5" disabled class="premium-option">GPT-5</option>
                 <option value="gpt-5-chat-latest" disabled class="premium-option">GPT-5-chat-latest</option>
+                <option value="gpt-5.1" disabled class="premium-option">GPT-5.1</option>
               </select>
             </span>
           </span>
@@ -362,7 +315,7 @@
       <div class="response-box" id="geminiResponse" data-model="Gemini">
         <h2>
           <span class="title">Response from Gemini
-            <small><img src="/static/icons/chat_icons/google.png" class="model-icon" alt="icon"><span id="geminiModelText">gemini-2.5-flash</span></small>
+            <small><img src="/static/icons/chat_icons/gemini-icon.png" class="model-icon" alt="icon"><span id="geminiModelText">gemini-2.5-flash</span></small>
             <span class="model-picker-wrapper">
               <select id="geminiModelSelect" class="model-picker">
                 <option value="gemini-2.5-flash">gemini-2.5-flash</option>
@@ -389,8 +342,8 @@
             <small><img src="/static/icons/chat_icons/deepseek.png" class="model-icon" alt="icon"><span id="deepseekModelText">DeepSeek-V3</span></small>
             <span class="model-picker-wrapper">
               <select id="deepseekModelSelect" class="model-picker">
-                <option value="deepseek-chat">DeepSeek-V3</option>
-                <option value="deepseek-reasoner" disabled class="premium-option">DeepSeek-R1/Reasoner</option>
+                <option value="deepseek-chat">DeepSeek-V3.2</option>
+                <option value="deepseek-reasoner" disabled class="premium-option">DeepSeek-V3.2/Reasoner</option>
               </select>
             </span>
           </span>
@@ -414,9 +367,11 @@
           </small>
             <span class="model-picker-wrapper">
               <select id="grokModelSelect" class="model-picker">
+                <option value="grok-4-1-fast-non-reasoning-latest">grok-4-1-fast</option>
                 <option value="grok-4-fast-non-reasoning-latest">grok-4-fast</option>
                 <option value="grok-4-latest" disabled class="premium-option">grok-4-latest</option>
                 <option value="grok-3-latest" disabled class="premium-option">grok-3-latest</option>
+                <option value="grok-4-fast-reasoning-latest" disabled class="premium-option">grok-4-fast-reasoning-latest</option>
               </select>
             </span>
           </span>
@@ -449,7 +404,7 @@
             <label for="consensusModelDropdown" class="consensus-label">Consensus Model:</label>
             <div class="select-wrapper">
               <select id="consensusModelDropdown">
-                <option value="Grok">Grok-4-fast</option>
+                <option value="Grok">Grok-4.1-fast</option>
                 <option value="OpenAI">GPT-5-mini</option>
                 <option value="Anthropic">claude-haiku-4-5</option>
                 <option value="Mistral">mistral-large-latest</option>
@@ -457,7 +412,7 @@
                 <option value="DeepSeek">DeepSeek-V3</option>
 
                 <option value="Grok-Pro" class="premium-option">Grok-4-latest</option>
-                <option value="OpenAI-Pro" class="premium-option">gpt-5</option>
+                <option value="OpenAI-Pro" class="premium-option">GPT-5-chat-latest</option>
                 <option value="Anthropic-Pro" class="premium-option">claude-sonnet-4-5</option>
                 <option value="Gemini-Pro" class="premium-option">gemini-3-pro-preview</option>
                 <option value="DeepSeek-Pro" class="premium-option">DeepSeek-R1</option>
@@ -607,8 +562,10 @@
         
         if (isLoggedIn || hasApiKeys) {
           questionInput.placeholder = "Enter your question";
+          questionInput.disabled = false;
         } else {
           questionInput.placeholder = "Please log in or store your own API keys.";
+          questionInput.disabled = true;
         }
 
       function updateDeepThinkText() {
@@ -3454,16 +3411,108 @@
 <div id="disclaimerPopup" class="popup">
   <p>Deep Think Mode!</p>
 </div>
+
+<div class="feedback-line">
+  <span class="feedback-note">
+    Please avoid personal or sensitive data. AI models can make mistakes.
+  </span>
+  <button id="feedbackButton" class="feedback-button" title="Feedback senden">Feedback</button>
+  <a href="/privacy"  target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Privacy Policy" aria-label="Privacy Policy">Privacy</a>
+  <a href="/imprint"  target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Imprint"        aria-label="Imprint">Imprint</a>
+  <a href="/about"  target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="About"        aria-label="About">About</a>
+  <span id="feedback-note"></span>
+</div>
+
+<!-- Feedback Modal -->
+<div id="feedbackModal" class="modal">
+  <div class="modal-content feedback-modal">
+    <span class="close" id="closeFeedbackModal">&times;</span>
+    <h2>Send Feedback</h2>
+    <form id="feedbackForm">
+      <textarea name="message" placeholder="Your Feedback"></textarea>
+      <input type="email" name="email" placeholder="Your email (optional)">
+      <button type="submit">Submit</button>
+    </form>
+  </div>
+</div>
+
 <div id="popupContainer">
   <!-- Modal zum Editieren des Systemprompts -->
   <div id="systemPromptModal" class="modal" style="display:none;">
-    <div class="modal-content">
-      <span id="closeSystemPromptModal" class="close">&times;</span>
-      <h2>Edit System Prompt</h2>
-      <p>When empty, default is applied.</p>
-      <textarea id="systemPromptInput" class="systemPromptInputSytle" rows="4" style="width:98%;"></textarea>
-      <button id="saveSystemPromptBtn">Save</button>
-    </div>
+    <div class="modal-content settings-modal-content">
+      
+      <div class="settings-header">
+        <h2>Settings</h2>
+        <span id="closeSystemPromptModal" class="close">&times;</span>
+      </div>
+
+      <div class="settings-body">
+
+        <div class="settings-section">
+          <label for="useOwnKeysSwitch" class="custom-checkbox-label" style="width: 100%; display: flex; justify-content: space-between; font-weight: bold;">
+            Use your own API keys
+            <input type="checkbox" id="useOwnKeysSwitch">
+          </label>
+          <p style="font-size: 0.85em; color: #666; margin-top: 5px;">
+            Enable this to use the keys entered below instead of the free quota.
+          </p>
+        </div>
+
+        <hr class="settings-divider">
+
+        <div class="settings-section">
+          <div class="collapse-header" onclick="toggleSettingsCollapse('apiSettingsArea', 'apiArrow')">
+            <h3>API Keys (Endpoints)</h3>
+            <span id="apiArrow" class="arrow">&#9660;</span> </div>
+
+          <div id="apiSettingsArea" style="display: none; margin-top: 15px;">
+            
+            <div class="api-key-group">
+              <label for="openaiKey">OpenAI API Key <span id="openaiFeedback" class="feedback"></span></label>
+              <input type="text" id="openaiKey" placeholder="sk-..." autocomplete="off">
+            </div>
+            <div class="api-key-group">
+              <label for="mistralKey">Mistral API Key <span id="mistralFeedback" class="feedback"></span></label>
+              <input type="text" id="mistralKey" placeholder="Your Mistral Key" autocomplete="off">
+            </div>
+            <div class="api-key-group">
+              <label for="anthropicKey">Anthropic API Key <span id="anthropicFeedback" class="feedback"></span></label>
+              <input type="text" id="anthropicKey" placeholder="sk-ant-..." autocomplete="off">
+            </div>
+            <div class="api-key-group">
+              <label for="geminiKey">Google API Key <span id="geminiFeedback" class="feedback"></span></label>
+              <input type="text" id="geminiKey" placeholder="AIza..." autocomplete="off">
+            </div>
+            <div class="api-key-group">
+              <label for="deepseekKey">DeepSeek API Key <span id="deepseekFeedback" class="feedback"></span></label>
+              <input type="text" id="deepseekKey" placeholder="sk-..." autocomplete="off">
+            </div>
+            <div class="api-key-group">
+              <label for="grokKey">Grok API Key <span id="grokFeedback" class="feedback"></span></label>
+              <input type="text" id="grokKey" placeholder="Your Grok Key" autocomplete="off">
+            </div>          
+            
+            <button onclick="testAllKeys()" class="save-keys-btn">
+              Save & Test Keys 
+              <span id="apiSpinner" class="spinner" style="display: none;"></span>
+            </button>
+          </div>
+        </div>
+
+        <hr class="settings-divider">
+
+        <div class="settings-section">
+          <h3>System Prompt</h3>
+          <p style="font-size: 0.9em; color: #666; margin-bottom: 10px;">
+            Customize how the models behave. Leave empty for default.
+          </p>
+          <textarea id="systemPromptInput" class="systemPromptInputSytle" rows="7"></textarea>
+          <button id="saveSystemPromptBtn" class="save-prompt-btn">Save System Prompt</button> 
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px; opacity: 0.5; font-size: 0.8em;">
+          v1.9.4
+        </div>
   </div>
 </div>
 
@@ -3624,30 +3673,6 @@
         </p>        
       </div>      
     </div>
-  </div>
-</div>
-
-<div class="feedback-line">
-  <span class="feedback-note">
-    Please avoid personal or sensitive data. AI models can make mistakes.
-  </span>
-  <button id="feedbackButton" class="feedback-button" title="Feedback senden">Feedback</button>
-  <a href="/privacy"  target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Privacy Policy" aria-label="Privacy Policy">Privacy</a>
-  <a href="/imprint"  target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Imprint"        aria-label="Imprint">Imprint</a>
-  <a href="/about"  target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="About"        aria-label="About">About</a>
-  <span id="feedback-note"></span>
-</div>
-
-<!-- Feedback Modal -->
-<div id="feedbackModal" class="modal">
-  <div class="modal-content feedback-modal">
-    <span class="close" id="closeFeedbackModal">&times;</span>
-    <h2>Send Feedback</h2>
-    <form id="feedbackForm">
-      <textarea name="message" placeholder="Your Feedback"></textarea>
-      <input type="email" name="email" placeholder="Your email (optional)">
-      <button type="submit">Submit</button>
-    </form>
   </div>
 </div>
 
