@@ -4303,6 +4303,23 @@ body.all-collapsed #toggleAllButton .toggle-visual{
   text-decoration: underline;
 }
 
+/* 1. Entfernt den margin-top, wenn der Inhalt eingeklappt ist */
+.collapsible-content.collapsed {
+  margin-top: 0 !important; 
+  padding-bottom: 0 !important;
+}
+
+/* 2. Verringert das Padding der Response-Box, WENN der Inhalt darin eingeklappt ist */
+.response-box:has(.collapsible-content.collapsed) {
+  padding-bottom: 6px; /* Reduziert von ursprünglich ~10-15px */
+  padding-top: 6px;    /* Optional: Leicht kompakter oben */
+}
+
+/* 3. Optional: Wenn du es extrem flach willst, entferne auch den unteren Margin der Überschrift im eingeklappten Zustand */
+.response-box:has(.collapsible-content.collapsed) h2 {
+  margin-bottom: 0;
+}
+
 /* Button wirklich „link-artig“ machen und die breite Button-Regel neutralisieren */
 .modal-content button.link-btn {
   background: none !important;

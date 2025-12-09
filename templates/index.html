@@ -174,267 +174,266 @@
       <span class="settings-label">Settings</span>
     </button>
     <span id="version-number">v1.9.4</span>
+  </div> 
+</div>
+<div class="container">
+  <div class="input-section">
+    <div class="chat-input-container" style="position: relative;">
+      <textarea class="input-field" id="questionInput" placeholder="Enter your question"></textarea>
+      <button id="toggleAllButton" onclick="toggleAllResponses()" title="Collapse or expand all answers">
+        <span class="toggle-visual"></span>
+      </button>
+      <!-- Container für beide Schalter -->
+      <div class="consensus-switch-container" style="position: absolute; bottom: 10px; left: 10px; display: flex; align-items: center; gap: 20px;">
+        <!-- Auto-Konsens-Switch -->
+        <div class="auto-consensus">
+          <label class="switch">
+            <input type="checkbox" id="autoConsensusToggle">
+            <span class="slider"></span>
+          </label>
+          <span class="auto-consensus-label">Auto Consensus</span>
+        </div>
+        <!-- Search Mode Switch, standardmäßig leicht ausgegraut -->
+        <div class="search-mode">
+          <label class="switch">
+            <input type="checkbox" id="searchModeToggle">
+            <span class="slider"></span>
+          </label>
+          <span class="search-mode-label">Web Search</span>
+          <!-- Disclaimer, der nur beim Aktivieren angezeigt wird -->
+          <span id="searchDisclaimer" class="search-disclaimer" style="display: none; font-size: 0.8em; margin-left: 5px;">
+            Models have access to the Internet.
+          </span>
+        </div>
+        <div class="search-mode deep-search-mode">
+          <label class="switch deep-switch">
+            <input type="checkbox" id="deepSearchToggle">
+            <span class="slider"></span>
+          </label>
+          <span class="search-mode-label deep-switch-label">Deep Think</span>
+          <span id="deepthinkDisclaimer" class="deepthink-disclaimer" style="display: none; font-size: 0.8em; margin-left: 5px;">
+            Reasoning models. More thoughtful responses.
+          </span>
+        </div>
+      </div>
+      <!-- Clear-Button nur mit Icon -->
+      <button id="clearButton" onclick="clearResponseBoxes()" title="Clear all responses" aria-label="Clear all responses">Clear All</button>      
+      <button class="button" id="sendButton" onclick="sendQuestion()">
+        <!-- SVG-Icon für einen Pfeil, der nach unten zeigt -->
+        <svg class="input-icon" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+        </svg>
+      </button>
+    </div>
   </div>
   
-</div>
-  <div class="container">
-    <div class="input-section">
-      <div class="chat-input-container" style="position: relative;">
-        <textarea class="input-field" id="questionInput" placeholder="Enter your question"></textarea>
-        <button id="toggleAllButton" onclick="toggleAllResponses()" title="Collapse or expand all answers">
-          <span class="toggle-visual"></span>
-        </button>
-        <!-- Container für beide Schalter -->
-        <div class="consensus-switch-container" style="position: absolute; bottom: 10px; left: 10px; display: flex; align-items: center; gap: 20px;">
-          <!-- Auto-Konsens-Switch -->
-          <div class="auto-consensus">
-            <label class="switch">
-              <input type="checkbox" id="autoConsensusToggle">
-              <span class="slider"></span>
-            </label>
-            <span class="auto-consensus-label">Auto Consensus</span>
-          </div>
-          <!-- Search Mode Switch, standardmäßig leicht ausgegraut -->
-          <div class="search-mode">
-            <label class="switch">
-              <input type="checkbox" id="searchModeToggle">
-              <span class="slider"></span>
-            </label>
-            <span class="search-mode-label">Web Search</span>
-            <!-- Disclaimer, der nur beim Aktivieren angezeigt wird -->
-            <span id="searchDisclaimer" class="search-disclaimer" style="display: none; font-size: 0.8em; margin-left: 5px;">
-              Models have access to the Internet.
-            </span>
-          </div>
-          <div class="search-mode deep-search-mode">
-            <label class="switch deep-switch">
-              <input type="checkbox" id="deepSearchToggle">
-              <span class="slider"></span>
-            </label>
-            <span class="search-mode-label deep-switch-label">Deep Think</span>
-            <span id="deepthinkDisclaimer" class="deepthink-disclaimer" style="display: none; font-size: 0.8em; margin-left: 5px;">
-              Reasoning models. More thoughtful responses.
-            </span>
+  <div class="response-section" style="position: relative;">
+    <div class="response-box" id="openaiResponse" data-model="OpenAI">
+      <h2>
+        <span class="title">Response from ChatGPT
+        <small>
+          <img 
+            src="/static/icons/chat_icons/chatgpt.png" 
+            class="model-icon chatgpt-logo" 
+            alt="icon"
+          >
+          <span id="openaiModelText">GPT-5-mini</span>
+        </small>
+          <span class="model-picker-wrapper">
+            <select id="openaiModelSelect" class="model-picker">
+              <option value="gpt-5-mini">GPT-5-mini</option>
+              <option value="gpt-5-nano">GPT-5-nano</option>
+              <option value="gpt-4.1">GPT-4.1</option>
+              <option value="gpt-4o">GPT-4o</option>
+              <option value="gpt-3.5-turbo">GPT-3.5-turbo</option>
+              <option value="gpt-5" disabled class="premium-option">GPT-5</option>
+              <option value="gpt-5-chat-latest" disabled class="premium-option">GPT-5-chat-latest</option>
+              <option value="gpt-5.1" disabled class="premium-option">GPT-5.1</option>
+            </select>
+          </span>
+        </span>
+        <div class="control-icons">
+          <span class="best-btn" onclick="toggleBest('openaiResponse')" title="Mark as best answer">&#9733;</span>
+          <span class="exclude-btn" onclick="toggleExclude('openaiResponse')" title="Exclude answer">&#10005;</span>
+          <button class="collapse-btn" onclick="toggleCollapse('openaiResponse')">
+            <span class="arrow">&#9660;</span>
+          </button>
+        </div>
+      </h2>
+      <p class="collapsible-content"></p>
+    </div>
+
+    <div class="response-box" id="mistralResponse" data-model="Mistral">
+      <h2>
+        <span class="title">Response from Mistral
+          <small><img src="/static/icons/chat_icons/mistral.png" class="model-icon" alt="icon"><span id="mistralModelText">mistral-large-latest</span></small>
+          <span class="model-picker-wrapper">
+            <select id="mistralModelSelect" class="model-picker">
+              <option value="mistral-large-latest">mistral-large-latest</option>
+              <option value="mistral-medium-latest">mistral-medium-latest</option>
+              <option value="mistral-small-latest">mistral-small-latest</option>
+            </select>
+          </span>
+        </span>
+        <div class="control-icons">
+          <span class="best-btn" onclick="toggleBest('mistralResponse')" title="Mark as best answer">&#9733;</span>
+          <span class="exclude-btn" onclick="toggleExclude('mistralResponse')" title="Exclude answer">&#10005;</span>
+          <button class="collapse-btn" onclick="toggleCollapse('mistralResponse')">
+            <span class="arrow">&#9660;</span>
+          </button>
+        </div>
+      </h2>
+      <p class="collapsible-content"></p>
+    </div>
+
+    <div class="response-box" id="claudeResponse" data-model="Anthropic">
+      <h2>
+        <span class="title">Response from Claude
+          <small><img src="/static/icons/chat_icons/claude.png" class="model-icon" alt="icon"><span id="claudeModelText">claude-haiku-4-5</span></small>
+          <span class="model-picker-wrapper">
+            <select id="claudeModelSelect" class="model-picker">
+              <option value="claude-haiku-4-5">claude-haiku-4-5</option>
+              <option value="claude-sonnet-4-20250514">claude-4-sonnet</option>
+              <option value="claude-3-7-sonnet-20250219">claude-3-7-sonnet</option>
+              <option value="claude-3-5-haiku-20241022">claude-3-5-haiku</option>
+              <option value="claude-sonnet-4-5-20250929" disabled class="premium-option">claude-sonnet-4-5</option>
+            </select>
+          </span>
+        </span>
+        <div class="control-icons">
+          <span class="best-btn" onclick="toggleBest('claudeResponse')" title="Mark as best answer">&#9733;</span>
+          <span class="exclude-btn" onclick="toggleExclude('claudeResponse')" title="Exclude answer">&#10005;</span>
+          <button class="collapse-btn" onclick="toggleCollapse('claudeResponse')">
+            <span class="arrow">&#9660;</span>
+          </button>
+        </div>
+      </h2>
+      <p class="collapsible-content"></p>
+    </div>
+
+    <div class="response-box" id="geminiResponse" data-model="Gemini">
+      <h2>
+        <span class="title">Response from Gemini
+          <small><img src="/static/icons/chat_icons/gemini-icon.png" class="model-icon" alt="icon"><span id="geminiModelText">gemini-2.5-flash</span></small>
+          <span class="model-picker-wrapper">
+            <select id="geminiModelSelect" class="model-picker">
+              <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+              <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+              <option value="gemini-2.5-pro" disabled class="premium-option">gemini-2.5-pro</option>
+              <option value="gemini-3-pro-preview" disabled class="premium-option">gemini-3-pro-preview</option>
+            </select>
+          </span>
+        </span>
+        <div class="control-icons">
+          <span class="best-btn" onclick="toggleBest('geminiResponse')" title="Mark as best answer">&#9733;</span>
+          <span class="exclude-btn" onclick="toggleExclude('geminiResponse')" title="Exclude answer">&#10005;</span>
+          <button class="collapse-btn" onclick="toggleCollapse('geminiResponse')">
+            <span class="arrow">&#9660;</span>
+          </button>
+        </div>
+      </h2>
+      <p class="collapsible-content"></p>
+    </div>
+
+    <div class="response-box" id="deepseekResponse" data-model="DeepSeek">
+      <h2>
+        <span class="title">Response from DeepSeek
+          <small><img src="/static/icons/chat_icons/deepseek.png" class="model-icon" alt="icon"><span id="deepseekModelText">DeepSeek-V3</span></small>
+          <span class="model-picker-wrapper">
+            <select id="deepseekModelSelect" class="model-picker">
+              <option value="deepseek-chat">DeepSeek-V3.2</option>
+              <option value="deepseek-reasoner" disabled class="premium-option">DeepSeek-V3.2/Reasoner</option>
+            </select>
+          </span>
+        </span>
+        <div class="control-icons">
+          <span class="best-btn" onclick="toggleBest('deepseekResponse')" title="Mark as best answer">&#9733;</span>
+          <span class="exclude-btn" onclick="toggleExclude('deepseekResponse')" title="Exclude answer">&#10005;</span>
+          <button class="collapse-btn" onclick="toggleCollapse('deepseekResponse')">
+            <span class="arrow">&#9660;</span>
+          </button>
+        </div>
+      </h2>
+      <p class="collapsible-content"></p>
+    </div>
+
+    <div class="response-box" id="grokResponse" data-model="Grok">
+      <h2>
+        <span class="title">Response from Grok
+        <small>
+          <img src="/static/icons/chat_icons/grok.png" class="model-icon grok-logo" alt="Grok icon">
+          <span id="grokModelText">Grok-4-fast</span>
+        </small>
+          <span class="model-picker-wrapper">
+            <select id="grokModelSelect" class="model-picker">
+              <option value="grok-4-1-fast-non-reasoning-latest">grok-4-1-fast</option>
+              <option value="grok-4-fast-non-reasoning-latest">grok-4-fast</option>
+              <option value="grok-4-latest" disabled class="premium-option">grok-4-latest</option>
+              <option value="grok-3-latest" disabled class="premium-option">grok-3-latest</option>
+              <option value="grok-4-fast-reasoning-latest" disabled class="premium-option">grok-4-fast-reasoning-latest</option>
+            </select>
+          </span>
+        </span>
+        <div class="control-icons">
+          <span class="best-btn" onclick="toggleBest('grokResponse')" title="Mark as best answer">&#9733;</span>
+          <span class="exclude-btn" onclick="toggleExclude('grokResponse')" title="Exclude answer">&#10005;</span>
+          <button class="collapse-btn" onclick="toggleCollapse('grokResponse')">
+            <span class="arrow">&#9660;</span>
+          </button>
+        </div>
+      </h2>
+      <p class="collapsible-content"></p>
+    </div>
+  </div>
+  
+  <!-- Konsens-Section -->
+  <div class="consensus-section">
+    <div class="consensus-wrapper">
+      <!-- Konsens-Kontrolle: Schalter, Button und Dropdown wie gehabt -->
+      <div class="consensus-controls">
+        <!-- Tooltip-Wrapper um den Button -->
+        <div class="tooltip">
+          <button id="consensusButton" onclick="getConsensus()">Generate Consensus</button>
+          <!-- Das Hover-Feld mit weiteren Infos -->
+          <div class="tooltiptext">
+            Combine four responses into a final, consistent consensus by reconciling contradictions and errors.
           </div>
         </div>
-        <!-- Clear-Button nur mit Icon -->
-        <button id="clearButton" onclick="clearResponseBoxes()" title="Clear all responses" aria-label="Clear all responses">Clear All</button>      
-        <button class="button" id="sendButton" onclick="sendQuestion()">
-          <!-- SVG-Icon für einen Pfeil, der nach unten zeigt -->
-          <svg class="input-icon" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-          </svg>
-        </button>
-      </div>
-    </div>
-    
-    <div class="response-section" style="position: relative;">
-      <div class="response-box" id="openaiResponse" data-model="OpenAI">
-        <h2>
-          <span class="title">Response from ChatGPT
-          <small>
-            <img 
-              src="/static/icons/chat_icons/chatgpt.png" 
-              class="model-icon chatgpt-logo" 
-              alt="icon"
-            >
-            <span id="openaiModelText">GPT-5-mini</span>
-          </small>
-            <span class="model-picker-wrapper">
-              <select id="openaiModelSelect" class="model-picker">
-                <option value="gpt-5-mini">GPT-5-mini</option>
-                <option value="gpt-5-nano">GPT-5-nano</option>
-                <option value="gpt-4.1">GPT-4.1</option>
-                <option value="gpt-4o">GPT-4o</option>
-                <option value="gpt-3.5-turbo">GPT-3.5-turbo</option>
-                <option value="gpt-5" disabled class="premium-option">GPT-5</option>
-                <option value="gpt-5-chat-latest" disabled class="premium-option">GPT-5-chat-latest</option>
-                <option value="gpt-5.1" disabled class="premium-option">GPT-5.1</option>
-              </select>
-            </span>
-          </span>
-          <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('openaiResponse')" title="Mark as best answer">&#9733;</span>
-            <span class="exclude-btn" onclick="toggleExclude('openaiResponse')" title="Exclude answer">&#10005;</span>
-            <button class="collapse-btn" onclick="toggleCollapse('openaiResponse')">
-              <span class="arrow">&#9660;</span>
-            </button>
-          </div>
-        </h2>
-        <p class="collapsible-content"></p>
-      </div>
+        <div class="consensus-model">
+          <label for="consensusModelDropdown" class="consensus-label">Consensus Model:</label>
+          <div class="select-wrapper">
+            <select id="consensusModelDropdown">
+              <option value="Grok">Grok-4.1-fast</option>
+              <option value="OpenAI">GPT-5-mini</option>
+              <option value="Anthropic">claude-haiku-4-5</option>
+              <option value="Mistral">mistral-large-latest</option>
+              <option value="Gemini">gemini-2.5-flash</option>
+              <option value="DeepSeek">DeepSeek-V3</option>
 
-      <div class="response-box" id="mistralResponse" data-model="Mistral">
-        <h2>
-          <span class="title">Response from Mistral
-            <small><img src="/static/icons/chat_icons/mistral.png" class="model-icon" alt="icon"><span id="mistralModelText">mistral-large-latest</span></small>
-            <span class="model-picker-wrapper">
-              <select id="mistralModelSelect" class="model-picker">
-                <option value="mistral-large-latest">mistral-large-latest</option>
-                <option value="mistral-medium-latest">mistral-medium-latest</option>
-                <option value="mistral-small-latest">mistral-small-latest</option>
-              </select>
-            </span>
-          </span>
-          <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('mistralResponse')" title="Mark as best answer">&#9733;</span>
-            <span class="exclude-btn" onclick="toggleExclude('mistralResponse')" title="Exclude answer">&#10005;</span>
-            <button class="collapse-btn" onclick="toggleCollapse('mistralResponse')">
-              <span class="arrow">&#9660;</span>
-            </button>
-          </div>
-        </h2>
-        <p class="collapsible-content"></p>
-      </div>
-
-      <div class="response-box" id="claudeResponse" data-model="Anthropic">
-        <h2>
-          <span class="title">Response from Claude
-            <small><img src="/static/icons/chat_icons/claude.png" class="model-icon" alt="icon"><span id="claudeModelText">claude-haiku-4-5</span></small>
-            <span class="model-picker-wrapper">
-              <select id="claudeModelSelect" class="model-picker">
-                <option value="claude-haiku-4-5">claude-haiku-4-5</option>
-                <option value="claude-sonnet-4-20250514">claude-4-sonnet</option>
-                <option value="claude-3-7-sonnet-20250219">claude-3-7-sonnet</option>
-                <option value="claude-3-5-haiku-20241022">claude-3-5-haiku</option>
-                <option value="claude-sonnet-4-5-20250929" disabled class="premium-option">claude-sonnet-4-5</option>
-              </select>
-            </span>
-          </span>
-          <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('claudeResponse')" title="Mark as best answer">&#9733;</span>
-            <span class="exclude-btn" onclick="toggleExclude('claudeResponse')" title="Exclude answer">&#10005;</span>
-            <button class="collapse-btn" onclick="toggleCollapse('claudeResponse')">
-              <span class="arrow">&#9660;</span>
-            </button>
-          </div>
-        </h2>
-        <p class="collapsible-content"></p>
-      </div>
-
-      <div class="response-box" id="geminiResponse" data-model="Gemini">
-        <h2>
-          <span class="title">Response from Gemini
-            <small><img src="/static/icons/chat_icons/gemini-icon.png" class="model-icon" alt="icon"><span id="geminiModelText">gemini-2.5-flash</span></small>
-            <span class="model-picker-wrapper">
-              <select id="geminiModelSelect" class="model-picker">
-                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-                <option value="gemini-2.5-pro" disabled class="premium-option">gemini-2.5-pro</option>
-                <option value="gemini-3-pro-preview" disabled class="premium-option">gemini-3-pro-preview</option>
-              </select>
-            </span>
-          </span>
-          <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('geminiResponse')" title="Mark as best answer">&#9733;</span>
-            <span class="exclude-btn" onclick="toggleExclude('geminiResponse')" title="Exclude answer">&#10005;</span>
-            <button class="collapse-btn" onclick="toggleCollapse('geminiResponse')">
-              <span class="arrow">&#9660;</span>
-            </button>
-          </div>
-        </h2>
-        <p class="collapsible-content"></p>
-      </div>
-
-      <div class="response-box" id="deepseekResponse" data-model="DeepSeek">
-        <h2>
-          <span class="title">Response from DeepSeek
-            <small><img src="/static/icons/chat_icons/deepseek.png" class="model-icon" alt="icon"><span id="deepseekModelText">DeepSeek-V3</span></small>
-            <span class="model-picker-wrapper">
-              <select id="deepseekModelSelect" class="model-picker">
-                <option value="deepseek-chat">DeepSeek-V3.2</option>
-                <option value="deepseek-reasoner" disabled class="premium-option">DeepSeek-V3.2/Reasoner</option>
-              </select>
-            </span>
-          </span>
-          <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('deepseekResponse')" title="Mark as best answer">&#9733;</span>
-            <span class="exclude-btn" onclick="toggleExclude('deepseekResponse')" title="Exclude answer">&#10005;</span>
-            <button class="collapse-btn" onclick="toggleCollapse('deepseekResponse')">
-              <span class="arrow">&#9660;</span>
-            </button>
-          </div>
-        </h2>
-        <p class="collapsible-content"></p>
-      </div>
-
-      <div class="response-box" id="grokResponse" data-model="Grok">
-        <h2>
-          <span class="title">Response from Grok
-          <small>
-            <img src="/static/icons/chat_icons/grok.png" class="model-icon grok-logo" alt="Grok icon">
-            <span id="grokModelText">Grok-4-fast</span>
-          </small>
-            <span class="model-picker-wrapper">
-              <select id="grokModelSelect" class="model-picker">
-                <option value="grok-4-1-fast-non-reasoning-latest">grok-4-1-fast</option>
-                <option value="grok-4-fast-non-reasoning-latest">grok-4-fast</option>
-                <option value="grok-4-latest" disabled class="premium-option">grok-4-latest</option>
-                <option value="grok-3-latest" disabled class="premium-option">grok-3-latest</option>
-                <option value="grok-4-fast-reasoning-latest" disabled class="premium-option">grok-4-fast-reasoning-latest</option>
-              </select>
-            </span>
-          </span>
-          <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('grokResponse')" title="Mark as best answer">&#9733;</span>
-            <span class="exclude-btn" onclick="toggleExclude('grokResponse')" title="Exclude answer">&#10005;</span>
-            <button class="collapse-btn" onclick="toggleCollapse('grokResponse')">
-              <span class="arrow">&#9660;</span>
-            </button>
-          </div>
-        </h2>
-        <p class="collapsible-content"></p>
-      </div>
-    </div>
-    
-    <!-- Konsens-Section -->
-    <div class="consensus-section">
-      <div class="consensus-wrapper">
-        <!-- Konsens-Kontrolle: Schalter, Button und Dropdown wie gehabt -->
-        <div class="consensus-controls">
-          <!-- Tooltip-Wrapper um den Button -->
-          <div class="tooltip">
-            <button id="consensusButton" onclick="getConsensus()">Generate Consensus</button>
-            <!-- Das Hover-Feld mit weiteren Infos -->
-            <div class="tooltiptext">
-              Combine four responses into a final, consistent consensus by reconciling contradictions and errors.
-            </div>
-          </div>
-          <div class="consensus-model">
-            <label for="consensusModelDropdown" class="consensus-label">Consensus Model:</label>
-            <div class="select-wrapper">
-              <select id="consensusModelDropdown">
-                <option value="Grok">Grok-4.1-fast</option>
-                <option value="OpenAI">GPT-5-mini</option>
-                <option value="Anthropic">claude-haiku-4-5</option>
-                <option value="Mistral">mistral-large-latest</option>
-                <option value="Gemini">gemini-2.5-flash</option>
-                <option value="DeepSeek">DeepSeek-V3</option>
-
-                <option value="Grok-Pro" class="premium-option">Grok-4-latest</option>
-                <option value="OpenAI-Pro" class="premium-option">GPT-5-chat-latest</option>
-                <option value="Anthropic-Pro" class="premium-option">claude-sonnet-4-5</option>
-                <option value="Gemini-Pro" class="premium-option">gemini-3-pro-preview</option>
-                <option value="DeepSeek-Pro" class="premium-option">DeepSeek-R1</option>
-              </select>
-            </div>
-          </div>
-        </div>
-        <!-- Konsens-Box mit zwei nebeneinanderliegenden Bereichen -->
-        <div class="consensus-box" id="consensusResponse">
-          <!-- Linker Bereich: Konsens-Antwort (80%) -->
-          <div class="consensus-main">
-            <h2>Consensus Answer<img src="/static/favicon.png" alt="" width="18" height=auto style="display:block;"/></h2>
-            <p></p>
-          </div>
-          <!-- Rechter Bereich: Unterschiede (20%) -->
-          <div class="consensus-differences">
-            <h2>Differences</h2>
-            <p></p>
+              <option value="Grok-Pro" class="premium-option">Grok-4-latest</option>
+              <option value="OpenAI-Pro" class="premium-option">GPT-5-chat-latest</option>
+              <option value="Anthropic-Pro" class="premium-option">claude-sonnet-4-5</option>
+              <option value="Gemini-Pro" class="premium-option">gemini-3-pro-preview</option>
+              <option value="DeepSeek-Pro" class="premium-option">DeepSeek-R1</option>
+            </select>
           </div>
         </div>
       </div>
+      <!-- Konsens-Box mit zwei nebeneinanderliegenden Bereichen -->
+      <div class="consensus-box" id="consensusResponse">
+        <!-- Linker Bereich: Konsens-Antwort (80%) -->
+        <div class="consensus-main">
+          <h2>Consensus Answer<img src="/static/favicon.png" alt="" width="18" height=auto style="display:block;"/></h2>
+          <p></p>
+        </div>
+        <!-- Rechter Bereich: Unterschiede (20%) -->
+        <div class="consensus-differences">
+          <h2>Differences</h2>
+          <p></p>
+        </div>
+      </div>
     </div>
+  </div>
 
     <script>
       document.addEventListener("DOMContentLoaded", function() {
@@ -632,10 +631,10 @@
           el.style.display = showPickers ? "inline-flex" : "none";
         });
 
-        const openaiModelText   = deepSearchActive ? "GPT-5" : document.getElementById("openaiModelSelect").value;
+        const openaiModelText   = deepSearchActive ? "GPT-5 reasoning" : document.getElementById("openaiModelSelect").value;
         const geminiModelText   = deepSearchActive ? "gemini-3-pro-preview" : document.getElementById("geminiModelSelect").value;
         const claudeModelText   = deepSearchActive ? "claude-sonnet-4-5-20250929" : document.getElementById("claudeModelSelect").value;
-        const deepseekModelText = deepSearchActive ? "DeepSeek-R1" : document.getElementById("deepseekModelSelect").value;
+        const deepseekModelText = deepSearchActive ? "DeepSeek-Reasoner" : document.getElementById("deepseekModelSelect").value;
         const grokModelText     = deepSearchActive ? "grok-4-latest" : document.getElementById("grokModelSelect").value;
 
         const setModelText = (id, txt) => {
@@ -2827,10 +2826,18 @@
         }
 
         function buildConsensusCitation() {
-          const meta = window.consensusCitationMeta;
+          let meta = window.consensusCitationMeta || {};
 
-          // Noch kein Consensus berechnet → keine Zitation
-          if (!meta || !meta.includedModels || !meta.includedModels.length) {
+          // Primär aus Meta lesen
+          let includedModels = Array.isArray(meta.includedModels) ? meta.includedModels : [];
+
+          // Fallback: Wenn leer, aus dem DOM rekonstruieren
+          if (!includedModels.length && typeof getIncludedModelNamesForCitation === "function") {
+            includedModels = getIncludedModelNamesForCitation();
+          }
+
+          // Wenn wir wirklich gar keine Modelle finden → keine Zitation
+          if (!includedModels.length) {
             return "";
           }
 
@@ -3205,10 +3212,17 @@
                   }
               });
           });
-          if (window.restoreModelSelections) {
-              window.restoreModelSelections();
-          }
-      }
+
+        if (window.restoreModelSelections) {
+                window.restoreModelSelections();
+            }
+            
+            // FIX: Nach dem Restore prüfen, ob Deep Think aktiv ist, 
+            // und die Texte wieder auf die Reasoning-Namen setzen.
+            if (typeof updateDeepThinkText === "function") {
+                updateDeepThinkText();
+            }
+        }
 
       // Event Listener für den neuen Upgrade-Link im Header
       const headerUpgradeLink = document.getElementById("upgradeLink");

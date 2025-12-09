@@ -676,11 +676,22 @@ async function saveBookmark(question, response, modelName, mode) {
   const id_token = await auth.currentUser.getIdToken(false);
   if (!id_token) return;
 
+  // HIER: Quellen holen
+  const sources = window.currentEvidenceSources || [];
+
   try {
     const res = await fetch("/bookmark", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id_token, question, response, modelName, mode })
+      // HIER: sources hinzufügen
+      body: JSON.stringify({ 
+        id_token, 
+        question, 
+        response, 
+        modelName, 
+        mode,
+        sources: sources 
+      })
     });
     const data = await res.json();
 
@@ -717,6 +728,10 @@ async function saveBookmarkConsensus(question, consensusText, differencesText) {
   if (!auth.currentUser) return;
   const id_token = await auth.currentUser?.getIdToken(/* forceRefresh= */ false);
   if (!id_token) return;
+
+  // HIER: Quellen holen
+  const sources = window.currentEvidenceSources || [];
+
   try {
     const res = await fetch("/bookmark/consensus", {
        method: "POST",
@@ -725,7 +740,8 @@ async function saveBookmarkConsensus(question, consensusText, differencesText) {
          id_token: id_token,
          question: question,
          consensusText: consensusText,
-         differencesText: differencesText
+         differencesText: differencesText,
+         sources: sources // HIER: Hinzufügen
        })
     });
     const data = await res.json();
@@ -748,48 +764,115 @@ function loadSingleBookmarkUI(bookmark) {
 
     console.log("Loading bookmark into UI:", bookmark.id);
 
+    // --- NEU: Quellen wiederherstellen ---
+    // 1. Globale Variable setzen, damit injectMarkdown (in index.html) darauf zugreifen kann
+    window.currentEvidenceSources = bookmark.sources || [];
+
+    // 2. Die Quellen-Liste (unten im UI) visuell rendern (falls die Funktion existiert)
+    if (window.renderEvidenceSources) {
+        window.renderEvidenceSources(bookmark.sources || []);
+    }
+
     if (bookmark && bookmark.responses) {
-        // Hilfsfunktion zum sicheren Einfügen (hast du wahrscheinlich schon irgendwo, sonst definieren)
-        // Falls du injectHtmlSafe nicht global hast, nutze hier einfache Zuweisung oder deine Logik
-        const setContent = (id, text) => {
-            const el = document.getElementById(id);
-            if (el) {
-                const contentArea = el.querySelector(".collapsible-content");
-                if (contentArea) contentArea.innerHTML = text || ""; 
+        
+        // HELPER: Nutzt die globale Funktion injectMarkdown aus der index.html, 
+        // um Markdown korrekt zu rendern, Copy-Buttons hinzuzufügen etc.
+        const renderContent = (container, text) => {
+            if (!container) return;
+            
+            const content = text || "";
+            
+            if (window.injectMarkdown) {
+                // Nutzt die Logik aus index.html (Marked + DOMPurify + Copy Buttons)
+                window.injectMarkdown(container, content);
+            } else {
+                // Fallback, falls injectMarkdown noch nicht geladen ist
+                // (nutzt die lokale renderMarkdownSafe Funktion von oben in firebase.js)
+                container.innerHTML = typeof renderMarkdownSafe === "function" 
+                                      ? renderMarkdownSafe(content) 
+                                      : content;
             }
         };
 
-        setContent("openaiResponse", bookmark.responses["OpenAI"]);
-        setContent("mistralResponse", bookmark.responses["Mistral"]);
-        setContent("claudeResponse", bookmark.responses["Anthropic"]);
-        setContent("geminiResponse", bookmark.responses["Gemini"]);
-        setContent("deepseekResponse", bookmark.responses["DeepSeek"]);
-        setContent("grokResponse", bookmark.responses["Grok"]);
+        // Funktion für die Modell-Boxen
+        const setModelContent = (id, text) => {
+            const el = document.getElementById(id);
+            if (el) {
+                const contentArea = el.querySelector(".collapsible-content");
+                renderContent(contentArea, text);
+            }
+        };
 
-        // Konsens Boxen
+        setModelContent("openaiResponse", bookmark.responses["OpenAI"]);
+        setModelContent("mistralResponse", bookmark.responses["Mistral"]);
+        setModelContent("claudeResponse", bookmark.responses["Anthropic"]);
+        setModelContent("geminiResponse", bookmark.responses["Gemini"]);
+        setModelContent("deepseekResponse", bookmark.responses["DeepSeek"]);
+        setModelContent("grokResponse", bookmark.responses["Grok"]);
+
+        // --- Konsens Boxen ---
         const conMain = document.querySelector("#consensusResponse .consensus-main p");
-        if(conMain) conMain.innerHTML = bookmark.responses["consensus"] || "";
+        renderContent(conMain, bookmark.responses["consensus"]);
         
+        // --- Differences Box (mit Badge-Logik) ---
         const conDiff = document.querySelector("#consensusResponse .consensus-differences p");
-        if(conDiff) conDiff.innerHTML = bookmark.responses["differences"] || "";
+        
+        // Optional: Falls du die "Credibility Badges" (Farben) auch im Bookmark sehen willst:
+        let diffText = bookmark.responses["differences"] || "";
+        if (window.colorizeCredibility) {
+            diffText = window.colorizeCredibility(diffText);
+        }
+        renderContent(conDiff, diffText);
 
-        // Toggles setzen (Deep Think / Web Search)
+        // Toggles setzen (Deep Think / Web Search) - wie gehabt
         if (bookmark.mode) {
             const deepToggle = document.getElementById("deepSearchToggle");
             const searchToggle = document.getElementById("searchModeToggle");
 
+            // Erstmal beide resetten
+            if (deepToggle && deepToggle.checked) deepToggle.click();
+            if (searchToggle && searchToggle.checked) searchToggle.click();
+
+            // Dann korrekt setzen
             if (bookmark.mode === "Deep Think") {
                 if (deepToggle && !deepToggle.checked) deepToggle.click();
-                if (searchToggle && searchToggle.checked) searchToggle.click();
             } else if (bookmark.mode === "Web Search") {
                 if (searchToggle && !searchToggle.checked) searchToggle.click();
-                if (deepToggle && deepToggle.checked) deepToggle.click();
-            } else {
-                // Reset
-                if (deepToggle && deepToggle.checked) deepToggle.click();
-                if (searchToggle && searchToggle.checked) searchToggle.click();
             }
         }
+        
+        // Frage ins Eingabefeld setzen (optional, aber hilfreich)
+        const questionInput = document.getElementById("questionInput");
+        if (questionInput && bookmark.query) {
+            questionInput.value = bookmark.query;
+            // Falls du eine globale Variable für die letzte Frage hast:
+            if (typeof lastQuestion !== 'undefined') lastQuestion = bookmark.query; 
+        }
+    }
+    // === NEU: Citation-Meta immer nach dem Rendern setzen ===
+    try {
+        let includedModels = [];
+
+        if (typeof window.getIncludedModelNamesForCitation === "function") {
+            // liest aus dem DOM (nur Boxen mit Inhalt & nicht "excluded")
+            includedModels = window.getIncludedModelNamesForCitation();
+        }
+
+        window.consensusCitationMeta = {
+            question: bookmark.query || "",
+            includedModels: includedModels,
+            // falls du irgendwann das echte Consensus-Modell speicherst, hier ersetzen
+            consensusModel: "GPT-5",
+            url: window.location.href.split("#")[0],
+            dateISO:
+                bookmark.created_at ||
+                bookmark.createdAt ||
+                bookmark.created_at_iso ||
+                new Date().toISOString()
+        };
+    } catch (err) {
+        console.warn("Could not rebuild consensusCitationMeta from bookmark:", err);
+        window.consensusCitationMeta = null;
     }
 }
 

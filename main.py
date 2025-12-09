@@ -1414,6 +1414,7 @@ async def save_bookmark(request: Request, data: dict = Body(...)):
     response_text= data.get("response")
     modelName    = data.get("modelName")
     mode         = data.get("mode")
+    sources      = data.get("sources") # <--- NEU: Quellen auslesen
     
     if not (id_token and question and response_text and modelName):
         raise HTTPException(status_code=400, detail="Missing required fields.")
@@ -1433,6 +1434,10 @@ async def save_bookmark(request: Request, data: dict = Body(...)):
         "mode": mode,
         "responses": { modelName: response_text }
     }
+
+    # <--- NEU: Quellen hinzufügen, falls vorhanden
+    if sources is not None:
+        dataToMerge["sources"] = sources
     
     try:
         # Speichern (merge)
@@ -1468,6 +1473,7 @@ async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
     question = data.get("question")
     consensusText = data.get("consensusText")
     differencesText = data.get("differencesText")
+    sources = data.get("sources")
     
     if not id_token or not question or consensusText is None or differencesText is None:
         raise HTTPException(status_code=400, detail="Missing required fields.")
@@ -1487,6 +1493,9 @@ async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
             "differences": differencesText
         }
     }
+
+    if sources is not None:
+        dataToMerge["sources"] = sources
     
     try:
         db_firestore.collection("users").document(uid).collection("bookmarks").document(doc_id).set(dataToMerge, merge=True)
@@ -2149,27 +2158,55 @@ async def prepare(request: Request, data: dict = Body(...)):
 
 
 @app.post("/consensus")
-@limiter.limit("3/minute")
+@limiter.limit("5/minute")
 def consensus(request: Request, data: dict = Body(...)):
     id_token = extract_id_token(request, data)
     use_own_keys = data.get("useOwnKeys", False)
-    # Neuer Parameter: search_mode
     search_mode = data.get("search_mode", False)
     
+    # 1. Auth & Usage Check
     if id_token:
         if not use_own_keys:
             try:
                 uid = verify_user_token(id_token)
+                is_pro = is_user_pro(uid)  # WICHTIG: Pro-Status prüfen
             except Exception:
                 raise HTTPException(status_code=401, detail="Invalid token")
+
+            # Limits basierend auf Status festlegen
+            limit_regular = PRO_USAGE_LIMIT if is_pro else FREE_USAGE_LIMIT
+            limit_deep = PRO_DEEP_SEARCH_LIMIT if is_pro else 0  # Free User haben 0 Deep Search im Consensus
+
+            # Aktuellen Verbrauch abrufen
             current_usage = usage_counter.get(uid, 0)
-            if current_usage >= FREE_USAGE_LIMIT:
+            current_deep_usage = deep_search_usage.get(uid, 0)
+
+            # A) Deep Search Prüfung (wenn aktiviert)
+            if search_mode:
+                if not is_pro:
+                    # Optional: Falls Free User Deep Search im Consensus gar nicht dürfen
+                    raise HTTPException(status_code=403, detail="Deep Think consensus is exclusively available for Pro users.")
+                
+                if current_deep_usage >= limit_deep:
+                     raise HTTPException(
+                        status_code=403, 
+                        detail="Your Deep Think quota is exhausted."
+                    )
+                # Deep Usage erhöhen
+                deep_search_usage[uid] = current_deep_usage + 1
+
+            # B) Reguläre Usage Prüfung (gilt immer für Consensus Request)
+            if current_usage >= limit_regular:
+                msg = "Pro usage limit reached." if is_pro else "Your free quota has been used up. Please store your own API keys."
                 raise HTTPException(
                     status_code=403,
-                    detail="Your free quota has been used up. Please store your own API keys."
+                    detail=msg
                 )
+            
+            # Reguläre Usage erhöhen
             usage_counter[uid] = current_usage + 1
     else:
+        # Gast / ohne Token -> muss eigene Keys nutzen
         use_own_keys = True
 
     # Parameter extrahieren
