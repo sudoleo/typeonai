@@ -173,7 +173,7 @@
       <span class="settings-icon">⚙️</span>
       <span class="settings-label">Settings</span>
     </button>
-    <span id="version-number">v1.9.4</span>
+    <span id="version-number">v1.2.6</span>
   </div> 
 </div>
 <div class="container">
@@ -561,10 +561,8 @@
         
         if (isLoggedIn || hasApiKeys) {
           questionInput.placeholder = "Enter your question";
-          questionInput.disabled = false;
         } else {
           questionInput.placeholder = "Please log in or store your own API keys.";
-          questionInput.disabled = true;
         }
 
       function updateDeepThinkText() {
@@ -837,7 +835,6 @@
         });
   
         // Elemente für den Search Mode:
-        //const deepSearchToggle = document.getElementById("deepSearchToggle");
         const deepthinkDisclaimer = document.getElementById("deepthinkDisclaimer");
         const consensusDropdown = document.getElementById("consensusModelDropdown");
         
@@ -3160,6 +3157,10 @@
                 if (deepSearchLabel) {
                     deepSearchLabel.classList.add("locked");
                     deepSearchLabel.title = "Pro feature only";
+                    
+                    // WICHTIG: Klicks auf dem gesamten Label erlauben, damit der Listener feuert
+                    deepSearchLabel.style.pointerEvents = "auto"; 
+                    
                     const input = deepSearchLabel.querySelector('input');
                     if(input) input.style.pointerEvents = "auto";
                 }
@@ -3450,6 +3451,69 @@
   </div>
 </div>
 
+<div id="proFeatureModal" class="modal">
+  <div class="modal-content pro-modal-content">
+    <span class="close" id="closeProModal">&times;</span>
+    
+    <div class="pro-header">
+      <h2>Unlock <span class="highlight-tech">Deep Think</span></h2>
+      <p>Complex reasoning requires advanced compute power. <br>Upgrade to access the smartest AI models.</p>
+    </div>
+
+    <div class="pricing-grid">
+      
+      <div class="pricing-header">
+        <div class="col-feature">Features</div>
+        <div class="col-plan">Free</div>
+        <div class="col-plan">Pro</div> </div>
+
+      <div class="pricing-row">
+        <div class="col-feature">Fast Queries</div>
+        <div class="col-plan">25 / day</div>
+        <div class="col-plan bold">100 / day</div>
+      </div>
+
+      <div class="pricing-row">
+        <div class="col-feature">Web Search</div>
+        <div class="col-plan">25 / day</div>
+        <div class="col-plan bold">100 / day</div>
+      </div>
+
+      <div class="pricing-row">
+        <div class="col-feature">Deep Think</div>
+        <div class="col-plan">none</div>
+        <div class="col-plan bold">25 / day</div>
+      </div>
+
+      <div class="pricing-row">
+        <div class="col-feature">Context Window</div>
+        <div class="col-plan">Medium</div>
+        <div class="col-plan bold">Large</span></div>
+      </div>
+
+      <div class="pricing-row">
+        <div class="col-feature">Models</div>
+        <div class="col-plan">Lightweight<br><small>GPT-5 mini, Gemini 2.5 Flash...</small></div>
+        <div class="col-plan bold"><span class="highlight-tech">Frontier</span><br><small>Gemini 3 Pro, GPT-5.1...</small></div>
+      </div>
+
+       <div class="pricing-footer">
+        <div class="col-feature"></div> <div class="col-plan price-block">
+            <span class="price">€0</span>
+            <button class="btn-free" id="keepFreeBtn">Stay Free</button>
+        </div>
+        
+        <div class="col-plan price-block">
+            <span class="price">€10<small>/mo</small></span>
+            <button id="smokeTestUpgradeBtn" class="btn-pro">Upgrade</button>
+            <div class="guarantee">(Pricing preview, not active yet)</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <div id="popupContainer">
   <!-- Modal zum Editieren des Systemprompts -->
   <div id="systemPromptModal" class="modal" style="display:none;">
@@ -3525,7 +3589,7 @@
         </div>
         
         <div style="text-align: center; margin-top: 20px; opacity: 0.5; font-size: 0.8em;">
-          v1.9.4
+          v1.2.6
         </div>
   </div>
 </div>
@@ -3686,69 +3750,6 @@
           The free quota is intended to allow an initial, non-committal exploration of consens.io. It enables you to test model comparison, consensus building, and web search features before deciding whether you want to use your own API keys or extended access.
         </p>        
       </div>      
-    </div>
-  </div>
-</div>
-
-<div id="proFeatureModal" class="modal">
-  <div class="modal-content pro-modal-content">
-    <span class="close" id="closeProModal">&times;</span>
-    
-    <div class="pro-header">
-      <h2>Unlock <span class="highlight-tech">Deep Think</span></h2>
-      <p>Complex reasoning requires advanced compute power. <br>Upgrade to access the smartest AI models.</p>
-    </div>
-
-    <div class="pricing-grid">
-      
-      <div class="pricing-header">
-        <div class="col-feature">Features</div>
-        <div class="col-plan">Free</div>
-        <div class="col-plan">Pro</div> </div>
-
-      <div class="pricing-row">
-        <div class="col-feature">Fast Queries</div>
-        <div class="col-plan">25 / day</div>
-        <div class="col-plan bold">100 / day</div>
-      </div>
-
-      <div class="pricing-row">
-        <div class="col-feature">Web Search</div>
-        <div class="col-plan">25 / day</div>
-        <div class="col-plan bold">100 / day</div>
-      </div>
-
-      <div class="pricing-row">
-        <div class="col-feature">Deep Think</div>
-        <div class="col-plan">none</div>
-        <div class="col-plan bold">25 / day</div>
-      </div>
-
-      <div class="pricing-row">
-        <div class="col-feature">Context Window</div>
-        <div class="col-plan">Medium</div>
-        <div class="col-plan bold">Large</span></div>
-      </div>
-
-      <div class="pricing-row">
-        <div class="col-feature">Models</div>
-        <div class="col-plan">Lightweight<br><small>GPT-5 mini, Gemini 2.5 Flash...</small></div>
-        <div class="col-plan bold"><span class="highlight-tech">Frontier</span><br><small>Gemini 3 Pro, GPT-5.1...</small></div>
-      </div>
-
-       <div class="pricing-footer">
-        <div class="col-feature"></div> <div class="col-plan price-block">
-            <span class="price">€0</span>
-            <button class="btn-free" id="keepFreeBtn">Stay Free</button>
-        </div>
-        
-        <div class="col-plan price-block">
-            <span class="price">€10<small>/mo</small></span>
-            <button id="smokeTestUpgradeBtn" class="btn-pro">Upgrade</button>
-            <div class="guarantee">(Pricing preview, not active yet)</div>
-        </div>
-      </div>
-
     </div>
   </div>
 </div>

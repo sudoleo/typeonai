@@ -403,9 +403,6 @@ z-index: 2000;  /* höher als der toggleAllButton */
     filter: grayscale(100%);
     cursor: not-allowed;
 }
-.switch.deep-switch.locked .slider {
-    cursor: not-allowed;
-}
 
 /* Input-Section */
 .input-section {
