@@ -297,7 +297,8 @@
               <option value="claude-sonnet-4-20250514">claude-4-sonnet</option>
               <option value="claude-3-7-sonnet-20250219">claude-3-7-sonnet</option>
               <option value="claude-3-5-haiku-20241022">claude-3-5-haiku</option>
-              <option value="claude-sonnet-4-5-20250929" disabled class="premium-option">claude-sonnet-4-5</option>
+              <option value="claude-sonnet-4-5" disabled class="premium-option">claude-sonnet-4-5</option>
+              <option value="claude-opus-4-5" disabled class="premium-option">claude-opus-4-5</option>
             </select>
           </span>
         </span>
@@ -632,7 +633,7 @@
 
         const openaiModelText   = deepSearchActive ? "GPT-5 reasoning" : document.getElementById("openaiModelSelect").value;
         const geminiModelText   = deepSearchActive ? "gemini-3-pro-preview" : document.getElementById("geminiModelSelect").value;
-        const claudeModelText   = deepSearchActive ? "claude-sonnet-4-5-20250929" : document.getElementById("claudeModelSelect").value;
+        const claudeModelText   = deepSearchActive ? "claude-sonnet-4-5" : document.getElementById("claudeModelSelect").value;
         const deepseekModelText = deepSearchActive ? "DeepSeek-Reasoner" : document.getElementById("deepseekModelSelect").value;
         const grokModelText     = deepSearchActive ? "grok-4-latest" : document.getElementById("grokModelSelect").value;
 

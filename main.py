@@ -148,8 +148,8 @@ ALLOWED_ANTHROPIC_MODELS = {
     "claude-3-7-sonnet-20250219",
     "claude-3-5-haiku-20241022",
     # Premium:
-    "claude-sonnet-4-5-20250929",
     "claude-sonnet-4-5", 
+    "claude-opus-4-5",
 }
 
 # --- GEMINI ---
@@ -186,8 +186,8 @@ PREMIUM_MODELS = {
     "gpt-5.2",
 
     # Anthropic
-    "claude-sonnet-4-5-20250929",
     "claude-sonnet-4-5",
+    "claude-opus-4-5",
     
     # Gemini
     "gemini-2.5-pro",
@@ -405,7 +405,7 @@ def query_claude(question: str, api_key: str, system_prompt: str = None, deep_se
             "anthropic-version": "2023-06-01"
         }
         payload = {
-            "model": model_override if (model_override and not deep_search) else "claude-sonnet-4-5-20250929",
+            "model": model_override if (model_override and not deep_search) else "claude-sonnet-4-5",
             "max_tokens": max_tokens,
             "system": system_prompt,
             "messages": [{"role": "user", "content": question}]
