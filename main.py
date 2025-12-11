@@ -131,6 +131,7 @@ ALLOWED_OPENAI_MODELS = {
     "gpt-5",
     "gpt-5-chat-latest",
     "gpt-5.1",
+    "gpt-5.2",
 }
 
 # --- MISTRAL ---
@@ -182,6 +183,7 @@ PREMIUM_MODELS = {
     "gpt-5",
     "gpt-5-chat-latest",
     "gpt-5.1",
+    "gpt-5.2",
 
     # Anthropic
     "claude-sonnet-4-5-20250929",
