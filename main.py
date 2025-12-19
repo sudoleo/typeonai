@@ -154,6 +154,7 @@ ALLOWED_ANTHROPIC_MODELS = {
 
 # --- GEMINI ---
 ALLOWED_GEMINI_MODELS = {
+    "gemini-3-flash-preview",
     "gemini-2.5-flash",
     "gemini-2.0-flash",
     # Premium:
@@ -450,7 +451,7 @@ def query_gemini(
         return f"Error with Gemini: configuration failed: {e}"
 
     # (B) Modell & Config
-    model_name = "gemini-3-pro-preview" if deep_search else (model_override or "gemini-2.5-flash")
+    model_name = "gemini-3-pro-preview" if deep_search else (model_override or "gemini-3-flash-preview")
 
     print(f"[MODEL] Gemini -> {model_name} | deep_search={deep_search} | override={model_override}")
 
@@ -802,7 +803,7 @@ def query_consensus(
                 genai.configure()
 
             # Flash vs Pro
-            model_name = "gemini-3-pro-preview" if consensus_model == "Gemini-Pro" else "gemini-2.5-flash"
+            model_name = "gemini-3-pro-preview" if consensus_model == "Gemini-Pro" else "gemini-3-flash-preview"
             
             model = genai.GenerativeModel(model_name)
             generation_config = {"max_output_tokens": int(CONSENSUS_MAX_TOKENS)}
@@ -993,7 +994,7 @@ def query_differences(
                     genai.configure()
 
                 model = genai.GenerativeModel(
-                    model_name="gemini-2.5-flash",
+                    model_name="gemini-3-flash-preview",
                     system_instruction="Answer in the exact same language as the Model responses.",
                     safety_settings=[{"category":"HARM_CATEGORY_HARASSMENT","threshold":"BLOCK_ONLY_HIGH"}],
                     generation_config={"max_output_tokens": int(DIFFERENCES_MAX_TOKENS), "temperature": 0.2}
