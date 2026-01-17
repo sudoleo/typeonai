@@ -57,8 +57,7 @@ TOOLS:
 - "weather": Current weather, forecasts, temperature (City needed).
 - "stock": Stock prices, ETFs, Indices, Market Cap (Ticker/Company needed).
 - "crypto": Cryptocurrency prices, Coins (Coin name/Symbol needed).
-- "web": General web search for factual questions that require up-to-date or external information
-         (e.g. current events, very specific statistics, niche facts).
+- "web": General web search. ONLY for breaking news, events after 2024, or hyper-specific facts not found in general training data. Be extremely RESTRICTIVE!
 
 INSTRUCTIONS:
 1. Identify the Intent.
