@@ -26,7 +26,7 @@ VALID_LEADERBOARD_MODELS = {
 ALLOWED_OPENAI_MODELS = {
     "gpt-5-nano", "gpt-5-mini", "gpt-4.1", "gpt-4o", "gpt-3.5-turbo",
     "gpt-5", "gpt-5-chat-latest", "gpt-5.1", "gpt-5.2", "gpt-5.3", "gpt-5.3-chat-latest", "gpt-5.4",
-    "gpt-5.5",
+    "gpt-5.5", "gpt-5.4-mini",
 }
 
 ALLOWED_MISTRAL_MODELS = {

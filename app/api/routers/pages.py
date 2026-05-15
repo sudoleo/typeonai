@@ -11,6 +11,7 @@ import requests
 
 from app.core.rate_limit import limiter
 from app.core.security import verify_user_token, is_valid_session, extract_id_token, db_firestore
+from firebase_admin import firestore
 from app.core.state import last_feedback_time
 from app.core.config import FREE_USAGE_LIMIT, VALID_LEADERBOARD_MODELS
 

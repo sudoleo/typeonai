@@ -79,7 +79,7 @@ def query_consensus(
         if consensus_model in ["OpenAI", "OpenAI-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
             # WICHTIG: Hier wird das Modell gewählt
-            model_to_use = "gpt-5.5" if consensus_model == "OpenAI-Pro" else "gpt-5.5"
+            model_to_use = "gpt-5.5" if consensus_model == "OpenAI-Pro" else "gpt-5.4-mini"
             
             kwargs = {
                 "model": model_to_use,
@@ -285,7 +285,7 @@ def query_differences(
         # OPENAI
         if differences_model in ["OpenAI", "OpenAI-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
-            model_to_use = "gpt-5.5"
+            model_to_use = "gpt-5.5" if differences_model == "OpenAI-Pro" else "gpt-5.4-mini"
             
             kwargs = {
                 "model": model_to_use,

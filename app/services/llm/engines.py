@@ -23,7 +23,7 @@ def query_openai(
     client = openai.OpenAI(api_key=api_key)
 
     # Modell-Entscheidung: search_mode ist entfernt – nur deep_search & override steuern
-    model_to_use = "gpt-5.5" if deep_search else (model_override or "gpt-5.5")
+    model_to_use = "gpt-5.5" if deep_search else (model_override or "gpt-5.4-mini")
 
     print(f"[MODEL] OpenAI -> {model_to_use} | deep_search={deep_search} | override={model_override}")
 
