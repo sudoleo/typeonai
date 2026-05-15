@@ -51,7 +51,39 @@ async def read_root(request: Request):
         "firebase_messaging_sender_id": os.environ.get("FIREBASE_MESSAGING_SENDER_ID"),
         "firebase_app_id": os.environ.get("FIREBASE_APP_ID")
     }
-    return templates.TemplateResponse("index.html", {"request": request, "free_limit": FREE_USAGE_LIMIT, **firebase_config})
+    from app.core.config import ALLOWED_OPENAI_MODELS, ALLOWED_MISTRAL_MODELS, ALLOWED_ANTHROPIC_MODELS, ALLOWED_GEMINI_MODELS, ALLOWED_DEEPSEEK_MODELS, ALLOWED_GROK_MODELS, PREMIUM_MODELS
+    
+    models = {
+        "openai": sorted(list(ALLOWED_OPENAI_MODELS)),
+        "mistral": sorted(list(ALLOWED_MISTRAL_MODELS)),
+        "anthropic": sorted(list(ALLOWED_ANTHROPIC_MODELS)),
+        "gemini": sorted(list(ALLOWED_GEMINI_MODELS)),
+        "deepseek": sorted(list(ALLOWED_DEEPSEEK_MODELS)),
+        "grok": sorted(list(ALLOWED_GROK_MODELS)),
+        "premium": list(PREMIUM_MODELS)
+    }
+
+    return templates.TemplateResponse("index.html", {
+        "request": request, 
+        "free_limit": FREE_USAGE_LIMIT, 
+        "models": models,
+        **firebase_config
+    })
+
+@router.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request):
+    firebase_config = {
+        "firebase_api_key": os.environ.get("FIREBASE_API_KEY"),
+        "firebase_auth_domain": os.environ.get("FIREBASE_AUTH_DOMAIN"),
+        "firebase_project_id": os.environ.get("FIREBASE_PROJECT_ID"),
+        "firebase_storage_bucket": os.environ.get("FIREBASE_STORAGE_BUCKET"),
+        "firebase_messaging_sender_id": os.environ.get("FIREBASE_MESSAGING_SENDER_ID"),
+        "firebase_app_id": os.environ.get("FIREBASE_APP_ID")
+    }
+    return templates.TemplateResponse("admin.html", {
+        "request": request,
+        **firebase_config
+    })
 
 @router.post("/feedback")
 @limiter.limit("3/minute")

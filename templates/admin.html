@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>consens.io - Admin Dashboard</title>
+    <script>
+        window.FIREBASE_CONFIG = {
+          apiKey: "{{ firebase_api_key }}",
+          authDomain: "{{ firebase_auth_domain }}",
+          projectId: "{{ firebase_project_id }}",
+          storageBucket: "{{ firebase_storage_bucket }}",
+          messagingSenderId: "{{ firebase_messaging_sender_id }}",
+          appId: "{{ firebase_app_id }}"
+        };
+    </script>
+    <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .admin-container {
+            max-width: 1000px;
+            margin: 100px auto;
+            padding: 20px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .provider-section {
+            background: var(--bg-primary);
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .provider-section h3 { 
+            margin-top: 0; 
+            text-transform: capitalize; 
+            border-bottom: 1px solid var(--border-color); 
+            padding-bottom: 10px;
+        }
+        .model-row { 
+            display: flex; 
+            align-items: center; 
+            gap: 15px; 
+            margin-bottom: 10px; 
+        }
+        .model-row input[type="text"] { 
+            flex: 1; 
+            padding: 8px; 
+            border-radius: 4px; 
+            border: 1px solid var(--border-color); 
+            background: var(--bg-secondary); 
+            color: var(--text-color);
+        }
+        .model-row label { 
+            display: flex; 
+            align-items: center; 
+            gap: 5px; 
+            font-size: 0.9em; 
+            cursor: pointer; 
+            white-space: nowrap;
+        }
+        .remove-btn { 
+            background: #f44336; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            padding: 8px 12px; 
+            cursor: pointer; 
+            font-weight: bold;
+        }
+        .add-btn { 
+            background: #4caf50; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            padding: 8px 12px; 
+            cursor: pointer; 
+            margin-top: 10px; 
+            font-weight: bold;
+        }
+        .admin-btn {
+            background-color: var(--button-bg);
+            color: var(--button-text);
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .admin-btn:hover {
+            background-color: var(--button-hover);
+        }
+        #statusMessage {
+            margin-top: 10px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .success { color: #4caf50; }
+        .error { color: #f44336; }
+        .providers-grid {
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .providers-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+
+        const app = initializeApp(window.FIREBASE_CONFIG);
+        const auth = getAuth(app);
+        
+        const providers = ['openai', 'mistral', 'anthropic', 'gemini', 'deepseek', 'grok'];
+        let globalModelsData = {};
+
+        function renderUI() {
+            const container = document.getElementById('providersContainer');
+            container.innerHTML = '';
+            
+            const premiumSet = new Set(globalModelsData.premium || []);
+            
+            providers.forEach(p => {
+                const section = document.createElement('div');
+                section.className = 'provider-section';
+                
+                const title = document.createElement('h3');
+                title.textContent = p;
+                section.appendChild(title);
+                
+                const listContainer = document.createElement('div');
+                listContainer.id = `list-${p}`;
+                
+                const models = globalModelsData[p] || [];
+                models.forEach((m, idx) => {
+                    const row = createModelRow(p, m, premiumSet.has(m));
+                    listContainer.appendChild(row);
+                });
+                
+                section.appendChild(listContainer);
+                
+                const addBtn = document.createElement('button');
+                addBtn.className = 'add-btn';
+                addBtn.textContent = '+ Add Model';
+                addBtn.onclick = () => {
+                    listContainer.appendChild(createModelRow(p, '', false));
+                };
+                section.appendChild(addBtn);
+                
+                container.appendChild(section);
+            });
+        }
+        
+        function createModelRow(provider, modelName, isPremium) {
+            const row = document.createElement('div');
+            row.className = 'model-row';
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = modelName;
+            input.placeholder = 'Model identifier (e.g. gpt-4o)';
+            
+            const label = document.createElement('label');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = isPremium;
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(' Premium'));
+            
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-btn';
+            removeBtn.textContent = 'X';
+            removeBtn.onclick = () => row.remove();
+            
+            row.appendChild(input);
+            row.appendChild(label);
+            row.appendChild(removeBtn);
+            
+            return row;
+        }
+
+        async function fetchModels(idToken) {
+            try {
+                const response = await fetch('/api/admin/models', {
+                    headers: { 'Authorization': `Bearer ${idToken}` }
+                });
+                if (!response.ok) {
+                    throw new Error('Failed to fetch models. Admin access required.');
+                }
+                globalModelsData = await response.json();
+                renderUI();
+            } catch (err) {
+                document.getElementById('statusMessage').textContent = err.message;
+                document.getElementById('statusMessage').className = 'error';
+            }
+        }
+
+        async function saveModels() {
+            const user = auth.currentUser;
+            if (!user) return;
+            const idToken = await user.getIdToken();
+            
+            const data = { premium: [] };
+            
+            providers.forEach(p => {
+                data[p] = [];
+                const listContainer = document.getElementById(`list-${p}`);
+                const rows = listContainer.querySelectorAll('.model-row');
+                rows.forEach(row => {
+                    const input = row.querySelector('input[type="text"]');
+                    const checkbox = row.querySelector('input[type="checkbox"]');
+                    const modelName = input.value.trim();
+                    
+                    if (modelName) {
+                        data[p].push(modelName);
+                        if (checkbox.checked) {
+                            data.premium.push(modelName);
+                        }
+                    }
+                });
+            });
+
+            try {
+                const response = await fetch('/api/admin/models', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${idToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    document.getElementById('statusMessage').textContent = 'Models updated successfully!';
+                    document.getElementById('statusMessage').className = 'success';
+                    setTimeout(() => document.getElementById('statusMessage').textContent = '', 3000);
+                } else {
+                    const resData = await response.json();
+                    throw new Error(resData.detail || 'Failed to update models');
+                }
+            } catch (err) {
+                document.getElementById('statusMessage').textContent = err.message;
+                document.getElementById('statusMessage').className = 'error';
+            }
+        }
+
+        document.getElementById('saveBtn').addEventListener('click', saveModels);
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                const idToken = await user.getIdToken();
+                fetchModels(idToken);
+            } else {
+                document.getElementById('statusMessage').textContent = 'Please log in to access the admin panel.';
+                document.getElementById('statusMessage').className = 'error';
+                window.location.href = '/';
+            }
+        });
+    </script>
+</head>
+<body class="dark-mode">
+    <header class="top-bar">
+        <div class="top-bar-logo">
+            <a href="/" id="logoLink">
+                <img src="/static/favicon.png" alt="Favicon" class="top-bar-favicon">
+            </a>
+            <span class="top-bar-title">consens.io Admin</span>
+        </div>
+        <div class="top-bar-right">
+            <a href="/app" class="top-bar-about">Back to App</a>
+        </div>
+    </header>
+
+    <div class="admin-container">
+        <div class="admin-header">
+            <h2>AI Models Configuration</h2>
+            <button id="saveBtn" class="admin-btn">Save Changes</button>
+        </div>
+        <div id="statusMessage"></div>
+        <p style="margin-bottom: 20px; font-size: 0.9em; color: var(--text-color);">Add models to each provider and toggle the <strong>Premium</strong> checkbox to mark them as Pro-only.</p>
+        
+        <div id="providersContainer" class="providers-grid">
+            <!-- Populated by JavaScript -->
+        </div>
+    </div>
+</body>
+</html>

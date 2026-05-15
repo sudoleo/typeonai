@@ -17,9 +17,18 @@ from app.core.security import CustomSecurityMiddleware
 from app.core.rate_limit import limiter
 
 # Import routers
-from app.api.routers import auth, users, bookmarks, chat, pages
+from app.api.routers import auth, users, bookmarks, chat, pages, admin
+from app.core.config import load_models_from_db
 
-app = FastAPI()
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load models from db on startup
+    load_models_from_db()
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 # Add Custom Security Middleware
 app.add_middleware(CustomSecurityMiddleware)
@@ -48,3 +57,4 @@ app.include_router(users.router)
 app.include_router(bookmarks.router)
 app.include_router(chat.router)
 app.include_router(pages.router)
+app.include_router(admin.router)

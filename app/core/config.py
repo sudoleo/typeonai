@@ -75,4 +75,70 @@ ALL_ALLOWED_MODELS = (
     ALLOWED_GEMINI_MODELS | ALLOWED_DEEPSEEK_MODELS | ALLOWED_GROK_MODELS
 )
 
+def load_models_from_db():
+    import logging
+    from app.core.security import db_firestore
+    try:
+        doc_ref = db_firestore.collection("app_config").document("models")
+        doc = doc_ref.get()
+        if doc.exists:
+            data = doc.to_dict()
+            
+            # Update OpenAI
+            if "openai" in data:
+                ALLOWED_OPENAI_MODELS.clear()
+                ALLOWED_OPENAI_MODELS.update(data["openai"])
+            
+            # Update Mistral
+            if "mistral" in data:
+                ALLOWED_MISTRAL_MODELS.clear()
+                ALLOWED_MISTRAL_MODELS.update(data["mistral"])
+            
+            # Update Anthropic
+            if "anthropic" in data:
+                ALLOWED_ANTHROPIC_MODELS.clear()
+                ALLOWED_ANTHROPIC_MODELS.update(data["anthropic"])
+            
+            # Update Gemini
+            if "gemini" in data:
+                ALLOWED_GEMINI_MODELS.clear()
+                ALLOWED_GEMINI_MODELS.update(data["gemini"])
+            
+            # Update DeepSeek
+            if "deepseek" in data:
+                ALLOWED_DEEPSEEK_MODELS.clear()
+                ALLOWED_DEEPSEEK_MODELS.update(data["deepseek"])
+            
+            # Update Grok
+            if "grok" in data:
+                ALLOWED_GROK_MODELS.clear()
+                ALLOWED_GROK_MODELS.update(data["grok"])
+            
+            # Update Premium
+            if "premium" in data:
+                PREMIUM_MODELS.clear()
+                PREMIUM_MODELS.update(data["premium"])
+            
+            # Update ALL_ALLOWED_MODELS
+            global ALL_ALLOWED_MODELS
+            ALL_ALLOWED_MODELS = (
+                ALLOWED_OPENAI_MODELS | ALLOWED_MISTRAL_MODELS | ALLOWED_ANTHROPIC_MODELS |
+                ALLOWED_GEMINI_MODELS | ALLOWED_DEEPSEEK_MODELS | ALLOWED_GROK_MODELS
+            )
+            logging.info("Models configuration loaded from Firestore successfully.")
+        else:
+            # If document doesn't exist, create it with default values
+            doc_ref.set({
+                "openai": list(ALLOWED_OPENAI_MODELS),
+                "mistral": list(ALLOWED_MISTRAL_MODELS),
+                "anthropic": list(ALLOWED_ANTHROPIC_MODELS),
+                "gemini": list(ALLOWED_GEMINI_MODELS),
+                "deepseek": list(ALLOWED_DEEPSEEK_MODELS),
+                "grok": list(ALLOWED_GROK_MODELS),
+                "premium": list(PREMIUM_MODELS)
+            })
+            logging.info("Created default models configuration in Firestore.")
+    except Exception as e:
+        logging.error(f"Failed to load models from Firestore: {e}")
+
 DEEP_THINK_PROMPT = "Deep Think: Focus as hard as you can! But only on the essentials."

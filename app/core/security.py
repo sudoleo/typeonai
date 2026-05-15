@@ -106,6 +106,23 @@ def is_user_pro(uid: str) -> bool:
         logging.error(f"Pro-Check Fehler für {uid}: {e}")
         return False
 
+def is_user_admin(uid: str) -> bool:
+    """
+    Liest aus Firestore, ob das Feld 'role' auf 'admin' steht.
+    """
+    try:
+        doc_ref = db_firestore.collection("users").document(uid)
+        doc = doc_ref.get()
+        
+        if doc.exists:
+            data = doc.to_dict()
+            role = data.get("role", "").lower()
+            return role == "admin"
+        return False
+    except Exception as e:
+        logging.error(f"Admin-Check Fehler für {uid}: {e}")
+        return False
+
 def is_valid_session(token: str) -> bool:
     """
     Prüft, ob das übergebene Firebase-ID-Token gültig ist.

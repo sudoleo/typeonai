@@ -245,19 +245,9 @@
             </small>
             <span class="model-picker-wrapper">
               <select id="openaiModelSelect" class="model-picker">
-                <option value="gpt-5.4-mini">GPT-5.4-mini</option>
-                <option value="gpt-5-mini">GPT-5-mini</option>
-                <option value="gpt-5-nano">GPT-5-nano</option>
-                <option value="gpt-4.1">GPT-4.1</option>
-                <option value="gpt-4o">GPT-4o</option>
-                <option value="gpt-3.5-turbo">GPT-3.5-turbo</option>
-                <option value="gpt-5.5" disabled class="premium-option">GPT-5.5</option>
-                <option value="gpt-5" disabled class="premium-option">GPT-5</option>
-                <option value="gpt-5-chat-latest" disabled class="premium-option">GPT-5-chat-latest</option>
-                <option value="gpt-5.1" disabled class="premium-option">GPT-5.1</option>
-                <option value="gpt-5.2" disabled class="premium-option">GPT-5.2</option>
-                <option value="gpt-5.3-chat-latest" disabled class="premium-option">GPT-5.3-chat-latest</option>
-                <option value="gpt-5.4" disabled class="premium-option">GPT-5.4</option>
+                {% for model in models['openai'] %}
+                <option value="{{ model }}" {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}</option>
+                {% endfor %}
               </select>
             </span>
           </span>
@@ -279,12 +269,9 @@
                 id="mistralModelText">mistral-small-4</span></small>
             <span class="model-picker-wrapper">
               <select id="mistralModelSelect" class="model-picker">
-                <option value="mistral-small-latest">mistral-small-4</option>
-                <option value="mistral-medium-latest">mistral-medium-3.5</option>
-                <option value="mistral-large-latest" disabled class="premium-option">mistral-large-3</option>
-                <option value="ministral-3b-latest">ministral-3b-latest</option>
-                <option value="ministral-8b-latest">ministral-8b-latest</option>
-                <option value="pixtral-large-latest" disabled class="premium-option">pixtral-large-latest</option>
+                {% for model in models['mistral'] %}
+                <option value="{{ model }}" {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}</option>
+                {% endfor %}
               </select>
             </span>
           </span>
@@ -306,15 +293,9 @@
                 id="claudeModelText">claude-haiku-4-5</span></small>
             <span class="model-picker-wrapper">
               <select id="claudeModelSelect" class="model-picker">
-                <option value="claude-haiku-4-5">claude-haiku-4-5</option>
-                <option value="claude-sonnet-4-20250514">claude-4-sonnet</option>
-                <option value="claude-3-7-sonnet-20250219">claude-3-7-sonnet</option>
-                <option value="claude-3-5-haiku-20241022">claude-3-5-haiku</option>
-                <option value="claude-opus-4-7" disabled class="premium-option">claude-opus-4-7</option>
-                <option value="claude-sonnet-4-5" disabled class="premium-option">claude-sonnet-4-5</option>
-                <option value="claude-opus-4-5" disabled class="premium-option">claude-opus-4-5</option>
-                <option value="claude-sonnet-4-6" disabled class="premium-option">claude-sonnet-4-6</option>
-                <option value="claude-opus-4-6" disabled class="premium-option">claude-opus-4-6</option>
+                {% for model in models['anthropic'] %}
+                <option value="{{ model }}" {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}</option>
+                {% endfor %}
               </select>
             </span>
           </span>
@@ -336,12 +317,9 @@
                 id="geminiModelText">gemini-3.1-flash</span></small>
             <span class="model-picker-wrapper">
               <select id="geminiModelSelect" class="model-picker">
-                <option value="gemini-3-flash-preview">gemini-3.1-flash</option>
-                <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite</option>
-                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-                <option value="gemini-3-pro-preview" disabled class="premium-option">gemini-3.1-pro</option>
-                <option value="gemini-2.5-pro" disabled class="premium-option">gemini-2.5-pro</option>
+                {% for model in models['gemini'] %}
+                <option value="{{ model }}" {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}</option>
+                {% endfor %}
               </select>
             </span>
           </span>
@@ -363,10 +341,9 @@
                 id="deepseekModelText">DeepSeek-V4-Flash</span></small>
             <span class="model-picker-wrapper">
               <select id="deepseekModelSelect" class="model-picker">
-                <option value="deepseek-v4-flash">DeepSeek-V4-Flash</option>
-                <option value="deepseek-chat">DeepSeek-V3.2</option>
-                <option value="deepseek-v4-pro" disabled class="premium-option">DeepSeek-V4-Pro</option>
-                <option value="deepseek-reasoner" disabled class="premium-option">DeepSeek-V3.2/Reasoner</option>
+                {% for model in models['deepseek'] %}
+                <option value="{{ model }}" {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}</option>
+                {% endfor %}
               </select>
             </span>
           </span>
@@ -390,15 +367,9 @@
             </small>
             <span class="model-picker-wrapper">
               <select id="grokModelSelect" class="model-picker">
-                <option value="grok-4.20-non-reasoning">grok-4.20-non-reasoning</option>
-                <option value="grok-4-1-fast-non-reasoning-latest">grok-4-1-fast</option>
-                <option value="grok-4-fast-non-reasoning-latest">grok-4-fast</option>
-                <option value="grok-4.3" disabled class="premium-option">grok-4.3</option>
-                <option value="grok-4-latest" disabled class="premium-option">grok-4-latest</option>
-                <option value="grok-3-latest" disabled class="premium-option">grok-3-latest</option>
-                <option value="grok-4-fast-reasoning-latest" disabled class="premium-option">
-                  grok-4-fast-reasoning-latest</option>
-                <option value="grok-4.20" disabled class="premium-option">grok-4.20</option>
+                {% for model in models['grok'] %}
+                <option value="{{ model }}" {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}</option>
+                {% endfor %}
               </select>
             </span>
           </span>
