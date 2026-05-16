@@ -17,7 +17,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=20260517-ui1">
   <link rel="icon" href="/static/favicon.png" type="image/x-icon">
   <!-- Füge dies im <head> hinzu -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -28,42 +28,12 @@
   <!-- DOMPurify (HTML Sanitizer) -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js"></script>
-  <script type="module" src="/static/demo.js"></script>
+  <script type="module" src="/static/firebase.js?v=20260517-ui1"></script>
+  <script type="module" src="/static/demo.js?v=20260516-ui7"></script>
+  <script src="/static/app-ui.js" defer></script>
 </head>
 
 <body>
-  <!-- Marketing Popup -->
-  <div id="marketingPopup" class="modal">
-    <div class="modal-content">
-      <span class="close">&times;</span>
-      <h2>Welcome to <span class="highlight">consens.io</span></h2>
-      <div class="benefits">
-        <p class="benefits-note"><strong>All free & completely non‑binding</strong></p>
-
-        <div class="benefit">
-          <span class="benefit-icon">✔</span>
-          <strong>Models:</strong>
-          <span>25 free queries to multiple leading AI models.</span>
-        </div>
-        <br />
-        <div class="benefit">
-          <span class="benefit-icon">✔</span>
-          <strong>Deep Think Mode:</strong>
-          <span>12 free deep‑research queries for detailed insights.</span>
-        </div>
-        <br />
-        <div class="benefit">
-          <span class="benefit-icon">✔</span>
-          <strong>Search:</strong>
-          <span>Real‑time web search for accurate, up‑to‑date results.</span>
-        </div>
-      </div>
-      <p class="cta-text">Log in & get started immediately – free.</p>
-      <button id="startNowButton" class="cta-button">Get started</button>
-    </div>
-  </div>
-
   <header class="top-bar">
     <!-- Sidebar Toggle Button -->
     <button id="toggleSidebarButton" class="sidebar-toggle collapse-btn">
@@ -150,7 +120,7 @@
 
       <!-- Leaderboard -->
       <div class="sidebar-header">
-        <h2 data-tooltip="Displays the user leaderboard based on their results.">
+        <h2 data-tooltip="For every query, the best model answer is picked by the consensus engine. This process is completely anonymized.">
           Leaderboard
         </h2>
         <button id="toggleLeaderboard" onclick="toggleLeaderboard()" class="collapse-btn">
@@ -177,7 +147,7 @@
         <span class="settings-icon">⚙️</span>
         <span class="settings-label">Settings</span>
       </button>
-      <span id="version-number">v1.2.6</span>
+      <span id="version-number">v1.3.1</span>
     </div>
   </div>
   <div class="container">
@@ -192,7 +162,7 @@
           style="position: absolute; bottom: 10px; left: 10px; display: flex; align-items: center; gap: 20px;">
           <!-- Auto-Konsens-Switch -->
           <div class="auto-consensus">
-            <label class="switch">
+            <label class="switch" aria-label="Auto Consensus" title="Auto Consensus">
               <input type="checkbox" id="autoConsensusToggle">
               <span class="slider"></span>
             </label>
@@ -200,7 +170,7 @@
           </div>
           <!-- Search Mode Switch, standardmäßig leicht ausgegraut -->
           <div class="search-mode">
-            <label class="switch">
+            <label class="switch" aria-label="Web Search" title="Web Search">
               <input type="checkbox" id="searchModeToggle">
               <span class="slider"></span>
             </label>
@@ -212,14 +182,14 @@
             </span>
           </div>
           <div class="search-mode deep-search-mode">
-            <label class="switch deep-switch">
+            <label class="switch deep-switch" aria-label="Deep Think" title="Deep Think">
               <input type="checkbox" id="deepSearchToggle">
               <span class="slider"></span>
             </label>
             <span class="search-mode-label deep-switch-label">Deep Think</span>
             <span id="deepthinkDisclaimer" class="deepthink-disclaimer"
               style="display: none; font-size: 0.8em; margin-left: 5px;">
-              Reasoning models. More thoughtful responses.
+              Reasoning models. Thoughtful responses.
             </span>
           </div>
         </div>
@@ -261,9 +231,6 @@
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('openaiResponse')" title="Mark as best answer">&#9733;</span>
             <span class="exclude-btn" onclick="toggleExclude('openaiResponse')" title="Exclude answer">&#10005;</span>
-            <button class="collapse-btn" onclick="toggleCollapse('openaiResponse')">
-              <span class="arrow">&#9660;</span>
-            </button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -285,9 +252,6 @@
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('mistralResponse')" title="Mark as best answer">&#9733;</span>
             <span class="exclude-btn" onclick="toggleExclude('mistralResponse')" title="Exclude answer">&#10005;</span>
-            <button class="collapse-btn" onclick="toggleCollapse('mistralResponse')">
-              <span class="arrow">&#9660;</span>
-            </button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -309,9 +273,6 @@
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('claudeResponse')" title="Mark as best answer">&#9733;</span>
             <span class="exclude-btn" onclick="toggleExclude('claudeResponse')" title="Exclude answer">&#10005;</span>
-            <button class="collapse-btn" onclick="toggleCollapse('claudeResponse')">
-              <span class="arrow">&#9660;</span>
-            </button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -321,11 +282,11 @@
         <h2>
           <span class="title">Response from Gemini
             <small><img src="/static/icons/chat_icons/gemini-icon.png" class="model-icon" alt="icon"><span
-                id="geminiModelText">gemini-3.1-flash</span></small>
+                id="geminiModelText">gemini-3-flash-preview</span></small>
             <span class="model-picker-wrapper">
               <select id="geminiModelSelect" class="model-picker">
                 {% for model in models['gemini'] %}
-                <option value="{{ model }}" {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}</option>
+                <option value="{{ model }}" {% if model == "gemini-3-flash-preview" %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}</option>
                 {% endfor %}
               </select>
             </span>
@@ -333,9 +294,6 @@
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('geminiResponse')" title="Mark as best answer">&#9733;</span>
             <span class="exclude-btn" onclick="toggleExclude('geminiResponse')" title="Exclude answer">&#10005;</span>
-            <button class="collapse-btn" onclick="toggleCollapse('geminiResponse')">
-              <span class="arrow">&#9660;</span>
-            </button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -357,9 +315,6 @@
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('deepseekResponse')" title="Mark as best answer">&#9733;</span>
             <span class="exclude-btn" onclick="toggleExclude('deepseekResponse')" title="Exclude answer">&#10005;</span>
-            <button class="collapse-btn" onclick="toggleCollapse('deepseekResponse')">
-              <span class="arrow">&#9660;</span>
-            </button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -383,9 +338,6 @@
           <div class="control-icons">
             <span class="best-btn" onclick="toggleBest('grokResponse')" title="Mark as best answer">&#9733;</span>
             <span class="exclude-btn" onclick="toggleExclude('grokResponse')" title="Exclude answer">&#10005;</span>
-            <button class="collapse-btn" onclick="toggleCollapse('grokResponse')">
-              <span class="arrow">&#9660;</span>
-            </button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -413,14 +365,14 @@
                 <option value="OpenAI">GPT-5.4-mini</option>
                 <option value="Anthropic">claude-haiku-4-5</option>
                 <option value="Mistral">mistral-small-4</option>
-                <option value="Gemini">gemini-3.1-flash</option>
+                <option value="Gemini">gemini-3-flash-preview</option>
                 <option value="DeepSeek">DeepSeek-V4-Flash</option>
 
                 <option value="Grok-Pro" class="premium-option">Grok-4.3</option>
                 <option value="OpenAI-Pro" class="premium-option">GPT-5.5</option>
                 <option value="Anthropic-Pro" class="premium-option">claude-opus-4-7</option>
                 <option value="Mistral-Pro" class="premium-option">mistral-large-latest</option>
-                <option value="Gemini-Pro" class="premium-option">gemini-3-pro-preview</option>
+                <option value="Gemini-Pro" class="premium-option">gemini-3.1-pro-preview</option>
                 <option value="DeepSeek-Pro" class="premium-option">DeepSeek-V4-Pro</option>
               </select>
             </div>
@@ -440,6 +392,19 @@
             <p></p>
           </div>
         </div>
+        <div class="feedback-line">
+          <span class="feedback-note">
+            Please avoid personal or sensitive data. AI models can make mistakes.
+          </span>
+          <button id="feedbackButton" class="feedback-button" title="Feedback senden">Feedback</button>
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Privacy Policy"
+            aria-label="Privacy Policy">Privacy</a>
+          <a href="/imprint" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Imprint"
+            aria-label="Imprint">Imprint</a>
+          <a href="/about" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="About"
+            aria-label="About">About</a>
+          <span id="feedback-note"></span>
+        </div>
       </div>
     </div>
 
@@ -453,8 +418,7 @@
         // Global verfügbar für alle Funktionen
         window.spinnerHTML = `
           <span class="thinking-wrap" role="status" aria-live="polite" aria-busy="true">
-            <span class="spinner" aria-hidden="true"></span>
-            <span class="thinking" data-text="Typing …">Typing&nbsp;…</span>
+            <span class="thinking typing-indicator" data-text="Typing" aria-label="Typing">Typing<span class="typing-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span>
           </span>
         `;
 
@@ -554,6 +518,7 @@
         // Bei Änderung den neuen Zustand speichern
         autoConsensusToggle.addEventListener("change", function () {
           localStorage.setItem("autoConsensus", this.checked);
+          showMobileInfoPopup("Auto Consensus automatically generates a consensus after the model responses.");
         });
 
         const questionInput = document.getElementById("questionInput");
@@ -573,7 +538,31 @@
           questionInput.placeholder = "Please log in or store your own API keys.";
         }
 
-        function updateDeepThinkText() {
+        let mobileInfoPopupTimer = null;
+
+        function isCompactControlLayout() {
+          return window.matchMedia("(max-width: 900px)").matches;
+        }
+
+        function showMobileInfoPopup(message) {
+          if (!message || !isCompactControlLayout()) return;
+
+          const popup = document.getElementById("disclaimerPopup");
+          const popupText = popup ? popup.querySelector("p") : null;
+          if (!popup || !popupText) return;
+
+          popupText.textContent = message;
+          popup.classList.add("show");
+
+          if (mobileInfoPopupTimer) {
+            clearTimeout(mobileInfoPopupTimer);
+          }
+          mobileInfoPopupTimer = setTimeout(() => {
+            popup.classList.remove("show");
+          }, 7000);
+        }
+
+        function updateDeepThinkText(showMobilePopup = false) {
           const deepSearchToggle = document.getElementById("deepSearchToggle");
           const searchToggle = document.getElementById("searchModeToggle");
 
@@ -588,19 +577,21 @@
           // -------------------------
           const deepText = searchModeActive
             ? "DeepSearch models. Thoughtful plus internet."
-            : "Reasoning models. More thoughtful responses.";
+            : "Reasoning models. Thoughtful responses.";
 
           const searchText = "Models have access to the Internet.";
 
           // -------------------------
           // Mobile / kleine Screens: Popup
           // -------------------------
-          if (window.innerWidth < 1400) {
+          if (isCompactControlLayout()) {
             // Priorität Deep Think: wenn beides an ist, nur Deep Think Text zeigen
-            if (deepSearchActive) {
-              showPopup(deepText);
-            } else if (searchModeActive) {
-              showPopup(searchText);
+            if (showMobilePopup) {
+              if (deepSearchActive) {
+                showMobileInfoPopup(deepText);
+              } else if (searchModeActive) {
+                showMobileInfoPopup(searchText);
+              }
             }
 
             if (deepthinkDisclaimer) deepthinkDisclaimer.style.display = "none";
@@ -638,7 +629,7 @@
           });
 
           const openaiModelText = deepSearchActive ? "GPT-5.5" : document.getElementById("openaiModelSelect").value;
-          const geminiModelText = deepSearchActive ? "gemini-3-pro-preview" : document.getElementById("geminiModelSelect").value;
+          const geminiModelText = deepSearchActive ? "gemini-3.1-pro-preview" : document.getElementById("geminiModelSelect").value;
           const claudeModelText = deepSearchActive ? "claude-opus-4-7" : document.getElementById("claudeModelSelect").value;
           const deepseekModelText = deepSearchActive ? "DeepSeek-V4-Pro" : document.getElementById("deepseekModelSelect").value;
           const grokModelText = deepSearchActive ? "grok-4.3" : document.getElementById("grokModelSelect").value;
@@ -656,8 +647,8 @@
 
         // DEEP THINK & SMOKE TEST LOGIK
         // Deep Search Toggle Text Update (bestehender Code)
-        document.getElementById("deepSearchToggle").addEventListener("change", updateDeepThinkText);
-        document.getElementById("searchModeToggle").addEventListener("change", updateDeepThinkText);
+        document.getElementById("deepSearchToggle").addEventListener("change", () => updateDeepThinkText(true));
+        document.getElementById("searchModeToggle").addEventListener("change", () => updateDeepThinkText(true));
 
         // --- NEU: Pro Modal Referenzen ---
         const proModal = document.getElementById("proFeatureModal");
@@ -807,38 +798,25 @@
           } catch (e) { console.error(e); }
         }
 
-        if (!localStorage.getItem("marketingPopupShown")) {
-          document.getElementById("marketingPopup").style.display = "block";
-          document.body.classList.add("modal-open");
+        const SIDEBAR_OVERLAY_BREAKPOINT = 1465;
+
+        function usesOverlaySidebar() {
+          return window.matchMedia(`(max-width: ${SIDEBAR_OVERLAY_BREAKPOINT}px)`).matches;
         }
 
-        // Popup schließen, wenn auf das "x" geklickt wird
-        document.querySelector("#marketingPopup .close").addEventListener("click", function () {
-          document.getElementById("marketingPopup").style.display = "none";
-          document.body.classList.remove("modal-open");
-          localStorage.setItem("marketingPopupShown", "true");
-        });
-
-        // Popup schließen, wenn der "Jetzt starten"-Button geklickt wird
-        document.getElementById("startNowButton").addEventListener("click", function () {
-          document.getElementById("marketingPopup").style.display = "none";
-          document.body.classList.remove("modal-open");
-          localStorage.setItem("marketingPopupShown", "true");
-          // >>> Nur Chip einblenden, kein Auto-Start
-          createStartDemoChip();
-        });
+        function closeOverlaySidebar() {
+          const sidebar = document.querySelector(".sidebar");
+          if (!sidebar || !usesOverlaySidebar()) return;
+          sidebar.classList.remove("active");
+          sidebar.classList.add("collapsed");
+        }
 
         document.addEventListener("click", function (event) {
-          const sidebar = document.querySelector('.sidebar');
-          const burgerButton = document.querySelector('.sidebar-toggle');
+          const sidebar = document.querySelector(".sidebar");
+          if (!sidebar || !usesOverlaySidebar() || !sidebar.classList.contains("active")) return;
 
-          // Nur auf kleinen Displays
-          if (window.innerWidth <= 1465 && sidebar.classList.contains("active")) {
-            // Wenn der Klick weder innerhalb der Sidebar noch auf dem Burger-Button erfolgt
-            if (!sidebar.contains(event.target) && !event.target.closest('.sidebar-toggle')) {
-              sidebar.classList.remove("active");
-
-            }
+          if (!sidebar.contains(event.target) && !event.target.closest(".sidebar-toggle")) {
+            closeOverlaySidebar();
           }
         });
 
@@ -973,6 +951,16 @@
         });
 
         // Standardmäßig Antworten ausgeblendet (optional)
+        document.querySelectorAll('.faq-item h3').forEach((question) => {
+          question.addEventListener('click', () => {
+            const answer = question.nextElementSibling;
+            const icon = question.querySelector('.faq-toggle-icon');
+            if (answer && icon) {
+              icon.textContent = answer.style.display === 'block' ? '-' : '+';
+            }
+          });
+        });
+
         document.querySelectorAll('.faq-item p').forEach((answer) => {
           answer.style.display = 'none';
         });
@@ -1017,21 +1005,30 @@
 
         document.getElementById("toggleSidebarButton").addEventListener("click", function () {
           const sidebar = document.querySelector(".sidebar");
-          sidebar.classList.toggle("collapsed");
-        });
+          if (!sidebar) return;
 
-        document.getElementById('toggleSidebarButton').addEventListener('click', function () {
-          const sidebar = document.querySelector('.sidebar');
-          sidebar.classList.toggle('active');
+          if (usesOverlaySidebar()) {
+            const shouldOpen = !sidebar.classList.contains("active");
+            sidebar.classList.toggle("active", shouldOpen);
+            sidebar.classList.toggle("collapsed", !shouldOpen);
+          } else {
+            sidebar.classList.toggle("collapsed");
+            sidebar.classList.remove("active");
+          }
+          updateToggleButton();
         });
 
         // Fenstergröße prüfen – wenn <1024px, Sidebar einklappen
         function checkWindowSize() {
           const sidebar = document.querySelector(".sidebar");
-          if (window.innerWidth < 1024) {
+          if (!sidebar) return;
+
+          if (usesOverlaySidebar()) {
             sidebar.classList.add("collapsed");
+            sidebar.classList.remove("active");
           } else {
             sidebar.classList.remove("collapsed");
+            sidebar.classList.remove("active");
           }
           updateToggleButton();
         }
@@ -1140,9 +1137,6 @@
           } else {
             document.querySelectorAll(".response-box").forEach(b => b.classList.remove("best"));
             box.classList.add("best");
-            const model = box.getAttribute("data-model");
-            // Direkter Aufruf zur Firebase-Funktion:
-            recordModelVote(model, "best");
           }
         };
 
@@ -1210,8 +1204,8 @@
           const responseBox = document.getElementById(responseId);
           const content = responseBox.querySelector(".collapsible-content");
           const arrow = responseBox.querySelector(".collapse-btn .arrow");
-          content.classList.toggle("collapsed");
-          arrow.classList.toggle("rotated");
+          if (content) content.classList.toggle("collapsed");
+          if (arrow) arrow.classList.toggle("rotated");
         };
 
         // Exclude/Include einer Antwort-Box (falls nicht als "best" markiert)
@@ -1506,7 +1500,6 @@
           const baseSpinnerHTML = window.spinnerHTML;
           const webSearchSpinnerHTML = `
             <div class="thinking-wrap">
-              <div class="spinner"></div>
               <span class="thinking" data-text="Web search">Web search</span>
             </div>
           `;
@@ -2346,44 +2339,8 @@
           // Wenn die Frage neu oder geändert ist, werden Firebase-Votes aktualisiert.
           if (question !== lastQuestion) {
             // Für jedes Modell prüfen, ob es als "best" markiert ist.
-            if (document.getElementById("openaiResponse").classList.contains("best")) {
-              recordModelVote("OpenAI", "best");
-            }
-            if (document.getElementById("mistralResponse").classList.contains("best")) {
-              recordModelVote("Mistral", "best");
-            }
-            if (document.getElementById("claudeResponse").classList.contains("best")) {
-              recordModelVote("Anthropic", "best");
-            }
-            if (document.getElementById("geminiResponse").classList.contains("best")) {
-              recordModelVote("Gemini", "best");
-            }
-            if (document.getElementById("deepseekResponse").classList.contains("best")) {
-              recordModelVote("DeepSeek", "best");
-            }
-            if (document.getElementById("grokResponse").classList.contains("best")) {
-              recordModelVote("Grok", "best");
-            }
 
             // Ebenso für "excluded" (sofern du das separat erfassen möchtest).
-            if (document.getElementById("openaiResponse").classList.contains("excluded")) {
-              recordModelVote("OpenAI", "exclude");
-            }
-            if (document.getElementById("mistralResponse").classList.contains("excluded")) {
-              recordModelVote("Mistral", "exclude");
-            }
-            if (document.getElementById("claudeResponse").classList.contains("excluded")) {
-              recordModelVote("Anthropic", "exclude");
-            }
-            if (document.getElementById("geminiResponse").classList.contains("excluded")) {
-              recordModelVote("Gemini", "exclude");
-            }
-            if (document.getElementById("deepseekResponse").classList.contains("excluded")) {
-              recordModelVote("DeepSeek", "exclude");
-            }
-            if (document.getElementById("grokResponse").classList.contains("excluded")) {
-              recordModelVote("Grok", "exclude");
-            }
 
             // Aktualisiere die letzte verarbeitete Frage.
             lastQuestion = question;
@@ -2394,6 +2351,9 @@
           const mainSpinner = window.spinnerHTML;
           const diffSpinner = window.spinnerHTML;
 
+          if (window.resetCredibilityFrame) {
+            window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
+          }
           consensusDiv.querySelector(".consensus-main p").innerHTML = mainSpinner;
           consensusDiv.querySelector(".consensus-differences p").innerHTML = diffSpinner;
 
@@ -2572,12 +2532,15 @@
 
               if (diffEl) {
                 const diffsMD = data.differences || "No differences found.";
-                const colored = window.colorizeCredibility
+                if (window.applyCredibilityFrame) {
+                  window.applyCredibilityFrame(diffEl, diffsMD);
+                }
+                const cleaned = window.colorizeCredibility
                   ? window.colorizeCredibility(diffsMD)
                   : diffsMD;
 
                 // Differences auch über injectMarkdown → [S1]-Links inkl.
-                injectMarkdown(diffEl, colored);
+                injectMarkdown(diffEl, cleaned);
               }
 
               if (auth.currentUser) {
@@ -2589,12 +2552,18 @@
                 recordModelVote(bestModelFromConsensus, "BestModel");
               }
             } else {
+              if (window.resetCredibilityFrame) {
+                window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
+              }
               consensusDiv.querySelector(".consensus-main p").innerText = "Error: " + data.detail;
               consensusDiv.querySelector(".consensus-differences p").innerText = "";
             }
 
           } catch (error) {
             console.error("Error fetching consensus:", error);
+            if (window.resetCredibilityFrame) {
+              window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
+            }
             consensusDiv.querySelector(".consensus-main p").innerText = "Error in the consensus calculation.";
             consensusDiv.querySelector(".consensus-differences p").innerText = "";
           }
@@ -2729,6 +2698,9 @@
             if (diffElement) {
               diffElement.innerHTML = "";
             }
+            if (window.resetCredibilityFrame) {
+              window.resetCredibilityFrame(consensusBox.querySelector(".consensus-differences"));
+            }
           }
 
           // Leere den Inhalt der Input-Box mit der ID "questionInput".
@@ -2805,16 +2777,16 @@
 
         function getIncludedModelNamesForCitation() {
           const map = [
-            { boxId: "openaiResponse", label: "OpenAI" },
-            { boxId: "mistralResponse", label: "Mistral" },
-            { boxId: "claudeResponse", label: "Anthropic Claude" },
-            { boxId: "geminiResponse", label: "Google Gemini" },
-            { boxId: "deepseekResponse", label: "DeepSeek" },
-            { boxId: "grokResponse", label: "Grok" }
+            { boxId: "openaiResponse", selectId: "openaiModelSelect", label: "OpenAI" },
+            { boxId: "mistralResponse", selectId: "mistralModelSelect", label: "Mistral" },
+            { boxId: "claudeResponse", selectId: "claudeModelSelect", label: "Anthropic Claude" },
+            { boxId: "geminiResponse", selectId: "geminiModelSelect", label: "Google Gemini" },
+            { boxId: "deepseekResponse", selectId: "deepseekModelSelect", label: "DeepSeek" },
+            { boxId: "grokResponse", selectId: "grokModelSelect", label: "Grok" }
           ];
 
           const names = [];
-          map.forEach(({ boxId, label }) => {
+          map.forEach(({ boxId, selectId, label }) => {
             const box = document.getElementById(boxId);
             if (!box) return;
             if (box.classList.contains("excluded")) return;
@@ -2822,7 +2794,11 @@
             const txtEl = box.querySelector(".collapsible-content");
             const txt = txtEl ? txtEl.innerText.trim() : "";
             if (txt) {
-              names.push(label);
+              const select = document.getElementById(selectId);
+              const modelName = select
+                ? (select.options[select.selectedIndex]?.text || select.value || "")
+                : "";
+              names.push(modelName ? `${label}: ${modelName}` : label);
             }
           });
 
@@ -2851,9 +2827,13 @@
           const dd = String(date.getDate()).padStart(2, "0");
           const dateStr = `${yyyy}-${mm}-${dd}`;
 
-          const question = (meta.question || "").trim();
-          const modelsPart = meta.includedModels.join(", ");
-          const consensusModel = meta.consensusModel || "";
+          const question = (meta.question || document.getElementById("questionInput")?.value || "").trim();
+          const modelsPart = includedModels.join(", ");
+          const consensusSelect = document.getElementById("consensusModelDropdown");
+          const consensusModel = meta.consensusModel
+            || consensusSelect?.options[consensusSelect.selectedIndex]?.text
+            || consensusSelect?.value
+            || "";
           const cleanUrl = meta.url || window.location.href;
 
           const parts = [];
@@ -2906,17 +2886,31 @@
 
         let consensusMenuEl = null;
 
+        function closeConsensusActionsMenu() {
+          if (!consensusMenuEl) return;
+          consensusMenuEl.classList.remove("open");
+          consensusMenuEl.style.display = "none";
+          document.querySelectorAll(".consensus-actions-wrapper.open").forEach(el => {
+            el.classList.remove("open");
+          });
+          document.querySelectorAll(".consensus-actions-toggle[aria-expanded='true']").forEach(btn => {
+            btn.setAttribute("aria-expanded", "false");
+          });
+        }
+
         function ensureConsensusActionsMenu() {
           if (consensusMenuEl) return consensusMenuEl;
 
           const menu = document.createElement("div");
           menu.id = "consensusActionsMenuGlobal";
           menu.className = "consensus-actions-menu";
+          menu.setAttribute("role", "menu");
 
           // 📋 Copy consensus
           const copyAnswerBtn = document.createElement("button");
           copyAnswerBtn.type = "button";
           copyAnswerBtn.className = "consensus-copy-icon-btn consensus-copy-btn";
+          copyAnswerBtn.setAttribute("role", "menuitem");
           copyAnswerBtn.innerHTML = `
             <span class="copy-icon" aria-hidden="true"></span>
             <span class="copy-label">Copy consensus</span>
@@ -2929,6 +2923,7 @@
             const mainText = mainPara ? mainPara.innerText.trim() : "";
 
             if (!mainText) {
+              closeConsensusActionsMenu();
               alert("No consensus available yet.");
               return;
             }
@@ -2942,9 +2937,11 @@
               ta.select();
               document.execCommand("copy");
               document.body.removeChild(ta);
+              closeConsensusActionsMenu();
               showPopup("Consensus copied to clipboard.");
             } else {
               navigator.clipboard.writeText(toCopy).then(() => {
+                closeConsensusActionsMenu();
                 showPopup("Consensus copied to clipboard.");
               }).catch(() => {
                 alert("Copy to clipboard failed.");
@@ -2956,6 +2953,7 @@
           const copyCitationBtn = document.createElement("button");
           copyCitationBtn.type = "button";
           copyCitationBtn.className = "consensus-copy-icon-btn consensus-citation-btn";
+          copyCitationBtn.setAttribute("role", "menuitem");
           copyCitationBtn.innerHTML = `
             <span class="copy-icon" aria-hidden="true"></span>
             <span class="copy-label">Copy citation</span>
@@ -2966,6 +2964,7 @@
             const citation = buildConsensusCitation();
 
             if (!citation) {
+              closeConsensusActionsMenu();
               alert("No citation available yet.");
               return;
             }
@@ -2977,9 +2976,11 @@
               ta.select();
               document.execCommand("copy");
               document.body.removeChild(ta);
+              closeConsensusActionsMenu();
               showPopup("Citation copied to clipboard.");
             } else {
               navigator.clipboard.writeText(citation).then(() => {
+                closeConsensusActionsMenu();
                 showPopup("Citation copied to clipboard.");
               }).catch(() => {
                 alert("Copy to clipboard failed.");
@@ -3021,10 +3022,13 @@
           toggleBtn.type = "button";
           toggleBtn.className = "consensus-actions-toggle";
           toggleBtn.setAttribute("aria-label", "Copy options");
+          toggleBtn.setAttribute("aria-haspopup", "menu");
+          toggleBtn.setAttribute("aria-expanded", "false");
           toggleBtn.innerHTML = `
             <span class="copy-icon" aria-hidden="true"></span>
             <span class="caret">▾</span>
           `;
+          toggleBtn.querySelector(".caret").textContent = "";
 
           actionsWrapper.appendChild(toggleBtn);
           inlineBar.appendChild(actionsWrapper);
@@ -3033,10 +3037,7 @@
           const menu = ensureConsensusActionsMenu();
 
           function closeMenu() {
-            if (!menu) return;
-            menu.classList.remove("open");
-            menu.style.display = "none";
-            actionsWrapper.classList.remove("open");
+            closeConsensusActionsMenu();
           }
 
           function openMenu() {
@@ -3059,6 +3060,7 @@
             menu.style.top = `${top}px`;
             menu.style.left = `${left}px`;
             menu.style.visibility = "visible";
+            toggleBtn.setAttribute("aria-expanded", "true");
           }
 
           toggleBtn.addEventListener("click", (evt) => {
@@ -3193,25 +3195,18 @@
             const premiumOptions = dropdown.querySelectorAll('option.premium-option');
 
             premiumOptions.forEach(option => {
+              option.textContent = option.textContent
+                .replace(/^Pro:\s*/i, '')
+                .replace(' (Pro only)', '')
+                .trim();
 
               if (isPro) {
                 // --- PRO USER ---
                 option.disabled = false;
 
-                // Optional: Entferne auch das "Pro: " vorne, wenn der User bezahlt hat
-                // Damit er nur "GPT-5" sieht statt "Pro: GPT-5"
-                if (option.textContent.startsWith('Pro: ')) {
-                  option.textContent = option.textContent.substring(5); // Entfernt "Pro: "
-                }
-
               } else {
                 // --- FREE USER ---
                 option.disabled = true;
-
-                // Stelle sicher, dass vorne "Pro: " steht
-                if (!option.textContent.startsWith('Pro: ')) {
-                  option.textContent = 'Pro: ' + option.textContent;
-                }
 
                 // Falls durch einen Fehler (Cache) ausgewählt -> Reset
                 if (option.selected) {
@@ -3307,20 +3302,18 @@
 
     <!-- Login Modal -->
     <div id="loginModal" class="modal">
-      <div class="modal-content" id="loginModalContent">
+      <div class="modal-content auth-modal" id="loginModalContent">
         <span class="close" id="closeLoginModal">&times;</span>
 
-        <!-- Brand (inline styles) -->
-        <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin:8px 0 10px;">
-          <img src="/static/favicon.png" alt="consens.io" style="width:28px; border-radius:6px; display:block;" />
-          <span style="font-size:1.15rem; font-weight:200; letter-spacing:.2px; opacity:.95;">
-            consens.io
-          </span>
+        <div class="auth-brand">
+          <img src="/static/favicon.png" alt="consens.io" />
+          <span>consens.io</span>
         </div>
-        </br>
-        <h2 id="authTitle" style="margin:6px 0 4px; font-size:1.15rem;">Login</h2>
+
+        <h2 id="authTitle" class="auth-title">Login</h2>
+
         <!-- Das Login-Formular hat autocomplete="on" -->
-        <form id="loginForm" autocomplete="on" data-mode="login">
+        <form id="loginForm" class="auth-form" autocomplete="on" data-mode="login">
 
           <!-- Login / shared fields -->
           <input type="email" id="loginEmail" name="email" placeholder="Email" autocomplete="username" />
@@ -3337,125 +3330,51 @@
             autocomplete="new-password" style="display:none;" />
 
           <!-- Primary actions -->
-          <div style="display:flex; gap:10px; align-items:center; margin-top:15px;">
-            <button type="button" id="loginButton">Log in</button>
-            <button type="button" id="confirmRegisterButton" style="display:none;">Create account</button>
+          <div class="auth-actions">
+            <button type="button" id="loginButton" class="auth-primary-action">Log in</button>
+            <button type="button" id="confirmRegisterButton" class="auth-primary-action" style="display:none;">Create account</button>
           </div>
 
           <!-- Inline errors -->
-          <div id="loginError" class="error-message" style="margin-top:8px;"></div>
-          <div id="registerError" class="error-message" style="margin-top:4px;"></div>
+          <div id="loginError" class="error-message"></div>
+          <div id="registerError" class="error-message"></div>
 
-          <div id="singleMailNote"
-            style="font-size:.8rem; color:#6b7280; text-align:center; margin:2px auto 10px; max-width:280px; line-height:1.35;">
+          <div id="singleMailNote" class="auth-note">
             Important: Only one e-mail can be registered
           </div>
-          </br>
-
-          <style>
-            #loginForm[data-mode="register"] #singleMailNote {
-              display: block !important;
-            }
-
-            #loginForm[data-mode="register"] #forgotPasswordButton {
-              visibility: hidden;
-            }
-
-            #singleMailNote {
-              display: none !important;
-            }
-          </style>
 
           <!-- Secondary row (links only) -->
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+          <div class="auth-secondary-row">
             <a href="#" id="forgotPasswordButton" class="secondary-link">Forgot Password?</a>
             <button type="button" id="toggleRegister" class="link-btn secondary-link">
               New here? Create account
             </button>
-          </div></br>
+          </div>
 
           <!-- Subtle divider -->
-          <div id="oauthDivider" style="height:1px; background:#e5e7eb; margin:12px 0 10px;"></div>
-          </br>
+          <div id="oauthDivider" class="oauth-divider"><span>or</span></div>
+
           <!-- Google OAuth Button (full width) -->
-          <button type="button" id="googleLoginButton" aria-label="Continue with Google" style="
-          width:95%;
-          margin: left 9px;
-          display:flex; align-items:center; justify-content:center; gap:10px;
-          padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px;
-          background:#ffffff; box-shadow:0 1px 2px rgba(0,0,0,0.04);
-          font-size:0.95rem; line-height:1; color:#111827;
-          cursor:pointer; transition:background .15s ease, box-shadow .15s ease, transform .02s ease;
-          user-select:none;
-        ">
-            <img src="/static/icons/google.png" alt="" width="18" height="18" style="display:block;" />
+          <button type="button" id="googleLoginButton" class="oauth-button" aria-label="Continue with Google">
+            <img src="/static/icons/google.png" alt="" width="18" height="18" />
             <span style="white-space:nowrap;">Continue with Google</span>
           </button>
-          </br>
-          <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-inline-link"
-            title="Privacy Policy" aria-label="Privacy Policy">Privacy</a>
-          <a href="/imprint" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Imprint"
-            aria-label="Imprint">Imprint</a>
-          <a href="/about" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="About"
-            aria-label="About">About</a>
-          <style>
-            #googleLoginButton:hover {
-              background: #f9fafb;
-              box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
-            }
 
-            #googleLoginButton:active {
-              transform: translateY(0.5px);
-            }
-
-            #googleLoginButton:focus {
-              outline: 2px solid #2563eb33;
-              outline-offset: 2px;
-            }
-
-            @media (prefers-color-scheme: dark) {
-              #oauthDivider {
-                background: #26272b;
-              }
-
-              #googleLoginButton {
-                background: #0b0b0c;
-                border-color: #26272b;
-                color: #e5e7eb;
-                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-              }
-
-              #googleLoginButton:hover {
-                background: #131316;
-                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
-              }
-
-              #googleLoginButton:focus {
-                outline: 2px solid #60a5fa33;
-              }
-            }
-          </style>
+          <div class="auth-footer-links">
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-inline-link"
+              title="Privacy Policy" aria-label="Privacy Policy">Privacy</a>
+            <a href="/imprint" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Imprint"
+              aria-label="Imprint">Imprint</a>
+            <a href="/about" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="About"
+              aria-label="About">About</a>
+          </div>
+        </form>
       </div>
-      </form>
     </div>
   </div>
 
   <div id="disclaimerPopup" class="popup">
     <p>Deep Think Mode!</p>
-  </div>
-
-  <div class="feedback-line">
-    <span class="feedback-note">
-      Please avoid personal or sensitive data. AI models can make mistakes.
-    </span>
-    <button id="feedbackButton" class="feedback-button" title="Feedback senden">Feedback</button>
-    <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Privacy Policy"
-      aria-label="Privacy Policy">Privacy</a>
-    <a href="/imprint" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Imprint"
-      aria-label="Imprint">Imprint</a>
-    <a href="/about" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="About"
-      aria-label="About">About</a>
-    <span id="feedback-note"></span>
   </div>
 
   <!-- Feedback Modal -->
@@ -3509,7 +3428,7 @@
         <div class="pricing-row">
           <div class="col-feature">Context Window</div>
           <div class="col-plan">Medium</div>
-          <div class="col-plan bold">Large</span></div>
+          <div class="col-plan bold">Large</div>
         </div>
 
         <div class="pricing-row">
@@ -3544,7 +3463,13 @@
 
         <div class="settings-header">
           <h2>Settings</h2>
-          <span id="closeSystemPromptModal" class="close">&times;</span>
+          <div class="settings-header-actions">
+            <button id="helpButton" class="help-button" type="button" title="Hilfe & Erklärung"
+              aria-label="Hilfe und Erklärung">
+              &#63;
+            </button>
+            <span id="closeSystemPromptModal" class="close">&times;</span>
+          </div>
         </div>
 
         <div class="settings-body">
@@ -3615,15 +3540,10 @@
           </div>
 
           <div style="text-align: center; margin-top: 20px; opacity: 0.5; font-size: 0.8em;">
-            v1.2.6
+            v1.3.1
           </div>
         </div>
       </div>
-
-      <!-- Hilfebutton (z.B. in der unteren rechten Ecke) -->
-      <button id="helpButton" class="help-button" title="Hilfe & Erklärung">
-        &#63;
-      </button>
 
       <!-- FAQ Modal -->
       <div id="helpModal" class="modal">
@@ -3806,6 +3726,50 @@
           if (isIOS) document.documentElement.classList.add('ios');
         })();
 
+        const credibilityFrameClasses = ["cred-very", "cred-largely", "cred-partially", "cred-hardly", "cred-not"];
+
+        function getCredibilityClass(md) {
+          if (!md) return null;
+          const plain = String(md)
+            .replace(/<[^>]*>/g, " ")
+            .replace(/\*\*/g, "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toLowerCase();
+          const mapping = [
+            { pattern: /the consensus answer is very credible/, cls: "cred-very" },
+            { pattern: /the consensus answer is largely credible/, cls: "cred-largely" },
+            { pattern: /the consensus answer is partially credible/, cls: "cred-partially" },
+            { pattern: /the consensus answer is hardly credible/, cls: "cred-hardly" },
+            { pattern: /the consensus answer is not credible/, cls: "cred-not" }
+          ];
+
+          for (const m of mapping) {
+            if (m.pattern.test(plain)) return m.cls;
+          }
+          return null;
+        }
+
+        function resetCredibilityFrame(target) {
+          const frame = target?.classList?.contains("consensus-differences")
+            ? target
+            : target?.closest?.(".consensus-differences");
+          if (!frame) return;
+          frame.classList.remove("credibility-framed", ...credibilityFrameClasses);
+        }
+
+        function applyCredibilityFrame(target, md) {
+          const frame = target?.classList?.contains("consensus-differences")
+            ? target
+            : target?.closest?.(".consensus-differences");
+          if (!frame) return;
+          resetCredibilityFrame(frame);
+          const cls = getCredibilityClass(md);
+          if (cls) {
+            frame.classList.add("credibility-framed", cls);
+          }
+        }
+
         function colorizeCredibility(md) {
           if (!md) return md;
           const lines = md.trim().split("\n");
@@ -3830,12 +3794,16 @@
 
           if (cls) {
             // Markdown-Bold **…** in der Badge vermeiden, damit die Farbe klar lesbar bleibt
-            const clean = lines[0].replace(/\*\*/g, "");
-            lines[0] = `<span class="cred-badge ${cls}">${clean}</span>`;
+            lines[0] = lines[0].replace(/\*\*/g, "");
             return lines.join("\n");
           }
           return md;
         }
+
+        window.getCredibilityClass = getCredibilityClass;
+        window.applyCredibilityFrame = applyCredibilityFrame;
+        window.resetCredibilityFrame = resetCredibilityFrame;
+        window.colorizeCredibility = colorizeCredibility;
 
       </script>
 

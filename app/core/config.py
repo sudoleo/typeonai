@@ -13,6 +13,12 @@ DIFFERENCES_MAX_TOKENS = 4096
 REASONING_EFFORT_FOR_DEEP = "low"
 GEMINI_MAX_TOKENS = 4096
 GEMINI_DEEP_MAX_TOKENS = 8192
+GEMINI_FLASH_MODEL = "gemini-3-flash-preview"
+GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
+UNSUPPORTED_GEMINI_MODELS = {
+    "gemini-3.1-flash-preview",
+    "gemini-3-pro-preview",
+}
 
 PRO_USAGE_LIMIT = 500
 PRO_DEEP_SEARCH_LIMIT = 50
@@ -42,9 +48,9 @@ ALLOWED_ANTHROPIC_MODELS = {
 }
 
 ALLOWED_GEMINI_MODELS = {
-    "gemini-3.1-flash-preview", "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.0-flash",
-    "gemini-3.1-pro-preview", "gemini-2.5-pro", "gemini-3-pro-preview",
-    "gemini-3.1-flash-preview", "gemini-3.1-flash-lite-preview",
+    GEMINI_FLASH_MODEL, "gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview",
+    "gemini-2.5-flash", "gemini-2.0-flash",
+    GEMINI_PRO_MODEL, "gemini-2.5-pro",
 }
 
 ALLOWED_DEEPSEEK_MODELS = {
@@ -64,7 +70,7 @@ PREMIUM_MODELS = {
     "claude-sonnet-4-5", "claude-opus-4-5", "claude-sonnet-4-6", "claude-opus-4-6",
     "claude-opus-4-7",
     "pixtral-large-latest", "mistral-large-latest",
-    "gemini-3.1-pro-preview", "gemini-2.5-pro", "gemini-3-pro-preview",
+    GEMINI_PRO_MODEL, "gemini-2.5-pro",
     "deepseek-reasoner", "deepseek-v4-pro",
     "grok-4-latest", "grok-3-latest", "grok-4-fast-reasoning-latest", "grok-4.20",
     "grok-4.3",
@@ -103,6 +109,8 @@ def load_models_from_db():
             if "gemini" in data:
                 ALLOWED_GEMINI_MODELS.clear()
                 ALLOWED_GEMINI_MODELS.update(data["gemini"])
+                ALLOWED_GEMINI_MODELS.difference_update(UNSUPPORTED_GEMINI_MODELS)
+                ALLOWED_GEMINI_MODELS.update({GEMINI_FLASH_MODEL, GEMINI_PRO_MODEL})
             
             # Update DeepSeek
             if "deepseek" in data:
@@ -118,6 +126,8 @@ def load_models_from_db():
             if "premium" in data:
                 PREMIUM_MODELS.clear()
                 PREMIUM_MODELS.update(data["premium"])
+                PREMIUM_MODELS.difference_update(UNSUPPORTED_GEMINI_MODELS)
+                PREMIUM_MODELS.add(GEMINI_PRO_MODEL)
             
             # Update ALL_ALLOWED_MODELS
             global ALL_ALLOWED_MODELS

@@ -1,264 +1,154 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="About consens.io – A small independent project to compare AI models and find consensus." />
-  <title>consens.io – About</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="About consens.io - an independent tool for comparing AI model answers.">
+  <title>consens.io - About</title>
+  <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260516-public2">
   <link rel="icon" href="/static/favicon.png" type="image/x-icon">
-
-  <style>
-    :root { --bg:#fff; --text:#222; --muted:#666; --link:#0b57d0; --maxw:860px; }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg:#111; --text:#e7e7e7; --muted:#a2a2a2; --link:#8ab4f8; }
-    }
-
-    html{box-sizing:border-box}
-    *,*:before,*:after{box-sizing:inherit}
-    body{
-      margin:0;
-      font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
-      background:var(--bg);
-      color:var(--text);
-    }
-
-    .wrap{
-      max-width:var(--maxw);
-      margin:0 auto;
-      padding:24px 16px 56px;
-    }
-
-    header{
-      margin:8px 0 16px;
-      display:flex;
-      align-items:flex-start;
-      gap:12px;
-    }
-
-    h1{
-      margin:0 0 6px;
-      font-size:1.75rem;
-    }
-
-    .sub{
-      margin:0;
-      color:var(--muted);
-      font-size:.95rem;
-    }
-
-    h2{
-      margin:24px 0 8px;
-      font-size:1.15rem;
-    }
-
-    p,ul{
-      margin:8px 0;
-    }
-
-    ul{
-      padding-left:20px;
-    }
-
-    a{
-      color:var(--link);
-    }
-
-    .note{
-      border:1px solid #ddd;
-      border-radius:6px;
-      padding:10px 12px;
-      margin:12px 0;
-      font-size:.95rem;
-    }
-    @media (prefers-color-scheme: dark){
-      .note{border-color:#333;}
-    }
-
-    .links{
-      margin-top:24px;
-      display:flex;
-      gap:12px;
-      flex-wrap:wrap;
-    }
-
-    .links a{
-      text-decoration:none;
-      border-bottom:1px solid currentColor;
-      padding-bottom:2px;
-      font-size:.95rem;
-    }
-
-    footer{
-      margin-top:40px;
-      color:var(--muted);
-      font-size:.95rem;
-    }
-
-    /* Model logos – schlicht im gleichen Stil */
-    .model-strip{
-      margin:12px 0 4px;
-    }
-
-    .model-strip-label{
-      margin:8px 0 6px;
-      font-size:.95rem;
-      font-weight:600;
-    }
-
-    .model-strip-logos {
-      display:flex;
-      flex-wrap:wrap;
-      justify-content:space-between;   /* verteilt Logos über die gesamte Zeile */
-      gap:14px 18px;
-      align-items:center;
-      width:100%;
-    }
-
-    .model-logo {
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      gap:6px;
-      flex:1 0 80px;                   /* jedes Logo bekommt “Platzanteil” an der Zeile */
-    }
-
-    .model-logo img {
-      width:72px;                      /* deutlich breiter */
-      height:auto;
-      border-radius:10px;
-      display:block;
-    }
-    .model-logo span{
-      margin-top:4px;
-      color:var(--muted);
-      text-align:center;
-    }
-
-    .muted-small{
-      font-size:.85rem;
-      color:var(--muted);
-      margin-top:4px;
-    }
-  </style>
+  <script>
+    (function () {
+      const savedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
+        document.documentElement.classList.add("dark-mode");
+      }
+    })();
+  </script>
 </head>
 <body>
-  <main class="wrap">
-    <header>
-      <div>
-        <h1>About consens.io</h1>
-        <p class="sub">A small independent tool to compare AI models and highlight where they agree and where they don’t.</p>
-      </div>
-    </header>
-    
-    <p class="note">
-      consens.io is <strong>not another chatbot</strong>, but a simple interface to send one prompt
-      to several AI models at once, view their answers side by side and add a small “consensus” layer on top.
-    </p>
-    <a href="/app" title="Back to the App">Back to App</a>
-    <h2>What is consens.io?</h2>
-    <p>
-      consens.io is a web interface for comparing answers from different large language models.
-      You enter a single prompt and receive multiple responses next to each other.
-    </p>
-    <p>
-      A separate analysis then tries to:
-    </p>
-    <ul>
-      <li>summarise the main points models agree on,</li>
-      <li>surface contradictions or blind spots,</li>
-      <li>give you a compact “consensus” answer as a starting point.</li>
-    </ul>
-    <p class="muted-small">
-      It is an experiment in transparency and robustness – useful for research, learning and everyday questions,
-      but never a substitute for your own judgement.
-    </p>
+  <nav class="site-nav" aria-label="Primary">
+    <a href="/" class="brand" aria-label="consens.io home">
+      <img src="/static/favicon.png" alt="">
+      <span>consens.io</span>
+    </a>
+    <div class="nav-links">
+      <a href="/privacy">Privacy</a>
+      <a href="/imprint">Imprint</a>
+      <a href="/app" class="nav-cta">Open app</a>
+    </div>
+  </nav>
 
-    <h2>How it works (in short)</h2>
-    <ul>
-      <li>You choose which models to query and adjust basic options.</li>
-      <li>The backend forwards your prompt to the selected providers.</li>
-      <li>Responses are rendered side by side for direct comparison.</li>
-      <li>A lightweight “consensus engine” highlights overlaps and differences.</li>
-    </ul>
-
-    <div class="model-strip">
-      <p class="model-strip-label">Currently integrates models from e.g.:</p>
-      <div class="model-strip-logos">
-        <div class="model-logo">
-          <img src="/static/icons/chatgpt.png" alt="OpenAI / ChatGPT">
-          <span>OpenAI</span>
-        </div>
-        <div class="model-logo">
-          <img src="/static/icons/claude.png" alt="Anthropic / Claude">
-          <span>Anthropic</span>
-        </div>
-        <div class="model-logo">
-          <img src="/static/icons/gemini.png" alt="Google / Gemini">
-          <span>Gemini</span>
-        </div>
-        <div class="model-logo">
-          <img src="/static/icons/mistral.png" alt="Mistral">
-          <span>Mistral</span>
-        </div>
-        <div class="model-logo">
-          <img src="/static/icons/deepseek.png" alt="DeepSeek">
-          <span>DeepSeek</span>
-        </div>
-        <div class="model-logo">
-          <img src="/static/icons/grok.png" alt="Grok">
-          <span>Grok</span>
-        </div>
-      </div>
-      <p class="muted-small">
-        The exact line-up may change over time as models are added, updated or removed.
+  <main class="page-shell">
+    <header class="page-header">
+      <p class="eyebrow">Independent AI tooling</p>
+      <h1>About consens.io</h1>
+      <p class="lead">
+        consens.io is a small independent tool for comparing AI model answers, spotting agreement,
+        and making disagreements easier to inspect.
       </p>
+    </header>
+
+    <div class="page-content">
+      <section class="legal-panel notice">
+        <h2>Not another single chatbot</h2>
+        <p>
+          consens.io sends one prompt to several selected AI models, keeps the original responses visible,
+          and adds a separate consensus layer on top.
+        </p>
+      </section>
+
+      <section class="legal-panel">
+        <h2>What it does</h2>
+        <p>
+          You enter a single prompt and receive multiple model responses next to each other. The consensus
+          step then summarizes common ground, highlights contradictions, and gives you a compact answer as a
+          starting point.
+        </p>
+        <p class="subtle">
+          It is useful for research, learning, drafting, and everyday questions, but it is not a substitute
+          for your own judgement.
+        </p>
+      </section>
+
+      <section class="legal-panel">
+        <h2>How it works</h2>
+        <ul>
+          <li>You choose which models to query and adjust the available options.</li>
+          <li>The backend forwards your prompt to the selected providers.</li>
+          <li>Responses are rendered side by side for direct comparison.</li>
+          <li>A lightweight consensus step highlights overlaps and differences.</li>
+        </ul>
+      </section>
+
+      <section class="legal-panel">
+        <h2>Integrated providers</h2>
+        <p>
+          consens.io is built around major model providers and supporting search tools. The exact line-up may
+          change over time as models are added, updated, or removed.
+        </p>
+        <div class="model-grid" style="margin-top:16px;">
+          <article class="model-card">
+            <img src="/static/icons/chatgpt.png" alt="OpenAI logo">
+            <p class="provider">OpenAI</p>
+            <h3>ChatGPT</h3>
+            <p>General reasoning, writing, coding, and structured output.</p>
+          </article>
+          <article class="model-card">
+            <img src="/static/icons/claude.png" alt="Anthropic logo">
+            <p class="provider">Anthropic</p>
+            <h3>Claude</h3>
+            <p>Long-form analysis, careful summaries, and nuanced answers.</p>
+          </article>
+          <article class="model-card">
+            <img src="/static/icons/gemini.png" alt="Gemini logo">
+            <p class="provider">Google</p>
+            <h3>Gemini</h3>
+            <p>Fast research workflows and multimodal-capable model families.</p>
+          </article>
+          <article class="model-card">
+            <img src="/static/icons/mistral.png" alt="Mistral logo">
+            <p class="provider">Mistral AI</p>
+            <h3>Mistral</h3>
+            <p>Efficient responses and practical European model options.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="legal-panel">
+        <h2>Project and maintainer</h2>
+        <p>
+          consens.io is built and maintained by a single independent developer. It started as a private workflow
+          for sanity-checking AI answers and gradually turned into a public side project.
+        </p>
+        <p>
+          There is no large company behind it, no marketing team, and no dedicated support department. The project
+          is iterated as time and budget allow.
+        </p>
+      </section>
+
+      <section class="legal-panel">
+        <h2>Data handling</h2>
+        <ul>
+          <li>Prompts are used to call the selected AI models and display results to you.</li>
+          <li>Login and account features are handled through authentication infrastructure.</li>
+          <li>If you use your own API keys, they are stored locally in your browser, not on the server.</li>
+          <li>There are no embedded ad-network tracking pixels.</li>
+        </ul>
+        <p class="subtle">
+          For full details, read the <a href="/privacy">Privacy Notice</a>. Avoid secrets, highly sensitive data,
+          and information that normally requires professional advice.
+        </p>
+        <div class="links">
+          <a href="/app" class="button-secondary">Back to app</a>
+          <a href="/privacy" class="button-secondary">Privacy</a>
+          <a href="/imprint" class="button-secondary">Imprint</a>
+        </div>
+      </section>
     </div>
-
-    <h2>Project & maintainer</h2>
-    <p>
-      consens.io is built and maintained by a single independent developer with a background in data,
-      automation and AI. It started as a private workflow for sanity-checking AI answers and gradually
-      turned into a public side project.
-    </p>
-    <p>
-      There is no company behind it, no marketing team and no dedicated support department.
-      Just one person running the infrastructure and iterating on the product when time and budget allow.
-    </p>
-    <p class="muted-small">
-      For legal details and contact information, please refer to the <a href="/imprint">imprint</a>.
-    </p>
-
-    <h2>Data handling & privacy</h2>
-    <p>
-      consens.io aims to stay as minimal and privacy-conscious as reasonably possible:
-    </p>
-    <ul>
-      <li>Prompts are used to call the selected AI models and to display results to you.</li>
-      <li>Login and account features are handled via Firebase authentication.</li>
-      <li>If you use your own API keys, they are stored locally in your browser, not on the server.</li>
-      <li>There are no embedded ad-network tracking pixels.</li>
-    </ul>
-    <p class="muted-small">
-      For full details, please see the <a href="/privacy">Privacy Notice</a>.
-      As a rule of thumb: avoid secrets, highly sensitive data or information that would normally
-      require professional advice (e.g. legal, medical, financial).
-    </p>
-
-    <h2>Using consens.io</h2>
-    <p>
-      If consens.io is useful for you, you are welcome to keep using it quietly, share it with others,
-      or send feedback via the button in the app – all of that helps to decide what to improve next.
-    </p>
-
-    <div class="links">
-      <a href="/app" title="Back to the App">Back to App</a>
-      <a href="/privacy" title="Privacy Notice">Privacy</a>
-      <a href="/imprint" title="Imprint">Imprint</a>
-    </div>
-
-    <footer>
-      <p>© 2025 consens.io</p>
-    </footer>
   </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <span>© 2026 consens.io</span>
+      <div class="footer-links">
+        <a href="/app">App</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/imprint">Imprint</a>
+      </div>
+    </div>
+  </footer>
 </body>
 </html>

@@ -117,13 +117,10 @@ async function checkUserStatusOnLoad(user, token) {
 
           premiumOptions.forEach(option => {
               option.disabled = false;
-              
-              // Entferne "Pro: " vorne, wenn der User zahlt (optional, sieht sauberer aus)
-              if (option.textContent.startsWith('Pro: ')) {
-                  option.textContent = option.textContent.substring(5);
-              }
-              // Sicherstellen, dass "(Pro only)" weg ist (falls es im HTML stand)
-              option.textContent = option.textContent.replace(' (Pro only)', '');
+              option.textContent = option.textContent
+                  .replace(/^Pro:\s*/i, '')
+                  .replace(' (Pro only)', '')
+                  .trim();
           });
 
       } else {
@@ -134,14 +131,11 @@ async function checkUserStatusOnLoad(user, token) {
 
           premiumOptions.forEach(option => {
               option.disabled = true;
+              option.textContent = option.textContent
+                  .replace(/^Pro:\s*/i, '')
+                  .replace(' (Pro only)', '')
+                  .trim();
 
-              // 1. Entferne "(Pro only)", falls es fälschlicherweise da ist
-              option.textContent = option.textContent.replace(' (Pro only)', '');
-
-              // 2. Füge "Pro: " vorne hinzu, falls es noch nicht da ist
-              if (!option.textContent.startsWith('Pro: ')) {
-                  option.textContent = 'Pro: ' + option.textContent;
-              }
           });
       }
       
@@ -257,15 +251,11 @@ onIdTokenChanged(auth, async (user) => {
         const premiumOptions = document.querySelectorAll('.premium-option');
         premiumOptions.forEach(option => {
             option.disabled = true;
+            option.textContent = option.textContent
+                .replace(/^Pro:\s*/i, '')
+                .replace(' (Pro only)', '')
+                .trim();
 
-            // 1. Zuerst den alten "(Pro only)" Text entfernen, falls er da ist
-            option.textContent = option.textContent.replace(' (Pro only)', '');
-
-            // 2. Stattdessen "Pro: " vorne hinzufügen, falls es fehlt
-            if (!option.textContent.startsWith('Pro: ')) {
-                option.textContent = 'Pro: ' + option.textContent;
-            }
-            
             // Falls ausgewählt (Cache-Problem), zurücksetzen auf Standard
             if (option.selected) {
                 option.parentNode.selectedIndex = 0; 
@@ -422,7 +412,7 @@ function setMode(mode) {
   const isRegister = mode === "register";
   // Titel & Hinweise
   titleEl.textContent = isRegister ? "Create account" : "Login";
-  singleMailNoteEl.style.display = isRegister ? "block" : "block"; // ggf. "none" im Login
+  singleMailNoteEl.style.display = isRegister ? "block" : "none";
 
   // Felder ein-/ausblenden
   emailConfirmEl.style.display = isRegister ? "" : "none";
@@ -608,24 +598,38 @@ const leaderboardQuery = query(
   orderBy("BestModel", "desc")
 );
 onSnapshot(leaderboardQuery, (snapshot) => {
-  let html = '<table><tbody>';
+  const leaderboardEl = document.getElementById("leaderboardContent");
+  if (!leaderboardEl) return;
+
+  const escapeHtml = (value) => {
+    const div = document.createElement("div");
+    div.textContent = String(value);
+    return div.innerHTML;
+  };
+
+  let hasRows = false;
+  let rank = 0;
+  let html = '<div class="leaderboard-list" role="list"><div class="leaderboard-caption">Consensus leaders</div>';
   snapshot.forEach((doc) => {
     const data = doc.data();
-    const bestVotes      = data.best      || 0;
-    const excludeVotes   = data.exclude   || 0;
     const bestModelVotes = data.BestModel || 0;
+    if (!bestModelVotes) return;
 
-    html += `<tr>
-      <td>${doc.id}</td>
-      <td>
-        <span class="vote BestModel" title="BestModel">★ ${bestModelVotes}</span>
-        <span class="vote best"      title="Best">&#10003; ${bestVotes}</span>
-        <span class="vote exclude"   title="Exclude">&#10005; ${excludeVotes}</span>
-      </td>
-    </tr>`;
+    hasRows = true;
+    rank += 1;
+    const modelName = escapeHtml(doc.id);
+    const voteLabel = bestModelVotes === 1 ? "pick" : "picks";
+
+    html += `<div class="leaderboard-row" role="listitem">
+      <span class="leaderboard-rank">${rank}</span>
+      <span class="leaderboard-model">${modelName}</span>
+      <span class="vote BestModel" title="BestModel">${bestModelVotes}<span>${voteLabel}</span></span>
+    </div>`;
   });
-  html += '</tbody></table>';
-  document.getElementById("leaderboardContent").innerHTML = html;
+  html += '</div>';
+  leaderboardEl.innerHTML = hasRows
+    ? html
+    : '<div class="leaderboard-empty">No BestModel votes yet.</div>';
 });
 
 async function recordModelVote(model, type) {
@@ -820,6 +824,9 @@ function loadSingleBookmarkUI(bookmark) {
         
         // Optional: Falls du die "Credibility Badges" (Farben) auch im Bookmark sehen willst:
         let diffText = bookmark.responses["differences"] || "";
+        if (window.applyCredibilityFrame) {
+            window.applyCredibilityFrame(conDiff, diffText);
+        }
         if (window.colorizeCredibility) {
             diffText = window.colorizeCredibility(diffText);
         }

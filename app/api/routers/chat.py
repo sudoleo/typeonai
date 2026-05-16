@@ -22,6 +22,27 @@ from tool_heuristics import get_realtime_context, get_intent_from_llm
 
 router = APIRouter()
 
+def get_valid_active_count(data: dict) -> int:
+    raw = data.get("active_count", 1)
+    if isinstance(raw, bool):
+        raise HTTPException(status_code=400, detail="Invalid active_count.")
+
+    try:
+        if isinstance(raw, float) and not raw.is_integer():
+            raise ValueError
+        if isinstance(raw, str):
+            raw = raw.strip()
+            if not raw.isdigit():
+                raise ValueError
+        active_count = int(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid active_count.")
+
+    if active_count < 1 or active_count > 6:
+        raise HTTPException(status_code=400, detail="active_count must be between 1 and 6.")
+
+    return active_count
+
 @router.post("/ask_openai")
 @limiter.limit("5/minute")
 def ask_openai_post(request: Request, data: dict = Body(...)):
@@ -59,7 +80,7 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
 
     validate_model(model, ALLOWED_OPENAI_MODELS, "OpenAI", is_pro=is_pro_user)
 
-    active_count = data.get("active_count", 1)
+    active_count = get_valid_active_count(data)
 
     if uid:
         increment = 1.0 / active_count
@@ -165,7 +186,7 @@ def ask_mistral_post(request: Request, data: dict = Body(...)):
 
     validate_model(model, ALLOWED_MISTRAL_MODELS, "Mistral", is_pro=is_pro_user)
 
-    active_count = data.get("active_count", 1)
+    active_count = get_valid_active_count(data)
 
     if uid:
         increment = 1.0 / active_count
@@ -237,7 +258,7 @@ def ask_claude_post(request: Request, data: dict = Body(...)):
 
     validate_model(model, ALLOWED_ANTHROPIC_MODELS, "Anthropic", is_pro=is_pro_user)
 
-    active_count = data.get("active_count", 1)
+    active_count = get_valid_active_count(data)
 
     if uid:
         increment = 1.0 / active_count
@@ -311,7 +332,7 @@ def ask_gemini_post(request: Request, data: dict = Body(...)):
 
     validate_model(model, ALLOWED_GEMINI_MODELS, "Gemini", is_pro=is_pro_user)
 
-    active_count = data.get("active_count", 1)
+    active_count = get_valid_active_count(data)
 
     if uid:
         increment = 1.0 / active_count
@@ -389,7 +410,7 @@ def ask_deepseek_post(request: Request, data: dict = Body(...)):
 
     validate_model(model, ALLOWED_DEEPSEEK_MODELS, "DeepSeek", is_pro=is_pro_user)
 
-    active_count = data.get("active_count", 1)
+    active_count = get_valid_active_count(data)
 
     if uid:
         increment = 1.0 / active_count
@@ -461,7 +482,7 @@ def ask_grok_post(request: Request, data: dict = Body(...)):
 
     validate_model(model, ALLOWED_GROK_MODELS, "Grok", is_pro=is_pro_user)
 
-    active_count = data.get("active_count", 1)
+    active_count = get_valid_active_count(data)
 
     if uid:
         increment = 1.0 / active_count
@@ -622,8 +643,11 @@ async def prepare(request: Request, data: dict = Body(...)):
 @limiter.limit("5/minute")
 def consensus(request: Request, data: dict = Body(...)):
     id_token = extract_id_token(request, data)
-    use_own_keys = data.get("useOwnKeys", False)
+    use_own_keys = str(data.get("useOwnKeys", "false")).lower() == "true"
     search_mode = data.get("search_mode", False)
+    consensus_model = data.get("consensus_model")
+    uid = None
+    is_pro = False
     
     # 1. Auth & Usage Check
     if id_token:
@@ -633,6 +657,9 @@ def consensus(request: Request, data: dict = Body(...)):
                 is_pro = is_user_pro(uid)  # WICHTIG: Pro-Status prüfen
             except Exception:
                 raise HTTPException(status_code=401, detail="Invalid token")
+
+            if isinstance(consensus_model, str) and consensus_model.endswith("-Pro") and not is_pro:
+                raise HTTPException(status_code=403, detail="Premium consensus engines are reserved for Pro users.")
 
             # Limits basierend auf Status festlegen
             limit_regular = PRO_USAGE_LIMIT if is_pro else FREE_USAGE_LIMIT
@@ -679,11 +706,22 @@ def consensus(request: Request, data: dict = Body(...)):
     answer_deepseek = data.get("answer_deepseek")
     answer_grok     = data.get("answer_grok")
     best_model      = data.get("best_model", "")
-    consensus_model = data.get("consensus_model")
     excluded_models = data.get("excluded_models", [])
 
     # API Keys setzen: Bei useOwnKeys werden die vom Nutzer übermittelten Keys genutzt,
     # andernfalls wird für fehlende Keys auf die Developer Keys zurückgegriffen.
+    if isinstance(consensus_model, str) and consensus_model.endswith("-Pro"):
+        if not id_token:
+            raise HTTPException(status_code=403, detail="Premium consensus engines require a Pro account.")
+        if uid is None:
+            try:
+                uid = verify_user_token(id_token)
+                is_pro = is_user_pro(uid)
+            except Exception:
+                raise HTTPException(status_code=401, detail="Invalid token")
+        if not is_pro:
+            raise HTTPException(status_code=403, detail="Premium consensus engines are reserved for Pro users.")
+
     api_keys = {}
     if use_own_keys:
         api_keys["OpenAI"] = data.get("openai_key")

@@ -5,7 +5,14 @@ from typing import Optional
 import google.generativeai as genai
 from mistralai import Mistral
 
-from app.core.config import MAX_TOKENS, DEEP_SEARCH_MAX_TOKENS, REASONING_EFFORT_FOR_DEEP, DEEP_THINK_PROMPT
+from app.core.config import (
+    MAX_TOKENS,
+    DEEP_SEARCH_MAX_TOKENS,
+    REASONING_EFFORT_FOR_DEEP,
+    DEEP_THINK_PROMPT,
+    GEMINI_FLASH_MODEL,
+    GEMINI_PRO_MODEL,
+)
 from app.services.llm.base import get_system_prompt
 
 def query_openai(
@@ -150,7 +157,7 @@ def query_gemini(
         return f"Error with Gemini: configuration failed: {e}"
 
     # (B) Modell & Config
-    model_name = "gemini-3-pro-preview" if deep_search else (model_override or "gemini-3-flash-preview")
+    model_name = GEMINI_PRO_MODEL if deep_search else (model_override or GEMINI_FLASH_MODEL)
 
     print(f"[MODEL] Gemini -> {model_name} | deep_search={deep_search} | override={model_override}")
 

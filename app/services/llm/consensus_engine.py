@@ -7,7 +7,7 @@ import openai
 from mistralai import Mistral
 import google.generativeai as genai
 
-from app.core.config import CONSENSUS_MAX_TOKENS, DIFFERENCES_MAX_TOKENS
+from app.core.config import CONSENSUS_MAX_TOKENS, DIFFERENCES_MAX_TOKENS, GEMINI_FLASH_MODEL, GEMINI_PRO_MODEL
 
 def query_consensus(
     question: str,
@@ -148,7 +148,7 @@ def query_consensus(
                 genai.configure()
 
             # Flash vs Pro
-            model_name = "gemini-3-pro-preview" if consensus_model == "Gemini-Pro" else "gemini-3-flash-preview"
+            model_name = GEMINI_PRO_MODEL if consensus_model == "Gemini-Pro" else GEMINI_FLASH_MODEL
             
             model = genai.GenerativeModel(model_name)
             generation_config = {"max_output_tokens": int(CONSENSUS_MAX_TOKENS)}
@@ -345,7 +345,7 @@ def query_differences(
                     genai.configure()
 
                 model = genai.GenerativeModel(
-                    model_name="gemini-3-flash-preview",
+                    model_name=GEMINI_FLASH_MODEL,
                     system_instruction="Answer in the exact same language as the Model responses.",
                     safety_settings=[{"category":"HARM_CATEGORY_HARASSMENT","threshold":"BLOCK_ONLY_HIGH"}],
                     generation_config={"max_output_tokens": int(DIFFERENCES_MAX_TOKENS), "temperature": 0.2}

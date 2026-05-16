@@ -3,427 +3,352 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="consens.io – Don't ask just any AI. Ask all of them.">
-  <title>consens.io – Ask all of them</title>
-
-  <!-- Google Font -->
-  <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700&display=swap" rel="stylesheet">
-  <!-- Main CSS -->
-  <link rel="stylesheet" href="/static/style.css">
+  <meta name="description" content="consens.io - compare leading AI models and find where they agree.">
+  <title>consens.io - Ask all of them</title>
+  <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260516-public2">
   <link rel="icon" href="/static/favicon.png" type="image/x-icon">
-
-  <style>
-    /* Color Variables for Light and Dark Mode */
-    :root {
-      --bg-color: #f4f4f4;
-      --container-bg: #fff;
-      --text-color: #333;
-      --accent-1: #0056b3;
-      --accent-2: #ffb400;
-      --input-bg: #fff;
-      --input-border: #ccc;
-      --response-bg: #e9e9e9;
-      --box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      --code-bg: #f7f7f7;
-      --feedback-text-color: #b3b3b3;
-      --feedback-text-hover-color: #666;
-      --clear-button-bg: #fce4e4;
-      --clear-button-border: #ffcdd2;
-      --clear-button-text: #b71c1c;
-      --clear-button-bg-hover: #f8bdbd;
-      --slider-bg: #ccc;
-      --email-icon-bg: #ddd;
-      --scrollbar-thumb: rgba(0,0,0,0.3);
-      --scrollbar-thumb-hover: rgba(0,0,0,0.5);
-      /* Button specific */
-      --cta-bg: #0056b3;            /* kräftiges Blau für Light‑Mode */
-      --cta-text: #ffffff;          /* weiße Schrift */
-      --cta-bg-hover: #004494;      /* dunkleres Blau beim Hover */
-      --cta-text-hover: #ffffff;
-    }
-    .dark-mode {
-      --bg-color: #121212;
-      --container-bg: #1e1e1e;
-      --text-color: #e0e0e0;
-      --accent-1: #3399ff;
-      --accent-2: #ffcf4d;
-      --input-bg: #333;
-      --input-border: #555;
-      --response-bg: #2c2c2c;
-      --box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-      --code-bg: #1e1e1e;
-      --feedback-text-color: #949494;
-      --feedback-text-hover-color: #bbb;
-      --clear-button-bg: #3d1f1f;
-      --clear-button-border: #633131;
-      --clear-button-text: #f8bdbd;
-      --clear-button-bg-hover: #5a2a2a;
-      --slider-bg: #636363;
-      --email-icon-bg: #555;
-      --scrollbar-thumb: rgba(255,255,255,0.3);
-      --scrollbar-thumb-hover: rgba(255,255,255,0.5);
-      --cta-bg: #7f5af0;            /* Lila für Dark‑Mode */
-      --cta-text: #ffffff;          /* weiße Schrift für besten Kontrast */
-      --cta-bg-hover: #6b46c1;      /* dunkleres Lila beim Hover */
-      --cta-text-hover: #ffffff;
-    }
-
-    /* Dark Mode: Links in einer helleren, gut lesbaren Farbe */
-    .dark-mode a {
-      color: #dfdfdf; /* Beispiel: ein sanftes Lila, passend zu deinem Button-Hintergrund */
-      text-decoration: underline;
-    }
-
-    /* Base Styles */
-    html { scroll-behavior: smooth; }
-    body {
-      margin: 0;
-      font-family: 'Inter', sans-serif;
-      background-color: var(--bg-color);
-      color: var(--text-color);
-    }
-
-    /* Hero Section */
-    .hero {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      text-align: center;
-      height: 100vh;
-      background-color: var(--container-bg);
-      box-shadow: var(--box-shadow);
-      padding: 0 1rem;
-    }
-    .hero h1 { font-size: 3rem; font-weight: 700; margin-bottom: 1rem; }
-    .hero .subtitle { font-size: 1.25rem; line-height: 1.4; margin-bottom: 2rem; }
-    .hero .subtitle .highlight {
-      background-color: rgba(255,215,0,0.4);
-      padding: 0.25rem 0.5rem;
-      border-radius: 4px;
-      color: var(--text-color);
-    }
-    .hero .subtitle small {
-      font-size: 0.75rem;
-      display: block;
-      margin-top: 0.25rem;
-      opacity: 0.7;
-    }
-    .cta-button {
-      display: inline-block;
-      padding: 0.6rem 1.8rem;
-      font-size: 1rem;
-      font-weight: 700;
-      color: var(--cta-text);
-      background: var(--cta-bg);
-      border: 2px solid transparent;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0, 86, 179, 0.3);
-      transition: background-color 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease, border-color 0.2s ease;
-      text-decoration: none !important;
-    }
-
-    .cta-button:hover {
-      background: var(--cta-bg-hover);
-      color: var(--cta-text-hover);
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(0, 68, 148, 0.35);
-      border-color: rgba(255,255,255,0.3);
-    }
-
-    .cta-button:focus {
-      outline: none;
-      box-shadow: 0 0 0 3px rgba(0, 86, 179, 0.6);
-    }
-
-    /* Scroll Indicator */
-    .scroll-indicator {
-      position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 2rem;
-      color: var(--button-bg);
-      animation: bounce 2s infinite;
-      opacity: 1;
-      transition: opacity 0.3s ease;
-    }
-    @keyframes bounce {
-      0%,20%,50%,80%,100% { transform: translateX(-50%) translateY(0); }
-      40% { transform: translateX(-50%) translateY(10px); }
-      60% { transform: translateX(-50%) translateY(5px); }
-    }
-
-    /* Features Section */
-    .features {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px,1fr));
-      gap: 2rem;
-      max-width: 960px;
-      margin: 4rem auto;
-      padding: 0 1rem;
-    }
-    .feature {
-      background-color: var(--container-bg);
-      padding: 1.5rem;
-      border-radius: 8px;
-      box-shadow: var(--box-shadow);
-      transition: transform 0.2s;
-      text-align: center;
-    }
-    .feature:hover { transform: translateY(-3px); }
-    .feature-icon { font-size: 1.5rem; margin-bottom: 0.5rem; color: var(--cta-bg-hover); }
-    .feature h3 { font-size: 1.125rem; margin-bottom: 0.5rem; }
-    .feature p { font-size: 0.95rem; line-height: 1.4; }
-
-    /* Models Info Section */
-    .models-info {
-      max-width: 960px;
-      margin: 4rem auto;
-      padding: 1.5rem;
-    }
-    .models-info h2 {
-      text-align: center;
-      font-size: 1.5rem;
-      font-weight: 600;
-      margin-bottom: 2rem;
-    }
-    .model-cards {
-      display: grid;
-      grid-template-columns: repeat(auto-fit,minmax(200px,1fr));
-      gap: 1.5rem;
-    }
-    .model-card {
-      background-color: var(--container-bg);
-      border-radius: 8px;
-      box-shadow: var(--box-shadow);
-      padding: 1.5rem;
-      text-align: center;
-      transition: transform 0.2s;
-    }
-    .model-card:hover { transform: translateY(-4px); }
-    .model-icon { width: 64px; height: 64px; object-fit: contain; margin-bottom: 0.75rem; }
-    .model-card h3 { font-size: 1.125rem; margin: 0.5rem 0; }
-    .model-card p { margin: 0.25rem 0; font-size: 0.9rem; line-height: 1.4; }
-
-    /* Consensus Cards Section */
-    .consensus-features {
-      display: grid;
-      grid-template-columns: repeat(auto-fit,minmax(260px,1fr));
-      gap: 2rem;
-      max-width: 800px;
-      margin: 3rem auto;
-      padding: 0 1rem;
-    }
-    .consensus-card {
-      background-color: var(--container-bg);
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      padding: 2rem 1.5rem;
-      text-align: center;
-      position: relative;
-      overflow: hidden;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .consensus-card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-    }
-    .consensus-card:before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 6px;
-      background: linear-gradient(90deg,var(--accent-1),var(--accent-2));
-    }
-    .card-icon {
-      font-size: 2.5rem;
-      margin-bottom: 1rem;
-      color: var(--accent-1);
-    }
-    .consensus-card h3 {
-      font-size: 1.25rem;
-      margin-bottom: 0.75rem;
-      color: var(--text-color);
-    }
-    .consensus-card p {
-      font-size: 1rem;
-      line-height: 1.5;
-      color: var(--text-color);
-      opacity: 0.85;
-    }
-
-    /* Footer */
-    .footer {
-      text-align: center;
-      padding: 2rem 1rem;
-      font-size: 0.85rem;
-      color: var(--feedback-text-color);
-      background-color: var(--container-bg);
-      box-shadow: var(--box-shadow);
-    }
-    .footer a { color: var(--text-color); text-decoration: none; font-weight: 500; }
-    .footer a:hover { color: var(--feedback-text-hover-color); }
-
-    @media (max-width: 768px) {
-      .hero h1 { font-size: 2.5rem; }
-      .hero .subtitle { font-size: 1.1rem; }
-      .model-cards, .features, .consensus-features { grid-template-columns: 1fr; }
-      .scroll-indicator { bottom: 80px;} 
-    }
-  </style>
-
   <script>
-    // Detect and apply dark mode based on user preference
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      document.documentElement.classList.add('dark-mode');
-    }
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-      if (e.matches) document.documentElement.classList.add('dark-mode');
-      else document.documentElement.classList.remove('dark-mode');
-    });
-
-    document.addEventListener("DOMContentLoaded", () => {
-      // Ausnahme‑Flag aus der Session
-      const skip = sessionStorage.getItem("skipLandingRedirect");
-      if (localStorage.getItem("visitedLanding") && !skip) {
-        // schon mal da gewesen und keine Ausnahme → weiter zu /app
-        window.location.replace("/app");
-        return;
+    (function () {
+      const savedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
+        document.documentElement.classList.add("dark-mode");
       }
-      // erstes Mal oder Ausnahme → Landing zeigen und Flag setzen
-      localStorage.setItem("visitedLanding", "true");
-      // Ausnahme nachladen löschen
-      sessionStorage.removeItem("skipLandingRedirect");
-
-      // Dein Scroll‑Indicator bleibt unverändert:
-      const indicator = document.querySelector('.scroll-indicator');
-      let lastScrollY = window.scrollY;
-      window.addEventListener('scroll', () => {
-        const currentY = window.scrollY;
-        indicator.style.opacity = currentY > lastScrollY ? '0' : '1';
-        lastScrollY = currentY;
-      });
-    });
+    })();
   </script>
 </head>
-<body>
+<body class="landing-page">
+  <canvas id="constellationCanvas" class="constellation-bg" aria-hidden="true"></canvas>
 
-  <!-- Hero Section -->
-  <section class="hero">
-    <h1>consens.io</h1>
-    <p class="subtitle">
-      <span class="highlight">Compare AIs,<br>find consensus.</span>
-      <small>(sometimes)</small>
-    </p>
-    <a id="ctaButton" href="/app" class="cta-button">Get started</a>
-    <div class="scroll-indicator">↓</div>
-  </section>
+  <nav class="site-nav" aria-label="Primary">
+    <a href="/" class="brand" aria-label="consens.io home">
+      <img src="/static/favicon.png" alt="">
+      <span>consens.io</span>
+    </a>
+    <div class="nav-links">
+      <a href="/about">About</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/imprint">Imprint</a>
+      <a id="navCtaButton" href="/app" class="nav-cta">Open app</a>
+    </div>
+  </nav>
 
-  <!-- Features Section -->
-  <section class="features">
-    <div class="feature">
-      <div class="feature-icon">🤖</div>
-      <h3>Multiple Models</h3>
-      <p>Receive simultaneous responses from leading AI models.</p>
-    </div>
-    <div class="feature">
-      <div class="feature-icon">💡</div>
-      <h3>Unified Answers</h3>
-      <p>Robust consensus answer combining strengths of each model.</p>
-    </div>
-    <div class="feature">
-      <div class="feature-icon">🔍</div>
-      <h3>Real-time Search</h3>
-      <p>Web-powered data for up-to-date, precise insights.</p>
-    </div>
-  </section>
+  <main class="landing-shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Multi-model AI comparison</p>
+        <h1 class="landing-title">consens.io</h1>
+        <p class="lead">
+          Ask several leading AI models at once, compare their answers side by side,
+          and see where they agree before you decide what to trust.
+        </p>
+        <p class="trust-line">
+          Answers come directly from the selected model providers. consens.io does not route prompts through
+          extra model marketplaces or aggregator layers, and your data is not passed to unrelated AI middlemen.
+        </p>
+        <div class="hero-actions">
+          <a id="ctaButton" href="/app" class="button-primary">Get started</a>
+          <a href="#how-it-works" class="button-secondary">See how it works</a>
+        </div>
+      </div>
 
-  <!-- Models Info Section -->
-  <section class="models-info">
-    <h2>Our Models – United for Better Answers</h2>
-    <div class="model-cards">
-      <div class="model-card">
-        <img src="./static/icons/chatgpt.png" alt="ChatGPT Logo" class="model-icon">
-        <h3>ChatGPT</h3>
-        <p><strong>Provider:</strong> OpenAI</p>
-        <p>Conversational fluency, broad knowledge, code generation.</p>
+      <div class="hero-visual" aria-label="consens.io app preview">
+        <div class="visual-topbar" aria-hidden="true">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>
+        <div class="visual-grid">
+          <div class="ai-row">
+            <img src="/static/icons/chatgpt.png" alt="">
+            <div>
+              <strong>OpenAI</strong>
+              <span>Direct provider response</span>
+            </div>
+            <span class="signal" aria-hidden="true"></span>
+          </div>
+          <div class="ai-row">
+            <img src="/static/icons/claude.png" alt="">
+            <div>
+              <strong>Anthropic</strong>
+              <span>Independent model view</span>
+            </div>
+            <span class="signal" aria-hidden="true"></span>
+          </div>
+          <div class="ai-row">
+            <img src="/static/icons/gemini.png" alt="">
+            <div>
+              <strong>Google Gemini</strong>
+              <span>Side-by-side comparison</span>
+            </div>
+            <span class="signal" aria-hidden="true"></span>
+          </div>
+          <div class="consensus-preview">
+            <strong>Consensus layer</strong>
+            <p>Highlights agreement, separates differences, and keeps the original model answers visible.</p>
+          </div>
+        </div>
       </div>
-      <div class="model-card">
-        <img src="./static/icons/mistral.png" alt="Mistral Logo" class="model-icon">
-        <h3>Mistral</h3>
-        <p><strong>Provider:</strong> Mistral AI</p>
-        <p>High throughput, memory efficient, open-source.</p>
-      </div>
-      <div class="model-card">
-        <img src="./static/icons/claude.png" alt="Claude Logo" class="model-icon">
-        <h3>Claude</h3>
-        <p><strong>Provider:</strong> Anthropic</p>
-        <p>Safety-focused, consistent reasoning, long-form summaries.</p>
-      </div>
-      <div class="model-card">
-        <img src="./static/icons/gemini.png" alt="Gemini Logo" class="model-icon">
-        <h3>Gemini</h3>
-        <p><strong>Provider:</strong> Google</p>
-        <p>Multimodal inputs, search integration, code assistance.</p>
-      </div>
-      <div class="model-card">
-        <img src="./static/icons/deepseek.png" alt="DeepSeek Logo" class="model-icon">
-        <h3>DeepSeek</h3>
-        <p><strong>Provider:</strong> DeepSeek</p>
-        <p>Real-time search relevance, up-to-the-minute data.</p>
-      </div>
-      <div class="model-card">
-        <img src="./static/icons/grok.png" alt="Grok Logo" class="model-icon">
-        <h3>Grok</h3>
-        <p><strong>Provider:</strong> xAI</p>
-        <p>Fast response times, social platform integration.</p>
-      </div>
-      <div class="model-card">
-        <img src="./static/icons/exa.png" alt="Exa Logo" class="model-icon">
-        <h3>Exa</h3>
-        <p><strong>Provider:</strong> Exa AI</p>
-        <p>Specialized domain performance, efficient architecture.</p>
-      </div>
-      <div class="model-card">
-        <img src="./static/icons/perplexity.png" alt="Perplexity Logo" class="model-icon">
-        <h3>Perplexity</h3>
-        <p><strong>Provider:</strong> Perplexity AI</p>
-        <p>Precise fact retrieval, rapid context understanding.</p>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Consensus vs. Differences -->
-  <section class="consensus-features">
-    <div class="consensus-card">
-      <div class="card-icon">📊</div>
-      <h3>Consensus Answer</h3>
-      <p>We aggregate all model outputs into one rock‑solid response—minimizing hallucinations and amplifying agreement.</p>
-    </div>
-    <div class="consensus-card">
-      <div class="card-icon">🔍</div>
-      <h3>Differences</h3>
-      <p>We surface key divergences—so you see exactly where models disagree and why.</p>
-    </div>
-  </section>
+    <section id="how-it-works" class="section">
+      <h2>Compare first. Trust slower.</h2>
+      <p class="section-intro">
+        consens.io keeps the workflow simple: one prompt, multiple provider responses, one structured consensus.
+      </p>
+      <div class="card-grid">
+        <article class="info-card">
+          <p class="kicker">01</p>
+          <h3>Parallel answers</h3>
+          <p>Send a prompt to multiple selected models and read their original responses without losing context.</p>
+        </article>
+        <article class="info-card">
+          <p class="kicker">02</p>
+          <h3>Visible disagreement</h3>
+          <p>Differences are surfaced instead of hidden, so weak spots and conflicting claims are easier to catch.</p>
+        </article>
+        <article class="info-card">
+          <p class="kicker">03</p>
+          <h3>Provider-aware privacy</h3>
+          <p>Prompts go to the providers you choose and not through extra model-router intermediaries.</p>
+        </article>
+      </div>
+    </section>
 
-  <!-- Footer -->
+    <section class="section">
+      <h2>Models in one workspace</h2>
+      <p class="section-intro">
+        The exact line-up can change as models evolve, but consens.io is built around direct access to major providers.
+      </p>
+      <div class="model-grid">
+        <article class="model-card">
+          <img src="/static/icons/chatgpt.png" alt="OpenAI logo">
+          <p class="provider">OpenAI</p>
+          <h3>ChatGPT</h3>
+          <p>Strong general reasoning, writing, coding, and structured outputs.</p>
+        </article>
+        <article class="model-card">
+          <img src="/static/icons/claude.png" alt="Anthropic logo">
+          <p class="provider">Anthropic</p>
+          <h3>Claude</h3>
+          <p>Careful long-form analysis, summaries, and nuanced comparison.</p>
+        </article>
+        <article class="model-card">
+          <img src="/static/icons/gemini.png" alt="Gemini logo">
+          <p class="provider">Google</p>
+          <h3>Gemini</h3>
+          <p>Fast multimodal-capable models with strong research workflows.</p>
+        </article>
+        <article class="model-card">
+          <img src="/static/icons/mistral.png" alt="Mistral logo">
+          <p class="provider">Mistral AI</p>
+          <h3>Mistral</h3>
+          <p>Efficient European models with concise and practical responses.</p>
+        </article>
+        <article class="model-card">
+          <img src="/static/icons/deepseek.png" alt="DeepSeek logo">
+          <p class="provider">DeepSeek</p>
+          <h3>DeepSeek</h3>
+          <p>Useful for technical reasoning, code, and alternative viewpoints.</p>
+        </article>
+        <article class="model-card">
+          <img src="/static/icons/grok.png" alt="Grok logo">
+          <p class="provider">xAI</p>
+          <h3>Grok</h3>
+          <p>Another independent model family for comparison and consensus checks.</p>
+        </article>
+        <article class="model-card">
+          <img src="/static/icons/perplexity.png" alt="Perplexity logo">
+          <p class="provider">Perplexity</p>
+          <h3>Perplexity</h3>
+          <p>Research-oriented answers and source-aware retrieval workflows.</p>
+        </article>
+        <article class="model-card">
+          <img src="/static/icons/exa.png" alt="Exa logo">
+          <p class="provider">Exa</p>
+          <h3>Exa</h3>
+          <p>Search infrastructure that helps support current, web-grounded context.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
   <footer class="footer">
-    © 2025 consens.io | <a href="/app">Go to App</a>
+    <div class="footer-inner">
+      <span>&copy; 2026 consens.io</span>
+      <div class="footer-links">
+        <a href="/app">App</a>
+        <a href="/about">About</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/imprint">Imprint</a>
+      </div>
+    </div>
   </footer>
 
   <script>
-    // Wenn der Nutzer bewusst auf den Button klickt, setzen wir eine Ausnahme 
-    // und speichern sie nur in dieser Session.
-    document.getElementById("ctaButton").addEventListener("click", () => {
-      sessionStorage.setItem("skipLandingRedirect", "1");
+    (function () {
+      const canvas = document.getElementById("constellationCanvas");
+      if (!canvas) return;
+
+      const reducedMotionQuery = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)");
+      const prefersReducedMotion = reducedMotionQuery && reducedMotionQuery.matches;
+      const ctx = canvas.getContext("2d");
+      const pointer = { x: 0, y: 0, active: false };
+      let width = 0;
+      let height = 0;
+      let dpr = 1;
+      let points = [];
+
+      function themeColor(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      }
+
+      function hexToRgb(hex) {
+        const value = hex.replace("#", "");
+        const full = value.length === 3
+          ? value.split("").map(ch => ch + ch).join("")
+          : value;
+        const int = parseInt(full, 16);
+        return {
+          r: (int >> 16) & 255,
+          g: (int >> 8) & 255,
+          b: int & 255
+        };
+      }
+
+      function rgba(token, alpha) {
+        const raw = themeColor(token);
+        if (raw.startsWith("#")) {
+          const rgb = hexToRgb(raw);
+          return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+        }
+        return raw;
+      }
+
+      function resize() {
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = Math.floor(width * dpr);
+        canvas.height = Math.floor(height * dpr);
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const count = Math.max(28, Math.min(52, Math.floor((width * height) / 23000)));
+        points = Array.from({ length: count }, (_, index) => ({
+          x: Math.random() * width,
+          y: Math.random() * height,
+          vx: (Math.random() - 0.5) * 0.16,
+          vy: (Math.random() - 0.5) * 0.16,
+          r: index % 7 === 0 ? 2.1 : 1.45
+        }));
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, width, height);
+        const isDark = document.documentElement.classList.contains("dark-mode");
+        const accent = rgba("--accent", isDark ? 0.34 : 0.24);
+        const muted = rgba("--muted", isDark ? 0.3 : 0.23);
+        const line = rgba("--muted", isDark ? 0.14 : 0.11);
+
+        for (const point of points) {
+          if (!prefersReducedMotion) {
+            point.x += point.vx;
+            point.y += point.vy;
+            if (point.x < -40) point.x = width + 40;
+            if (point.x > width + 40) point.x = -40;
+            if (point.y < -40) point.y = height + 40;
+            if (point.y > height + 40) point.y = -40;
+          }
+        }
+
+        for (let i = 0; i < points.length; i++) {
+          for (let j = i + 1; j < points.length; j++) {
+            const a = points[i];
+            const b = points[j];
+            const dx = a.x - b.x;
+            const dy = a.y - b.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 132) {
+              ctx.beginPath();
+              ctx.moveTo(a.x, a.y);
+              ctx.lineTo(b.x, b.y);
+              ctx.strokeStyle = line;
+              ctx.globalAlpha = 1 - dist / 132;
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+          }
+        }
+
+        if (pointer.active) {
+          for (const point of points) {
+            const dx = point.x - pointer.x;
+            const dy = point.y - pointer.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 170) {
+              ctx.beginPath();
+              ctx.moveTo(point.x, point.y);
+              ctx.lineTo(pointer.x, pointer.y);
+              ctx.strokeStyle = accent;
+              ctx.globalAlpha = 0.2 * (1 - dist / 170);
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+          }
+        }
+
+        ctx.globalAlpha = 1;
+        for (const point of points) {
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, point.r, 0, Math.PI * 2);
+          ctx.fillStyle = point.r > 2 ? accent : muted;
+          ctx.fill();
+        }
+
+        if (!prefersReducedMotion) {
+          requestAnimationFrame(draw);
+        }
+      }
+
+      window.addEventListener("resize", () => {
+        resize();
+        if (prefersReducedMotion) draw();
+      });
+      window.addEventListener("pointermove", event => {
+        pointer.x = event.clientX;
+        pointer.y = event.clientY;
+        pointer.active = true;
+      });
+      window.addEventListener("pointerleave", () => {
+        pointer.active = false;
+      });
+
+      resize();
+      draw();
+    })();
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const skip = sessionStorage.getItem("skipLandingRedirect");
+      if (localStorage.getItem("visitedLanding") && !skip) {
+        window.location.replace("/app");
+        return;
+      }
+
+      localStorage.setItem("visitedLanding", "true");
+      sessionStorage.removeItem("skipLandingRedirect");
+
+      ["ctaButton", "navCtaButton"].forEach(id => {
+        const button = document.getElementById(id);
+        if (button) {
+          button.addEventListener("click", () => {
+            sessionStorage.setItem("skipLandingRedirect", "1");
+          });
+        }
+      });
     });
   </script>
-
 </body>
 </html>
-

@@ -125,7 +125,7 @@ async def submit_feedback(request: Request, data: dict = Body(...)):
     
     return {"status": "success", "message": "Feedback has been successfully submitted."}
 
-ALLOWED_VOTE_TYPES = {"best", "exclude", "BestModel"}
+ALLOWED_VOTE_TYPES = {"BestModel"}
 
 @router.post("/vote")
 @limiter.limit("3/minute")

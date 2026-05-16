@@ -319,3 +319,66 @@ body:has(.sidebar.collapsed) .main-wrapper {
 #editSystemPromptBtn:hover { background-color: var(--sidebar-hover) !important; }
 #editSystemPromptBtn .settings-icon { margin-right: 8px; font-size: 14px; display: inline-block; }
 
+@media (max-width: 1465px) {
+  .sidebar {
+    top: 45px;
+    width: min(82vw, 360px);
+    height: calc(100% - 45px);
+    padding: 10px;
+    background: var(--container-bg);
+    box-shadow: 16px 0 40px rgba(15, 23, 42, 0.16);
+    transform: translateX(-100%);
+  }
+
+  .sidebar.active {
+    transform: translateX(0);
+  }
+
+  .sidebar-content {
+    margin-top: 8px;
+    margin-bottom: 88px;
+    padding: 10px;
+  }
+
+  .sidebar-settings {
+    position: absolute;
+    left: 15px;
+    bottom: 18px;
+    width: calc(100% - 30px);
+  }
+
+  .container {
+    width: min(100% - 20px, 900px);
+    box-sizing: border-box;
+  }
+}
+
+@media (max-width: 640px) {
+  body {
+    padding-inline: 6px;
+  }
+
+  .top-bar {
+    padding-inline: 8px;
+  }
+
+  .top-bar-right {
+    gap: 10px;
+    margin-right: 12px;
+  }
+
+  .top-bar-about,
+  .top-bar-divider {
+    display: none;
+  }
+
+  .top-bar-title {
+    display: none;
+  }
+
+  .container {
+    width: 100%;
+    padding-inline: 10px;
+  }
+}
+

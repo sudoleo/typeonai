@@ -5,8 +5,7 @@
   // Globale Spinner-HTML, falls du sie nur für die Demo brauchst
   window.spinnerHTML = `
     <span class="thinking-wrap" role="status" aria-live="polite" aria-busy="true">
-      <span class="spinner" aria-hidden="true"></span>
-      <span class="thinking" data-text="Typing …">Typing&nbsp;…</span>
+      <span class="thinking typing-indicator" data-text="Typing" aria-label="Typing">Typing<span class="typing-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span>
     </span>
   `;
   window.currentEvidenceSources = [];
@@ -179,12 +178,13 @@
     </div>`,
 
     differences:
-      `<div class="ai-differences">
-        <p><span class="cred-badge cred-largely">The consensus answer is largely credible.</span></p>
-        <hr>
-        <p>Most models agree on the core stack (B12 baseline; D3, iodine, algae EPA+DHA as context; iron only with labs; calcium to ~1,000 mg; creatine for athletes). Minor content nuances appear (e.g., zinc/copper balance, magnesium for sleep/performance, process/QA details) without contradictions.</p>
-        <p><br>BestModel: Anthropic</p>
-      </div>`
+      `The consensus answer is **largely** credible.
+
+_____________
+
+Most models agree on the core stack (B12 baseline; D3, iodine, algae EPA+DHA as context; iron only with labs; calcium to ~1,000 mg; creatine for athletes). Minor content nuances appear (e.g., zinc/copper balance, magnesium for sleep/performance, process/QA details) without contradictions.
+
+BestModel: Anthropic`
       };
 
       /* === DEMO: Timing & Typing Configuration =============================== */
@@ -312,6 +312,7 @@
             window.injectMarkdown(mainP, DEMO_DATA.consensus);
         }
         if (diffP) {
+            window.applyCredibilityFrame?.(diffP, DEMO_DATA.differences);
             const html = marked.parse(
             (window.colorizeCredibility?.(DEMO_DATA.differences) ?? DEMO_DATA.differences)
             );
@@ -322,6 +323,7 @@
         };
 
         if (auto){
+          window.resetCredibilityFrame?.(consensusDiv?.querySelector(".consensus-differences"));
           if (mainP) mainP.innerHTML = window.spinnerHTML;
           if (diffP) diffP.innerHTML = window.spinnerHTML;
           setTimeout(
@@ -388,4 +390,3 @@ function toggleSettingsCollapse(contentId, arrowId) {
 }
 
 window.toggleSettingsCollapse = toggleSettingsCollapse;
-  
