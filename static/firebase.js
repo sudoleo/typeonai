@@ -203,34 +203,35 @@ onIdTokenChanged(auth, async (user) => {
       usageOptions.style.display = "block";
     }
 
-    // 5) E‑Mail‑Icon & Popup setzen
+    // 5) E‑Mail & Logout als Popup
     const emailInitial = user.email.charAt(0).toUpperCase();
     loginContainer.innerHTML = `
-      <div class="email-container">
-        <span id="emailIcon" class="email-icon">${emailInitial}</span>
-        <div id="emailPopup" class="email-popup">
-          <div class="popup-content">
-            <span class="user-email">${user.email}</span>
-            <button id="logoutButton" class="logout-button">Logout</button>
+      <div class="email-container" style="position: relative; display: inline-block;">
+        <span id="emailIcon" class="email-icon" style="display: inline-block; width: 32px; height: 32px; border-radius: 50%; background-color: var(--sidebar-border, #ddd); color: var(--text-color); text-align: center; line-height: 32px; font-weight: bold; font-size: 14px; cursor: pointer;">${emailInitial}</span>
+        <div id="emailPopup" class="email-popup" style="display: none; position: absolute; top: 45px; right: 0; background-color: var(--container-bg, #fff); border: 1px solid var(--sidebar-border, #ddd); border-radius: 8px; padding: 15px 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); z-index: 100; min-width: 150px;">
+          <div class="popup-content" style="display: flex; flex-direction: column; align-items: flex-start;">
+            <span class="user-email" style="margin-bottom: 12px; font-weight: 500; font-size: 0.95rem; color: var(--text-color);">${user.email}</span>
+            <a id="logoutButton" class="top-bar-about" style="cursor: pointer; text-decoration: none; align-self: flex-start; padding: 5px 0;">Logout</a>
           </div>
         </div>
       </div>
     `;
-    const emailIcon    = document.getElementById("emailIcon");
-    const emailPopup   = document.getElementById("emailPopup");
+    const emailIcon = document.getElementById("emailIcon");
+    const emailPopup = document.getElementById("emailPopup");
     const logoutButton = document.getElementById("logoutButton");
 
     emailIcon.addEventListener("click", e => {
       e.stopPropagation();
-      emailPopup.classList.toggle("active");
+      emailPopup.style.display = emailPopup.style.display === "none" ? "block" : "none";
     });
+
     logoutButton.addEventListener("click", () => {
-      signOut(auth).then(() => emailPopup.classList.remove("active"))
-                    .catch(err => console.error("Logout-Fehler", err));
+      signOut(auth).catch(err => console.error("Logout-Fehler", err));
     });
+
     document.addEventListener("click", e => {
       if (!loginContainer.contains(e.target)) {
-        emailPopup.classList.remove("active");
+        emailPopup.style.display = "none";
       }
     });
 

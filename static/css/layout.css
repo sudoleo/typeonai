@@ -1,0 +1,321 @@
+/* ==========================================================================
+   Layout Styles (Containers, Header, Sidebar)
+   ========================================================================== */
+
+/* Main Containers */
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  background: var(--container-bg);
+  padding: 15px 20px;
+  border-radius: 8px;
+  border: 1px solid var(--sidebar-border);
+  box-shadow: var(--box-shadow);
+  position: relative;
+}
+
+.main-wrapper {
+  display: flex;
+  justify-content: center;
+  padding-top: 20px;
+  margin-left: 260px;
+  transition: margin-left 0.3s ease;
+  width: auto;
+}
+
+body:has(.sidebar.collapsed) .main-wrapper {
+  margin-left: 0 !important;
+}
+
+/* --------------------------------------------------------------------------
+   Top Bar
+   -------------------------------------------------------------------------- */
+.top-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 45px;
+  background: var(--container-bg);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 20px;
+  z-index: var(--z-header);
+  border-bottom: 1px solid var(--sidebar-border);
+  box-shadow: none;
+  flex-wrap: nowrap;
+}
+
+.top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-left: auto;
+  margin-right: 30px;
+}
+
+.top-bar-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.top-bar-favicon {
+  width: 24px;
+  height: auto;
+  margin-right: 8px;
+  filter: invert(1);
+  transition: filter 0.3s ease;
+}
+
+.dark-mode .top-bar-favicon {
+  filter: invert(0);
+}
+
+.top-bar-about {
+  font-size: 1em;
+  color: var(--text-color);
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+.top-bar-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(128, 128, 128, 0.4);
+}
+
+.login-text {
+  cursor: pointer;
+  font-size: 1em;
+  transition: color 0.3s;
+  color: var(--text-color);
+  display: flex;
+  align-items: center;
+}
+
+.login-text:hover {
+  color: var(--button-bg);
+  text-decoration: underline;
+}
+
+/* --------------------------------------------------------------------------
+   Sidebar
+   -------------------------------------------------------------------------- */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  padding: 5px;
+  width: 260px;
+  height: 100%;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
+  box-sizing: border-box;
+  z-index: var(--z-sidebar);
+  text-align: center;
+  transition: transform 0.3s ease;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex-direction: column;
+  display: flex;
+}
+
+.sidebar.collapsed {
+  transform: translateX(-100%);
+}
+
+.sidebar-content {
+  flex: 1;
+  padding: 15px;
+  margin-top: 50px;
+  margin-bottom: 80px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  margin-right: 15px;
+  width: 40px;
+  height: 40px;
+  z-index: var(--z-sidebar-toggle);
+}
+
+.sidebar-toggle:hover {
+  background-color: rgba(0,0,0,0.05);
+  border-radius: 50%;
+}
+
+.dark-mode .sidebar-toggle:hover {
+  background-color: rgba(255,255,255,0.1);
+}
+
+.burger-icon {
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  line-height: 40px;
+  font-size: 22px;
+  text-align: center;
+  color: var(--icon-color);
+}
+
+.sidebar-separator {
+  border-top: 1px solid var(--sidebar-border);
+  margin: 15px 10px;
+}
+
+.sidebar-settings {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  width: calc(260px - 40px);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sidebar-settings button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: 0.9em;
+  padding: 8px 12px;
+  width: 100%;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.sidebar-settings .settings-icon {
+  font-size: 16px;
+  margin-right: 8px;
+  transition: transform 0.3s ease;
+}
+
+.sidebar-settings button:hover {
+  background-color: var(--sidebar-hover);
+}
+
+.sidebar-settings button:hover .settings-icon {
+  transform: rotate(20deg);
+}
+
+.sidebar-section h2 {
+  text-align: left;
+  margin-top: 20px;
+  padding: 0 10px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sidebar-text-muted);
+  font-weight: 600;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+}
+
+.sidebar-header h2 {
+  flex-grow: 1;
+  text-align: left;
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sidebar-text-muted);
+  font-weight: 600;
+}
+
+.sidebar-title {
+  margin-bottom: 15px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sidebar-title h1 {
+  font-size: 1.2em;
+  margin: 5px 0;
+}
+
+#version-number {
+  position: static;
+  display: block;
+  text-align: center;
+  margin-top: 10px;
+  opacity: 0.6;
+  font-size: 0.7rem;
+  color: var(--sidebar-text-muted);
+}
+
+
+/* --- Restored missing styles --- */
+#usageOptions { text-align: left; margin-top: 5px; margin-bottom: 15px; padding: 0 10px; }
+#usageDisplay { 
+  display: flex; 
+  flex-direction: column;
+  gap: 4px;
+  background: var(--container-bg); 
+  border: 1px solid var(--sidebar-border); 
+  border-radius: 8px; 
+  padding: 10px 12px; 
+  font-size: 0.8rem; 
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--text-color); 
+}
+#usageDisplay span { display: flex; justify-content: space-between; }
+#usageDisplay br { display: none; }
+.model-selection { display: none; flex-direction: column; gap: 2px; padding: 0 5px; margin-top: 8px; }
+.model-selection label { 
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+  padding: 6px 10px; 
+  font-size: 13px; 
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  color: var(--text-color);
+  margin-bottom: 0;
+}
+.model-selection label:hover {
+  background-color: var(--sidebar-hover);
+}
+.bookmark { 
+  cursor: pointer; 
+  background: none; 
+  font-size: 13px; 
+  margin-bottom: 4px; 
+  padding: 8px 10px; 
+  border: none; 
+  border-radius: 6px; 
+  text-align: left; 
+  transition: background-color 0.2s ease; 
+  position: relative; 
+  width: 100%; 
+  display: block; 
+  color: inherit; 
+  box-sizing: border-box;
+}
+.bookmark p { overflow-wrap: break-word; padding-right: 30px; margin: 0; }
+.sidebar .bookmark:hover { background-color: var(--sidebar-hover); }
+.delete-bookmark { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; font-weight: bold; opacity: 0.5; }
+#editSystemPromptBtn { background-color: transparent !important; color: var(--text-color) !important; border: 1px solid var(--sidebar-border) !important; padding: 8px 16px; border-radius: 6px; cursor: pointer; width: 100%; margin: 0; }
+#editSystemPromptBtn:hover { background-color: var(--sidebar-hover) !important; }
+#editSystemPromptBtn .settings-icon { margin-right: 8px; font-size: 14px; display: inline-block; }
+

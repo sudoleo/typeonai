@@ -1,0 +1,4351 @@
+/* Google Fonts: Roboto */
+:root {
+  --bg-color: #f4f4f4;
+  --container-bg: #fff;
+  --text-color: #333;
+  --input-bg: #fff;
+  --input-border: #ccc;
+  --button-bg: #007bff;
+  --button-text: #fff;
+  --response-bg: #e9e9e9;
+  --box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  --code-bg: #f7f7f7; /* Heller Hintergrund für Light Mode */
+  --feedback-text-color: #b3b3b3;           /* Dezentes mittleres Grau im Light Mode */
+  --feedback-text-hover-color: #666;       /* Etwas dunkler beim Hover */
+  --clear-button-bg: #fce4e4;       /* Sehr dezenter, pastelliger Rotton */
+  --clear-button-border: #ffcdd2;   /* Passende, weiche Umrandung */
+  --clear-button-text: #b71c1c;     /* Dunkler, kontrastreicher Rotton für den Text */
+  --clear-button-bg-hover: #f8bdbd;  /* Leicht intensiver Farbton beim Hover */
+  --slider-bg: #ccc; /* Standard für White Mode */
+  --email-icon-bg: #ddd; /* Neue Variable: leicht grauer Hintergrund für Whitemode */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.3);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.5);
+  /* Vote-Badge-Variablen */
+  --vote-model-bg: #e6f0ff;
+  --vote-model-color: #1a4aa1;
+  --vote-best-bg: #e6ffed;
+  --vote-best-color: #2c7a2c;
+  --vote-exclude-bg: var(--clear-button-bg);
+  --vote-exclude-color: var(--clear-button-text);
+    --accent: #418af5;
+  --accent-contrast: #0b234a;
+  --chip-bg: rgba(0,0,0,0.04);
+  --chip-border: rgba(0,0,0,0.12);
+  --chip-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.08);
+  --chip-shadow-active: 0 3px 10px rgba(65,138,245,0.25);
+  --overlay-dim: rgba(0, 0, 0, 0.38);
+}
+
+.dark-mode {
+  --bg-color: #121212;
+  --container-bg: #1e1e1e;
+  --text-color: #e0e0e0;
+  --input-bg: #333;
+  --input-border: #555;
+  --button-bg: #bb86fc;
+  --button-text: #000;
+  --response-bg: #2c2c2c;
+  --box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+  --code-bg: #1e1e1e; /* Dunkler Hintergrund für Dark Mode */
+  --feedback-text-color: #949494;             /* Dezentes helles Grau im Dark Mode */
+  --feedback-text-hover-color: #bbb;         /* Etwas dunkler beim Hover */
+  --clear-button-bg: #3d1f1f;       /* Im Dark Mode etwas gedämpfter, dunkler Rotton */
+  --clear-button-border: #633131;   /* Entsprechende Umrandung im Dark Mode */
+  --clear-button-text: #f8bdbd;     /* Helle Schrift, damit der Kontrast im Dunkeln stimmt */
+  --clear-button-bg-hover: #5a2a2a;  /* Etwas hellere Variante beim Hover */
+  --slider-bg: #636363;
+  --email-icon-bg: #555; /* Passende dunkle Farbe im Dark Mode */
+  --scrollbar-thumb: rgba(255, 255, 255, 0.3);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.5);
+  /* Override für Dark Mode falls gewünscht */
+  --vote-model-bg: #2c2f3c;
+  --vote-model-color: #82aaff;
+  --vote-best-bg: #203c20;
+  --vote-best-color: #8aff8a;
+  --vote-exclude-bg: var(--clear-button-bg);
+  --vote-exclude-color: var(--clear-button-text);
+    --accent: #bb86fc;
+  --accent-contrast: #111;
+  --chip-bg: rgba(255,255,255,0.06);
+  --chip-border: rgba(255,255,255,0.16);
+  --chip-shadow: 0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(0,0,0,0.35);
+  --chip-shadow-active: 0 4px 16px rgba(187,134,252,0.35);
+  --overlay-dim: rgba(0, 0, 0, 0.62);
+}
+
+/* Dark Mode Anpassungen */
+.dark-mode {
+  --consensus-button-text: #eee;
+}
+
+body {
+  font-family: 'Roboto', Arial, sans-serif;
+  background-color: var(--bg-color);
+  margin: 0;
+  padding: 10px;
+  color: var(--text-color);
+  padding-top: 10px;
+}
+
+/* Scrollbar-Styling direkt für das Body-Element */
+body::-webkit-scrollbar {
+  width: 6px;
+}
+
+body::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
+body::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 4px;
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+}
+
+body::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+.top-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 45px; /* Angepasste Höhe */
+  background: var(--container-bg);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 20px;
+  z-index: 1500;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  flex-wrap: nowrap; /* verhindert Zeilenumbruch */
+}
+
+.top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  
+  /* NEU: Das ist der Trick. Es schiebt dieses Element ganz nach rechts */
+  margin-left: auto; 
+  
+  margin-right: 30px; /* Optionaler Abstand zum Bildschirmrand */
+}
+
+/* Standard-Styling für das Logo-Element */
+.top-bar-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.top-bar-favicon {
+  width: 24px; /* oder eine andere passende Größe */
+  height: auto;
+  margin-right: 8px;
+/* TRICK: Da das Bild weiß ist, drehen wir die Farben im Light Mode um -> Es wird Schwarz */
+  filter: invert(1); 
+  transition: filter 0.3s ease;
+}
+.dark-mode .top-bar-favicon {
+  filter: invert(0);
+}
+
+/* --- Fix für das Icon im Consensus-Bereich --- */
+
+/* Standard (Light Mode): Das weiße Icon wird schwarz invertiert */
+.consensus-main h2 img {
+  margin-right: 8px;
+  filter: invert(1);
+  transition: filter 0.3s ease;
+}
+
+/* Dark Mode: Der Filter wird entfernt, das Icon ist wieder original weiß */
+.dark-mode .consensus-main h2 img {
+  filter: invert(0);
+}
+
+#loginModalContent img {
+  filter: invert(1);
+  transition: filter 0.3s ease;
+}
+
+#loginModalContent #googleLoginButton img {
+  filter: none; 
+}
+
+.dark-mode #loginModalContent img {
+  filter: invert(0);
+}
+
+/* About-Link in der Top-Bar */
+.top-bar-about {
+  font-size: 1em;
+  color: var(--text-color);
+  opacity: 0.8;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+  color: var(--text-color);
+  font-family: 'Roboto', Arial, sans-serif;
+}
+
+.top-bar-about:hover {
+  opacity: 1;
+}
+
+/* Dünner vertikaler Trenner */
+.top-bar-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(128, 128, 128, 0.4);
+}
+
+.top-bar a,
+.top-bar-about {
+  text-decoration: none !important;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.top-bar a:hover,
+.top-bar-about:hover {
+  opacity: 1;
+}
+
+/* Icon‑Link */
+#logoLink {
+  text-decoration: none;  /* kein Unterstrich unter dem IMG */
+  display: inline-block;
+}
+
+/* Link‑Farbe erben */
+#logoLink img {
+  cursor: pointer;
+}
+
+.top-bar .mode-switch {
+  position: relative;
+  top: auto;
+  right: auto;
+}  
+
+/* Container als flex-Container für die rechte Seite */
+.top-bar-about, 
+#loginContainer {
+  display: flex;
+  align-items: center;
+  color: var(--text-color);
+}
+
+/* Wrapper für das Icon (und das Popup) */
+.email-container {
+  display: inline-block;
+  margin-left: 8px; /* sorgt für Abstand */
+  position: relative; /* wichtig für die absolute Positionierung des Popups */
+}
+
+/* Stil für das E-Mail Icon */
+.email-icon {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: var(--email-icon-bg);
+  color: var(--text-color);
+  text-align: center;
+  line-height: 32px;
+  cursor: pointer;
+}
+
+/* Modernes Styling für das EmailPopup */
+.email-popup {
+  display: none; /* Initial nicht sichtbar */
+  position: absolute;
+  top: 50px;         /* Etwas Abstand nach oben, z. B. anpassen */
+  right: 0;
+  background-color: var(--container-bg, #ffffff);
+  border: 1px solid var(--input-border, #ddd);
+  border-radius: 8px;        /* Abgerundete Ecken */
+  padding: 15px 20px;        /* Mehr Innenabstand */
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);  /* Weicher, moderner Schatten */
+  color: var(--text-color, #333);
+  z-index: 100;
+  opacity: 0;              /* Für sanftes Einblenden */
+  transform: translateY(10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Sichtbarmachen des Popups, z. B. durch Aktivierung */
+.email-popup.active {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Container für den Inhalt */
+.email-popup .popup-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* Stil für die E-Mail-Anzeige */
+.email-popup .user-email {
+  margin-bottom: 12px;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+/* Optional: Stil für einen Close-Button im Popup */
+.email-popup .close-btn {
+  align-self: flex-end;
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: var(--text-color, #333);
+  margin-bottom: 10px;
+  transition: color 0.2s ease;
+}
+
+.email-popup .close-btn:hover {
+  color: var(--primary-color, #007BFF);
+}
+
+/* Stil für den Logout-Button */
+.logout-button {
+  background-color: var(--button-bg);
+  color: var(--button-text);
+  border: none;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.logout-button:hover {
+  opacity: 0.9;
+}
+
+/* Container */
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  background: var(--container-bg);
+  padding: 15px 20px;
+  border-radius: 8px;
+  box-shadow: var(--box-shadow);
+  position: relative;
+}
+
+
+
+/* Überschriften */
+h1, h2 {
+  text-align: center;
+  margin-bottom: 5px;
+  padding: 0;
+}
+
+/* Überschrift in der Sidebar inkl. Logo */
+.sidebar-title {
+  margin-bottom: 15px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Platzhalter-Logo neben der Überschrift (hier oberhalb oder neben dem Text, je nach Wunsch) */
+.sidebar-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 50%;
+  margin-bottom: 5px;
+}
+
+.sidebar-title h1 {
+  font-size: 1.2em;
+  margin: 5px 0;
+  text-align: center;
+}
+
+.title small {
+font-size: 0.8em;
+}
+
+#marketingPopup {
+z-index: 2000;  /* höher als der toggleAllButton */
+}
+
+.cta-text {
+  font-size: 1em;  /* leicht verkleinert für dezenteren Look */
+  font-weight: 500; /* statt 600 für weniger fette Schrift */
+  color: var(--text-color);
+  padding: 10px 18px;
+  margin-top: 20px;
+  text-align: center;
+  border-left: 3px solid #00b894; /* etwas schmaler für eine feinere Optik */
+  background-color: rgba(0, 0, 0, 0.02); /* noch dezentere Hintergrundtönung */
+}
+
+.dark-mode .cta-text {
+  color: var(--text-color);
+  border-left: 3px solid #00b894; 
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+/* CSS für gesperrten Switch */
+.switch.deep-switch.locked {
+    opacity: 0.5;
+    filter: grayscale(100%);
+    cursor: not-allowed;
+}
+
+/* Input-Section */
+.input-section {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.chat-input-container {
+  display: flex;
+  align-items: flex-start; /* sorgt dafür, dass der Inhalt oben beginnt */
+  background-color: var(--response-bg);
+  border-radius: 10px;
+  padding: 10px;
+  width: 100%;
+  margin: 10px 0;
+  box-sizing: border-box;
+  /* Feste Höhe entfernen, stattdessen eine Mindesthöhe setzen */
+  /* height: 110px; */
+  min-height: 110px;
+  padding-bottom: 50px;
+}
+
+.chat-input-container .input-field {
+  flex-grow: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-color);
+  font-size: 16px;
+  outline: none;
+  padding: 10px;
+  box-sizing: border-box;
+  resize: vertical; /* Ermöglicht vertikales Vergrößern */
+  text-align: left;
+  vertical-align: top;
+  font-family: inherit;
+  min-height: 80px;   /* optional */
+  max-height: 300px;  /* optional */
+}
+
+/* Der Senden-Button – fix und ohne die Containerbreite zu beeinflussen */
+.chat-input-container .button {
+  background-color: var(--button-bg);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 10px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  flex-shrink: 0;
+}
+
+.chat-input-container .button:hover {
+  background-color: #0056b3;
+}
+
+
+.input-section input[type="text"] {
+  width: 60%;
+  padding: 10px 12px;
+  font-size: 1em;
+  margin-right: 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  transition: border 0.3s;
+}
+
+.input-section input[type="text"]:focus {
+  outline: none;
+  border-color: var(--button-bg);
+}
+
+.input-section button {
+  padding: 10px 16px;
+  font-size: 1em;
+  background-color: var(--button-bg);
+  color: var(--button-text);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.input-section button:hover {
+  background-color: #0056b3;
+}
+
+/* Send-Icon im Button: schlanker Up-Arrow */
+.chat-input-container .button svg.send-icon {
+  width: 18px;     /* oder 20px wenn du’s etwas größer magst */
+  height: 18px;
+  display: block;
+}
+
+/* Falls irgendwo noch fill gesetzt wird, stellen wir es sicher aus */
+.chat-input-container .button svg.send-icon path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.input-icon {
+  width: 100px;
+  height: 100px;
+}
+
+.response-section {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+#toggleAllButton {
+  position: absolute;
+  top: -23px;    /* Passt die vertikale Position an */
+  right: -13px;   /* Passt die horizontale Position an */
+  border: none;
+  background: none;
+  cursor: pointer;
+  z-index: 1000;
+}
+
+.dark-mode #toggleAllButton .toggle-visual {
+  background-color: #3f3f3f;  /* dunkler als #fff */
+  border: 1px solid #535353;  /* angepasster Rahmen */
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5); /* optional angepasster Schatten */
+}
+
+/* Das visuelle Element (der Strich) */
+#toggleAllButton .toggle-visual {
+  display: block;
+  width: 25px;
+  height: 5px;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: background-color 0.3s, box-shadow 0.3s;
+  animation: pulse 2s ease-out;
+}
+
+/* Hover-Effekt über den Button (optional, greift auch auf den inneren Strich) */
+#toggleAllButton:hover .toggle-visual {
+  background-color: #f9f9f9;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+/* Container: einfache Ausrichtung ohne Rahmen oder Hintergrund */
+#usageOptions {
+  margin: 10px 0;
+  text-align: left;
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  color: #333;
+}
+
+/* Checkbox-Label: linksbündig mit Abstand zwischen Checkbox und Text */
+.custom-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;         /* Abstand zwischen Checkbox und Text */
+  cursor: pointer;
+  margin-bottom: 10px; /* Abstand zum nächsten Element */
+}
+
+/* Individuelle Checkbox */
+.custom-checkbox-label input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #ccc;
+  border-radius: 4px;
+  transition: background-color 0.3s, border-color 0.3s;
+  position: relative;
+}
+
+.custom-checkbox-label input[type="checkbox"]:checked {
+  background-color: #007bff;
+  border-color: #007bff;
+}
+
+.custom-checkbox-label input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 4px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* Darkmode-Anpassungen */
+.dark-mode #usageOptions {
+  color: #e0e0e0;
+}
+
+.dark-mode .custom-checkbox-label input[type="checkbox"] {
+  border: 2px solid #555;
+}
+
+.dark-mode .custom-checkbox-label input[type="checkbox"]:checked {
+  background-color: #bb86fc;
+  border-color: #bb86fc;
+}
+
+.popup {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  opacity: 0;
+  pointer-events: none;  /* Damit es nicht interaktiv ist */
+  transition: opacity 0.5s ease;
+  z-index: 2000;
+}
+
+.popup.show {
+opacity: 1;
+}
+
+.explanation-popup {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: 2000;
+}
+
+/* Tooltip-Wrapper */
+.tooltip {
+position: relative;
+display: inline-block;
+}
+
+/* Angepasstes Tooltip-Feld */
+.tooltip .tooltiptext {
+visibility: hidden;
+width: 180px;              /* Kleinere Breite */
+background-color: #333;
+color: #fff;
+text-align: center;
+padding: 5px;              /* Etwas weniger Padding */
+border-radius: 6px;
+font-size: 12px;           /* Kleinere Schriftgröße */
+
+/* Positionierung mittig über dem Button */
+position: absolute;
+z-index: 1;
+bottom: 125%;             /* etwas oberhalb des Buttons */
+left: 50%;
+transform: translateX(-50%);
+
+opacity: 0;
+transition: opacity 0.3s ease-in-out;
+}
+
+/* Tooltip sichtbar machen beim Hover, mit 1 Sekunde Verzögerung */
+.tooltip:hover .tooltiptext {
+visibility: visible;
+opacity: 1;
+transition-delay: 0.5s;
+}
+
+.sidebar-tooltip {
+  position: relative;
+  display: inline-block;
+}
+
+.info-icon {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  line-height: 12px;
+  font-size: 0.6em;
+  text-align: center;
+  color: #888;
+  cursor: help;
+  margin-left: 5px;
+  position: relative;
+  top: -5px;  /* Verschiebt das Icon 2px nach oben */
+  opacity: 0.5;
+}
+
+.dark-mode .info-icon {
+  color: #bbb;
+  border-color: #bbb;
+}
+
+  /* Container fürs Leaderboard */
+  #leaderboardContent {
+    max-width: 400px;
+    margin: 0 auto;
+    font-family: sans-serif;
+    font-size: 0.9rem;
+    color: var(--text-color);
+  }
+
+  /* Table-Grundlayout */
+  #leaderboardContent table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  #leaderboardContent thead {
+    display: none; /* Header ausblenden für sehr minimal */
+  }
+  #leaderboardContent tbody tr {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  #leaderboardContent tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  /* Spalten als Flex-Items */
+  #leaderboardContent td {
+    display: inline-flex;
+    align-items: center;
+  }
+  #leaderboardContent td:first-child {
+    flex: 1;
+    font-weight: 500;
+  }
+  #leaderboardContent td:last-child {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;       /* gleichmäßiger Abstand zwischen allen Badges */
+  }
+
+  #leaderboardContent .vote {
+    margin-left: 0.75rem;
+    font-size: 0.85rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 9999px;
+    background: var(--response-bg);      /* neutraler Hintergrund */
+    color: var(--text-color);           /* neutraler Text */
+    transition: background 0.2s;
+    margin: 0;  
+  }
+  #leaderboardContent .vote.best {
+    background: var(--vote-best-bg);
+    color: var(--vote-best-color);
+  }
+  #leaderboardContent .vote.exclude {
+    background: var(--vote-exclude-bg);
+    color: var(--vote-exclude-color);
+    border: 1px solid var(--clear-button-border);
+  }
+  /* BestModel */
+  #leaderboardContent .vote.BestModel {
+    background: var(--vote-model-bg);
+    color: var(--vote-model-color);
+    margin-left: 0;
+  }
+
+/* =========================================
+   Global Dynamic Tooltip
+   ========================================= */
+
+/* Der Tooltip Container (wird per JS erzeugt) */
+.global-tooltip {
+  position: fixed;         /* Fixiert am Viewport -> schwebt über ALLEM */
+  z-index: 100000;         /* Höher als Sidebar, Modals, alles */
+  background-color: #222;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: normal;
+  max-width: 220px;
+  pointer-events: none;    /* Maus ignoriert den Tooltip -> kein Flackern */
+  box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+  border: 1px solid #444;
+  
+  /* Fade Animation */
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  
+  /* Wichtig damit er nicht umbricht, außer er muss */
+  white-space: normal;
+}
+
+.global-tooltip.visible {
+  opacity: 1;
+}
+
+/* Dark Mode Anpassung */
+.dark-mode .global-tooltip {
+  background-color: #333;
+  border-color: #666;
+  color: #eee;
+}
+
+/* Cursor Hilfs-Indikator für die H2 Header */
+h2[data-tooltip] {
+  cursor: help;
+}
+
+.response-box, .consensus-box {
+  flex: 1;
+  min-width: 280px;
+  padding: 10px 15px;
+  background: var(--response-bg);
+  border-radius: 8px;
+  box-shadow: var(--box-shadow);
+  transition: background 0.3s, box-shadow 0.3s, border 0.3s;
+  position: relative;
+}
+
+/* Konsens-Box Aufteilung in zwei Bereiche */
+.consensus-box {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.consensus-box p {
+  text-align: left;
+}
+
+/* Linker Bereich: Konsens-Antwort (ca. 80% Breite) */
+.consensus-main {
+  flex: 4; /* entspricht ca. 80% */
+  background: var(--response-bg);
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: var(--box-shadow);
+  overflow-x: auto; /* horizontaler Scrollbar, falls nötig */
+}
+
+/* Rechter Bereich: Unterschiede (ca. 20% Breite) */
+.consensus-differences {
+  flex: 1; /* entspricht ca. 20% */
+  background: var(--response-bg);
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: var(--box-shadow);
+  overflow-y: auto; /* bei längeren Inhalten */
+}
+
+/* Gemeinsame Scrollbar-Regeln für Konsens-Boxen und das Input-Feld (WebKit) */
+.consensus-main::-webkit-scrollbar,
+.consensus-differences::-webkit-scrollbar,
+.chat-input-container .input-field::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+:-webkit-scrollbar-track,
+.consensus-main::-webkit-scrollbar-track,
+.consensus-differences::-webkit-scrollbar-track,
+.chat-input-container .input-field::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
+:-webkit-scrollbar-track,
+.consensus-main::-webkit-scrollbar-thumb,
+.consensus-differences::-webkit-scrollbar-thumb,
+.chat-input-container .input-field::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+}
+
+:-webkit-scrollbar-track,
+.consensus-main::-webkit-scrollbar-thumb:hover,
+.consensus-differences::-webkit-scrollbar-thumb:hover,
+.chat-input-container .input-field::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Gemeinsame Scrollbar-Regeln für Firefox */
+.consensus-main,
+.consensus-differences,
+.chat-input-container .input-field {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
+}
+
+/* Modern gestylte Code-Box ohne horizontale Scrollbar */
+pre {
+  position: relative;
+  background-color: var(--code-bg);
+  color: var(--text-color); /* nutzt deine bestehende Textfarbe */
+  padding: 10px 40px 10px 10px; /* Platz für den Copy-Button rechts */
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow-x: visible; /* kein horizontaler Scroll */
+  white-space: pre-wrap; /* Zeilenumbruch innerhalb des Blocks */
+  word-break: break-word; /* lange Wörter umbrechen */
+  font-family: Consolas, "Courier New", monospace;
+  margin: 1em 0;
+}
+
+/* Copy-Button im Code-Block – ohne unerwünschten Hintergrund */
+pre .copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: transparent; /* kein Hintergrund */
+  border: none;
+  padding: 4px;
+  font-size: 1em;
+  color: var(--text-color);
+  cursor: pointer;
+  z-index: 10;
+  transition: background 0.3s;
+}
+
+pre .copy-btn:hover {
+  background: rgba(255, 255, 255, 0.1); /* dezenter Hover-Effekt */
+}
+
+/* Darkmode-Anpassungen für den Copy-Button */
+.dark-mode pre .copy-btn {
+  background: transparent; /* auch im Darkmode transparent */
+  color: #ccc;
+}
+
+/* Lesezeichen-Bereich linksbündig ausrichten */
+.sidebar-section h2 {
+  text-align: left;
+  margin-left: 0;
+  margin-top: 20px;
+}
+
+.bookmark {
+  cursor: pointer;
+  background: none;
+  color: inherit;
+  font-size: 14px;
+  margin: 0;       /* Keine Außenabstände */
+  padding: 0.5px 0;  /* Nur minimaler innerer Abstand */
+  border: none;
+  border-radius: 6px;
+  text-align: left;
+  transition: background-color 0.2s ease;
+  border-left: 10px solid transparent; /* Erweitert den Bereich links */
+  border-right: 10px solid transparent; /* Erweitert den Bereich rechts */
+}
+
+/* Hover-Effekt im White Mode */
+.sidebar .bookmark:hover {
+  background-color: #f2f2f2;
+}
+
+.delete-bookmark {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  font-weight: bold;       /* Optional, damit das "x" etwas kräftiger erscheint */
+  opacity: 0.5;
+}
+
+/* Hover-Effekt im Dark Mode */
+.dark-mode .sidebar .bookmark:hover {
+  background-color: #363636;
+}
+
+/* Fade-In-Klasse für den Bookmarks-Container */
+.fade-in {
+  animation: fadeInAnimation 0.5s ease-in-out;
+}
+
+#clearButton {
+  position: absolute;
+  bottom: 9px;
+  right: 10px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  font-family: inherit;
+  font-size: 0.8rem; /* Kleinere Schriftgröße */
+  color: var(--text-color, #333);
+  opacity: 0.5;
+  padding: 0.2rem 0.3rem; /* Angepasstes, geringeres Padding */
+}
+
+/* Icon als Pseudo-Element, angeordnet vor dem Text */
+#clearButton::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background-color: #a7a5a5; 
+  border: 1px solid #ccc; 
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: background-color 0.3s, box-shadow 0.3s;
+  animation: pulse 2s ease-out;
+  
+  /* clear.png als Maske */
+  -webkit-mask: url('./icons/clear.png') no-repeat center;
+  mask: url('./icons/clear.png') no-repeat center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  
+  /* Abstand zwischen Icon und Text */
+  margin-right: 8px;
+}
+
+/* Dark-Mode: Anpassung analog zum toggleAllButton */
+.dark-mode #clearButton::before {
+  background-color: #9e9e9e;
+  border: 1px solid #535353;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  width: 16px;         /* Neue Breite des Icons */
+  height: 16px;        /* Neue Höhe des Icons */
+}
+
+/* Hover-Effekt */
+#clearButton:hover::before {
+  background-color: var(--text-color);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+.chat-input-container .demo-chip{
+  /* sanfter Reset, ohne Accessibility zu verlieren */
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+
+  /* Größe & Typo */
+  height: 26px;
+  padding: 0 10px;                /* kein vertikales Padding -> saubere Vertikalmitte */
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  line-height: 1;
+  font-family: inherit;           /* gleiche Schrift wie Input */
+  font-size: clamp(12px, 0.84rem, 14px);
+  font-weight: 400;               /* nicht fett */
+  letter-spacing: .01em;
+  text-transform: none;
+  white-space: nowrap;
+
+  /* Outline-Style */
+  color: var(--button-bg);
+  background: transparent;
+  border: 1.5px solid var(--button-bg);
+  border-radius: 10px;
+
+  /* Interaktion */
+  cursor: pointer;
+  user-select: none;
+  opacity: .95;
+  z-index: 5;
+
+  /* Smooth feedback */
+  transition:
+    opacity .15s ease,
+    transform .12s ease,
+    box-shadow .2s ease,
+    background-color .2s ease,
+    border-color .2s ease;
+}
+
+.chat-input-container .demo-chip:hover,
+.chat-input-container .demo-chip:focus-visible{
+  background-color: color-mix(in srgb, var(--button-bg) 6%, transparent);
+  border-color: color-mix(in srgb, var(--button-bg) 85%, white 15%);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--button-bg) 10%, transparent);
+  opacity: 1;
+}
+
+.chat-input-container .demo-chip:active{
+  transform: translateY(calc(-50% + 1px)) scale(0.985);
+}
+
+/* Beim Tippen/bei Inhalt ausblenden */
+.chat-input-container:has(.input-field:focus) .demo-chip{ opacity: .7; }
+.chat-input-container .input-field:not(:placeholder-shown) ~ .demo-chip{
+  opacity: 0; pointer-events: none; transform: translateY(calc(-50% - 2px));
+}
+
+/* 1) Subtile Pulse-Variablen + Animation aktivieren */
+.chat-input-container .demo-chip{
+  /* ... deine bestehenden Regeln ... */
+
+  /* Pulse-Feintuning */
+  --pulse-size: 6px;                  /* Halo-Größe */
+  --pulse-alpha: 10%;                 /* Intensität im Idle */
+  --pulse-alpha-hover: 16%;           /* etwas stärker beim Hover/Focus */
+  --pulse-border-boost: 6%;           /* leichte Border-Tönung im Peak */
+
+  animation: chipPulse 2.6s ease-in-out infinite both;
+}
+
+/* 3) Beim Tippen/bei Inhalt → Pulse pausieren (plus bestehendes Ausblenden) */
+.chat-input-container:has(.input-field:focus) .demo-chip{
+  opacity: .7;
+  animation-play-state: paused;
+}
+.chat-input-container .input-field:not(:placeholder-shown) ~ .demo-chip{
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(calc(-50% - 2px));
+  animation-play-state: paused;
+}
+
+/* 4) Respektiere „reduced motion“ */
+@media (prefers-reduced-motion: reduce){
+  .chat-input-container .demo-chip{ animation: none !important; }
+}
+
+/* 5) Keyframes für den Halo-Puls */
+@keyframes chipPulse{
+  0%, 100%{
+    /* Idle: sehr dezente Halo */
+    box-shadow:
+      0 0 0 var(--pulse-size)
+      color-mix(in srgb, var(--button-bg) var(--pulse-alpha), transparent);
+    border-color: var(--button-bg);
+    transform: translateY(-50%) scale(1);
+  }
+  50%{
+    /* Peak: etwas kräftiger + ganz leichte Border-Tönung */
+    box-shadow:
+      0 0 0 calc(var(--pulse-size) + 3px)
+      color-mix(in srgb, var(--button-bg) var(--pulse-alpha-hover), transparent);
+    border-color: color-mix(in srgb, var(--button-bg) calc(100% - var(--pulse-border-boost)), white var(--pulse-border-boost));
+    transform: translateY(-50%) scale(1.01); /* 1% Scale für lebendiges Gefühl */
+  }
+}
+
+/* Demo: pseudo-Eingabe in den Modellboxen */
+.demo-typing{
+  display:flex; align-items:center; gap:8px;
+  padding:6px 8px;
+  border:1px dashed var(--input-border);
+  border-radius:8px;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  opacity:.9; background: var(--input-bg);
+}
+.demo-typing .label{opacity:.8; white-space:nowrap;}
+.demo-typing .text{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.demo-typing .caret{
+  display:inline-block; width:1px; height:1em; background: currentColor; margin-left:1px;
+  animation: demoCaretBlink 1s steps(1) infinite;
+}
+.demo-typing .sent{margin-left:6px; opacity:.75;}
+@keyframes demoCaretBlink{50%{opacity:0}}
+
+/* Grüne Umrandung bei Best-Auswahl */
+.response-box.best {
+  border: 2px solid green;
+}
+
+/* Positioniere den Settings-Button in der unteren linken Ecke der Sidebar */
+.sidebar-settings {
+  position: absolute;
+  bottom: 20px; /* Abstand vom unteren Rand */
+  left: 20px;   /* Abstand vom linken Rand */
+  width: calc(100% - 40px);
+  text-align: left;
+  position: fixed;
+  bottom: 20px;
+  width: calc(260px - 40px); /* passt die Breite an die Sidebar an */
+  text-align: left;
+}
+
+/* Für WebKit-Browser (Chrome, Edge, Safari) */
+.sidebar-content::-webkit-scrollbar {
+  width: 5px; /* Schmalere Scrollbar */
+}
+
+/* Style den Button: Icon und Text nebeneinander */
+.sidebar-settings button {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: 1em;
+  padding: 5px;
+}
+
+.sidebar-settings .settings-icon {
+  font-size: 18px; /* oder eine andere gewünschte Größe */
+  margin-right: 8px;
+  margin-top: -4px; /* Passe diesen Wert an, um das Icon etwas höher zu positionieren */
+  transition: transform 0.3s ease;
+}
+
+/* Beim Hover: leicht drehen */
+.sidebar-settings button:hover .settings-icon {
+  transform: rotate(20deg);
+}
+
+/* Optional: Text-Style für das Label */
+.sidebar-settings .settings-label {
+  font-weight: 500;
+  line-height: 1.2; /* ggf. anpassen */
+}
+
+/* --- Settings Modal Layout (Sticky Header) --- */
+
+.settings-modal-content {
+  width: min(95vw, 550px);
+  height: min(85vh, 800px); /* Maximale Höhe des Modals */
+  padding: 0 !important;    /* Padding vom Container entfernen, wir machen das innen */
+  display: flex;            /* Flexbox für Sticky Header */
+  flex-direction: column;   /* Untereinander */
+  overflow: hidden;         /* Verhindert Scrollen des gesamten Containers */
+  text-align: left;
+}
+
+/* 1. Header Bereich (Fixiert) */
+.settings-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--input-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--container-bg); /* Wichtig damit Content nicht durchscheint */
+  flex-shrink: 0; /* Darf nicht schrumpfen */
+  z-index: 10;
+}
+
+.settings-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.settings-header .close {
+  float: none; /* Reset float */
+  font-size: 28px;
+  line-height: 1;
+}
+
+/* 2. Body Bereich (Scrollbar) */
+.settings-body {
+  flex: 1;              /* Nimmt restlichen Platz ein */
+  overflow-y: auto;     /* Nur hier wird gescrollt */
+  padding: 20px;
+}
+
+/* --- Styling für Collapsible Section --- */
+.collapse-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding: 10px;
+  background-color: var(--response-bg);
+  border-radius: 6px;
+  transition: background-color 0.2s;
+}
+
+.collapse-header:hover {
+  background-color: rgba(0,0,0,0.05);
+}
+
+.collapse-header h3 {
+  margin: 0;
+  border: none;
+  font-size: 1.1em;
+  padding: 0;
+}
+
+.collapse-header .arrow {
+  transition: transform 0.3s ease;
+}
+
+/* Klasse zum Drehen des Pfeils */
+.arrow.rotated {
+  transform: rotate(180deg);
+}
+
+/* Allgemeine Inputs im Modal */
+.settings-body input[type="text"],
+.settings-body textarea {
+  width: 95%;
+  padding: 10px;
+  border: 1px solid var(--input-border);
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  border-radius: 6px;
+}
+
+.settings-divider {
+  border: 0;
+  border-top: 1px solid var(--input-border);
+  margin: 20px 0;
+  opacity: 0.5;
+}
+
+/* Checkbox Label Anpassung */
+.settings-body .custom-checkbox-label input {
+  width: auto; /* Checkbox soll nicht 100% breit sein */
+}
+
+/* Header & Control Icons */
+.response-box h2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 5px 0 0 0;
+  padding: 0;
+  font-size: 1em;
+}
+
+.response-box .title {
+  font-weight: 700;
+  text-align: left;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.response-box .title small {
+  font-weight: 500;
+  font-size: 0.8em;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-color);
+}
+
+.control-icons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: -10px;
+}
+
+.best-btn, .exclude-btn {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  text-align: center;
+  line-height: 20px;
+  border-radius: 75%;
+  cursor: pointer;
+  transition: background-color 0.3s, border-color 0.3s, opacity 0.3s;
+  color: #888;
+}
+
+  .exclude-btn {
+    font-size: small;
+  }
+
+/* Bei Auswahl: */
+.response-box.best .best-btn {
+  background-color: green;
+  border-color: green;
+  color: #fff;
+}
+.response-box.excluded .exclude-btn {
+  pointer-events: auto;
+  background-color: red;
+  border-color: red;
+  color: #fff;
+}
+
+/* Gegenseitige Deaktivierung */
+.response-box.best .exclude-btn,
+.response-box.excluded .best-btn {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Minimaler Collapse-Button – an ✕ angelehnt */
+.collapse-btn {
+  background: transparent;        /* kein Kreis, kein Hintergrund */
+  border: none;                   /* kein Rahmen */
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;             /* kleiner Fokus-Radius */
+  opacity: 0.6;                   /* dezent wie das ✕ */
+  cursor: pointer;
+  transition: opacity .15s ease, transform .12s ease;
+}
+
+.collapse-btn:hover {
+  opacity: 0.9;                   /* nur leichte Aufhellung */
+  transform: translateY(0.5px);   /* Mini-Feedback statt Farbfläche */
+}
+
+.collapse-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--text-color) 35%, transparent);
+  outline-offset: 2px;            /* klarer Tastaturfokus, ohne Rahmen-Dauerzustand */
+}
+
+.collapse-btn .arrow {
+  /* Nutzt weiterhin dein Unicode-Icon (▼) aus dem HTML */
+  font-size: 14px;                /* minimal kleiner als vorher */
+  line-height: 1;
+  color: var(--text-color);       /* passt sich Light/Dark automatisch an */
+  transition: transform .2s ease, opacity .15s ease;
+  margin-left: -5px;
+  margin-top: -2px;
+}
+
+/* Wenn eingeklappt: zeigt nach rechts (wie vorher bei dir) */
+.collapse-btn .arrow.rotated {
+  transform: rotate(-90deg);
+  opacity: 0.9;                   /* leicht betonen, dass es 'aufklappbar' ist */
+}
+
+/* Einheitliche Header für beide Bereiche */
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Optional: Falls du die Überschriften (h2) im Header ebenfalls zentrieren möchtest */
+.sidebar-header h2 {
+  flex-grow: 1;
+  text-align: left;
+  margin: 0 0 10px 0;
+}
+
+/* Optional: Überschrift anpassen */
+.sidebar-header.model-header h2 {
+  font-size: 1.1em;
+  margin: 0;
+}
+
+/* Modelle-Bereich standardmäßig einklappen */
+.model-selection {
+  display: none;
+  flex-direction: column;
+}
+
+/* Checkboxen und Labels in der Modelle-Auswahl ausrichten */
+.model-selection label {
+  display: flex;
+  align-items: center;
+  gap: 5px;  /* Abstand zwischen Checkbox und Text */
+  margin-bottom: 8px;
+}
+
+.sidebar-title hr.sidebar-title-separator {
+  border: none;
+  border-top: 1px solid #ccc;
+  margin: 10px 0;
+}  
+
+.sidebar-section,
+#bookmarksContainer,
+.bookmark p {
+  text-align: left !important;
+}
+
+.bookmark p {
+  overflow-wrap: break-word; /* lange Wörter umbrechen */
+  padding-right: 30px;        /* Platz schaffen für den 'x'-Button */
+}
+
+.response-box.excluded {
+  opacity: 0.5; /* graue Darstellung */
+  /* pointer-events: none;  Entferne oder kommentiere diese Zeile aus */
+}
+
+/* Collapsible Content – jetzt ohne eigenen Hintergrund und Schatten,
+ sodass es sich farblich in die Box einfügt */
+ .collapsible-content {
+  max-height: 1000px;
+  overflow-y: auto;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  padding: 8px;
+  background-color: transparent;
+  border-radius: 4px;
+  margin-top: 5px;
+  font-size: 0.9em;
+}
+
+.collapsible-content.collapsed {
+  max-height: 0;
+  opacity: 0;
+  padding: 0 8px;
+}
+
+/* Konsens-Section */
+.consensus-section {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.consensus-section button {
+  padding: 4px 4px;
+  font-size: 1em;
+  color: var(--text-color);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.mode-switch {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 1300;
+}
+
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 24px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--slider-bg);
+  transition: 0.4s;
+  border-radius: 24px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: var(--button-bg);
+}
+
+input:checked + .slider:before {
+  transform: translateX(26px);
+}
+
+/* Container für den Switch und den Text nebeneinander */
+.auto-consensus-toggle {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 16px; /* Abstand zum Button */
+}
+
+.consensus-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 20px 0;
+}
+
+.auto-consensus {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.search-mode {
+display: flex;
+align-items: center;
+gap: 10px;
+}
+
+#consensusButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 15px;
+  font-size: 0.9em;
+  font-weight: normal;
+  background-color: var(--button-bg);
+  color: var(--consensus-button-text, #333);
+  border: none;
+  border-radius: 8px;
+  box-shadow: var(--box-shadow);
+  transition: background 0.3s, box-shadow 0.3s;
+  position: relative;
+  opacity: 0.8;
+}
+
+#consensusButton::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  background-color: currentColor; /* übernimmt die Textfarbe */
+  -webkit-mask: url('./icons/consensus.png') no-repeat center;
+  mask: url('./icons/consensus.png') no-repeat center;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+#consensusButton:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+/* Expliziter Active- und Focus-Zustand */
+#consensusButton:active,
+#consensusButton:focus {
+  background: var(--response-bg) !important;
+}
+
+#consensusButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Dropdown im Konsens-Modell-Bereich */
+.consensus-model .select-wrapper {
+  position: relative;
+  display: inline-block;
+  width: auto;
+  margin-left: auto;
+}
+.consensus-model .select-wrapper select {
+  padding: 10px 30px 10px 15px;
+  font-size: 0.8em;
+  font-weight: normal;
+  background: var(--response-bg);
+  color: var(--consensus-button-text, #333);
+  border: none;
+  border-radius: 8px;
+  box-shadow: var(--box-shadow);
+  appearance: none;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+.consensus-model .select-wrapper::after {
+  content: "▼";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: 0.7em;
+  color: var(--consensus-button-text, #333);
+}
+.consensus-model .select-wrapper select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.3);
+}
+
+#sendButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.consensus-model {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.select-wrapper select {
+  padding: 8px 32px 8px 8px;
+  font-size: 0.9em;
+  background-color: var(--button-bg);
+  color: var(--button-text);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.select-wrapper select:focus {
+  outline: none;
+  border-color: var(--button-bg);
+}
+
+.select-wrapper::after {
+  font-size: 0.8em;
+  color: var(--button-text);
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.model-picker-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;   /* vorher 56px */
+  height: 18px;      /* vorher 22px */
+  margin-left: 6px;
+  padding: 0 1px;    /* vorher 0 10px */
+  border-radius: 999px;
+  margin-left: -5px;  
+  background: transparent;
+  transition: background-color .2s ease, box-shadow .2s ease, color .2s ease;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.model-picker-wrapper:hover {
+  background: var(--response-bg);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.model-picker-wrapper:focus-within {
+  background: var(--response-bg);
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.22);
+}
+
+.model-picker-wrapper::after {
+  content: "▾";      /* kleiner Down-Caret */
+  font-size: 12px;   /* dezenter als vorher */
+  line-height: 1;
+  color: var(--text-color);
+  pointer-events: none;
+  transition: color .2s ease, transform .2s ease;
+}
+
+.model-picker-wrapper:hover::after,
+.model-picker-wrapper:focus-within::after {
+  color: var(--button-bg);
+  transform: translateY(0.5px);
+}
+
+.model-picker-wrapper select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: transparent;   /* nix anzeigen */
+  appearance: none;
+  border-radius: 999px;
+  padding: 0;
+  cursor: pointer;
+  transition: transform .2s ease, box-shadow .2s ease, background-color .2s ease;
+}
+
+.model-picker-wrapper select:focus {
+  color: var(--text-color);
+  font-size: 0.9rem;
+  background: var(--container-bg);
+  border: 1px solid var(--input-border);
+  box-shadow: 0 16px 30px rgba(0,0,0,.18);
+  padding: 0 12px;
+  top: calc(100% + 8px);
+  left: 50%;
+  width: clamp(200px, 32vw, 260px);
+  transform: translate(-50%, 0);
+  height: auto;
+  border-radius: 12px;
+  z-index: 20;
+  outline: none;
+}
+
+.model-picker-wrapper select option {
+  color: var(--text-color);
+  background: var(--container-bg);
+  font-size: 0.95rem;
+  padding: 6px 8px;
+}
+
+.model-picker-wrapper select option:checked {
+  font-weight: 600;
+}
+
+.model-picker-wrapper select option:hover,
+.model-picker-wrapper select option:focus {
+  background: var(--response-bg);
+}
+
+/* Nur auf iOS: native Select-Darstellung komplett ausblenden */
+.ios .model-picker-wrapper select{
+  opacity: 0;                 /* statt color: transparent */
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;       /* bleibt klickbar */
+  position: absolute;
+  inset: 0;                   /* volle Fläche */
+  width: 100%;
+  height: 100%;
+}
+
+/* Sichtbares Fokus-Feedback, wenn das unsichtbare Select fokussiert ist */
+.model-picker-wrapper:has(select:focus){
+  background: var(--response-bg);
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, .22);
+}
+
+/* Neues CSS für die Icons */
+.model-icon {
+  width: 16px;         /* Sehr klein, wie gewünscht */
+  height: 16px;
+  object-fit: contain; /* Verhindert Verzerren */
+  vertical-align: middle;
+  margin-right: 4px;   /* Abstand zum Text */
+  margin-bottom: 2px;  /* Optische Korrektur der Höhe */
+  border-radius: 3px;
+}
+
+/* Optional: Damit das Icon im Dark Mode gut aussieht (falls Icons transparent sind) */
+.dark-mode .model-icon {
+  filter: brightness(1.1);
+}
+
+/* 1. Basis-Anpassung für alle Icons im Dark Mode (leicht aufhellen) */
+body.dark-mode .model-icon,
+html[data-theme='dark'] .model-icon {
+  filter: brightness(1.1);
+}
+
+/* 2. Spezifische Invertierung für schwarze Logos (ChatGPT & Grok) */
+/* Hier werden beide Logos angesprochen */
+body.dark-mode .chatgpt-logo,
+body.dark-mode .grok-logo,
+html[data-theme='dark'] .chatgpt-logo,
+html[data-theme='dark'] .grok-logo {
+    /* Macht Schwarz zu Weiß */
+    filter: invert(1); 
+    
+    /* TIPP: Falls das Grok-Logo danach grau statt weiß wirkt, 
+       lösche die Zeile oben und nimm diese hier: */
+    /* filter: brightness(0) invert(1); */
+}
+
+
+/* Sidebar-Styling */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  padding: 5px;
+  width: 260px;
+  height: 100%;
+  background: var(--container-bg);
+  box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+  box-sizing: border-box;
+  z-index: 1000;
+  text-align: center;
+  transition: transform 0.3s ease;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex-direction: column;
+  display: flex;
+}
+
+
+.sidebar-content {
+  flex: 1;
+  padding: 15px;
+  margin-top: 60px; /* Passe diesen Wert an, falls nötig */
+  margin-bottom: 80px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin-top: 50px;
+}
+
+
+/* Wenn die Sidebar ausgeblendet (collapsed) ist – sie wird von links verschoben */
+.sidebar.collapsed {
+  transform: translateX(-100%);
+}
+
+.sidebar-toggle {
+  display: flex;             /* Immer sichtbar */
+  align-items: center;
+  justify-content: center;
+  background: transparent;   /* Fügt sich besser in die Topbar ein */
+  border: none;
+  cursor: pointer;
+  margin-right: 15px;        /* Abstand zum Logo */
+  width: 40px;
+  height: 40px;
+  z-index: 1002;
+}
+
+/* Optional: Hover-Effekt für Desktop hinzufügen */
+.sidebar-toggle:hover {
+  background-color: rgba(0,0,0,0.05);
+  border-radius: 50%;
+}
+.dark-mode .sidebar-toggle:hover {
+  background-color: rgba(255,255,255,0.1);
+}
+
+/* Styling für den Toggle-Button */
+.sidebar-toggle button {
+  background: var(--button-bg);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.3s;
+}
+
+
+/* Pfeil im Toggle-Button */
+.sidebar-toggle .arrow {
+  display: inline-block;
+  color: var(--button-text);
+  font-size: 1.5em;
+}
+
+.sidebar h2 {
+  font-size: 1.1em;
+  margin-bottom: 10px;
+}
+
+/* Trennstrich zwischen API Keys und Modelle */
+.sidebar-separator {
+  border-top: 1px solid #ccc;
+  margin: 15px 0;
+}
+
+/* Styling für den Login-Text in der Top Bar */
+.login-text {
+cursor: pointer;
+font-size: 1em;
+transition: color 0.3s;
+color: var(--text-color);
+}
+
+.login-text:hover {
+color: #007bff;  /* wechselt zu einer auffälligen Farbe */
+text-decoration: underline;
+}
+
+.help-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 2000;
+  border: none;
+  outline: none;
+  background: transparent;
+  width: 40px;
+  height: 40px;
+  font-size: 20px;
+  cursor: pointer;
+  transition: color 0.3s, transform 0.3s;
+  opacity: 0.8;
+  color: #4e4e4e; /* Dark grey for light mode */
+}
+
+.help-button:hover {
+  color: #007bff;
+  transform: scale(1.2);
+}
+
+/* Override for dark mode */
+.dark-mode .help-button {
+  color: #cccccc; /* Light grey for dark mode */
+}
+
+.dark-mode .help-button:hover {
+  color: #66b2ff;
+}
+
+option.premium-option {
+    /* Farbe vom Anfang (Blau/Purple) */
+    color: var(--button-bg, #007bff);
+    
+    /* Hintergrund beibehalten (fixiert den Dark Mode) */
+    background-color: var(--vote-model-bg);
+    
+    /* Schrift nicht fett (Standard) */
+    font-weight: normal;
+}
+
+/* --- PREMIUM MODELLE (Gesperrt / Free User) --- */
+option.premium-option:disabled {
+    /* Auch hier die Farbe vom Anfang (statt Grau) */
+    color: var(--button-bg, #007bff) !important;
+    
+    /* Hintergrund passend zum Theme (kein weißer Balken im Dark Mode) */
+    background-color: var(--bg-color) !important;
+    
+    /* Optional: Etwas transparenter, damit es nicht "aktiv" wirkt, aber farbig bleibt */
+    opacity: 0.7; 
+}
+
+/* Modal Container - Breiter, aber luftiger */
+.pro-modal-content {
+  width: min(95vw, 750px) !important;
+  max-width: 95% !important;
+  padding: 40px !important; /* Mehr Padding wirkt luxuriöser */
+  background: var(--container-bg, #ffffff) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15) !important; /* Weicherer Schatten */
+  border: 1px solid rgba(0,0,0,0.05) !important; /* Fast unsichtbarer Rand */
+}
+
+/* Header - Zentriert und minimalistisch */
+.pro-header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.pro-header h2 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+  letter-spacing: -0.5px;
+  color: var(--text-color, #111);
+}
+
+.pro-header p {
+  color: #666; 
+  font-size: 1rem;
+  line-height: 1.5;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+/* Highlight Text - Statt Gold lieber eine dezente Farbe oder einfach fett */
+.highlight-tech {
+  color: var(--button-bg, #007bff);
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr; /* Feature-Spalte etwas breiter */
+  gap: 0;
+  margin-top: 20px;
+}
+
+/* Zeilen Styling - KEINE vertikalen Linien, nur horizontale Haarlinien */
+.pricing-header, .pricing-row, .pricing-footer {
+  display: grid;
+  grid-template-columns: subgrid; /* Erbt Spalten vom Parent */
+  grid-column: 1 / -1;
+  align-items: center;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+.pricing-header {
+  border-bottom: 2px solid rgba(0,0,0,0.08); /* Etwas dickerer Header-Strich */
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #888;
+  font-weight: 600;
+  padding-bottom: 15px;
+}
+
+/* Letzte Zeile ohne Strich */
+.pricing-footer {
+  border-bottom: none;
+  padding-top: 30px;
+  align-items: start;
+}
+
+/* Spalten Styling */
+.col-feature {
+  text-align: left;
+  font-weight: 500;
+  font-size: 0.95rem;
+  color: var(--text-color, #333);
+}
+
+.col-plan {
+  text-align: center;
+  font-size: 1rem;
+  color: var(--text-color, #333);
+}
+
+/* Pro Spalte - Subtile Hervorhebung durch Hintergrund */
+.pricing-grid > div > div:nth-child(3) {
+  position: relative;
+}
+
+/* Ein subtiler Hintergrundstreifen für die Pro-Spalte über alle Zeilen hinweg wäre komplex im Grid.
+   Stattdessen machen wir den Text/Font einfach stärker. */
+
+.col-plan.bold {
+  font-weight: 700;
+  color: var(--text-color, #000);
+}
+
+.col-plan small {
+  display: block;
+  font-size: 0.8rem;
+  color: #888;
+  font-weight: normal;
+  margin-top: 4px;
+}
+
+/* --- PREIS & BUTTONS --- */
+.price-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  width: 100%;
+}
+
+.price {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.price small {
+  font-size: 0.9rem;
+  color: #666;
+  font-weight: 400;
+  display: inline-block;
+}
+
+/* Buttons - Minimalistisch */
+.btn-free {
+  background: transparent !important;
+  border: none !important;
+  color: #888 !important;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(0,0,0,0.2);
+  text-underline-offset: 4px;
+}
+
+.btn-free:hover {
+  color: var(--text-color) !important;
+}
+
+.btn-pro {
+  /* Solider, dunkler Button für Seriosität (oder deine Primärfarbe) */
+  background-color: var(--text-color, #111) !important; 
+  color: var(--container-bg, #fff) !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  padding: 12px 24px !important;
+  font-size: 0.95rem !important;
+  font-weight: 600 !important;
+  width: 100% !important;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.btn-pro:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+  opacity: 0.9;
+}
+
+.guarantee {
+  font-size: 0.75rem;
+  color: #999;
+  margin-top: 8px;
+}
+
+/* --- DARK MODE ANPASSUNGEN --- */
+body.dark-mode .pro-modal-content {
+  background: #151515 !important; /* Sehr dunkles Grau statt tiefschwarz */
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5) !important;
+}
+
+body.dark-mode .pricing-header,
+body.dark-mode .pricing-row {
+  border-bottom-color: rgba(255,255,255,0.08);
+}
+
+body.dark-mode .pro-header p {
+  color: #aaa;
+}
+
+body.dark-mode .pricing-header {
+  color: #666;
+}
+
+body.dark-mode .btn-pro {
+  background-color: #fff !important; /* Weißer Button im Darkmode */
+  color: #000 !important;
+}
+
+.faq-modal {
+  position: relative;
+  width: 850px;
+  max-width: 95%;
+  max-height: 55vh; /* Reduzierte Höhe */
+  border-radius: 12px;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+  background-color: #fff; /* Light mode */
+  overflow: hidden; /* Verhindert, dass Header und Close-Button scrollen */
+}
+
+/* Fixed header with close button (Header bleibt immer oben) */
+.faq-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding: 10px 35px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: inherit;
+  border-bottom: 1px solid rgba(0,123,255,0.2);
+}
+
+/* Scrollable FAQ body – nur dieser Bereich scrollt */
+.faq-body {
+  padding: 20px 20px 20px 20px;
+  overflow-y: auto;
+  max-height: calc(55vh - 55px); /* 60vh minus Header/Close-Button Höhe */
+}
+
+.faq-intro {
+  margin-bottom: 25px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid rgba(0,123,255,0.2);
+  font-size: 0.95em;
+}
+
+.faq-modal h2 {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.faq-item {
+  margin-bottom: 15px;
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+  padding-bottom: 10px;
+}
+
+.faq-item:last-child {
+  border-bottom: none;
+}
+
+.faq-item h3 {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  transition: color 0.3s;
+  font-size: 1em;
+}
+
+.faq-number {
+  font-weight: bold;
+  margin-right: 8px;
+  color: #007bff;
+}
+
+.faq-item p {
+  display: none;
+  padding-top: 8px;
+  font-size: 0.95em;
+  line-height: 1.6;
+}
+
+.faq-toggle-icon {
+  font-weight: bold;
+  color: #007bff;
+  font-size: 1.2em;
+}
+
+.dark-mode .faq-item {
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.dark-mode .faq-intro {
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+::-webkit-scrollbar-thumb:hover,
+.faq-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover,
+.faq-body::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover,
+.faq-body::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+}
+
+::-webkit-scrollbar-thumb:hover,
+.faq-body::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Firefox Scrollbar */
+.faq-body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
+}
+
+/* Modal Hintergrund */
+.modal {
+display: none;
+position: fixed;
+z-index: 2000;
+left: 0;
+top: 0;
+width: 100%;
+height: 100%;
+overflow: auto;
+background-color: rgba(0,0,0,0.5); /* Halbtransparentes Schwarz */
+background-color: var(--overlay-dim);
+backdrop-filter: blur(6px);
+transition: background-color 160ms ease, backdrop-filter 160ms ease;
+}
+
+.modal-content {
+  background: color-mix(in oklab, var(--container-bg) 100%, transparent);
+  margin: clamp(24px, 8vh, 80px) auto;
+  padding: 22px 20px;
+  width: min(92vw, 360px);
+  max-height: min(80vh, 630px);
+  border-radius: 12px;
+  text-align: center;
+
+  /* dezente Tiefe + sanfte Interaktion */
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.06),
+    0 10px 30px rgba(0,0,0,0.12);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+
+.modal-content h2 {
+margin-top: 0;
+text-align: center;
+}
+
+.modal-content h3 {
+margin-bottom: 10px;
+}
+
+.modal-content ul {
+list-style: disc inside;
+padding-left: 20px;
+}
+
+.modal-content p {
+line-height: 1.6;
+margin-bottom: 15px;
+}
+
+.close {
+color: #aaa;
+float: right;
+font-size: 28px;
+font-weight: bold;
+cursor: pointer;
+}
+
+.close:hover,
+.close:focus {
+color: black;
+text-decoration: none;
+}
+
+.benefit-icon {
+font-size: 1.2em;
+color: #28a745; /* Grün */
+font-weight: bold;
+}
+
+/* Inputfelder im Modal */
+.modal-content input {
+width: 90%;
+padding: 10px;
+margin: 10px 0;
+border: 1px solid var(--input-border);
+border-radius: 4px;
+background-color: var(--input-bg);
+color: var(--text-color);
+}
+
+/* Login Button im Modal */
+.modal-content button {
+  background-color: var(--button-bg);
+  border: none;
+  border-radius: 4px;
+  padding: 10px;
+  color: var(--button-text);
+  cursor: pointer;
+  width: 95%;
+  margin-left: 9px;
+}
+
+/* Schließ-Button für das Modal */
+.modal-content .close {
+float: right;
+font-size: 24px;
+cursor: pointer;
+}
+
+/* Fehlernachricht */
+.error-message {
+color: red;
+font-size: 0.9em;
+}
+
+.systemPromptInputSytle {
+  resize: vertical;
+  max-height: 300px;
+}
+
+#version-number {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  opacity: 0.3;
+  font-size: 12px;
+  color: #000;
+  padding-right: 10px; /* adjust as needed */
+}
+
+/* Link-Styling passend zur Version */
+.privacy-inline-link {
+  background: none;
+  border: none;
+  color: var(--feedback-text-color);
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.3s ease;
+  text-align: center;
+}
+
+.dark-mode #version-number {
+  color: var(--text-color);
+}
+
+/* Styling für die Textarea im Feedback-Modal */
+.modal-content.feedback-modal textarea {
+  width: 100%;
+  min-height: 150px;      /* Erhöht die Höhe für mehr Platz */
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  resize: vertical;       /* Ermöglicht vertikales Anpassen */
+  box-sizing: border-box;
+}
+
+/* Feedback-Auslöser als klickbarer Text */
+#feedbackButton {
+  background: none;
+  border: none;
+  color: var(--feedback-text-color);
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.3s ease;
+}
+
+/* Hover-Effekt für den Feedback-Text */
+#feedbackButton:hover {
+  color: var(--feedback-text-hover-color);
+}
+
+/* Styling für die Textarea im Feedback-Modal */
+.modal-content.feedback-modal textarea {
+  width: 100%;
+  min-height: 150px;
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+/* ersetze deine aktuelle .feedback-line-Regel durch das hier */
+.feedback-line{
+  position: relative;           /* oder sticky; top:45px; wenn sie unter der Topbar 'kleben' soll */
+  z-index: 1600;
+
+  display: flex;                /* sicherstellen, dass es nicht 'grid' greift */
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  /* Breite & Zentrierung analog zur .container */
+  width: min(92vw, 900px);      /* gleiche max-breite wie .container */
+  box-sizing: border-box;
+  padding: 6px 20px;
+  margin: -25px auto 8px;       /* auto -> mittig, leicht hochgezogen */
+  z-index: 100;
+  font-size: 11px;
+}
+
+.consensus-main h2 {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: nowrap;
+    padding-right: 40px; /* Platzhalter für den absoluten Button rechts */
+    padding-left: 40px;
+}
+
+.consensus-main h2 img {
+    display: inline-block !important;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+/* Button schwebt auf Desktop rechts */
+.consensus-copy-inline {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+}
+
+.consensus-differences h2 {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Wrapper im Pill-Look (angelehnt an model-picker-wrapper) */
+.consensus-actions-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0;
+  background: transparent;
+  transition: background .15s ease, box-shadow .15s ease;
+  margin-left: -20px;
+}
+
+.consensus-actions-wrapper:hover,
+.consensus-actions-wrapper.open {
+  background: var(--response-bg);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+/* Trigger: nur Icon + Caret, keine Beschriftung */
+.consensus-actions-toggle {
+  border: none;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--text-color);
+}
+
+/* kleines Caret (wie im Model-Picker) */
+.consensus-actions-toggle .caret {
+  font-size: 0.7rem;
+  line-height: 1;
+  opacity: 0.7;
+  transition: color .15s ease, transform .15s ease, opacity .15s ease;
+}
+
+.consensus-actions-wrapper.open .caret {
+  transform: translateY(1px) rotate(180deg);
+  opacity: 1;
+}
+
+/* Globales Dropdown-Panel (Overlay auf oberster Ebene) */
+.consensus-actions-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  min-width: 180px;
+  padding: 6px 0;
+  background: var(--container-bg);
+  border-radius: 12px;
+  border: 1px solid var(--input-border);
+  box-shadow: 0 16px 30px rgba(0,0,0,.18);
+  display: none;
+  z-index: 9999; /* ganz oben */
+}
+
+.consensus-actions-menu.open {
+  display: block;
+}
+
+/* Einträge im Menü */
+.consensus-actions-menu .consensus-copy-icon-btn {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  margin: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-color);
+  opacity: 0.9;
+}
+
+.consensus-actions-menu .consensus-copy-icon-btn:hover {
+  opacity: 1;
+  background: var(--response-bg);
+}
+
+.consensus-actions-menu .consensus-copy-icon-btn:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 2px;
+}
+
+/* Icon bleibt kompakt */
+.copy-icon {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  display: inline-block;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
+.copy-icon::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+  opacity: 0.45;
+  box-sizing: border-box;
+}
+
+/* Label nur im Menü (nicht im Trigger) */
+.consensus-copy-icon-btn .copy-label {
+  font-size: 0.8rem;
+  line-height: 1.1;
+}
+
+
+@media (max-width: 768px){
+  .feedback-line{
+    width: min(94vw, 900px);
+    margin: auto 6px;
+    display: flex !important;   /* falls irgendwo 'grid' aktiviert war */
+  }
+  .consensus-main h2 {
+    flex-wrap: wrap;          /* erlaubt Umbrechen */
+  }
+
+  .consensus-copy-inline {
+    flex-direction: column;   /* Buttons untereinander */
+    align-items: flex-end;    /* weiter rechts ausrichten */
+    gap: 4px;                 /* etwas weniger Abstand */
+    margin-left: auto;        /* bleibt an der rechten Seite */
+  }
+}
+
+/* Nicht-klickbarer Text im gleichen Stil */
+.feedback-note {
+  color: var(--feedback-text-color);
+}
+
+.burger-icon {
+  display: inline-block;
+  width: 40px;                 /* = Buttonbreite */
+  height: 40px;                /* = Buttonhöhe   */
+  line-height: 40px;           /* vertikal zentrieren */
+  font-size: 22px;             /* Icongröße */
+  text-align: center;
+  color: currentColor;         /* erbt von Button (Dark/Light) */
+  transform: translateX(0);    /* nicht nach links schieben */
+}
+
+.dark-mode .burger-icon { color: #fff; }  /* Dark */
+
+
+@media (max-width: 640px) {
+  .model-picker-wrapper select:focus {
+    width: min(240px, 85vw);
+  }
+}
+
+@media (max-width: 1465px) {
+  .top-bar {
+    display: flex;
+    align-items: center;
+  }
+
+  /* Burger bleibt links */
+  .sidebar-toggle {
+    order: 0;
+    margin-right: 6px; /* hast du ja schon */
+  }
+
+  /* Logo direkt neben dem Burger, NICHT mehr zentrieren */
+  .top-bar-logo {
+    order: 1;
+    margin: 0;              /* alle auto-Margins killen */
+    margin-left: 6px;       /* kleiner Abstand vom Burger */
+    flex: 0 0 auto;         /* falls global flex: 1 gesetzt war */
+    text-align: left;
+  }
+
+  /* Rechte Gruppe (Avatar, About us, Toggle) bleibt rechts */
+  .top-bar-right, 
+  .top-bar-nav, 
+  .top-bar-actions {  /* nimm die Klasse, die bei dir passt */
+    order: 2;
+    margin-left: auto;     /* schiebt diese Gruppe ganz nach rechts */
+  }
+
+  body {
+    padding: 10px !important;
+    padding-top: 70px;
+  }
+  .container {
+    width: 80% !important;
+    max-width: none !important;
+    margin: 0 auto !important;
+    padding: 15px 20px;
+  }
+  .main-wrapper {
+    margin-left: 0 !important;
+    padding-top: 10px;
+  }
+
+  .top-bar { padding-left: 8px; }   /* vorher global: 20px */
+  .top-bar-favicon { margin-top: 4px; }
+
+  /* Sidebar Overlay (aktiv sichtbar bei Klasse 'active') */
+  .sidebar {
+    position: fixed;
+    top: 45px;
+    left: 0;
+    width: 80%;
+    max-width: 440px;
+    height: calc(100% - 45px); /* Höhe anpassen */
+    background: var(--container-bg);
+    box-shadow: var(--box-shadow);
+    padding: 15px;
+    box-sizing: border-box;
+    z-index: 1100;
+    transition: transform 0.3s ease;
+    transform: translateX(-100%);
+    overflow-x: hidden;
+  }
+
+  .sidebar-settings {
+    position: absolute;
+    bottom: 20px;
+    left: 15px;
+    width: calc(100% - 30px);
+    text-align: left;
+  }
+  .sidebar.active {
+    transform: translateX(0);
+    z-index: 120;
+  }
+
+  .sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 80px; /* Erhöhe diesen Wert */
+    margin-top: 5px;
+  }
+
+  /* Leaderboard an die Sidebar anpassen */
+  #leaderboardContent table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto; /* statt fixed, damit der Inhalt nicht unnötig umbricht */
+  }
+
+  #leaderboardContent th,
+  #leaderboardContent td {
+    white-space: nowrap;      /* Alle Inhalte in einer Zeile anzeigen */
+    text-align: left;
+    font-size: 0.9em;         /* Schrift ggf. etwas kleiner */
+  }
+
+  #leaderboardContent th {
+    border-bottom: 1px solid #ccc;
+  }
+
+  #leaderboardContent tr {
+    border-bottom: 1px solid #eee;
+    vertical-align: middle;
+  }
+
+  .sidebar-toggle {
+    display: block !important;
+    position: relative;  /* im Flex-Flow bleiben */
+    top: auto;
+    left: auto;
+    z-index: 1200;
+    margin-right: 6px;   /* kleiner Abstand vor dem Logo */
+    width: 40px;         /* wichtig wg. .collapse-btn Defaults */
+    height: 40px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Falls du einen doppelten Toggle außerhalb der Top Bar hast, blendest du ihn hier aus */
+  body > .sidebar-toggle:not(header .sidebar-toggle) {
+    display: none;
+  }
+
+
+  .chat-input-container {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+  .chat-input-container .input-field {
+    width: 100% !important;
+    box-sizing: border-box;
+    margin-bottom: 10px;
+  }
+  .chat-input-container .button {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    bottom: 10px;       /* Immer 10px vom unteren Rand entfernt */
+    right: 10px;        /* Optional: rechtsbündig */
+    margin: 0; 
+  }
+  .chat-input-container .button svg {
+    width: 60%;
+    height: 60%;
+    fill: var(--button-text);
+  }
+  .mode-switch {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 1300;
+  }
+  .consensus-controls {
+    gap: 10px;
+  }
+
+  .consensus-controls > * {
+    width: auto;
+  }
+  .title small {
+    font-size: 0.8em;
+  }
+  .modal-content {
+    margin-top: 80px; /* Erhöht den Abstand vom oberen Rand */
+  }
+  .auto-consensus {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .search-mode {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  }
+
+  #clearButton {
+    right: 60px;
+  }
+  /* A und Button-Links im Modal angleichen */
+  .modal-content a.secondary-link,
+  .modal-content button.link-btn {
+    color: var(--link-color) !important;
+    text-decoration: underline;
+  }
+
+  /* Button wirklich „link-artig“ machen und die breite Button-Regel neutralisieren */
+  .modal-content button.link-btn {
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+    width: auto !important;
+    box-shadow: none !important;
+    font: inherit;
+    cursor: pointer;
+    opacity: .95;
+  }
+  .modal-content a.secondary-link:hover,
+  .modal-content button.link-btn:hover {
+    opacity: 1;
+  }
+  /* Überschrift + Inline-Buttons */
+  .consensus-main h2 {
+    align-items: center;
+    gap: 20px;
+    padding-left: 10px;
+  }
+}
+
+@media (max-width: 768px) {
+  .burger-icon {
+    display: inline-block;
+    text-align: center;
+    line-height: 40px;
+    font-size: 22px;
+    transform: none;
+    position: relative;
+    z-index: 2;
+    margin: 0;              /* keine negativen Offsets */
+  }
+
+  .burger-icon { color: #111; }  /* Light */
+  .dark-mode .burger-icon { color: #fff; }  /* Dark */
+
+  .top-bar-logo {
+    margin-left: 6px; /* kleiner Spalt hinter dem Burger */
+  }
+
+  .top-bar-favicon {
+    width: 24px;
+    height: auto;
+    margin: 0; 
+    margin-top: 6px;          /* keine negativen Offsets */
+  }
+
+  body {
+    padding: 5px !important;
+    padding-top: 60px;
+  }
+
+  .demo-chip {
+    padding: 7px 12px;
+    font-size: 0.88rem;
+    gap: 6px;
+  }
+  .demo-chip::before { width: 13px; height: 13px; }
+
+  .container {
+    width: 90% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    /*padding: 15px 20px;*/
+  }
+
+  .main-wrapper {
+    margin-left: 0 !important;
+    padding-top: 0px;
+  }
+
+  #clearButton {
+    display: none; /* Der Button und sein ::before-Pseudo-Element werden nicht angezeigt */
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 45px;
+    left: 0;
+    width: 80%;
+    max-width: 440px;
+    height: calc(100% - 45px);
+    background: var(--container-bg);
+    box-shadow: var(--box-shadow);
+    padding: 15px;
+    box-sizing: border-box;
+    z-index: 1100;
+    transition: transform 0.3s ease;
+    transform: translateX(-100%);
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 80px; /* Erhöhe diesen Wert */
+    margin-top: 5px;
+  }
+  
+  .sidebar-settings {
+    position: absolute; /* oder alternativ per flexbox als fester Teil unten */
+    bottom: 20px;
+    left: 15px;
+    width: calc(100% - 30px);
+    text-align: left;
+  }
+  .sidebar.active {
+    transform: translateX(0);
+  }
+    
+  .sidebar.active {
+    transform: translateX(0);
+  }
+
+  #bookmarksContainer {
+    max-height: calc(100vh - 120px); /* Verhindert, dass es zu weit nach unten geht */
+    overflow-y: auto; /* Scrollbar bleibt */
+    padding-bottom: 50px; /* Platz für Settings-Button */
+  }
+
+  /* Leaderboard an die Sidebar anpassen */
+  #leaderboardContent table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto; /* statt fixed, damit der Inhalt nicht unnötig umbricht */
+  }
+
+  #leaderboardContent th,
+  #leaderboardContent td {
+    white-space: nowrap;      /* Alle Inhalte in einer Zeile anzeigen */
+    text-align: left;
+    padding: 2px;         /* Feineres Padding, um den Platz optimal zu nutzen */
+    font-size: 0.9em;         /* Schrift ggf. etwas kleiner */
+  }
+
+  #leaderboardContent th {
+    border-bottom: 1px solid #ccc;
+  }
+
+  #leaderboardContent tr {
+    border-bottom: 1px solid #eee;
+    vertical-align: middle;
+  } 
+
+  .burger-icon {
+    display: inline-block;
+    text-align: center;
+    line-height: 40px;  /* exakt Button-Höhe -> vertikal mittig/höher */
+    font-size: 22px;
+    transform: none;
+    position: relative;
+    z-index: 2;
+    margin: 0;          /* keine Offsets */
+  }
+
+  .burger-icon { color: #111; }  /* Light */
+  .dark-mode .burger-icon { color: #fff;}  /* Dark */
+
+  .sidebar-toggle {
+    display: block !important;
+    position: relative;  /* im Flex-Flow bleiben */
+    top: auto;
+    left: auto;
+    z-index: 1200;
+    margin-right: 6px;
+    width: 40px;         /* .collapse-btn (24x24) überstimmen */
+    height: 40px;
+    padding: 0;
+    display: flex;
+    align-items: center;  /* -> Icon sitzt optisch höher/zentriert */
+    justify-content: center;
+  }
+
+  /* Linksgruppe bündig, Rechtsgruppe nach rechts schieben */
+  .top-bar { justify-content: flex-start; }
+  .top-bar { padding-left: 8px; }   /* vorher global: 20px */
+  #toggleAllButton {
+    position: absolute;
+    top: -23px;
+  }
+
+  /* Falls du einen doppelten Toggle außerhalb der Top Bar hast, blendest du ihn hier aus */
+  body > .sidebar-toggle:not(header .sidebar-toggle) {
+    display: none;
+  }
+
+  .consensus-switch-container {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  
+  .auto-consensus,
+  .search-mode:not(.deep-search-mode),
+  .deep-search-mode {
+    width: auto !important;
+    min-width: 70px; 
+    flex-shrink: 0;
+    /* Falls du vorher margin-right: 8px vergeben hast, bitte entfernen */
+    margin-right: 0 !important;
+  }
+
+  .deep-search-mode label.switch {
+    margin-left: -8px;
+  }
+  
+  /* ---------------------------------------
+     1) AUTO CONSENSUS – moderner Pill-Chip
+     --------------------------------------- */
+
+  /* Alte Elemente ausblenden */
+  .auto-consensus .slider,
+  .auto-consensus .auto-consensus-label {
+    display: none !important;
+  }
+
+  .auto-consensus label.switch {
+    position: relative;
+    display: inline-block;
+    min-width: 78px;
+    height: 34px;
+    cursor: pointer;
+  }
+
+  /* Checkbox unsichtbar machen */
+  .auto-consensus label.switch input[type="checkbox"] {
+    position:absolute; inset:0; opacity:0; margin:0; cursor:pointer;
+  }
+
+  /* Unchecked: Pill mit dezentem Schatten */
+  .auto-consensus label.switch::before {
+    content: "Auto Consens";
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+
+    height: 34px;
+    padding: 0 12px 0 36px;   /* Platz fürs Icon links */
+    border-radius: 999px;
+    border: 1px solid var(--input-border);
+    background: var(--response-bg);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.08);
+
+    color: var(--text-color);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: .2px;
+
+    transition: background .25s ease, box-shadow .25s ease, color .2s ease, transform .12s ease;
+  }
+
+  /* Linkes Icon (Mask) */
+  .auto-consensus label.switch::after {
+    content:"";
+    position:absolute; left:10px; top:50%;
+    width:16px; height:16px; transform:translateY(-50%);
+    background: currentColor;
+    opacity:.9;
+    -webkit-mask:url('./icons/consensus.png') no-repeat center; 
+    mask:url('./icons/consensus.png') no-repeat center;
+    -webkit-mask-size:contain; mask-size:contain;
+  }
+
+  /* Hover/Active */
+  .auto-consensus label.switch:hover::before {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+  }
+  .auto-consensus label.switch:active::before {
+    transform: translateY(0);
+  }
+
+  /* Checked: akzentuierter Hintergrund & Border in Button-Farbe */
+  .auto-consensus label.switch:has(input:checked)::before {
+    /* Fallback + progressive Enhancement */
+    background-color: rgba(65,138,245,0.18);
+    background-color: color-mix(in srgb, var(--button-bg) 25%, transparent);
+    border-color: var(--button-bg);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+    color: var(--text-color);
+  }
+
+  /* Tastatur-Fokus-Ring */
+  .auto-consensus label.switch:has(input:focus-visible)::before {
+    outline: 2px solid color-mix(in srgb, var(--button-bg) 60%, transparent);
+    outline-offset: 2px;
+  }
+
+.consensus-main h2 {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+    padding-right: 40px;
+    padding-left: 40px;
+}
+
+.consensus-main h2 img {
+    display: inline-block !important;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.consensus-copy-inline {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.consensus-differences h2 {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+@media only screen and (max-width: 480px) {
+    .consensus-main h2 {
+        justify-content: flex-start;
+        padding-left: 0;
+        padding-right: 35px;
+        font-size: 1.1rem;
+    }
+
+    .consensus-differences h2 {
+        justify-content: flex-start;
+        padding-left: 0;
+        font-size: 1.1rem;
+    }
+}
+
+  /* 
+     2) WEB SEARCH – moderner Pill-Chip
+ */
+
+  .search-mode:not(.deep-search-mode) .slider,
+  .search-mode:not(.deep-search-mode) .search-mode-label,
+  .search-mode:not(.deep-search-mode) .deepthink-disclaimer{
+    display: none !important;
+  }
+
+  .search-mode:not(.deep-search-mode) label.switch {
+    position: relative;
+    display: inline-block;
+    min-width: 78px;
+    height: 34px;
+    cursor: pointer;
+  }
+
+  .search-mode:not(.deep-search-mode) label.switch input[type="checkbox"] {
+    position:absolute; inset:0; opacity:0; margin:0; cursor:pointer;
+  }
+
+  .search-mode:not(.deep-search-mode) label.switch::before {
+    content: "Web Search";
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+
+    height: 34px;
+    padding: 0 12px 0 36px;
+    border-radius: 999px;
+    border: 1px solid var(--input-border);
+    background: var(--response-bg);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.08);
+
+    color: var(--text-color);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: .2px;
+
+    transition: background .25s ease, box-shadow .25s ease, color .2s ease, transform .12s ease;
+  }
+
+  .search-mode:not(.deep-search-mode) label.switch::after {
+    content:"";
+    position:absolute; left:10px; top:50%;
+    width:16px; height:16px; transform:translateY(-50%);
+    background: currentColor; opacity:.9;
+    -webkit-mask:url('./icons/search.png') no-repeat center; 
+    mask:url('./icons/search.png') no-repeat center;
+    -webkit-mask-size:contain; mask-size:contain;
+  }
+
+  .search-mode:not(.deep-search-mode) label.switch:hover::before {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+  }
+  .search-mode:not(.deep-search-mode) label.switch:active::before {
+    transform: translateY(0);
+  }
+
+  .search-mode:not(.deep-search-mode) label.switch:has(input:checked)::before {
+    background-color: rgba(65,138,245,0.18);
+    background-color: color-mix(in srgb, var(--button-bg) 25%, transparent);
+    border-color: var(--button-bg);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+    color: var(--text-color);
+  }
+
+  .search-mode:not(.deep-search-mode) label.switch:has(input:focus-visible)::before {
+    outline: 2px solid color-mix(in srgb, var(--button-bg) 60%, transparent);
+    outline-offset: 2px;
+  }
+
+
+  /* ---------------------------------------
+     3) DEEP THINK – moderner Pill-Chip
+     --------------------------------------- */
+
+  /* Alte Elemente ausblenden */
+  .deep-search-mode .slider,
+  .deep-search-mode .deep-switch-label,
+  .deep-search-mode .deep-deepthink-disclaimer {
+    display: none !important;
+  }
+
+  .deep-search-mode .deep-switch {
+    position: relative;
+    display: inline-block;
+    min-width: 78px;
+    height: 34px;
+    cursor: pointer;
+  }
+
+  .deep-search-mode .deep-switch input[type="checkbox"] {
+    position:absolute; inset:0; opacity:0; margin:0; cursor:pointer;
+  }
+
+  .deep-search-mode .deep-switch::before {
+    content: "Deep Think";
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+
+    height: 34px;
+    padding: 0 12px 0 36px;
+    border-radius: 999px;
+    border: 1px solid var(--input-border);
+    background: var(--response-bg);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.08);
+
+    color: var(--text-color);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: .2px;
+
+    transition: background .25s ease, box-shadow .25s ease, color .2s ease, transform .12s ease;
+  }
+
+  .deep-search-mode .deep-switch::after {
+    content:"";
+    position:absolute; left:10px; top:50%;
+    width:16px; height:16px; transform:translateY(-50%);
+    background: currentColor; opacity:.9;
+    -webkit-mask:url('./icons/deepsearch.png') no-repeat center; 
+    mask:url('./icons/deepsearch.png') no-repeat center;
+    -webkit-mask-size:contain; mask-size:contain;
+  }
+
+  .deep-search-mode .deep-switch:hover::before {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+  }
+  .deep-search-mode .deep-switch:active::before {
+    transform: translateY(0);
+  }
+
+  .deep-search-mode .deep-switch:has(input:checked)::before {
+    background-color: rgba(65,138,245,0.18);
+    background-color: color-mix(in srgb, var(--button-bg) 25%, transparent);
+    border-color: var(--button-bg);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+    color: var(--text-color);
+  }
+
+  .deep-search-mode .deep-switch:has(input:focus-visible)::before {
+    outline: 2px solid color-mix(in srgb, var(--button-bg) 60%, transparent);
+    outline-offset: 2px;
+  }
+
+
+  /* ---------------------------------------
+     Rest wie gehabt
+     --------------------------------------- */
+
+  .modal-content {
+    width: min(92vw, 320px);
+  }
+
+  .login-text {
+    cursor: pointer;
+    font-size: 0.8em; /* vorher 1em */
+    color: var(--text-color);
+  }
+
+  #loginContainer,
+  .login-text,
+  .logout-text,
+  .top-bar-about {
+    font-size: 0.7em !important;
+  }
+
+  .top-bar-title {
+    font-size: 0.8em;  /* Verkleinert den Text */
+    font-weight: bold; /* Macht den Text fett */
+  }
+
+  /* Antwortfelder und Konsens-Box untereinander */
+  .response-section,
+  .consensus-box {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .response-box,
+  .consensus-box {
+    width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  /* Eingabecontainer korrekt ausgerichtet */
+  .chat-input-container {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    position: relative;  /* Ermöglicht absolute Positionierung der Kinder */
+    padding-bottom: 40px; /* Genug Platz am unteren Rand für den Button */
+  }
+
+  .chat-input-container .input-field {
+    width: 100% !important;
+    box-sizing: border-box;
+    margin-bottom: 10px;
+  }
+
+  /* Button mit korrekter Ausrichtung nach rechts */
+  .chat-input-container .button {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    margin-left: auto; /* Rechts ausrichten */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    bottom: 10px;   /* Immer 10px vom unteren Rand entfernt */
+    right: 10px;
+    margin: 0;
+  }
+
+  /* SVG sichtbar */
+  .chat-input-container .button svg {
+    width: 60%;
+    height: 60%;
+    fill: var(--button-text);
+  }
+
+  .mode-switch {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 1300;
+    }
+
+  /* Spezifische Formatierung für den Search Mode: leicht ausgegraut */
+  .search-mode {
+    display: flex;
+    align-items: center;
+    left: -20px;
+    margin: 0;
+    padding: 0;
+  }
+
+  .search-mode label.switch {
+    margin-right: 8px;
+  }
+
+  .search-mode-label {
+    font-size: 1em;
+    line-height: 24px; /* entspricht der Höhe des Switches */
+  }
+
+  .deepthink-disclaimer, 
+  .search-disclaimer{
+    font-size: 0.8em;
+    margin-left: 5px;
+    line-height: 24px;
+    color: #666;
+  }    
+
+  /* Container der Konsens-Kontrollen in einer Zeile */
+  .consensus-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: nowrap;
+    flex-direction: row;
+  }
+  
+  .consensus-label {
+    display: none;
+  }
+  
+  .title small {
+    font-size: 0.8em;
+  }
+  
+  #consensusButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 15px;
+    font-size: 0.9em;
+    font-weight: normal;
+    background-color: var(--button-bg);
+    color: var(--consensus-button-text, #333);
+    border: none;
+    border-radius: 8px;
+    box-shadow: var(--box-shadow);
+    transition: background 0.3s, box-shadow 0.3s;
+    position: relative;
+  }
+
+  #consensusButton::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    background-color: currentColor; /* übernimmt die Textfarbe */
+    -webkit-mask: url('./icons/consensus.png') no-repeat center;
+    mask: url('./icons/consensus.png') no-repeat center;
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  
+  #consensusButton:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+  /* Expliziter Active- und Focus-Zustand */
+  #consensusButton:active,
+  #consensusButton:focus {
+    background: var(--response-bg) !important;
+  }
+  
+  /* Dropdown im Konsens-Modell-Bereich */
+  .consensus-model .select-wrapper {
+    position: relative;
+    display: inline-block;
+    width: auto;
+    margin-left: auto;
+  }
+  .consensus-model .select-wrapper select {
+    padding: 10px 30px 10px 15px;
+    font-size: 0.7em;
+    font-weight: normal;
+    background: var(--response-bg);
+    color: var(--consensus-button-text, #333);
+    border: none;
+    border-radius: 8px;
+    box-shadow: var(--box-shadow);
+    appearance: none;
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+  .consensus-model .select-wrapper::after {
+    content: "▼";
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    font-size: 0.7em;
+    color: var(--consensus-button-text, #333);
+  }
+  .consensus-model .select-wrapper select:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.3);
+  }
+  
+  /* Standardfarben im Light Mode */
+  :root {
+    --consensus-button-text: #333;
+  }
+  /* Dark Mode Anpassungen */
+  .dark-mode {
+    --consensus-button-text: #eee;
+  }
+
+  .explanation-popup {
+    width: 65%;  /* Nimmt 90% der Bildschirmbreite ein */
+    max-width: 400px; /* Begrenzung, damit es nicht zu groß wird */
+  }
+
+  .feedback-line {
+    display: grid;
+    align-items: center;
+    gap: 8px; /* Abstand zwischen Text & Button */
+    justify-content: center;
+    font-size: 11px;
+    z-index: 100;
+  }
+
+  /* === Compact chips & consistent spacing (OVERRIDES) === */
+
+  /* Einheitliche, etwas kleinere Chips */
+  .auto-consensus label.switch,
+  .search-mode:not(.deep-search-mode) label.switch,
+  .deep-search-mode .deep-switch {
+    min-width: 72px;        /* vorher 78px */
+    height: 30px;           /* vorher 34px */
+  }
+
+  /* Kompaktere Typo + weniger Innenabstand */
+  .auto-consensus label.switch::before,
+  .search-mode:not(.deep-search-mode) label.switch::before,
+  .deep-search-mode .deep-switch::before {
+    height: 30px;           /* vorher 34px */
+    padding: 0 10px 0 32px; /* vorher 0 12px 0 36px */
+    font-size: 11px;        /* vorher 12px */
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 4px 12px rgba(0,0,0,0.08); /* etwas leichter */
+  }
+
+  /* Kleinere Icons + näher an den Rand */
+  .auto-consensus label.switch::after,
+  .search-mode:not(.deep-search-mode) label.switch::after,
+  .deep-search-mode .deep-switch::after {
+    left: 8px;              /* vorher 10px */
+    width: 14px;            /* vorher 16px */
+    height: 14px;           /* vorher 16px */
+  }
+
+  /* Gleichmäßige Abstände zwischen allen drei Chips */
+  .consensus-controls {
+    gap: 8px;               /* vorher 10px */
+  }
+
+  /* Web Search hatte Extra-Rechtsabstand -> entfernen */
+  .search-mode label.switch {
+    margin-right: 0 !important;  /* überschreibt deine alte 8px-Regel */
+  }
+
+  /* Deep Think hatte negativen Linksabstand -> neutralisieren */
+  .deep-search-mode label.switch {
+    margin-left: 0 !important;   /* überschreibt -8px */
+  }
+
+  .auto-consensus label.switch::before,
+  .search-mode:not(.deep-search-mode) label.switch::before,
+  .deep-search-mode .deep-switch::before {
+    padding: 0 10px 0 32px;     /* Einheitlich – kein versteckter Extra-Platz */
+  }
+
+  .deep-search-mode .deep-switch::before {
+    margin-left: -9px;    /* Einheitlich – kein versteckter Extra-Platz */
+  }
+
+  /* A und Button-Links im Modal angleichen */
+  .modal-content a.secondary-link,
+  .modal-content button.link-btn {
+    color: var(--link-color) !important;
+    text-decoration: underline;
+  }
+
+  /* Button wirklich „link-artig“ machen und die breite Button-Regel neutralisieren */
+  .modal-content button.link-btn {
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+    width: auto !important;
+    box-shadow: none !important;
+    font: inherit;
+    cursor: pointer;
+    opacity: .95;
+  }
+  .modal-content a.secondary-link:hover,
+  .modal-content button.link-btn:hover {
+    opacity: 1;
+  }
+
+  /* 1. Container: Platz sparen */
+  .pro-modal-content {
+    width: 85vw !important;
+    padding: 20px 15px 0px 15px !important;
+  }
+
+  /* 2. Header: Kompakter */
+  .pro-header {
+    margin-bottom: 15px;
+  }
+  
+  .pro-header h2 {
+    font-size: 1.4rem; /* Kleinerer Titel */
+  }
+  
+  .pro-header p {
+    font-size: 0.9rem;
+  }
+
+  /* 3. Das Grid: Spaltenverhältnisse anpassen */
+  .pricing-grid {
+    /* Wir geben der Feature-Spalte (links) etwas mehr Platz, 
+       und machen die Plan-Spalten (rechts) so schmal wie möglich */
+    grid-template-columns: 1.2fr 0.8fr 0.8fr; 
+    column-gap: 4px; /* Lücken verkleinern */
+  }
+
+  .pricing-header, .pricing-row {
+    padding: 12px 0; /* Weniger vertikaler Platz pro Zeile */
+  }
+
+  /* 4. Schriften in der Tabelle verkleinern */
+  .col-feature {
+    font-size: 0.8rem; /* Kleiner, damit längere Wörter passen */
+    padding-left: 5px;
+  }
+
+  .col-plan {
+    font-size: 0.8rem;
+  }
+  
+  /* Falls du Icons nutzt, stell sicher, dass sie zentriert bleiben */
+  .col-plan i, 
+  .col-plan svg {
+    font-size: 1rem; 
+  }
+  
+  /* Header Beschriftungen (Feature, Free, Pro) kleiner */
+  .pricing-header {
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+  }
+
+  /* --- 5. DER WICHTIGSTE TEIL: FOOTER (Preise & Buttons) --- */
+  /* Hier brechen wir das Grid auf, damit die Buttons gut klickbar sind */
+  
+  .pricing-footer {
+    display: flex !important; /* Grid überschreiben */
+    flex-direction: column;   /* Untereinander stapeln */
+    gap: 20px;
+    padding-top: 25px;
+    text-align: center;
+  }
+
+  /* Wir müssen die Struktur "Feature | Free | Pro" hier auflösen */
+  /* Das leere erste Div (Feature Spalte im Footer) verstecken wir */
+  .pricing-footer > div:first-child {
+    display: none; 
+  }
+
+  /* Der Free-Bereich (jetzt als Block untereinander) */
+  .pricing-footer > div:nth-child(2) {
+    order: 2; /* Free Button nach unten */
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* Der Pro-Bereich (Highlight) */
+  .pricing-footer > div:nth-child(3) {
+    order: 1; /* Pro Button nach oben (wichtiger!) */
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  
+  /* Buttons volle Breite für bessere Touch-Bedienung */
+  .btn-pro {
+    width: 100% !important;
+    padding: 14px !important;
+  }
+  
+  .price-block {
+    flex-direction: row; /* Preis und "per month" nebeneinander statt untereinander um Platz zu sparen */
+    justify-content: center;
+    align-items: baseline;
+    margin-bottom: 10px;
+  }
+
+  .pricing-footer > div:nth-child(2) {
+    display: none !important; 
+  }
+
+}
+
+
+@media (max-width: 480px) {
+  .top-bar-title {
+    display: none;
+  }
+}
+
+
+/* Toggle-Button für den API-Testbereich */
+#toggleApiTest {
+border: none;
+border-radius: 50%;
+width: 28px;
+height: 28px;
+display: flex;
+align-items: center;
+justify-content: center;
+cursor: pointer;
+transition: background 0.3s;
+}
+
+/* API-Key Gruppe: keine extra Einrückung und kleineres Padding */
+.api-key-group {
+margin-bottom: 8px;
+text-align: left;
+padding-left: 0;
+}
+
+.api-key-group label {
+display: block;
+margin-bottom: 2px;
+font-size: 0.85em;
+}
+
+/* Eingabefelder kompakter gestalten */
+.api-key-group input {
+width: 90%;
+padding: 6px 8px;  /* kleineres Padding */
+margin-bottom: 4px;
+border: 1px solid var(--input-border);
+border-radius: 4px;
+background-color: var(--input-bg);
+color: var(--text-color);
+font-size: 0.9em;
+text-align: left;
+transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.api-key-group input:focus {
+border-color: var(--button-bg);
+box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+outline: none;
+}
+
+/* Feedback-Span: Abstand hinter dem Labeltext */
+.feedback {
+  font-size: 1.1em;
+  font-weight: bold;
+  margin-left: 5px;
+}
+
+/* Button im API-Testbereich */
+.api-test-area button {
+  padding: 8px;
+  width: 100%;
+  background-color: var(--button-bg);
+  color: var(--button-text);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+  margin-top: 10px;
+}
+.api-test-area button:hover {
+  background-color: #0056b3;
+}
+
+.api-test-area {
+display: none;
+}
+
+/* Dark Mode: Links in einer helleren, gut lesbaren Farbe */
+.dark-mode a {
+  color: var(--feedback-text-color);
+  text-decoration: underline;
+  text-align: center;
+}
+
+.dark-mode a:hover {
+  color: #d0a7f9; /* Leicht aufgehellt beim Hover */
+}
+
+#freeUsageDisplay {
+  display: block;
+}
+
+#countdownDisplay {
+  display: block;
+  margin-top: 17px;
+}
+
+/* Wrapper für den Hauptinhalt – zentriert neben der Sidebar */
+.main-wrapper {
+  display: flex;
+  justify-content: center;
+  padding-top: 20px; /* optionaler Abstand nach oben */
+}
+
+.main-wrapper {
+  /* Sicherstellen, dass die Transition aktiv ist für sanftes Gleiten */
+  margin-left: 260px; /* Empfehlung: Auf 260px setzen (Breite deiner Sidebar), statt 220px */
+  transition: margin-left 0.3s ease;
+  width: auto;
+}
+
+/* MAGIC SAUCE: Wenn die Sidebar die Klasse .collapsed hat, geht der Margin weg */
+/* Dies nutzt den modernen :has() Selektor, der mittlerweile gut unterstützt wird */
+body:has(.sidebar.collapsed) .main-wrapper {
+  margin-left: 0 !important;
+}
+
+/* =========================
+   Thinking: Spinner + Text-Shimmer (nur in Glyphen)
+   ========================= */
+
+/* Spinner (unverändert, optional größenanpassbar) */
+.spinner {
+  border: 2px solid #f3f3f3;         /* heller Ring */
+  border-top: 2px solid grey;        /* rotierender Abschnitt */
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  animation: spin 1s linear infinite;
+  display: inline-block;
+  margin-left: 5px;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Wrapper für Spinner + Text */
+.thinking-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;                 /* Abstand zwischen Spinner und Text */
+  font-size: 0.95em;
+  opacity: 0.9;
+}
+
+/* Basis-Text (sichtbare Grundfarbe) */
+.thinking {
+  position: relative;
+  display: inline-block;
+  line-height: 1.2;
+  color: var(--feedback-text-color, #8a8a8a);  /* nutze deine Variable */
+  overflow: hidden;
+  isolation: isolate;
+  white-space: nowrap;       /* verhindert Umbruch, Shimmer deckungsgleich */
+}
+
+/* Spiegelnde, diagonale Glanzspur nur in den Glyphen */
+.thinking::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+
+  /* Diagonaler, stark fokussierter Glanz mit weichen Kanten */
+  background:
+    linear-gradient(
+      22deg,                               /* Winkel der Spiegelung */
+      rgba(255,255,255,0) 42%,
+      rgba(255,255,255,0.10) 45%,
+      rgba(255,255,255,0.35) 47%,
+      rgba(255,255,255,0.95) 50%,          /* heller, „metallischer“ Kern */
+      rgba(255,255,255,0.35) 53%,
+      rgba(255,255,255,0.10) 55%,
+      rgba(255,255,255,0) 58%
+    );
+  background-size: 260% 200%;
+  background-position: -140% 0;
+
+  animation: thinking-shimmer 1.35s ease-in-out infinite;
+
+  /* Clip auf Text → sichtbar nur in den Buchstaben */
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+
+  /* sorgt für stärkeren „Glanz“ auf dunklen Hintergründen */
+  mix-blend-mode: screen;
+  opacity: 0.9;
+}
+
+/* Animation: diagonale Spiegelung „wischt“ über das Wort */
+@keyframes thinking-shimmer {
+  0%   { background-position: -140% 0; }
+  50%  { background-position:  20%  0; }
+  100% { background-position: 160%  0; }
+}
+
+/* Barrierearmut: Bewegtbild reduzieren → Shimmer aus, Punkte an */
+@media (prefers-reduced-motion: reduce) {
+  .thinking::after {
+    content: none;
+    animation: none;
+  }
+  .thinking::before {
+    content: '…';
+    position: static;
+    margin-left: 2px;
+    animation: thinking-dots 1.6s steps(4, end) infinite;
+    color: currentColor;
+  }
+  @keyframes thinking-dots {
+    0%   { content: ''; }
+    25%  { content: '.'; }
+    50%  { content: '..'; }
+    75%  { content: '...'; }
+    100% { content: ''; }
+  }
+}
+
+/* Optional: Dark-Mode-Feintuning, falls du es getrennt steuern willst */
+@media (prefers-color-scheme: dark) {
+  .thinking {
+    color: var(--feedback-text-color, #a0a0a0);
+  }
+  /* Shine im Dark Mode minimal dezenter */
+  .thinking::after {
+    opacity: 0.8;
+  }
+}
+
+/* Optional: sorge dafür, dass Spinner + Text schön in der Box mittig wirken */
+.response-box .collapsible-content .thinking-wrap,
+#consensusResponse .thinking-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.hidden {
+  display: none;
+}
+
+/* Für Webkit-basierte Browser */
+.collapsible-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.collapsible-content::-webkit-scrollbar-track {
+  background: transparent; /* oder z.B. var(--bg-color) */
+  border-radius: 4px;
+}
+
+.collapsible-content::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+}
+
+.collapsible-content::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Für Firefox */
+.collapsible-content {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
+}  
+
+/* Credibility badges – professional, subtle palette */
+.cred-badge{
+  display:inline-block;
+  padding:2px 8px;
+  border-radius:8px;
+  font-weight:600;
+  font-size:0.95rem;
+  line-height:1.2;
+  border:1px solid var(--cred-border);
+  background:var(--cred-bg);
+  color:var(--cred-fg);
+}
+
+/* Light theme colors */
+.cred-very{
+  --cred-bg:#e6f4ea;   /* soft green tint */
+  --cred-border:#cfe9d7;
+  --cred-fg:#196a35;   /* deep green */
+}
+.cred-largely{
+  --cred-bg:#eef6ef;   /* even softer green */
+  --cred-border:#dbeade;
+  --cred-fg:#2e7d32;   /* medium green */
+}
+.cred-partially{
+  --cred-bg:#fff4e5;   /* soft amber */
+  --cred-border:#ffe0b3;
+  --cred-fg:#8a4f00;   /* amber/brown */
+}
+.cred-hardly{
+  --cred-bg:#fde7e9;   /* light red */
+  --cred-border:#f6c7cc;
+  --cred-fg:#c62828;   /* strong red */
+}
+.cred-not{
+  --cred-bg:#fbeaea;   /* very light red */
+  --cred-border:#f0b9b9;
+  --cred-fg:#b71c1c;   /* dark red */
+}
+
+/* Dark mode overrides (du nutzt .dark-mode auf <body>) */
+.dark-mode .cred-very{
+  --cred-bg:rgba(25,106,53,0.18);
+  --cred-border:rgba(25,106,53,0.35);
+  --cred-fg:#7bd597;
+}
+.dark-mode .cred-largely{
+  --cred-bg:rgba(46,125,50,0.16);
+  --cred-border:rgba(46,125,50,0.32);
+  --cred-fg:#98e3a6;
+}
+.dark-mode .cred-partially{
+  --cred-bg:rgba(138,79,0,0.16);
+  --cred-border:rgba(138,79,0,0.34);
+  --cred-fg:#ffcf7a;
+}
+.dark-mode .cred-hardly{
+  --cred-bg:rgba(198,40,40,0.16);
+  --cred-border:rgba(198,40,40,0.34);
+  --cred-fg:#ff9a9a;
+}
+.dark-mode .cred-not{
+  --cred-bg:rgba(183,28,28,0.16);
+  --cred-border:rgba(183,28,28,0.34);
+  --cred-fg:#ff8080;
+}
+
+/* Für Firefox */
+.consensus-main,
+.consensus-differences,
+.chat-input-container .input-field {
+    scrollbar-width: thin; /* oder 'auto' */
+    scrollbar-color: rgba(0, 0, 0, 0.3) transparent; /* Daumen-Farbe Track-Farbe */
+}
+
+.dark-mode .consensus-main,
+.dark-mode .consensus-differences,
+.dark-mode .chat-input-container .input-field {
+   scrollbar-color: rgba(255, 255, 255, 0.3) transparent; /* Angepasste Farbe für Dark Mode */
+}
+
+/* Basis: Button vorbereiten */
+.collapse-btn{
+  position: relative;
+  border: 1px solid transparent; /* verhindert Layout-Jumps */
+  border-radius: 999px;          /* Grundform rund */
+  overflow: visible;             /* falls Bubble minimal größer ist */
+}
+
+/* Pfeil etwas über die Bubble legen */
+.collapse-btn .arrow{
+  position: relative;
+  z-index: 1;
+}
+
+/* Die runde Bubble hinter dem Icon – standardmäßig unsichtbar */
+.collapse-btn::after{
+  content:"";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;                 /* Bubble-Größe: Icon-konform */
+  height: 22px;
+  transform: translate(-60%, -50%);
+  border-radius: 999px;        /* komplett rund */
+  background: transparent;     /* nur im aktiven Zustand einfärben */
+  box-shadow: none;
+  pointer-events: none;         /* nicht anklickbar */
+  transition: background .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+
+/* AKTIV: Einzelbox eingeklappt (Pfeil gedreht) -> Bubble zeigen */
+.collapse-btn:has(.arrow.rotated)::after{
+  background: color-mix(in srgb, var(--button-bg) 22%, transparent);
+  border-color: var(--button-bg);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+}
+
+/* Alternativ/zusätzlich über aria-expanded */
+.collapse-btn[aria-expanded="false"]::after{
+  background: color-mix(in srgb, var(--button-bg) 22%, transparent);
+  border-color: var(--button-bg);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+}
+
+/* Wenn der Container als 'collapsed' gilt, färbe den Button ebenfalls */
+.response-box:has(.collapsible-content.collapsed) .collapse-btn::after{
+  background: color-mix(in srgb, var(--button-bg) 22%, transparent);
+  border-color: var(--button-bg);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+}
+
+/* Hover/Focus für den aktiven Zustand (Bubble bleibt mittig hinter dem Icon) */
+.collapse-btn:has(.arrow.rotated):hover::after,
+.response-box:has(.collapsible-content.collapsed) .collapse-btn:hover::after,
+.collapse-btn[aria-expanded="false"]:hover::after{
+  box-shadow: 0 3px 12px rgba(0,0,0,0.22);
+}
+
+.collapse-btn:has(.arrow.rotated):focus-visible,
+.response-box:has(.collapsible-content.collapsed) .collapse-btn:focus-visible,
+.collapse-btn[aria-expanded="false"] :focus-visible{
+  outline: 2px solid color-mix(in srgb, var(--button-bg) 55%, transparent);
+  outline-offset: 2px;
+}
+
+/* Optional: Pfeilfarbe im aktiven Zustand minimal zum Akzent mischen */
+.collapse-btn:has(.arrow.rotated) .arrow,
+.collapse-btn[aria-expanded="false"] .arrow{
+  color: color-mix(in srgb, var(--text-color) 80%, var(--button-bg) 20%);
+}
+
+/* Globaler Toggle-Strich – etwas runder & eingefärbt, sobald min. eine Box zu ist */
+#toggleAllButton .toggle-visual{
+  border-radius: 6px; /* runder */
+}
+
+body:has(.response-box .collapsible-content.collapsed) #toggleAllButton .toggle-visual{
+  background-color: color-mix(in srgb, var(--button-bg) 30%, white);
+  border-color: var(--button-bg);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+
+/* Falls du per JS 'alle zu' markierst */
+body.all-collapsed #toggleAllButton .toggle-visual{
+  background-color: color-mix(in srgb, var(--button-bg) 45%, transparent);
+  border-color: var(--button-bg);
+}
+
+#toggleRegister.secondary-link:hover { color: var(--feedback-text-hover-color) !important; }
+
+/* Einheitliche Linkfarbe im Modal (gut lesbar in Light & Dark) */
+:root       { --link-color: color-mix(in srgb, var(--text-color) 85%, transparent); }
+.dark-mode  { --link-color: color-mix(in srgb, var(--text-color) 92%, transparent); }
+
+/* A und Button-Links im Modal angleichen */
+.modal-content a.secondary-link,
+.modal-content button.link-btn {
+  color: var(--link-color) !important;
+  text-decoration: underline;
+}
+
+/* 1. Entfernt den margin-top, wenn der Inhalt eingeklappt ist */
+.collapsible-content.collapsed {
+  margin-top: 0 !important; 
+  padding-bottom: 0 !important;
+}
+
+/* 2. Verringert das Padding der Response-Box, WENN der Inhalt darin eingeklappt ist */
+.response-box:has(.collapsible-content.collapsed) {
+  padding-bottom: 6px; /* Reduziert von ursprünglich ~10-15px */
+  padding-top: 6px;    /* Optional: Leicht kompakter oben */
+}
+
+/* 3. Optional: Wenn du es extrem flach willst, entferne auch den unteren Margin der Überschrift im eingeklappten Zustand */
+.response-box:has(.collapsible-content.collapsed) h2 {
+  margin-bottom: 0;
+}
+
+/* Button wirklich „link-artig“ machen und die breite Button-Regel neutralisieren */
+.modal-content button.link-btn {
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  width: auto !important;
+  box-shadow: none !important;
+  font: inherit;
+  cursor: pointer;
+  opacity: .95;
+}
+.modal-content a.secondary-link:hover,
+.modal-content button.link-btn:hover {
+  opacity: 1;
+}
+
+
+@keyframes spin {
+0% { transform: rotate(0deg); }
+100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes fadeInAnimation {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}

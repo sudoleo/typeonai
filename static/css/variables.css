@@ -1,0 +1,135 @@
+/* ==========================================================================
+   Variables & Design Tokens
+   ========================================================================== */
+
+:root {
+  /* Colors - Light Mode */
+  --bg-color: #f8fafc;
+  --container-bg: #ffffff;
+  --text-color: #334155;
+  --input-bg: #ffffff;
+  --input-border: #e2e8f0;
+  --button-bg: #0f172a;
+  --button-text: #ffffff;
+  --response-bg: #ffffff;
+  /* Additional UI Colors */
+  --sidebar-bg: #f8fafc;
+  --sidebar-border: #e2e8f0;
+  --sidebar-text-muted: #64748b;
+  --sidebar-hover: #f1f5f9;
+
+  --code-bg: #f7f7f7;
+  --feedback-text-color: #b3b3b3;
+  --feedback-text-hover-color: #666;
+  --clear-button-bg: #fce4e4;
+  --clear-button-border: #ffcdd2;
+  --clear-button-text: #b71c1c;
+  --clear-button-bg-hover: #f8bdbd;
+  --slider-bg: #ccc;
+  --email-icon-bg: #ddd;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.3);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.5);
+  --consensus-button-text: #333;
+  --checkbox-border: #ccc;
+  --checkbox-checked: #007bff;
+  --icon-color: #111; /* For Burger/Clear Icons */
+  --help-button-color: #4e4e4e;
+  --help-button-hover: #007bff;
+  --link-color: color-mix(in srgb, var(--text-color) 85%, transparent);
+  
+  /* Vote Badge Colors */
+  --vote-model-bg: #e6f0ff;
+  --vote-model-color: #1a4aa1;
+  --vote-best-bg: #e6ffed;
+  --vote-best-color: #2c7a2c;
+  --vote-exclude-bg: var(--clear-button-bg);
+  --vote-exclude-color: var(--clear-button-text);
+  
+  /* Modern UI / Pulse Tokens */
+  --accent: #418af5;
+  --accent-contrast: #0b234a;
+  --chip-bg: rgba(0,0,0,0.04);
+  --chip-border: rgba(0,0,0,0.12);
+  --chip-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.08);
+  --chip-shadow-active: 0 3px 10px rgba(65,138,245,0.25);
+  --overlay-dim: rgba(0, 0, 0, 0.38);
+  --pulse-size: 6px;
+  --pulse-alpha: 10%;
+  --pulse-alpha-hover: 16%;
+  --pulse-border-boost: 6%;
+
+  /* Box Shadows */
+  --box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  --shadow-hover: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+
+  /* Credibility Badges (Light) */
+  --cred-bg: #e6f4ea;
+  --cred-border: #cfe9d7;
+  --cred-fg: #196a35;
+
+  /* Z-Index Scale */
+  --z-dropdown: 100;
+  --z-sticky: 1000;
+  --z-sidebar: 1100;
+  --z-sidebar-toggle: 1200;
+  --z-mode-switch: 1300;
+  --z-header: 1500;
+  --z-feedback: 1600;
+  --z-modal: 2000;
+  --z-tooltip: 100000;
+}
+
+/* Colors - Dark Mode */
+.dark-mode {
+  --bg-color: #0d1117;
+  --container-bg: #14171a;
+  --text-color: #e6edf3;
+  --input-bg: #0d1117;
+  --input-border: #2b3036;
+  --button-bg: #bb86fc;
+  --button-text: #0d1117;
+  --response-bg: #14171a;
+  
+  --sidebar-bg: #14171a;
+  --sidebar-border: #2b3036;
+  --sidebar-text-muted: #8b949e;
+  --sidebar-hover: #1f2328;
+
+  --code-bg: #1e1e1e;
+  --feedback-text-color: #949494;
+  --feedback-text-hover-color: #bbb;
+  --clear-button-bg: #3d1f1f;
+  --clear-button-border: #633131;
+  --clear-button-text: #f8bdbd;
+  --clear-button-bg-hover: #5a2a2a;
+  --slider-bg: #636363;
+  --email-icon-bg: #555;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.3);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.5);
+  --consensus-button-text: #eee;
+  --checkbox-border: #555;
+  --checkbox-checked: #bb86fc;
+  --icon-color: #fff;
+  --help-button-color: #cccccc;
+  --help-button-hover: #66b2ff;
+  --link-color: color-mix(in srgb, var(--text-color) 92%, transparent);
+
+  /* Vote Badge Colors (Dark) */
+  --vote-model-bg: #2c2f3c;
+  --vote-model-color: #82aaff;
+  --vote-best-bg: #203c20;
+  --vote-best-color: #8aff8a;
+  --vote-exclude-bg: var(--clear-button-bg);
+  --vote-exclude-color: var(--clear-button-text);
+  
+  --accent: #bb86fc;
+  --accent-contrast: #111;
+  --chip-bg: rgba(255,255,255,0.06);
+  --chip-border: rgba(255,255,255,0.16);
+  --chip-shadow: 0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(0,0,0,0.35);
+  --chip-shadow-active: 0 4px 16px rgba(187,134,252,0.35);
+  --overlay-dim: rgba(0, 0, 0, 0.62);
+
+  --box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  --shadow-hover: 0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -1px rgba(0,0,0,0.2);
+}

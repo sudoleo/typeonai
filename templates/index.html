@@ -82,9 +82,9 @@
     <div class="top-bar-right">
       <h2>
         <span id="proBadge"
-          style="display: none; background: #d4af37; color: white; font-size: 0.5em; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 5px; margin-top: -18px;">PRO</span>
+          style="display: none; background: #d4af37; color: white; font-size: 0.5em; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 5px;">PRO</span>
         <a id="upgradeLink" href="#"
-          style="display: none; color: #999; font-size: 0.5em; text-decoration: none; vertical-align: middle; margin-left: 5px; margin-top: -18px; cursor: pointer; border: 1px solid #444; padding: 1px 5px; border-radius: 4px; margin-right: -10px;">upgrade</a>
+          style="display: none; color: #999; font-size: 0.5em; text-decoration: none; vertical-align: middle; margin-left: 5px; cursor: pointer; border: 1px solid #444; padding: 1px 5px; border-radius: 4px; margin-right: -10px;">upgrade</a>
       </h2>
       <!-- Neuer About-Link -->
       <div id="loginContainer" class="login-text">Log in</div>
@@ -223,15 +223,22 @@
             </span>
           </div>
         </div>
-        <!-- Clear-Button nur mit Icon -->
-        <button id="clearButton" onclick="clearResponseBoxes()" title="Clear all responses"
-          aria-label="Clear all responses">Clear All</button>
-        <button class="button" id="sendButton" onclick="sendQuestion()">
-          <!-- SVG-Icon für einen Pfeil, der nach unten zeigt -->
-          <svg class="input-icon" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-          </svg>
-        </button>
+        <!-- Actions bottom right -->
+        <div class="input-actions-container">
+          <button id="clearButton" class="input-action-btn-subtle" onclick="clearResponseBoxes()" title="Clear all responses" aria-label="Clear all responses">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </button>
+          <button id="sendButton" class="input-action-btn-primary" onclick="sendQuestion()" title="Send question">
+            Send
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
 
