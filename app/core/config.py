@@ -39,9 +39,8 @@ PRO_USAGE_LIMIT = 500
 PRO_DEEP_SEARCH_LIMIT = 50
 
 VALID_LEADERBOARD_MODELS = {
-    "OpenAI", "Mistral", "Claude", "Gemini", "DeepSeek", "Grok", 
+    "OpenAI", "Mistral", "Claude", "Gemini", "DeepSeek", "Grok",
     "OpenAI-Pro", "Mistral-Pro", "Anthropic-Pro", "Gemini-Pro", "DeepSeek-Pro", "Grok-Pro",
-    "Exa"
 }
 
 ALLOWED_OPENAI_MODELS = {

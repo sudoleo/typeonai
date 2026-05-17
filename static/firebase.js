@@ -832,20 +832,16 @@ function loadSingleBookmarkUI(bookmark) {
         }
         renderContent(conDiff, diffText);
 
-        // Toggles setzen (Deep Think / Web Search) - wie gehabt
+        // Toggles setzen (Deep Think) - wie gehabt
         if (bookmark.mode) {
             const deepToggle = document.getElementById("deepSearchToggle");
-            const searchToggle = document.getElementById("searchModeToggle");
 
-            // Erstmal beide resetten
+            // Erstmal resetten
             if (deepToggle && deepToggle.checked) deepToggle.click();
-            if (searchToggle && searchToggle.checked) searchToggle.click();
 
             // Dann korrekt setzen
             if (bookmark.mode === "Deep Think") {
                 if (deepToggle && !deepToggle.checked) deepToggle.click();
-            } else if (bookmark.mode === "Web Search") {
-                if (searchToggle && !searchToggle.checked) searchToggle.click();
             }
         }
         

@@ -31,18 +31,12 @@ def query_consensus(
     excluded_models: list,
     consensus_model: str,
     api_keys: dict,
-    search_mode: bool = False
 ) -> str:
     """
     Konsolidiert die Antworten der 6 Haupt-LLMs zu einer Konsensantwort.
     Unterscheidet jetzt zwischen Standard- und Pro-Modellen.
     """
     prompt_parts = []
-    if search_mode:
-        prompt_parts.append(
-            "Note: The following responses are based on additional web context. "
-            "If URLs are present in the model answers, include the most relevant ones in the final answer.\n\n"
-        )
 
     prompt_parts.append(
         f"Please provide your answer in the same language as the user's question. "
@@ -221,7 +215,6 @@ def query_differences(
     """
     Extrahiert die Unterschiede zwischen den Antworten der 6 Hauptmodelle,
     anonymisiert die Modellnamen und ordnet das bestbewertete Modell anschließend wieder zu.
-    Web Search ist bereits in den Antworten eingebacken, Exa selbst taucht hier nicht mehr auf.
     """
 
     model_answers = [

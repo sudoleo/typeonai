@@ -169,18 +169,6 @@
             <span class="auto-consensus-label">Auto Consensus</span>
           </div>
           <!-- Search Mode Switch, standardmäßig leicht ausgegraut -->
-          <div class="search-mode">
-            <label class="switch" aria-label="Web Search" title="Web Search">
-              <input type="checkbox" id="searchModeToggle">
-              <span class="slider"></span>
-            </label>
-            <span class="search-mode-label">Web Search</span>
-            <!-- Disclaimer, der nur beim Aktivieren angezeigt wird -->
-            <span id="searchDisclaimer" class="search-disclaimer"
-              style="display: none; font-size: 0.8em; margin-left: 5px;">
-              Models have access to the Internet.
-            </span>
-          </div>
           <div class="search-mode deep-search-mode">
             <label class="switch deep-switch" aria-label="Deep Think" title="Deep Think">
               <input type="checkbox" id="deepSearchToggle">
@@ -423,11 +411,9 @@
         `;
 
         const deepSearchToggle = document.getElementById("deepSearchToggle");
-        const searchModeToggle = document.getElementById("searchModeToggle");
 
         // Auslesen des aktuellen Zustands (true, wenn aktiviert, sonst false):
         const deepSearchActive = deepSearchToggle.checked;
-        const searchModeActive = searchModeToggle.checked;
 
         function applyTheme(theme) {
           if (theme === "dark") {
@@ -468,14 +454,14 @@
         function linkifySourceTags(containerEl, sources) {
           if (!sources || !sources.length) return;
           let html = containerEl.innerHTML;
-          const regex = /\[(S\d+(?:,\s*S\d+)*)\]/g;
+          const regex = /\[((?:S?\d+)(?:,\s*S?\d+)*)\]/g;
 
           html = html.replace(regex, (match, innerContent) => {
             const parts = innerContent.split(',');
 
             const linkedParts = parts.map(part => {
               const trimmedPart = part.trim();
-              const idNum = parseInt(trimmedPart.slice(1), 10);
+              const idNum = parseInt(trimmedPart.replace(/^S/i, ""), 10);
               const index = idNum - 1;
               const src = sources[index];
               if (src && src.url) {
@@ -488,6 +474,73 @@
           containerEl.innerHTML = html;
         }
         window.linkifySourceTags = linkifySourceTags;
+
+        function normalizeEvidenceUrl(url) {
+          if (!url) return "";
+          try {
+            const u = new URL(url);
+            u.hash = "";
+            u.pathname = u.pathname.replace(/\/$/, "");
+            return u.toString().toLowerCase();
+          } catch (e) {
+            return String(url).trim().toLowerCase();
+          }
+        }
+
+        function mergeEvidenceSources(incomingSources) {
+          if (!Array.isArray(window.currentEvidenceSources)) {
+            window.currentEvidenceSources = [];
+          }
+          const idMap = {};
+          (incomingSources || []).forEach((src, idx) => {
+            const localId = String(src.id || `S${idx + 1}`);
+            const key = normalizeEvidenceUrl(src.url) || String(src.title || "").trim().toLowerCase();
+            let existingIndex = window.currentEvidenceSources.findIndex(existing => {
+              const existingKey = normalizeEvidenceUrl(existing.url) || String(existing.title || "").trim().toLowerCase();
+              return existingKey && existingKey === key;
+            });
+
+            if (existingIndex === -1) {
+              existingIndex = window.currentEvidenceSources.length;
+              window.currentEvidenceSources.push({
+                ...src,
+                id: `S${existingIndex + 1}`
+              });
+            }
+
+            const globalNumber = existingIndex + 1;
+            idMap[localId] = globalNumber;
+            idMap[localId.replace(/^S/i, "")] = globalNumber;
+            idMap[`S${idx + 1}`] = globalNumber;
+            idMap[String(idx + 1)] = globalNumber;
+          });
+
+          if (window.renderEvidenceSources) {
+            window.renderEvidenceSources(window.currentEvidenceSources);
+          }
+          return idMap;
+        }
+
+        function rewriteSourceTags(markdown, idMap) {
+          if (!markdown || !idMap || !Object.keys(idMap).length) return markdown;
+          return markdown.replace(/\[((?:S?\d+)(?:,\s*S?\d+)*)\]/g, (match, inner) => {
+            const mapped = inner.split(",").map(part => {
+              const token = part.trim();
+              const numeric = token.replace(/^S/i, "");
+              return idMap[token] || idMap[numeric] || null;
+            }).filter(Boolean);
+            return mapped.length ? `[${mapped.join(", ")}]` : match;
+          });
+        }
+
+        function registerResponseSources(markdown, incomingSources) {
+          const idMap = mergeEvidenceSources(incomingSources || []);
+          return rewriteSourceTags(markdown || "", idMap);
+        }
+
+        window.mergeEvidenceSources = mergeEvidenceSources;
+        window.rewriteSourceTags = rewriteSourceTags;
+        window.registerResponseSources = registerResponseSources;
 
         // Lese gespeicherten Wert aus; wenn keiner vorhanden, verwende die Systempräferenz:
         let storedTheme = localStorage.getItem("theme");
@@ -564,22 +617,15 @@
 
         function updateDeepThinkText(showMobilePopup = false) {
           const deepSearchToggle = document.getElementById("deepSearchToggle");
-          const searchToggle = document.getElementById("searchModeToggle");
 
           const deepSearchActive = !!deepSearchToggle && deepSearchToggle.checked;
-          const searchModeActive = !!searchToggle && searchToggle.checked;
 
           const deepthinkDisclaimer = document.getElementById("deepthinkDisclaimer");
-          const searchDisclaimer = document.getElementById("searchDisclaimer"); // wird nur versteckt
 
           // -------------------------
           // Texte vorbereiten
           // -------------------------
-          const deepText = searchModeActive
-            ? "DeepSearch models. Thoughtful plus internet."
-            : "Reasoning models. Thoughtful responses.";
-
-          const searchText = "Models have access to the Internet.";
+          const deepText = "Reasoning models. Thoughtful responses.";
 
           // -------------------------
           // Mobile / kleine Screens: Popup
@@ -589,27 +635,20 @@
             if (showMobilePopup) {
               if (deepSearchActive) {
                 showMobileInfoPopup(deepText);
-              } else if (searchModeActive) {
-                showMobileInfoPopup(searchText);
               }
             }
 
             if (deepthinkDisclaimer) deepthinkDisclaimer.style.display = "none";
-            if (searchDisclaimer) searchDisclaimer.style.display = "none";
           } else {
             // -------------------------
             // Desktop: Text RECHTS vom Deep-Think-Toggle
             // -------------------------
             if (deepthinkDisclaimer) {
-              if (deepSearchActive || searchModeActive) {
+              if (deepSearchActive) {
                 // Priorität:
                 // 1) Deep Think aktiv -> Deep Text
                 // 2) Nur Web Search aktiv -> Web-Search-Text
-                if (deepSearchActive) {
-                  deepthinkDisclaimer.textContent = deepText;
-                } else {
-                  deepthinkDisclaimer.textContent = searchText;
-                }
+                deepthinkDisclaimer.textContent = deepText;
                 deepthinkDisclaimer.style.display = "inline-block";
               } else {
                 deepthinkDisclaimer.style.display = "none";
@@ -617,9 +656,6 @@
             }
 
             // Den ursprünglichen Web-Search-Disclaimer-Span ausblenden
-            if (searchDisclaimer) {
-              searchDisclaimer.style.display = "none";
-            }
           }
 
           // Model-Picker zeigen/verstecken
@@ -650,7 +686,6 @@
         // DEEP THINK & SMOKE TEST LOGIK
         // Deep Search Toggle Text Update (bestehender Code)
         document.getElementById("deepSearchToggle").addEventListener("change", () => updateDeepThinkText(true));
-        document.getElementById("searchModeToggle").addEventListener("change", () => updateDeepThinkText(true));
 
         // --- NEU: Pro Modal Referenzen ---
         const proModal = document.getElementById("proFeatureModal");
@@ -1496,15 +1531,9 @@
 
           effectiveSystemPrompt = storedSystemPrompt;
 
-          const searchModeEnabled = document.getElementById("searchModeToggle").checked;
           const deepSearchFlag = document.getElementById("deepSearchToggle").checked;
 
           const baseSpinnerHTML = window.spinnerHTML;
-          const webSearchSpinnerHTML = `
-            <div class="thinking-wrap">
-              <span class="thinking" data-text="Web search">Web search</span>
-            </div>
-          `;
 
           // Nur Boxen der aktuell ausgewählten Modelle
           const modelBoxes = [];
@@ -1534,22 +1563,13 @@
             if (box) modelBoxes.push(box);
           }
 
-          const autoSearchActive = true; // Oder checke hier: document.getElementById("autoConsensusToggle").checked o.ä.
-          const looksLikeSearch = predictSearchIntent(question);
-
-          // Hier kombinieren wir manuellen Modus ODER die Heuristik
-          const showSearchSpinner = searchModeEnabled || (autoSearchActive && looksLikeSearch);
-
           // 🔸 PHASE 1: UI Feedback setzen
-          if (showSearchSpinner) {  // <--- Änderung: Wir nutzen die berechnete Variable
-            window.spinnerHTML = webSearchSpinnerHTML;
-          } else {
-            window.spinnerHTML = baseSpinnerHTML;
-          }
+          window.spinnerHTML = baseSpinnerHTML;
           modelBoxes.forEach(box => setSpinnerEl(box));
+          window.currentEvidenceSources = [];
+          if (window.renderEvidenceSources) window.renderEvidenceSources([]);
 
           // Wir rufen /prepare IMMER auf, damit Wetter-Infos etc. injiziert werden können.
-          // Wir übergeben searchModeEnabled dynamisch an das Backend.
           try {
             // 🔹 Firebase-ID-Token holen (falls eingeloggt)
             let idToken = null;
@@ -1564,7 +1584,6 @@
             const preparePayload = {
               question: question,
               system_prompt: storedSystemPrompt,
-              search_mode: searchModeEnabled, // <--- WICHTIG: Hier Variable nutzen, nicht 'true' hardcoden!
               deep_search: deepSearchFlag,
               mode: mode
             };
@@ -1595,19 +1614,12 @@
             }
 
             // Quellen aktualisieren (nur relevant, wenn Search an war, sonst ist die Liste leer)
-            window.currentEvidenceSources = prepareData.sources || [];
-            if (window.renderEvidenceSources) {
-              window.renderEvidenceSources(prepareData.sources || []);
-            }
 
           } catch (err) {
             console.error("Error during /prepare:", err);
             // Fallback: effectiveSystemPrompt bleibt der gespeicherte Prompt
-            window.currentEvidenceSources = [];
-            if (window.renderEvidenceSources) window.renderEvidenceSources([]);
           }
 
-          // 🔸 PHASE 2: Exa fertig → zurück auf "Thinking ..." für die LLMs
           window.spinnerHTML = baseSpinnerHTML;
           modelBoxes.forEach(box => setSpinnerEl(box));
 
@@ -1757,7 +1769,6 @@
             const payload = {
               question: question,
               active_count: 1,
-              search_mode: searchModeEnabled,   // oben definiert
               deep_search: deepSearchFlag,      // oben definiert
               system_prompt: effectiveSystemPrompt,
               mode: mode,
@@ -1813,9 +1824,12 @@
                   .querySelector(".collapsible-content");
 
                 if (data.response) {
-                  injectMarkdown(outputEl, data.response);
+                  const responseWithSources = window.registerResponseSources
+                    ? window.registerResponseSources(data.response, data.sources || [])
+                    : data.response;
+                  injectMarkdown(outputEl, responseWithSources);
                   if (auth.currentUser) {
-                    saveBookmark(question, data.response, "OpenAI", mode);
+                    saveBookmark(question, responseWithSources, "OpenAI", mode);
                   }
                 } else if (data.error) {
                   outputEl.innerText = data.error;
@@ -1897,10 +1911,13 @@
               .then(data => {
                 let outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
                 if (data.response) {
-                  injectMarkdown(outputEl, data.response);
+                  const responseWithSources = window.registerResponseSources
+                    ? window.registerResponseSources(data.response, data.sources || [])
+                    : data.response;
+                  injectMarkdown(outputEl, responseWithSources);
 
                   if (auth.currentUser) {
-                    saveBookmark(question, data.response, "Mistral", mode);
+                    saveBookmark(question, responseWithSources, "Mistral", mode);
                   }
                 } else if (data.error) {
                   outputEl.innerText = data.error;
@@ -1973,9 +1990,12 @@
               .then(data => {
                 const outputEl = document.getElementById("claudeResponse").querySelector(".collapsible-content");
                 if (data.response) {
-                  injectMarkdown(outputEl, data.response);
+                  const responseWithSources = window.registerResponseSources
+                    ? window.registerResponseSources(data.response, data.sources || [])
+                    : data.response;
+                  injectMarkdown(outputEl, responseWithSources);
                   if (auth.currentUser) {
-                    saveBookmark(question, data.response, "Anthropic", mode);
+                    saveBookmark(question, responseWithSources, "Anthropic", mode);
                   }
                 } else if (data.error) {
                   outputEl.innerText = data.error;
@@ -2048,9 +2068,12 @@
               .then(data => {
                 const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
                 if (data.response) {
-                  injectMarkdown(outputEl, data.response);
+                  const responseWithSources = window.registerResponseSources
+                    ? window.registerResponseSources(data.response, data.sources || [])
+                    : data.response;
+                  injectMarkdown(outputEl, responseWithSources);
                   if (auth.currentUser) {
-                    saveBookmark(question, data.response, "Gemini", mode);
+                    saveBookmark(question, responseWithSources, "Gemini", mode);
                   }
                 } else if (data.error) {
                   outputEl.innerText = data.error;
@@ -2123,9 +2146,12 @@
               .then(data => {
                 const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
                 if (data.response) {
-                  injectMarkdown(outputEl, data.response);
+                  const responseWithSources = window.registerResponseSources
+                    ? window.registerResponseSources(data.response, data.sources || [])
+                    : data.response;
+                  injectMarkdown(outputEl, responseWithSources);
                   if (auth.currentUser) {
-                    saveBookmark(question, data.response, "DeepSeek", mode);
+                    saveBookmark(question, responseWithSources, "DeepSeek", mode);
                   }
                 } else if (data.error) {
                   outputEl.innerText = data.error;
@@ -2197,9 +2223,12 @@
               .then(data => {
                 const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
                 if (data.response) {
-                  injectMarkdown(outputEl, data.response);
+                  const responseWithSources = window.registerResponseSources
+                    ? window.registerResponseSources(data.response, data.sources || [])
+                    : data.response;
+                  injectMarkdown(outputEl, responseWithSources);
                   if (auth.currentUser) {
-                    saveBookmark(question, data.response, "Grok", mode);
+                    saveBookmark(question, responseWithSources, "Grok", mode);
                   }
                 } else if (data.error) {
                   outputEl.innerText = data.error;
@@ -2297,10 +2326,6 @@
           }
         });
 
-        // Search Mode Toggle: Modelle automatisch anpassen, wenn aktiviert
-        //const searchModeToggle = document.getElementById("searchModeToggle");
-        //const searchDisclaimer = document.getElementById("searchDisclaimer");
-
         function showDisclaimerPopup() {
           const popup = document.getElementById('disclaimerPopup');
           popup.classList.add('show');
@@ -2309,14 +2334,6 @@
             popup.classList.remove('show');
           }, 5000);
         }
-
-        searchModeToggle.addEventListener("change", function () {
-          const isSearchMode = this.checked;
-          consensusDropdown.disabled = false;
-
-          // 4) DeepThink-Text / Hinweis aktualisieren (damit Web Search Text passt)
-          updateDeepThinkText();
-        });
 
         // Globale Variable, um die letzte verarbeitete Frage zu speichern.
         let lastQuestion = "";
@@ -2327,7 +2344,6 @@
               .trim();
           // Status, ob eigene API Keys genutzt werden sollen
           const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
-          let searchMode = document.getElementById("searchModeToggle").checked;
 
           let id_token = null;
           if (!useOwnKeys && window.auth && window.auth.currentUser) {
@@ -2378,13 +2394,12 @@
           const answer_grok = grokBox.querySelector(".collapsible-content").innerText.trim();
 
           // Überprüfe nur die Modelle, die nicht als "ausgeschlossen" markiert sind.
-          // Überprüfe nur Modelle, die im jeweiligen Modus relevant UND nicht "excluded" sind.
-          const needOpenAI = !searchMode && !openaiBox.classList.contains("excluded");
-          const needGemini = !searchMode && !geminiBox.classList.contains("excluded");
-          const needMistral = !searchMode && !mistralBox.classList.contains("excluded");
-          const needClaude = !searchMode && !claudeBox.classList.contains("excluded");
-          const needDeepseek = !searchMode && !deepseekBox.classList.contains("excluded");
-          const needGrok = !searchMode && !grokBox.classList.contains("excluded");
+          const needOpenAI = !openaiBox.classList.contains("excluded");
+          const needGemini = !geminiBox.classList.contains("excluded");
+          const needMistral = !mistralBox.classList.contains("excluded");
+          const needClaude = !claudeBox.classList.contains("excluded");
+          const needDeepseek = !deepseekBox.classList.contains("excluded");
+          const needGrok = !grokBox.classList.contains("excluded");
 
           if (
             !question ||
@@ -2496,7 +2511,6 @@
                 id_token: id_token,
                 useOwnKeys: useOwnKeys,
                 question: question,
-                search_mode: searchMode,
                 answer_openai: answer_openai,
                 answer_mistral: answer_mistral,
                 answer_claude: answer_claude,
@@ -2714,13 +2728,10 @@
 
         function getActiveMode() {
           const deepSearchActive = document.getElementById("deepSearchToggle").checked;
-          const searchModeActive = document.getElementById("searchModeToggle").checked;
 
           // Beispielhafte Logik: Priorisiere Deep Think, falls aktiviert:
           if (deepSearchActive) {
             return "Deep Think";
-          } else if (searchModeActive) {
-            return "Web Search";
           }
           return "Standard"; // Default-Wert, falls keine Checkbox aktiviert ist
         }

@@ -1,4 +1,4 @@
-import os
+﻿import os
 import logging
 from fastapi import APIRouter, Request, Body, HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -16,8 +16,8 @@ from app.services.llm.base import validate_model, count_words, get_system_prompt
 from app.services.llm.engines import (
     query_openai, query_mistral, query_claude, query_gemini, query_deepseek, query_grok
 )
+from app.services.llm.citations import source_response
 from app.services.llm.consensus_engine import query_consensus, query_differences
-from app.services.search import prepare_prompt_with_websearch
 from tool_heuristics import get_realtime_context, get_intent_from_llm
 
 router = APIRouter()
@@ -129,13 +129,13 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
         remaining_regular = int(limit_regular - usage_counter[uid])
         remaining_deep = int(limit_deep - deep_search_usage.get(uid, 0))
 
-        return {
-            "response": answer,
-            "free_usage_remaining": remaining_regular,
-            "deep_remaining": remaining_deep,
-            "is_pro_user": is_pro_user,
-            "key_used": "Developer API Key"
-        }
+        return source_response(
+            answer,
+            free_usage_remaining=remaining_regular,
+            deep_remaining=remaining_deep,
+            is_pro_user=is_pro_user,
+            key_used="Developer API Key"
+        )
 
     # --- 5. Eigener API Key (Bypass Limits) ---
     elif api_key:
@@ -143,13 +143,13 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
             question, api_key, deep_search=deep_search,
             system_prompt=system_prompt, model_override=model
         )
-        return {
-            "response": answer,
-            "free_usage_remaining": "Unlimited",
-            "deep_remaining": "Unlimited",
-            "is_pro_user": False,
-            "key_used": "User API Key"
-        }
+        return source_response(
+            answer,
+            free_usage_remaining="Unlimited",
+            deep_remaining="Unlimited",
+            is_pro_user=False,
+            key_used="User API Key"
+        )
 
     else:
         raise HTTPException(status_code=400, detail="No auth provided.")
@@ -212,17 +212,17 @@ def ask_mistral_post(request: Request, data: dict = Body(...)):
         
         answer = query_mistral(question, developer_api_key, system_prompt, deep_search=deep_search, model_override=model)
         
-        return {
-            "response": answer,
-            "free_usage_remaining": int(limit_regular - usage_counter[uid]),
-            "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
-            "is_pro_user": is_pro_user,
-            "key_used": "Developer API Key"
-        }
+        return source_response(
+            answer,
+            free_usage_remaining=int(limit_regular - usage_counter[uid]),
+            deep_remaining=int(limit_deep - deep_search_usage.get(uid, 0)),
+            is_pro_user=is_pro_user,
+            key_used="Developer API Key"
+        )
 
     elif api_key:
         answer = query_mistral(question, api_key, system_prompt, deep_search=deep_search, model_override=model)
-        return {"response": answer, "free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": False, "key_used": "User API Key"}
+        return source_response(answer, free_usage_remaining="Unlimited", deep_remaining="Unlimited", is_pro_user=False, key_used="User API Key")
     else:
         raise HTTPException(status_code=400, detail="No auth provided.")
 
@@ -284,17 +284,17 @@ def ask_claude_post(request: Request, data: dict = Body(...)):
 
         answer = query_claude(question, developer_api_key, system_prompt, deep_search=deep_search, model_override=model)
         
-        return {
-            "response": answer,
-            "free_usage_remaining": int(limit_regular - usage_counter[uid]),
-            "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
-            "is_pro_user": is_pro_user,
-            "key_used": "Developer API Key"
-        }
+        return source_response(
+            answer,
+            free_usage_remaining=int(limit_regular - usage_counter[uid]),
+            deep_remaining=int(limit_deep - deep_search_usage.get(uid, 0)),
+            is_pro_user=is_pro_user,
+            key_used="Developer API Key"
+        )
 
     elif api_key:
         answer = query_claude(question, api_key, system_prompt, deep_search=deep_search, model_override=model)
-        return {"response": answer, "free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": False, "key_used": "User API Key"}
+        return source_response(answer, free_usage_remaining="Unlimited", deep_remaining="Unlimited", is_pro_user=False, key_used="User API Key")
     else:
         raise HTTPException(status_code=400, detail="No auth provided.")
 
@@ -363,20 +363,20 @@ def ask_gemini_post(request: Request, data: dict = Body(...)):
             answer = query_gemini(question, user_api_key=None, deep_search=deep_search, system_prompt=system_prompt, model_override=model, max_output_tokens=max_tokens)
             key_info = "Service Account"
 
-        return {
-            "response": answer,
-            "free_usage_remaining": int(limit_regular - usage_counter[uid]),
-            "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
-            "is_pro_user": is_pro_user,
-            "key_used": key_info
-        }
+        return source_response(
+            answer,
+            free_usage_remaining=int(limit_regular - usage_counter[uid]),
+            deep_remaining=int(limit_deep - deep_search_usage.get(uid, 0)),
+            is_pro_user=is_pro_user,
+            key_used=key_info
+        )
 
     else:
         # Guest mit eigenem Key
         if not (api_key and api_key.strip()):
             raise HTTPException(status_code=400, detail="No credentials provided.")
         answer = query_gemini(question, user_api_key=api_key.strip(), deep_search=deep_search, system_prompt=system_prompt, model_override=model, max_output_tokens=max_tokens)
-        return {"response": answer, "key_used": "User API Key", "is_pro_user": False}
+        return source_response(answer, key_used="User API Key", is_pro_user=False)
 
 
 @router.post("/ask_deepseek")
@@ -436,17 +436,17 @@ def ask_deepseek_post(request: Request, data: dict = Body(...)):
 
         answer = query_deepseek(question, developer_api_key, system_prompt, deep_search=deep_search, model_override=model)
         
-        return {
-            "response": answer,
-            "free_usage_remaining": int(limit_regular - usage_counter[uid]),
-            "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
-            "is_pro_user": is_pro_user,
-            "key_used": "Developer API Key"
-        }
+        return source_response(
+            answer,
+            free_usage_remaining=int(limit_regular - usage_counter[uid]),
+            deep_remaining=int(limit_deep - deep_search_usage.get(uid, 0)),
+            is_pro_user=is_pro_user,
+            key_used="Developer API Key"
+        )
 
     elif api_key:
         answer = query_deepseek(question, api_key, system_prompt, deep_search=deep_search, model_override=model)
-        return {"response": answer, "free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": False, "key_used": "User API Key"}
+        return source_response(answer, free_usage_remaining="Unlimited", deep_remaining="Unlimited", is_pro_user=False, key_used="User API Key")
     else:
         raise HTTPException(status_code=400, detail="No auth provided.")
 
@@ -508,17 +508,17 @@ def ask_grok_post(request: Request, data: dict = Body(...)):
 
         answer = query_grok(question, developer_api_key, system_prompt, deep_search=deep_search, model_override=model)
         
-        return {
-            "response": answer,
-            "free_usage_remaining": int(limit_regular - usage_counter[uid]),
-            "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
-            "is_pro_user": is_pro_user,
-            "key_used": "Developer API Key"
-        }
+        return source_response(
+            answer,
+            free_usage_remaining=int(limit_regular - usage_counter[uid]),
+            deep_remaining=int(limit_deep - deep_search_usage.get(uid, 0)),
+            is_pro_user=is_pro_user,
+            key_used="Developer API Key"
+        )
 
     elif api_key:
         answer = query_grok(question, api_key, system_prompt, deep_search=deep_search, model_override=model)
-        return {"response": answer, "free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": False, "key_used": "User API Key"}
+        return source_response(answer, free_usage_remaining="Unlimited", deep_remaining="Unlimited", is_pro_user=False, key_used="User API Key")
     else:
         raise HTTPException(status_code=400, detail="No auth provided.")
 
@@ -528,52 +528,34 @@ async def prepare(request: Request, data: dict = Body(...)):
     if not question:
         raise HTTPException(status_code=400, detail="Missing 'question' in request body.")
 
-    # --- 2. SECURITY FIX: Authentifizierung ZUERST prüfen ---
     id_token = extract_id_token(request, data)
-    
     if not id_token:
         raise HTTPException(status_code=401, detail="Authentication required to analyze intent.")
 
     try:
         uid = verify_user_token(id_token)
-        
-        # Status hier ermitteln
-        is_pro = is_user_pro(uid) 
-        
-        # Limit basierend auf Status setzen
+        is_pro = is_user_pro(uid)
         limit = PRO_USAGE_LIMIT if is_pro else FREE_USAGE_LIMIT
         current_usage = usage_counter.get(uid, 0)
-        
-        # Erster Check: Ist das Limit generell erreicht?
         if current_usage >= limit:
             raise HTTPException(status_code=403, detail="Usage limit exhausted.")
-            
     except HTTPException as he:
         raise he
     except Exception as e:
         logging.error(f"Auth failed in /prepare: {e}")
         raise HTTPException(status_code=401, detail="Authentication failed.")
 
-    # search_mode robust von String → Bool  (User-Toggle!)
-    search_mode_raw = data.get("search_mode", False)
-    user_search_mode = True if str(search_mode_raw).lower() == "true" else bool(search_mode_raw)
-
-    # Basis-Systemprompt holen
     raw_system_prompt = data.get("system_prompt")
     if not raw_system_prompt or not str(raw_system_prompt).strip():
         base_system_prompt = get_system_prompt()
     else:
         base_system_prompt = str(raw_system_prompt).strip()
 
-    # --- 1) Router-Entscheidung holen ---
     decision = await run_in_threadpool(get_intent_from_llm, question)
     tool = decision.get("tool")
-    query = decision.get("query")
 
-    # --- 2) Realtime-Context injizieren (nur weather/stock/crypto) ---
     realtime_data = None
     if tool in {"weather", "stock", "crypto"}:
-        # Auch hier: Tool-Abruf ist blockierend (requests/yfinance), also auslagern
         realtime_data = await run_in_threadpool(get_realtime_context, question, decision=decision)
 
     if realtime_data:
@@ -585,57 +567,9 @@ async def prepare(request: Request, data: dict = Body(...)):
             f"{base_system_prompt}"
         )
 
-    # --- 3) Auto-Websearch durch Router? ---
-
-    if tool in {"weather", "stock", "crypto"}:
-        # Wenn wir zwar ein Tool wollten, aber KEINE Daten bekommen haben (Fehler),
-        # sollten wir vielleicht doch suchen?
-        if realtime_data and ("not found" in realtime_data.lower() or "error" in realtime_data.lower()):
-             # Fallback: Wenn Tool failt, probieren wir Websearch (sofern User nicht explizit ausgeschlossen)
-             auto_search_needed = True 
-        else:
-             auto_search_needed = False
-    else:
-        auto_search_needed = (tool == "web")
-
-    # Effektiver Search-Mode:
-    # - User hat explizit eingeschaltet ODER
-    # - Router sagt: web
-    effective_search_mode = user_search_mode or auto_search_needed
-
-    # Wenn Websearch effektiv NICHT genutzt werden soll → direkt zurückgeben
-    if not effective_search_mode:
-        return {
-            "system_prompt": base_system_prompt,
-            "sources": []
-        }
-
-    # --- 4) Auth & Quoten nur für Websearch ---
-    # WICHTIG: Hier nutzen wir nur noch die oben definierten Variablen (uid, limit, is_pro)
-    if current_usage >= limit:
-        if user_search_mode:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Your {'Pro' if is_pro else 'free'} quota is exhausted. Web search is only available with your own API keys."
-            )
-        else:
-            logging.info("Auto websearch requested but quota exhausted; skipping Exa.")
-            return {
-                "system_prompt": base_system_prompt,
-                "sources": []
-            }
-
-    # --- 5) Exa-Suche wirklich ausführen ---
-    final_prompt, sources = await run_in_threadpool(
-        prepare_prompt_with_websearch,
-        question=question,
-        search_mode=True,
-        base_system_prompt=base_system_prompt
-    )
-
     return {
-        "system_prompt": final_prompt,
-        "sources": sources or []
+        "system_prompt": base_system_prompt,
+        "sources": []
     }
 
 
@@ -644,7 +578,6 @@ async def prepare(request: Request, data: dict = Body(...)):
 def consensus(request: Request, data: dict = Body(...)):
     id_token = extract_id_token(request, data)
     use_own_keys = str(data.get("useOwnKeys", "false")).lower() == "true"
-    search_mode = data.get("search_mode", False)
     consensus_model = data.get("consensus_model")
     uid = None
     is_pro = False
@@ -669,21 +602,7 @@ def consensus(request: Request, data: dict = Body(...)):
             current_usage = usage_counter.get(uid, 0)
             current_deep_usage = deep_search_usage.get(uid, 0)
 
-            # A) Deep Search Prüfung (wenn aktiviert)
-            if search_mode:
-                if not is_pro:
-                    # Optional: Falls Free User Deep Search im Consensus gar nicht dürfen
-                    raise HTTPException(status_code=403, detail="Deep Think consensus is exclusively available for Pro users.")
-                
-                if current_deep_usage >= limit_deep:
-                     raise HTTPException(
-                        status_code=403, 
-                        detail="Your Deep Think quota is exhausted."
-                    )
-                # Deep Usage erhöhen
-                deep_search_usage[uid] = current_deep_usage + 1
-
-            # B) Reguläre Usage Prüfung (gilt immer für Consensus Request)
+            # Reguläre Usage Prüfung (gilt immer für Consensus Request)
             if current_usage >= limit_regular:
                 msg = "Pro usage limit reached." if is_pro else "Your free quota has been used up. Please store your own API keys."
                 raise HTTPException(
@@ -730,7 +649,6 @@ def consensus(request: Request, data: dict = Body(...)):
         api_keys["Gemini"] = data.get("gemini_key")
         api_keys["DeepSeek"] = data.get("deepseek_key")
         api_keys["Grok"] = data.get("grok_key")
-        api_keys["Exa"] = data.get("exa_key")
 
     else:
         api_keys["OpenAI"] = data.get("openai_key") or os.environ.get("DEVELOPER_OPENAI_API_KEY")
@@ -739,7 +657,6 @@ def consensus(request: Request, data: dict = Body(...)):
         api_keys["Gemini"] = data.get("gemini_key") or os.environ.get("DEVELOPER_GEMINI_API_KEY")
         api_keys["DeepSeek"] = data.get("deepseek_key") or os.environ.get("DEVELOPER_DEEPSEEK_API_KEY")
         api_keys["Grok"] = data.get("grok_key") or os.environ.get("DEVELOPER_GROK_API_KEY")
-        api_keys["Exa"] = data.get("exa_key") or os.environ.get("DEVELOPER_EXA_API_KEY")
 
     # Validierung der erforderlichen Parameter (nur für Modelle, die nicht ausgeschlossen wurden)
     missing = []
@@ -815,7 +732,6 @@ def consensus(request: Request, data: dict = Body(...)):
         excluded_models,
         consensus_model,
         api_keys,
-        search_mode
     )
 
     differences = query_differences(
