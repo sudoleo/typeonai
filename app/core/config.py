@@ -13,7 +13,22 @@ DIFFERENCES_MAX_TOKENS = 4096
 REASONING_EFFORT_FOR_DEEP = "low"
 GEMINI_MAX_TOKENS = 4096
 GEMINI_DEEP_MAX_TOKENS = 8192
-GEMINI_FLASH_MODEL = "gemini-3-flash-preview"
+DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
+DEFAULT_MISTRAL_MODEL = "mistral-medium-latest"
+DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"
+DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
+DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
+DEFAULT_GROK_MODEL = "grok-4.20-non-reasoning"
+DEFAULT_MODEL_BY_PROVIDER = {
+    "openai": DEFAULT_OPENAI_MODEL,
+    "mistral": DEFAULT_MISTRAL_MODEL,
+    "anthropic": DEFAULT_ANTHROPIC_MODEL,
+    "gemini": DEFAULT_GEMINI_MODEL,
+    "deepseek": DEFAULT_DEEPSEEK_MODEL,
+    "grok": DEFAULT_GROK_MODEL,
+}
+
+GEMINI_FLASH_MODEL = DEFAULT_GEMINI_MODEL
 GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 UNSUPPORTED_GEMINI_MODELS = {
     "gemini-3.1-flash-preview",
@@ -63,6 +78,16 @@ ALLOWED_GROK_MODELS = {
     "grok-4-latest", "grok-3-latest", "grok-4-fast-reasoning-latest", "grok-4.20",
     "grok-4.20-non-reasoning", "grok-4.3",
 }
+
+def ensure_default_models_allowed():
+    ALLOWED_OPENAI_MODELS.add(DEFAULT_OPENAI_MODEL)
+    ALLOWED_MISTRAL_MODELS.add(DEFAULT_MISTRAL_MODEL)
+    ALLOWED_ANTHROPIC_MODELS.add(DEFAULT_ANTHROPIC_MODEL)
+    ALLOWED_GEMINI_MODELS.add(DEFAULT_GEMINI_MODEL)
+    ALLOWED_DEEPSEEK_MODELS.add(DEFAULT_DEEPSEEK_MODEL)
+    ALLOWED_GROK_MODELS.add(DEFAULT_GROK_MODEL)
+
+ensure_default_models_allowed()
 
 PREMIUM_MODELS = {
     "gpt-5", "gpt-5-chat-latest", "gpt-5.1", "gpt-5.2", "gpt-5.3", "gpt-5.3-chat-latest", "gpt-5.4",
@@ -121,6 +146,8 @@ def load_models_from_db():
             if "grok" in data:
                 ALLOWED_GROK_MODELS.clear()
                 ALLOWED_GROK_MODELS.update(data["grok"])
+
+            ensure_default_models_allowed()
             
             # Update Premium
             if "premium" in data:

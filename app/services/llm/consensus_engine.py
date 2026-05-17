@@ -7,7 +7,17 @@ import openai
 from mistralai import Mistral
 import google.generativeai as genai
 
-from app.core.config import CONSENSUS_MAX_TOKENS, DIFFERENCES_MAX_TOKENS, GEMINI_FLASH_MODEL, GEMINI_PRO_MODEL
+from app.core.config import (
+    CONSENSUS_MAX_TOKENS,
+    DIFFERENCES_MAX_TOKENS,
+    GEMINI_FLASH_MODEL,
+    GEMINI_PRO_MODEL,
+    DEFAULT_OPENAI_MODEL,
+    DEFAULT_MISTRAL_MODEL,
+    DEFAULT_ANTHROPIC_MODEL,
+    DEFAULT_DEEPSEEK_MODEL,
+    DEFAULT_GROK_MODEL,
+)
 
 def query_consensus(
     question: str,
@@ -79,7 +89,7 @@ def query_consensus(
         if consensus_model in ["OpenAI", "OpenAI-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
             # WICHTIG: Hier wird das Modell gewählt
-            model_to_use = "gpt-5.5" if consensus_model == "OpenAI-Pro" else "gpt-5.4-mini"
+            model_to_use = "gpt-5.5" if consensus_model == "OpenAI-Pro" else DEFAULT_OPENAI_MODEL
             
             kwargs = {
                 "model": model_to_use,
@@ -100,7 +110,7 @@ def query_consensus(
         elif consensus_model in ["Mistral", "Mistral-Pro"]:
             client = Mistral(api_key=api_keys.get("Mistral"))
             # Standard & Pro nutzen aktuell beide 'large', ansonsten hier anpassen
-            model_to_use = "mistral-large-latest" if consensus_model == "Mistral-Pro" else "mistral-small-latest" 
+            model_to_use = "mistral-large-latest" if consensus_model == "Mistral-Pro" else DEFAULT_MISTRAL_MODEL
             
             response = client.chat.complete(
                 model=model_to_use,
@@ -121,7 +131,7 @@ def query_consensus(
                 "anthropic-version": "2023-06-01"
             }
             # Haiku vs Sonnet 4.5
-            model_to_use = "claude-opus-4-7" if consensus_model == "Anthropic-Pro" else "claude-haiku-4-5"
+            model_to_use = "claude-opus-4-7" if consensus_model == "Anthropic-Pro" else DEFAULT_ANTHROPIC_MODEL
             
             payload = {
                 "model": model_to_use,
@@ -163,7 +173,7 @@ def query_consensus(
         elif consensus_model in ["DeepSeek", "DeepSeek-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("DeepSeek"), base_url="https://api.deepseek.com")
             # Chat vs Reasoner
-            model_to_use = "deepseek-v4-pro" if consensus_model == "DeepSeek-Pro" else "deepseek-v4-flash"
+            model_to_use = "deepseek-v4-pro" if consensus_model == "DeepSeek-Pro" else DEFAULT_DEEPSEEK_MODEL
             
             response = client.chat.completions.create(
                 model=model_to_use,
@@ -179,7 +189,7 @@ def query_consensus(
         elif consensus_model in ["Grok", "Grok-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
             # Fast vs Latest (Strong)
-            model_to_use = "grok-4.3" if consensus_model == "Grok-Pro" else "grok-4.20-non-reasoning"
+            model_to_use = "grok-4.3" if consensus_model == "Grok-Pro" else DEFAULT_GROK_MODEL
             
             response = client.chat.completions.create(
                 model=model_to_use,
@@ -285,7 +295,7 @@ def query_differences(
         # OPENAI
         if differences_model in ["OpenAI", "OpenAI-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
-            model_to_use = "gpt-5.5" if differences_model == "OpenAI-Pro" else "gpt-5.4-mini"
+            model_to_use = "gpt-5.5" if differences_model == "OpenAI-Pro" else DEFAULT_OPENAI_MODEL
             
             kwargs = {
                 "model": model_to_use,
@@ -306,7 +316,7 @@ def query_differences(
         elif differences_model in ["Mistral", "Mistral-Pro"]:
             client = Mistral(api_key=api_keys.get("Mistral"))
             response = client.chat.complete(
-                model="mistral-small-latest",
+                model=DEFAULT_MISTRAL_MODEL,
                 messages=[
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
@@ -323,7 +333,7 @@ def query_differences(
                 "anthropic-version": "2023-06-01"
             }
             payload = {
-                "model": "claude-haiku-4-5",
+                "model": DEFAULT_ANTHROPIC_MODEL,
                 "max_tokens": 1024,
                 "system": "Answer in the exact same language as the Model responses.",
                 "messages": [{"role": "user", "content": differences_prompt}]
@@ -369,7 +379,7 @@ def query_differences(
         elif differences_model in ["DeepSeek", "DeepSeek-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("DeepSeek"), base_url="https://api.deepseek.com")
             response = client.chat.completions.create(
-                model="deepseek-v4-flash",
+                model=DEFAULT_DEEPSEEK_MODEL,
                 messages=[
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
@@ -381,7 +391,7 @@ def query_differences(
         elif differences_model in ["Grok", "Grok-Pro"]:
             client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
             response = client.chat.completions.create(
-                model="grok-4.20-non-reasoning",
+                model=DEFAULT_GROK_MODEL,
                 messages=[
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}

@@ -12,6 +12,11 @@ from app.core.config import (
     DEEP_THINK_PROMPT,
     GEMINI_FLASH_MODEL,
     GEMINI_PRO_MODEL,
+    DEFAULT_OPENAI_MODEL,
+    DEFAULT_MISTRAL_MODEL,
+    DEFAULT_ANTHROPIC_MODEL,
+    DEFAULT_DEEPSEEK_MODEL,
+    DEFAULT_GROK_MODEL,
 )
 from app.services.llm.base import get_system_prompt
 
@@ -30,7 +35,7 @@ def query_openai(
     client = openai.OpenAI(api_key=api_key)
 
     # Modell-Entscheidung: search_mode ist entfernt – nur deep_search & override steuern
-    model_to_use = "gpt-5.5" if deep_search else (model_override or "gpt-5.4-mini")
+    model_to_use = "gpt-5.5" if deep_search else (model_override or DEFAULT_OPENAI_MODEL)
 
     print(f"[MODEL] OpenAI -> {model_to_use} | deep_search={deep_search} | override={model_override}")
 
@@ -75,7 +80,7 @@ def query_mistral(question: str, api_key: str, system_prompt: str = None, deep_s
 
     try:
         client = Mistral(api_key=api_key)
-        model = model_override if (model_override and not deep_search) else ("mistral-large-latest" if deep_search else "mistral-small-latest")
+        model = model_override if (model_override and not deep_search) else ("mistral-large-latest" if deep_search else DEFAULT_MISTRAL_MODEL)
 
         print(f"[MODEL] Mistral -> {model} | deep_search={deep_search} | override={model_override}")
 
@@ -112,7 +117,7 @@ def query_claude(question: str, api_key: str, system_prompt: str = None, deep_se
             "anthropic-version": "2023-06-01"
         }
         payload = {
-            "model": model_override if (model_override and not deep_search) else ("claude-opus-4-7" if deep_search else "claude-haiku-4-5"),
+            "model": model_override if (model_override and not deep_search) else ("claude-opus-4-7" if deep_search else DEFAULT_ANTHROPIC_MODEL),
             "max_tokens": max_tokens,
             "system": system_prompt,
             "messages": [{"role": "user", "content": question}]
@@ -222,7 +227,7 @@ def query_deepseek(question: str, api_key: str, system_prompt: str = None, deep_
 
     try:
         client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-        model_to_use = "deepseek-v4-pro" if deep_search else (model_override or "deepseek-v4-flash")
+        model_to_use = "deepseek-v4-pro" if deep_search else (model_override or DEFAULT_DEEPSEEK_MODEL)
         print(f"[MODEL] DeepSeek -> {model_to_use} | deep_search={deep_search} | override={model_override}")
         response = client.chat.completions.create(
             model=model_to_use,
@@ -250,7 +255,7 @@ def query_grok(question: str, api_key: str, system_prompt: str = None, deep_sear
 
     try:
         client = openai.OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
-        model_to_use = "grok-4.3" if deep_search else (model_override or "grok-4.20-non-reasoning")
+        model_to_use = "grok-4.3" if deep_search else (model_override or DEFAULT_GROK_MODEL)
 
         print(f"[MODEL] Grok -> {model_to_use} | deep_search={deep_search} | override={model_override}")
 
