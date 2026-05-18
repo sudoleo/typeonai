@@ -359,12 +359,16 @@ body:has(.sidebar.collapsed) .main-wrapper {
   }
 
   .top-bar {
-    padding-inline: 8px;
+    padding-inline: 12px;
   }
 
   .top-bar-right {
-    gap: 10px;
-    margin-right: 12px;
+    gap: 14px;
+    margin-right: 34px;
+  }
+
+  .top-bar .mode-switch {
+    display: none;
   }
 
   .top-bar-about,

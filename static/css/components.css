@@ -6,7 +6,7 @@
    Buttons & Inputs
    -------------------------------------------------------------------------- */
 .button,
-button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(#clearButton):not(#consensusButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button) {
+button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(#clearButton):not(#consensusButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle) {
   padding: 10px 16px;
   font-size: 1em;
   background-color: var(--button-bg);
@@ -637,6 +637,117 @@ textarea:focus {
   position: relative;
   top: auto;
   right: auto;
+  line-height: 0;
+}
+
+.theme-toggle {
+  width: 46px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  position: relative;
+  color: #64748b !important;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  border: 1.5px solid #94a3b8 !important;
+  border-radius: 999px !important;
+  box-shadow: none !important;
+  cursor: pointer;
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease, transform .12s ease;
+}
+
+.theme-toggle::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  width: 17px;
+  height: 17px;
+  background: #ffffff;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  transition: border-color .18s ease, background-color .18s ease;
+}
+
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
+  opacity: 1;
+  background: #f8fafc !important;
+  background-color: #f8fafc !important;
+  color: #475569 !important;
+  border-color: #64748b !important;
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--button-bg) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.theme-toggle:active {
+  transform: translateY(1px);
+}
+
+.theme-icon {
+  width: 12px;
+  height: 12px;
+  margin-left: 7px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.theme-icon-sun,
+.theme-toggle.is-dark .theme-icon-moon {
+  display: none;
+}
+
+.theme-toggle.is-dark {
+  color: #ffffff !important;
+  background: #111827 !important;
+  background-color: #111827 !important;
+  border-color: #111827 !important;
+}
+
+.theme-toggle.is-dark::after {
+  border-color: #ffffff;
+}
+
+.theme-toggle.is-dark .theme-icon-sun {
+  display: block;
+}
+
+.theme-toggle.is-dark:hover,
+.theme-toggle.is-dark:focus-visible {
+  background: #0f172a !important;
+  background-color: #0f172a !important;
+  border-color: #0f172a !important;
+}
+
+.settings-theme-section {
+  display: none;
+}
+
+.settings-theme-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-theme-row h3 {
+  margin: 0 0 4px;
+}
+
+.settings-theme-row p {
+  margin: 0;
+  color: var(--sidebar-text-muted);
+  font-size: 0.85rem;
+  line-height: 1.35;
 }
 
 .switch {
@@ -1770,6 +1881,53 @@ h2[data-tooltip] {
   font-size: 0.9em;
 }
 
+.source-link {
+  display: inline-flex;
+  align-items: center;
+  max-width: 140px;
+  height: 18px;
+  margin: 0 2px;
+  padding: 0 6px;
+  border: 1px solid rgba(100, 116, 139, 0.28);
+  border-radius: 4px;
+  background: rgba(100, 116, 139, 0.09);
+  color: var(--sidebar-text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  vertical-align: baseline;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: translateY(-1px);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.source-link:hover,
+.source-link:focus-visible {
+  background: rgba(100, 116, 139, 0.16);
+  border-color: rgba(100, 116, 139, 0.42);
+  color: var(--text-color);
+  opacity: 1;
+}
+
+.source-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.dark-mode .source-link {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.dark-mode .source-link:hover,
+.dark-mode .source-link:focus-visible {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
 .collapsible-content.collapsed {
   max-height: 0;
   opacity: 0;
@@ -2272,6 +2430,10 @@ option.premium-option:disabled {
 }
 
 @media (max-width: 640px) {
+  .settings-theme-section {
+    display: block;
+  }
+
   .auth-modal,
   .faq-modal {
     width: min(94vw, 420px);
@@ -2374,7 +2536,7 @@ option.premium-option:disabled {
   }
 
   #toggleAllButton {
-    right: 0;
+    right: 8px !important;
   }
 
   .pro-modal-content {

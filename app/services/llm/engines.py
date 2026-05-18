@@ -5,7 +5,8 @@ import openai
 import requests
 from typing import Optional
 from urllib.parse import quote
-import google.generativeai as genai
+import google.auth
+from google.auth.transport.requests import Request as GoogleAuthRequest
 
 from app.core.config import (
     MAX_TOKENS,
@@ -79,6 +80,38 @@ def _mistral_headers(api_key: str):
     }
 
 
+def _mistral_builtin_tools_unsupported(response: requests.Response) -> bool:
+    if response.status_code != 400:
+        return False
+    try:
+        data = response.json()
+    except ValueError:
+        return "builtin connectors" in response.text.lower()
+
+    message = str(data.get("message") or "").lower()
+    code = data.get("code")
+    return code == 3004 or "builtin connectors" in message
+
+
+def _google_adc_headers() -> dict:
+    credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/generative-language"])
+    credentials.refresh(GoogleAuthRequest())
+    return {
+        "Authorization": f"Bearer {credentials.token}",
+        "Content-Type": "application/json",
+    }
+
+
+def _gemini_search_tool_unsupported(error_text: str) -> bool:
+    text = (error_text or "").lower()
+    return (
+        "google_search_retrieval is not supported" in text
+        or "google_search is not supported" in text
+        or "search grounding" in text
+        or "google_search tool" in text and "not supported" in text
+    )
+
+
 def query_openai(
     question: str,
     api_key: str,
@@ -126,22 +159,31 @@ def query_mistral(question: str, api_key: str, system_prompt: str = None, deep_s
 
         print(f"[MODEL] Mistral -> {model} | deep_search={deep_search} | override={model_override}")
 
+        payload = {
+            "model": model,
+            "instructions": system_prompt,
+            "inputs": question,
+            "tools": [{"type": "web_search"}],
+            "completion_args": {
+                "max_tokens": max_tokens,
+                "temperature": 0.2,
+            },
+            "store": False,
+        }
         response = requests.post(
             "https://api.mistral.ai/v1/conversations",
-            json={
-                "model": model,
-                "instructions": system_prompt,
-                "inputs": question,
-                "tools": [{"type": "web_search"}],
-                "completion_args": {
-                    "max_tokens": max_tokens,
-                    "temperature": 0.2,
-                },
-                "store": False,
-            },
+            json=payload,
             headers=_mistral_headers(api_key),
             timeout=120,
         )
+        if _mistral_builtin_tools_unsupported(response):
+            payload.pop("tools", None)
+            response = requests.post(
+                "https://api.mistral.ai/v1/conversations",
+                json=payload,
+                headers=_mistral_headers(api_key),
+                timeout=120,
+            )
         if response.status_code >= 400:
             raise RuntimeError(f"{response.status_code} - {response.text}")
         data = response.json()
@@ -229,51 +271,46 @@ def query_gemini(
     base_content = "Do not ask any questions.\n---\n" + question
 
     try:
+        payload = {
+            "systemInstruction": {"parts": [{"text": system_prompt}]},
+            "contents": [{"role": "user", "parts": [{"text": base_content}]}],
+            "tools": [{"google_search": {}}],
+            "generationConfig": {
+                "maxOutputTokens": eff_max,
+                "temperature": 0.2,
+            },
+            "safetySettings": [{
+                "category": "HARM_CATEGORY_HARASSMENT",
+                "threshold": "BLOCK_ONLY_HIGH",
+            }],
+        }
+        request_kwargs = {
+            "json": payload,
+            "timeout": 120,
+        }
         if api_key:
-            payload = {
-                "systemInstruction": {"parts": [{"text": system_prompt}]},
-                "contents": [{"role": "user", "parts": [{"text": base_content}]}],
-                "tools": [{"google_search": {}}],
-                "generationConfig": {
-                    "maxOutputTokens": eff_max,
-                    "temperature": 0.2,
-                },
-                "safetySettings": [{
-                    "category": "HARM_CATEGORY_HARASSMENT",
-                    "threshold": "BLOCK_ONLY_HIGH",
-                }],
-            }
+            request_kwargs["params"] = {"key": api_key}
+        else:
+            request_kwargs["headers"] = _google_adc_headers()
+
+        response = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{quote(model_name, safe='')}:generateContent",
+            **request_kwargs,
+        )
+        if response.status_code >= 400 and _gemini_search_tool_unsupported(response.text):
+            payload.pop("tools", None)
             response = requests.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{quote(model_name, safe='')}:generateContent",
-                params={"key": api_key},
-                json=payload,
-                timeout=120,
+                **request_kwargs,
             )
-            if response.status_code >= 400:
-                raise RuntimeError(f"{response.status_code} - {response.text}")
-            data = response.json()
-            parsed = parse_gemini_response(data)
-            if result_text(parsed):
-                return parsed
-            cand = (data.get("candidates") or [{}])[0]
-            fr = cand.get("finishReason")
-        else:
-            genai.configure()
-            model = genai.GenerativeModel(
-                model_name=model_name,
-                system_instruction=system_prompt,
-                safety_settings=[{"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"}],
-                tools="google_search_retrieval",
-            )
-            resp = model.generate_content(
-                base_content,
-                generation_config={"max_output_tokens": eff_max, "temperature": 0.2},
-            )
-            txt = (getattr(resp, "text", None) or "").strip()
-            if txt:
-                return parse_gemini_response(resp, fallback_text=txt)
-            cand = (getattr(resp, "candidates", []) or [None])[0]
-            fr = getattr(cand, "finish_reason", None)
+        if response.status_code >= 400:
+            raise RuntimeError(f"{response.status_code} - {response.text}")
+        data = response.json()
+        parsed = parse_gemini_response(data)
+        if result_text(parsed):
+            return parsed
+        cand = (data.get("candidates") or [{}])[0]
+        fr = cand.get("finishReason")
 
         frs = str(fr)
         if frs in ("2", "MAX_TOKENS", "FinishReason.MAX_TOKENS"):

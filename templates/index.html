@@ -17,7 +17,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260517-ui1">
+  <link rel="stylesheet" href="/static/style.css?v=20260518-theme-mobile5">
   <link rel="icon" href="/static/favicon.png" type="image/x-icon">
   <!-- Füge dies im <head> hinzu -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -64,10 +64,15 @@
       <a href="/about" class="top-bar-about">About us</a>
       <!-- Dark/Light Toggle -->
       <div class="mode-switch">
-        <label class="switch">
-          <input type="checkbox" id="modeToggle">
-          <span class="slider"></span>
-        </label>
+        <button type="button" id="modeToggle" class="theme-toggle" aria-label="Switch to dark mode" title="Switch to dark mode">
+          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M21 14.4A7.6 7.6 0 0 1 9.6 3a8.5 8.5 0 1 0 11.4 11.4Z" />
+          </svg>
+          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="4.2" />
+            <path d="M12 2.8v2.1M12 19.1v2.1M4.2 4.2l1.5 1.5M18.3 18.3l1.5 1.5M2.8 12h2.1M19.1 12h2.1M4.2 19.8l1.5-1.5M18.3 5.7l1.5-1.5" />
+          </svg>
+        </button>
       </div>
     </div>
   </header>
@@ -414,15 +419,22 @@
 
         // Auslesen des aktuellen Zustands (true, wenn aktiviert, sonst false):
         const deepSearchActive = deepSearchToggle.checked;
+        const modeToggles = Array.from(document.querySelectorAll(".theme-toggle"));
 
         function applyTheme(theme) {
+          const isDark = theme === "dark";
           if (theme === "dark") {
             document.body.classList.add("dark-mode");
-            modeToggle.checked = true;
           } else {
             document.body.classList.remove("dark-mode");
-            modeToggle.checked = false;
           }
+
+          modeToggles.forEach(toggle => {
+            toggle.classList.toggle("is-dark", isDark);
+            toggle.setAttribute("aria-pressed", String(isDark));
+            toggle.setAttribute("aria-label", isDark ? "Switch to light mode" : "Switch to dark mode");
+            toggle.title = isDark ? "Switch to light mode" : "Switch to dark mode";
+          });
         }
 
         function setSpinner(boxId) {
@@ -451,27 +463,104 @@
 
         window.injectMarkdown = injectMarkdown;
 
+        function getSourceSiteName(src) {
+          const rawUrl = src && src.url ? String(src.url) : "";
+          if (!rawUrl && !(src && src.title)) return "";
+          try {
+            const url = new URL(rawUrl);
+            const hostParts = url.hostname
+              .toLowerCase()
+              .replace(/^(www|m|amp)\./, "")
+              .split(".");
+            const sldSuffixes = new Set(["co", "com", "org", "net", "ac", "gov"]);
+            const nameIndex = hostParts.length >= 3 && sldSuffixes.has(hostParts[hostParts.length - 2])
+              ? hostParts.length - 3
+              : hostParts.length - 2;
+            return hostParts[Math.max(0, nameIndex)] || rawUrl;
+          } catch (e) {
+            return (src && (src.title || src.url)) ? String(src.title || src.url) : "source";
+          }
+        }
+
+        function getSafeSourceHref(src) {
+          if (!src || !src.url) return "";
+          try {
+            const url = new URL(String(src.url));
+            return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+          } catch (e) {
+            return "";
+          }
+        }
+
+        function createSourceChip(src, fallbackLabel) {
+          const href = getSafeSourceHref(src);
+          const el = href ? document.createElement("a") : document.createElement("span");
+          el.className = "source-link";
+          el.textContent = getSourceSiteName(src) || fallbackLabel;
+          el.title = (src && (src.title || src.url)) ? String(src.title || src.url) : fallbackLabel;
+          el.setAttribute("aria-label", `Source: ${el.title}`);
+
+          if (href) {
+            el.href = href;
+            el.target = "_blank";
+            el.rel = "noopener noreferrer";
+          }
+
+          return el;
+        }
+
         function linkifySourceTags(containerEl, sources) {
-          if (!sources || !sources.length) return;
-          let html = containerEl.innerHTML;
-          const regex = /\[((?:S?\d+)(?:,\s*S?\d+)*)\]/g;
+          if (!containerEl || !sources || !sources.length) return;
 
-          html = html.replace(regex, (match, innerContent) => {
-            const parts = innerContent.split(',');
-
-            const linkedParts = parts.map(part => {
-              const trimmedPart = part.trim();
-              const idNum = parseInt(trimmedPart.replace(/^S/i, ""), 10);
-              const index = idNum - 1;
-              const src = sources[index];
-              if (src && src.url) {
-                return `<a href="${src.url}" target="_blank" rel="noopener noreferrer" class="source-link">${trimmedPart}</a>`;
+          const ignoredParents = new Set(["A", "CODE", "PRE", "SCRIPT", "STYLE", "TEXTAREA"]);
+          const sourceTagRegex = /\[((?:S?\d+)(?:,\s*S?\d+)*)\]/g;
+          const walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, {
+            acceptNode(node) {
+              if (!sourceTagRegex.test(node.nodeValue || "")) {
+                sourceTagRegex.lastIndex = 0;
+                return NodeFilter.FILTER_REJECT;
               }
-              return trimmedPart;
-            });
-            return `[${linkedParts.join(', ')}]`;
+              sourceTagRegex.lastIndex = 0;
+              let parent = node.parentElement;
+              while (parent && parent !== containerEl) {
+                if (ignoredParents.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
+                parent = parent.parentElement;
+              }
+              return NodeFilter.FILTER_ACCEPT;
+            }
           });
-          containerEl.innerHTML = html;
+
+          const textNodes = [];
+          while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+          textNodes.forEach(node => {
+            const text = node.nodeValue || "";
+            const fragment = document.createDocumentFragment();
+            let lastIndex = 0;
+
+            text.replace(sourceTagRegex, (match, innerContent, offset) => {
+              if (offset > lastIndex) {
+                fragment.appendChild(document.createTextNode(text.slice(lastIndex, offset)));
+              }
+
+              innerContent.split(",").forEach((part, idx) => {
+                if (idx > 0) fragment.appendChild(document.createTextNode(" "));
+                const token = part.trim();
+                const idNum = parseInt(token.replace(/^S/i, ""), 10);
+                const src = sources[idNum - 1];
+                fragment.appendChild(createSourceChip(src, token));
+              });
+
+              lastIndex = offset + match.length;
+              return match;
+            });
+
+            if (lastIndex < text.length) {
+              fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+            }
+
+            node.parentNode.replaceChild(fragment, node);
+          });
         }
         window.linkifySourceTags = linkifySourceTags;
 
@@ -551,10 +640,12 @@
         applyTheme(storedTheme);
 
         // Schalte den Dark Mode um und speichere die Auswahl:
-        modeToggle.addEventListener("change", function () {
-          const newTheme = this.checked ? "dark" : "light";
-          localStorage.setItem("theme", newTheme);
-          applyTheme(newTheme);
+        modeToggles.forEach(toggle => {
+          toggle.addEventListener("click", function () {
+            const newTheme = document.body.classList.contains("dark-mode") ? "light" : "dark";
+            localStorage.setItem("theme", newTheme);
+            applyTheme(newTheme);
+          });
         });
 
         // --- Speichern des Auto Consensus Zustands ---
@@ -1290,6 +1381,37 @@
           { key: "Grok", checkId: "selectGrok", selectId: "grokModelSelect", responseId: "grokResponse", textId: "grokModelText" }
         ];
 
+        function getModelPrefByResponseId(responseId) {
+          return modelPrefs.find(pref => pref.responseId === responseId) || null;
+        }
+
+        function setModelSelectionState(prefOrResponseId, isChecked, options = {}) {
+          const pref = typeof prefOrResponseId === "string"
+            ? getModelPrefByResponseId(prefOrResponseId)
+            : prefOrResponseId;
+          if (!pref) return;
+
+          const checked = !!isChecked;
+          const checkbox = document.getElementById(pref.checkId);
+          const box = document.getElementById(pref.responseId);
+          const { persist = false, syncCheckbox = true } = options;
+
+          if (checkbox && syncCheckbox) {
+            checkbox.checked = checked;
+          }
+
+          if (box) {
+            box.classList.toggle("excluded", !checked);
+            if (!checked) {
+              box.classList.remove("best");
+            }
+          }
+
+          if (persist) {
+            localStorage.setItem("pref_check_" + pref.key, String(checked));
+          }
+        }
+
         window.restoreModelSelections = function () {
           // 1. Bestehende Logik für die Chat-Boxen (OpenAI, Mistral etc.)
           modelPrefs.forEach(pref => {
@@ -1299,12 +1421,9 @@
 
             // Checkboxen wiederherstellen
             const savedCheck = localStorage.getItem("pref_check_" + pref.key);
-            if (savedCheck !== null && checkbox) {
-              const isChecked = (savedCheck === "true");
-              if (checkbox.checked !== isChecked) {
-                checkbox.checked = isChecked;
-                if (window.toggleModel) window.toggleModel(pref.responseId, isChecked);
-              }
+            if (checkbox) {
+              const isChecked = savedCheck === null ? checkbox.checked : savedCheck === "true";
+              setModelSelectionState(pref, isChecked, { persist: false, syncCheckbox: true });
             }
 
             // Dropdowns wiederherstellen
@@ -1334,6 +1453,10 @@
         // 1. Initialer Aufruf beim Laden der Seite
         window.restoreModelSelections();
 
+        window.addEventListener("pageshow", function () {
+          window.restoreModelSelections();
+        });
+
         // 2. Event Listener zum Speichern hinzufügen (bleibt gleich)
         modelPrefs.forEach(pref => {
           const checkbox = document.getElementById(pref.checkId);
@@ -1342,7 +1465,7 @@
 
           if (checkbox) {
             checkbox.addEventListener("change", function () {
-              localStorage.setItem("pref_check_" + pref.key, this.checked);
+              setModelSelectionState(pref, this.checked, { persist: true, syncCheckbox: false });
             });
           }
 
@@ -2265,12 +2388,7 @@
 
         // Modelle (Checkboxen) ein-/ausschalten
         window.toggleModel = function (responseId, isChecked) {
-          const box = document.getElementById(responseId);
-          if (!isChecked) {
-            box.classList.add("excluded");
-          } else {
-            box.classList.remove("excluded");
-          }
+          setModelSelectionState(responseId, isChecked, { persist: true, syncCheckbox: true });
         };
         document.getElementById("selectOpenAI").addEventListener("change", function () {
           toggleModel("openaiResponse", this.checked);
@@ -3486,6 +3604,30 @@
         </div>
 
         <div class="settings-body">
+
+          <div class="settings-section settings-theme-section">
+            <div class="settings-theme-row">
+              <div>
+                <h3>Appearance</h3>
+                <p>Switch between light and dark mode.</p>
+              </div>
+              <div class="mode-switch settings-mode-switch">
+                <button type="button" id="mobileModeToggle" class="theme-toggle" aria-label="Switch to dark mode"
+                  title="Switch to dark mode">
+                  <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M21 14.4A7.6 7.6 0 0 1 9.6 3a8.5 8.5 0 1 0 11.4 11.4Z" />
+                  </svg>
+                  <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="12" r="4.2" />
+                    <path
+                      d="M12 2.8v2.1M12 19.1v2.1M4.2 4.2l1.5 1.5M18.3 18.3l1.5 1.5M2.8 12h2.1M19.1 12h2.1M4.2 19.8l1.5-1.5M18.3 5.7l1.5-1.5" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <hr class="settings-divider settings-theme-section">
 
           <div class="settings-section">
             <label for="useOwnKeysSwitch" class="custom-checkbox-label"
