@@ -6,7 +6,7 @@
    Buttons & Inputs
    -------------------------------------------------------------------------- */
 .button,
-button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(#clearButton):not(#consensusButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle) {
+button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(#clearButton):not(#consensusButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle) {
   padding: 10px 16px;
   font-size: 1em;
   background-color: var(--button-bg);
@@ -2216,6 +2216,10 @@ header .sidebar-toggle.collapse-btn {
   transform: translateY(0.5px);
 }
 
+.model-picker-wrapper.is-expanded {
+  z-index: 30;
+}
+
 .model-picker-wrapper select {
   position: absolute;
   inset: 0;
@@ -2235,10 +2239,41 @@ header .sidebar-toggle.collapse-btn {
   outline: none;
 }
 
+.model-picker-wrapper select.model-picker-expanded {
+  inset: auto auto auto 0;
+  top: calc(100% + 6px);
+  width: 260px;
+  max-width: min(260px, 82vw);
+  height: auto;
+  min-height: 0;
+  padding: 6px;
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  background: var(--container-bg);
+  color: var(--text-color);
+  box-shadow: var(--box-shadow);
+  appearance: auto;
+  cursor: default;
+}
+
 .model-picker-wrapper select option {
   color: var(--text-color);
   background: var(--container-bg);
   padding: 6px 10px;
+}
+
+.model-name-trigger {
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color .15s ease, background-color .15s ease, box-shadow .15s ease;
+}
+
+.model-name-trigger:hover,
+.model-name-trigger:focus-visible {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+  outline: none;
 }
 
 option.premium-option {

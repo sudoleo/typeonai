@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter, Request, Body, HTTPException
 
 from app.core.security import extract_id_token, verify_user_token, is_user_admin, db_firestore
-from app.core.config import load_models_from_db
+from app.core.config import apply_limits, get_limits_config, load_models_from_db
 
 router = APIRouter()
 
@@ -26,7 +26,10 @@ def get_models(request: Request):
         doc_ref = db_firestore.collection("app_config").document("models")
         doc = doc_ref.get()
         if doc.exists:
-            return doc.to_dict()
+            data = doc.to_dict()
+            apply_limits(data.get("limits"))
+            data["limits"] = get_limits_config()
+            return data
         else:
             from app.core.config import ALLOWED_OPENAI_MODELS, ALLOWED_MISTRAL_MODELS, ALLOWED_ANTHROPIC_MODELS, ALLOWED_GEMINI_MODELS, ALLOWED_DEEPSEEK_MODELS, ALLOWED_GROK_MODELS, PREMIUM_MODELS
             return {
@@ -36,7 +39,8 @@ def get_models(request: Request):
                 "gemini": list(ALLOWED_GEMINI_MODELS),
                 "deepseek": list(ALLOWED_DEEPSEEK_MODELS),
                 "grok": list(ALLOWED_GROK_MODELS),
-                "premium": list(PREMIUM_MODELS)
+                "premium": list(PREMIUM_MODELS),
+                "limits": get_limits_config()
             }
     except Exception as e:
         logging.error(f"Error fetching models: {e}")
@@ -63,6 +67,7 @@ def update_models(request: Request, data: dict = Body(...)):
             raise HTTPException(status_code=400, detail=f"Missing or invalid format for {k}. Must be a list of strings.")
             
     try:
+        apply_limits(data.get("limits"))
         doc_ref = db_firestore.collection("app_config").document("models")
         doc_ref.set({
             "openai": data["openai"],
@@ -71,13 +76,14 @@ def update_models(request: Request, data: dict = Body(...)):
             "gemini": data["gemini"],
             "deepseek": data["deepseek"],
             "grok": data["grok"],
-            "premium": data["premium"]
+            "premium": data["premium"],
+            "limits": get_limits_config()
         })
         
         # Refresh the cache in config.py
         load_models_from_db()
         
-        return {"status": "success", "message": "Models updated successfully."}
+        return {"status": "success", "message": "Configuration updated successfully."}
     except Exception as e:
         logging.error(f"Error updating models: {e}")
         raise HTTPException(status_code=500, detail="Failed to update models")

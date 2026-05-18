@@ -3,16 +3,35 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-FREE_USAGE_LIMIT = 25
-MAX_WORDS = 500
-DEEP_SEARCH_MAX_WORDS = 1000
-MAX_TOKENS = 4096
-DEEP_SEARCH_MAX_TOKENS = 8192
-CONSENSUS_MAX_TOKENS = 8192
-DIFFERENCES_MAX_TOKENS = 4096
+DEFAULT_LIMITS = {
+    "free_usage_limit": 25,
+    "pro_usage_limit": 500,
+    "free_deep_search_limit": 0,
+    "pro_deep_search_limit": 50,
+    "free_max_words": 500,
+    "pro_max_words": 500,
+    "free_deep_search_max_words": 0,
+    "pro_deep_search_max_words": 1000,
+    "free_max_tokens": 4096,
+    "pro_max_tokens": 4096,
+    "free_deep_search_max_tokens": 0,
+    "pro_deep_search_max_tokens": 8192,
+    "consensus_max_tokens": 8192,
+    "differences_max_tokens": 4096,
+}
+
+LIMITS = DEFAULT_LIMITS.copy()
+
+FREE_USAGE_LIMIT = LIMITS["free_usage_limit"]
+MAX_WORDS = LIMITS["free_max_words"]
+DEEP_SEARCH_MAX_WORDS = LIMITS["pro_deep_search_max_words"]
+MAX_TOKENS = LIMITS["pro_max_tokens"]
+DEEP_SEARCH_MAX_TOKENS = LIMITS["pro_deep_search_max_tokens"]
+CONSENSUS_MAX_TOKENS = LIMITS["consensus_max_tokens"]
+DIFFERENCES_MAX_TOKENS = LIMITS["differences_max_tokens"]
 REASONING_EFFORT_FOR_DEEP = "low"
-GEMINI_MAX_TOKENS = 4096
-GEMINI_DEEP_MAX_TOKENS = 8192
+GEMINI_MAX_TOKENS = MAX_TOKENS
+GEMINI_DEEP_MAX_TOKENS = DEEP_SEARCH_MAX_TOKENS
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 DEFAULT_MISTRAL_MODEL = "mistral-medium-latest"
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"
@@ -35,8 +54,8 @@ UNSUPPORTED_GEMINI_MODELS = {
     "gemini-3-pro-preview",
 }
 
-PRO_USAGE_LIMIT = 500
-PRO_DEEP_SEARCH_LIMIT = 50
+PRO_USAGE_LIMIT = LIMITS["pro_usage_limit"]
+PRO_DEEP_SEARCH_LIMIT = LIMITS["pro_deep_search_limit"]
 
 VALID_LEADERBOARD_MODELS = {
     "OpenAI", "Mistral", "Claude", "Gemini", "DeepSeek", "Grok",
@@ -105,6 +124,75 @@ ALL_ALLOWED_MODELS = (
     ALLOWED_GEMINI_MODELS | ALLOWED_DEEPSEEK_MODELS | ALLOWED_GROK_MODELS
 )
 
+
+def _coerce_limit(value, fallback: int) -> int:
+    if isinstance(value, bool):
+        return fallback
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return parsed if parsed >= 0 else fallback
+
+
+def _sync_limit_constants():
+    global FREE_USAGE_LIMIT, PRO_USAGE_LIMIT, PRO_DEEP_SEARCH_LIMIT
+    global MAX_WORDS, DEEP_SEARCH_MAX_WORDS, MAX_TOKENS, DEEP_SEARCH_MAX_TOKENS
+    global CONSENSUS_MAX_TOKENS, DIFFERENCES_MAX_TOKENS
+    global GEMINI_MAX_TOKENS, GEMINI_DEEP_MAX_TOKENS
+
+    FREE_USAGE_LIMIT = LIMITS["free_usage_limit"]
+    PRO_USAGE_LIMIT = LIMITS["pro_usage_limit"]
+    PRO_DEEP_SEARCH_LIMIT = LIMITS["pro_deep_search_limit"]
+    MAX_WORDS = LIMITS["free_max_words"]
+    DEEP_SEARCH_MAX_WORDS = LIMITS["pro_deep_search_max_words"]
+    MAX_TOKENS = LIMITS["pro_max_tokens"]
+    DEEP_SEARCH_MAX_TOKENS = LIMITS["pro_deep_search_max_tokens"]
+    CONSENSUS_MAX_TOKENS = LIMITS["consensus_max_tokens"]
+    DIFFERENCES_MAX_TOKENS = LIMITS["differences_max_tokens"]
+    GEMINI_MAX_TOKENS = MAX_TOKENS
+    GEMINI_DEEP_MAX_TOKENS = DEEP_SEARCH_MAX_TOKENS
+
+
+def apply_limits(limits_data=None):
+    incoming = limits_data if isinstance(limits_data, dict) else {}
+    normalized = {}
+    for key, fallback in DEFAULT_LIMITS.items():
+        normalized[key] = _coerce_limit(incoming.get(key, fallback), fallback)
+
+    LIMITS.clear()
+    LIMITS.update(normalized)
+    _sync_limit_constants()
+
+
+def get_limits_config() -> dict:
+    return dict(LIMITS)
+
+
+def get_usage_limit(is_pro: bool) -> int:
+    return LIMITS["pro_usage_limit"] if is_pro else LIMITS["free_usage_limit"]
+
+
+def get_deep_search_limit(is_pro: bool) -> int:
+    return LIMITS["pro_deep_search_limit"] if is_pro else LIMITS["free_deep_search_limit"]
+
+
+def get_word_limit(is_pro: bool, deep_search: bool = False) -> int:
+    if deep_search:
+        key = "pro_deep_search_max_words" if is_pro else "free_deep_search_max_words"
+    else:
+        key = "pro_max_words" if is_pro else "free_max_words"
+    return LIMITS[key]
+
+
+def get_output_token_limit(is_pro: bool, deep_search: bool = False) -> int:
+    if deep_search:
+        key = "pro_deep_search_max_tokens" if is_pro else "free_deep_search_max_tokens"
+    else:
+        key = "pro_max_tokens" if is_pro else "free_max_tokens"
+    return LIMITS[key]
+
+
 def load_models_from_db():
     import logging
     from app.core.security import db_firestore
@@ -154,6 +242,8 @@ def load_models_from_db():
                 PREMIUM_MODELS.update(data["premium"])
                 PREMIUM_MODELS.difference_update(UNSUPPORTED_GEMINI_MODELS)
                 PREMIUM_MODELS.add(GEMINI_PRO_MODEL)
+
+            apply_limits(data.get("limits"))
             
             # Update ALL_ALLOWED_MODELS
             global ALL_ALLOWED_MODELS
@@ -171,7 +261,8 @@ def load_models_from_db():
                 "gemini": list(ALLOWED_GEMINI_MODELS),
                 "deepseek": list(ALLOWED_DEEPSEEK_MODELS),
                 "grok": list(ALLOWED_GROK_MODELS),
-                "premium": list(PREMIUM_MODELS)
+                "premium": list(PREMIUM_MODELS),
+                "limits": get_limits_config()
             })
             logging.info("Created default models configuration in Firestore.")
     except Exception as e:

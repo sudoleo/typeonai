@@ -7,9 +7,8 @@ import openai
 from mistralai import Mistral
 import google.generativeai as genai
 
+import app.core.config as cfg
 from app.core.config import (
-    CONSENSUS_MAX_TOKENS,
-    DIFFERENCES_MAX_TOKENS,
     GEMINI_FLASH_MODEL,
     GEMINI_PRO_MODEL,
     DEFAULT_OPENAI_MODEL,
@@ -93,9 +92,9 @@ def query_consensus(
                 ]
             }
             if "gpt-5" in model_to_use or "o" in model_to_use:
-                kwargs["max_completion_tokens"] = CONSENSUS_MAX_TOKENS
+                kwargs["max_completion_tokens"] = cfg.CONSENSUS_MAX_TOKENS
             else:
-                kwargs["max_tokens"] = CONSENSUS_MAX_TOKENS
+                kwargs["max_tokens"] = cfg.CONSENSUS_MAX_TOKENS
                 
             response = client.chat.completions.create(**kwargs)
             return response.choices[0].message.content.strip()
@@ -112,7 +111,7 @@ def query_consensus(
                     {"role": "system", "content": ""},
                     {"role": "user", "content": consensus_prompt}
                 ],
-                max_tokens=CONSENSUS_MAX_TOKENS
+                max_tokens=cfg.CONSENSUS_MAX_TOKENS
             )
             return response.choices[0].message.content.strip()
 
@@ -129,7 +128,7 @@ def query_consensus(
             
             payload = {
                 "model": model_to_use,
-                "max_tokens": 2048,
+                "max_tokens": cfg.CONSENSUS_MAX_TOKENS,
                 "system": "",
                 "messages": [{"role": "user", "content": consensus_prompt}]
             }
@@ -155,7 +154,7 @@ def query_consensus(
             model_name = GEMINI_PRO_MODEL if consensus_model == "Gemini-Pro" else GEMINI_FLASH_MODEL
             
             model = genai.GenerativeModel(model_name)
-            generation_config = {"max_output_tokens": int(CONSENSUS_MAX_TOKENS)}
+            generation_config = {"max_output_tokens": int(cfg.CONSENSUS_MAX_TOKENS)}
 
             response = model.generate_content(
                 consensus_prompt,
@@ -175,7 +174,7 @@ def query_consensus(
                     {"role": "system", "content": " "},
                     {"role": "user", "content": consensus_prompt}
                 ],
-                max_tokens=CONSENSUS_MAX_TOKENS
+                max_tokens=cfg.CONSENSUS_MAX_TOKENS
             )
             return response.choices[0].message.content.strip()
 
@@ -191,7 +190,7 @@ def query_consensus(
                     {"role": "system", "content": " "},
                     {"role": "user", "content": consensus_prompt}
                 ],
-                max_tokens=CONSENSUS_MAX_TOKENS
+                max_tokens=cfg.CONSENSUS_MAX_TOKENS
             )
             return response.choices[0].message.content.strip()
 
@@ -298,9 +297,9 @@ def query_differences(
                 ]
             }
             if "gpt-5" in model_to_use or "o" in model_to_use:
-                kwargs["max_completion_tokens"] = DIFFERENCES_MAX_TOKENS
+                kwargs["max_completion_tokens"] = cfg.DIFFERENCES_MAX_TOKENS
             else:
-                kwargs["max_tokens"] = DIFFERENCES_MAX_TOKENS
+                kwargs["max_tokens"] = cfg.DIFFERENCES_MAX_TOKENS
                 
             response = client.chat.completions.create(**kwargs)
             result = response.choices[0].message.content.strip()
@@ -314,7 +313,7 @@ def query_differences(
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
                 ],
-                max_tokens=DIFFERENCES_MAX_TOKENS
+                max_tokens=cfg.DIFFERENCES_MAX_TOKENS
             )
             result = response.choices[0].message.content.strip()
 
@@ -327,7 +326,7 @@ def query_differences(
             }
             payload = {
                 "model": DEFAULT_ANTHROPIC_MODEL,
-                "max_tokens": 1024,
+                "max_tokens": cfg.DIFFERENCES_MAX_TOKENS,
                 "system": "Answer in the exact same language as the Model responses.",
                 "messages": [{"role": "user", "content": differences_prompt}]
             }
@@ -351,7 +350,7 @@ def query_differences(
                     model_name=GEMINI_FLASH_MODEL,
                     system_instruction="Answer in the exact same language as the Model responses.",
                     safety_settings=[{"category":"HARM_CATEGORY_HARASSMENT","threshold":"BLOCK_ONLY_HIGH"}],
-                    generation_config={"max_output_tokens": int(DIFFERENCES_MAX_TOKENS), "temperature": 0.2}
+                    generation_config={"max_output_tokens": int(cfg.DIFFERENCES_MAX_TOKENS), "temperature": 0.2}
                 )
 
                 resp = model.generate_content(differences_prompt)
@@ -377,7 +376,7 @@ def query_differences(
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
                 ],
-                max_tokens=DIFFERENCES_MAX_TOKENS
+                max_tokens=cfg.DIFFERENCES_MAX_TOKENS
             )
             result = response.choices[0].message.content.strip()
 
@@ -389,7 +388,7 @@ def query_differences(
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
                 ],
-                max_tokens=DIFFERENCES_MAX_TOKENS
+                max_tokens=cfg.DIFFERENCES_MAX_TOKENS
             )
             result = response.choices[0].message.content.strip()
 

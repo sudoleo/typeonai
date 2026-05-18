@@ -3,7 +3,7 @@ from firebase_admin import auth, firestore
 from fastapi import APIRouter, Request, Body, HTTPException
 
 from app.core.rate_limit import limiter
-from app.core.config import FREE_USAGE_LIMIT, PRO_USAGE_LIMIT, PRO_DEEP_SEARCH_LIMIT
+import app.core.config as cfg
 from app.core.security import verify_user_token, is_user_pro, db_firestore
 from app.core.state import usage_counter, deep_search_usage
 
@@ -30,8 +30,8 @@ async def get_user_status(request: Request):
         pro_status = is_user_pro(uid)
 
         # 3. Limits basierend auf Status setzen
-        limit_regular = PRO_USAGE_LIMIT if pro_status else FREE_USAGE_LIMIT
-        limit_deep = PRO_DEEP_SEARCH_LIMIT if pro_status else 0  # Free User haben 0 Deep Search
+        limit_regular = cfg.get_usage_limit(pro_status)
+        limit_deep = cfg.get_deep_search_limit(pro_status)
 
         return {
             "uid": uid,
@@ -63,8 +63,8 @@ async def get_usage_post(request: Request):
     pro_status = is_user_pro(uid)
 
     # 2. Limits festlegen
-    limit_regular = PRO_USAGE_LIMIT if pro_status else FREE_USAGE_LIMIT
-    limit_deep = PRO_DEEP_SEARCH_LIMIT if pro_status else 0
+    limit_regular = cfg.get_usage_limit(pro_status)
+    limit_deep = cfg.get_deep_search_limit(pro_status)
 
     # 3. Verbrauch abrufen
     current_usage = usage_counter.get(uid, 0)

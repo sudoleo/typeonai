@@ -13,7 +13,7 @@ from app.core.rate_limit import limiter
 from app.core.security import verify_user_token, is_valid_session, extract_id_token, db_firestore
 from firebase_admin import firestore
 from app.core.state import last_feedback_time
-from app.core.config import FREE_USAGE_LIMIT, VALID_LEADERBOARD_MODELS, DEFAULT_MODEL_BY_PROVIDER
+import app.core.config as cfg
 
 # To be supplied by main.py dependency injection or imported 
 # We'll import templates from main or setup a generic one here.
@@ -65,9 +65,10 @@ async def read_root(request: Request):
 
     return templates.TemplateResponse("index.html", {
         "request": request, 
-        "free_limit": FREE_USAGE_LIMIT, 
+        "free_limit": cfg.get_usage_limit(False),
+        "limits": cfg.get_limits_config(),
         "models": models,
-        "default_models": DEFAULT_MODEL_BY_PROVIDER,
+        "default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
         **firebase_config
     })
 
@@ -139,7 +140,7 @@ async def record_vote(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=400, detail="Missing required fields: id_token, model or vote_type.")
     if vote_type not in ALLOWED_VOTE_TYPES:
         raise HTTPException(status_code=400, detail="Invalid vote type provided.")
-    if model not in VALID_LEADERBOARD_MODELS:
+    if model not in cfg.VALID_LEADERBOARD_MODELS:
          logging.warning(f"Invalid vote attempt for model '{model}'")
          raise HTTPException(status_code=400, detail="Invalid model name.")
 
@@ -178,7 +179,7 @@ async def check_keys(request: Request, data: dict = Body(...)):
             if openai_key and len(openai_key) > 10:
                 client = openai.OpenAI(api_key=openai_key)
                 response = client.chat.completions.create(
-                    model=DEFAULT_MODEL_BY_PROVIDER["openai"],
+                    model=cfg.DEFAULT_MODEL_BY_PROVIDER["openai"],
                     messages=[
                         {"role": "system", "content": "ping"},
                         {"role": "user", "content": "ping"}
@@ -196,7 +197,7 @@ async def check_keys(request: Request, data: dict = Body(...)):
             if mistral_key and len(mistral_key) > 10:
                 client = Mistral(api_key=mistral_key)
                 response = client.chat.complete(
-                    model=DEFAULT_MODEL_BY_PROVIDER["mistral"],
+                    model=cfg.DEFAULT_MODEL_BY_PROVIDER["mistral"],
                     messages=[{"role": "user", "content": "ping"}],
                     max_tokens=5
                 )
@@ -216,7 +217,7 @@ async def check_keys(request: Request, data: dict = Body(...)):
                     "anthropic-version": "2023-06-01"
                 }
                 payload = {
-                    "model": DEFAULT_MODEL_BY_PROVIDER["anthropic"],
+                    "model": cfg.DEFAULT_MODEL_BY_PROVIDER["anthropic"],
                     "max_tokens": 5,
                     "messages": [{"role": "user", "content": "ping"}]
                 }
@@ -234,7 +235,7 @@ async def check_keys(request: Request, data: dict = Body(...)):
         try:
             if gemini_key and len(gemini_key) > 10:
                 genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel(DEFAULT_MODEL_BY_PROVIDER["gemini"])
+                model = genai.GenerativeModel(cfg.DEFAULT_MODEL_BY_PROVIDER["gemini"])
                 resp = model.generate_content("ping", generation_config={"max_output_tokens": 5})
                 results["Gemini"] = "valid"
             else:
@@ -247,7 +248,7 @@ async def check_keys(request: Request, data: dict = Body(...)):
             if deepseek_key and len(deepseek_key) > 10:
                 client = openai.OpenAI(api_key=deepseek_key, base_url="https://api.deepseek.com")
                 response = client.chat.completions.create(
-                    model=DEFAULT_MODEL_BY_PROVIDER["deepseek"],
+                    model=cfg.DEFAULT_MODEL_BY_PROVIDER["deepseek"],
                     messages=[{"role": "user", "content": "ping"}],
                     max_tokens=5
                 )
@@ -262,7 +263,7 @@ async def check_keys(request: Request, data: dict = Body(...)):
             if grok_key and len(grok_key) > 10:
                 client = openai.OpenAI(api_key=grok_key, base_url="https://api.x.ai/v1")
                 response = client.chat.completions.create(
-                    model=DEFAULT_MODEL_BY_PROVIDER["grok"],
+                    model=cfg.DEFAULT_MODEL_BY_PROVIDER["grok"],
                     messages=[{"role": "user", "content": "ping"}],
                     max_tokens=5
                 )

@@ -108,8 +108,45 @@
             grid-template-columns: 1fr 1fr; 
             gap: 20px;
         }
+        .limits-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .limit-section {
+            background: var(--bg-primary);
+            padding: 15px;
+            border-radius: 6px;
+        }
+        .limit-section h3 {
+            margin-top: 0;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+        .limit-row {
+            display: grid;
+            grid-template-columns: minmax(160px, 1fr) 140px;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+        .limit-row label {
+            font-size: 0.9em;
+        }
+        .limit-row input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-color);
+        }
         @media (max-width: 768px) {
             .providers-grid { grid-template-columns: 1fr; }
+            .limits-grid { grid-template-columns: 1fr; }
+            .limit-row { grid-template-columns: 1fr; }
         }
     </style>
     <script type="module">
@@ -120,9 +157,47 @@
         const auth = getAuth(app);
         
         const providers = ['openai', 'mistral', 'anthropic', 'gemini', 'deepseek', 'grok'];
+        const limitGroups = [
+            {
+                title: 'Usage Limits',
+                fields: [
+                    ['free_usage_limit', 'Free requests'],
+                    ['pro_usage_limit', 'Pro requests'],
+                    ['free_deep_search_limit', 'Free Deep Think requests'],
+                    ['pro_deep_search_limit', 'Pro Deep Think requests']
+                ]
+            },
+            {
+                title: 'Input / Context Limits',
+                fields: [
+                    ['free_max_words', 'Free input words'],
+                    ['pro_max_words', 'Pro input words'],
+                    ['free_deep_search_max_words', 'Free Deep Think input words'],
+                    ['pro_deep_search_max_words', 'Pro Deep Think input words']
+                ]
+            },
+            {
+                title: 'Output Token Limits',
+                fields: [
+                    ['free_max_tokens', 'Free output tokens'],
+                    ['pro_max_tokens', 'Pro output tokens'],
+                    ['free_deep_search_max_tokens', 'Free Deep Think output tokens'],
+                    ['pro_deep_search_max_tokens', 'Pro Deep Think output tokens']
+                ]
+            },
+            {
+                title: 'Consensus Limits',
+                fields: [
+                    ['consensus_max_tokens', 'Consensus output tokens'],
+                    ['differences_max_tokens', 'Differences output tokens']
+                ]
+            }
+        ];
         let globalModelsData = {};
 
         function renderUI() {
+            renderLimits();
+
             const container = document.getElementById('providersContainer');
             container.innerHTML = '';
             
@@ -155,6 +230,44 @@
                 };
                 section.appendChild(addBtn);
                 
+                container.appendChild(section);
+            });
+        }
+
+        function renderLimits() {
+            const container = document.getElementById('limitsContainer');
+            container.innerHTML = '';
+            const limits = globalModelsData.limits || {};
+
+            limitGroups.forEach(group => {
+                const section = document.createElement('div');
+                section.className = 'limit-section';
+
+                const title = document.createElement('h3');
+                title.textContent = group.title;
+                section.appendChild(title);
+
+                group.fields.forEach(([key, labelText]) => {
+                    const row = document.createElement('div');
+                    row.className = 'limit-row';
+
+                    const label = document.createElement('label');
+                    label.htmlFor = `limit-${key}`;
+                    label.textContent = labelText;
+
+                    const input = document.createElement('input');
+                    input.type = 'number';
+                    input.min = '0';
+                    input.step = '1';
+                    input.id = `limit-${key}`;
+                    input.dataset.limitKey = key;
+                    input.value = Number.isFinite(Number(limits[key])) ? limits[key] : 0;
+
+                    row.appendChild(label);
+                    row.appendChild(input);
+                    section.appendChild(row);
+                });
+
                 container.appendChild(section);
             });
         }
@@ -208,7 +321,11 @@
             if (!user) return;
             const idToken = await user.getIdToken();
             
-            const data = { premium: [] };
+            const data = { premium: [], limits: {} };
+            document.querySelectorAll('[data-limit-key]').forEach(input => {
+                const value = parseInt(input.value, 10);
+                data.limits[input.dataset.limitKey] = Number.isFinite(value) && value >= 0 ? value : 0;
+            });
             
             providers.forEach(p => {
                 data[p] = [];
@@ -239,7 +356,7 @@
                 });
                 
                 if (response.ok) {
-                    document.getElementById('statusMessage').textContent = 'Models updated successfully!';
+                    document.getElementById('statusMessage').textContent = 'Configuration updated successfully!';
                     document.getElementById('statusMessage').className = 'success';
                     setTimeout(() => document.getElementById('statusMessage').textContent = '', 3000);
                 } else {
@@ -285,6 +402,12 @@
             <button id="saveBtn" class="admin-btn">Save Changes</button>
         </div>
         <div id="statusMessage"></div>
+        <p style="margin-bottom: 20px; font-size: 0.9em; color: var(--text-color);">Set request, input, context, and token limits for Free and Pro users.</p>
+
+        <div id="limitsContainer" class="limits-grid">
+            <!-- Populated by JavaScript -->
+        </div>
+
         <p style="margin-bottom: 20px; font-size: 0.9em; color: var(--text-color);">Add models to each provider and toggle the <strong>Premium</strong> checkbox to mark them as Pro-only.</p>
         
         <div id="providersContainer" class="providers-grid">

@@ -14,6 +14,7 @@
       messagingSenderId: "{{ firebase_messaging_sender_id }}",
       appId: "{{ firebase_app_id }}"
     };
+    window.APP_LIMITS = {{ limits | tojson }};
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
@@ -139,9 +140,12 @@
       <!-- Trennstrich zwischen API Keys und Leaderboard -->
       <div class="sidebar-separator"></div>
 
-      <div class="sidebar-section">
-        <h2 data-tooltip="All your chats if you are logged in.">
-          Bookmarks
+      <div class="sidebar-section bookmarks-section">
+        <h2 class="bookmarks-heading">
+          <button id="bookmarksToggle" class="bookmarks-toggle" type="button" onclick="toggleBookmarks()" aria-expanded="true" aria-controls="bookmarksContainer" data-tooltip="All your chats if you are logged in.">
+            <span>Bookmarks</span>
+            <span class="bookmarks-arrow" aria-hidden="true">&#8250;</span>
+          </button>
         </h2>
         <div id="bookmarksContainer"></div>
       </div>
@@ -1093,8 +1097,8 @@
           answer.style.display = 'none';
         });
 
-        const DEFAULT_MAX_WORDS = 500;
-        const DEEP_SEARCH_MAX_WORDS = 1000;
+        const APP_LIMITS = window.APP_LIMITS || {};
+        const FREE_USAGE_LIMIT = APP_LIMITS.free_usage_limit || {{ free_limit }};
 
         function validateInputText() {
           const text = document.getElementById("questionInput").value.trim();
@@ -1102,7 +1106,11 @@
           // Prüfe, ob der Deep Think Toggle aktiv ist:
           const deepSearchActive = document.getElementById("deepSearchToggle").checked;
           // Setze das Wortlimit abhängig vom Deep Think Status
-          const maxWords = deepSearchActive ? DEEP_SEARCH_MAX_WORDS : DEFAULT_MAX_WORDS;
+          const isPro = Boolean(window.isUserPro);
+          const maxWordsRaw = deepSearchActive
+            ? (isPro ? APP_LIMITS.pro_deep_search_max_words : APP_LIMITS.free_deep_search_max_words)
+            : (isPro ? APP_LIMITS.pro_max_words : APP_LIMITS.free_max_words);
+          const maxWords = Number(maxWordsRaw || 0);
 
           if (wordCount > maxWords) {
             alert(`The query is above the limit of ${maxWords} words (you entered ${wordCount}).`);
@@ -1497,6 +1505,111 @@
           container.classList.toggle("hidden");
           arrow.classList.toggle("rotated");
         };
+
+        window.toggleBookmarks = function () {
+          const section = document.querySelector(".bookmarks-section");
+          const container = document.getElementById("bookmarksContainer");
+          const toggle = document.getElementById("bookmarksToggle");
+          if (!section || !container || !toggle) return;
+
+          const isCollapsed = section.classList.toggle("is-collapsed");
+          container.classList.toggle("hidden", isCollapsed);
+          toggle.setAttribute("aria-expanded", String(!isCollapsed));
+          localStorage.setItem("bookmarks_collapsed", String(isCollapsed));
+        };
+
+        function restoreBookmarksState() {
+          const section = document.querySelector(".bookmarks-section");
+          const container = document.getElementById("bookmarksContainer");
+          const toggle = document.getElementById("bookmarksToggle");
+          if (!section || !container || !toggle) return;
+
+          const isCollapsed = localStorage.getItem("bookmarks_collapsed") === "true";
+          section.classList.toggle("is-collapsed", isCollapsed);
+          container.classList.toggle("hidden", isCollapsed);
+          toggle.setAttribute("aria-expanded", String(!isCollapsed));
+        }
+
+        restoreBookmarksState();
+
+        let expandedModelPicker = null;
+
+        function collapseExpandedModelPicker(select = expandedModelPicker) {
+          if (!select || select.dataset.expandedPicker !== "true") return;
+
+          select.size = 1;
+          select.classList.remove("model-picker-expanded");
+          select.closest(".model-picker-wrapper")?.classList.remove("is-expanded");
+          delete select.dataset.expandedPicker;
+
+          if (expandedModelPicker === select) {
+            expandedModelPicker = null;
+          }
+        }
+
+        function openModelPicker(select) {
+          if (!select || select.disabled) return;
+          collapseExpandedModelPicker();
+          select.focus({ preventScroll: true });
+          if (typeof select.showPicker === "function") {
+            try {
+              select.showPicker();
+              return;
+            } catch (error) {
+              // Fall back to an inline list when the browser rejects programmatic opening.
+            }
+          }
+
+          select.dataset.expandedPicker = "true";
+          select.classList.add("model-picker-expanded");
+          select.closest(".model-picker-wrapper")?.classList.add("is-expanded");
+          select.size = Math.min(select.options.length, 8);
+          expandedModelPicker = select;
+        }
+
+        modelPrefs.forEach(pref => {
+          const labelText = document.getElementById(pref.textId);
+          const select = document.getElementById(pref.selectId);
+          if (!labelText || !select) return;
+
+          labelText.classList.add("model-name-trigger");
+          labelText.setAttribute("role", "button");
+          labelText.setAttribute("tabindex", "0");
+          labelText.setAttribute("aria-haspopup", "listbox");
+          labelText.setAttribute("aria-controls", pref.selectId);
+          labelText.title = "Choose model";
+
+          labelText.addEventListener("click", function (event) {
+            event.stopPropagation();
+            openModelPicker(select);
+          });
+
+          labelText.addEventListener("keydown", function (event) {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              openModelPicker(select);
+            }
+          });
+
+          select.addEventListener("change", function () {
+            collapseExpandedModelPicker(select);
+          });
+
+          select.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") {
+              collapseExpandedModelPicker(select);
+              labelText.focus({ preventScroll: true });
+            }
+          });
+        });
+
+        document.addEventListener("click", function (event) {
+          if (!expandedModelPicker) return;
+          const title = expandedModelPicker.closest(".title");
+          if (title && !title.contains(event.target)) {
+            collapseExpandedModelPicker();
+          }
+        });
 
         // Globale Variable
         let consensusGenerated = false;

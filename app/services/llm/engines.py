@@ -8,9 +8,8 @@ from urllib.parse import quote
 import google.auth
 from google.auth.transport.requests import Request as GoogleAuthRequest
 
+import app.core.config as cfg
 from app.core.config import (
-    MAX_TOKENS,
-    DEEP_SEARCH_MAX_TOKENS,
     REASONING_EFFORT_FOR_DEEP,
     DEEP_THINK_PROMPT,
     GEMINI_FLASH_MODEL,
@@ -117,7 +116,8 @@ def query_openai(
     api_key: str,
     deep_search: bool = False,
     system_prompt: str = None,
-    model_override: str = None
+    model_override: str = None,
+    max_output_tokens: Optional[int] = None,
 ) -> str:
     if system_prompt is None:
         system_prompt = get_system_prompt()
@@ -125,6 +125,7 @@ def query_openai(
         system_prompt += "\n" + DEEP_THINK_PROMPT
 
     model_to_use = "gpt-5.5" if deep_search else (model_override or DEFAULT_OPENAI_MODEL)
+    max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
 
     print(f"[MODEL] OpenAI -> {model_to_use} | deep_search={deep_search} | override={model_override}")
 
@@ -135,7 +136,7 @@ def query_openai(
             model=model_to_use,
             system_prompt=system_prompt,
             question=question,
-            max_tokens=DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS,
+            max_tokens=max_tokens,
             reasoning_effort=REASONING_EFFORT_FOR_DEEP if deep_search else None,
             provider="openai",
         )
@@ -143,7 +144,14 @@ def query_openai(
         return _error("OpenAI", e)
 
 
-def query_mistral(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False, model_override: str = None) -> str:
+def query_mistral(
+    question: str,
+    api_key: str,
+    system_prompt: str = None,
+    deep_search: bool = False,
+    model_override: str = None,
+    max_output_tokens: Optional[int] = None,
+) -> str:
     """Fragt die Mistral API zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit."""
     if system_prompt is None:
         system_prompt = get_system_prompt()
@@ -152,7 +160,7 @@ def query_mistral(question: str, api_key: str, system_prompt: str = None, deep_s
         system_prompt += "\n" + DEEP_THINK_PROMPT
 
     # Setze max_tokens basierend auf dem deep_search Flag
-    max_tokens = DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS
+    max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
 
     try:
         model = model_override if (model_override and not deep_search) else ("mistral-large-latest" if deep_search else DEFAULT_MISTRAL_MODEL)
@@ -202,7 +210,14 @@ def query_mistral(question: str, api_key: str, system_prompt: str = None, deep_s
         return _error("Mistral", str(e))
 
 
-def query_claude(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False, model_override: str = None) -> str:
+def query_claude(
+    question: str,
+    api_key: str,
+    system_prompt: str = None,
+    deep_search: bool = False,
+    model_override: str = None,
+    max_output_tokens: Optional[int] = None,
+) -> str:
     """Fragt die Anthropic API (Claude) zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit.
        Da die Anthropic API ein Token-Limit erwartet, setzen wir einen sehr hohen Wert ein."""
     if system_prompt is None:
@@ -212,7 +227,7 @@ def query_claude(question: str, api_key: str, system_prompt: str = None, deep_se
         system_prompt += "\n" + DEEP_THINK_PROMPT
 
     # Setze max_tokens basierend auf dem deep_search Flag
-    max_tokens = DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS
+    max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
 
     try:
         url = "https://api.anthropic.com/v1/messages"
@@ -265,7 +280,7 @@ def query_gemini(
     print(f"[MODEL] Gemini -> {model_name} | deep_search={deep_search} | override={model_override}")
 
     api_key = (user_api_key or os.environ.get("DEVELOPER_GEMINI_API_KEY") or "").strip()
-    eff_max = int(max_output_tokens) if max_output_tokens is not None else (4096 if deep_search else 2048)
+    eff_max = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
     if question and len(question) > 12000:
         question = question[:12000] + " ... [truncated]"
     base_content = "Do not ask any questions.\n---\n" + question
@@ -323,7 +338,14 @@ def query_gemini(
     except Exception as e:
         return _error("Gemini", e)
 
-def query_deepseek(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False, model_override: str = None) -> str:
+def query_deepseek(
+    question: str,
+    api_key: str,
+    system_prompt: str = None,
+    deep_search: bool = False,
+    model_override: str = None,
+    max_output_tokens: Optional[int] = None,
+) -> str:
     """Fragt DeepSeek zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
     if system_prompt is None:
         system_prompt = get_system_prompt()
@@ -332,7 +354,7 @@ def query_deepseek(question: str, api_key: str, system_prompt: str = None, deep_
         system_prompt += "\n" + DEEP_THINK_PROMPT
 
     # Setze max_tokens basierend auf dem deep_search Flag
-    max_tokens = DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS
+    max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
 
     try:
         client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
@@ -351,7 +373,14 @@ def query_deepseek(question: str, api_key: str, system_prompt: str = None, deep_
     except Exception as e:
         return f"Error with DeepSeek: {str(e)}"
     
-def query_grok(question: str, api_key: str, system_prompt: str = None, deep_search: bool = False, model_override: str = None) -> str:
+def query_grok(
+    question: str,
+    api_key: str,
+    system_prompt: str = None,
+    deep_search: bool = False,
+    model_override: str = None,
+    max_output_tokens: Optional[int] = None,
+) -> str:
     """Fragt die Grok API zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
     if system_prompt is None:
         system_prompt = get_system_prompt()
@@ -360,7 +389,7 @@ def query_grok(question: str, api_key: str, system_prompt: str = None, deep_sear
         system_prompt += "\n" + DEEP_THINK_PROMPT
 
     # Setze max_tokens basierend auf dem deep_search Flag
-    max_tokens = DEEP_SEARCH_MAX_TOKENS if deep_search else MAX_TOKENS
+    max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
 
     try:
         model_to_use = "grok-4.3" if deep_search else (model_override or DEFAULT_GROK_MODEL)

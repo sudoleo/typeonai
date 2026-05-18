@@ -223,6 +223,64 @@ body:has(.sidebar.collapsed) .main-wrapper {
   font-weight: 600;
 }
 
+.sidebar-section .bookmarks-heading {
+  padding: 0;
+}
+
+.bookmarks-toggle {
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--sidebar-text-muted);
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.bookmarks-toggle:hover,
+.bookmarks-toggle:focus-visible {
+  opacity: 1;
+  outline: none;
+}
+
+.bookmarks-toggle:focus-visible {
+  color: var(--accent);
+}
+
+.bookmarks-arrow {
+  display: inline-block;
+  opacity: 0;
+  transform: translateX(-2px) rotate(90deg);
+  color: var(--sidebar-text-muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  transition: opacity .15s ease, transform .18s ease, color .15s ease;
+}
+
+.bookmarks-toggle:hover .bookmarks-arrow,
+.bookmarks-toggle:focus-visible .bookmarks-arrow {
+  opacity: 0.45;
+  transform: translateX(0) rotate(90deg);
+}
+
+.bookmarks-section.is-collapsed .bookmarks-arrow {
+  opacity: 0.45;
+  transform: translateX(0);
+}
+
+.bookmarks-toggle:hover .bookmarks-arrow,
+.bookmarks-toggle:focus-visible .bookmarks-arrow,
+.bookmarks-section.is-collapsed .bookmarks-toggle:hover .bookmarks-arrow,
+.bookmarks-section.is-collapsed .bookmarks-toggle:focus-visible .bookmarks-arrow {
+  color: var(--accent);
+}
+
 .sidebar-header {
   display: flex;
   align-items: center;
