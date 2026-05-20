@@ -78,7 +78,8 @@ async def get_usage_post(request: Request):
         "remaining": remaining,
         "deep_remaining": deep_remaining,
         "is_pro": pro_status,
-        "total_limit": limit_regular
+        "total_limit": limit_regular,
+        "deep_total_limit": limit_deep
     }
 
 @router.post("/track-interest")

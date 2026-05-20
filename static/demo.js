@@ -263,6 +263,7 @@ BestModel: Anthropic`
         const consensusBtn = document.getElementById("consensusButton");
         if (sendBtn) sendBtn.disabled = true;
         if (consensusBtn) consensusBtn.disabled = true;
+        window.setAgentModeStatus?.("running");
 
         // Prompt in das Eingabefeld setzen
         const qi = document.getElementById("questionInput");
@@ -280,6 +281,7 @@ BestModel: Anthropic`
         }
 
         // === 2) Jetzt erst Spinners in alle aktiven Boxen =======================
+        window.setAgentModeStatus?.("running");
         Object.keys(MODEL_TO_BOX).forEach(key => {
           const box = getBox(key);
           if (box) setSpinnerEl(box);
@@ -302,6 +304,8 @@ BestModel: Anthropic`
         ));
 
         // === 4) Consensus/Differences – wie gehabt ==============================
+        window.setAgentModeStatus?.("complete");
+
         const consensusDiv = document.getElementById("consensusResponse");
         const mainP = consensusDiv?.querySelector(".consensus-main p");
         const diffP = consensusDiv?.querySelector(".consensus-differences p");

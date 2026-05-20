@@ -18,7 +18,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260520-excluded-animate2">
+  <link rel="stylesheet" href="/static/style.css?v=20260520-agent-mode3">
   <link rel="icon" href="/static/favicon.png" type="image/x-icon">
   <!-- Füge dies im <head> hinzu -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -30,7 +30,7 @@
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
   <script type="module" src="/static/firebase.js?v=20260520-input-lock1"></script>
-  <script type="module" src="/static/demo.js?v=20260516-ui7"></script>
+  <script type="module" src="/static/demo.js?v=20260520-agent-mode1"></script>
   <script src="/static/app-ui.js" defer></script>
 </head>
 
@@ -92,59 +92,59 @@
       <div class="sidebar-separator"></div>
 
       <!-- Verwendete Modelle (einklappbar) -->
-      <div class="sidebar-header">
-        <h2 data-tooltip="Choose the models you want to use.">
-          Models
+      <div class="sidebar-section models-section is-collapsed">
+        <h2 class="sidebar-toggle-heading">
+          <button id="toggleModelSelection" class="sidebar-toggle-btn" type="button" onclick="toggleModelSelection()" aria-expanded="false" aria-controls="modelSelectionArea" data-tooltip="Choose the models you want to use.">
+            <span>Models</span>
+            <span class="sidebar-toggle-arrow" aria-hidden="true">&#8250;</span>
+          </button>
         </h2>
-        <button id="toggleModelSelection" onclick="toggleModelSelection()" class="collapse-btn">
-          <span class="arrow">&#9660;</span>
-        </button>
-      </div>
-      <div id="modelSelectionArea" class="model-selection">
-        <label for="selectOpenAI">
-          <input type="checkbox" id="selectOpenAI" checked> OpenAI
-        </label>
-        <label for="selectMistral">
-          <input type="checkbox" id="selectMistral" checked> Mistral
-        </label>
-        <label for="selectClaude">
-          <input type="checkbox" id="selectClaude" checked> Anthropic Claude
-        </label>
-        <label for="selectGemini">
-          <input type="checkbox" id="selectGemini" checked> Gemini
-        </label>
-        <label for="selectDeepSeek">
-          <input type="checkbox" id="selectDeepSeek" checked> DeepSeek
-        </label>
-        <label for="selectGrok">
-          <input type="checkbox" id="selectGrok" checked> Grok
-        </label>
+        <div id="modelSelectionArea" class="model-selection hidden">
+          <label for="selectOpenAI">
+            <input type="checkbox" id="selectOpenAI" checked> OpenAI
+          </label>
+          <label for="selectMistral">
+            <input type="checkbox" id="selectMistral" checked> Mistral
+          </label>
+          <label for="selectClaude">
+            <input type="checkbox" id="selectClaude" checked> Anthropic Claude
+          </label>
+          <label for="selectGemini">
+            <input type="checkbox" id="selectGemini" checked> Gemini
+          </label>
+          <label for="selectDeepSeek">
+            <input type="checkbox" id="selectDeepSeek" checked> DeepSeek
+          </label>
+          <label for="selectGrok">
+            <input type="checkbox" id="selectGrok" checked> Grok
+          </label>
+        </div>
       </div>
 
       <!-- Trennstrich zwischen API Keys und Leaderboard -->
       <div class="sidebar-separator"></div>
 
       <!-- Leaderboard -->
-      <div class="sidebar-header">
-        <h2 data-tooltip="For every query, the best model answer is picked by the consensus engine. This process is completely anonymized.">
-          Leaderboard
+      <div class="sidebar-section leaderboard-section is-collapsed">
+        <h2 class="sidebar-toggle-heading">
+          <button id="toggleLeaderboard" class="sidebar-toggle-btn" type="button" onclick="toggleLeaderboard()" aria-expanded="false" aria-controls="leaderboardContentContainer" data-tooltip="For every query, the best model answer is picked by the consensus engine. This process is completely anonymized.">
+            <span>Leaderboard</span>
+            <span class="sidebar-toggle-arrow" aria-hidden="true">&#8250;</span>
+          </button>
         </h2>
-        <button id="toggleLeaderboard" onclick="toggleLeaderboard()" class="collapse-btn">
-          <span class="arrow">&#9660;</span>
-        </button>
-      </div>
-      <div id="leaderboardContentContainer" class="hidden">
-        <div id="leaderboardContent"></div>
+        <div id="leaderboardContentContainer" class="hidden">
+          <div id="leaderboardContent"></div>
+        </div>
       </div>
 
       <!-- Trennstrich zwischen API Keys und Leaderboard -->
       <div class="sidebar-separator"></div>
 
       <div class="sidebar-section bookmarks-section">
-        <h2 class="bookmarks-heading">
-          <button id="bookmarksToggle" class="bookmarks-toggle" type="button" onclick="toggleBookmarks()" aria-expanded="true" aria-controls="bookmarksContainer" data-tooltip="All your chats if you are logged in.">
+        <h2 class="sidebar-toggle-heading">
+          <button id="bookmarksToggle" class="sidebar-toggle-btn" type="button" onclick="toggleBookmarks()" aria-expanded="true" aria-controls="bookmarksContainer" data-tooltip="All your chats if you are logged in.">
             <span>Bookmarks</span>
-            <span class="bookmarks-arrow" aria-hidden="true">&#8250;</span>
+            <span class="sidebar-toggle-arrow" aria-hidden="true">&#8250;</span>
           </button>
         </h2>
         <div id="bookmarksContainer"></div>
@@ -163,12 +163,16 @@
     <div class="input-section">
       <div class="chat-input-container" style="position: relative;">
         <textarea class="input-field" id="questionInput" placeholder="Enter your question"></textarea>
-        <button id="toggleAllButton" onclick="toggleAllResponses()" title="Collapse or expand all answers">
-          <span class="toggle-visual"></span>
-        </button>
         <!-- Container für beide Schalter -->
         <div class="consensus-switch-container"
           style="position: absolute; bottom: 10px; left: 10px; display: flex; align-items: center; gap: 20px;">
+          <div class="agent-mode-control">
+            <label class="switch agent-mode-switch" aria-label="Agent Mode" title="Agent Mode">
+              <input type="checkbox" id="toggleAllButton">
+              <span class="slider"></span>
+            </label>
+            <span class="agent-mode-label">Agent Mode</span>
+          </div>
           <!-- Auto-Konsens-Switch -->
           <div class="auto-consensus">
             <label class="switch" aria-label="Auto Consensus" title="Auto Consensus">
@@ -210,6 +214,27 @@
     </div>
 
     <div class="response-section" style="position: relative;">
+      <div id="agentModePanel" class="agent-mode-panel" aria-live="polite" aria-hidden="true">
+        <div class="agent-mode-header">
+          <div>
+            <span class="agent-mode-kicker">Agent Mode</span>
+            <h2 id="agentModeTitle">Selected models</h2>
+          </div>
+          <div class="agent-mode-metrics">
+            <div id="agentModeTimer" class="agent-mode-timer" aria-live="polite">Elapsed 00:00</div>
+            <span id="agentModeCount" class="agent-mode-count">0 models</span>
+          </div>
+        </div>
+        <div id="agentModeModels" class="agent-mode-models"></div>
+        <div id="agentModeAnimation" class="agent-mode-animation" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div id="agentModeStatus" class="agent-mode-status">Ready for a grouped model run.</div>
+      </div>
+
       <div class="response-box" id="openaiResponse" data-model="OpenAI" data-short-label="OpenAI">
         <h2 data-short-label="OpenAI">
           <span class="title">Response from ChatGPT
@@ -220,7 +245,7 @@
             <span class="model-picker-wrapper">
               <select id="openaiModelSelect" class="model-picker">
                 {% for model in models['openai'] %}
-                <option value="{{ model }}" {% if model == default_models['openai'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}</option>
+                <option value="{{ model }}" {% if model == default_models['openai'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}{% if model in models['premium'] %} · Pro{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -241,7 +266,7 @@
             <span class="model-picker-wrapper">
               <select id="mistralModelSelect" class="model-picker">
                 {% for model in models['mistral'] %}
-                <option value="{{ model }}" {% if model == default_models['mistral'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}</option>
+                <option value="{{ model }}" {% if model == default_models['mistral'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}{% if model in models['premium'] %} · Pro{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -262,7 +287,7 @@
             <span class="model-picker-wrapper">
               <select id="claudeModelSelect" class="model-picker">
                 {% for model in models['anthropic'] %}
-                <option value="{{ model }}" {% if model == default_models['anthropic'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}</option>
+                <option value="{{ model }}" {% if model == default_models['anthropic'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}{% if model in models['premium'] %} · Pro{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -283,7 +308,7 @@
             <span class="model-picker-wrapper">
               <select id="geminiModelSelect" class="model-picker">
                 {% for model in models['gemini'] %}
-                <option value="{{ model }}" {% if model == default_models['gemini'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}</option>
+                <option value="{{ model }}" {% if model == default_models['gemini'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}{% if model in models['premium'] %} · Pro{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -304,7 +329,7 @@
             <span class="model-picker-wrapper">
               <select id="deepseekModelSelect" class="model-picker">
                 {% for model in models['deepseek'] %}
-                <option value="{{ model }}" {% if model == default_models['deepseek'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}</option>
+                <option value="{{ model }}" {% if model == default_models['deepseek'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}{% if model in models['premium'] %} · Pro{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -327,7 +352,7 @@
             <span class="model-picker-wrapper">
               <select id="grokModelSelect" class="model-picker">
                 {% for model in models['grok'] %}
-                <option value="{{ model }}" {% if model == default_models['grok'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}</option>
+                <option value="{{ model }}" {% if model == default_models['grok'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}{% if model in models['premium'] %} · Pro{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -365,12 +390,12 @@
                 <option value="Gemini">{{ default_models['gemini'] }}</option>
                 <option value="DeepSeek">{{ default_models['deepseek'] }}</option>
 
-                <option value="Grok-Pro" class="premium-option">Grok-4.3</option>
-                <option value="OpenAI-Pro" class="premium-option">GPT-5.5</option>
-                <option value="Anthropic-Pro" class="premium-option">claude-opus-4-7</option>
-                <option value="Mistral-Pro" class="premium-option">mistral-large-latest</option>
-                <option value="Gemini-Pro" class="premium-option">gemini-3.1-pro-preview</option>
-                <option value="DeepSeek-Pro" class="premium-option">DeepSeek-V4-Pro</option>
+                <option value="Grok-Pro" class="premium-option">Grok-4.3 · Pro</option>
+                <option value="OpenAI-Pro" class="premium-option">GPT-5.5 · Pro</option>
+                <option value="Anthropic-Pro" class="premium-option">claude-opus-4-7 · Pro</option>
+                <option value="Mistral-Pro" class="premium-option">mistral-large-latest · Pro</option>
+                <option value="Gemini-Pro" class="premium-option">gemini-3.1-pro-preview · Pro</option>
+                <option value="DeepSeek-Pro" class="premium-option">DeepSeek-V4-Pro · Pro</option>
               </select>
             </div>
           </div>
@@ -665,8 +690,15 @@
         }
         // Bei Änderung den neuen Zustand speichern
         autoConsensusToggle.addEventListener("change", function () {
+          if (typeof window.isAgentModeEnabled === "function" && window.isAgentModeEnabled() && !this.checked) {
+            this.checked = true;
+          }
           localStorage.setItem("autoConsensus", this.checked);
-          showMobileInfoPopup("Auto Consensus automatically generates a consensus after the model responses.");
+          showMobileInfoPopup(
+            typeof window.isAgentModeEnabled === "function" && window.isAgentModeEnabled()
+              ? "Auto Consensus stays on while Agent Mode is active."
+              : "Auto Consensus automatically generates a consensus after the model responses."
+          );
         });
 
         const questionInput = document.getElementById("questionInput");
@@ -787,7 +819,10 @@
 
           const setModelText = (id, txt) => {
             const el = document.getElementById(id);
-            if (el) el.textContent = txt;
+            if (el) {
+              el.textContent = txt;
+              el.title = `Choose model: ${txt}`;
+            }
           };
           setModelText("openaiModelText", openaiModelText);
           setModelText("mistralModelText", mistralModelText);
@@ -887,12 +922,42 @@
 
         updateDeepThinkText();
 
+        function getConfiguredLimit(key, fallback) {
+          const raw = (window.APP_LIMITS || {})[key];
+          const value = Number(raw);
+          return Number.isFinite(value) ? value : fallback;
+        }
+
         const LIMITS = {
-          FREE: { NORMAL: 25, DEEP: 12 },
-          PRO: { NORMAL: 500, DEEP: 50 }
+          FREE: {
+            NORMAL: getConfiguredLimit("free_usage_limit", 25),
+            DEEP: getConfiguredLimit("free_deep_search_limit", 12)
+          },
+          PRO: {
+            NORMAL: getConfiguredLimit("pro_usage_limit", 500),
+            DEEP: getConfiguredLimit("pro_deep_search_limit", 50)
+          }
         };
         let currentMaxLimit = LIMITS.FREE.NORMAL;
         let currentDeepLimit = LIMITS.FREE.DEEP;
+
+        function setCurrentUsageLimits(isPro, serverLimits = {}) {
+          const normalLimit = Number(serverLimits.limit ?? serverLimits.total_limit);
+          const deepLimit = Number(serverLimits.deep_limit ?? serverLimits.deep_total_limit);
+
+          currentMaxLimit = Number.isFinite(normalLimit)
+            ? normalLimit
+            : (isPro ? LIMITS.PRO.NORMAL : LIMITS.FREE.NORMAL);
+          currentDeepLimit = Number.isFinite(deepLimit)
+            ? deepLimit
+            : (isPro ? LIMITS.PRO.DEEP : LIMITS.FREE.DEEP);
+
+          window.currentMaxLimit = currentMaxLimit;
+          window.currentDeepLimit = currentDeepLimit;
+        }
+
+        setCurrentUsageLimits(false);
+        window.setCurrentUsageLimits = setCurrentUsageLimits;
 
         // Diese Funktion prüft den Status sofort beim Laden
         async function checkUserStatusOnLoad(user) {
@@ -914,11 +979,10 @@
               const data = await response.json();
 
               // 1. UI sofort umschalten (Badge an, Modelle frei)
-              updateUserTierUI(data.is_pro);
+              updateUserTierUI(data.is_pro, true);
 
               // 2. Limits sofort aktualisieren (verhindert den 500/25 Fehler)
-              currentMaxLimit = data.limit;
-              currentDeepLimit = data.deep_limit;
+              setCurrentUsageLimits(data.is_pro, data);
 
               // 3. Sidebar Text initial befüllen (damit dort nicht 25 steht bis zum ersten Klick)
               // Wir rufen hier kurz den Usage-Endpoint auf, um die aktuellen Zahlen zu haben
@@ -938,6 +1002,7 @@
               body: JSON.stringify({ id_token: token })
             });
             const data = await resp.json();
+            setCurrentUsageLimits(data.is_pro === true, data);
 
             // Hier nutzen wir die GLOBALE Variable, die durch checkUserStatusOnLoad korrekt gesetzt wurde
             document.getElementById("freeUsageDisplay").innerHTML =
@@ -1316,47 +1381,18 @@
 
         // Modelle-Auswahl umschalten (für den Pfeil in der Modelle Section)
         window.toggleModelSelection = function () {
+          const section = document.querySelector(".models-section");
           const area = document.getElementById("modelSelectionArea");
-          const button = document.getElementById("toggleModelSelection");
-          const arrow = button.querySelector(".arrow");
-          if (area.style.display === "none" || area.style.display === "") {
-            area.style.display = "flex";
-            arrow.classList.add("rotated");
-          } else {
-            area.style.display = "none";
-            arrow.classList.remove("rotated");
-          }
+          const toggle = document.getElementById("toggleModelSelection");
+          if (!section || !area || !toggle) return;
+
+          const isCollapsed = section.classList.toggle("is-collapsed");
+          area.classList.toggle("hidden", isCollapsed);
+          toggle.setAttribute("aria-expanded", String(!isCollapsed));
         };
 
         window.toggleAllResponses = function () {
-          const responses = document.querySelectorAll('.response-box');
-          let shouldCollapse = false;
-          responses.forEach(box => {
-            const content = box.querySelector('.collapsible-content');
-            if (content && !content.classList.contains('collapsed')) {
-              shouldCollapse = true;
-            }
-          });
-
-          responses.forEach(box => {
-            const content = box.querySelector('.collapsible-content');
-            const arrow = box.querySelector('.collapse-btn .arrow');
-            if (shouldCollapse) {
-              if (content && !content.classList.contains('collapsed')) {
-                content.classList.add('collapsed');
-              }
-              if (arrow && !arrow.classList.contains('rotated')) {
-                arrow.classList.add('rotated');
-              }
-            } else {
-              if (content && content.classList.contains('collapsed')) {
-                content.classList.remove('collapsed');
-              }
-              if (arrow && arrow.classList.contains('rotated')) {
-                arrow.classList.remove('rotated');
-              }
-            }
-          });
+          setAgentMode(!isAgentModeEnabled(), { persist: true });
         };
 
         // Collapse/Expand einer Antwort-Box
@@ -1405,13 +1441,230 @@
 
         // Definition der Modelle und IDs
         const modelPrefs = [
-          { key: "OpenAI", checkId: "selectOpenAI", selectId: "openaiModelSelect", responseId: "openaiResponse", textId: "openaiModelText" },
-          { key: "Mistral", checkId: "selectMistral", selectId: "mistralModelSelect", responseId: "mistralResponse", textId: "mistralModelText" },
-          { key: "Anthropic", checkId: "selectClaude", selectId: "claudeModelSelect", responseId: "claudeResponse", textId: "claudeModelText" },
-          { key: "Gemini", checkId: "selectGemini", selectId: "geminiModelSelect", responseId: "geminiResponse", textId: "geminiModelText" },
-          { key: "DeepSeek", checkId: "selectDeepSeek", selectId: "deepseekModelSelect", responseId: "deepseekResponse", textId: "deepseekModelText" },
-          { key: "Grok", checkId: "selectGrok", selectId: "grokModelSelect", responseId: "grokResponse", textId: "grokModelText" }
+          { key: "OpenAI", label: "OpenAI", checkId: "selectOpenAI", selectId: "openaiModelSelect", responseId: "openaiResponse", textId: "openaiModelText" },
+          { key: "Mistral", label: "Mistral", checkId: "selectMistral", selectId: "mistralModelSelect", responseId: "mistralResponse", textId: "mistralModelText" },
+          { key: "Anthropic", label: "Claude", checkId: "selectClaude", selectId: "claudeModelSelect", responseId: "claudeResponse", textId: "claudeModelText" },
+          { key: "Gemini", label: "Gemini", checkId: "selectGemini", selectId: "geminiModelSelect", responseId: "geminiResponse", textId: "geminiModelText" },
+          { key: "DeepSeek", label: "DeepSeek", checkId: "selectDeepSeek", selectId: "deepseekModelSelect", responseId: "deepseekResponse", textId: "deepseekModelText" },
+          { key: "Grok", label: "Grok", checkId: "selectGrok", selectId: "grokModelSelect", responseId: "grokResponse", textId: "grokModelText" }
         ];
+
+        const AGENT_MODE_STORAGE_KEY = "agentMode";
+        let agentModeStatus = "idle";
+        let agentModeTimerStartedAt = null;
+        let agentModeTimerElapsedMs = 0;
+        let agentModeTimerInterval = null;
+
+        function isAgentModeEnabled() {
+          return localStorage.getItem(AGENT_MODE_STORAGE_KEY) === "true";
+        }
+
+        function formatAgentElapsed(ms) {
+          const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+          const minutes = Math.floor(totalSeconds / 60);
+          const seconds = totalSeconds % 60;
+          return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+        }
+
+        function updateAgentModeTimerDisplay() {
+          const timerEl = document.getElementById("agentModeTimer");
+          if (!timerEl) return;
+          const elapsed = agentModeTimerStartedAt
+            ? Date.now() - agentModeTimerStartedAt
+            : agentModeTimerElapsedMs;
+          const isVisible = !!agentModeTimerStartedAt || agentModeTimerElapsedMs > 0;
+          timerEl.classList.toggle("is-visible", isVisible);
+          timerEl.textContent = `Elapsed ${formatAgentElapsed(elapsed)}`;
+        }
+
+        function startAgentModeTimer() {
+          if (agentModeTimerStartedAt) return;
+          agentModeTimerStartedAt = Date.now();
+          agentModeTimerElapsedMs = 0;
+          window.clearInterval(agentModeTimerInterval);
+          updateAgentModeTimerDisplay();
+          agentModeTimerInterval = window.setInterval(updateAgentModeTimerDisplay, 1000);
+        }
+
+        function stopAgentModeTimer() {
+          if (agentModeTimerStartedAt) {
+            agentModeTimerElapsedMs = Date.now() - agentModeTimerStartedAt;
+          }
+          agentModeTimerStartedAt = null;
+          window.clearInterval(agentModeTimerInterval);
+          agentModeTimerInterval = null;
+          updateAgentModeTimerDisplay();
+        }
+
+        function resetAgentModeTimer() {
+          agentModeTimerStartedAt = null;
+          agentModeTimerElapsedMs = 0;
+          window.clearInterval(agentModeTimerInterval);
+          agentModeTimerInterval = null;
+          updateAgentModeTimerDisplay();
+        }
+
+        function getActiveAgentModels() {
+          return modelPrefs
+            .filter(pref => document.getElementById(pref.checkId)?.checked)
+            .map(pref => {
+              const select = document.getElementById(pref.selectId);
+              const selectedText = select?.options[select.selectedIndex]?.text || select?.value || "";
+              const modelText = selectedText.replace(/\s*·\s*Pro\s*$/, "").trim();
+              return {
+                pref,
+                label: pref.label,
+                model: modelText
+              };
+            });
+        }
+
+        function syncAgentModePicker(agentSelect, pref) {
+          const sourceSelect = document.getElementById(pref.selectId);
+          const labelText = document.getElementById(pref.textId);
+          if (!sourceSelect || !agentSelect) return;
+
+          sourceSelect.value = agentSelect.value;
+          localStorage.setItem("pref_select_" + pref.key, agentSelect.value);
+          if (labelText) {
+            labelText.textContent = agentSelect.value;
+            labelText.title = `Choose model: ${agentSelect.value}`;
+          }
+          sourceSelect.dispatchEvent(new Event("change", { bubbles: true }));
+          updateAgentModeUI();
+        }
+
+        function getAgentModeStatusText(activeModels) {
+          const count = activeModels.length;
+          if (count === 0) return "No models selected.";
+          if (agentModeStatus === "running") return "Querying selected models in parallel.";
+          if (agentModeStatus === "complete") return "Model responses are ready for consensus.";
+          if (agentModeStatus === "canceled") return "Request canceled.";
+          return "Ready for a grouped model run.";
+        }
+
+        function setAutoConsensusForAgentMode(enabled) {
+          const autoToggle = document.getElementById("autoConsensusToggle");
+          const autoWrap = document.querySelector(".auto-consensus");
+          const autoSwitch = autoWrap?.querySelector("label.switch");
+          if (!autoToggle) return;
+
+          if (enabled) {
+            autoToggle.checked = true;
+            localStorage.setItem("autoConsensus", "true");
+          }
+
+          autoToggle.disabled = !!enabled;
+          autoWrap?.classList.toggle("is-agent-locked", !!enabled);
+          if (autoSwitch) {
+            autoSwitch.classList.toggle("locked", !!enabled);
+            autoSwitch.title = enabled
+              ? "Auto Consensus is always on in Agent Mode"
+              : "Auto Consensus";
+            autoSwitch.setAttribute("aria-label", autoSwitch.title);
+          }
+        }
+
+        function updateAgentModeUI() {
+          const enabled = isAgentModeEnabled();
+          const panel = document.getElementById("agentModePanel");
+          const switchEl = document.getElementById("agentModeSwitch");
+          const toggleBtn = document.getElementById("toggleAllButton");
+          const toggleSwitch = document.querySelector(".agent-mode-switch");
+          const modelsEl = document.getElementById("agentModeModels");
+          const statusEl = document.getElementById("agentModeStatus");
+          const countEl = document.getElementById("agentModeCount");
+          const titleEl = document.getElementById("agentModeTitle");
+          const activeModels = getActiveAgentModels();
+
+          document.body.classList.toggle("agent-mode-enabled", enabled);
+          document.body.classList.toggle("agent-mode-running", enabled && agentModeStatus === "running");
+
+          if (switchEl) switchEl.checked = enabled;
+          if (toggleBtn) {
+            toggleBtn.checked = enabled;
+            toggleBtn.classList.toggle("is-agent-active", enabled);
+            toggleBtn.setAttribute("aria-checked", String(enabled));
+            toggleBtn.title = enabled ? "Disable Agent Mode" : "Enable Agent Mode";
+            toggleBtn.setAttribute("aria-label", toggleBtn.title);
+          }
+          if (toggleSwitch) {
+            toggleSwitch.title = enabled ? "Disable Agent Mode" : "Enable Agent Mode";
+            toggleSwitch.setAttribute("aria-label", toggleSwitch.title);
+          }
+          setAutoConsensusForAgentMode(enabled);
+          if (panel) panel.setAttribute("aria-hidden", String(!enabled));
+
+          if (titleEl) {
+            titleEl.textContent = agentModeStatus === "running" ? "Models are working" : "Selected models";
+          }
+          if (countEl) {
+            countEl.textContent = `${activeModels.length} ${activeModels.length === 1 ? "model" : "models"}`;
+          }
+          if (statusEl) {
+            statusEl.textContent = getAgentModeStatusText(activeModels);
+          }
+          if (modelsEl) {
+            modelsEl.innerHTML = "";
+            activeModels.forEach(modelInfo => {
+              const chip = document.createElement("span");
+              chip.className = "agent-mode-chip";
+              chip.textContent = modelInfo.model
+                ? `${modelInfo.label} · ${modelInfo.model}`
+                : modelInfo.label;
+              chip.setAttribute("role", "group");
+              chip.setAttribute("aria-label", `Choose ${modelInfo.label} model`);
+
+              const sourceSelect = document.getElementById(modelInfo.pref.selectId);
+              if (sourceSelect) {
+                const picker = document.createElement("select");
+                picker.className = "agent-mode-picker";
+                picker.setAttribute("aria-label", `Choose ${modelInfo.label} model`);
+                Array.from(sourceSelect.options).forEach(option => {
+                  picker.appendChild(option.cloneNode(true));
+                });
+                picker.value = sourceSelect.value;
+                picker.addEventListener("change", function () {
+                  syncAgentModePicker(this, modelInfo.pref);
+                });
+                chip.appendChild(picker);
+              }
+              modelsEl.appendChild(chip);
+            });
+          }
+        }
+
+        function setAgentMode(enabled, options = {}) {
+          const { persist = false } = options;
+          const nextEnabled = !!enabled;
+          const wasEnabled = isAgentModeEnabled();
+          if (persist) {
+            localStorage.setItem(AGENT_MODE_STORAGE_KEY, String(nextEnabled));
+          }
+          if (wasEnabled !== nextEnabled) {
+            document.body.classList.add("agent-mode-transitioning");
+            window.setTimeout(() => {
+              document.body.classList.remove("agent-mode-transitioning");
+            }, 340);
+          }
+          updateAgentModeUI();
+        }
+
+        function setAgentModeStatus(status) {
+          if (status === "running") {
+            startAgentModeTimer();
+          } else if (status === "complete" || status === "canceled") {
+            stopAgentModeTimer();
+          } else if (status === "idle") {
+            resetAgentModeTimer();
+          }
+          agentModeStatus = status;
+          updateAgentModeUI();
+        }
+
+        window.setAgentModeStatus = setAgentModeStatus;
+        window.updateAgentModeUI = updateAgentModeUI;
+        window.isAgentModeEnabled = isAgentModeEnabled;
 
         function getModelPrefByResponseId(responseId) {
           return modelPrefs.find(pref => pref.responseId === responseId) || null;
@@ -1493,6 +1746,8 @@
           if (typeof window.updateConsensusButtonAvailability === "function") {
             window.updateConsensusButtonAvailability();
           }
+
+          updateAgentModeUI();
         }
 
         window.restoreModelSelections = function () {
@@ -1515,7 +1770,10 @@
               const option = select.querySelector(`option[value="${savedSelect}"]`);
               if (option && !option.disabled) {
                 select.value = savedSelect;
-                if (labelText) labelText.textContent = savedSelect;
+                if (labelText) {
+                  labelText.textContent = savedSelect;
+                  labelText.title = `Choose model: ${savedSelect}`;
+                }
               }
             }
           });
@@ -1535,9 +1793,11 @@
 
         // 1. Initialer Aufruf beim Laden der Seite
         window.restoreModelSelections();
+        updateAgentModeUI();
 
         window.addEventListener("pageshow", function () {
           window.restoreModelSelections();
+          updateAgentModeUI();
         });
 
         // 2. Event Listener zum Speichern hinzufügen (bleibt gleich)
@@ -1556,9 +1816,24 @@
             select.addEventListener("change", function () {
               localStorage.setItem("pref_select_" + pref.key, this.value);
               if (labelText) labelText.textContent = this.value;
+              updateAgentModeUI();
             });
           }
         });
+
+        const agentModeSwitch = document.getElementById("agentModeSwitch");
+        if (agentModeSwitch) {
+          agentModeSwitch.addEventListener("change", function () {
+            setAgentMode(this.checked, { persist: true });
+          });
+        }
+
+        const inlineAgentModeSwitch = document.getElementById("toggleAllButton");
+        if (inlineAgentModeSwitch) {
+          inlineAgentModeSwitch.addEventListener("change", function () {
+            setAgentMode(this.checked, { persist: true });
+          });
+        }
 
         // --- NEU: Event Listener für Consensus Dropdown ---
         const consensusSelect = document.getElementById("consensusModelDropdown");
@@ -1575,10 +1850,14 @@
         let leaderboardInterval; // Variable zum Speichern des Interval-IDs
 
         window.toggleLeaderboard = function () {
+          const section = document.querySelector(".leaderboard-section");
           const container = document.getElementById("leaderboardContentContainer");
-          const arrow = document.getElementById("toggleLeaderboard").querySelector(".arrow");
-          container.classList.toggle("hidden");
-          arrow.classList.toggle("rotated");
+          const toggle = document.getElementById("toggleLeaderboard");
+          if (!section || !container || !toggle) return;
+
+          const isCollapsed = section.classList.toggle("is-collapsed");
+          container.classList.toggle("hidden", isCollapsed);
+          toggle.setAttribute("aria-expanded", String(!isCollapsed));
         };
 
         window.toggleBookmarks = function () {
@@ -1652,7 +1931,7 @@
           labelText.setAttribute("tabindex", "0");
           labelText.setAttribute("aria-haspopup", "listbox");
           labelText.setAttribute("aria-controls", pref.selectId);
-          labelText.title = "Choose model";
+          labelText.title = `Choose model: ${labelText.textContent}`;
 
           labelText.addEventListener("click", function (event) {
             event.stopPropagation();
@@ -1838,6 +2117,9 @@
           if (window.resetCredibilityFrame && consensusBox) {
             window.resetCredibilityFrame(consensusBox.querySelector(".consensus-differences"));
           }
+          if (isAgentModeEnabled()) {
+            setAgentModeStatus("canceled");
+          }
         }
 
         window.cancelCurrentQuery = function () {
@@ -1973,6 +2255,7 @@
           }
 
           // 🔸 PHASE 1: UI Feedback setzen
+          setAgentModeStatus(modelBoxes.length > 0 ? "running" : "idle");
           window.spinnerHTML = baseSpinnerHTML;
           modelBoxes.forEach(box => setSpinnerEl(box));
           window.currentEvidenceSources = [];
@@ -2070,6 +2353,7 @@
           if (document.getElementById("selectGemini").checked) activeModels.push("Gemini");
           if (document.getElementById("selectDeepSeek").checked) activeModels.push("DeepSeek");
           if (document.getElementById("selectGrok").checked) activeModels.push("Grok");
+          setAgentModeStatus(activeModels.length > 0 ? "running" : "idle");
 
           // Spinner in den jeweiligen Response-Boxen setzen
           if (activeModels.includes("OpenAI")) {
@@ -2090,11 +2374,7 @@
           if (activeModels.includes("Grok")) {
             document.getElementById("grokResponse").querySelector(".collapsible-content").innerHTML = window.spinnerHTML;
           }
-          if (document.getElementById("autoConsensusToggle").checked) {
-            document.getElementById("consensusResponse").querySelector("p").innerHTML = spinnerHTML;
-          } else {
-            document.getElementById("consensusResponse").querySelector("p").innerHTML = "";
-          }
+          document.getElementById("consensusResponse").querySelector("p").innerHTML = "";
 
           // API Keys aus localStorage abrufen
           const openaiKey = localStorage.getItem("openaiKey") || "";
@@ -2110,6 +2390,7 @@
             if (!isActiveQueryRun(queryRunId)) return;
             responsesReceived++;
             if (responsesReceived === totalActive) {
+              setAgentModeStatus("complete");
               // Sende-Button immer wieder freischalten
               finishQueryRun(queryRunId);
               const canGenerateConsensus = typeof window.updateConsensusButtonAvailability === "function"
@@ -2148,6 +2429,7 @@
 
           // Hilfsfunktion, um einen leeren API Key zu prüfen
           if (totalActive === 0) {
+            setAgentModeStatus("idle");
             finishQueryRun(queryRunId);
             if (typeof window.updateConsensusButtonAvailability === "function") {
               window.updateConsensusButtonAvailability();
@@ -2756,24 +3038,48 @@
           toggleModel("grokResponse", this.checked);
         });
 
-        // Modell-Dropdowns aktualisieren die angezeigten Namen
+        // Modell-Dropdowns aktualisieren die angezeigten Namen und Tooltips
         document.getElementById("openaiModelSelect").addEventListener("change", function () {
-          document.getElementById("openaiModelText").textContent = this.value;
+          const el = document.getElementById("openaiModelText");
+          if (el) {
+            el.textContent = this.value;
+            el.title = `Choose model: ${this.value}`;
+          }
         });
         document.getElementById("mistralModelSelect").addEventListener("change", function () {
-          document.getElementById("mistralModelText").textContent = this.value;
+          const el = document.getElementById("mistralModelText");
+          if (el) {
+            el.textContent = this.value;
+            el.title = `Choose model: ${this.value}`;
+          }
         });
         document.getElementById("claudeModelSelect").addEventListener("change", function () {
-          document.getElementById("claudeModelText").textContent = this.value;
+          const el = document.getElementById("claudeModelText");
+          if (el) {
+            el.textContent = this.value;
+            el.title = `Choose model: ${this.value}`;
+          }
         });
         document.getElementById("geminiModelSelect").addEventListener("change", function () {
-          document.getElementById("geminiModelText").textContent = this.value;
+          const el = document.getElementById("geminiModelText");
+          if (el) {
+            el.textContent = this.value;
+            el.title = `Choose model: ${this.value}`;
+          }
         });
         document.getElementById("deepseekModelSelect").addEventListener("change", function () {
-          document.getElementById("deepseekModelText").textContent = this.value;
+          const el = document.getElementById("deepseekModelText");
+          if (el) {
+            el.textContent = this.value;
+            el.title = `Choose model: ${this.value}`;
+          }
         });
         document.getElementById("grokModelSelect").addEventListener("change", function () {
-          document.getElementById("grokModelText").textContent = this.value;
+          const el = document.getElementById("grokModelText");
+          if (el) {
+            el.textContent = this.value;
+            el.title = `Choose model: ${this.value}`;
+          }
         });
 
         // collapse model dropdown after selection to avoid lingering focus
@@ -3128,7 +3434,7 @@
             // Aktualisiere Free Requests, falls vorhanden (Deep Think nicht benötigt)
             if (data.free_usage_remaining !== undefined) {
               document.getElementById("freeUsageDisplay").innerText =
-                "Free requests: " + data.free_usage_remaining + " / " + FREE_USAGE_LIMIT;
+                "Requests: " + data.free_usage_remaining + " / " + currentMaxLimit;
             }
 
             if (response.ok) {
@@ -3326,6 +3632,8 @@
           if (inputBox) {
             inputBox.value = "";
           }
+
+          setAgentModeStatus("idle");
         }
 
         function getActiveMode() {
@@ -3729,7 +4037,7 @@
             if (upgradeLink) upgradeLink.style.display = "none";
 
             // Optional: Standard-Limits (Free) oder ganz sperren
-            currentMaxLimit = LIMITS.FREE.NORMAL;
+            setCurrentUsageLimits(false);
 
             // Deep Search sperren (wie bei Free User)
             if (deepSearchLabel) {
@@ -3746,8 +4054,7 @@
             if (upgradeLink) upgradeLink.style.display = "none";
 
             // Limits
-            currentMaxLimit = LIMITS.PRO.NORMAL;
-            currentDeepLimit = LIMITS.PRO.DEEP;
+            setCurrentUsageLimits(true);
 
             // Dropdowns entsperren
             if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(true);
@@ -3766,8 +4073,7 @@
             if (upgradeLink) upgradeLink.style.display = "inline-block"; // Hier zeigen wir Upgrade
 
             // Limits
-            currentMaxLimit = LIMITS.FREE.NORMAL;
-            currentDeepLimit = LIMITS.FREE.DEEP;
+            setCurrentUsageLimits(false);
 
             // Dropdowns sperren
             if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false);
@@ -4114,6 +4420,19 @@
           <hr class="settings-divider settings-theme-section">
 
           <div class="settings-section">
+            <label for="agentModeSwitch" class="custom-checkbox-label settings-agent-mode-row"
+              style="width: 100%; display: flex; justify-content: space-between; font-weight: bold;">
+              Agent Mode
+              <input type="checkbox" id="agentModeSwitch">
+            </label>
+            <p style="font-size: 0.85em; color: #666; margin-top: 5px;">
+              Show selected models as one grouped agent box while keeping responses available for consensus.
+            </p>
+          </div>
+
+          <hr class="settings-divider">
+
+          <div class="settings-section">
             <label for="useOwnKeysSwitch" class="custom-checkbox-label"
               style="width: 100%; display: flex; justify-content: space-between; font-weight: bold;">
               Use your own API keys
@@ -4434,6 +4753,7 @@
           if (cls) {
             // Markdown-Bold **…** in der Badge vermeiden, damit die Farbe klar lesbar bleibt
             lines[0] = lines[0].replace(/\*\*/g, "");
+            lines[0] = `<span class="cred-badge ${cls}">${lines[0]}</span>`;
             return lines.join("\n");
           }
           return md;

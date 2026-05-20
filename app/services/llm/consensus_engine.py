@@ -289,7 +289,7 @@ def query_differences(
         "If all models respond almost identically, the consensus is very credible. "
         "If there are only linguistic variations, it is largely credible. "
         "If there are content nuances, it is partially credible. "
-        "If there are clear contradictions, it is hardly or not credible."
+        "If there are clear contradictions, it is hardly or not credible. "
         "Respond with one of the following sentences:\n\n"
 
         "- 'The consensus answer is **very** credible.'\n"
@@ -298,7 +298,9 @@ def query_differences(
         "- 'The consensus answer is **hardly** credible.'\n"
         "- 'The consensus answer is **not** credible.'\n\n"
 
-        "After the sentence, include a separator line and a **very brief explanation** of why these differences are relevant.\n\n"
+        "After the sentence, include a separator line and a concise differences summary. "
+        "Keep it short and scannable: maximum two bullet points, each under 18 words. "
+        "Mention only the most important substantive deviations. Do not write long paragraphs or restate every model.\n\n"
         "Consensus answer:\n" + consensus_answer + "\n\n"
         "Model responses:\n" + responses_text + "\n\n"
         "Finally, subjectively determine which model provided the best answer. "
@@ -311,7 +313,8 @@ def query_differences(
         "\n"
         "_____________\n"
         "\n"
-        "[Very brief explanation of why these differences affect credibility.]\n\n"
+        "- [Most important difference, under 18 words.]\n"
+        "- [Optional second important difference, under 18 words.]\n\n"
         "(Info: Mark the model closest to the consensus as Best Model)\n"
         "BestModel: [Model name]"
     )

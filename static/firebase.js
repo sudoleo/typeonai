@@ -64,10 +64,22 @@ function injectHtmlSafe(containerEl, md) {
   enhanceLinks(containerEl);
 }
 
+function getConfiguredLimit(key, fallback) {
+  const raw = (window.APP_LIMITS || {})[key];
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : fallback;
+}
+
 // Globale Limits Definition
 window.LIMITS = {
-  FREE: { NORMAL: 25, DEEP: 12 },
-  PRO:  { NORMAL: 500, DEEP: 50 }
+  FREE: {
+    NORMAL: getConfiguredLimit("free_usage_limit", 25),
+    DEEP: getConfiguredLimit("free_deep_search_limit", 12)
+  },
+  PRO: {
+    NORMAL: getConfiguredLimit("pro_usage_limit", 500),
+    DEEP: getConfiguredLimit("pro_deep_search_limit", 50)
+  }
 };
 
 // Globale Variablen für den aktuellen Zustand (Startwert: Free)
@@ -102,6 +114,12 @@ async function checkUserStatusOnLoad(user, token) {
       // A) Der saubere Weg (falls vorhanden):
       if (typeof window.updateUserTierUI === "function") {
           window.updateUserTierUI(data.is_pro, true); 
+      }
+      if (typeof window.setCurrentUsageLimits === "function") {
+          window.setCurrentUsageLimits(data.is_pro, data);
+      } else {
+          window.currentMaxLimit = data.limit;
+          window.currentDeepLimit = data.deep_limit;
       }
 
       // B) FALLBACK (Hier war der Fehler):
@@ -296,6 +314,14 @@ function fetchUsageData(token) {
   })
     .then(response => response.json())
     .then(data => {
+      if (typeof window.setCurrentUsageLimits === "function") {
+        window.setCurrentUsageLimits(data.is_pro === true, data);
+      } else {
+        const totalLimit = Number(data.total_limit);
+        const deepTotalLimit = Number(data.deep_total_limit);
+        if (Number.isFinite(totalLimit)) window.currentMaxLimit = totalLimit;
+        if (Number.isFinite(deepTotalLimit)) window.currentDeepLimit = deepTotalLimit;
+      }
       freeDisplay.innerHTML = 'Requests: <strong>' + data.remaining + ' / ' + window.currentMaxLimit + '</strong>';
       deepDisplay.innerHTML = 'Deep Think: <strong>' + data.deep_remaining + ' / ' + window.currentDeepLimit + '</strong>';
     })
