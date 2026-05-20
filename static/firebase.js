@@ -155,6 +155,9 @@ onIdTokenChanged(auth, async (user) => {
     // **NEU: Harte Client-Gate—kein Token persistieren, keine Calls, wenn unverified**
     if (!user.emailVerified) {
       localStorage.removeItem("id_token");
+      if (typeof window.updateQuestionInputAccess === "function") {
+        window.updateQuestionInputAccess();
+      }
       if (usageOptions) usageOptions.style.display = "none";
       if (loginContainer) loginContainer.innerText = "Verify your e-mail to continue";
       return; // <--- ganz wichtig
@@ -163,6 +166,9 @@ onIdTokenChanged(auth, async (user) => {
     // ab hier nur noch verifizierte Nutzer
     const token = await user.getIdToken(/* forceRefresh= */ false);
     localStorage.setItem("id_token", token);
+    if (typeof window.updateQuestionInputAccess === "function") {
+      window.updateQuestionInputAccess();
+    }
 
     try {
       // Dieser Call übernimmt nun die Arbeit für ALLE Login-Arten (Google, Email, Reload)
@@ -232,6 +238,9 @@ onIdTokenChanged(auth, async (user) => {
     } else {
         // Cleanup bei Logout
         localStorage.removeItem("id_token");
+        if (typeof window.updateQuestionInputAccess === "function") {
+          window.updateQuestionInputAccess();
+        }
         loginContainer.innerText = "Log in";
 
         if (usageOptions) usageOptions.style.display = "none";

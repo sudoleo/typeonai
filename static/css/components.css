@@ -83,6 +83,11 @@ textarea:focus {
   max-height: 300px;
 }
 
+.chat-input-container .input-field:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
 /* --------------------------------------------------------------------------
    Input Actions Container (Send / Clear)
    -------------------------------------------------------------------------- */
@@ -124,7 +129,7 @@ textarea:focus {
 .input-action-btn-primary {
   background: var(--button-bg);
   color: var(--button-text);
-  border: none;
+  border: 1px solid transparent;
   padding: 8px 16px;
   box-shadow: var(--box-shadow);
 }
@@ -132,6 +137,37 @@ textarea:focus {
 .input-action-btn-primary:hover {
   opacity: 0.9;
   transform: translateY(-1px);
+}
+
+.input-action-btn-primary.is-cancel-action {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0;
+  border-radius: 50%;
+  background: #eeeeee;
+  color: #111111;
+  border-color: transparent;
+}
+
+.input-action-btn-primary.is-cancel-action:hover {
+  background: #e4e4e4;
+  opacity: 1;
+  transform: none;
+}
+
+.input-action-btn-primary.is-cancel-action svg {
+  width: 14px;
+  height: 14px;
+}
+
+.dark-mode .input-action-btn-primary.is-cancel-action {
+  background: #25272c;
+  color: #ffffff;
+}
+
+.dark-mode .input-action-btn-primary.is-cancel-action:hover {
+  background: #30333a;
 }
 
 /* --------------------------------------------------------------------------
@@ -144,6 +180,17 @@ textarea:focus {
   flex-wrap: wrap;
   justify-content: space-between;
   position: relative;
+}
+
+.response-section:has(.response-box.excluded)::after {
+  content: "";
+  order: 9;
+  flex: 0 0 100%;
+  height: 0;
+}
+
+.response-section:has(.response-box.excluded) {
+  justify-content: flex-start;
 }
 
 .response-box,
@@ -159,12 +206,23 @@ textarea:focus {
   position: relative;
 }
 
+.response-box {
+  overflow: hidden;
+  will-change: transform;
+}
+
 .response-box.best {
   border: 2px solid green;
 }
 
 .response-box.excluded {
-  opacity: 0.5;
+  order: 10;
+  flex: 0 1 96px;
+  min-width: 88px;
+  max-width: 104px;
+  min-height: 0;
+  padding: 5px 8px;
+  opacity: 0.72;
 }
 
 .response-box h2 {
@@ -174,6 +232,14 @@ textarea:focus {
   margin: 5px 0 0 0;
   padding: 0;
   font-size: 1em;
+}
+
+.response-box.excluded h2 {
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+  line-height: 1.1;
 }
 
 .response-box .title {
@@ -193,6 +259,33 @@ textarea:focus {
   color: var(--sidebar-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.response-box.excluded .collapsible-content {
+  display: none;
+}
+
+.response-box.excluded h2::before {
+  content: attr(data-short-label);
+  display: block;
+  max-width: calc(100% - 22px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--sidebar-text-muted);
+  pointer-events: none;
+}
+
+.response-box.excluded .title small,
+.response-box.excluded .model-picker-wrapper {
+  display: none !important;
+}
+
+.response-box.excluded .title {
+  display: none;
 }
 
 .control-icons {
@@ -218,7 +311,7 @@ textarea:focus {
   color: #888;
 }
 
-.exclude-btn {
+.best-btn {
   font-size: small;
 }
 
@@ -230,15 +323,35 @@ textarea:focus {
 
 .response-box.excluded .exclude-btn {
   pointer-events: auto;
-  background-color: red;
-  border-color: red;
-  color: #fff;
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--sidebar-text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  opacity: 0.82;
+}
+
+.response-box.excluded .control-icons {
+  margin: 0;
+  padding: 0;
+  align-items: center;
+}
+
+.response-box.excluded .exclude-btn:hover,
+.response-box.excluded .exclude-btn:focus-visible {
+  background-color: var(--sidebar-hover);
+  color: var(--text-color);
+  opacity: 1;
 }
 
 .response-box.best .exclude-btn,
 .response-box.excluded .best-btn {
   opacity: 0.5;
   pointer-events: none;
+}
+
+.response-box.excluded .best-btn {
+  display: none;
 }
 
 .consensus-box {
@@ -542,6 +655,46 @@ textarea:focus {
   mask: url("../icons/consensus.png") no-repeat center;
   -webkit-mask-size: contain;
   mask-size: contain;
+}
+
+#consensusButton.is-cancel-action {
+  gap: 8px;
+  background: #eeeeee;
+  color: #111111;
+  border-color: transparent;
+  box-shadow: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  min-height: 36px;
+}
+
+#consensusButton.is-cancel-action:hover {
+  background: #e4e4e4;
+  opacity: 1;
+  transform: none;
+  box-shadow: none;
+}
+
+#consensusButton.is-cancel-action::before {
+  display: none;
+}
+
+#consensusButton.is-cancel-action::after {
+  content: "";
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 1.5px;
+  background: currentColor;
+}
+
+.dark-mode #consensusButton.is-cancel-action {
+  background: #25272c;
+  color: #ffffff;
+}
+
+.dark-mode #consensusButton.is-cancel-action:hover {
+  background: #30333a;
 }
 
 #consensusButton:hover {

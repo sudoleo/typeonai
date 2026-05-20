@@ -18,7 +18,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260518-theme-mobile5">
+  <link rel="stylesheet" href="/static/style.css?v=20260520-excluded-animate2">
   <link rel="icon" href="/static/favicon.png" type="image/x-icon">
   <!-- Füge dies im <head> hinzu -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -29,7 +29,7 @@
   <!-- DOMPurify (HTML Sanitizer) -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260517-ui1"></script>
+  <script type="module" src="/static/firebase.js?v=20260520-input-lock1"></script>
   <script type="module" src="/static/demo.js?v=20260516-ui7"></script>
   <script src="/static/app-ui.js" defer></script>
 </head>
@@ -210,8 +210,8 @@
     </div>
 
     <div class="response-section" style="position: relative;">
-      <div class="response-box" id="openaiResponse" data-model="OpenAI">
-        <h2>
+      <div class="response-box" id="openaiResponse" data-model="OpenAI" data-short-label="OpenAI">
+        <h2 data-short-label="OpenAI">
           <span class="title">Response from ChatGPT
             <small>
               <img src="/static/icons/chat_icons/chatgpt.png" class="model-icon chatgpt-logo" alt="icon">
@@ -233,8 +233,8 @@
         <p class="collapsible-content"></p>
       </div>
 
-      <div class="response-box" id="mistralResponse" data-model="Mistral">
-        <h2>
+      <div class="response-box" id="mistralResponse" data-model="Mistral" data-short-label="Mistral">
+        <h2 data-short-label="Mistral">
           <span class="title">Response from Mistral
             <small><img src="/static/icons/chat_icons/mistral.png" class="model-icon" alt="icon"><span
                 id="mistralModelText">{{ default_models['mistral'] }}</span></small>
@@ -254,8 +254,8 @@
         <p class="collapsible-content"></p>
       </div>
 
-      <div class="response-box" id="claudeResponse" data-model="Anthropic">
-        <h2>
+      <div class="response-box" id="claudeResponse" data-model="Anthropic" data-short-label="Claude">
+        <h2 data-short-label="Claude">
           <span class="title">Response from Claude
             <small><img src="/static/icons/chat_icons/claude.png" class="model-icon" alt="icon"><span
                 id="claudeModelText">{{ default_models['anthropic'] }}</span></small>
@@ -275,8 +275,8 @@
         <p class="collapsible-content"></p>
       </div>
 
-      <div class="response-box" id="geminiResponse" data-model="Gemini">
-        <h2>
+      <div class="response-box" id="geminiResponse" data-model="Gemini" data-short-label="Gemini">
+        <h2 data-short-label="Gemini">
           <span class="title">Response from Gemini
             <small><img src="/static/icons/chat_icons/gemini-icon.png" class="model-icon" alt="icon"><span
                 id="geminiModelText">{{ default_models['gemini'] }}</span></small>
@@ -296,8 +296,8 @@
         <p class="collapsible-content"></p>
       </div>
 
-      <div class="response-box" id="deepseekResponse" data-model="DeepSeek">
-        <h2>
+      <div class="response-box" id="deepseekResponse" data-model="DeepSeek" data-short-label="DeepSeek">
+        <h2 data-short-label="DeepSeek">
           <span class="title">Response from DeepSeek
             <small><img src="/static/icons/chat_icons/deepseek.png" class="model-icon" alt="icon"><span
                 id="deepseekModelText">{{ default_models['deepseek'] }}</span></small>
@@ -317,8 +317,8 @@
         <p class="collapsible-content"></p>
       </div>
 
-      <div class="response-box" id="grokResponse" data-model="Grok">
-        <h2>
+      <div class="response-box" id="grokResponse" data-model="Grok" data-short-label="Grok">
+        <h2 data-short-label="Grok">
           <span class="title">Response from Grok
             <small>
               <img src="/static/icons/chat_icons/grok.png" class="model-icon grok-logo" alt="Grok icon">
@@ -670,21 +670,40 @@
         });
 
         const questionInput = document.getElementById("questionInput");
-        // Prüfe, ob der Nutzer eingeloggt ist (z.B. über ein gespeichertes Token)
-        const isLoggedIn = !!localStorage.getItem("id_token");
-        // Prüfe, ob mindestens ein API Key vorhanden ist
-        const hasApiKeys = localStorage.getItem("openaiKey") ||
-          localStorage.getItem("mistralKey") ||
-          localStorage.getItem("anthropicKey") ||
-          localStorage.getItem("geminiKey") ||
-          localStorage.getItem("deepseekKey") ||
-          localStorage.getItem("grokKey");
-
-        if (isLoggedIn || hasApiKeys) {
-          questionInput.placeholder = "Enter your question";
-        } else {
-          questionInput.placeholder = "Please log in or store your own API keys.";
+        const defaultQuestionPlaceholder = "Enter your question";
+        const lockedQuestionPlaceholder = "Sign in to start asking questions for free.";
+        const apiKeyStorageKeys = ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey", "grokKey"];
+        function hasStoredApiKeys() {
+          return apiKeyStorageKeys.some(key => (localStorage.getItem(key) || "").trim() !== "");
         }
+
+        function hasVerifiedSession() {
+          return Boolean(window.auth?.currentUser?.emailVerified || localStorage.getItem("id_token"));
+        }
+
+        window.userCanAskQuestions = function () {
+          return hasVerifiedSession() || hasStoredApiKeys();
+        };
+
+        window.updateQuestionInputAccess = function () {
+          const canAsk = window.userCanAskQuestions();
+          const sendButton = document.getElementById("sendButton");
+
+          if (questionInput) {
+            questionInput.disabled = !canAsk;
+            questionInput.placeholder = canAsk ? defaultQuestionPlaceholder : lockedQuestionPlaceholder;
+            questionInput.setAttribute("aria-disabled", String(!canAsk));
+          }
+
+          if (sendButton && !sendButton.classList.contains("is-cancel-action")) {
+            sendButton.disabled = !canAsk;
+            sendButton.title = canAsk ? "Send question" : "Sign in or add API keys to ask questions";
+          }
+
+          return canAsk;
+        };
+
+        window.updateQuestionInputAccess();
 
         let mobileInfoPopupTimer = null;
 
@@ -1120,6 +1139,7 @@
         }
 
         document.getElementById("sendButton").addEventListener("click", function (e) {
+          if (queryRequestRunning) return;
           if (!validateInputText()) {
             e.preventDefault();
           }
@@ -1129,6 +1149,10 @@
         // Frage per Enter (ohne Zeilenumbruch) absenden
         document.getElementById("questionInput").addEventListener("keydown", function (event) {
           if (event.key === "Enter" && !event.shiftKey) {
+            if (queryRequestRunning) {
+              event.preventDefault();
+              return;
+            }
             // Wenn der Button deaktiviert ist, breche die Ausführung ab
             if (document.getElementById("sendButton").disabled) {
               event.preventDefault();
@@ -1296,7 +1320,7 @@
           const button = document.getElementById("toggleModelSelection");
           const arrow = button.querySelector(".arrow");
           if (area.style.display === "none" || area.style.display === "") {
-            area.style.display = "block";
+            area.style.display = "flex";
             arrow.classList.add("rotated");
           } else {
             area.style.display = "none";
@@ -1359,7 +1383,7 @@
           // verhalte dich wie früher (nur .excluded toggeln).
           if (!checkbox) {
             if (!box.classList.contains("excluded")) {
-              showPopup("You have excluded this answer. It will be removed from the view and not included in the consensus.");
+              showPopup("You have excluded this answer. It is minimized and will not be included in the consensus.");
             }
             box.classList.toggle("excluded");
             return;
@@ -1369,7 +1393,7 @@
           const willBeChecked = !currentlyChecked;
 
           if (currentlyChecked && !box.classList.contains("excluded")) {
-            showPopup("You have excluded this answer. It will be removed from the view and not included in the consensus.");
+            showPopup("You have excluded this answer. It is minimized and will not be included in the consensus.");
           }
 
           checkbox.checked = willBeChecked;
@@ -1393,6 +1417,32 @@
           return modelPrefs.find(pref => pref.responseId === responseId) || null;
         }
 
+        function animateResponseReorder(box, applyStateChange) {
+          if (!box || typeof box.animate !== "function") {
+            applyStateChange();
+            return;
+          }
+
+          const first = box.getBoundingClientRect();
+          applyStateChange();
+          const last = box.getBoundingClientRect();
+          const deltaX = first.left - last.left;
+          const deltaY = first.top - last.top;
+
+          if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) return;
+
+          box.animate(
+            [
+              { transform: `translate(${deltaX}px, ${deltaY}px)`, opacity: 0.86 },
+              { transform: "translate(0, 0)", opacity: box.classList.contains("excluded") ? 0.72 : 1 }
+            ],
+            {
+              duration: 180,
+              easing: "cubic-bezier(0.2, 0, 0, 1)"
+            }
+          );
+        }
+
         function setModelSelectionState(prefOrResponseId, isChecked, options = {}) {
           const pref = typeof prefOrResponseId === "string"
             ? getModelPrefByResponseId(prefOrResponseId)
@@ -1402,21 +1452,46 @@
           const checked = !!isChecked;
           const checkbox = document.getElementById(pref.checkId);
           const box = document.getElementById(pref.responseId);
-          const { persist = false, syncCheckbox = true } = options;
+          const label = document.querySelector(`label[for='${pref.checkId}']`);
+          const { persist = false, syncCheckbox = true, animate = persist } = options;
 
           if (checkbox && syncCheckbox) {
             checkbox.checked = checked;
           }
 
+          if (label) {
+            label.classList.toggle("is-unselected", !checked);
+            label.title = checked ? pref.key : `${pref.key} is excluded. Check to include it again.`;
+          }
+
           if (box) {
-            box.classList.toggle("excluded", !checked);
-            if (!checked) {
-              box.classList.remove("best");
+            const applyBoxState = () => {
+              box.classList.toggle("excluded", !checked);
+              box.title = checked ? "" : `${pref.key} is excluded. Click the checkmark to include it again.`;
+              const excludeBtn = box.querySelector(".exclude-btn");
+              if (excludeBtn) {
+                excludeBtn.textContent = checked ? "×" : "✓";
+                excludeBtn.title = checked ? "Exclude answer" : "Include answer";
+                excludeBtn.setAttribute("aria-label", checked ? "Exclude answer" : "Include answer");
+              }
+              if (!checked) {
+                box.classList.remove("best");
+              }
+            };
+
+            if (animate) {
+              animateResponseReorder(box, applyBoxState);
+            } else {
+              applyBoxState();
             }
           }
 
           if (persist) {
             localStorage.setItem("pref_check_" + pref.key, String(checked));
+          }
+
+          if (typeof window.updateConsensusButtonAvailability === "function") {
+            window.updateConsensusButtonAvailability();
           }
         }
 
@@ -1689,10 +1764,103 @@
         }
 
         let effectiveSystemPrompt = "";
+        let currentQueryController = null;
+        let currentQueryRunId = 0;
+        let queryRequestRunning = false;
+
+        function setSendButtonRunning(isRunning) {
+          const sendButton = document.getElementById("sendButton");
+          if (!sendButton) return;
+
+          sendButton.disabled = false;
+          sendButton.classList.toggle("is-cancel-action", isRunning);
+          sendButton.title = isRunning ? "Cancel request" : "Send question";
+          sendButton.setAttribute("aria-label", isRunning ? "Cancel request" : "Send question");
+          sendButton.innerHTML = isRunning
+            ? `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <rect x="8" y="8" width="8" height="8" rx="1.3"></rect>
+            </svg>`
+            : `Send
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: 16px; height: 16px;">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>`;
+
+          if (!isRunning && typeof window.updateQuestionInputAccess === "function") {
+            window.updateQuestionInputAccess();
+          }
+        }
+
+        function isActiveQueryRun(runId) {
+          return queryRequestRunning
+            && runId === currentQueryRunId
+            && currentQueryController
+            && !currentQueryController.signal.aborted;
+        }
+
+        function isAbortError(error) {
+          return error && error.name === "AbortError";
+        }
+
+        function finishQueryRun(runId) {
+          if (runId !== currentQueryRunId) return;
+          queryRequestRunning = false;
+          currentQueryController = null;
+          setSendButtonRunning(false);
+        }
+
+        function markPendingQueryResponsesCanceled() {
+          const boxIds = [
+            "openaiResponse",
+            "mistralResponse",
+            "claudeResponse",
+            "geminiResponse",
+            "deepseekResponse",
+            "grokResponse"
+          ];
+
+          boxIds.forEach(id => {
+            const contentEl = document.getElementById(id)?.querySelector(".collapsible-content");
+            if (contentEl?.querySelector(".thinking-wrap")) {
+              contentEl.innerText = "Request canceled.";
+            }
+          });
+
+          const consensusBox = document.getElementById("consensusResponse");
+          const consensusMain = consensusBox?.querySelector(".consensus-main p");
+          const consensusDiff = consensusBox?.querySelector(".consensus-differences p");
+          if (consensusMain?.querySelector(".thinking-wrap")) {
+            consensusMain.innerText = "Request canceled.";
+          }
+          if (consensusDiff?.querySelector(".thinking-wrap")) {
+            consensusDiff.innerText = "";
+          }
+          if (window.resetCredibilityFrame && consensusBox) {
+            window.resetCredibilityFrame(consensusBox.querySelector(".consensus-differences"));
+          }
+        }
+
+        window.cancelCurrentQuery = function () {
+          if (!queryRequestRunning || !currentQueryController) return;
+          const runId = currentQueryRunId;
+          currentQueryController.abort();
+          markPendingQueryResponsesCanceled();
+          finishQueryRun(runId);
+          document.getElementById("consensusButton").disabled = true;
+        };
 
         // Senden der Frage an die aktiven Modelle
         window.sendQuestion = async function () {
+          if (queryRequestRunning) {
+            window.cancelCurrentQuery();
+            return;
+          }
+
           // Überprüfe zuerst das Wortlimit. Falls überschritten, wird die Funktion beendet.
+          if (typeof window.updateQuestionInputAccess === "function" && !window.updateQuestionInputAccess()) {
+            return;
+          }
+
           const mode = getActiveMode();
           if (!validateInputText()) {
             return;
@@ -1719,7 +1887,12 @@
             return;
           }
 
-          document.getElementById("sendButton").disabled = true;
+          currentQueryRunId++;
+          const queryRunId = currentQueryRunId;
+          currentQueryController = new AbortController();
+          const querySignal = currentQueryController.signal;
+          queryRequestRunning = true;
+          setSendButtonRunning(true);
           // Konsens-Button wieder aktivieren, bevor eine neue Anfrage gesendet wird.
           document.getElementById("consensusButton").disabled = false;
 
@@ -1833,7 +2006,7 @@
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(preparePayload),
-              keepalive: true
+              signal: querySignal
             });
 
             const prepareData = await prepareResp.json();
@@ -1852,8 +2025,15 @@
             // Quellen aktualisieren (nur relevant, wenn Search an war, sonst ist die Liste leer)
 
           } catch (err) {
+            if (isAbortError(err) || !isActiveQueryRun(queryRunId)) {
+              return;
+            }
             console.error("Error during /prepare:", err);
             // Fallback: effectiveSystemPrompt bleibt der gespeicherte Prompt
+          }
+
+          if (!isActiveQueryRun(queryRunId)) {
+            return;
           }
 
           window.spinnerHTML = baseSpinnerHTML;
@@ -1927,12 +2107,16 @@
           let responsesReceived = 0;
           const totalActive = activeModels.length;
           function checkAllResponses() {
+            if (!isActiveQueryRun(queryRunId)) return;
             responsesReceived++;
             if (responsesReceived === totalActive) {
               // Sende-Button immer wieder freischalten
-              document.getElementById("sendButton").disabled = false;
+              finishQueryRun(queryRunId);
+              const canGenerateConsensus = typeof window.updateConsensusButtonAvailability === "function"
+                ? window.updateConsensusButtonAvailability()
+                : true;
 
-              if (document.getElementById("autoConsensusToggle").checked) {
+              if (document.getElementById("autoConsensusToggle").checked && canGenerateConsensus) {
                 // Auto Consensus ist aktiviert: 
                 // Den Consensus-Button vorübergehend deaktivieren und
                 // erst nach Abschluss der Konsensgenerierung wieder aktivieren.
@@ -1940,19 +2124,39 @@
                 getConsensus()
                   .then(() => {
                     document.getElementById("consensusButton").disabled = false;
+                    if (typeof window.updateConsensusButtonAvailability === "function") {
+                      window.updateConsensusButtonAvailability();
+                    }
                   })
                   .catch((error) => {
                     console.error("Fehler bei der Konsensgenerierung:", error);
                     document.getElementById("consensusButton").disabled = false;
+                    if (typeof window.updateConsensusButtonAvailability === "function") {
+                      window.updateConsensusButtonAvailability();
+                    }
                   });
               } else {
                 // Auto Consensus nicht aktiviert – beide Buttons direkt freigeben.
-                document.getElementById("consensusButton").disabled = false;
+                if (typeof window.updateConsensusButtonAvailability === "function") {
+                  window.updateConsensusButtonAvailability();
+                } else {
+                  document.getElementById("consensusButton").disabled = false;
+                }
               }
             }
           }
 
           // Hilfsfunktion, um einen leeren API Key zu prüfen
+          if (totalActive === 0) {
+            finishQueryRun(queryRunId);
+            if (typeof window.updateConsensusButtonAvailability === "function") {
+              window.updateConsensusButtonAvailability();
+            } else {
+              document.getElementById("consensusButton").disabled = true;
+            }
+            return;
+          }
+
           function validateUserKey(keyName) {
             const key = localStorage.getItem(keyName);
             return key && key.trim() !== "";
@@ -2024,6 +2228,9 @@
                 const outputEl = document.getElementById("openaiResponse").querySelector(".collapsible-content");
                 outputEl.innerHTML = "Please log in or store your own API keys.";
                 alert("Please enter a valid OpenAI API key.");
+                currentQueryController?.abort();
+                markPendingQueryResponsesCanceled();
+                finishQueryRun(queryRunId);
                 return;
               }
               payload.api_key = localStorage.getItem("openaiKey");
@@ -2033,7 +2240,7 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),
-              keepalive: true
+              signal: querySignal
             })
               .then(async (response) => {
                 // Parse JSON (auch bei Non-2xx), aber werte response.ok aus
@@ -2055,6 +2262,7 @@
                 return data;
               })
               .then((data) => {
+                if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document
                   .getElementById("openaiResponse")
                   .querySelector(".collapsible-content");
@@ -2097,6 +2305,7 @@
                 checkAllResponses();
               })
               .catch((error) => {
+                if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
                 const outputEl = document
                   .getElementById("openaiResponse")
                   .querySelector(".collapsible-content");
@@ -2132,6 +2341,9 @@
                 const outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
                 outputEl.innerHTML = "Please log in or store your own API keys.";
                 alert("Please enter a valid Mistral API key.");
+                currentQueryController?.abort();
+                markPendingQueryResponsesCanceled();
+                finishQueryRun(queryRunId);
                 return;
               }
               payload.api_key = localStorage.getItem("mistralKey");
@@ -2141,10 +2353,11 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),
-              keepalive: true
+              signal: querySignal
             })
               .then(response => response.json())
               .then(data => {
+                if (!isActiveQueryRun(queryRunId)) return;
                 let outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
                 if (data.response) {
                   const responseWithSources = window.registerResponseSources
@@ -2182,6 +2395,7 @@
                 checkAllResponses();
               })
               .catch(error => {
+                if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
                 console.error("Error with Mistral:", error);
                 checkAllResponses();
               });
@@ -2211,6 +2425,9 @@
                 const outputEl = document.getElementById("claudeResponse").querySelector(".collapsible-content");
                 outputEl.innerHTML = "Please log in or store your own API keys.";
                 alert("Please enter a valid Anthropic API Key.");
+                currentQueryController?.abort();
+                markPendingQueryResponsesCanceled();
+                finishQueryRun(queryRunId);
                 return;
               }
               payload.api_key = localStorage.getItem("anthropicKey");
@@ -2220,10 +2437,11 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),
-              keepalive: true
+              signal: querySignal
             })
               .then(response => response.json())
               .then(data => {
+                if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document.getElementById("claudeResponse").querySelector(".collapsible-content");
                 if (data.response) {
                   const responseWithSources = window.registerResponseSources
@@ -2260,6 +2478,7 @@
                 checkAllResponses();
               })
               .catch(error => {
+                if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
                 console.error("Error with Anthropic:", error);
                 checkAllResponses();
               });
@@ -2289,6 +2508,9 @@
                 const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
                 outputEl.innerHTML = "Please log in or store your own API keys.";
                 alert("Please enter a valid Gemini API Key.");
+                currentQueryController?.abort();
+                markPendingQueryResponsesCanceled();
+                finishQueryRun(queryRunId);
                 return;
               }
               payload.api_key = localStorage.getItem("geminiKey");
@@ -2298,10 +2520,11 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),
-              keepalive: true
+              signal: querySignal
             })
               .then(response => response.json())
               .then(data => {
+                if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
                 if (data.response) {
                   const responseWithSources = window.registerResponseSources
@@ -2338,6 +2561,7 @@
                 checkAllResponses();
               })
               .catch(error => {
+                if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
                 console.error("Error with Gemini:", error);
                 checkAllResponses();
               });
@@ -2367,6 +2591,9 @@
                 const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
                 outputEl.innerHTML = "Please log in or store your own API keys.";
                 alert("Please enter a valid DeepSeek API key.");
+                currentQueryController?.abort();
+                markPendingQueryResponsesCanceled();
+                finishQueryRun(queryRunId);
                 return;
               }
               payload.api_key = localStorage.getItem("deepseekKey");
@@ -2376,10 +2603,11 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),
-              keepalive: true
+              signal: querySignal
             })
               .then(response => response.json())
               .then(data => {
+                if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
                 if (data.response) {
                   const responseWithSources = window.registerResponseSources
@@ -2416,6 +2644,7 @@
                 checkAllResponses();
               })
               .catch(error => {
+                if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
                 console.error("Fehler bei DeepSeek:", error);
                 checkAllResponses();
               });
@@ -2445,6 +2674,9 @@
                 const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
                 outputEl.innerHTML = "Please log in or store your own API keys.";
                 alert("Please enter a valid Grok API key.");
+                currentQueryController?.abort();
+                markPendingQueryResponsesCanceled();
+                finishQueryRun(queryRunId);
                 return;
               }
               payload.api_key = localStorage.getItem("grokKey");
@@ -2453,10 +2685,11 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),
-              keepalive: true
+              signal: querySignal
             })
               .then(response => response.json())
               .then(data => {
+                if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
                 if (data.response) {
                   const responseWithSources = window.registerResponseSources
@@ -2493,6 +2726,7 @@
                 checkAllResponses();
               })
               .catch(error => {
+                if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
                 console.error("Fehler bei Grok:", error);
                 checkAllResponses();
               });
@@ -2568,8 +2802,111 @@
 
         // Globale Variable, um die letzte verarbeitete Frage zu speichern.
         let lastQuestion = "";
+        let currentConsensusController = null;
+        let currentConsensusRunId = 0;
+        let consensusRequestRunning = false;
+
+        function getCompletedIncludedAnswerCount() {
+          const boxIds = [
+            "openaiResponse",
+            "mistralResponse",
+            "claudeResponse",
+            "geminiResponse",
+            "deepseekResponse",
+            "grokResponse"
+          ];
+
+          return boxIds.filter(id => {
+            const box = document.getElementById(id);
+            if (!box || box.classList.contains("excluded")) return false;
+            const contentEl = box.querySelector(".collapsible-content");
+            if (!contentEl || contentEl.querySelector(".thinking-wrap")) return false;
+            const text = contentEl.innerText.trim();
+            return text && text !== "Request canceled.";
+          }).length;
+        }
+
+        window.updateConsensusButtonAvailability = function () {
+          const consensusButton = document.getElementById("consensusButton");
+          if (!consensusButton || consensusRequestRunning) return true;
+
+          const canGenerate = getCompletedIncludedAnswerCount() >= 2;
+          consensusButton.disabled = !canGenerate;
+          consensusButton.title = canGenerate
+            ? "Generate Consensus"
+            : "Consensus requires at least two completed model answers";
+          consensusButton.setAttribute("aria-label", consensusButton.title);
+          return canGenerate;
+        };
+
+        function setConsensusButtonRunning(isRunning) {
+          const consensusButton = document.getElementById("consensusButton");
+          if (!consensusButton) return;
+
+          consensusButton.disabled = false;
+          consensusButton.classList.toggle("is-cancel-action", isRunning);
+          consensusButton.title = isRunning ? "Cancel consensus" : "Generate Consensus";
+          consensusButton.setAttribute("aria-label", isRunning ? "Cancel consensus" : "Generate Consensus");
+          consensusButton.textContent = isRunning ? "Stop Consensus generation" : "Generate Consensus";
+          if (!isRunning && window.updateConsensusButtonAvailability) {
+            window.updateConsensusButtonAvailability();
+          }
+        }
+
+        function isActiveConsensusRun(runId) {
+          return consensusRequestRunning
+            && runId === currentConsensusRunId
+            && currentConsensusController
+            && !currentConsensusController.signal.aborted;
+        }
+
+        function finishConsensusRun(runId) {
+          if (runId !== currentConsensusRunId) return;
+          consensusRequestRunning = false;
+          currentConsensusController = null;
+          setConsensusButtonRunning(false);
+        }
+
+        function markPendingConsensusCanceled() {
+          const consensusDiv = document.getElementById("consensusResponse");
+          if (!consensusDiv) return;
+
+          const mainEl = consensusDiv.querySelector(".consensus-main p");
+          const diffEl = consensusDiv.querySelector(".consensus-differences p");
+          if (mainEl?.querySelector(".thinking-wrap")) {
+            mainEl.innerText = "Request canceled.";
+          }
+          if (diffEl?.querySelector(".thinking-wrap")) {
+            diffEl.innerText = "";
+          }
+          if (window.resetCredibilityFrame) {
+            window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
+          }
+        }
+
+        window.cancelCurrentConsensus = function () {
+          if (!consensusRequestRunning || !currentConsensusController) return;
+          const runId = currentConsensusRunId;
+          currentConsensusController.abort();
+          markPendingConsensusCanceled();
+          finishConsensusRun(runId);
+        };
+
+        window.updateConsensusButtonAvailability();
 
         window.getConsensus = async function () {
+          if (consensusRequestRunning) {
+            window.cancelCurrentConsensus();
+            return;
+          }
+
+          currentConsensusRunId++;
+          const consensusRunId = currentConsensusRunId;
+          currentConsensusController = new AbortController();
+          const consensusSignal = currentConsensusController.signal;
+          consensusRequestRunning = true;
+          setConsensusButtonRunning(true);
+
           const question =
             (document.getElementById("questionInput")?.value ?? lastQuestion ?? "")
               .trim();
@@ -2586,6 +2923,10 @@
           }
 
           // Wenn die Frage neu oder geändert ist, werden Firebase-Votes aktualisiert.
+          if (!isActiveConsensusRun(consensusRunId)) {
+            return;
+          }
+
           if (question !== lastQuestion) {
             // Für jedes Modell prüfen, ob es als "best" markiert ist.
 
@@ -2597,14 +2938,6 @@
 
           // Setze den Konsens-Bereich (Spinner etc.) und rufe anschließend deinen Konsens-Endpunkt auf.
           const consensusDiv = document.getElementById("consensusResponse");
-          const mainSpinner = window.spinnerHTML;
-          const diffSpinner = window.spinnerHTML;
-
-          if (window.resetCredibilityFrame) {
-            window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
-          }
-          consensusDiv.querySelector(".consensus-main p").innerHTML = mainSpinner;
-          consensusDiv.querySelector(".consensus-differences p").innerHTML = diffSpinner;
 
           const consensus_model = document.getElementById("consensusModelDropdown").value;
 
@@ -2617,24 +2950,37 @@
           const grokBox = document.getElementById("grokResponse");
 
           // Lies die Antworten (trim für überflüssige Leerzeichen)
-          const answer_openai = openaiBox.querySelector(".collapsible-content").innerText.trim();
-          const answer_mistral = mistralBox.querySelector(".collapsible-content").innerText.trim();
-          const answer_claude = claudeBox.querySelector(".collapsible-content").innerText.trim();
-          const answer_gemini = geminiBox.querySelector(".collapsible-content").innerText.trim();
-          const answer_deepseek = deepseekBox.querySelector(".collapsible-content").innerText.trim();
-          const answer_grok = grokBox.querySelector(".collapsible-content").innerText.trim();
+          function isIncludedBox(box) {
+            return box && !box.classList.contains("excluded");
+          }
+
+          function getIncludedAnswer(box) {
+            if (!isIncludedBox(box)) return "";
+            return box.querySelector(".collapsible-content")?.innerText.trim() || "";
+          }
+
+          // Abgewählte Modelle werden bewusst als leer gesendet.
+          const answer_openai = getIncludedAnswer(openaiBox);
+          const answer_mistral = getIncludedAnswer(mistralBox);
+          const answer_claude = getIncludedAnswer(claudeBox);
+          const answer_gemini = getIncludedAnswer(geminiBox);
+          const answer_deepseek = getIncludedAnswer(deepseekBox);
+          const answer_grok = getIncludedAnswer(grokBox);
 
           // Überprüfe nur die Modelle, die nicht als "ausgeschlossen" markiert sind.
-          const needOpenAI = !openaiBox.classList.contains("excluded");
-          const needGemini = !geminiBox.classList.contains("excluded");
-          const needMistral = !mistralBox.classList.contains("excluded");
-          const needClaude = !claudeBox.classList.contains("excluded");
-          const needDeepseek = !deepseekBox.classList.contains("excluded");
-          const needGrok = !grokBox.classList.contains("excluded");
+          const needOpenAI = isIncludedBox(openaiBox);
+          const needGemini = isIncludedBox(geminiBox);
+          const needMistral = isIncludedBox(mistralBox);
+          const needClaude = isIncludedBox(claudeBox);
+          const needDeepseek = isIncludedBox(deepseekBox);
+          const needGrok = isIncludedBox(grokBox);
+          const includedAnswerCount = [answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok]
+            .filter(Boolean).length;
 
           if (
             !question ||
             !consensus_model ||
+            includedAnswerCount < 2 ||
             (needOpenAI && !answer_openai) ||
             (needGemini && !answer_gemini) ||
             (needMistral && !answer_mistral) ||
@@ -2642,12 +2988,24 @@
             (needDeepseek && !answer_deepseek) ||
             (needGrok && !answer_grok)
           ) {
-            alert("Refresh the page. Please send a question first, retrieve all answers and select the consensus model.");
+            alert("Please provide at least two completed model answers before generating a consensus.");
+            if (window.resetCredibilityFrame) {
+              window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
+            }
+            consensusDiv.querySelector(".consensus-main p").innerText = "";
+            consensusDiv.querySelector(".consensus-differences p").innerText = "";
+            finishConsensusRun(consensusRunId);
             return;
           }
 
+          if (window.resetCredibilityFrame) {
+            window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
+          }
+          consensusDiv.querySelector(".consensus-main p").innerHTML = window.spinnerHTML;
+          consensusDiv.querySelector(".consensus-differences p").innerHTML = window.spinnerHTML;
+
           // Hole den best markierten Modus (falls vorhanden)
-          const bestBox = document.querySelector(".response-box.best");
+          const bestBox = document.querySelector(".response-box.best:not(.excluded)");
           let best_model = bestBox ? bestBox.getAttribute("data-model") : "";
 
           // Die übrigen Parameter wie "excluded_models" werden wie bisher ermittelt
@@ -2738,6 +3096,7 @@
               headers: {
                 "Content-Type": "application/json"
               },
+              signal: consensusSignal,
               body: JSON.stringify({
                 id_token: id_token,
                 useOwnKeys: useOwnKeys,
@@ -2761,6 +3120,10 @@
               })
             });
             const data = await response.json();
+
+            if (!isActiveConsensusRun(consensusRunId)) {
+              return;
+            }
 
             // Aktualisiere Free Requests, falls vorhanden (Deep Think nicht benötigt)
             if (data.free_usage_remaining !== undefined) {
@@ -2807,12 +3170,17 @@
             }
 
           } catch (error) {
+            if (isAbortError(error) || !isActiveConsensusRun(consensusRunId)) {
+              return;
+            }
             console.error("Error fetching consensus:", error);
             if (window.resetCredibilityFrame) {
               window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
             }
             consensusDiv.querySelector(".consensus-main p").innerText = "Error in the consensus calculation.";
             consensusDiv.querySelector(".consensus-differences p").innerText = "";
+          } finally {
+            finishConsensusRun(consensusRunId);
           }
         };
 
@@ -2830,6 +3198,9 @@
           localStorage.setItem("geminiKey", geminiKey);
           localStorage.setItem("deepseekKey", deepseekKey);
           localStorage.setItem("grokKey", grokKey);
+          if (typeof window.updateQuestionInputAccess === "function") {
+            window.updateQuestionInputAccess();
+          }
           const spinner = document.getElementById("apiSpinner");
           spinner.style.display = "inline-block";
           try {

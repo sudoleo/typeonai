@@ -18,6 +18,32 @@ from app.core.config import (
     DEFAULT_GROK_MODEL,
 )
 
+CANONICAL_MODEL_NAMES = {
+    "openai": "OpenAI",
+    "gpt": "OpenAI",
+    "chatgpt": "OpenAI",
+    "mistral": "Mistral",
+    "anthropic": "Anthropic",
+    "claude": "Anthropic",
+    "gemini": "Gemini",
+    "deepseek": "DeepSeek",
+    "grok": "Grok",
+}
+
+
+def normalize_model_name(model_name: str) -> str:
+    key = str(model_name or "").strip()
+    if key.endswith("-Pro"):
+        key = key[:-4]
+    return CANONICAL_MODEL_NAMES.get(key.lower(), key)
+
+
+def normalize_excluded_models(excluded_models) -> set:
+    if not isinstance(excluded_models, (list, tuple, set)):
+        return set()
+    return {normalize_model_name(model) for model in excluded_models if model}
+
+
 def query_consensus(
     question: str,
     answer_openai: str,
@@ -35,6 +61,7 @@ def query_consensus(
     Konsolidiert die Antworten der 6 Haupt-LLMs zu einer Konsensantwort.
     Unterscheidet jetzt zwischen Standard- und Pro-Modellen.
     """
+    excluded = normalize_excluded_models(excluded_models)
     prompt_parts = []
 
     prompt_parts.append(
@@ -42,17 +69,17 @@ def query_consensus(
         f"The question is: {question}\n\n"
     )
 
-    if "OpenAI" not in excluded_models and answer_openai:
+    if "OpenAI" not in excluded and answer_openai:
         prompt_parts.append(f"Response from GPT (OpenAI): {answer_openai}\n\n")
-    if "Mistral" not in excluded_models and answer_mistral:
+    if "Mistral" not in excluded and answer_mistral:
         prompt_parts.append(f"Response from Mistral: {answer_mistral}\n\n")
-    if "Anthropic" not in excluded_models and answer_claude:
+    if "Anthropic" not in excluded and answer_claude:
         prompt_parts.append(f"Response from Claude: {answer_claude}\n\n")
-    if "Gemini" not in excluded_models and answer_gemini:
+    if "Gemini" not in excluded and answer_gemini:
         prompt_parts.append(f"Response from Gemini: {answer_gemini}\n\n")
-    if "DeepSeek" not in excluded_models and answer_deepseek:
+    if "DeepSeek" not in excluded and answer_deepseek:
         prompt_parts.append(f"Response from DeepSeek: {answer_deepseek}\n\n")
-    if "Grok" not in excluded_models and answer_grok:
+    if "Grok" not in excluded and answer_grok:
         prompt_parts.append(f"Response from Grok: {answer_grok}\n\n")
 
     if best_model:
@@ -209,24 +236,30 @@ def query_differences(
     answer_grok: str,
     consensus_answer: str,
     api_keys: dict,
-    differences_model: str
+    differences_model: str,
+    excluded_models: list = None,
 ) -> str:
     """
     Extrahiert die Unterschiede zwischen den Antworten der 6 Hauptmodelle,
     anonymisiert die Modellnamen und ordnet das bestbewertete Modell anschließend wieder zu.
     """
 
+    excluded = normalize_excluded_models(excluded_models or [])
+
     model_answers = [
         ("OpenAI",   answer_openai),
         ("Mistral",  answer_mistral),
-        ("Claude",   answer_claude),
+        ("Anthropic", answer_claude),
         ("Gemini",   answer_gemini),
         ("DeepSeek", answer_deepseek),
         ("Grok",     answer_grok),
     ]
 
-    # Leere Antworten filtern
-    model_answers = [(n, a) for (n, a) in model_answers if a]
+    # Leere und explizit abgewählte Antworten filtern.
+    model_answers = [
+        (n, a) for (n, a) in model_answers
+        if a and normalize_model_name(n) not in excluded
+    ]
 
     if not model_answers:
         return "Error in comparison: no model responses available."

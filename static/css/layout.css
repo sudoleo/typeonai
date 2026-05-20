@@ -338,7 +338,7 @@ body:has(.sidebar.collapsed) .main-wrapper {
 }
 #usageDisplay span { display: flex; justify-content: space-between; }
 #usageDisplay br { display: none; }
-.model-selection { display: none; flex-direction: column; gap: 2px; padding: 0 5px; margin-top: 8px; }
+.model-selection { display: none; flex-direction: row; flex-wrap: wrap; gap: 4px; padding: 0 5px; margin-top: 8px; }
 .model-selection label { 
   display: flex; 
   align-items: center; 
@@ -350,6 +350,19 @@ body:has(.sidebar.collapsed) .main-wrapper {
   transition: background-color 0.2s ease;
   color: var(--text-color);
   margin-bottom: 0;
+}
+.model-selection label.is-unselected {
+  width: auto;
+  min-height: 30px;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 5px 8px;
+  color: var(--sidebar-text-muted);
+  opacity: 0.78;
+}
+.model-selection label.is-unselected input {
+  margin: 0;
+  flex: 0 0 auto;
 }
 .model-selection label:hover {
   background-color: var(--sidebar-hover);

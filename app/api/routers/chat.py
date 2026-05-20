@@ -16,7 +16,7 @@ from app.services.llm.engines import (
     query_openai, query_mistral, query_claude, query_gemini, query_deepseek, query_grok
 )
 from app.services.llm.citations import source_response
-from app.services.llm.consensus_engine import query_consensus, query_differences
+from app.services.llm.consensus_engine import normalize_model_name, query_consensus, query_differences
 from tool_heuristics import get_realtime_context, get_intent_from_llm
 
 router = APIRouter()
@@ -643,6 +643,31 @@ def consensus(request: Request, data: dict = Body(...)):
     answer_grok     = data.get("answer_grok")
     best_model      = data.get("best_model", "")
     excluded_models = data.get("excluded_models", [])
+    if not isinstance(excluded_models, list):
+        excluded_models = []
+    excluded_models = list({normalize_model_name(model) for model in excluded_models if model})
+
+    answer_by_model = {
+        "OpenAI": answer_openai,
+        "Mistral": answer_mistral,
+        "Anthropic": answer_claude,
+        "Gemini": answer_gemini,
+        "DeepSeek": answer_deepseek,
+        "Grok": answer_grok,
+    }
+
+    if "OpenAI" in excluded_models:
+        answer_openai = None
+    if "Mistral" in excluded_models:
+        answer_mistral = None
+    if "Anthropic" in excluded_models:
+        answer_claude = None
+    if "Gemini" in excluded_models:
+        answer_gemini = None
+    if "DeepSeek" in excluded_models:
+        answer_deepseek = None
+    if "Grok" in excluded_models:
+        answer_grok = None
 
     # API Keys setzen: Bei useOwnKeys werden die vom Nutzer übermittelten Keys genutzt,
     # andernfalls wird für fehlende Keys auf die Developer Keys zurückgegriffen.
@@ -681,6 +706,22 @@ def consensus(request: Request, data: dict = Body(...)):
         missing.append("question")
     if not consensus_model:
         missing.append("consensus_model")
+
+    included_answers = {
+        model: answer
+        for model, answer in {
+            "OpenAI": answer_openai,
+            "Mistral": answer_mistral,
+            "Anthropic": answer_claude,
+            "Gemini": answer_gemini,
+            "DeepSeek": answer_deepseek,
+            "Grok": answer_grok,
+        }.items()
+        if model not in excluded_models and answer
+    }
+
+    if len(included_answers) < 2:
+        missing.append("at least two selected model answers")
 
     if "OpenAI" not in excluded_models and not answer_openai:
         missing.append("OpenAI")
@@ -734,8 +775,11 @@ def consensus(request: Request, data: dict = Body(...)):
                     detail=f"Missing API key for selected consensus engine: {engine}."
                 )
 
+    best_model = normalize_model_name(best_model)
     if best_model and best_model in excluded_models:
         raise HTTPException(status_code=400, detail="The answer marked as best must not be excluded.")
+    if best_model and not answer_by_model.get(best_model):
+        raise HTTPException(status_code=400, detail="The answer marked as best is not available.")
 
     consensus_answer = query_consensus(
         question,
@@ -760,7 +804,8 @@ def consensus(request: Request, data: dict = Body(...)):
         answer_grok,
         consensus_answer,
         api_keys,
-        differences_model=consensus_model
+        differences_model=consensus_model,
+        excluded_models=excluded_models,
     )
 
     return {"consensus_response": consensus_answer, "differences": differences}
