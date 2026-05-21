@@ -18,10 +18,11 @@ class CustomSecurityMiddleware:
                 headers = dict(message.get("headers", []))
                 csp = (
                     "default-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net https://www.gstatic.com; "
-                    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://accounts.google.com; "
+                    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://accounts.google.com https://cloud.umami.is; "
                     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                     "img-src 'self' data: https://lh3.googleusercontent.com https:; "
                     "connect-src 'self' "
+                    "https://cloud.umami.is "
                     "https://firestore.googleapis.com "
                     "https://*.firebaseio.com "
                     "https://identitytoolkit.googleapis.com "
