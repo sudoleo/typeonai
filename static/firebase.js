@@ -1040,16 +1040,21 @@ function addBookmarkToDOM(bookmark) {
   div.style.position = "relative";
   div.innerHTML = `
     <p>${truncateText(bookmark.query)}</p>
-    <span class="delete-bookmark" 
-          style="position:absolute; right:5px; top:50%; transform:translateY(-50%); cursor:pointer;">
-      x
-    </span>
+    <span class="delete-bookmark" role="button" tabindex="0" aria-label="Delete bookmark" title="Delete bookmark">x</span>
   `;
 
   // Delete-Event
-  div.querySelector(".delete-bookmark").addEventListener("click", e => { 
+  const deleteControl = div.querySelector(".delete-bookmark");
+  deleteControl.addEventListener("click", e => { 
        e.stopPropagation(); 
        deleteBookmark(bookmark.id); 
+  });
+  deleteControl.addEventListener("keydown", e => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      e.stopPropagation();
+      deleteBookmark(bookmark.id);
+    }
   });
 
   // Click-Event -> Ruft jetzt die ausgelagerte Funktion auf

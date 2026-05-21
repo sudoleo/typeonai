@@ -18,7 +18,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260520-agent-mode3">
+  <link rel="stylesheet" href="/static/style.css?v=20260521-sources1">
   <link rel="icon" href="/static/favicon.png" type="image/x-icon">
   <!-- Füge dies im <head> hinzu -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -431,7 +431,8 @@
     </div>
 
     <script>
-      document.addEventListener("DOMContentLoaded", function () {
+      (function () {
+        function initApp() {
         // --------------------------
         // Dark/Light Mode Initialisierung
         // --------------------------
@@ -521,12 +522,16 @@
           }
         }
 
+        function getSourceTitle(src, fallbackLabel) {
+          return (src && (src.title || src.url)) ? String(src.title || src.url) : fallbackLabel;
+        }
+
         function createSourceChip(src, fallbackLabel) {
           const href = getSafeSourceHref(src);
           const el = href ? document.createElement("a") : document.createElement("span");
           el.className = "source-link";
           el.textContent = getSourceSiteName(src) || fallbackLabel;
-          el.title = (src && (src.title || src.url)) ? String(src.title || src.url) : fallbackLabel;
+          el.title = getSourceTitle(src, fallbackLabel);
           el.setAttribute("aria-label", `Source: ${el.title}`);
 
           if (href) {
@@ -538,18 +543,102 @@
           return el;
         }
 
+        function getSourceRefs(sourceText, sources) {
+          const refs = [];
+          const sourceTagRegex = /\[((?:S?\d+)(?:,\s*S?\d+)*)\]/g;
+
+          String(sourceText || "").replace(sourceTagRegex, (match, innerContent) => {
+            innerContent.split(",").forEach(part => {
+              const token = part.trim();
+              const idNum = parseInt(token.replace(/^S/i, ""), 10);
+              refs.push({
+                token,
+                src: Number.isFinite(idNum) ? sources[idNum - 1] : null
+              });
+            });
+            return match;
+          });
+
+          return refs;
+        }
+
+        function appendInlineSourceRefs(fragment, refs) {
+          refs.forEach((ref, idx) => {
+            if (idx > 0) fragment.appendChild(document.createTextNode(" "));
+            fragment.appendChild(createSourceChip(ref.src, ref.token));
+          });
+        }
+
+        function createSourceListCluster(refs) {
+          const uniqueRefs = [];
+          const seen = new Set();
+
+          refs.forEach(ref => {
+            const key = normalizeEvidenceUrl(ref.src && ref.src.url) || String(ref.src?.title || ref.token || "").trim().toLowerCase();
+            if (key && seen.has(key)) return;
+            if (key) seen.add(key);
+            uniqueRefs.push(ref);
+          });
+
+          const details = document.createElement("details");
+          details.className = "source-list-cluster";
+          details.open = true;
+
+          const summary = document.createElement("summary");
+          summary.className = "source-list-summary";
+          summary.textContent = `${uniqueRefs.length} sources`;
+          details.appendChild(summary);
+
+          const list = document.createElement("ol");
+          list.className = "source-list";
+
+          uniqueRefs.forEach(ref => {
+            const item = document.createElement("li");
+            item.className = "source-list-item";
+
+            const href = getSafeSourceHref(ref.src);
+            const title = getSourceTitle(ref.src, ref.token);
+            const link = href ? document.createElement("a") : document.createElement("span");
+            link.className = "source-list-link";
+            link.textContent = title;
+            link.title = title;
+
+            if (href) {
+              link.href = href;
+              link.target = "_blank";
+              link.rel = "noopener noreferrer";
+            }
+
+            item.appendChild(link);
+
+            const siteName = getSourceSiteName(ref.src);
+            if (siteName && siteName !== title) {
+              const meta = document.createElement("span");
+              meta.className = "source-list-meta";
+              meta.textContent = siteName;
+              item.appendChild(meta);
+            }
+
+            list.appendChild(item);
+          });
+
+          details.appendChild(list);
+          return details;
+        }
+
         function linkifySourceTags(containerEl, sources) {
           if (!containerEl || !sources || !sources.length) return;
 
           const ignoredParents = new Set(["A", "CODE", "PRE", "SCRIPT", "STYLE", "TEXTAREA"]);
-          const sourceTagRegex = /\[((?:S?\d+)(?:,\s*S?\d+)*)\]/g;
+          const sourceRunRegex = /(?:\[((?:S?\d+)(?:,\s*S?\d+)*)\](?:[\s,;:]*(?=\[S?\d))?)+/gi;
+          const sourceGroupThreshold = 6;
           const walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, {
             acceptNode(node) {
-              if (!sourceTagRegex.test(node.nodeValue || "")) {
-                sourceTagRegex.lastIndex = 0;
+              if (!sourceRunRegex.test(node.nodeValue || "")) {
+                sourceRunRegex.lastIndex = 0;
                 return NodeFilter.FILTER_REJECT;
               }
-              sourceTagRegex.lastIndex = 0;
+              sourceRunRegex.lastIndex = 0;
               let parent = node.parentElement;
               while (parent && parent !== containerEl) {
                 if (ignoredParents.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
@@ -567,18 +656,17 @@
             const fragment = document.createDocumentFragment();
             let lastIndex = 0;
 
-            text.replace(sourceTagRegex, (match, innerContent, offset) => {
+            text.replace(sourceRunRegex, (match, innerContent, offset) => {
               if (offset > lastIndex) {
                 fragment.appendChild(document.createTextNode(text.slice(lastIndex, offset)));
               }
 
-              innerContent.split(",").forEach((part, idx) => {
-                if (idx > 0) fragment.appendChild(document.createTextNode(" "));
-                const token = part.trim();
-                const idNum = parseInt(token.replace(/^S/i, ""), 10);
-                const src = sources[idNum - 1];
-                fragment.appendChild(createSourceChip(src, token));
-              });
+              const refs = getSourceRefs(match, sources);
+              if (refs.length >= sourceGroupThreshold) {
+                fragment.appendChild(createSourceListCluster(refs));
+              } else {
+                appendInlineSourceRefs(fragment, refs);
+              }
 
               lastIndex = offset + match.length;
               return match;
@@ -656,9 +744,55 @@
           return rewriteSourceTags(markdown || "", idMap);
         }
 
+        function prepareResponseSources(markdown, incomingSources) {
+          const sources = Array.isArray(incomingSources) ? incomingSources : [];
+          const idMap = mergeEvidenceSources(sources);
+          const mappedSources = [];
+          const seen = new Set();
+
+          sources.forEach((src, idx) => {
+            if (!src || typeof src !== "object") return;
+            const localId = String(src.id || `S${idx + 1}`);
+            const numericId = localId.replace(/^S/i, "");
+            const globalNumber =
+              idMap[localId] ||
+              idMap[numericId] ||
+              idMap[`S${idx + 1}`] ||
+              idMap[String(idx + 1)];
+            const mapped = {
+              id: globalNumber ? `S${globalNumber}` : localId,
+              title: src.title || src.url || "",
+              url: src.url || "",
+              provider: src.provider || ""
+            };
+            const key = normalizeEvidenceUrl(mapped.url) || String(mapped.title || mapped.id || "").trim().toLowerCase();
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            mappedSources.push(mapped);
+          });
+
+          return {
+            markdown: rewriteSourceTags(markdown || "", idMap),
+            sources: mappedSources
+          };
+        }
+
+        function renderModelResponseWithSources(outputEl, markdown, incomingSources) {
+          const prepared = prepareResponseSources(markdown, incomingSources || []);
+          const box = outputEl?.closest?.(".response-box");
+          if (box) {
+            box.dataset.consensusAnswer = prepared.markdown || "";
+            box.dataset.consensusSources = JSON.stringify(prepared.sources || []);
+          }
+          injectMarkdown(outputEl, prepared.markdown);
+          return prepared.markdown;
+        }
+
         window.mergeEvidenceSources = mergeEvidenceSources;
         window.rewriteSourceTags = rewriteSourceTags;
         window.registerResponseSources = registerResponseSources;
+        window.prepareResponseSources = prepareResponseSources;
+        window.renderModelResponseWithSources = renderModelResponseWithSources;
 
         // Lese gespeicherten Wert aus; wenn keiner vorhanden, verwende die Systempräferenz:
         let storedTheme = localStorage.getItem("theme");
@@ -761,6 +895,15 @@
           }, 7000);
         }
 
+        const deepThinkModelLabels = {
+          OpenAI: "GPT-5.5",
+          Mistral: "mistral-large-latest",
+          Gemini: "gemini-3.1-pro-preview",
+          Anthropic: "claude-opus-4-7",
+          DeepSeek: "DeepSeek-V4-Pro",
+          Grok: "grok-4.3"
+        };
+
         function updateDeepThinkText(showMobilePopup = false) {
           const deepSearchToggle = document.getElementById("deepSearchToggle");
 
@@ -810,12 +953,12 @@
             el.style.display = showPickers ? "inline-flex" : "none";
           });
 
-          const openaiModelText = deepSearchActive ? "GPT-5.5" : document.getElementById("openaiModelSelect").value;
-          const mistralModelText = deepSearchActive ? "mistral-large-latest" : document.getElementById("mistralModelSelect").value;
-          const geminiModelText = deepSearchActive ? "gemini-3.1-pro-preview" : document.getElementById("geminiModelSelect").value;
-          const claudeModelText = deepSearchActive ? "claude-opus-4-7" : document.getElementById("claudeModelSelect").value;
-          const deepseekModelText = deepSearchActive ? "DeepSeek-V4-Pro" : document.getElementById("deepseekModelSelect").value;
-          const grokModelText = deepSearchActive ? "grok-4.3" : document.getElementById("grokModelSelect").value;
+          const openaiModelText = deepSearchActive ? deepThinkModelLabels.OpenAI : document.getElementById("openaiModelSelect").value;
+          const mistralModelText = deepSearchActive ? deepThinkModelLabels.Mistral : document.getElementById("mistralModelSelect").value;
+          const geminiModelText = deepSearchActive ? deepThinkModelLabels.Gemini : document.getElementById("geminiModelSelect").value;
+          const claudeModelText = deepSearchActive ? deepThinkModelLabels.Anthropic : document.getElementById("claudeModelSelect").value;
+          const deepseekModelText = deepSearchActive ? deepThinkModelLabels.DeepSeek : document.getElementById("deepseekModelSelect").value;
+          const grokModelText = deepSearchActive ? deepThinkModelLabels.Grok : document.getElementById("grokModelSelect").value;
 
           const setModelText = (id, txt) => {
             const el = document.getElementById(id);
@@ -830,6 +973,10 @@
           setModelText("claudeModelText", claudeModelText);
           setModelText("deepseekModelText", deepseekModelText);
           setModelText("grokModelText", grokModelText);
+
+          if (typeof window.updateAgentModeUI === "function") {
+            window.updateAgentModeUI();
+          }
         }
 
         // DEEP THINK & SMOKE TEST LOGIK
@@ -1505,16 +1652,21 @@
         }
 
         function getActiveAgentModels() {
+          const deepSearchActive = !!document.getElementById("deepSearchToggle")?.checked;
           return modelPrefs
             .filter(pref => document.getElementById(pref.checkId)?.checked)
             .map(pref => {
               const select = document.getElementById(pref.selectId);
-              const selectedText = select?.options[select.selectedIndex]?.text || select?.value || "";
+              const displayedText = document.getElementById(pref.textId)?.textContent || "";
+              const selectedText = deepSearchActive
+                ? (deepThinkModelLabels[pref.key] || displayedText)
+                : (select?.options[select.selectedIndex]?.text || select?.value || displayedText);
               const modelText = selectedText.replace(/\s*·\s*Pro\s*$/, "").trim();
               return {
                 pref,
                 label: pref.label,
-                model: modelText
+                model: modelText,
+                usesDeepThinkModel: deepSearchActive
               };
             });
         }
@@ -1616,7 +1768,7 @@
               chip.setAttribute("aria-label", `Choose ${modelInfo.label} model`);
 
               const sourceSelect = document.getElementById(modelInfo.pref.selectId);
-              if (sourceSelect) {
+              if (sourceSelect && !modelInfo.usesDeepThinkModel) {
                 const picker = document.createElement("select");
                 picker.className = "agent-mode-picker";
                 picker.setAttribute("aria-label", `Choose ${modelInfo.label} model`);
@@ -1660,6 +1812,9 @@
           }
           agentModeStatus = status;
           updateAgentModeUI();
+          if (typeof window.updateConsensusButtonAvailability === "function") {
+            window.updateConsensusButtonAvailability();
+          }
         }
 
         window.setAgentModeStatus = setAgentModeStatus;
@@ -2175,8 +2330,8 @@
           const querySignal = currentQueryController.signal;
           queryRequestRunning = true;
           setSendButtonRunning(true);
-          // Konsens-Button wieder aktivieren, bevor eine neue Anfrage gesendet wird.
-          document.getElementById("consensusButton").disabled = false;
+          // Keep consensus unavailable until the current model run produces enough complete answers.
+          document.getElementById("consensusButton").disabled = true;
 
           // 1. Definiere useOwnKeys frühzeitig
           const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
@@ -2257,7 +2412,11 @@
           // 🔸 PHASE 1: UI Feedback setzen
           setAgentModeStatus(modelBoxes.length > 0 ? "running" : "idle");
           window.spinnerHTML = baseSpinnerHTML;
-          modelBoxes.forEach(box => setSpinnerEl(box));
+          modelBoxes.forEach(box => {
+            delete box.dataset.consensusAnswer;
+            delete box.dataset.consensusSources;
+            setSpinnerEl(box);
+          });
           window.currentEvidenceSources = [];
           if (window.renderEvidenceSources) window.renderEvidenceSources([]);
 
@@ -2550,10 +2709,9 @@
                   .querySelector(".collapsible-content");
 
                 if (data.response) {
-                  const responseWithSources = window.registerResponseSources
-                    ? window.registerResponseSources(data.response, data.sources || [])
+                  const responseWithSources = window.renderModelResponseWithSources
+                    ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                     : data.response;
-                  injectMarkdown(outputEl, responseWithSources);
                   if (auth.currentUser) {
                     saveBookmark(question, responseWithSources, "OpenAI", mode);
                   }
@@ -2642,10 +2800,9 @@
                 if (!isActiveQueryRun(queryRunId)) return;
                 let outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
                 if (data.response) {
-                  const responseWithSources = window.registerResponseSources
-                    ? window.registerResponseSources(data.response, data.sources || [])
+                  const responseWithSources = window.renderModelResponseWithSources
+                    ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                     : data.response;
-                  injectMarkdown(outputEl, responseWithSources);
 
                   if (auth.currentUser) {
                     saveBookmark(question, responseWithSources, "Mistral", mode);
@@ -2726,10 +2883,9 @@
                 if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document.getElementById("claudeResponse").querySelector(".collapsible-content");
                 if (data.response) {
-                  const responseWithSources = window.registerResponseSources
-                    ? window.registerResponseSources(data.response, data.sources || [])
+                  const responseWithSources = window.renderModelResponseWithSources
+                    ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                     : data.response;
-                  injectMarkdown(outputEl, responseWithSources);
                   if (auth.currentUser) {
                     saveBookmark(question, responseWithSources, "Anthropic", mode);
                   }
@@ -2809,10 +2965,9 @@
                 if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
                 if (data.response) {
-                  const responseWithSources = window.registerResponseSources
-                    ? window.registerResponseSources(data.response, data.sources || [])
+                  const responseWithSources = window.renderModelResponseWithSources
+                    ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                     : data.response;
-                  injectMarkdown(outputEl, responseWithSources);
                   if (auth.currentUser) {
                     saveBookmark(question, responseWithSources, "Gemini", mode);
                   }
@@ -2892,10 +3047,9 @@
                 if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
                 if (data.response) {
-                  const responseWithSources = window.registerResponseSources
-                    ? window.registerResponseSources(data.response, data.sources || [])
+                  const responseWithSources = window.renderModelResponseWithSources
+                    ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                     : data.response;
-                  injectMarkdown(outputEl, responseWithSources);
                   if (auth.currentUser) {
                     saveBookmark(question, responseWithSources, "DeepSeek", mode);
                   }
@@ -2974,10 +3128,9 @@
                 if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
                 if (data.response) {
-                  const responseWithSources = window.registerResponseSources
-                    ? window.registerResponseSources(data.response, data.sources || [])
+                  const responseWithSources = window.renderModelResponseWithSources
+                    ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                     : data.response;
-                  injectMarkdown(outputEl, responseWithSources);
                   if (auth.currentUser) {
                     saveBookmark(question, responseWithSources, "Grok", mode);
                   }
@@ -3134,7 +3287,20 @@
 
         window.updateConsensusButtonAvailability = function () {
           const consensusButton = document.getElementById("consensusButton");
-          if (!consensusButton || consensusRequestRunning) return true;
+          if (!consensusButton) return false;
+          if (consensusRequestRunning) return true;
+
+          const agentModeWaitingForResponses =
+            typeof window.isAgentModeEnabled === "function"
+            && window.isAgentModeEnabled()
+            && agentModeStatus === "running";
+
+          if (agentModeWaitingForResponses) {
+            consensusButton.disabled = true;
+            consensusButton.title = "Consensus is available after all Agent Mode responses finish";
+            consensusButton.setAttribute("aria-label", consensusButton.title);
+            return false;
+          }
 
           const canGenerate = getCompletedIncludedAnswerCount() >= 2;
           consensusButton.disabled = !canGenerate;
@@ -3206,6 +3372,17 @@
             return;
           }
 
+          if (
+            typeof window.isAgentModeEnabled === "function"
+            && window.isAgentModeEnabled()
+            && agentModeStatus === "running"
+          ) {
+            if (typeof window.updateConsensusButtonAvailability === "function") {
+              window.updateConsensusButtonAvailability();
+            }
+            return;
+          }
+
           currentConsensusRunId++;
           const consensusRunId = currentConsensusRunId;
           currentConsensusController = new AbortController();
@@ -3262,7 +3439,17 @@
 
           function getIncludedAnswer(box) {
             if (!isIncludedBox(box)) return "";
-            return box.querySelector(".collapsible-content")?.innerText.trim() || "";
+            return (box.dataset.consensusAnswer || box.querySelector(".collapsible-content")?.innerText || "").trim();
+          }
+
+          function getIncludedSources(box) {
+            if (!isIncludedBox(box) || !box.dataset.consensusSources) return [];
+            try {
+              const parsed = JSON.parse(box.dataset.consensusSources);
+              return Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+              return [];
+            }
           }
 
           // Abgewählte Modelle werden bewusst als leer gesendet.
@@ -3272,6 +3459,14 @@
           const answer_gemini = getIncludedAnswer(geminiBox);
           const answer_deepseek = getIncludedAnswer(deepseekBox);
           const answer_grok = getIncludedAnswer(grokBox);
+          const model_sources = {
+            OpenAI: getIncludedSources(openaiBox),
+            Mistral: getIncludedSources(mistralBox),
+            Anthropic: getIncludedSources(claudeBox),
+            Gemini: getIncludedSources(geminiBox),
+            DeepSeek: getIncludedSources(deepseekBox),
+            Grok: getIncludedSources(grokBox)
+          };
 
           // Überprüfe nur die Modelle, die nicht als "ausgeschlossen" markiert sind.
           const needOpenAI = isIncludedBox(openaiBox);
@@ -3413,6 +3608,7 @@
                 answer_gemini: answer_gemini,
                 answer_deepseek: answer_deepseek,
                 answer_grok: answer_grok,
+                model_sources: model_sources,
                 best_model: best_model,
                 consensus_model: consensus_model,
                 excluded_models: excludedModels,
@@ -3603,6 +3799,8 @@
           boxIds.forEach(id => {
             const box = document.getElementById(id);
             if (box) {
+              delete box.dataset.consensusAnswer;
+              delete box.dataset.consensusSources;
               const contentEl = box.querySelector(".collapsible-content");
               if (contentEl) {
                 contentEl.innerHTML = "";
@@ -4218,7 +4416,14 @@
         window.addEventListener('scroll', hideTooltip, true);
 
         window.updateUserTierUI = updateUserTierUI;
-      });
+        }
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", initApp);
+        } else {
+          initApp();
+        }
+      })();
     </script>
 
     <!-- Login Modal -->

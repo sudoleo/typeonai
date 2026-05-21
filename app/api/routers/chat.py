@@ -643,9 +643,12 @@ def consensus(request: Request, data: dict = Body(...)):
     answer_grok     = data.get("answer_grok")
     best_model      = data.get("best_model", "")
     excluded_models = data.get("excluded_models", [])
+    model_sources   = data.get("model_sources", {})
     if not isinstance(excluded_models, list):
         excluded_models = []
     excluded_models = list({normalize_model_name(model) for model in excluded_models if model})
+    if not isinstance(model_sources, dict):
+        model_sources = {}
 
     answer_by_model = {
         "OpenAI": answer_openai,
@@ -793,6 +796,7 @@ def consensus(request: Request, data: dict = Body(...)):
         excluded_models,
         consensus_model,
         api_keys,
+        model_sources=model_sources,
     )
 
     differences = query_differences(

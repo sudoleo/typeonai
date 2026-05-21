@@ -25,7 +25,8 @@ router = APIRouter()
 @router.get("/", response_class=HTMLResponse)
 async def landing(request: Request):
     token = request.cookies.get("session") or request.headers.get("Authorization", "").removeprefix("Bearer ")
-    if token and is_valid_session(token):
+    force_landing = request.query_params.get("landing") == "1"
+    if token and is_valid_session(token) and not force_landing:
         return RedirectResponse(url="/app")
     return templates.TemplateResponse("landing.html", {"request": request})
 

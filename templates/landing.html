@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="consens.io - compare leading AI models and find where they agree.">
-  <title>consens.io - Ask all of them</title>
-  <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260516-public2">
+  <meta name="description" content="consens.io compares leading AI models in one workspace and turns their answers into a clear consensus.">
+  <title>consens.io - AI answers, compared</title>
+  <link href="https://fonts.googleapis.com/css?family=Roboto:400,500,700,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260521-landing-saas2">
   <link rel="icon" href="/static/favicon.png" type="image/x-icon">
   <script>
     (function () {
@@ -19,152 +19,232 @@
   </script>
 </head>
 <body class="landing-page">
-  <canvas id="constellationCanvas" class="constellation-bg" aria-hidden="true"></canvas>
-
   <nav class="site-nav" aria-label="Primary">
     <a href="/" class="brand" aria-label="consens.io home">
       <img src="/static/favicon.png" alt="">
       <span>consens.io</span>
     </a>
     <div class="nav-links">
-      <a href="/about">About</a>
-      <a href="/privacy">Privacy</a>
-      <a href="/imprint">Imprint</a>
+      <a href="#product">Product</a>
+      <a href="#agent-mode">Agent Mode</a>
+      <a href="#models">Models</a>
       <a id="navCtaButton" href="/app" class="nav-cta">Open app</a>
     </div>
   </nav>
 
-  <main class="landing-shell">
-    <section class="hero">
-      <div>
-        <p class="eyebrow">Multi-model AI comparison</p>
-        <h1 class="landing-title">consens.io</h1>
+  <main>
+    <section class="hero landing-shell">
+      <div class="hero-copy">
+        <p class="eyebrow">Multi-model AI workspace</p>
+        <h1>Ask every model. Decide with consensus.</h1>
         <p class="lead">
-          Ask several leading AI models at once, compare their answers side by side,
-          and see where they agree before you decide what to trust.
-        </p>
-        <p class="trust-line">
-          Answers come directly from the selected model providers. consens.io does not route prompts through
-          extra model marketplaces or aggregator layers, and your data is not passed to unrelated AI middlemen.
+          consens.io sends one question to several leading AI models, keeps every original answer visible,
+          and creates a structured consensus that shows agreement, differences, and weak spots.
         </p>
         <div class="hero-actions">
-          <a id="ctaButton" href="/app" class="button-primary">Get started</a>
-          <a href="#how-it-works" class="button-secondary">See how it works</a>
+          <a id="ctaButton" href="/app" class="button-primary">Start comparing</a>
+          <a href="#product" class="button-secondary">Watch the workflow</a>
+        </div>
+        <div class="hero-proof" aria-label="Product highlights">
+          <span>Direct provider answers</span>
+          <span>Agent Mode</span>
+          <span>Consensus layer</span>
         </div>
       </div>
 
-      <div class="hero-visual" aria-label="consens.io app preview">
-        <div class="visual-topbar" aria-hidden="true">
-          <span class="dot"></span>
-          <span class="dot"></span>
-          <span class="dot"></span>
+      <div class="product-window hero-window" aria-label="consens.io app preview">
+        <div class="mock-topbar">
+          <span class="mock-burger" aria-hidden="true"></span>
+          <span class="mock-logo"><img src="/static/favicon.png" alt=""> consens.io</span>
+          <span class="mock-login">Log in</span>
         </div>
-        <div class="visual-grid">
-          <div class="ai-row">
-            <img src="/static/icons/chatgpt.png" alt="">
-            <div>
-              <strong>OpenAI</strong>
-              <span>Direct provider response</span>
+        <div class="mock-container">
+          <div class="mock-input">
+            <span class="mock-placeholder">Enter your question</span>
+            <div class="mock-switch-row">
+              <span class="mock-switch is-on"></span><span>Agent Mode</span>
+              <span class="mock-switch is-on"></span><span>Auto Consensus</span>
+              <span class="mock-switch"></span><span>Deep Think</span>
             </div>
-            <span class="signal" aria-hidden="true"></span>
+            <button class="mock-send">Send</button>
           </div>
-          <div class="ai-row">
-            <img src="/static/icons/claude.png" alt="">
-            <div>
-              <strong>Anthropic</strong>
-              <span>Independent model view</span>
+          <div class="agent-card is-running">
+            <div class="agent-card-head">
+              <div>
+                <span>Agent Mode</span>
+                <strong>Models are working</strong>
+              </div>
+              <em>4 models</em>
             </div>
-            <span class="signal" aria-hidden="true"></span>
-          </div>
-          <div class="ai-row">
-            <img src="/static/icons/gemini.png" alt="">
-            <div>
-              <strong>Google Gemini</strong>
-              <span>Side-by-side comparison</span>
+            <div class="agent-chips">
+              <span>Claude - sonnet</span>
+              <span>Gemini - flash</span>
+              <span>DeepSeek - chat</span>
+              <span>Grok - fast</span>
             </div>
-            <span class="signal" aria-hidden="true"></span>
+            <div class="agent-pulse" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            <p>Querying selected models in parallel.</p>
           </div>
           <div class="consensus-preview">
-            <strong>Consensus layer</strong>
-            <p>Highlights agreement, separates differences, and keeps the original model answers visible.</p>
+            <div>
+              <strong>Consensus Answer</strong>
+              <p>Shared conclusion with the assumptions that multiple models agree on.</p>
+            </div>
+            <div>
+              <strong>Differences</strong>
+              <p>Claims that need checking before you rely on the result.</p>
+            </div>
           </div>
         </div>
       </div>
     </section>
 
-    <section id="how-it-works" class="section">
-      <h2>Compare first. Trust slower.</h2>
-      <p class="section-intro">
-        consens.io keeps the workflow simple: one prompt, multiple provider responses, one structured consensus.
-      </p>
+    <section id="product" class="scroll-story">
+      <div class="landing-shell story-layout">
+        <div class="story-copy">
+          <p class="eyebrow">Product walkthrough</p>
+          <h2>See the app before you open it.</h2>
+          <p>
+            The landing page now mirrors the actual consens.io workflow: prompt once, compare model answers,
+            then let the consensus panel reconcile the useful parts.
+          </p>
+
+          <article class="story-step is-active" data-story-step="ask">
+            <span>01</span>
+            <h3>Start with one prompt</h3>
+            <p>Use the same input surface from the app, including Agent Mode, Auto Consensus, and Deep Think.</p>
+          </article>
+          <article id="agent-mode" class="story-step" data-story-step="agent">
+            <span>02</span>
+            <h3>Watch Agent Mode run</h3>
+            <p>Selected models are grouped into one run, with chips and a live activity state.</p>
+          </article>
+          <article class="story-step" data-story-step="consensus">
+            <span>03</span>
+            <h3>Read agreement and differences</h3>
+            <p>The final panel separates what the models agree on from what still conflicts.</p>
+          </article>
+        </div>
+
+        <div class="story-stage" aria-label="Animated product excerpt">
+          <div class="product-window" data-active-scene="ask">
+            <div class="mock-topbar">
+              <span class="mock-burger" aria-hidden="true"></span>
+              <span class="mock-logo"><img src="/static/favicon.png" alt=""> consens.io</span>
+              <span class="mock-login">About us</span>
+            </div>
+            <div class="mock-container">
+              <div class="mock-input story-scene scene-ask">
+                <span class="mock-placeholder typing-line">Which AI model is most reliable for market research?</span>
+                <div class="mock-switch-row">
+                  <span class="mock-switch is-on"></span><span>Agent Mode</span>
+                  <span class="mock-switch is-on"></span><span>Auto Consensus</span>
+                  <span class="mock-switch"></span><span>Deep Think</span>
+                </div>
+                <button class="mock-send">Send</button>
+              </div>
+
+              <div class="agent-card story-scene scene-agent is-running">
+                <div class="agent-card-head">
+                  <div>
+                    <span>Agent Mode</span>
+                    <strong>Models are working</strong>
+                  </div>
+                  <em>Elapsed 00:08</em>
+                </div>
+                <div class="agent-chips">
+                  <span>ChatGPT - GPT-5.4</span>
+                  <span>Claude - Haiku</span>
+                  <span>Gemini - Flash</span>
+                  <span>Grok - non-reasoning</span>
+                </div>
+                <div class="agent-pulse" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+                <p>Querying selected models in parallel.</p>
+              </div>
+
+              <div class="response-grid story-scene scene-consensus">
+                <div class="mini-response">
+                  <strong>Response from ChatGPT</strong>
+                  <small><img src="/static/icons/chat_icons/chatgpt.png" alt=""> GPT-5.4</small>
+                </div>
+                <div class="mini-response">
+                  <strong>Response from Claude</strong>
+                  <small><img src="/static/icons/chat_icons/claude.png" alt=""> Claude Haiku</small>
+                </div>
+                <div class="mini-response">
+                  <strong>Response from Gemini</strong>
+                  <small><img src="/static/icons/chat_icons/gemini-icon.png" alt=""> Gemini Flash</small>
+                </div>
+                <div class="mini-response">
+                  <strong>Response from Grok</strong>
+                  <small><img src="/static/icons/chat_icons/grok.png" alt=""> Grok</small>
+                </div>
+              </div>
+
+              <div class="consensus-preview story-consensus">
+                <div>
+                  <strong>Consensus Answer</strong>
+                  <p>Most models agree on triangulating outputs and checking sources before using the final answer.</p>
+                </div>
+                <div>
+                  <strong>Differences</strong>
+                  <p>Claude is more cautious, Grok is more direct, Gemini emphasizes source freshness.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section landing-shell value-section">
+      <div>
+        <p class="eyebrow">Why consens.io</p>
+        <h2>Built for decisions, not single-model guesswork.</h2>
+      </div>
       <div class="card-grid">
         <article class="info-card">
-          <p class="kicker">01</p>
-          <h3>Parallel answers</h3>
-          <p>Send a prompt to multiple selected models and read their original responses without losing context.</p>
+          <p class="kicker">Compare</p>
+          <h3>Original answers stay visible</h3>
+          <p>Read each model response side by side before the consensus layer summarizes it.</p>
         </article>
         <article class="info-card">
-          <p class="kicker">02</p>
-          <h3>Visible disagreement</h3>
-          <p>Differences are surfaced instead of hidden, so weak spots and conflicting claims are easier to catch.</p>
+          <p class="kicker">Verify</p>
+          <h3>Disagreement is surfaced</h3>
+          <p>The app highlights differences instead of hiding them inside one confident answer.</p>
         </article>
         <article class="info-card">
-          <p class="kicker">03</p>
-          <h3>Provider-aware privacy</h3>
-          <p>Prompts go to the providers you choose and not through extra model-router intermediaries.</p>
+          <p class="kicker">Control</p>
+          <h3>You choose the models</h3>
+          <p>Select providers, switch reasoning modes, and decide which outputs count toward consensus.</p>
         </article>
       </div>
     </section>
 
-    <section class="section">
-      <h2>Models in one workspace</h2>
-      <p class="section-intro">
-        The exact line-up can change as models evolve, but consens.io is built around direct access to major providers.
-      </p>
-      <div class="model-grid">
-        <article class="model-card">
-          <img src="/static/icons/chatgpt.png" alt="OpenAI logo">
-          <p class="provider">OpenAI</p>
-          <h3>ChatGPT</h3>
-          <p>Strong general reasoning, writing, coding, and structured outputs.</p>
-        </article>
-        <article class="model-card">
-          <img src="/static/icons/claude.png" alt="Anthropic logo">
-          <p class="provider">Anthropic</p>
-          <h3>Claude</h3>
-          <p>Careful long-form analysis, summaries, and nuanced comparison.</p>
-        </article>
-        <article class="model-card">
-          <img src="/static/icons/gemini.png" alt="Gemini logo">
-          <p class="provider">Google</p>
-          <h3>Gemini</h3>
-          <p>Fast multimodal-capable models with strong research workflows.</p>
-        </article>
-        <article class="model-card">
-          <img src="/static/icons/mistral.png" alt="Mistral logo">
-          <p class="provider">Mistral AI</p>
-          <h3>Mistral</h3>
-          <p>Efficient European models with concise and practical responses.</p>
-        </article>
-        <article class="model-card">
-          <img src="/static/icons/deepseek.png" alt="DeepSeek logo">
-          <p class="provider">DeepSeek</p>
-          <h3>DeepSeek</h3>
-          <p>Useful for technical reasoning, code, and alternative viewpoints.</p>
-        </article>
-        <article class="model-card">
-          <img src="/static/icons/grok.png" alt="Grok logo">
-          <p class="provider">xAI</p>
-          <h3>Grok</h3>
-          <p>Another independent model family for comparison and consensus checks.</p>
-        </article>
-        <article class="model-card">
-          <img src="/static/icons/perplexity.png" alt="Perplexity logo">
-          <p class="provider">Perplexity</p>
-          <h3>Perplexity</h3>
-          <p>Research-oriented answers and source-aware retrieval workflows.</p>
-        </article>
+    <section id="models" class="section landing-shell">
+      <div class="section-heading-row">
+        <div>
+          <p class="eyebrow">Model coverage</p>
+          <h2>One workspace for leading AI providers.</h2>
+        </div>
+        <p class="section-intro">
+          consens.io is designed around direct comparison across major model families, so every answer can be checked against independent alternatives.
+        </p>
       </div>
+      <div class="model-grid">
+        <article class="model-card"><img src="/static/icons/chatgpt.png" alt=""><span>OpenAI</span><strong>ChatGPT</strong></article>
+        <article class="model-card"><img src="/static/icons/claude.png" alt=""><span>Anthropic</span><strong>Claude</strong></article>
+        <article class="model-card"><img src="/static/icons/gemini.png" alt=""><span>Google</span><strong>Gemini</strong></article>
+        <article class="model-card"><img src="/static/icons/mistral.png" alt=""><span>Mistral AI</span><strong>Mistral</strong></article>
+        <article class="model-card"><img src="/static/icons/deepseek.png" alt=""><span>DeepSeek</span><strong>DeepSeek</strong></article>
+        <article class="model-card"><img src="/static/icons/grok.png" alt=""><span>xAI</span><strong>Grok</strong></article>
+      </div>
+    </section>
+
+    <section class="final-cta landing-shell">
+      <p class="eyebrow">Get the product view</p>
+      <h2>Open consens.io and compare your next answer across models.</h2>
+      <a href="/app" class="button-primary">Open app</a>
     </section>
   </main>
 
@@ -181,158 +261,45 @@
   </footer>
 
   <script>
-    (function () {
-      const canvas = document.getElementById("constellationCanvas");
-      if (!canvas) return;
-
-      const reducedMotionQuery = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)");
-      const prefersReducedMotion = reducedMotionQuery && reducedMotionQuery.matches;
-      const ctx = canvas.getContext("2d");
-      const pointer = { x: 0, y: 0, active: false };
-      let width = 0;
-      let height = 0;
-      let dpr = 1;
-      let points = [];
-
-      function themeColor(name) {
-        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-      }
-
-      function hexToRgb(hex) {
-        const value = hex.replace("#", "");
-        const full = value.length === 3
-          ? value.split("").map(ch => ch + ch).join("")
-          : value;
-        const int = parseInt(full, 16);
-        return {
-          r: (int >> 16) & 255,
-          g: (int >> 8) & 255,
-          b: int & 255
-        };
-      }
-
-      function rgba(token, alpha) {
-        const raw = themeColor(token);
-        if (raw.startsWith("#")) {
-          const rgb = hexToRgb(raw);
-          return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
-        }
-        return raw;
-      }
-
-      function resize() {
-        dpr = Math.min(window.devicePixelRatio || 1, 2);
-        width = window.innerWidth;
-        height = window.innerHeight;
-        canvas.width = Math.floor(width * dpr);
-        canvas.height = Math.floor(height * dpr);
-        canvas.style.width = `${width}px`;
-        canvas.style.height = `${height}px`;
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-        const count = Math.max(28, Math.min(52, Math.floor((width * height) / 23000)));
-        points = Array.from({ length: count }, (_, index) => ({
-          x: Math.random() * width,
-          y: Math.random() * height,
-          vx: (Math.random() - 0.5) * 0.16,
-          vy: (Math.random() - 0.5) * 0.16,
-          r: index % 7 === 0 ? 2.1 : 1.45
-        }));
-      }
-
-      function draw() {
-        ctx.clearRect(0, 0, width, height);
-        const isDark = document.documentElement.classList.contains("dark-mode");
-        const accent = rgba("--accent", isDark ? 0.34 : 0.24);
-        const muted = rgba("--muted", isDark ? 0.3 : 0.23);
-        const line = rgba("--muted", isDark ? 0.14 : 0.11);
-
-        for (const point of points) {
-          if (!prefersReducedMotion) {
-            point.x += point.vx;
-            point.y += point.vy;
-            if (point.x < -40) point.x = width + 40;
-            if (point.x > width + 40) point.x = -40;
-            if (point.y < -40) point.y = height + 40;
-            if (point.y > height + 40) point.y = -40;
-          }
-        }
-
-        for (let i = 0; i < points.length; i++) {
-          for (let j = i + 1; j < points.length; j++) {
-            const a = points[i];
-            const b = points[j];
-            const dx = a.x - b.x;
-            const dy = a.y - b.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < 132) {
-              ctx.beginPath();
-              ctx.moveTo(a.x, a.y);
-              ctx.lineTo(b.x, b.y);
-              ctx.strokeStyle = line;
-              ctx.globalAlpha = 1 - dist / 132;
-              ctx.lineWidth = 1;
-              ctx.stroke();
-            }
-          }
-        }
-
-        if (pointer.active) {
-          for (const point of points) {
-            const dx = point.x - pointer.x;
-            const dy = point.y - pointer.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < 170) {
-              ctx.beginPath();
-              ctx.moveTo(point.x, point.y);
-              ctx.lineTo(pointer.x, pointer.y);
-              ctx.strokeStyle = accent;
-              ctx.globalAlpha = 0.2 * (1 - dist / 170);
-              ctx.lineWidth = 1;
-              ctx.stroke();
-            }
-          }
-        }
-
-        ctx.globalAlpha = 1;
-        for (const point of points) {
-          ctx.beginPath();
-          ctx.arc(point.x, point.y, point.r, 0, Math.PI * 2);
-          ctx.fillStyle = point.r > 2 ? accent : muted;
-          ctx.fill();
-        }
-
-        if (!prefersReducedMotion) {
-          requestAnimationFrame(draw);
-        }
-      }
-
-      window.addEventListener("resize", () => {
-        resize();
-        if (prefersReducedMotion) draw();
-      });
-      window.addEventListener("pointermove", event => {
-        pointer.x = event.clientX;
-        pointer.y = event.clientY;
-        pointer.active = true;
-      });
-      window.addEventListener("pointerleave", () => {
-        pointer.active = false;
-      });
-
-      resize();
-      draw();
-    })();
-
     document.addEventListener("DOMContentLoaded", () => {
-      const skip = sessionStorage.getItem("skipLandingRedirect");
-      if (localStorage.getItem("visitedLanding") && !skip) {
-        window.location.replace("/app");
-        return;
-      }
+      const steps = Array.from(document.querySelectorAll(".story-step"));
+      const stage = document.querySelector(".story-stage .product-window");
+      const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-      localStorage.setItem("visitedLanding", "true");
-      sessionStorage.removeItem("skipLandingRedirect");
+      const setScene = scene => {
+        if (!stage) return;
+        stage.dataset.activeScene = scene;
+        steps.forEach(step => step.classList.toggle("is-active", step.dataset.storyStep === scene));
+      };
+
+      if (steps.length && !reducedMotion) {
+        let pendingFrame = false;
+
+        const updateSceneFromScroll = () => {
+          pendingFrame = false;
+          const readingLine = window.scrollY + window.innerHeight * 0.6;
+          let activeStep = steps[0];
+
+          for (const step of steps) {
+            const stepTop = step.getBoundingClientRect().top + window.scrollY;
+            if (stepTop <= readingLine) {
+              activeStep = step;
+            }
+          }
+
+          setScene(activeStep.dataset.storyStep);
+        };
+
+        const scheduleSceneUpdate = () => {
+          if (pendingFrame) return;
+          pendingFrame = true;
+          window.requestAnimationFrame(updateSceneFromScroll);
+        };
+
+        window.addEventListener("scroll", scheduleSceneUpdate, { passive: true });
+        window.addEventListener("resize", scheduleSceneUpdate);
+        updateSceneFromScroll();
+      }
 
       ["ctaButton", "navCtaButton"].forEach(id => {
         const button = document.getElementById(id);

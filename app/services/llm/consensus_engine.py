@@ -30,6 +30,9 @@ CANONICAL_MODEL_NAMES = {
     "grok": "Grok",
 }
 
+MAX_SOURCES_PER_EXPERT = 5
+MAX_SOURCE_FIELD_CHARS = 180
+
 
 def normalize_model_name(model_name: str) -> str:
     key = str(model_name or "").strip()
@@ -44,6 +47,67 @@ def normalize_excluded_models(excluded_models) -> set:
     return {normalize_model_name(model) for model in excluded_models if model}
 
 
+def _clip(value, limit=MAX_SOURCE_FIELD_CHARS):
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3].rstrip() + "..."
+
+
+def _sources_for_model(model_sources, model_name):
+    if not isinstance(model_sources, dict):
+        return []
+
+    normalized_target = normalize_model_name(model_name)
+    for key, sources in model_sources.items():
+        if normalize_model_name(key) == normalized_target and isinstance(sources, list):
+            return sources
+    return []
+
+
+def _format_sources_for_prompt(model_name, model_sources):
+    sources = _sources_for_model(model_sources, model_name)
+    if not sources:
+        return ""
+
+    lines = []
+    seen = set()
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        title = _clip(source.get("title") or source.get("url") or "Source")
+        url = _clip(source.get("url") or "")
+        source_id = _clip(source.get("id") or "")
+        key = (url or title).lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+
+        prefix = f"[{source_id}] " if source_id else ""
+        suffix = f" - {url}" if url and url != title else ""
+        lines.append(f"- {prefix}{title}{suffix}")
+        if len(lines) >= MAX_SOURCES_PER_EXPERT:
+            break
+
+    if not lines:
+        return ""
+
+    omitted = max(0, len(sources) - len(lines))
+    if omitted:
+        lines.append(f"- ... {omitted} additional source(s) omitted")
+
+    return "Sources for this expert (compact, provenance only):\n" + "\n".join(lines) + "\n"
+
+
+def _format_expert_opinion(label, answer, model_sources):
+    source_section = _format_sources_for_prompt(label, model_sources)
+    return (
+        f"Expert opinion from {label}:\n"
+        f"Answer:\n{answer}\n"
+        f"{source_section}\n"
+    )
+
+
 def query_consensus(
     question: str,
     answer_openai: str,
@@ -56,6 +120,7 @@ def query_consensus(
     excluded_models: list,
     consensus_model: str,
     api_keys: dict,
+    model_sources=None,
 ) -> str:
     """
     Konsolidiert die Antworten der 6 Haupt-LLMs zu einer Konsensantwort.
@@ -69,18 +134,38 @@ def query_consensus(
         f"The question is: {question}\n\n"
     )
 
+    prompt_parts.append(
+        "Below are independent expert opinions from different models. "
+        "Each source list belongs only to the immediately preceding expert opinion. "
+        "Use sources as compact provenance, not as additional opinions. "
+        "Do not restate raw source lists in the final answer.\n\n"
+    )
+
     if "OpenAI" not in excluded and answer_openai:
-        prompt_parts.append(f"Response from GPT (OpenAI): {answer_openai}\n\n")
+        prompt_parts.append(_format_expert_opinion("OpenAI", answer_openai, model_sources))
     if "Mistral" not in excluded and answer_mistral:
-        prompt_parts.append(f"Response from Mistral: {answer_mistral}\n\n")
+        prompt_parts.append(_format_expert_opinion("Mistral", answer_mistral, model_sources))
     if "Anthropic" not in excluded and answer_claude:
-        prompt_parts.append(f"Response from Claude: {answer_claude}\n\n")
+        prompt_parts.append(_format_expert_opinion("Anthropic", answer_claude, model_sources))
     if "Gemini" not in excluded and answer_gemini:
-        prompt_parts.append(f"Response from Gemini: {answer_gemini}\n\n")
+        prompt_parts.append(_format_expert_opinion("Gemini", answer_gemini, model_sources))
     if "DeepSeek" not in excluded and answer_deepseek:
-        prompt_parts.append(f"Response from DeepSeek: {answer_deepseek}\n\n")
+        prompt_parts.append(_format_expert_opinion("DeepSeek", answer_deepseek, model_sources))
     if "Grok" not in excluded and answer_grok:
-        prompt_parts.append(f"Response from Grok: {answer_grok}\n\n")
+        prompt_parts.append(_format_expert_opinion("Grok", answer_grok, model_sources))
+
+    user_facing_instruction = (
+        "Use the expert-opinion framing only for your internal synthesis. "
+        "The final answer is for an end user, so do not mention experts, expert opinions, models, "
+        "model responses, consensus mechanics, or that sources disagree. "
+        "Resolve disagreements silently where possible. If uncertainty remains important, state it as "
+        "ordinary factual uncertainty without referring to the underlying experts or models. "
+        "When a central factual claim is directly supported by a cited source in the provided opinions, "
+        "include the existing source tag such as [S1] next to that claim. "
+        "Use only source tags that were provided in the opinions or their compact source lists; never invent new source IDs. "
+        "Use citations sparingly and only where they add verifiability. "
+        "Provide only the final, balanced answer."
+    )
 
     if best_model:
         prompt_parts.append(
@@ -89,7 +174,7 @@ def query_consensus(
             "Your task is to combine these responses into a comprehensive, correct, and coherent answer. "
             "Note: Experts can also make mistakes. Therefore, try to identify and exclude possible errors by comparing the answers. "
             "Structure the answer clearly and coherently. "
-            "Provide only the final, balanced answer."
+            + user_facing_instruction
         )
     else:
         prompt_parts.append(
@@ -97,8 +182,8 @@ def query_consensus(
             "Treat all expert opinions equally. Do not focus on the answer of one model. "
             "Your task is to combine these responses into a comprehensive, correct, and coherent answer. "
             "Note: Experts can also make mistakes. Therefore, try to identify and exclude possible errors by comparing the answers. "
-            "Structure the answer clearly and coherently."
-            "Provide only the final, balanced answer."
+            "Structure the answer clearly and coherently. "
+            + user_facing_instruction
         )
 
     consensus_prompt = "".join(prompt_parts)
@@ -300,7 +385,8 @@ def query_differences(
 
         "After the sentence, include a separator line and a concise differences summary. "
         "Keep it short and scannable: maximum two bullet points, each under 18 words. "
-        "Mention only the most important substantive deviations. Do not write long paragraphs or restate every model.\n\n"
+        "Mention only the most important substantive deviations. Do not write long paragraphs or restate every model. "
+        "Ignore citation markers, source labels, URLs, and source-list noise unless they reveal a real factual disagreement.\n\n"
         "Consensus answer:\n" + consensus_answer + "\n\n"
         "Model responses:\n" + responses_text + "\n\n"
         "Finally, subjectively determine which model provided the best answer. "
