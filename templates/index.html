@@ -14,7 +14,7 @@
       messagingSenderId: "{{ firebase_messaging_sender_id }}",
       appId: "{{ firebase_app_id }}"
     };
-    window.APP_LIMITS = {{ limits | tojson }};
+    window.APP_LIMITS = JSON.parse('{{ limits | tojson | safe }}');
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
@@ -1330,7 +1330,7 @@
         });
 
         const APP_LIMITS = window.APP_LIMITS || {};
-        const FREE_USAGE_LIMIT = APP_LIMITS.free_usage_limit || {{ free_limit }};
+        const FREE_USAGE_LIMIT = APP_LIMITS.free_usage_limit || Number('{{ free_limit }}');
 
         function validateInputText() {
           const text = document.getElementById("questionInput").value.trim();
@@ -4220,7 +4220,7 @@
 
         window.isUserPro = false;
 
-        window.updateUserTierUI = function (isPro, isLoggedIn = false) { // Standardmäßig false
+        function updateUserTierUI(isPro, isLoggedIn = false) { // Standardmäßig false
           // 1. Globalen Status aktualisieren
           window.isUserPro = isPro;
 
@@ -4294,7 +4294,7 @@
               if (input) input.style.pointerEvents = "auto";
             }
           }
-        };
+        }
 
         function updatePremiumModelsState(isPro) {
           // Dropdown-IDs definieren (Consensus und OpenAI)
