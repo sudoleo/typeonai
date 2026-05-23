@@ -4,3 +4,8 @@ __pycache__/
 *.log
 *json
 consensai-firebase-adminsdk-fbsvc-9064a77134.json
+
+# Recording assets and local video generation tooling
+recordings/
+recording/
+.recording-tools/

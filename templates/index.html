@@ -18,8 +18,8 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260521-sources1">
-  <link rel="icon" href="/static/favicon.png" type="image/x-icon">
+  <link rel="stylesheet" href="/static/style.css?v=20260523-width-resize1">
+  <link rel="icon" href="/static/favicon-square.png?v=20260523-logo1" type="image/png">
   <!-- Füge dies im <head> hinzu -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <!-- Optional für Sicherheit: -->
@@ -31,7 +31,7 @@
   <!-- Firebase-Code wird jetzt ausgelagert -->
   <script type="module" src="/static/firebase.js?v=20260520-input-lock1"></script>
   <script type="module" src="/static/demo.js?v=20260520-agent-mode1"></script>
-  <script src="/static/app-ui.js" defer></script>
+  <script src="/static/app-ui.js?v=20260523-width-resize1" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b"></script>
 </head>
@@ -1767,6 +1767,12 @@
                 : modelInfo.label;
               chip.setAttribute("role", "group");
               chip.setAttribute("aria-label", `Choose ${modelInfo.label} model`);
+              chip.textContent = "";
+
+              const chipLabel = document.createElement("span");
+              chipLabel.className = "agent-mode-chip-label";
+              chipLabel.textContent = modelInfo.label;
+              chip.appendChild(chipLabel);
 
               const sourceSelect = document.getElementById(modelInfo.pref.selectId);
               if (sourceSelect && !modelInfo.usesDeepThinkModel) {
@@ -1781,6 +1787,12 @@
                   syncAgentModePicker(this, modelInfo.pref);
                 });
                 chip.appendChild(picker);
+                initCustomModelPicker(picker);
+              } else if (modelInfo.model) {
+                const chipModel = document.createElement("span");
+                chipModel.className = "agent-mode-chip-model";
+                chipModel.textContent = modelInfo.model;
+                chip.appendChild(chipModel);
               }
               modelsEl.appendChild(chip);
             });
@@ -2044,13 +2056,90 @@
 
         let expandedModelPicker = null;
 
-        function collapseExpandedModelPicker(select = expandedModelPicker) {
-          if (!select || select.dataset.expandedPicker !== "true") return;
+        function getModelPickerState(select) {
+          return select?._customModelPicker || null;
+        }
 
-          select.size = 1;
-          select.classList.remove("model-picker-expanded");
-          select.closest(".model-picker-wrapper")?.classList.remove("is-expanded");
-          delete select.dataset.expandedPicker;
+        function getModelOptionLabel(option) {
+          return (option?.textContent || "").replace(/\s*(?:\u00c2\u00b7|\u00b7)\s*Pro\s*$/i, "").trim();
+        }
+
+        function syncCustomModelPicker(select) {
+          const state = getModelPickerState(select);
+          if (!state) return;
+
+          const selectedOption = select.options[select.selectedIndex] || select.options[0];
+          const selectedLabel = getModelOptionLabel(selectedOption);
+
+          if (state.displayButton) {
+            state.displayButton.querySelector(".model-picker-display-text").textContent = selectedLabel;
+            state.displayButton.title = selectedLabel;
+          }
+
+          state.host.setAttribute("aria-label", `Choose model: ${selectedLabel}`);
+          state.menu.querySelectorAll(".model-picker-option").forEach(item => {
+            const isSelected = item.dataset.value === select.value;
+            item.classList.toggle("is-selected", isSelected);
+            item.setAttribute("aria-selected", String(isSelected));
+          });
+        }
+
+        function renderCustomModelPicker(select) {
+          const state = getModelPickerState(select);
+          if (!state) return;
+
+          state.menu.innerHTML = "";
+          Array.from(select.options).forEach(option => {
+            const item = document.createElement("button");
+            item.type = "button";
+            item.className = "model-picker-option";
+            item.dataset.value = option.value;
+            item.setAttribute("role", "option");
+            item.setAttribute("aria-selected", String(option.selected));
+            item.disabled = option.disabled;
+            item.classList.toggle("is-selected", option.selected);
+            item.classList.toggle("is-premium", option.classList.contains("premium-option"));
+
+            const label = document.createElement("span");
+            label.className = "model-picker-option-label";
+            label.textContent = getModelOptionLabel(option);
+            item.appendChild(label);
+
+            if (option.classList.contains("premium-option")) {
+              const badge = document.createElement("span");
+              badge.className = "model-picker-pro-badge";
+              badge.textContent = "Pro";
+              item.appendChild(badge);
+            }
+
+            item.addEventListener("click", event => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (option.disabled) return;
+
+              select.value = option.value;
+              option.selected = true;
+              select.dispatchEvent(new Event("change", { bubbles: true }));
+              collapseExpandedModelPicker(select);
+            });
+
+            state.menu.appendChild(item);
+          });
+
+          syncCustomModelPicker(select);
+        }
+
+        function collapseExpandedModelPicker(select = expandedModelPicker) {
+          const state = getModelPickerState(select);
+          if (!state) return;
+
+          state.menu.classList.remove("is-open");
+          state.host.classList.remove("is-expanded", "is-open");
+          state.host.setAttribute("aria-expanded", "false");
+
+          if (state.displayButton) {
+            state.displayButton.setAttribute("aria-expanded", "false");
+          }
 
           if (expandedModelPicker === select) {
             expandedModelPicker = null;
@@ -2058,23 +2147,79 @@
         }
 
         function openModelPicker(select) {
-          if (!select || select.disabled) return;
-          collapseExpandedModelPicker();
-          select.focus({ preventScroll: true });
-          if (typeof select.showPicker === "function") {
-            try {
-              select.showPicker();
-              return;
-            } catch (error) {
-              // Fall back to an inline list when the browser rejects programmatic opening.
-            }
+          const state = getModelPickerState(select);
+          if (!select || select.disabled || !state) return;
+
+          if (expandedModelPicker && expandedModelPicker !== select) {
+            collapseExpandedModelPicker(expandedModelPicker);
           }
 
-          select.dataset.expandedPicker = "true";
-          select.classList.add("model-picker-expanded");
-          select.closest(".model-picker-wrapper")?.classList.add("is-expanded");
-          select.size = Math.min(select.options.length, 8);
+          renderCustomModelPicker(select);
+          state.host.classList.add("is-expanded", "is-open");
+          state.host.setAttribute("aria-expanded", "true");
+          state.menu.classList.add("is-open");
+
+          if (state.displayButton) {
+            state.displayButton.setAttribute("aria-expanded", "true");
+          }
+
           expandedModelPicker = select;
+        }
+
+        function initCustomModelPicker(select, options = {}) {
+          if (!select || getModelPickerState(select)) return;
+
+          const host = select.closest(".model-picker-wrapper") || select.closest(".select-wrapper") || select.closest(".agent-mode-chip");
+          if (!host) return;
+
+          host.classList.add("custom-model-picker", "is-enhanced");
+          host.setAttribute("role", "button");
+          host.setAttribute("aria-haspopup", "listbox");
+          host.setAttribute("aria-expanded", "false");
+          host.tabIndex = options.externalTrigger ? 0 : -1;
+          select.classList.add("native-model-picker");
+
+          const menu = document.createElement("div");
+          menu.className = "model-picker-menu";
+          menu.setAttribute("role", "listbox");
+
+          let displayButton = null;
+          if (!options.externalTrigger) {
+            displayButton = document.createElement("button");
+            displayButton.type = "button";
+            displayButton.className = "model-picker-display";
+            displayButton.setAttribute("aria-haspopup", "listbox");
+            displayButton.setAttribute("aria-expanded", "false");
+            displayButton.innerHTML = '<span class="model-picker-display-text"></span>';
+            host.appendChild(displayButton);
+            displayButton.addEventListener("click", event => {
+              event.preventDefault();
+              event.stopPropagation();
+              openModelPicker(select);
+            });
+          }
+
+          host.appendChild(menu);
+          select._customModelPicker = { host, menu, displayButton };
+
+          host.addEventListener("click", event => {
+            if (menu.contains(event.target) || event.target === displayButton) return;
+            event.preventDefault();
+            event.stopPropagation();
+            openModelPicker(select);
+          });
+
+          host.addEventListener("keydown", event => {
+            if (event.key === "Enter" || event.key === " " || event.key === "ArrowDown") {
+              event.preventDefault();
+              openModelPicker(select);
+            } else if (event.key === "Escape") {
+              collapseExpandedModelPicker(select);
+            }
+          });
+
+          select.addEventListener("change", () => syncCustomModelPicker(select));
+          renderCustomModelPicker(select);
         }
 
         modelPrefs.forEach(pref => {
@@ -2111,12 +2256,23 @@
               labelText.focus({ preventScroll: true });
             }
           });
+
+          initCustomModelPicker(select, { externalTrigger: labelText });
         });
+
+        initCustomModelPicker(document.getElementById("consensusModelDropdown"));
+
+        window.syncCustomModelPickers = function () {
+          document.querySelectorAll(".native-model-picker").forEach(syncCustomModelPicker);
+        };
 
         document.addEventListener("click", function (event) {
           if (!expandedModelPicker) return;
+          const state = getModelPickerState(expandedModelPicker);
           const title = expandedModelPicker.closest(".title");
-          if (title && !title.contains(event.target)) {
+          const isInsideTitle = title && title.contains(event.target);
+          const isInsidePicker = state && state.host.contains(event.target);
+          if (!isInsideTitle && !isInsidePicker) {
             collapseExpandedModelPicker();
           }
         });
@@ -4238,6 +4394,8 @@
             // Optional: Standard-Limits (Free) oder ganz sperren
             setCurrentUsageLimits(false);
 
+            if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false);
+
             // Deep Search sperren (wie bei Free User)
             if (deepSearchLabel) {
               deepSearchLabel.classList.add("locked");
@@ -4338,6 +4496,10 @@
 
           if (window.restoreModelSelections) {
             window.restoreModelSelections();
+          }
+
+          if (typeof window.syncCustomModelPickers === "function") {
+            window.syncCustomModelPickers();
           }
 
           // FIX: Nach dem Restore prüfen, ob Deep Think aktiv ist, 

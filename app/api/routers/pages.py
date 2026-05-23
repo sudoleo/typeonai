@@ -54,13 +54,16 @@ async def read_root(request: Request):
     }
     from app.core.config import ALLOWED_OPENAI_MODELS, ALLOWED_MISTRAL_MODELS, ALLOWED_ANTHROPIC_MODELS, ALLOWED_GEMINI_MODELS, ALLOWED_DEEPSEEK_MODELS, ALLOWED_GROK_MODELS, PREMIUM_MODELS
     
+    def model_picker_sort(model_name: str):
+        return (model_name in PREMIUM_MODELS, model_name.lower())
+
     models = {
-        "openai": sorted(list(ALLOWED_OPENAI_MODELS)),
-        "mistral": sorted(list(ALLOWED_MISTRAL_MODELS)),
-        "anthropic": sorted(list(ALLOWED_ANTHROPIC_MODELS)),
-        "gemini": sorted(list(ALLOWED_GEMINI_MODELS)),
-        "deepseek": sorted(list(ALLOWED_DEEPSEEK_MODELS)),
-        "grok": sorted(list(ALLOWED_GROK_MODELS)),
+        "openai": sorted(list(ALLOWED_OPENAI_MODELS), key=model_picker_sort),
+        "mistral": sorted(list(ALLOWED_MISTRAL_MODELS), key=model_picker_sort),
+        "anthropic": sorted(list(ALLOWED_ANTHROPIC_MODELS), key=model_picker_sort),
+        "gemini": sorted(list(ALLOWED_GEMINI_MODELS), key=model_picker_sort),
+        "deepseek": sorted(list(ALLOWED_DEEPSEEK_MODELS), key=model_picker_sort),
+        "grok": sorted(list(ALLOWED_GROK_MODELS), key=model_picker_sort),
         "premium": list(PREMIUM_MODELS)
     }
 
