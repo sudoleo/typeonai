@@ -34,9 +34,6 @@ window.auth = auth;
 // Standard-Persistenz global setzen (beim Laden, nicht im Click-Handler)
 setPersistence(auth, browserLocalPersistence)
   .catch(() => setPersistence(auth, browserSessionPersistence))
-  .then(() => {
-    console.log("[Auth] Persistence initialized");
-  })
   .catch(err => {
     console.error("[Auth] Failed to set persistence:", err);
   });
@@ -129,7 +126,6 @@ async function checkUserStatusOnLoad(user, token) {
 
       if (data.is_pro) {
           // === IST PRO ===
-          console.log("User ist PRO -> Zeige Badge");
           if (badge) badge.style.display = "inline-block";
           if (upgradeLink) upgradeLink.style.display = "none";
 
@@ -143,7 +139,6 @@ async function checkUserStatusOnLoad(user, token) {
 
       } else {
           // === IST FREE ===
-          console.log("User ist FREE -> Zeige Upgrade Link");
           if (badge) badge.style.display = "none";
           if (upgradeLink) upgradeLink.style.display = "inline-block";
 
@@ -164,8 +159,6 @@ async function checkUserStatusOnLoad(user, token) {
 }
 
 onIdTokenChanged(auth, async (user) => {
-  console.log("[onIdTokenChanged] user?", !!user);
-
   const loginContainer = document.getElementById("loginContainer");
   const usageOptions   = document.getElementById("usageOptions");
 
@@ -329,8 +322,6 @@ function fetchUsageData(token) {
 }
 
 function mapFirebaseLoginError(error) {
-  console.error("Firebase login failed, code:", error?.code || "unknown");
-
   // Sicherheitsfreundliche, generische Messages
   switch (error.code) {
     case "auth/user-not-found":
@@ -350,8 +341,6 @@ function mapFirebaseLoginError(error) {
 }
 
 function mapFirebaseRegisterError(error) {
-  console.error("Firebase login failed, code:", error?.code || "unknown");
-
   switch (error.code) {
     case "auth/email-already-in-use":
       return "This e-mail address is already in use.";
@@ -367,8 +356,6 @@ function mapFirebaseRegisterError(error) {
 }
 
 function mapPasswordResetError(error) {
-  console.error("Firebase login failed, code:", error?.code || "unknown");
-
   switch (error.code) {
     case "auth/user-not-found":
       return "No account was found for this e-mail address.";
@@ -402,8 +389,6 @@ document.getElementById("loginButton").addEventListener("click", () => {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id_token: token })
           })
-            .then(res => res.json())
-            .then(info => console.log("Confirm-Registration:", info))
             .catch(err => console.error("Confirm-Registration-Fehler:", err));
 
           window.location.href = "/";
@@ -446,7 +431,7 @@ function setMode(mode) {
 
   const isRegister = mode === "register";
   // Titel & Hinweise
-  titleEl.textContent = isRegister ? "Create account" : "Login";
+  titleEl.textContent = isRegister ? "Create account" : "Log in to consens.io";
   singleMailNoteEl.style.display = isRegister ? "block" : "none";
 
   // Felder ein-/ausblenden
@@ -621,7 +606,6 @@ function handleGoogleSignIn() {
 document.getElementById("googleLoginButton")?.addEventListener("click", handleGoogleSignIn);
 
 async function afterGoogleLogin(user) {
-  console.log("[afterGoogleLogin] platform=iOS?", isIOS(), "emailVerified=", user.emailVerified);
   // Jetzt *nach* erfolgreichem/versuchtem POST navigieren
   location.replace("/");
 }
@@ -692,8 +676,6 @@ async function recordModelVote(model, type) {
     const data = await response.json();
     if (!response.ok) {
       console.error("Error recording vote:", data.detail);
-    } else {
-      console.log("Vote recorded:", data.message);
     }
   } catch (error) {
     console.error("Error connecting to backend for vote recording:", error);
@@ -740,7 +722,6 @@ async function saveBookmark(question, response, modelName, mode) {
       return;
     }
 
-    console.log("Bookmark gespeichert:", data.message);
     if (data.bookmark) {
         // Initialisiere Array falls leer
         if (!window.bookmarksData) window.bookmarksData = [];
@@ -787,8 +768,6 @@ async function saveBookmarkConsensus(question, consensusText, differencesText) {
     const data = await res.json();
     if (!res.ok) {
       console.error("Error saving consensus bookmark:", data.detail);
-    } else {
-      console.log(data.message);
     }
   } catch (error) {
     console.error("Error in saveBookmarkConsensus:", error);
@@ -801,8 +780,6 @@ function loadSingleBookmarkUI(bookmark) {
     // Konsens-Button deaktivieren
     const conBtn = document.getElementById("consensusButton");
     if(conBtn) conBtn.disabled = true;
-
-    console.log("Loading bookmark into UI:", bookmark.id);
 
     // --- NEU: Quellen wiederherstellen ---
     // 1. Globale Variable setzen, damit injectMarkdown (in index.html) darauf zugreifen kann
@@ -967,7 +944,6 @@ async function deleteBookmark(bookmarkId) {
       return;
     }
 
-    console.log("Bookmark gelöscht:", data.message);
     // Lokales Array und DOM aktualisieren
     window.bookmarksData = window.bookmarksData.filter(b => b.id !== bookmarkId);
     const el = document.querySelector(`.bookmark[data-id="${bookmarkId}"]`);
@@ -1004,7 +980,6 @@ function sendFeedback(message, email) {
   // Hole den aktuellen, gültigen ID-Token ohne forceRefresh
   return auth.currentUser.getIdToken()
     .then(idToken => {
-      console.log("sendFeedback: Abgerufener ID-Token:", idToken);
       // Sende das Feedback an deinen Backend-Endpoint
       return fetch("/feedback", {
         method: "POST",

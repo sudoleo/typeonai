@@ -21,6 +21,17 @@ from tool_heuristics import get_realtime_context, get_intent_from_llm
 
 router = APIRouter()
 
+def build_usage_limit_detail(message: str, code: str, limit_regular: int, current_usage, limit_deep: int, current_deep_usage):
+    return {
+        "error": message,
+        "error_code": code,
+        "free_usage_remaining": max(0, int(limit_regular - current_usage)),
+        "deep_remaining": max(0, int(limit_deep - current_deep_usage)),
+        "limit": int(limit_regular),
+        "deep_limit": int(limit_deep),
+    }
+
+
 def get_valid_active_count(data: dict) -> int:
     raw = data.get("active_count", 1)
     if isinstance(raw, bool):
@@ -553,9 +564,22 @@ async def prepare(request: Request, data: dict = Body(...)):
         uid = verify_user_token(id_token)
         is_pro = is_user_pro(uid)
         limit = cfg.get_usage_limit(is_pro)
+        deep_limit = cfg.get_deep_search_limit(is_pro)
         current_usage = usage_counter.get(uid, 0)
         if current_usage >= limit:
-            raise HTTPException(status_code=403, detail="Usage limit exhausted.")
+            current_deep_usage = deep_search_usage.get(uid, 0)
+            msg = "Pro usage limit reached." if is_pro else "Free usage limit reached. Upgrade to Pro or use your own API keys."
+            raise HTTPException(
+                status_code=403,
+                detail=build_usage_limit_detail(
+                    msg,
+                    "usage_limit_exceeded",
+                    limit,
+                    current_usage,
+                    deep_limit,
+                    current_deep_usage,
+                )
+            )
     except HTTPException as he:
         raise he
     except Exception as e:
@@ -621,10 +645,17 @@ def consensus(request: Request, data: dict = Body(...)):
 
             # Reguläre Usage Prüfung (gilt immer für Consensus Request)
             if current_usage >= limit_regular:
-                msg = "Pro usage limit reached." if is_pro else "Your free quota has been used up. Please store your own API keys."
+                msg = "Pro usage limit reached." if is_pro else "Your free quota has been used up. Please store your own API keys or upgrade to Pro."
                 raise HTTPException(
                     status_code=403,
-                    detail=msg
+                    detail=build_usage_limit_detail(
+                        msg,
+                        "usage_limit_exceeded",
+                        limit_regular,
+                        current_usage,
+                        limit_deep,
+                        current_deep_usage,
+                    )
                 )
             
             # Reguläre Usage erhöhen
@@ -812,4 +843,11 @@ def consensus(request: Request, data: dict = Body(...)):
         excluded_models=excluded_models,
     )
 
-    return {"consensus_response": consensus_answer, "differences": differences}
+    response = {"consensus_response": consensus_answer, "differences": differences}
+    if uid:
+        response.update({
+            "free_usage_remaining": max(0, int(limit_regular - usage_counter.get(uid, 0))),
+            "deep_remaining": max(0, int(limit_deep - deep_search_usage.get(uid, 0))),
+            "is_pro_user": is_pro,
+        })
+    return response

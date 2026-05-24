@@ -18,7 +18,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260523-width-resize1">
+  <link rel="stylesheet" href="/static/style.css?v=20260524-login-modal1">
   <link rel="icon" href="/static/favicon-square.png?v=20260523-logo1" type="image/png">
   <!-- Füge dies im <head> hinzu -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -443,6 +443,18 @@
         window.spinnerHTML = `
           <span class="thinking-wrap" role="status" aria-live="polite" aria-busy="true">
             <span class="thinking typing-indicator" data-text="Typing" aria-label="Typing">Typing<span class="typing-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span>
+          </span>
+        `;
+        window.consensusSpinnerHTML = `
+          <span class="thinking-wrap consensus-thinking-wrap" role="status" aria-live="polite" aria-busy="true">
+            <span class="consensus-loader" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+            <span class="thinking consensus-thinking">Synthesizing consensus</span>
+          </span>
+        `;
+        window.consensusDifferencesSpinnerHTML = `
+          <span class="thinking-wrap consensus-thinking-wrap" role="status" aria-live="polite" aria-busy="true">
+            <span class="consensus-loader" aria-hidden="true"><span></span><span></span><span></span></span>
+            <span class="thinking consensus-thinking">Comparing responses</span>
           </span>
         `;
 
@@ -1012,7 +1024,6 @@
             // 1. Verhindert, dass die Seite neu lädt
             event.preventDefault();
 
-            console.log("Upgrade Button clicked"); // Debugging
 
             // Zugriff über window.auth ist sicherer
             const currentUser = window.auth ? window.auth.currentUser : null;
@@ -1026,10 +1037,9 @@
               closeProModal();
 
               try {
-                console.log("Sending request to backend...");
                 const id_token = await currentUser.getIdToken(false);
 
-                const response = await fetch("/track-interest", {
+                await fetch("/track-interest", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
@@ -1037,10 +1047,6 @@
                     source: "smoke_test_modal"
                   })
                 });
-
-                // Antwort prüfen
-                const result = await response.json();
-                console.log("Backend Response:", result);
 
                 localStorage.setItem("proInterestShown", "true");
 
@@ -1599,6 +1605,7 @@
 
         const AGENT_MODE_STORAGE_KEY = "agentMode";
         let agentModeStatus = "idle";
+        let agentModeStatusMessage = "";
         let agentModeTimerStartedAt = null;
         let agentModeTimerElapsedMs = 0;
         let agentModeTimerInterval = null;
@@ -1693,6 +1700,7 @@
           if (agentModeStatus === "running") return "Querying selected models in parallel.";
           if (agentModeStatus === "complete") return "Model responses are ready for consensus.";
           if (agentModeStatus === "canceled") return "Request canceled.";
+          if (agentModeStatus === "error") return agentModeStatusMessage || "The request could not be completed.";
           return "Ready for a grouped model run.";
         }
 
@@ -1815,13 +1823,20 @@
           updateAgentModeUI();
         }
 
-        function setAgentModeStatus(status) {
+        function setAgentModeStatus(status, message = "") {
           if (status === "running") {
+            agentModeStatusMessage = "";
             startAgentModeTimer();
-          } else if (status === "complete" || status === "canceled") {
+          } else if (status === "complete" || status === "canceled" || status === "error") {
             stopAgentModeTimer();
           } else if (status === "idle") {
+            agentModeStatusMessage = "";
             resetAgentModeTimer();
+          }
+          if (message) {
+            agentModeStatusMessage = message;
+          } else if (status !== "error") {
+            agentModeStatusMessage = "";
           }
           agentModeStatus = status;
           updateAgentModeUI();
@@ -2572,10 +2587,79 @@
           modelBoxes.forEach(box => {
             delete box.dataset.consensusAnswer;
             delete box.dataset.consensusSources;
+            delete box.dataset.responseError;
             setSpinnerEl(box);
           });
           window.currentEvidenceSources = [];
           if (window.renderEvidenceSources) window.renderEvidenceSources([]);
+
+          let queryHadBlockingError = false;
+          let queryBlockingErrorMessage = "";
+
+          function unwrapApiError(data) {
+            const detail = data?.detail;
+            if (detail && typeof detail === "object") {
+              return {
+                ...detail,
+                error: detail.error || detail.message || "Request failed."
+              };
+            }
+            return data || {};
+          }
+
+          function getApiErrorMessage(data, fallback = "Request failed.") {
+            const normalized = unwrapApiError(data);
+            return normalized.error || normalized.detail || normalized.message || fallback;
+          }
+
+          function isUsageLimitError(data, message = "") {
+            const normalized = unwrapApiError(data);
+            const code = String(normalized.error_code || normalized.code || "").toLowerCase();
+            const text = String(message || normalized.error || normalized.detail || "").toLowerCase();
+            return code.includes("limit")
+              || text.includes("usage limit")
+              || text.includes("quota")
+              || text.includes("used up")
+              || text.includes("exhausted");
+          }
+
+          function updateUsageDisplayFromData(data) {
+            const normalized = unwrapApiError(data);
+            if (normalized.free_usage_remaining !== undefined) {
+              document.getElementById("freeUsageDisplay").innerHTML =
+                "Requests: " + normalized.free_usage_remaining + " / " + currentMaxLimit;
+            }
+            if (normalized.deep_remaining !== undefined) {
+              document.getElementById("deepUsageDisplay").innerHTML =
+                "Deep Think: " + normalized.deep_remaining + " / " + currentDeepLimit;
+            }
+            if (normalized.is_pro_user !== undefined) {
+              window.updateUserTierUI(normalized.is_pro_user === true, !!auth.currentUser);
+            }
+          }
+
+          function markQueryBlockingError(message, data = {}) {
+            queryHadBlockingError = true;
+            queryBlockingErrorMessage = message || queryBlockingErrorMessage || "The request could not be completed.";
+            updateUsageDisplayFromData(data);
+            if (isAgentModeEnabled()) {
+              setAgentModeStatus("error", queryBlockingErrorMessage);
+            }
+          }
+
+          function markModelSuccess(outputEl) {
+            const box = outputEl?.closest?.(".response-box");
+            if (box) delete box.dataset.responseError;
+          }
+
+          function markModelError(outputEl, message, data = {}) {
+            const box = outputEl?.closest?.(".response-box");
+            if (box) box.dataset.responseError = "true";
+            outputEl.innerText = message;
+            if (isUsageLimitError(data, message)) {
+              markQueryBlockingError(message, data);
+            }
+          }
 
           // Wir rufen /prepare IMMER auf, damit Wetter-Infos etc. injiziert werden können.
           try {
@@ -2614,10 +2698,19 @@
               // ÄNDERUNG: Wir prüfen, ob der neue Prompt ANDERS ist als der alte.
               if (prepareData.system_prompt !== storedSystemPrompt) {
                 effectiveSystemPrompt = prepareData.system_prompt;
-                console.log("Using enriched system prompt (Weather/Search data added).");
               }
               // Wenn sie gleich sind: Nichts tun, nichts loggen (effectiveSystemPrompt ist ja schon gesetzt).
             } else {
+              if (isUsageLimitError(prepareData)) {
+                const message = getApiErrorMessage(prepareData, "Usage limit reached.");
+                modelBoxes.forEach(box => {
+                  const outputEl = box.querySelector(".collapsible-content");
+                  if (outputEl) markModelError(outputEl, message, prepareData);
+                });
+                finishQueryRun(queryRunId);
+                document.getElementById("consensusButton").disabled = true;
+                return;
+              }
               console.warn("No valid system_prompt from /prepare, keeping base.");
             }
 
@@ -2638,7 +2731,6 @@
           window.spinnerHTML = baseSpinnerHTML;
           modelBoxes.forEach(box => setSpinnerEl(box));
 
-          console.log("Using system prompt:", effectiveSystemPrompt);
 
           const deepSearchActive = document.getElementById("deepSearchToggle").checked;
 
@@ -2702,13 +2794,24 @@
 
           let responsesReceived = 0;
           const totalActive = activeModels.length;
+
           function checkAllResponses() {
             if (!isActiveQueryRun(queryRunId)) return;
             responsesReceived++;
             if (responsesReceived === totalActive) {
-              setAgentModeStatus("complete");
               // Sende-Button immer wieder freischalten
               finishQueryRun(queryRunId);
+              if (queryHadBlockingError) {
+                setAgentModeStatus("error", queryBlockingErrorMessage);
+                if (typeof window.updateConsensusButtonAvailability === "function") {
+                  window.updateConsensusButtonAvailability();
+                } else {
+                  document.getElementById("consensusButton").disabled = true;
+                }
+                return;
+              }
+
+              setAgentModeStatus("complete");
               const canGenerateConsensus = typeof window.updateConsensusButtonAvailability === "function"
                 ? window.updateConsensusButtonAvailability()
                 : true;
@@ -2866,6 +2969,7 @@
                   .querySelector(".collapsible-content");
 
                 if (data.response) {
+                  markModelSuccess(outputEl);
                   const responseWithSources = window.renderModelResponseWithSources
                     ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                     : data.response;
@@ -2873,12 +2977,12 @@
                     saveBookmark(question, responseWithSources, "OpenAI", mode);
                   }
                 } else if (data.error) {
-                  outputEl.innerText = data.error;
+                  markModelError(outputEl, data.error, data);
                 } else if (data.detail) {
                   // Falls dein Backend irgendwo noch "detail" liefert
-                  outputEl.innerText = data.detail;
+                  markModelError(outputEl, getApiErrorMessage(data), data);
                 } else {
-                  outputEl.innerText = "Unexpected empty response from server.";
+                  markModelError(outputEl, "Unexpected empty response from server.", data);
                 }
 
                 const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -2907,7 +3011,7 @@
                   .getElementById("openaiResponse")
                   .querySelector(".collapsible-content");
                 // Zeig den echten Grund statt des generischen Login-Texts
-                outputEl.innerText = `OpenAI error: ${error.message}`;
+                markModelError(outputEl, `OpenAI error: ${error.message}`, { error: error.message });
                 console.error("Error at OpenAI:", error);
                 checkAllResponses();
               });
@@ -2957,6 +3061,7 @@
                 if (!isActiveQueryRun(queryRunId)) return;
                 let outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
                 if (data.response) {
+                  markModelSuccess(outputEl);
                   const responseWithSources = window.renderModelResponseWithSources
                     ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                     : data.response;
@@ -2965,9 +3070,11 @@
                     saveBookmark(question, responseWithSources, "Mistral", mode);
                   }
                 } else if (data.error) {
-                  outputEl.innerText = data.error;
+                  markModelError(outputEl, data.error, data);
+                } else if (data.detail) {
+                  markModelError(outputEl, getApiErrorMessage(data), data);
                 } else {
-                  outputEl.innerText = "Please log in or store your own API keys.";
+                  markModelError(outputEl, "Please log in or store your own API keys.", data);
                 }
                 // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
                 const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -3040,6 +3147,7 @@
                 if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document.getElementById("claudeResponse").querySelector(".collapsible-content");
                 if (data.response) {
+                  markModelSuccess(outputEl);
                   const responseWithSources = window.renderModelResponseWithSources
                     ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                     : data.response;
@@ -3047,9 +3155,11 @@
                     saveBookmark(question, responseWithSources, "Anthropic", mode);
                   }
                 } else if (data.error) {
-                  outputEl.innerText = data.error;
+                  markModelError(outputEl, data.error, data);
+                } else if (data.detail) {
+                  markModelError(outputEl, getApiErrorMessage(data), data);
                 } else {
-                  outputEl.innerText = "Please log in or store your own API keys.";
+                  markModelError(outputEl, "Please log in or store your own API keys.", data);
                 }
                 // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
                 const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -3122,6 +3232,7 @@
                 if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
                 if (data.response) {
+                  markModelSuccess(outputEl);
                   const responseWithSources = window.renderModelResponseWithSources
                     ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                     : data.response;
@@ -3129,9 +3240,11 @@
                     saveBookmark(question, responseWithSources, "Gemini", mode);
                   }
                 } else if (data.error) {
-                  outputEl.innerText = data.error;
+                  markModelError(outputEl, data.error, data);
+                } else if (data.detail) {
+                  markModelError(outputEl, getApiErrorMessage(data), data);
                 } else {
-                  outputEl.innerText = "Please log in or store your own API keys.";
+                  markModelError(outputEl, "Please log in or store your own API keys.", data);
                 }
                 // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
                 const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -3204,6 +3317,7 @@
                 if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
                 if (data.response) {
+                  markModelSuccess(outputEl);
                   const responseWithSources = window.renderModelResponseWithSources
                     ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                     : data.response;
@@ -3211,9 +3325,11 @@
                     saveBookmark(question, responseWithSources, "DeepSeek", mode);
                   }
                 } else if (data.error) {
-                  outputEl.innerText = data.error;
+                  markModelError(outputEl, data.error, data);
+                } else if (data.detail) {
+                  markModelError(outputEl, getApiErrorMessage(data), data);
                 } else {
-                  outputEl.innerText = "Please log in or store your own API keys.";
+                  markModelError(outputEl, "Please log in or store your own API keys.", data);
                 }
                 // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
                 const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -3285,6 +3401,7 @@
                 if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
                 if (data.response) {
+                  markModelSuccess(outputEl);
                   const responseWithSources = window.renderModelResponseWithSources
                     ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                     : data.response;
@@ -3292,9 +3409,11 @@
                     saveBookmark(question, responseWithSources, "Grok", mode);
                   }
                 } else if (data.error) {
-                  outputEl.innerText = data.error;
+                  markModelError(outputEl, data.error, data);
+                } else if (data.detail) {
+                  markModelError(outputEl, getApiErrorMessage(data), data);
                 } else {
-                  outputEl.innerText = "Please log in or store your own API keys.";
+                  markModelError(outputEl, "Please log in or store your own API keys.", data);
                 }
                 // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
                 const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -3435,6 +3554,7 @@
           return boxIds.filter(id => {
             const box = document.getElementById(id);
             if (!box || box.classList.contains("excluded")) return false;
+            if (box.dataset.responseError === "true") return false;
             const contentEl = box.querySelector(".collapsible-content");
             if (!contentEl || contentEl.querySelector(".thinking-wrap")) return false;
             const text = contentEl.innerText.trim();
@@ -3493,7 +3613,14 @@
           if (runId !== currentConsensusRunId) return;
           consensusRequestRunning = false;
           currentConsensusController = null;
+          setConsensusSynthesizing(false);
           setConsensusButtonRunning(false);
+        }
+
+        function setConsensusSynthesizing(isSynthesizing) {
+          document
+            .getElementById("consensusResponse")
+            ?.classList.toggle("is-synthesizing", !!isSynthesizing);
         }
 
         function markPendingConsensusCanceled() {
@@ -3596,6 +3723,7 @@
 
           function getIncludedAnswer(box) {
             if (!isIncludedBox(box)) return "";
+            if (box.dataset.responseError === "true") return "";
             return (box.dataset.consensusAnswer || box.querySelector(".collapsible-content")?.innerText || "").trim();
           }
 
@@ -3659,8 +3787,9 @@
           if (window.resetCredibilityFrame) {
             window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
           }
-          consensusDiv.querySelector(".consensus-main p").innerHTML = window.spinnerHTML;
-          consensusDiv.querySelector(".consensus-differences p").innerHTML = window.spinnerHTML;
+          setConsensusSynthesizing(true);
+          consensusDiv.querySelector(".consensus-main p").innerHTML = window.consensusSpinnerHTML || window.spinnerHTML;
+          consensusDiv.querySelector(".consensus-differences p").innerHTML = window.consensusDifferencesSpinnerHTML || window.spinnerHTML;
 
           // Hole den best markierten Modus (falls vorhanden)
           const bestBox = document.querySelector(".response-box.best:not(.excluded)");
@@ -3779,15 +3908,38 @@
               })
             });
             const data = await response.json();
+            const consensusErrorDetail =
+              data?.detail && typeof data.detail === "object"
+                ? data.detail
+                : null;
+            const consensusErrorMessage =
+              consensusErrorDetail?.error ||
+              consensusErrorDetail?.message ||
+              data.error ||
+              data.detail ||
+              `Consensus HTTP ${response.status}`;
 
             if (!isActiveConsensusRun(consensusRunId)) {
               return;
             }
 
             // Aktualisiere Free Requests, falls vorhanden (Deep Think nicht benötigt)
-            if (data.free_usage_remaining !== undefined) {
+            const freeUsageRemaining =
+              data.free_usage_remaining !== undefined
+                ? data.free_usage_remaining
+                : consensusErrorDetail?.free_usage_remaining;
+            const deepRemaining =
+              data.deep_remaining !== undefined
+                ? data.deep_remaining
+                : consensusErrorDetail?.deep_remaining;
+
+            if (freeUsageRemaining !== undefined) {
               document.getElementById("freeUsageDisplay").innerText =
-                "Requests: " + data.free_usage_remaining + " / " + currentMaxLimit;
+                "Requests: " + freeUsageRemaining + " / " + currentMaxLimit;
+            }
+            if (deepRemaining !== undefined) {
+              document.getElementById("deepUsageDisplay").innerText =
+                "Deep Think: " + deepRemaining + " / " + currentDeepLimit;
             }
 
             if (response.ok) {
@@ -3824,7 +3976,10 @@
               if (window.resetCredibilityFrame) {
                 window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
               }
-              consensusDiv.querySelector(".consensus-main p").innerText = "Error: " + data.detail;
+              if (consensusErrorDetail?.error_code === "usage_limit_exceeded" && typeof window.setAgentModeStatus === "function" && window.isAgentModeEnabled?.()) {
+                window.setAgentModeStatus("error", consensusErrorMessage);
+              }
+              consensusDiv.querySelector(".consensus-main p").innerText = "Error: " + consensusErrorMessage;
               consensusDiv.querySelector(".consensus-differences p").innerText = "";
             }
 
@@ -3880,7 +4035,6 @@
               throw new Error(errorText);
             }
             const data = await response.json();
-            console.log("Response von /check_keys:", data);
             if (!data || !data.results) {
               throw new Error("The response does not contain a 'results' object. Response: " + JSON.stringify(data));
             }
@@ -4527,9 +4681,18 @@
         tooltip.className = 'global-tooltip';
         document.body.appendChild(tooltip);
 
+        let tooltipTimer = null;
+        let activeTooltipTarget = null;
+
+        const clearTooltipTimer = () => {
+          if (tooltipTimer) {
+            clearTimeout(tooltipTimer);
+            tooltipTimer = null;
+          }
+        };
+
         // Funktion zum Anzeigen
-        const showTooltip = (e) => {
-          const target = e.target.closest('[data-tooltip]');
+        const showTooltip = (target) => {
           if (!target) return;
 
           const text = target.getAttribute('data-tooltip');
@@ -4563,16 +4726,30 @@
 
         // Funktion zum Verstecken
         const hideTooltip = () => {
+          clearTooltipTimer();
+          activeTooltipTarget = null;
           tooltip.classList.remove('visible');
         };
 
         // Event Listener für alle Elemente mit data-tooltip
         document.body.addEventListener('mouseover', (e) => {
-          if (e.target.closest('[data-tooltip]')) showTooltip(e);
+          const target = e.target.closest('[data-tooltip]');
+          if (!target || target.contains(e.relatedTarget)) return;
+
+          clearTooltipTimer();
+          activeTooltipTarget = target;
+          tooltipTimer = setTimeout(() => {
+            if (activeTooltipTarget === target) {
+              showTooltip(target);
+            }
+          }, 2500);
         });
 
         document.body.addEventListener('mouseout', (e) => {
-          if (e.target.closest('[data-tooltip]')) hideTooltip();
+          const target = e.target.closest('[data-tooltip]');
+          if (!target || target.contains(e.relatedTarget)) return;
+
+          hideTooltip();
         });
 
         // Optional: Beim Scrollen verstecken, damit er nicht "floated"
@@ -4599,55 +4776,57 @@
           <span>consens.io</span>
         </div>
 
-        <h2 id="authTitle" class="auth-title">Login</h2>
+        <h2 id="authTitle" class="auth-title">Log in to consens.io</h2>
 
         <!-- Das Login-Formular hat autocomplete="on" -->
         <form id="loginForm" class="auth-form" autocomplete="on" data-mode="login">
 
-          <!-- Login / shared fields -->
-          <input type="email" id="loginEmail" name="email" placeholder="Email" autocomplete="username" />
-
-          <!-- Confirm email (register-only) -->
-          <input type="email" id="loginEmailConfirm" name="email_confirm" placeholder="Confirm Email"
-            autocomplete="username" style="display:none;" />
-
-          <input type="password" id="loginPassword" name="password" placeholder="Password"
-            autocomplete="current-password" />
-
-          <!-- Confirm password (register-only) -->
-          <input type="password" id="loginPasswordConfirm" name="password_confirm" placeholder="Confirm Password"
-            autocomplete="new-password" style="display:none;" />
-
-          <!-- Primary actions -->
-          <div class="auth-actions">
-            <button type="button" id="loginButton" class="auth-primary-action">Log in</button>
-            <button type="button" id="confirmRegisterButton" class="auth-primary-action" style="display:none;">Create account</button>
-          </div>
-
-          <!-- Inline errors -->
-          <div id="loginError" class="error-message"></div>
-          <div id="registerError" class="error-message"></div>
-
-          <div id="singleMailNote" class="auth-note">
-            Important: Only one e-mail can be registered
-          </div>
-
-          <!-- Secondary row (links only) -->
-          <div class="auth-secondary-row">
-            <a href="#" id="forgotPasswordButton" class="secondary-link">Forgot Password?</a>
-            <button type="button" id="toggleRegister" class="link-btn secondary-link">
-              New here? Create account
-            </button>
-          </div>
+          <!-- Google OAuth Button (primary) -->
+          <button type="button" id="googleLoginButton" class="oauth-button" aria-label="Continue with Google">
+            <img src="/static/icons/google.png" alt="" width="20" height="20" />
+            <span>Continue with Google</span>
+          </button>
 
           <!-- Subtle divider -->
-          <div id="oauthDivider" class="oauth-divider"><span>or</span></div>
+          <div id="oauthDivider" class="oauth-divider"><span>or use e-mail</span></div>
 
-          <!-- Google OAuth Button (full width) -->
-          <button type="button" id="googleLoginButton" class="oauth-button" aria-label="Continue with Google">
-            <img src="/static/icons/google.png" alt="" width="18" height="18" />
-            <span style="white-space:nowrap;">Continue with Google</span>
-          </button>
+          <div class="auth-email-section">
+            <!-- Login / shared fields -->
+            <input type="email" id="loginEmail" name="email" placeholder="Email" autocomplete="username" />
+
+            <!-- Confirm email (register-only) -->
+            <input type="email" id="loginEmailConfirm" name="email_confirm" placeholder="Confirm Email"
+              autocomplete="username" style="display:none;" />
+
+            <input type="password" id="loginPassword" name="password" placeholder="Password"
+              autocomplete="current-password" />
+
+            <!-- Confirm password (register-only) -->
+            <input type="password" id="loginPasswordConfirm" name="password_confirm" placeholder="Confirm Password"
+              autocomplete="new-password" style="display:none;" />
+
+            <!-- Primary actions -->
+            <div class="auth-actions">
+              <button type="button" id="loginButton" class="auth-primary-action">Log in with e-mail</button>
+              <button type="button" id="confirmRegisterButton" class="auth-primary-action" style="display:none;">Create account</button>
+            </div>
+
+            <!-- Inline errors -->
+            <div id="loginError" class="error-message"></div>
+            <div id="registerError" class="error-message"></div>
+
+            <div id="singleMailNote" class="auth-note">
+              Important: Only one e-mail can be registered
+            </div>
+
+            <!-- Secondary row (links only) -->
+            <div class="auth-secondary-row">
+              <a href="#" id="forgotPasswordButton" class="secondary-link">Forgot Password?</a>
+              <button type="button" id="toggleRegister" class="link-btn secondary-link">
+                New here? Create account
+              </button>
+            </div>
+          </div>
 
           <div class="auth-footer-links">
             <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-inline-link"

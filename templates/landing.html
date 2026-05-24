@@ -6,7 +6,7 @@
   <meta name="description" content="consens.io compares leading AI models in one workspace and turns their answers into a clear consensus.">
   <title>consens.io - AI answers, compared</title>
   <link href="https://fonts.googleapis.com/css?family=Roboto:400,500,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260521-landing-saas2">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260524-landing-saas4">
   <link rel="icon" href="/static/favicon-square.png?v=20260523-logo1" type="image/png">
   <script>
     (function () {
@@ -66,7 +66,7 @@
             <div class="mock-switch-row">
               <span class="mock-switch is-on"></span><span>Agent Mode</span>
               <span class="mock-switch is-on"></span><span>Auto Consensus</span>
-              <span class="mock-switch"></span><span>Deep Think</span>
+              <span class="mock-switch is-on"></span><span>Deep Think</span>
             </div>
             <button class="mock-send">Send</button>
           </div>
@@ -76,13 +76,15 @@
                 <span>Agent Mode</span>
                 <strong>Models are working</strong>
               </div>
-              <em>4 models</em>
+              <em>6 models</em>
             </div>
             <div class="agent-chips">
-              <span>Claude - sonnet</span>
-              <span>Gemini - flash</span>
-              <span>DeepSeek - chat</span>
-              <span>Grok - fast</span>
+              <span>OpenAI - GPT-5.5</span>
+              <span>Mistral - mistral-large-latest</span>
+              <span>Claude - claude-opus-4-7</span>
+              <span>Gemini - gemini-3.1-pro-preview</span>
+              <span>DeepSeek - deepseek-v4-pro</span>
+              <span>Grok - grok-4.3</span>
             </div>
             <div class="agent-pulse" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
             <p>Querying selected models in parallel.</p>
@@ -141,7 +143,7 @@
                 <div class="mock-switch-row">
                   <span class="mock-switch is-on"></span><span>Agent Mode</span>
                   <span class="mock-switch is-on"></span><span>Auto Consensus</span>
-                  <span class="mock-switch"></span><span>Deep Think</span>
+                  <span class="mock-switch is-on"></span><span>Deep Think</span>
                 </div>
                 <button class="mock-send">Send</button>
               </div>
@@ -155,10 +157,12 @@
                   <em>Elapsed 00:08</em>
                 </div>
                 <div class="agent-chips">
-                  <span>ChatGPT - GPT-5.4</span>
-                  <span>Claude - Haiku</span>
-                  <span>Gemini - Flash</span>
-                  <span>Grok - non-reasoning</span>
+                  <span>OpenAI - GPT-5.5</span>
+                  <span>Mistral - mistral-large-latest</span>
+                  <span>Claude - claude-opus-4-7</span>
+                  <span>Gemini - gemini-3.1-pro-preview</span>
+                  <span>DeepSeek - deepseek-v4-pro</span>
+                  <span>Grok - grok-4.3</span>
                 </div>
                 <div class="agent-pulse" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
                 <p>Querying selected models in parallel.</p>
@@ -167,19 +171,27 @@
               <div class="response-grid story-scene scene-consensus">
                 <div class="mini-response">
                   <strong>Response from ChatGPT</strong>
-                  <small><img src="/static/icons/chat_icons/chatgpt.png" alt=""> GPT-5.4</small>
+                  <small><img src="/static/icons/chat_icons/chatgpt.png" alt=""> GPT-5.5</small>
+                </div>
+                <div class="mini-response">
+                  <strong>Response from Mistral</strong>
+                  <small><img src="/static/icons/chat_icons/mistral.png" alt=""> mistral-large-latest</small>
                 </div>
                 <div class="mini-response">
                   <strong>Response from Claude</strong>
-                  <small><img src="/static/icons/chat_icons/claude.png" alt=""> Claude Haiku</small>
+                  <small><img src="/static/icons/chat_icons/claude.png" alt=""> claude-opus-4-7</small>
                 </div>
                 <div class="mini-response">
                   <strong>Response from Gemini</strong>
-                  <small><img src="/static/icons/chat_icons/gemini-icon.png" alt=""> Gemini Flash</small>
+                  <small><img src="/static/icons/chat_icons/gemini-icon.png" alt=""> gemini-3.1-pro-preview</small>
+                </div>
+                <div class="mini-response">
+                  <strong>Response from DeepSeek</strong>
+                  <small><img src="/static/icons/chat_icons/deepseek.png" alt=""> deepseek-v4-pro</small>
                 </div>
                 <div class="mini-response">
                   <strong>Response from Grok</strong>
-                  <small><img src="/static/icons/chat_icons/grok.png" alt=""> Grok</small>
+                  <small><img src="/static/icons/chat_icons/grok.png" alt=""> grok-4.3</small>
                 </div>
               </div>
 
@@ -190,7 +202,7 @@
                 </div>
                 <div>
                   <strong>Differences</strong>
-                  <p>Claude is more cautious, Grok is more direct, Gemini emphasizes source freshness.</p>
+                  <p>Top reasoning models vary in confidence, source freshness, and technical depth.</p>
                 </div>
               </div>
             </div>
