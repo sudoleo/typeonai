@@ -55,7 +55,7 @@ async def read_root(request: Request):
     from app.core.config import ALLOWED_OPENAI_MODELS, ALLOWED_MISTRAL_MODELS, ALLOWED_ANTHROPIC_MODELS, ALLOWED_GEMINI_MODELS, ALLOWED_DEEPSEEK_MODELS, ALLOWED_GROK_MODELS, PREMIUM_MODELS
     
     def model_picker_sort(model_name: str):
-        return (model_name in PREMIUM_MODELS, model_name.lower())
+        return cfg.model_picker_sort_key(model_name)
 
     models = {
         "openai": sorted(list(ALLOWED_OPENAI_MODELS), key=model_picker_sort),
@@ -66,13 +66,21 @@ async def read_root(request: Request):
         "grok": sorted(list(ALLOWED_GROK_MODELS), key=model_picker_sort),
         "premium": list(PREMIUM_MODELS)
     }
+    model_metadata = cfg.get_model_picker_metadata()
+    model_labels = {model_id: meta["label"] for model_id, meta in model_metadata.items()}
+    model_badges = {model_id: meta["badge"] for model_id, meta in model_metadata.items() if meta["badge"]}
 
     return templates.TemplateResponse("index.html", {
         "request": request, 
         "free_limit": cfg.get_usage_limit(False),
         "limits": cfg.get_limits_config(),
         "models": models,
-        "default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
+        "default_models": cfg.FREE_DEFAULT_MODEL_BY_PROVIDER,
+        "pro_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
+        "consensus_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
+        "model_labels": model_labels,
+        "model_badges": model_badges,
+        "frontier_models": list(cfg.FRONTIER_LOW_MODELS),
         **firebase_config
     })
 

@@ -780,6 +780,7 @@ def consensus(request: Request, data: dict = Body(...)):
         "Mistral": "Mistral",     "Mistral-Pro": "Mistral",
         "Anthropic": "Anthropic", "Anthropic-Pro": "Anthropic",
         "Gemini": "Gemini",       "Gemini-Pro": "Gemini",
+        cfg.GEMINI_FRONTIER_LOW_MODEL: "Gemini",
         "DeepSeek": "DeepSeek",   "DeepSeek-Pro": "DeepSeek",
         "Grok": "Grok",           "Grok-Pro": "Grok",
     }
@@ -787,7 +788,7 @@ def consensus(request: Request, data: dict = Body(...)):
     need_key_for = engine_key_map.get(engine)
     if need_key_for:
         # ÄNDERUNG: Prüfe auf "Gemini" ODER "Gemini-Pro"
-        if engine in ["Gemini", "Gemini-Pro"]:
+        if engine in ["Gemini", "Gemini-Pro", cfg.GEMINI_FRONTIER_LOW_MODEL]:
             # Erlaube drei Varianten:
             # 1) expliziter Key (User- oder Dev-Key),
             # 2) Dev-Key aus ENV,

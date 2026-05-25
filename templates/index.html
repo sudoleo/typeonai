@@ -15,6 +15,8 @@
       appId: "{{ firebase_app_id }}"
     };
     window.APP_LIMITS = JSON.parse('{{ limits | tojson | safe }}');
+    window.FREE_DEFAULT_MODELS = JSON.parse('{{ default_models | tojson | safe }}');
+    window.PRO_DEFAULT_MODELS = JSON.parse('{{ pro_default_models | tojson | safe }}');
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
@@ -242,12 +244,12 @@
           <span class="title">Response from ChatGPT
             <small>
               <img src="/static/icons/chat_icons/chatgpt.png" class="model-icon chatgpt-logo" alt="icon">
-              <span id="openaiModelText">{{ default_models['openai'] }}</span>
+              <span id="openaiModelText">{{ model_labels.get(default_models['openai'], default_models['openai']) }}</span>
             </small>
             <span class="model-picker-wrapper">
               <select id="openaiModelSelect" class="model-picker">
                 {% for model in models['openai'] %}
-                <option value="{{ model }}" {% if model == default_models['openai'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}{% if model in models['premium'] %} · Pro{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ model_badges.get(model, '') }}" {% if model == default_models['openai'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if model in models['premium'] %} · Pro{% elif model in frontier_models %} · Early{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -264,11 +266,11 @@
         <h2 data-short-label="Mistral">
           <span class="title">Response from Mistral
             <small><img src="/static/icons/chat_icons/mistral.png" class="model-icon" alt="icon"><span
-                id="mistralModelText">{{ default_models['mistral'] }}</span></small>
+                id="mistralModelText">{{ model_labels.get(default_models['mistral'], default_models['mistral']) }}</span></small>
             <span class="model-picker-wrapper">
               <select id="mistralModelSelect" class="model-picker">
                 {% for model in models['mistral'] %}
-                <option value="{{ model }}" {% if model == default_models['mistral'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}{% if model in models['premium'] %} · Pro{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ model_badges.get(model, '') }}" {% if model == default_models['mistral'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if model in models['premium'] %} · Pro{% elif model in frontier_models %} · Early{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -285,11 +287,11 @@
         <h2 data-short-label="Claude">
           <span class="title">Response from Claude
             <small><img src="/static/icons/chat_icons/claude.png" class="model-icon" alt="icon"><span
-                id="claudeModelText">{{ default_models['anthropic'] }}</span></small>
+                id="claudeModelText">{{ model_labels.get(default_models['anthropic'], default_models['anthropic']) }}</span></small>
             <span class="model-picker-wrapper">
               <select id="claudeModelSelect" class="model-picker">
                 {% for model in models['anthropic'] %}
-                <option value="{{ model }}" {% if model == default_models['anthropic'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}{% if model in models['premium'] %} · Pro{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ model_badges.get(model, '') }}" {% if model == default_models['anthropic'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if model in models['premium'] %} · Pro{% elif model in frontier_models %} · Early{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -306,11 +308,11 @@
         <h2 data-short-label="Gemini">
           <span class="title">Response from Gemini
             <small><img src="/static/icons/chat_icons/gemini-icon.png" class="model-icon" alt="icon"><span
-                id="geminiModelText">{{ default_models['gemini'] }}</span></small>
+                id="geminiModelText">{{ model_labels.get(default_models['gemini'], default_models['gemini']) }}</span></small>
             <span class="model-picker-wrapper">
               <select id="geminiModelSelect" class="model-picker">
                 {% for model in models['gemini'] %}
-                <option value="{{ model }}" {% if model == default_models['gemini'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}{% if model in models['premium'] %} · Pro{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ model_badges.get(model, '') }}" {% if model == default_models['gemini'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if model in models['premium'] %} · Pro{% elif model in frontier_models %} · Early{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -327,11 +329,11 @@
         <h2 data-short-label="DeepSeek">
           <span class="title">Response from DeepSeek
             <small><img src="/static/icons/chat_icons/deepseek.png" class="model-icon" alt="icon"><span
-                id="deepseekModelText">{{ default_models['deepseek'] }}</span></small>
+                id="deepseekModelText">{{ model_labels.get(default_models['deepseek'], default_models['deepseek']) }}</span></small>
             <span class="model-picker-wrapper">
               <select id="deepseekModelSelect" class="model-picker">
                 {% for model in models['deepseek'] %}
-                <option value="{{ model }}" {% if model == default_models['deepseek'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}{% if model in models['premium'] %} · Pro{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ model_badges.get(model, '') }}" {% if model == default_models['deepseek'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if model in models['premium'] %} · Pro{% elif model in frontier_models %} · Early{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -349,12 +351,12 @@
           <span class="title">Response from Grok
             <small>
               <img src="/static/icons/chat_icons/grok.png" class="model-icon grok-logo" alt="Grok icon">
-              <span id="grokModelText">{{ default_models['grok'] }}</span>
+              <span id="grokModelText">{{ model_labels.get(default_models['grok'], default_models['grok']) }}</span>
             </small>
             <span class="model-picker-wrapper">
               <select id="grokModelSelect" class="model-picker">
                 {% for model in models['grok'] %}
-                <option value="{{ model }}" {% if model == default_models['grok'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model }}{% if model in models['premium'] %} · Pro{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ model_badges.get(model, '') }}" {% if model == default_models['grok'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if model in models['premium'] %} · Pro{% elif model in frontier_models %} · Early{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -385,19 +387,20 @@
             <label for="consensusModelDropdown" class="consensus-label">Consensus Model:</label>
             <div class="select-wrapper">
               <select id="consensusModelDropdown">
-                <option value="Grok">{{ default_models['grok'] }}</option>
-                <option value="OpenAI">{{ default_models['openai'] }}</option>
-                <option value="Anthropic">{{ default_models['anthropic'] }}</option>
-                <option value="Mistral">{{ default_models['mistral'] }}</option>
-                <option value="Gemini">{{ default_models['gemini'] }}</option>
-                <option value="DeepSeek">{{ default_models['deepseek'] }}</option>
+                <option value="{{ default_models['gemini'] }}" class="early-option" data-model-label="{{ model_labels.get(default_models['gemini'], default_models['gemini']) }}" data-model-badge="{{ model_badges.get(default_models['gemini'], '') }}" selected>{{ model_labels.get(default_models['gemini'], default_models['gemini']) }} · Early</option>
+                <option value="Grok">{{ model_labels.get(consensus_default_models['grok'], consensus_default_models['grok']) }}</option>
+                <option value="OpenAI">{{ model_labels.get(consensus_default_models['openai'], consensus_default_models['openai']) }}</option>
+                <option value="Anthropic">{{ model_labels.get(consensus_default_models['anthropic'], consensus_default_models['anthropic']) }}</option>
+                <option value="Mistral">{{ model_labels.get(consensus_default_models['mistral'], consensus_default_models['mistral']) }}</option>
+                <option value="Gemini">{{ model_labels.get(consensus_default_models['gemini'], consensus_default_models['gemini']) }}</option>
+                <option value="DeepSeek">{{ model_labels.get(consensus_default_models['deepseek'], consensus_default_models['deepseek']) }}</option>
 
                 <option value="Grok-Pro" class="premium-option">Grok-4.3 · Pro</option>
                 <option value="OpenAI-Pro" class="premium-option">GPT-5.5 · Pro</option>
-                <option value="Anthropic-Pro" class="premium-option">claude-opus-4-7 · Pro</option>
+                <option value="Anthropic-Pro" class="premium-option">Claude Opus 4.7 · Pro</option>
                 <option value="Mistral-Pro" class="premium-option">mistral-large-latest · Pro</option>
-                <option value="Gemini-Pro" class="premium-option">gemini-3.1-pro-preview · Pro</option>
-                <option value="DeepSeek-Pro" class="premium-option">DeepSeek-V4-Pro · Pro</option>
+                <option value="Gemini-Pro" class="premium-option">Gemini 3.1 · Pro</option>
+                <option value="DeepSeek-Pro" class="premium-option">DeepSeek V4 Pro · Pro</option>
               </select>
             </div>
           </div>
@@ -966,12 +969,16 @@
             el.style.display = showPickers ? "inline-flex" : "none";
           });
 
-          const openaiModelText = deepSearchActive ? deepThinkModelLabels.OpenAI : document.getElementById("openaiModelSelect").value;
-          const mistralModelText = deepSearchActive ? deepThinkModelLabels.Mistral : document.getElementById("mistralModelSelect").value;
-          const geminiModelText = deepSearchActive ? deepThinkModelLabels.Gemini : document.getElementById("geminiModelSelect").value;
-          const claudeModelText = deepSearchActive ? deepThinkModelLabels.Anthropic : document.getElementById("claudeModelSelect").value;
-          const deepseekModelText = deepSearchActive ? deepThinkModelLabels.DeepSeek : document.getElementById("deepseekModelSelect").value;
-          const grokModelText = deepSearchActive ? deepThinkModelLabels.Grok : document.getElementById("grokModelSelect").value;
+          const selectedModelLabel = (selectId) => {
+            const select = document.getElementById(selectId);
+            return getModelOptionLabel(select?.options[select.selectedIndex]) || select?.value || "";
+          };
+          const openaiModelText = deepSearchActive ? deepThinkModelLabels.OpenAI : selectedModelLabel("openaiModelSelect");
+          const mistralModelText = deepSearchActive ? deepThinkModelLabels.Mistral : selectedModelLabel("mistralModelSelect");
+          const geminiModelText = deepSearchActive ? deepThinkModelLabels.Gemini : selectedModelLabel("geminiModelSelect");
+          const claudeModelText = deepSearchActive ? deepThinkModelLabels.Anthropic : selectedModelLabel("claudeModelSelect");
+          const deepseekModelText = deepSearchActive ? deepThinkModelLabels.DeepSeek : selectedModelLabel("deepseekModelSelect");
+          const grokModelText = deepSearchActive ? deepThinkModelLabels.Grok : selectedModelLabel("grokModelSelect");
 
           const setModelText = (id, txt) => {
             const el = document.getElementById(id);
@@ -1595,13 +1602,42 @@
 
         // Definition der Modelle und IDs
         const modelPrefs = [
-          { key: "OpenAI", label: "OpenAI", checkId: "selectOpenAI", selectId: "openaiModelSelect", responseId: "openaiResponse", textId: "openaiModelText" },
-          { key: "Mistral", label: "Mistral", checkId: "selectMistral", selectId: "mistralModelSelect", responseId: "mistralResponse", textId: "mistralModelText" },
-          { key: "Anthropic", label: "Claude", checkId: "selectClaude", selectId: "claudeModelSelect", responseId: "claudeResponse", textId: "claudeModelText" },
-          { key: "Gemini", label: "Gemini", checkId: "selectGemini", selectId: "geminiModelSelect", responseId: "geminiResponse", textId: "geminiModelText" },
-          { key: "DeepSeek", label: "DeepSeek", checkId: "selectDeepSeek", selectId: "deepseekModelSelect", responseId: "deepseekResponse", textId: "deepseekModelText" },
-          { key: "Grok", label: "Grok", checkId: "selectGrok", selectId: "grokModelSelect", responseId: "grokResponse", textId: "grokModelText" }
+          { key: "OpenAI", provider: "openai", label: "OpenAI", checkId: "selectOpenAI", selectId: "openaiModelSelect", responseId: "openaiResponse", textId: "openaiModelText" },
+          { key: "Mistral", provider: "mistral", label: "Mistral", checkId: "selectMistral", selectId: "mistralModelSelect", responseId: "mistralResponse", textId: "mistralModelText" },
+          { key: "Anthropic", provider: "anthropic", label: "Claude", checkId: "selectClaude", selectId: "claudeModelSelect", responseId: "claudeResponse", textId: "claudeModelText" },
+          { key: "Gemini", provider: "gemini", label: "Gemini", checkId: "selectGemini", selectId: "geminiModelSelect", responseId: "geminiResponse", textId: "geminiModelText" },
+          { key: "DeepSeek", provider: "deepseek", label: "DeepSeek", checkId: "selectDeepSeek", selectId: "deepseekModelSelect", responseId: "deepseekResponse", textId: "deepseekModelText" },
+          { key: "Grok", provider: "grok", label: "Grok", checkId: "selectGrok", selectId: "grokModelSelect", responseId: "grokResponse", textId: "grokModelText" }
         ];
+
+        function getModelOptionLabel(option) {
+          const explicitLabel = option?.dataset?.modelLabel;
+          if (explicitLabel) return explicitLabel;
+          return (option?.textContent || "").replace(/\s*(?:\u00c2\u00b7|\u00b7)\s*(?:Pro|Early)\s*$/i, "").trim();
+        }
+
+        function setPickerToValue(select, labelText, value) {
+          if (!select || !value) return false;
+          const option = select.querySelector(`option[value="${value}"]`);
+          if (!option || option.disabled) return false;
+          select.value = value;
+          if (labelText) {
+            const label = getModelOptionLabel(option);
+            labelText.textContent = label;
+            labelText.title = `Choose model: ${label}`;
+          }
+          return true;
+        }
+
+        function applyTierDefaultModels(isPro) {
+          const defaults = isPro ? (window.PRO_DEFAULT_MODELS || {}) : (window.FREE_DEFAULT_MODELS || {});
+          modelPrefs.forEach(pref => {
+            if (localStorage.getItem("pref_select_" + pref.key) !== null) return;
+            const select = document.getElementById(pref.selectId);
+            const labelText = document.getElementById(pref.textId);
+            setPickerToValue(select, labelText, defaults[pref.provider]);
+          });
+        }
 
         const AGENT_MODE_STORAGE_KEY = "agentMode";
         let agentModeStatus = "idle";
@@ -1668,8 +1704,8 @@
               const displayedText = document.getElementById(pref.textId)?.textContent || "";
               const selectedText = deepSearchActive
                 ? (deepThinkModelLabels[pref.key] || displayedText)
-                : (select?.options[select.selectedIndex]?.text || select?.value || displayedText);
-              const modelText = selectedText.replace(/\s*·\s*Pro\s*$/, "").trim();
+                : (getModelOptionLabel(select?.options[select.selectedIndex]) || select?.value || displayedText);
+              const modelText = selectedText.trim();
               return {
                 pref,
                 label: pref.label,
@@ -1687,8 +1723,9 @@
           sourceSelect.value = agentSelect.value;
           localStorage.setItem("pref_select_" + pref.key, agentSelect.value);
           if (labelText) {
-            labelText.textContent = agentSelect.value;
-            labelText.title = `Choose model: ${agentSelect.value}`;
+            const selectedLabel = getModelOptionLabel(agentSelect.options[agentSelect.selectedIndex]) || agentSelect.value;
+            labelText.textContent = selectedLabel;
+            labelText.title = `Choose model: ${selectedLabel}`;
           }
           sourceSelect.dispatchEvent(new Event("change", { bubbles: true }));
           updateAgentModeUI();
@@ -1950,14 +1987,7 @@
             // Dropdowns wiederherstellen
             const savedSelect = localStorage.getItem("pref_select_" + pref.key);
             if (savedSelect !== null && select) {
-              const option = select.querySelector(`option[value="${savedSelect}"]`);
-              if (option && !option.disabled) {
-                select.value = savedSelect;
-                if (labelText) {
-                  labelText.textContent = savedSelect;
-                  labelText.title = `Choose model: ${savedSelect}`;
-                }
-              }
+              setPickerToValue(select, labelText, savedSelect);
             }
           });
 
@@ -1998,7 +2028,11 @@
           if (select) {
             select.addEventListener("change", function () {
               localStorage.setItem("pref_select_" + pref.key, this.value);
-              if (labelText) labelText.textContent = this.value;
+              const selectedLabel = getModelOptionLabel(this.options[this.selectedIndex]) || this.value;
+              if (labelText) {
+                labelText.textContent = selectedLabel;
+                labelText.title = `Choose model: ${selectedLabel}`;
+              }
               updateAgentModeUI();
             });
           }
@@ -2075,10 +2109,6 @@
           return select?._customModelPicker || null;
         }
 
-        function getModelOptionLabel(option) {
-          return (option?.textContent || "").replace(/\s*(?:\u00c2\u00b7|\u00b7)\s*Pro\s*$/i, "").trim();
-        }
-
         function syncCustomModelPicker(select) {
           const state = getModelPickerState(select);
           if (!state) return;
@@ -2114,6 +2144,7 @@
             item.disabled = option.disabled;
             item.classList.toggle("is-selected", option.selected);
             item.classList.toggle("is-premium", option.classList.contains("premium-option"));
+            item.classList.toggle("is-early", option.classList.contains("early-option"));
 
             const label = document.createElement("span");
             label.className = "model-picker-option-label";
@@ -2124,6 +2155,11 @@
               const badge = document.createElement("span");
               badge.className = "model-picker-pro-badge";
               badge.textContent = "Pro";
+              item.appendChild(badge);
+            } else if (option.classList.contains("early-option")) {
+              const badge = document.createElement("span");
+              badge.className = "model-picker-early-badge";
+              badge.textContent = "Early";
               item.appendChild(badge);
             }
 
@@ -3468,47 +3504,31 @@
         });
 
         // Modell-Dropdowns aktualisieren die angezeigten Namen und Tooltips
+        function syncVisibleModelName(select, textId) {
+          const el = document.getElementById(textId);
+          if (!el || !select) return;
+          const label = getModelOptionLabel(select.options[select.selectedIndex]) || select.value;
+          el.textContent = label;
+          el.title = `Choose model: ${label}`;
+        }
+
         document.getElementById("openaiModelSelect").addEventListener("change", function () {
-          const el = document.getElementById("openaiModelText");
-          if (el) {
-            el.textContent = this.value;
-            el.title = `Choose model: ${this.value}`;
-          }
+          syncVisibleModelName(this, "openaiModelText");
         });
         document.getElementById("mistralModelSelect").addEventListener("change", function () {
-          const el = document.getElementById("mistralModelText");
-          if (el) {
-            el.textContent = this.value;
-            el.title = `Choose model: ${this.value}`;
-          }
+          syncVisibleModelName(this, "mistralModelText");
         });
         document.getElementById("claudeModelSelect").addEventListener("change", function () {
-          const el = document.getElementById("claudeModelText");
-          if (el) {
-            el.textContent = this.value;
-            el.title = `Choose model: ${this.value}`;
-          }
+          syncVisibleModelName(this, "claudeModelText");
         });
         document.getElementById("geminiModelSelect").addEventListener("change", function () {
-          const el = document.getElementById("geminiModelText");
-          if (el) {
-            el.textContent = this.value;
-            el.title = `Choose model: ${this.value}`;
-          }
+          syncVisibleModelName(this, "geminiModelText");
         });
         document.getElementById("deepseekModelSelect").addEventListener("change", function () {
-          const el = document.getElementById("deepseekModelText");
-          if (el) {
-            el.textContent = this.value;
-            el.title = `Choose model: ${this.value}`;
-          }
+          syncVisibleModelName(this, "deepseekModelText");
         });
         document.getElementById("grokModelSelect").addEventListener("change", function () {
-          const el = document.getElementById("grokModelText");
-          if (el) {
-            el.textContent = this.value;
-            el.title = `Choose model: ${this.value}`;
-          }
+          syncVisibleModelName(this, "grokModelText");
         });
 
         // collapse model dropdown after selection to avoid lingering focus
@@ -4647,6 +4667,10 @@
               }
             });
           });
+
+          if (typeof applyTierDefaultModels === "function") {
+            applyTierDefaultModels(isPro);
+          }
 
           if (window.restoreModelSelections) {
             window.restoreModelSelections();

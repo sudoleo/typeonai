@@ -1,7 +1,24 @@
+from __future__ import annotations
+
 import os
+from dataclasses import dataclass, field
+from typing import Any
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+@dataclass(frozen=True)
+class ModelConfig:
+    internal_id: str
+    provider: str
+    api_model: str
+    label: str
+    is_free: bool = True
+    is_pro: bool = False
+    is_frontier: bool = False
+    is_low_reasoning: bool = False
+    low_config: dict[str, Any] = field(default_factory=dict)
 
 DEFAULT_LIMITS = {
     "free_usage_limit": 25,
@@ -38,6 +55,12 @@ DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"
 DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
 DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
 DEFAULT_GROK_MODEL = "grok-4.20-non-reasoning"
+
+OPENAI_FRONTIER_LOW_MODEL = "gpt-5.5-frontier-low"
+ANTHROPIC_FRONTIER_LOW_MODEL = "claude-opus-4-7-frontier-low"
+GEMINI_FRONTIER_LOW_MODEL = "gemini-3.1-pro-preview-frontier-low"
+GROK_FRONTIER_LOW_MODEL = "grok-4.3-frontier-low"
+
 DEFAULT_MODEL_BY_PROVIDER = {
     "openai": DEFAULT_OPENAI_MODEL,
     "mistral": DEFAULT_MISTRAL_MODEL,
@@ -49,6 +72,14 @@ DEFAULT_MODEL_BY_PROVIDER = {
 
 GEMINI_FLASH_MODEL = DEFAULT_GEMINI_MODEL
 GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
+FREE_DEFAULT_MODEL_BY_PROVIDER = {
+    "openai": OPENAI_FRONTIER_LOW_MODEL,
+    "mistral": DEFAULT_MISTRAL_MODEL,
+    "anthropic": ANTHROPIC_FRONTIER_LOW_MODEL,
+    "gemini": GEMINI_FRONTIER_LOW_MODEL,
+    "deepseek": DEFAULT_DEEPSEEK_MODEL,
+    "grok": GROK_FRONTIER_LOW_MODEL,
+}
 UNSUPPORTED_GEMINI_MODELS = {
     "gemini-3.1-flash-preview",
     "gemini-3-pro-preview",
@@ -65,7 +96,7 @@ VALID_LEADERBOARD_MODELS = {
 ALLOWED_OPENAI_MODELS = {
     "gpt-5-nano", "gpt-5-mini", "gpt-4.1", "gpt-4o", "gpt-3.5-turbo",
     "gpt-5", "gpt-5-chat-latest", "gpt-5.1", "gpt-5.2", "gpt-5.3", "gpt-5.3-chat-latest", "gpt-5.4",
-    "gpt-5.5", "gpt-5.4-mini",
+    "gpt-5.5", "gpt-5.4-mini", OPENAI_FRONTIER_LOW_MODEL,
 }
 
 ALLOWED_MISTRAL_MODELS = {
@@ -77,13 +108,13 @@ ALLOWED_MISTRAL_MODELS = {
 ALLOWED_ANTHROPIC_MODELS = {
     "claude-haiku-4-5", "claude-sonnet-4-20250514", "claude-3-7-sonnet-20250219", "claude-3-5-haiku-20241022",
     "claude-sonnet-4-5", "claude-opus-4-5", "claude-sonnet-4-6", "claude-opus-4-6",
-    "claude-opus-4-7",
+    "claude-opus-4-7", ANTHROPIC_FRONTIER_LOW_MODEL,
 }
 
 ALLOWED_GEMINI_MODELS = {
     GEMINI_FLASH_MODEL, "gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview",
     "gemini-2.5-flash", "gemini-2.0-flash",
-    GEMINI_PRO_MODEL, "gemini-2.5-pro",
+    GEMINI_PRO_MODEL, "gemini-2.5-pro", GEMINI_FRONTIER_LOW_MODEL,
 }
 
 ALLOWED_DEEPSEEK_MODELS = {
@@ -94,8 +125,16 @@ ALLOWED_DEEPSEEK_MODELS = {
 ALLOWED_GROK_MODELS = {
     "grok-4-fast-non-reasoning-latest", "grok-4-1-fast-non-reasoning-latest",
     "grok-4-latest", "grok-3-latest", "grok-4-fast-reasoning-latest", "grok-4.20",
-    "grok-4.20-non-reasoning", "grok-4.3",
+    "grok-4.20-non-reasoning", "grok-4.3", GROK_FRONTIER_LOW_MODEL,
 }
+
+FRONTIER_LOW_MODEL_IDS_BY_PROVIDER = {
+    "openai": OPENAI_FRONTIER_LOW_MODEL,
+    "anthropic": ANTHROPIC_FRONTIER_LOW_MODEL,
+    "gemini": GEMINI_FRONTIER_LOW_MODEL,
+    "grok": GROK_FRONTIER_LOW_MODEL,
+}
+FRONTIER_LOW_MODELS = set(FRONTIER_LOW_MODEL_IDS_BY_PROVIDER.values())
 
 def ensure_default_models_allowed():
     ALLOWED_OPENAI_MODELS.add(DEFAULT_OPENAI_MODEL)
@@ -104,6 +143,10 @@ def ensure_default_models_allowed():
     ALLOWED_GEMINI_MODELS.add(DEFAULT_GEMINI_MODEL)
     ALLOWED_DEEPSEEK_MODELS.add(DEFAULT_DEEPSEEK_MODEL)
     ALLOWED_GROK_MODELS.add(DEFAULT_GROK_MODEL)
+    ALLOWED_OPENAI_MODELS.add(OPENAI_FRONTIER_LOW_MODEL)
+    ALLOWED_ANTHROPIC_MODELS.add(ANTHROPIC_FRONTIER_LOW_MODEL)
+    ALLOWED_GEMINI_MODELS.add(GEMINI_FRONTIER_LOW_MODEL)
+    ALLOWED_GROK_MODELS.add(GROK_FRONTIER_LOW_MODEL)
 
 ensure_default_models_allowed()
 
@@ -118,11 +161,158 @@ PREMIUM_MODELS = {
     "grok-4-latest", "grok-3-latest", "grok-4-fast-reasoning-latest", "grok-4.20",
     "grok-4.3",
 }
+PREMIUM_MODELS.difference_update(FRONTIER_LOW_MODELS)
 
 ALL_ALLOWED_MODELS = (
     ALLOWED_OPENAI_MODELS | ALLOWED_MISTRAL_MODELS | ALLOWED_ANTHROPIC_MODELS |
     ALLOWED_GEMINI_MODELS | ALLOWED_DEEPSEEK_MODELS | ALLOWED_GROK_MODELS
 )
+
+MODEL_LABEL_OVERRIDES = {
+    "gpt-5.5": "GPT-5.5",
+    OPENAI_FRONTIER_LOW_MODEL: "GPT-5.5",
+    "claude-opus-4-7": "Claude Opus 4.7",
+    ANTHROPIC_FRONTIER_LOW_MODEL: "Claude Opus 4.7",
+    GEMINI_PRO_MODEL: "Gemini 3.1",
+    GEMINI_FRONTIER_LOW_MODEL: "Gemini 3.1",
+    "grok-4.3": "Grok 4.3",
+    GROK_FRONTIER_LOW_MODEL: "Grok 4.3",
+    "deepseek-v4-pro": "DeepSeek V4 Pro",
+}
+
+MODEL_CONFIGS: dict[str, ModelConfig] = {}
+
+
+def _fallback_label(model_id: str) -> str:
+    return MODEL_LABEL_OVERRIDES.get(model_id, model_id)
+
+
+def _provider_allowed_sets() -> dict[str, set]:
+    return {
+        "openai": ALLOWED_OPENAI_MODELS,
+        "mistral": ALLOWED_MISTRAL_MODELS,
+        "anthropic": ALLOWED_ANTHROPIC_MODELS,
+        "gemini": ALLOWED_GEMINI_MODELS,
+        "deepseek": ALLOWED_DEEPSEEK_MODELS,
+        "grok": ALLOWED_GROK_MODELS,
+    }
+
+
+def rebuild_model_configs():
+    MODEL_CONFIGS.clear()
+    for provider, models in _provider_allowed_sets().items():
+        for model_id in models:
+            MODEL_CONFIGS[model_id] = ModelConfig(
+                internal_id=model_id,
+                provider=provider,
+                api_model=model_id,
+                label=_fallback_label(model_id),
+                is_free=model_id not in PREMIUM_MODELS,
+                is_pro=model_id in PREMIUM_MODELS,
+            )
+
+    MODEL_CONFIGS.update({
+        OPENAI_FRONTIER_LOW_MODEL: ModelConfig(
+            internal_id=OPENAI_FRONTIER_LOW_MODEL,
+            provider="openai",
+            api_model="gpt-5.5",
+            label="GPT-5.5",
+            is_free=True,
+            is_frontier=True,
+            is_low_reasoning=True,
+            low_config={"reasoning": {"effort": "low"}},
+        ),
+        ANTHROPIC_FRONTIER_LOW_MODEL: ModelConfig(
+            internal_id=ANTHROPIC_FRONTIER_LOW_MODEL,
+            provider="anthropic",
+            api_model="claude-opus-4-7",
+            label="Claude Opus 4.7",
+            is_free=True,
+            is_frontier=True,
+            is_low_reasoning=True,
+            low_config={
+                "thinking": {"type": "adaptive"},
+                "output_config": {"effort": "low"},
+            },
+        ),
+        GEMINI_FRONTIER_LOW_MODEL: ModelConfig(
+            internal_id=GEMINI_FRONTIER_LOW_MODEL,
+            provider="gemini",
+            api_model=GEMINI_PRO_MODEL,
+            label="Gemini 3.1",
+            is_free=True,
+            is_frontier=True,
+            is_low_reasoning=True,
+            low_config={"generationConfig": {"thinkingConfig": {"thinkingLevel": "low"}}},
+        ),
+        GROK_FRONTIER_LOW_MODEL: ModelConfig(
+            internal_id=GROK_FRONTIER_LOW_MODEL,
+            provider="grok",
+            api_model="grok-4.3",
+            label="Grok 4.3",
+            is_free=True,
+            is_frontier=True,
+            is_low_reasoning=True,
+            low_config={"reasoning": {"effort": "low"}},
+        ),
+    })
+
+
+def get_model_config(model_id: str | None, provider: str | None = None) -> ModelConfig | None:
+    if not model_id:
+        return None
+    config = MODEL_CONFIGS.get(model_id)
+    if config:
+        return config
+    return ModelConfig(
+        internal_id=model_id,
+        provider=provider or "",
+        api_model=model_id,
+        label=_fallback_label(model_id),
+        is_free=model_id not in PREMIUM_MODELS,
+        is_pro=model_id in PREMIUM_MODELS,
+    )
+
+
+def resolve_api_model(model_id: str | None, default_model: str, provider: str) -> tuple[str, ModelConfig]:
+    selected_model = model_id or default_model
+    config = get_model_config(selected_model, provider) or get_model_config(default_model, provider)
+    return config.api_model, config
+
+
+def get_model_label(model_id: str) -> str:
+    config = get_model_config(model_id)
+    return config.label if config else _fallback_label(model_id)
+
+
+def get_model_badge(model_id: str) -> str:
+    config = get_model_config(model_id)
+    if config and config.is_frontier:
+        return "Early"
+    if model_id in PREMIUM_MODELS:
+        return "Pro"
+    return ""
+
+
+def get_model_picker_metadata() -> dict[str, dict[str, str]]:
+    return {
+        model_id: {
+            "label": get_model_label(model_id),
+            "badge": get_model_badge(model_id),
+        }
+        for model_id in ALL_ALLOWED_MODELS
+    }
+
+
+def model_picker_sort_key(model_id: str):
+    config = get_model_config(model_id)
+    label = config.label if config else model_id
+    is_premium = model_id in PREMIUM_MODELS
+    is_frontier = bool(config and config.is_frontier)
+    return (is_premium, label.lower(), not is_frontier, model_id.lower())
+
+
+rebuild_model_configs()
 
 
 def _coerce_limit(value, fallback: int) -> int:
@@ -241,9 +431,11 @@ def load_models_from_db():
                 PREMIUM_MODELS.clear()
                 PREMIUM_MODELS.update(data["premium"])
                 PREMIUM_MODELS.difference_update(UNSUPPORTED_GEMINI_MODELS)
+                PREMIUM_MODELS.difference_update(FRONTIER_LOW_MODELS)
                 PREMIUM_MODELS.add(GEMINI_PRO_MODEL)
 
             apply_limits(data.get("limits"))
+            ensure_default_models_allowed()
             
             # Update ALL_ALLOWED_MODELS
             global ALL_ALLOWED_MODELS
@@ -251,6 +443,7 @@ def load_models_from_db():
                 ALLOWED_OPENAI_MODELS | ALLOWED_MISTRAL_MODELS | ALLOWED_ANTHROPIC_MODELS |
                 ALLOWED_GEMINI_MODELS | ALLOWED_DEEPSEEK_MODELS | ALLOWED_GROK_MODELS
             )
+            rebuild_model_configs()
             logging.info("Models configuration loaded from Firestore successfully.")
         else:
             # If document doesn't exist, create it with default values
@@ -264,6 +457,7 @@ def load_models_from_db():
                 "premium": list(PREMIUM_MODELS),
                 "limits": get_limits_config()
             })
+            rebuild_model_configs()
             logging.info("Created default models configuration in Firestore.")
     except Exception as e:
         logging.error(f"Failed to load models from Firestore: {e}")

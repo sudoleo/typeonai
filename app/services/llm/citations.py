@@ -30,6 +30,16 @@ def result_sources(result: Any) -> List[Source]:
 
 
 def source_response(result: Any, **extra: Any) -> Dict[str, Any]:
+    if isinstance(result, dict) and result.get("error"):
+        payload = {
+            "error": str(result.get("error") or "This model could not complete the request."),
+            "error_detail": str(result.get("error_detail") or ""),
+            "response": "",
+            "sources": result_sources(result),
+        }
+        payload.update(extra)
+        return payload
+
     payload = {
         "response": result_text(result),
         "sources": result_sources(result),

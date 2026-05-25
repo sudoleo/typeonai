@@ -3381,6 +3381,23 @@ header .sidebar-toggle.collapse-btn {
   margin-right: 14px;
 }
 
+.model-picker-early-badge {
+  flex: 0 0 auto;
+  margin-right: 0;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, #0f766e 36%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, #14b8a6 14%, transparent);
+  color: color-mix(in srgb, #0f766e 88%, var(--text-color) 12%);
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.model-picker-option.is-selected .model-picker-early-badge {
+  margin-right: 14px;
+}
+
 .dark-mode .model-picker-menu {
   border-color: #383c44;
   background: #1f2228;
@@ -3400,6 +3417,12 @@ header .sidebar-toggle.collapse-btn {
   border-color: color-mix(in srgb, #fbbf24 40%, transparent);
   background: color-mix(in srgb, #f59e0b 18%, transparent);
   color: color-mix(in srgb, #fde68a 84%, var(--text-color) 16%);
+}
+
+.dark-mode .model-picker-early-badge {
+  border-color: color-mix(in srgb, #2dd4bf 34%, transparent);
+  background: color-mix(in srgb, #14b8a6 16%, transparent);
+  color: color-mix(in srgb, #99f6e4 84%, var(--text-color) 16%);
 }
 
 .model-name-trigger {
@@ -3445,6 +3468,12 @@ option.premium-option:disabled {
   background-color: color-mix(in srgb, var(--container-bg) 94%, var(--accent) 6%) !important;
 }
 
+option.early-option {
+  color: color-mix(in srgb, var(--text-color) 88%, #0f766e 12%);
+  background-color: color-mix(in srgb, var(--container-bg) 94%, #14b8a6 6%);
+  font-weight: 600;
+}
+
 .dark-mode option.premium-option {
   color: color-mix(in srgb, var(--text-color) 82%, var(--accent));
   background-color: color-mix(in srgb, var(--container-bg) 90%, var(--accent) 10%);
@@ -3453,6 +3482,11 @@ option.premium-option:disabled {
 .dark-mode option.premium-option:disabled {
   color: color-mix(in srgb, var(--sidebar-text-muted) 82%, var(--accent)) !important;
   background-color: color-mix(in srgb, var(--container-bg) 92%, var(--accent) 8%) !important;
+}
+
+.dark-mode option.early-option {
+  color: color-mix(in srgb, var(--text-color) 88%, #5eead4 12%);
+  background-color: color-mix(in srgb, var(--container-bg) 91%, #14b8a6 9%);
 }
 
 .agent-mode-control,

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import re
 import logging
@@ -6,6 +8,9 @@ import requests
 import openai
 from mistralai import Mistral
 import google.generativeai as genai
+import google.auth
+from google.auth.transport.requests import Request as GoogleAuthRequest
+from urllib.parse import quote
 
 import app.core.config as cfg
 from app.core.config import (
@@ -17,6 +22,7 @@ from app.core.config import (
     DEFAULT_DEEPSEEK_MODEL,
     DEFAULT_GROK_MODEL,
 )
+from app.services.llm.engines import build_provider_payload
 
 CANONICAL_MODEL_NAMES = {
     "openai": "OpenAI",
@@ -32,6 +38,47 @@ CANONICAL_MODEL_NAMES = {
 
 MAX_SOURCES_PER_EXPERT = 5
 MAX_SOURCE_FIELD_CHARS = 180
+
+
+def _google_adc_headers() -> dict:
+    credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/generative-language"])
+    credentials.refresh(GoogleAuthRequest())
+    return {
+        "Authorization": f"Bearer {credentials.token}",
+        "Content-Type": "application/json",
+    }
+
+
+def _gemini_generate_content_rest(prompt: str, api_key: str | None, model_override: str, max_tokens: int) -> str:
+    request_data = build_provider_payload(
+        "gemini",
+        question=prompt,
+        system_prompt="",
+        model_override=model_override,
+        max_output_tokens=max_tokens,
+    )
+    payload = request_data["payload"]
+    payload.pop("tools", None)
+    request_kwargs = {"json": payload, "timeout": 120}
+    if api_key and api_key.strip():
+        request_kwargs["params"] = {"key": api_key.strip()}
+    else:
+        request_kwargs["headers"] = _google_adc_headers()
+
+    response = requests.post(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{quote(request_data['api_model'], safe='')}:generateContent",
+        **request_kwargs,
+    )
+    if response.status_code >= 400:
+        raise RuntimeError(f"{response.status_code} - {response.text}")
+    data = response.json()
+    text_parts = []
+    for candidate in data.get("candidates", []) or []:
+        content = candidate.get("content") or {}
+        for part in content.get("parts", []) or []:
+            if part.get("text"):
+                text_parts.append(part["text"])
+    return "\n".join(text_parts).strip() or "Error: Empty response payload."
 
 
 def normalize_model_name(model_name: str) -> str:
@@ -255,8 +302,16 @@ def query_consensus(
                 return f"Error with Anthropic: {response.status_code} - {response.text}"
 
         # --- GEMINI ---
-        elif consensus_model in ["Gemini", "Gemini-Pro"]:
+        elif consensus_model in ["Gemini", "Gemini-Pro", cfg.GEMINI_FRONTIER_LOW_MODEL]:
             gemini_key = api_keys.get("Gemini")
+            if consensus_model == cfg.GEMINI_FRONTIER_LOW_MODEL:
+                return _gemini_generate_content_rest(
+                    consensus_prompt,
+                    gemini_key,
+                    cfg.GEMINI_FRONTIER_LOW_MODEL,
+                    int(cfg.CONSENSUS_MAX_TOKENS),
+                )
+
             if gemini_key and gemini_key.strip() != "":
                 genai.configure(api_key=gemini_key)
             else:
@@ -459,33 +514,41 @@ def query_differences(
             else:
                 return f"Error with Anthropic: {resp.status_code} - {resp.text}"
 
-        elif differences_model in ["Gemini", "Gemini-Pro"]:
+        elif differences_model in ["Gemini", "Gemini-Pro", cfg.GEMINI_FRONTIER_LOW_MODEL]:
             try:
-                if api_keys.get("Gemini"):
-                    genai.configure(api_key=api_keys["Gemini"])
-                elif os.environ.get("DEVELOPER_GEMINI_API_KEY"):
-                    genai.configure(api_key=os.environ["DEVELOPER_GEMINI_API_KEY"])
+                if differences_model == cfg.GEMINI_FRONTIER_LOW_MODEL:
+                    result = _gemini_generate_content_rest(
+                        differences_prompt,
+                        api_keys.get("Gemini"),
+                        cfg.GEMINI_FRONTIER_LOW_MODEL,
+                        int(cfg.DIFFERENCES_MAX_TOKENS),
+                    )
                 else:
-                    genai.configure()
+                    if api_keys.get("Gemini"):
+                        genai.configure(api_key=api_keys["Gemini"])
+                    elif os.environ.get("DEVELOPER_GEMINI_API_KEY"):
+                        genai.configure(api_key=os.environ["DEVELOPER_GEMINI_API_KEY"])
+                    else:
+                        genai.configure()
 
-                model = genai.GenerativeModel(
-                    model_name=GEMINI_FLASH_MODEL,
-                    system_instruction="Answer in the exact same language as the Model responses.",
-                    safety_settings=[{"category":"HARM_CATEGORY_HARASSMENT","threshold":"BLOCK_ONLY_HIGH"}],
-                    generation_config={"max_output_tokens": int(cfg.DIFFERENCES_MAX_TOKENS), "temperature": 0.2}
-                )
+                    model = genai.GenerativeModel(
+                        model_name=GEMINI_FLASH_MODEL,
+                        system_instruction="Answer in the exact same language as the Model responses.",
+                        safety_settings=[{"category":"HARM_CATEGORY_HARASSMENT","threshold":"BLOCK_ONLY_HIGH"}],
+                        generation_config={"max_output_tokens": int(cfg.DIFFERENCES_MAX_TOKENS), "temperature": 0.2}
+                    )
 
-                resp = model.generate_content(differences_prompt)
-                result = (getattr(resp, "text", None) or "").strip()
-                if not result:
-                    cand = (getattr(resp, "candidates", []) or [None])[0]
-                    fr = getattr(cand, "finish_reason", None)
-                    frs = str(fr)
-                    if frs in ("2","FinishReason.SAFETY","SAFETY"):
-                        return "Error with Gemini (differences): response was blocked by safety filters."
-                    if frs in ("3","FinishReason.MAX_TOKENS","MAX_TOKENS"):
-                        return "Error with Gemini (differences): hit max tokens before returning text."
-                    return f"Error with Gemini (differences): empty candidate (finish_reason={frs})."
+                    resp = model.generate_content(differences_prompt)
+                    result = (getattr(resp, "text", None) or "").strip()
+                    if not result:
+                        cand = (getattr(resp, "candidates", []) or [None])[0]
+                        fr = getattr(cand, "finish_reason", None)
+                        frs = str(fr)
+                        if frs in ("2","FinishReason.SAFETY","SAFETY"):
+                            return "Error with Gemini (differences): response was blocked by safety filters."
+                        if frs in ("3","FinishReason.MAX_TOKENS","MAX_TOKENS"):
+                            return "Error with Gemini (differences): hit max tokens before returning text."
+                        return f"Error with Gemini (differences): empty candidate (finish_reason={frs})."
 
             except Exception as e:
                 return f"Error with Gemini (differences): {e}"

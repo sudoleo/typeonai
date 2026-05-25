@@ -2,9 +2,29 @@ import logging
 from fastapi import APIRouter, Request, Body, HTTPException
 
 from app.core.security import extract_id_token, verify_user_token, is_user_admin, db_firestore
+import app.core.config as cfg
 from app.core.config import apply_limits, get_limits_config, load_models_from_db
 
 router = APIRouter()
+
+
+def normalize_models_document(data: dict) -> dict:
+    normalized = dict(data or {})
+    provider_frontier = {
+        "openai": cfg.OPENAI_FRONTIER_LOW_MODEL,
+        "anthropic": cfg.ANTHROPIC_FRONTIER_LOW_MODEL,
+        "gemini": cfg.GEMINI_FRONTIER_LOW_MODEL,
+        "grok": cfg.GROK_FRONTIER_LOW_MODEL,
+    }
+    for provider, frontier_model in provider_frontier.items():
+        models = set(normalized.get(provider) or [])
+        models.add(frontier_model)
+        normalized[provider] = sorted(models)
+
+    premium = set(normalized.get("premium") or [])
+    premium.difference_update(cfg.FRONTIER_LOW_MODELS)
+    normalized["premium"] = sorted(premium)
+    return normalized
 
 @router.get("/api/admin/models")
 def get_models(request: Request):
@@ -26,7 +46,7 @@ def get_models(request: Request):
         doc_ref = db_firestore.collection("app_config").document("models")
         doc = doc_ref.get()
         if doc.exists:
-            data = doc.to_dict()
+            data = normalize_models_document(doc.to_dict())
             apply_limits(data.get("limits"))
             data["limits"] = get_limits_config()
             return data
@@ -68,15 +88,16 @@ def update_models(request: Request, data: dict = Body(...)):
             
     try:
         apply_limits(data.get("limits"))
+        normalized = normalize_models_document(data)
         doc_ref = db_firestore.collection("app_config").document("models")
         doc_ref.set({
-            "openai": data["openai"],
+            "openai": normalized["openai"],
             "mistral": data["mistral"],
-            "anthropic": data["anthropic"],
-            "gemini": data["gemini"],
+            "anthropic": normalized["anthropic"],
+            "gemini": normalized["gemini"],
             "deepseek": data["deepseek"],
-            "grok": data["grok"],
-            "premium": data["premium"],
+            "grok": normalized["grok"],
+            "premium": normalized["premium"],
             "limits": get_limits_config()
         })
         

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import logging
 import openai
 import requests
 from typing import Optional
@@ -32,20 +33,24 @@ from app.services.llm.citations import (
 
 
 def _error(provider: str, error: Exception | str):
-    return make_llm_result(f"Error with {provider}: {error}", [])
+    error_text = str(error)
+    logging.error("Provider request failed for %s: %s", provider, error_text)
+    return {
+        "text": "",
+        "sources": [],
+        "error": f"{provider} could not complete this request. Please try again later.",
+        "error_detail": error_text,
+    }
 
 
-def _openai_responses_call(
+def _openai_responses_payload(
     *,
-    api_key: str,
-    base_url: str,
     model: str,
     system_prompt: str,
     question: str,
     max_tokens: int,
-    reasoning_effort: str | None = None,
-    provider: str,
-):
+    request_config: dict | None = None,
+) -> dict:
     payload = {
         "model": model,
         "instructions": system_prompt,
@@ -55,8 +60,18 @@ def _openai_responses_call(
         "include": ["web_search_call.action.sources"],
         "max_output_tokens": max_tokens,
     }
-    if reasoning_effort:
-        payload["reasoning"] = {"effort": reasoning_effort}
+    if request_config:
+        payload.update(request_config)
+    return payload
+
+
+def _openai_responses_call(
+    *,
+    api_key: str,
+    base_url: str,
+    payload: dict,
+    provider: str,
+):
 
     resp = requests.post(
         f"{base_url.rstrip('/')}/responses",
@@ -70,6 +85,202 @@ def _openai_responses_call(
     if resp.status_code >= 400:
         raise RuntimeError(f"{resp.status_code} - {resp.text}")
     return parse_openai_response(resp.json(), provider=provider)
+
+
+def _merge_nested_config(payload: dict, config: dict | None):
+    if not config:
+        return
+    for key, value in config.items():
+        if isinstance(value, dict) and isinstance(payload.get(key), dict):
+            _merge_nested_config(payload[key], value)
+        else:
+            payload[key] = value
+
+
+def build_provider_payload(
+    provider: str,
+    *,
+    question: str = "dry run",
+    system_prompt: str | None = None,
+    model_override: str | None = None,
+    deep_search: bool = False,
+    max_output_tokens: int | None = None,
+) -> dict:
+    if system_prompt is None:
+        system_prompt = get_system_prompt()
+    if deep_search:
+        system_prompt += "\n" + DEEP_THINK_PROMPT
+
+    max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
+    provider_key = provider.lower()
+
+    if provider_key == "openai":
+        if deep_search:
+            api_model = "gpt-5.5"
+            model_config = None
+            request_config = {"reasoning": {"effort": REASONING_EFFORT_FOR_DEEP}}
+            internal_model = "deep_search:gpt-5.5"
+        else:
+            internal_model = model_override or DEFAULT_OPENAI_MODEL
+            api_model, model_config = cfg.resolve_api_model(model_override, DEFAULT_OPENAI_MODEL, "openai")
+            request_config = model_config.low_config if model_config.is_low_reasoning else None
+        payload = _openai_responses_payload(
+            model=api_model,
+            system_prompt=system_prompt,
+            question=question,
+            max_tokens=max_tokens,
+            request_config=request_config,
+        )
+        return {
+            "provider": "openai",
+            "endpoint": "responses",
+            "internal_model": internal_model,
+            "api_model": api_model,
+            "is_low_reasoning": bool(model_config and model_config.is_low_reasoning) if not deep_search else True,
+            "payload": payload,
+        }
+
+    if provider_key == "mistral":
+        if deep_search:
+            api_model = "mistral-large-latest"
+            internal_model = "deep_search:mistral-large-latest"
+        else:
+            internal_model = model_override or DEFAULT_MISTRAL_MODEL
+            api_model, _ = cfg.resolve_api_model(model_override, DEFAULT_MISTRAL_MODEL, "mistral")
+        return {
+            "provider": "mistral",
+            "endpoint": "conversations",
+            "internal_model": internal_model,
+            "api_model": api_model,
+            "is_low_reasoning": False,
+            "payload": {
+                "model": api_model,
+                "instructions": system_prompt,
+                "inputs": question,
+                "tools": [{"type": "web_search"}],
+                "completion_args": {
+                    "max_tokens": max_tokens,
+                    "temperature": 0.2,
+                },
+                "store": False,
+            },
+        }
+
+    if provider_key == "anthropic":
+        if deep_search:
+            api_model = "claude-opus-4-7"
+            model_config = None
+            internal_model = "deep_search:claude-opus-4-7"
+        else:
+            internal_model = model_override or DEFAULT_ANTHROPIC_MODEL
+            api_model, model_config = cfg.resolve_api_model(model_override, DEFAULT_ANTHROPIC_MODEL, "anthropic")
+        payload = {
+            "model": api_model,
+            "max_tokens": max_tokens,
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": question}],
+            "tools": [{
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": 5,
+            }],
+        }
+        if model_config and model_config.is_low_reasoning:
+            _merge_nested_config(payload, model_config.low_config)
+        return {
+            "provider": "anthropic",
+            "endpoint": "messages",
+            "internal_model": internal_model,
+            "api_model": api_model,
+            "is_low_reasoning": bool(model_config and model_config.is_low_reasoning),
+            "payload": payload,
+        }
+
+    if provider_key == "gemini":
+        if deep_search:
+            api_model = GEMINI_PRO_MODEL
+            model_config = None
+            internal_model = f"deep_search:{GEMINI_PRO_MODEL}"
+        else:
+            internal_model = model_override or GEMINI_FLASH_MODEL
+            api_model, model_config = cfg.resolve_api_model(model_override, GEMINI_FLASH_MODEL, "gemini")
+        if question and len(question) > 12000:
+            question = question[:12000] + " ... [truncated]"
+        payload = {
+            "systemInstruction": {"parts": [{"text": system_prompt}]},
+            "contents": [{"role": "user", "parts": [{"text": "Do not ask any questions.\n---\n" + question}]}],
+            "tools": [{"google_search": {}}],
+            "generationConfig": {
+                "maxOutputTokens": max_tokens,
+                "temperature": 0.2,
+            },
+            "safetySettings": [{
+                "category": "HARM_CATEGORY_HARASSMENT",
+                "threshold": "BLOCK_ONLY_HIGH",
+            }],
+        }
+        if model_config and model_config.is_low_reasoning:
+            _merge_nested_config(payload, model_config.low_config)
+        return {
+            "provider": "gemini",
+            "endpoint": "generateContent",
+            "internal_model": internal_model,
+            "api_model": api_model,
+            "is_low_reasoning": bool(model_config and model_config.is_low_reasoning),
+            "payload": payload,
+        }
+
+    if provider_key == "deepseek":
+        if deep_search:
+            api_model = "deepseek-v4-pro"
+            internal_model = "deep_search:deepseek-v4-pro"
+        else:
+            internal_model = model_override or DEFAULT_DEEPSEEK_MODEL
+            api_model, _ = cfg.resolve_api_model(model_override, DEFAULT_DEEPSEEK_MODEL, "deepseek")
+        return {
+            "provider": "deepseek",
+            "endpoint": "chat.completions",
+            "internal_model": internal_model,
+            "api_model": api_model,
+            "is_low_reasoning": False,
+            "payload": {
+                "model": api_model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": question},
+                ],
+                "stream": False,
+                "max_tokens": max_tokens,
+            },
+        }
+
+    if provider_key == "grok":
+        if deep_search:
+            api_model = "grok-4.3"
+            model_config = None
+            request_config = {"reasoning": {"effort": REASONING_EFFORT_FOR_DEEP}}
+            internal_model = "deep_search:grok-4.3"
+        else:
+            internal_model = model_override or DEFAULT_GROK_MODEL
+            api_model, model_config = cfg.resolve_api_model(model_override, DEFAULT_GROK_MODEL, "grok")
+            request_config = model_config.low_config if model_config.is_low_reasoning else None
+        payload = _openai_responses_payload(
+            model=api_model,
+            system_prompt=system_prompt,
+            question=question,
+            max_tokens=max_tokens,
+            request_config=request_config,
+        )
+        return {
+            "provider": "grok",
+            "endpoint": "responses",
+            "internal_model": internal_model,
+            "api_model": api_model,
+            "is_low_reasoning": bool(model_config and model_config.is_low_reasoning) if not deep_search else True,
+            "payload": payload,
+        }
+
+    raise ValueError(f"Unsupported provider for payload dry-run: {provider}")
 
 
 def _mistral_headers(api_key: str):
@@ -119,25 +330,23 @@ def query_openai(
     model_override: str = None,
     max_output_tokens: Optional[int] = None,
 ) -> str:
-    if system_prompt is None:
-        system_prompt = get_system_prompt()
-    if deep_search:
-        system_prompt += "\n" + DEEP_THINK_PROMPT
-
-    model_to_use = "gpt-5.5" if deep_search else (model_override or DEFAULT_OPENAI_MODEL)
     max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
+    request_data = build_provider_payload(
+        "openai",
+        question=question,
+        system_prompt=system_prompt,
+        model_override=model_override,
+        deep_search=deep_search,
+        max_output_tokens=max_tokens,
+    )
 
-    print(f"[MODEL] OpenAI -> {model_to_use} | deep_search={deep_search} | override={model_override}")
+    print(f"[MODEL] OpenAI -> {request_data['api_model']} | deep_search={deep_search} | override={model_override}")
 
     try:
         return _openai_responses_call(
             api_key=api_key,
             base_url="https://api.openai.com/v1",
-            model=model_to_use,
-            system_prompt=system_prompt,
-            question=question,
-            max_tokens=max_tokens,
-            reasoning_effort=REASONING_EFFORT_FOR_DEEP if deep_search else None,
+            payload=request_data["payload"],
             provider="openai",
         )
     except Exception as e:
@@ -153,31 +362,22 @@ def query_mistral(
     max_output_tokens: Optional[int] = None,
 ) -> str:
     """Fragt die Mistral API zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit."""
-    if system_prompt is None:
-        system_prompt = get_system_prompt()
-
-    if deep_search:
-        system_prompt += "\n" + DEEP_THINK_PROMPT
-
     # Setze max_tokens basierend auf dem deep_search Flag
     max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
 
     try:
-        model = model_override if (model_override and not deep_search) else ("mistral-large-latest" if deep_search else DEFAULT_MISTRAL_MODEL)
+        request_data = build_provider_payload(
+            "mistral",
+            question=question,
+            system_prompt=system_prompt,
+            model_override=model_override,
+            deep_search=deep_search,
+            max_output_tokens=max_tokens,
+        )
 
-        print(f"[MODEL] Mistral -> {model} | deep_search={deep_search} | override={model_override}")
+        print(f"[MODEL] Mistral -> {request_data['api_model']} | deep_search={deep_search} | override={model_override}")
 
-        payload = {
-            "model": model,
-            "instructions": system_prompt,
-            "inputs": question,
-            "tools": [{"type": "web_search"}],
-            "completion_args": {
-                "max_tokens": max_tokens,
-                "temperature": 0.2,
-            },
-            "store": False,
-        }
+        payload = request_data["payload"]
         response = requests.post(
             "https://api.mistral.ai/v1/conversations",
             json=payload,
@@ -220,12 +420,6 @@ def query_claude(
 ) -> str:
     """Fragt die Anthropic API (Claude) zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit.
        Da die Anthropic API ein Token-Limit erwartet, setzen wir einen sehr hohen Wert ein."""
-    if system_prompt is None:
-        system_prompt = get_system_prompt()
-
-    if deep_search:
-        system_prompt += "\n" + DEEP_THINK_PROMPT
-
     # Setze max_tokens basierend auf dem deep_search Flag
     max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
 
@@ -236,17 +430,15 @@ def query_claude(
             "Content-Type": "application/json",
             "anthropic-version": "2023-06-01"
         }
-        payload = {
-            "model": model_override if (model_override and not deep_search) else ("claude-opus-4-7" if deep_search else DEFAULT_ANTHROPIC_MODEL),
-            "max_tokens": max_tokens,
-            "system": system_prompt,
-            "messages": [{"role": "user", "content": question}],
-            "tools": [{
-                "type": "web_search_20250305",
-                "name": "web_search",
-                "max_uses": 5
-            }]
-        }
+        request_data = build_provider_payload(
+            "anthropic",
+            question=question,
+            system_prompt=system_prompt,
+            model_override=model_override,
+            deep_search=deep_search,
+            max_output_tokens=max_tokens,
+        )
+        payload = request_data["payload"]
 
         print(f"[MODEL] Claude -> {payload['model']} | deep_search={deep_search} | override={model_override}")
 
@@ -271,34 +463,22 @@ def query_gemini(
     model_override: str = None,
     max_output_tokens: Optional[int] = None,
 ) -> str:
-    if system_prompt is None:
-        system_prompt = get_system_prompt()
-    if deep_search:
-        system_prompt += "\n" + DEEP_THINK_PROMPT
-
-    model_name = GEMINI_PRO_MODEL if deep_search else (model_override or GEMINI_FLASH_MODEL)
+    max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
+    request_data = build_provider_payload(
+        "gemini",
+        question=question,
+        system_prompt=system_prompt,
+        model_override=model_override,
+        deep_search=deep_search,
+        max_output_tokens=max_tokens,
+    )
+    model_name = request_data["api_model"]
     print(f"[MODEL] Gemini -> {model_name} | deep_search={deep_search} | override={model_override}")
 
     api_key = (user_api_key or os.environ.get("DEVELOPER_GEMINI_API_KEY") or "").strip()
-    eff_max = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
-    if question and len(question) > 12000:
-        question = question[:12000] + " ... [truncated]"
-    base_content = "Do not ask any questions.\n---\n" + question
 
     try:
-        payload = {
-            "systemInstruction": {"parts": [{"text": system_prompt}]},
-            "contents": [{"role": "user", "parts": [{"text": base_content}]}],
-            "tools": [{"google_search": {}}],
-            "generationConfig": {
-                "maxOutputTokens": eff_max,
-                "temperature": 0.2,
-            },
-            "safetySettings": [{
-                "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_ONLY_HIGH",
-            }],
-        }
+        payload = request_data["payload"]
         request_kwargs = {
             "json": payload,
             "timeout": 120,
@@ -347,28 +527,21 @@ def query_deepseek(
     max_output_tokens: Optional[int] = None,
 ) -> str:
     """Fragt DeepSeek zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
-    if system_prompt is None:
-        system_prompt = get_system_prompt()
-
-    if deep_search:
-        system_prompt += "\n" + DEEP_THINK_PROMPT
-
     # Setze max_tokens basierend auf dem deep_search Flag
     max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
 
     try:
         client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-        model_to_use = "deepseek-v4-pro" if deep_search else (model_override or DEFAULT_DEEPSEEK_MODEL)
-        print(f"[MODEL] DeepSeek -> {model_to_use} | deep_search={deep_search} | override={model_override}")
-        response = client.chat.completions.create(
-            model=model_to_use,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": question}
-            ],
-            stream=False,
-            max_tokens=max_tokens
+        request_data = build_provider_payload(
+            "deepseek",
+            question=question,
+            system_prompt=system_prompt,
+            model_override=model_override,
+            deep_search=deep_search,
+            max_output_tokens=max_tokens,
         )
+        print(f"[MODEL] DeepSeek -> {request_data['api_model']} | deep_search={deep_search} | override={model_override}")
+        response = client.chat.completions.create(**request_data["payload"])
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Error with DeepSeek: {str(e)}"
@@ -382,28 +555,25 @@ def query_grok(
     max_output_tokens: Optional[int] = None,
 ) -> str:
     """Fragt die Grok API zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
-    if system_prompt is None:
-        system_prompt = get_system_prompt()
-
-    if deep_search:
-        system_prompt += "\n" + DEEP_THINK_PROMPT
-
     # Setze max_tokens basierend auf dem deep_search Flag
     max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
 
     try:
-        model_to_use = "grok-4.3" if deep_search else (model_override or DEFAULT_GROK_MODEL)
+        request_data = build_provider_payload(
+            "grok",
+            question=question,
+            system_prompt=system_prompt,
+            model_override=model_override,
+            deep_search=deep_search,
+            max_output_tokens=max_tokens,
+        )
 
-        print(f"[MODEL] Grok -> {model_to_use} | deep_search={deep_search} | override={model_override}")
+        print(f"[MODEL] Grok -> {request_data['api_model']} | deep_search={deep_search} | override={model_override}")
 
         return _openai_responses_call(
             api_key=api_key,
             base_url="https://api.x.ai/v1",
-            model=model_to_use,
-            system_prompt=system_prompt,
-            question=question,
-            max_tokens=max_tokens,
-            reasoning_effort=REASONING_EFFORT_FOR_DEEP if deep_search else None,
+            payload=request_data["payload"],
             provider="grok",
         )
     except Exception as e:
