@@ -20,7 +20,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260524-login-modal1">
+  <link rel="stylesheet" href="/static/style.css?v=20260526-mode-briefing1">
   <link rel="icon" href="/static/favicon-square.png?v=20260523-logo1" type="image/png">
   <!-- Füge dies im <head> hinzu -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -31,8 +31,8 @@
   <!-- DOMPurify (HTML Sanitizer) -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260520-input-lock1"></script>
-  <script type="module" src="/static/demo.js?v=20260520-agent-mode1"></script>
+  <script type="module" src="/static/firebase.js?v=20260526-login-app-redirect1"></script>
+  <script type="module" src="/static/demo.js?v=20260526-demo-sources2"></script>
   <script src="/static/app-ui.js?v=20260523-width-resize1" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b"></script>
@@ -160,7 +160,7 @@
         <span class="settings-icon">⚙️</span>
         <span class="settings-label">Settings</span>
       </button>
-      <span id="version-number">v1.3.1</span>
+      <span id="version-number">v1.4.1</span>
     </div>
   </div>
   <div class="container">
@@ -197,6 +197,10 @@
               Reasoning models. Thoughtful responses.
             </span>
           </div>
+          <button type="button" id="modeExplainerTrigger" class="mode-explainer-trigger" aria-controls="modeExplainer" aria-expanded="false" title="Explain modes">
+            <span aria-hidden="true">i</span>
+            <span class="visually-hidden">Explain modes</span>
+          </button>
         </div>
         <!-- Actions bottom right -->
         <div class="input-actions-container">
@@ -215,6 +219,36 @@
           </button>
         </div>
       </div>
+      <section id="modeExplainer" class="mode-explainer" aria-label="Mode overview">
+        <div class="mode-explainer-copy">
+          <p class="mode-explainer-kicker">Mode overview</p>
+          <p>Use them when a question needs comparison, synthesis, or deeper reasoning.</p>
+        </div>
+        <div class="mode-explainer-items">
+          <div class="mode-explainer-item">
+            <span class="mode-explainer-icon mode-explainer-icon-agent" aria-hidden="true"></span>
+            <div>
+              <strong>Agent Mode</strong>
+              <p>Runs selected models together and keeps progress visible.</p>
+            </div>
+          </div>
+          <div class="mode-explainer-item">
+            <span class="mode-explainer-icon mode-explainer-icon-consensus" aria-hidden="true"></span>
+            <div>
+              <strong>Auto Consensus</strong>
+              <p>Creates the final consensus once enough answers are ready.</p>
+            </div>
+          </div>
+          <div class="mode-explainer-item">
+            <span class="mode-explainer-icon mode-explainer-icon-deep" aria-hidden="true"></span>
+            <div>
+              <strong>Deep Think</strong>
+              <p>Uses stronger reasoning models for harder questions.</p>
+            </div>
+          </div>
+        </div>
+        <button type="button" id="modeExplainerDismiss" class="mode-explainer-dismiss">Got it</button>
+      </section>
     </div>
 
     <div class="response-section" style="position: relative;">
@@ -249,7 +283,8 @@
             <span class="model-picker-wrapper">
               <select id="openaiModelSelect" class="model-picker">
                 {% for model in models['openai'] %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ model_badges.get(model, '') }}" {% if model == default_models['openai'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if model in models['premium'] %} · Pro{% elif model in frontier_models %} · Early{% endif %}</option>
+                {% set badge = model_badges.get(model, '') %}
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['openai'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -270,7 +305,8 @@
             <span class="model-picker-wrapper">
               <select id="mistralModelSelect" class="model-picker">
                 {% for model in models['mistral'] %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ model_badges.get(model, '') }}" {% if model == default_models['mistral'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if model in models['premium'] %} · Pro{% elif model in frontier_models %} · Early{% endif %}</option>
+                {% set badge = model_badges.get(model, '') %}
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['mistral'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -291,7 +327,8 @@
             <span class="model-picker-wrapper">
               <select id="claudeModelSelect" class="model-picker">
                 {% for model in models['anthropic'] %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ model_badges.get(model, '') }}" {% if model == default_models['anthropic'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if model in models['premium'] %} · Pro{% elif model in frontier_models %} · Early{% endif %}</option>
+                {% set badge = model_badges.get(model, '') %}
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['anthropic'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -312,7 +349,8 @@
             <span class="model-picker-wrapper">
               <select id="geminiModelSelect" class="model-picker">
                 {% for model in models['gemini'] %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ model_badges.get(model, '') }}" {% if model == default_models['gemini'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if model in models['premium'] %} · Pro{% elif model in frontier_models %} · Early{% endif %}</option>
+                {% set badge = model_badges.get(model, '') %}
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['gemini'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -333,7 +371,8 @@
             <span class="model-picker-wrapper">
               <select id="deepseekModelSelect" class="model-picker">
                 {% for model in models['deepseek'] %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ model_badges.get(model, '') }}" {% if model == default_models['deepseek'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if model in models['premium'] %} · Pro{% elif model in frontier_models %} · Early{% endif %}</option>
+                {% set badge = model_badges.get(model, '') %}
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['deepseek'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -356,7 +395,8 @@
             <span class="model-picker-wrapper">
               <select id="grokModelSelect" class="model-picker">
                 {% for model in models['grok'] %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ model_badges.get(model, '') }}" {% if model == default_models['grok'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if model in models['premium'] %} · Pro{% elif model in frontier_models %} · Early{% endif %}</option>
+                {% set badge = model_badges.get(model, '') %}
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['grok'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -387,7 +427,7 @@
             <label for="consensusModelDropdown" class="consensus-label">Consensus Model:</label>
             <div class="select-wrapper">
               <select id="consensusModelDropdown">
-                <option value="{{ default_models['gemini'] }}" class="early-option" data-model-label="{{ model_labels.get(default_models['gemini'], default_models['gemini']) }}" data-model-badge="{{ model_badges.get(default_models['gemini'], '') }}" selected>{{ model_labels.get(default_models['gemini'], default_models['gemini']) }} · Early</option>
+                <option value="{{ default_models['gemini'] }}" class="early-option" data-model-label="{{ model_labels.get(default_models['gemini'], default_models['gemini']) }}" data-model-badge="{{ model_badges.get(default_models['gemini'], '') }}" selected>{{ model_labels.get(default_models['gemini'], default_models['gemini']) }}{% if model_badges.get(default_models['gemini'], '') %} · {{ model_badges.get(default_models['gemini'], '') }}{% endif %}</option>
                 <option value="Grok">{{ model_labels.get(consensus_default_models['grok'], consensus_default_models['grok']) }}</option>
                 <option value="OpenAI">{{ model_labels.get(consensus_default_models['openai'], consensus_default_models['openai']) }}</option>
                 <option value="Anthropic">{{ model_labels.get(consensus_default_models['anthropic'], consensus_default_models['anthropic']) }}</option>
@@ -911,12 +951,42 @@
           }, 7000);
         }
 
+        const MODE_EXPLAINER_STORAGE_KEY = "modeExplainerConfirmed";
+
+        function initModeExplainer() {
+          const explainer = document.getElementById("modeExplainer");
+          const trigger = document.getElementById("modeExplainerTrigger");
+          const dismiss = document.getElementById("modeExplainerDismiss");
+          if (!explainer || !trigger || !dismiss) return;
+
+          const setExplainerVisible = (visible) => {
+            explainer.hidden = !visible;
+            explainer.classList.toggle("is-visible", visible);
+            trigger.setAttribute("aria-expanded", String(visible));
+            trigger.classList.toggle("is-active", visible);
+          };
+
+          const hasConfirmed = localStorage.getItem(MODE_EXPLAINER_STORAGE_KEY) === "true";
+          setExplainerVisible(!hasConfirmed);
+
+          trigger.addEventListener("click", () => {
+            setExplainerVisible(explainer.hidden);
+          });
+
+          dismiss.addEventListener("click", () => {
+            localStorage.setItem(MODE_EXPLAINER_STORAGE_KEY, "true");
+            setExplainerVisible(false);
+          });
+        }
+
+        initModeExplainer();
+
         const deepThinkModelLabels = {
           OpenAI: "GPT-5.5",
           Mistral: "mistral-large-latest",
           Gemini: "gemini-3.1-pro-preview",
           Anthropic: "claude-opus-4-7",
-          DeepSeek: "DeepSeek-V4-Pro",
+          DeepSeek: "DeepSeek V4 Pro",
           Grok: "grok-4.3"
         };
 
@@ -1613,7 +1683,7 @@
         function getModelOptionLabel(option) {
           const explicitLabel = option?.dataset?.modelLabel;
           if (explicitLabel) return explicitLabel;
-          return (option?.textContent || "").replace(/\s*(?:\u00c2\u00b7|\u00b7)\s*(?:Pro|Early)\s*$/i, "").trim();
+          return (option?.textContent || "").replace(/(?:\s*(?:\u00c2\u00b7|\u00b7)\s*(?:Pro|Early))+$/i, "").trim();
         }
 
         function setPickerToValue(select, labelText, value) {
@@ -2143,25 +2213,34 @@
             item.setAttribute("aria-selected", String(option.selected));
             item.disabled = option.disabled;
             item.classList.toggle("is-selected", option.selected);
-            item.classList.toggle("is-premium", option.classList.contains("premium-option"));
-            item.classList.toggle("is-early", option.classList.contains("early-option"));
+            const badges = (option.dataset.modelBadge || "")
+              .split(/\s*(?:\u00c2\u00b7|\u00b7)\s*/)
+              .map(badge => badge.trim())
+              .filter(Boolean);
+            if (!badges.length && option.classList.contains("premium-option")) {
+              badges.push("Pro");
+            }
+            if (!badges.length && option.classList.contains("early-option")) {
+              badges.push("Early");
+            }
+            const hasProBadge = badges.some(badge => badge.toLowerCase() === "pro");
+            const hasEarlyBadge = badges.some(badge => badge.toLowerCase() === "early");
+            item.classList.toggle("is-premium", option.classList.contains("premium-option") || hasProBadge);
+            item.classList.toggle("is-early", option.classList.contains("early-option") || hasEarlyBadge);
 
             const label = document.createElement("span");
             label.className = "model-picker-option-label";
             label.textContent = getModelOptionLabel(option);
             item.appendChild(label);
 
-            if (option.classList.contains("premium-option")) {
+            badges.forEach(badgeText => {
               const badge = document.createElement("span");
-              badge.className = "model-picker-pro-badge";
-              badge.textContent = "Pro";
+              badge.className = badgeText.toLowerCase() === "pro"
+                ? "model-picker-pro-badge"
+                : "model-picker-early-badge";
+              badge.textContent = badgeText;
               item.appendChild(badge);
-            } else if (option.classList.contains("early-option")) {
-              const badge = document.createElement("span");
-              badge.className = "model-picker-early-badge";
-              badge.textContent = "Early";
-              item.appendChild(badge);
-            }
+            });
 
             item.addEventListener("click", event => {
               event.preventDefault();
@@ -5069,7 +5148,7 @@
           </div>
 
           <div style="text-align: center; margin-top: 20px; opacity: 0.5; font-size: 0.8em;">
-            v1.3.1
+            v1.4.1
           </div>
         </div>
       </div>

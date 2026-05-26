@@ -391,7 +391,7 @@ document.getElementById("loginButton").addEventListener("click", () => {
           })
             .catch(err => console.error("Confirm-Registration-Fehler:", err));
 
-          window.location.href = "/";
+          window.location.href = "/app";
         });
       } else {
         try { localStorage.removeItem("id_token"); } catch {}
@@ -607,7 +607,7 @@ document.getElementById("googleLoginButton")?.addEventListener("click", handleGo
 
 async function afterGoogleLogin(user) {
   // Jetzt *nach* erfolgreichem/versuchtem POST navigieren
-  location.replace("/");
+  location.replace("/app");
 }
 
 // Restlicher Firebase-Code (z.B. Leaderboard, Funktionen, etc.)

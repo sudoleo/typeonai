@@ -50,10 +50,12 @@ REASONING_EFFORT_FOR_DEEP = "low"
 GEMINI_MAX_TOKENS = MAX_TOKENS
 GEMINI_DEEP_MAX_TOKENS = DEEP_SEARCH_MAX_TOKENS
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
-DEFAULT_MISTRAL_MODEL = "mistral-medium-latest"
+DEFAULT_MISTRAL_MODEL = "mistral-large-latest"
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"
 DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
-DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
+DEEPSEEK_FLASH_MODEL = "deepseek-v4-flash"
+DEEPSEEK_PRO_MODEL = "deepseek-v4-pro"
+DEFAULT_DEEPSEEK_MODEL = DEEPSEEK_PRO_MODEL
 DEFAULT_GROK_MODEL = "grok-4.20-non-reasoning"
 
 OPENAI_FRONTIER_LOW_MODEL = "gpt-5.5-frontier-low"
@@ -102,7 +104,6 @@ ALLOWED_OPENAI_MODELS = {
 ALLOWED_MISTRAL_MODELS = {
     "mistral-large-latest", "mistral-medium-latest", "mistral-small-latest",
     "ministral-3b-latest", "ministral-8b-latest", "pixtral-large-latest",
-    "mistral-small-latest", "mistral-medium-latest", "mistral-large-latest",
 }
 
 ALLOWED_ANTHROPIC_MODELS = {
@@ -118,8 +119,7 @@ ALLOWED_GEMINI_MODELS = {
 }
 
 ALLOWED_DEEPSEEK_MODELS = {
-    "deepseek-chat", "deepseek-reasoner",
-    "deepseek-v4-flash", "deepseek-v4-pro",
+    DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL,
 }
 
 ALLOWED_GROK_MODELS = {
@@ -135,13 +135,19 @@ FRONTIER_LOW_MODEL_IDS_BY_PROVIDER = {
     "grok": GROK_FRONTIER_LOW_MODEL,
 }
 FRONTIER_LOW_MODELS = set(FRONTIER_LOW_MODEL_IDS_BY_PROVIDER.values())
+EARLY_AND_PRO_MODELS = {DEFAULT_MISTRAL_MODEL, DEEPSEEK_PRO_MODEL}
+EARLY_FREE_MODELS = FRONTIER_LOW_MODELS | EARLY_AND_PRO_MODELS
+REQUIRED_PRO_MODELS = {"mistral-medium-latest"}
+DEPRECATED_DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner"}
+REQUIRED_DEEPSEEK_MODELS = {DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL}
 
 def ensure_default_models_allowed():
     ALLOWED_OPENAI_MODELS.add(DEFAULT_OPENAI_MODEL)
     ALLOWED_MISTRAL_MODELS.add(DEFAULT_MISTRAL_MODEL)
     ALLOWED_ANTHROPIC_MODELS.add(DEFAULT_ANTHROPIC_MODEL)
     ALLOWED_GEMINI_MODELS.add(DEFAULT_GEMINI_MODEL)
-    ALLOWED_DEEPSEEK_MODELS.add(DEFAULT_DEEPSEEK_MODEL)
+    ALLOWED_DEEPSEEK_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
+    ALLOWED_DEEPSEEK_MODELS.update(REQUIRED_DEEPSEEK_MODELS)
     ALLOWED_GROK_MODELS.add(DEFAULT_GROK_MODEL)
     ALLOWED_OPENAI_MODELS.add(OPENAI_FRONTIER_LOW_MODEL)
     ALLOWED_ANTHROPIC_MODELS.add(ANTHROPIC_FRONTIER_LOW_MODEL)
@@ -155,13 +161,16 @@ PREMIUM_MODELS = {
     "gpt-5.5",
     "claude-sonnet-4-5", "claude-opus-4-5", "claude-sonnet-4-6", "claude-opus-4-6",
     "claude-opus-4-7",
-    "pixtral-large-latest", "mistral-large-latest",
+    "pixtral-large-latest", "mistral-large-latest", "mistral-medium-latest",
     GEMINI_PRO_MODEL, "gemini-2.5-pro",
-    "deepseek-reasoner", "deepseek-v4-pro",
+    DEEPSEEK_PRO_MODEL,
     "grok-4-latest", "grok-3-latest", "grok-4-fast-reasoning-latest", "grok-4.20",
     "grok-4.3",
 }
 PREMIUM_MODELS.difference_update(FRONTIER_LOW_MODELS)
+PREMIUM_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
+PREMIUM_MODELS.update(EARLY_AND_PRO_MODELS)
+PREMIUM_MODELS.update(REQUIRED_PRO_MODELS)
 
 ALL_ALLOWED_MODELS = (
     ALLOWED_OPENAI_MODELS | ALLOWED_MISTRAL_MODELS | ALLOWED_ANTHROPIC_MODELS |
@@ -177,7 +186,8 @@ MODEL_LABEL_OVERRIDES = {
     GEMINI_FRONTIER_LOW_MODEL: "Gemini 3.1",
     "grok-4.3": "Grok 4.3",
     GROK_FRONTIER_LOW_MODEL: "Grok 4.3",
-    "deepseek-v4-pro": "DeepSeek V4 Pro",
+    DEEPSEEK_FLASH_MODEL: "DeepSeek V4 Flash",
+    DEEPSEEK_PRO_MODEL: "DeepSeek V4 Pro",
 }
 
 MODEL_CONFIGS: dict[str, ModelConfig] = {}
@@ -255,6 +265,24 @@ def rebuild_model_configs():
             is_low_reasoning=True,
             low_config={"reasoning": {"effort": "low"}},
         ),
+        DEFAULT_MISTRAL_MODEL: ModelConfig(
+            internal_id=DEFAULT_MISTRAL_MODEL,
+            provider="mistral",
+            api_model=DEFAULT_MISTRAL_MODEL,
+            label=_fallback_label(DEFAULT_MISTRAL_MODEL),
+            is_free=True,
+            is_pro=True,
+            is_frontier=True,
+        ),
+        DEEPSEEK_PRO_MODEL: ModelConfig(
+            internal_id=DEEPSEEK_PRO_MODEL,
+            provider="deepseek",
+            api_model=DEEPSEEK_PRO_MODEL,
+            label=_fallback_label(DEEPSEEK_PRO_MODEL),
+            is_free=True,
+            is_pro=True,
+            is_frontier=True,
+        ),
     })
 
 
@@ -287,11 +315,12 @@ def get_model_label(model_id: str) -> str:
 
 def get_model_badge(model_id: str) -> str:
     config = get_model_config(model_id)
+    badges = []
     if config and config.is_frontier:
-        return "Early"
-    if model_id in PREMIUM_MODELS:
-        return "Pro"
-    return ""
+        badges.append("Early")
+    if (config and config.is_pro) or model_id in PREMIUM_MODELS:
+        badges.append("Pro")
+    return " · ".join(dict.fromkeys(badges))
 
 
 def get_model_picker_metadata() -> dict[str, dict[str, str]]:
@@ -307,7 +336,7 @@ def get_model_picker_metadata() -> dict[str, dict[str, str]]:
 def model_picker_sort_key(model_id: str):
     config = get_model_config(model_id)
     label = config.label if config else model_id
-    is_premium = model_id in PREMIUM_MODELS
+    is_premium = model_id in PREMIUM_MODELS and model_id not in EARLY_FREE_MODELS
     is_frontier = bool(config and config.is_frontier)
     return (is_premium, label.lower(), not is_frontier, model_id.lower())
 
@@ -418,6 +447,8 @@ def load_models_from_db():
             if "deepseek" in data:
                 ALLOWED_DEEPSEEK_MODELS.clear()
                 ALLOWED_DEEPSEEK_MODELS.update(data["deepseek"])
+                ALLOWED_DEEPSEEK_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
+                ALLOWED_DEEPSEEK_MODELS.update(REQUIRED_DEEPSEEK_MODELS)
             
             # Update Grok
             if "grok" in data:
@@ -433,6 +464,9 @@ def load_models_from_db():
                 PREMIUM_MODELS.difference_update(UNSUPPORTED_GEMINI_MODELS)
                 PREMIUM_MODELS.difference_update(FRONTIER_LOW_MODELS)
                 PREMIUM_MODELS.add(GEMINI_PRO_MODEL)
+                PREMIUM_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
+                PREMIUM_MODELS.update(EARLY_AND_PRO_MODELS)
+                PREMIUM_MODELS.update(REQUIRED_PRO_MODELS)
 
             apply_limits(data.get("limits"))
             ensure_default_models_allowed()

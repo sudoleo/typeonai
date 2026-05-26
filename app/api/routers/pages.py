@@ -64,7 +64,7 @@ async def read_root(request: Request):
         "gemini": sorted(list(ALLOWED_GEMINI_MODELS), key=model_picker_sort),
         "deepseek": sorted(list(ALLOWED_DEEPSEEK_MODELS), key=model_picker_sort),
         "grok": sorted(list(ALLOWED_GROK_MODELS), key=model_picker_sort),
-        "premium": list(PREMIUM_MODELS)
+        "premium": list(PREMIUM_MODELS - cfg.EARLY_FREE_MODELS)
     }
     model_metadata = cfg.get_model_picker_metadata()
     model_labels = {model_id: meta["label"] for model_id, meta in model_metadata.items()}
@@ -80,7 +80,7 @@ async def read_root(request: Request):
         "consensus_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
         "model_labels": model_labels,
         "model_badges": model_badges,
-        "frontier_models": list(cfg.FRONTIER_LOW_MODELS),
+        "frontier_models": list(cfg.EARLY_FREE_MODELS),
         **firebase_config
     })
 

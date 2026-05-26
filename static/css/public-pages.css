@@ -158,6 +158,12 @@ a:hover {
   transition: transform .18s ease, border-color .18s ease, background-color .18s ease, color .18s ease;
 }
 
+.nav-cta {
+  min-height: 34px;
+  padding-inline: 14px;
+  font-size: 0.86rem;
+}
+
 .nav-cta,
 .button-primary {
   border: 1px solid var(--button-bg);
@@ -376,6 +382,18 @@ a:hover {
   font-size: 0.88rem;
   overflow: hidden;
   white-space: normal;
+}
+
+.mock-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.mock-mode-label {
+  min-width: 0;
+  line-height: 1;
 }
 
 .mock-switch {
@@ -951,6 +969,14 @@ canvas {
     padding-inline: 12px;
   }
 
+  .nav-cta {
+    min-height: 32px;
+    padding-inline: 12px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--button-bg) 14%, transparent);
+  }
+
   .nav-links {
     gap: 10px;
     font-size: 0.84rem;
@@ -998,31 +1024,63 @@ canvas {
   }
 
   .mock-input {
-    min-height: 174px;
+    min-height: 156px;
     padding: 14px;
-    padding-bottom: 86px;
+    padding-bottom: 64px;
   }
 
   .mock-switch-row {
     left: 14px;
-    right: 14px;
-    bottom: 54px;
-    gap: 7px;
+    right: 88px;
+    bottom: 12px;
+    gap: 8px;
     font-size: 0.82rem;
+    overflow: visible;
   }
 
-  .mock-switch {
+  .mock-mode {
     width: 38px;
-    height: 20px;
+    height: 38px;
+    justify-content: center;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--response-bg);
+    color: var(--button-bg);
+    box-shadow: var(--card-shadow);
   }
 
-  .mock-switch::before {
-    width: 14px;
-    height: 14px;
+  .mock-mode::before {
+    content: "";
+    width: 18px;
+    height: 18px;
+    background: currentColor;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-size: contain;
+    mask-size: contain;
   }
 
-  .mock-switch.is-on::before {
-    left: 21px;
+  .mock-mode-agent::before {
+    -webkit-mask-image: url("../favicon.png");
+    mask-image: url("../favicon.png");
+  }
+
+  .mock-mode-consensus::before {
+    -webkit-mask-image: url("../icons/consensus.png");
+    mask-image: url("../icons/consensus.png");
+  }
+
+  .mock-mode-deep::before {
+    -webkit-mask-image: url("../icons/deepsearch.png");
+    mask-image: url("../icons/deepsearch.png");
+  }
+
+  .mock-mode-label,
+  .mock-mode .mock-switch {
+    display: none;
   }
 
   .mock-send {

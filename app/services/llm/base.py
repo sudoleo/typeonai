@@ -1,7 +1,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from fastapi import HTTPException
-from app.core.config import PREMIUM_MODELS
+import app.core.config as cfg
 
 def get_system_prompt() -> str:
     now = datetime.now(ZoneInfo("Europe/Berlin"))
@@ -21,7 +21,12 @@ def validate_model(model: str, allowed: set, provider: str, is_pro: bool = False
             detail=f"Model '{model}' is not allowed for {provider}."
         )
     
-    if model in PREMIUM_MODELS and not is_pro:
+    model_config = cfg.get_model_config(model)
+    is_pro_only = (
+        model in cfg.PREMIUM_MODELS
+        and not (model_config and model_config.is_free)
+    )
+    if is_pro_only and not is_pro:
         raise HTTPException(
             status_code=403,
             detail=f"The model '{model}' is reserved for Premium users. Please upgrade your plan."

@@ -21,8 +21,20 @@ def normalize_models_document(data: dict) -> dict:
         models.add(frontier_model)
         normalized[provider] = sorted(models)
 
+    mistral_models = set(normalized.get("mistral") or [])
+    mistral_models.add(cfg.DEFAULT_MISTRAL_MODEL)
+    normalized["mistral"] = sorted(mistral_models)
+
+    deepseek_models = set(normalized.get("deepseek") or [])
+    deepseek_models.difference_update(cfg.DEPRECATED_DEEPSEEK_MODELS)
+    deepseek_models.update(cfg.REQUIRED_DEEPSEEK_MODELS)
+    normalized["deepseek"] = sorted(deepseek_models)
+
     premium = set(normalized.get("premium") or [])
     premium.difference_update(cfg.FRONTIER_LOW_MODELS)
+    premium.difference_update(cfg.DEPRECATED_DEEPSEEK_MODELS)
+    premium.update(cfg.EARLY_AND_PRO_MODELS)
+    premium.update(cfg.REQUIRED_PRO_MODELS)
     normalized["premium"] = sorted(premium)
     return normalized
 
@@ -92,10 +104,10 @@ def update_models(request: Request, data: dict = Body(...)):
         doc_ref = db_firestore.collection("app_config").document("models")
         doc_ref.set({
             "openai": normalized["openai"],
-            "mistral": data["mistral"],
+            "mistral": normalized["mistral"],
             "anthropic": normalized["anthropic"],
             "gemini": normalized["gemini"],
-            "deepseek": data["deepseek"],
+            "deepseek": normalized["deepseek"],
             "grok": normalized["grok"],
             "premium": normalized["premium"],
             "limits": get_limits_config()

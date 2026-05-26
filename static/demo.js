@@ -1,395 +1,432 @@
 // static/demo.js
 
-// Alles in DOMContentLoaded kapseln, damit das DOM fertig ist,
-// wenn wir auf Elemente zugreifen
-  // Globale Spinner-HTML, falls du sie nur für die Demo brauchst
-  window.spinnerHTML = `
-    <span class="thinking-wrap" role="status" aria-live="polite" aria-busy="true">
-      <span class="thinking typing-indicator" data-text="Typing" aria-label="Typing">Typing<span class="typing-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span>
-    </span>
-  `;
-  window.currentEvidenceSources = [];
+window.spinnerHTML = `
+  <span class="thinking-wrap" role="status" aria-live="polite" aria-busy="true">
+    <span class="thinking typing-indicator" data-text="Typing" aria-label="Typing">Typing<span class="typing-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span>
+  </span>
+`;
+window.currentEvidenceSources = window.currentEvidenceSources || [];
 
-  /* === DEMO: Data & Utilities ======================================= */
-  const DEMO_SCENARIO_PROMPT =
-    "Should vegetarians take supplements? If yes, which ones?";
+/* === DEMO: Data & Utilities ======================================= */
+const DEMO_SCENARIO_PROMPT =
+  "Should vegetarians take supplements? If yes, which ones?";
 
-      const DEMO_DATA = {
-        // realistic, staggered loading
-        delays: { OpenAI: 1400, Mistral: 2500, Anthropic: 2900, Gemini: 3600, DeepSeek: 4300, Grok: 5000 },
+const DEMO_SOURCE_LIBRARY = {
+  b12: {
+    id: "S1",
+    title: "NIH ODS: Vitamin B12 Fact Sheet",
+    url: "https://ods.od.nih.gov/factsheets/VitaminB12-Consumer/",
+    provider: "NIH Office of Dietary Supplements"
+  },
+  vitaminD: {
+    id: "S2",
+    title: "NIH ODS: Vitamin D Fact Sheet",
+    url: "https://ods.od.nih.gov/factsheets/VitaminD-HealthProfessional/",
+    provider: "NIH Office of Dietary Supplements"
+  },
+  iodine: {
+    id: "S3",
+    title: "NIH ODS: Iodine Fact Sheet",
+    url: "https://ods.od.nih.gov/factsheets/Iodine-Consumer/",
+    provider: "NIH Office of Dietary Supplements"
+  },
+  omega3: {
+    id: "S4",
+    title: "NIH ODS: Omega-3 Fatty Acids Fact Sheet",
+    url: "https://ods.od.nih.gov/factsheets/Omega3FattyAcids-HealthProfessional/",
+    provider: "NIH Office of Dietary Supplements"
+  },
+  iron: {
+    id: "S5",
+    title: "NIH ODS: Iron Fact Sheet",
+    url: "https://ods.od.nih.gov/factsheets/Iron-Consumer/",
+    provider: "NIH Office of Dietary Supplements"
+  },
+  calcium: {
+    id: "S6",
+    title: "NIH ODS: Calcium Fact Sheet",
+    url: "https://ods.od.nih.gov/factsheets/Calcium-Consumer/",
+    provider: "NIH Office of Dietary Supplements"
+  },
+  zinc: {
+    id: "S7",
+    title: "NIH ODS: Zinc Fact Sheet",
+    url: "https://ods.od.nih.gov/factsheets/Zinc-HealthProfessional/",
+    provider: "NIH Office of Dietary Supplements"
+  },
+  creatine: {
+    id: "S8",
+    title: "ISSN position stand: creatine supplementation",
+    url: "https://jissn.biomedcentral.com/articles/10.1186/s12970-017-0173-z",
+    provider: "Journal of the International Society of Sports Nutrition"
+  }
+};
 
-        // short but differentiated answers to create real signal for Consensus & Differences
-        // short but differentiated answers to create real signal for Consensus & Differences
-        responses: {
-          OpenAI:
-        `<div class="ai-block">
-            <p><u>Quick overview: do vegetarians need supplements?</u></p>
-            <p>Short answer: very often <strong>yes</strong> for B12, sometimes for D, iodine and omega-3, and the rest depends on your lab work and diet.</p>
-            <h4>1. Almost always needed</h4>
-            <ul>
-                <li><strong>Vitamin B12:</strong> 50–100 µg/day or 1,000 µg once weekly (cyanocobalamin is fine for most). Re-check B12 or MMA after ~8–12 weeks.</li>
-            </ul>
-            <h4>2. Very commonly useful</h4>
-            <ul>
-                <li><strong>Vitamin D3:</strong> 1,000–2,000 IU/day if you live far from the equator, have darker skin, or are mostly indoors.</li>
-                <li><strong>Iodine:</strong> ~150 µg/day if you rarely use iodized salt or seaweed (talk to your doctor if you have thyroid disease).</li>
-                <li><strong>Omega-3 (EPA+DHA from algae):</strong> 250–500 mg/day if you don’t eat fish.</li>
-            </ul>
-            <h4>3. Sometimes helpful (case-by-case)</h4>
-            <ul>
-                <li><strong>Iron:</strong> only if blood tests show low ferritin/iron.</li>
-                <li><strong>Calcium:</strong> aim for ~1,000 mg/day total (food + supplements).</li>
-                <li><strong>Zinc &amp; Selenium:</strong> small daily doses can make sense if intake is uncertain and your diet is very grain/legume-heavy.</li>
-                <li><strong>Creatine:</strong> 3–5 g/day for strength, performance or cognition – vegetarians often respond well.</li>
-            </ul>
-            <p><small>This is general information only and does not replace personal medical advice, lab testing or a consultation.</small></p>
-            </div>
-        `,
+function demoSources(keys) {
+  return keys.map(key => DEMO_SOURCE_LIBRARY[key]).filter(Boolean);
+}
 
-          Mistral:
-        `<div class="ai-block">
-            <p><u>Flowchart style: walk through your situation</u></p>
-            <ol>
-                <li><strong>Fully vegetarian or vegan &gt; 80% of the time?</strong><br>
-                    → Yes: add <strong>B12</strong> (50–100 µg/day or 1,000 µg/week).<br>
-                    → No: discuss B12 with a clinician, still often recommended.</li>
-                <li><strong>Little sun (office job, winter, north of ~35° latitude)?</strong><br>
-                    → Consider <strong>Vitamin D3</strong> 1,000–2,000 IU/day, check 25-OH-D after ~3 months.</li>
-                <li><strong>No fish at all + rarely flax/chia/walnuts?</strong><br>
-                    → Add <strong>algae EPA+DHA</strong> 250–500 mg/day.</li>
-                <li><strong>Use non-iodized “gourmet” salts and little seaweed?</strong><br>
-                    → Iodine ~150 µg/day may close a gap (especially relevant in pregnancy).</li>
-                <li><strong>Heavy periods, fatigue, pale skin, shortness of breath?</strong><br>
-                    → <em>Labs first.</em> Only supplement <strong>iron</strong> if a deficiency is confirmed.</li>
-                <li><strong>Train hard (gym, sprinting, CrossFit)?</strong><br>
-                    → <strong>Creatine monohydrate</strong> 3 g/day can support performance and strength.</li>
-                <li><strong>Minimal dairy/fortified plant milks?</strong><br>
-                    → Check if you reach ~1,000 mg/day of <strong>calcium</strong>; top up 300–500 mg if needed.</li>
-            </ol>
-            <p><small>General rule: start with 1–3 targeted supplements, track how you feel, and review with a professional after 8–12 weeks.</small></p>
-            </div>
-        `,
+const DEMO_DATA = {
+  delays: { OpenAI: 1400, Mistral: 2500, Anthropic: 2900, Gemini: 3600, DeepSeek: 4300, Grok: 5000 },
+  sourceKeys: {
+    OpenAI: ["b12", "vitaminD", "iodine", "omega3", "iron", "calcium", "creatine"],
+    Mistral: ["b12", "vitaminD", "omega3", "iodine", "iron", "creatine", "calcium"],
+    Anthropic: ["b12", "iodine", "vitaminD", "omega3", "iron", "zinc", "creatine"],
+    Gemini: ["b12", "vitaminD", "creatine", "iron", "iodine", "calcium", "zinc"],
+    DeepSeek: ["iron", "calcium", "b12", "vitaminD", "iodine", "omega3", "creatine"],
+    Grok: ["b12", "vitaminD", "omega3", "iodine", "iron", "creatine"]
+  },
+  responses: {
+    OpenAI:
+`<div class="ai-block">
+  <p>Quick overview</p>
+  <p>For many vegetarians, a targeted supplement plan is more useful than a broad multivitamin. Vitamin B12 is the most consistent baseline because people eating little or no animal food can fall short [S1].</p>
+  <h4>Likely baseline</h4>
+  <ul>
+    <li>Vitamin B12: use a regular supplement or reliably fortified foods; many people choose a daily low dose or a larger weekly dose [S1].</li>
+  </ul>
+  <h4>Often context-dependent</h4>
+  <ul>
+    <li>Vitamin D: consider it when sun exposure is low, especially in winter or mostly indoor routines [S2].</li>
+    <li>Iodine: check whether iodized salt, dairy, eggs, seafood or seaweed are actually present in your diet [S3].</li>
+    <li>Omega-3: algae-based EPA/DHA is the vegetarian route when fish is absent [S4].</li>
+  </ul>
+  <h4>Use labs or diet tracking</h4>
+  <ul>
+    <li>Iron: supplement when deficiency is shown or a clinician recommends it, not as a default [S5].</li>
+    <li>Calcium: aim to meet the daily target from food first; fortified plant milks, tofu and dairy can change the answer [S6].</li>
+    <li>Creatine: optional, mainly for strength or high-intensity training goals [S7].</li>
+  </ul>
+  <p><small>General information only; individual needs depend on labs, medical history, medication and pregnancy status.</small></p>
+</div>`,
 
-          Anthropic:
-        `<div class="ai-block">
-            <p><u>What a cautious clinician might consider</u></p>
-            <p><strong>Baseline assumption:</strong> a vegetarian diet can be healthy, but it shifts several nutrients from “almost automatic” to “must be monitored”.</p>
-            <ul>
-                <li><strong>Non-negotiable for most:</strong> Vitamin B12 in supplement or reliably fortified foods.</li>
-                <li><strong>Frequently indicated:</strong> Vitamin D3, iodine, and algae-derived omega-3, especially in low-sun regions and when fish and iodized salt are absent.</li>
-                <li><strong>Lab-driven:</strong> Iron, ferritin, B12, folate, sometimes zinc and thyroid markers guide whether additional supplements are needed.</li>
-                <li><strong>Performance/cognition:</strong> Creatine 3–5 g/day is often considered in vegetarians with high physical or cognitive demands.</li>
-            </ul>
-            <p>The clinical workflow is usually: assess diet → check relevant labs → introduce a small number of well-chosen supplements → re-evaluate symptoms and lab values after ~8–12 weeks.</p>
-            <p><small>This is an educational summary of common medical practice patterns, not individual medical advice.</small></p>
-            </div>
-        `,
+    Mistral:
+`<div class="ai-block">
+  <p>Decision path</p>
+  <ol>
+    <li>If you are vegetarian most days, make B12 the first check. Food sources can be inconsistent unless you regularly use fortified foods [S1].</li>
+    <li>If you get little sun or live through long winters, vitamin D becomes a practical candidate; a 25-OH-D blood test can guide dosing [S2].</li>
+    <li>If you never eat fish, algae oil is the direct EPA/DHA option; flax, chia and walnuts mainly provide ALA, not much preformed EPA/DHA [S3].</li>
+    <li>If your salt is non-iodized and seaweed is rare, iodine may be a gap, especially around pregnancy planning [S4].</li>
+    <li>If fatigue or heavy periods are part of the picture, check ferritin or an iron panel before taking iron [S5].</li>
+    <li>If you train hard, creatine monohydrate at a small daily dose is a reasonable performance-oriented add-on [S6].</li>
+    <li>If dairy and fortified plant drinks are low, calculate calcium intake before buying a pill [S7].</li>
+  </ol>
+  <p><small>Start with the smallest set that solves a real gap, then review symptoms and labs after several weeks.</small></p>
+</div>`,
 
-          Gemini:
-        `<div class="ai-block">
-            <p><u>Pick your profile: which one sounds like you?</u></p>
-            <ul>
-                <li><strong>1. Busy office vegetarian</strong><br>
-                    • B12 routinely<br>
-                    • D3 in winter or with low sun exposure<br>
-                    • Optional algae EPA+DHA if fish is off the menu</li>
-                <li><strong>2. Strength / endurance athlete</strong><br>
-                    • B12 + D3 as needed<br>
-                    • Creatine 3–5 g/day<br>
-                    • Check iron and ferritin if fatigue or performance drops</li>
-                <li><strong>3. Planning pregnancy / pregnant</strong><br>
-                    • Prenatal with folate, B12 and iodine (often ~150 µg/day)<br>
-                    • Iron according to lab results<br>
-                    • Discuss omega-3 and vitamin D with your doctor</li>
-                <li><strong>4. Dairy-light or dairy-free</strong><br>
-                    • Focus on calcium from fortified plant milks, tofu, greens<br>
-                    • Add 300–500 mg calcium if you consistently fall short</li>
-                <li><strong>5. “Everything from grains and legumes” pattern</strong><br>
-                    • Watch zinc and iron status<br>
-                    • Consider small doses of zinc + selenium if diet is very monotonous</li>
-            </ul>
-            <p><small>Real life is messy – you may be a mix of several profiles. When in doubt, get a basic blood panel and tailor things with a professional.</small></p>
-            </div>
-        `,
+    Anthropic:
+`<div class="ai-block">
+  <p>Clinician-style framing</p>
+  <p>A vegetarian diet can be nutritionally complete, but it moves several nutrients from automatic intake to active monitoring. The strongest routine recommendation is B12 because natural plant foods are not dependable B12 sources [S1].</p>
+  <ul>
+    <li>Core: B12 through supplement or fortified foods.</li>
+    <li>Common gaps: iodine, vitamin D and long-chain omega-3, depending on salt choice, sun exposure and fish avoidance [S2] [S3] [S4].</li>
+    <li>Lab-driven: iron status, ferritin and sometimes zinc should guide extra supplementation [S5] [S6].</li>
+    <li>Optional performance layer: creatine may help people doing resistance training or repeated high-intensity work [S7].</li>
+  </ul>
+  <p>The practical workflow is diet review, targeted labs, one or two changes, then recheck rather than stacking many products at once.</p>
+  <p><small>This is educational context and not a diagnosis or prescription.</small></p>
+</div>`,
 
-          DeepSeek:
-        `<div class="ai-block">
-            <p><u>Risk &amp; safety oriented checklist</u></p>
-            <h4>A. Before you buy anything</h4>
-            <ul>
-                <li>List your meds (e.g., levothyroxine, anticoagulants, metformin).</li>
-                <li>Collect recent lab results (B12, ferritin, 25-OH-D, thyroid, etc.).</li>
-                <li>Write down your typical week of food (2–3 days is better than guessing).</li>
-            </ul>
-            <h4>B. Smart additions for many vegetarians</h4>
-            <ul>
-                <li>B12 supplement as a default.</li>
-                <li>D3 if sun exposure is low.</li>
-                <li>Iodine if salt is not iodized and seaweed is rare.</li>
-                <li>Algae EPA+DHA if you never eat fish.</li>
-                <li>Creatine 3 g/day if you train seriously.</li>
-            </ul>
-            <h4>C. Things to actively avoid</h4>
-            <ul>
-                <li>High-dose “shotgun” multivitamins without a clear reason.</li>
-                <li>Taking iron “just in case” without lab-confirmed deficiency.</li>
-                <li>Stacking several products with overlapping ingredients (e.g., multiple D or A sources).</li>
-                <li>Ignoring timing: keep iron and calcium away from levothyroxine by ≥4 hours.</li>
-            </ul>
-            <p><small>Think of supplements as tools, not a lifestyle. Use the smallest, safest set that actually solves a defined problem.</small></p>
-            </div>
-        `,
+    Gemini:
+`<div class="ai-block">
+  <p>Pick the profile that fits best</p>
+  <ul>
+    <li>Busy office vegetarian: B12 as the anchor; vitamin D is worth checking when most daylight hours are indoors [S1] [S2].</li>
+    <li>Strength or endurance athlete: keep the nutrition basics, then consider creatine; monitor iron if performance drops or recovery worsens [S3] [S4].</li>
+    <li>Pregnancy planning or pregnant: discuss a prenatal approach with folate, B12 and iodine; iron should follow labs and clinician advice [S1] [S5].</li>
+    <li>Dairy-light or dairy-free: count calcium from fortified drinks, tofu, dairy alternatives and greens before adding a supplement [S6].</li>
+    <li>Grain-and-legume-heavy pattern: zinc absorption can be lower in high-phytate diets, so food planning matters [S7].</li>
+  </ul>
+  <p><small>Most people are a mix of profiles. The useful answer is the one that matches your diet and labs.</small></p>
+</div>`,
 
-          Grok:
-        `<div class="ai-block">
-            <p><u>No-BS take on vegetarian supplements</u></p>
-            <ul>
-                <li><strong>B12:</strong> Yes. Just do it. Your brain and nerves like it. Food sources in vegetarian diets are unreliable.</li>
-                <li><strong>Vitamin D:</strong> If you live in a place with winter and have a job that involves “indoors”, there’s a good chance you’re low.</li>
-                <li><strong>Omega-3 (algae):</strong> Fish on pause? Algae oil is the vegetarian detour.</li>
-                <li><strong>Iodine:</strong> Fancy pink salt looks nice on Instagram, not so great for your thyroid if it’s not iodized.</li>
-                <li><strong>Iron:</strong> Only with blood work. Guessing with iron is a bad hobby.</li>
-                <li><strong>Creatine:</strong> Take it if you lift, sprint or game hard. Otherwise, it’s not mandatory.</li>
-            </ul>
-            <p><small>Reminder: this is information, not medical orders. Internet advice is great for questions, not for diagnosing you.</small></p>
-            </div>
-        `
-    },
-        consensus:
-        `<div class="ai-consensus">
-          <p><u>Consensus (Demo — vegetarian focus)</u></p>
-          <p>Vegetarians benefit from a <em>targeted</em> supplement approach rather than large stacks. The near-universal baseline is <span>B12 50–100 µg/day</span> or <span>1,000 µg weekly</span>. Add context-dependent items:</p>
-        <ul>
-            <li><strong>Vitamin B12</strong>: almost universally advised (50–100 µg/day or ~1,000 µg weekly).</li>
-            <li><strong>Vitamin D3</strong>: 1,000–2,000 IU/day, especially with low sun exposure.</li>
-            <li><strong>Iodine</strong>: ~150 µg/day if iodized salt or seaweed aren’t regular parts of the diet.</li>
-            <li><strong>Omega-3 (algae EPA+DHA)</strong>: 250–500 mg/day for fully fish-free diets.</li>
-        </ul>
-        <p>Context-dependent items</p>
-        <ul>
-            <li><strong>Iron</strong>: only when confirmed by labs (ferritin/iron panel).</li>
-            <li><strong>Calcium</strong>: aim for ~1,000 mg/day total; add 300–500 mg if intake is low.</li>
-            <li><strong>Zinc / Selenium</strong>: mostly relevant for grain/legume-heavy patterns.</li>
-            <li><strong>Creatine</strong>: 3–5 g/day for strength, endurance or cognitive performance goals.</li>
-        </ul>
-        <p>All models emphasize: pick high-quality, third-party tested products, 
-        watch interactions (e.g., keeping levothyroxine away from iron/calcium), and 
-        recheck labs after ~8–12 weeks. This is general information, not medical advice.</p>
-    </div>`,
+    DeepSeek:
+`<div class="ai-block">
+  <p>Risk and safety checklist</p>
+  <h4>Before buying</h4>
+  <ul>
+    <li>List medication, thyroid history and recent labs. Iron and calcium can interact with some medicines, so timing matters [S1] [S2].</li>
+    <li>Write down a normal week of meals; this quickly reveals whether B12, D, iodine, omega-3 or calcium are actually low [S3] [S4] [S5] [S6].</li>
+  </ul>
+  <h4>Commonly sensible</h4>
+  <ul>
+    <li>B12 for most vegetarians, D when sun exposure is low, iodine when iodized salt and seaweed are absent, and algae EPA/DHA for fish-free diets [S3] [S4] [S5] [S6].</li>
+    <li>Creatine is a specific performance tool, not a universal health requirement [S7].</li>
+  </ul>
+  <h4>Avoid</h4>
+  <ul>
+    <li>High-dose shotgun multis without a reason.</li>
+    <li>Iron just in case; overdose risk and side effects make labs important [S1].</li>
+    <li>Overlapping products that quietly add multiple doses of the same nutrient.</li>
+  </ul>
+  <p><small>Use supplements as precise tools: one gap, one intervention, one follow-up check.</small></p>
+</div>`,
 
-    differences:
-      `The consensus answer is **largely** credible.
+    Grok:
+`<div class="ai-block">
+  <p>Plain-language take</p>
+  <ul>
+    <li>B12: yes, treat it as the boring baseline. Vegetarian diets can miss it unless fortified foods are deliberate [S1].</li>
+    <li>Vitamin D: if your lifestyle is mostly indoors or your winters are long, test or supplement thoughtfully [S2].</li>
+    <li>Omega-3: if fish is off the menu, algae oil is the direct EPA/DHA route [S3].</li>
+    <li>Iodine: trendy non-iodized salts do not help your thyroid; check your actual iodine sources [S4].</li>
+    <li>Iron: blood work first. Guessing with iron is unnecessary risk [S5].</li>
+    <li>Creatine: useful if you lift, sprint or train hard; not mandatory for everyone [S6].</li>
+  </ul>
+  <p><small>Internet guidance can help you ask better questions; your labs and clinician still settle the personal answer.</small></p>
+</div>`
+  },
+  consensusSources: demoSources(["b12", "vitaminD", "iodine", "omega3", "iron", "calcium", "zinc", "creatine"]),
+  consensus:
+`<div class="ai-consensus">
+  <p>Consensus: vegetarian supplement priorities</p>
+  <p>The models converge on a targeted approach. The most consistent baseline is B12 because vegetarian and especially vegan patterns can provide too little without fortified foods or supplements [S1]. After that, the answer depends on sun exposure, iodine sources, fish avoidance, calcium intake and labs.</p>
+  <ul>
+    <li>B12: routine supplement or reliably fortified foods [S1].</li>
+    <li>Vitamin D: most relevant with low sun exposure or low measured 25-OH-D [S2].</li>
+    <li>Iodine: consider it when iodized salt, dairy, eggs, seafood and seaweed are not regular parts of the diet [S3].</li>
+    <li>Omega-3: algae EPA/DHA is the direct fish-free option [S4].</li>
+  </ul>
+  <p>Other nutrients are more conditional. Iron should follow ferritin or an iron panel rather than habit [S5]. Calcium is best handled by counting food and fortified products before topping up [S6]. Zinc can matter in monotonous high-grain or legume-heavy diets [S7]. Creatine is optional and most relevant for training or performance goals [S8].</p>
+  <p>Overall recommendation: choose the smallest targeted set, avoid overlapping high-dose products, and recheck labs after a defined interval. This remains general information, not personal medical advice.</p>
+</div>`,
 
-_____________
+  differences:
+`The consensus answer is largely credible.
 
-Most models agree on the core stack (B12 baseline; D3, iodine, algae EPA+DHA as context; iron only with labs; calcium to ~1,000 mg; creatine for athletes). Minor content nuances appear (e.g., zinc/copper balance, magnesium for sleep/performance, process/QA details) without contradictions.
+Most models agree on the important hierarchy: B12 first; vitamin D, iodine and algae EPA/DHA when lifestyle or diet indicates; iron only with labs; calcium by intake calculation; creatine mainly for training goals. The answers differ in tone and workflow, but not in the main practical advice.
 
 BestModel: Anthropic`
-      };
+};
 
-      /* === DEMO: Timing & Typing Configuration =============================== */
-      const DEMO_PHASES = {
-        preType: true,
-        order: ["OpenAI","Anthropic","Gemini","Mistral","DeepSeek","Grok"],
-        typeChars: 90,         // how many prompt characters to "type"
-        typeSpeed: 40,         // ms per character
-        gapBetweenModels: 540, // pause between models
-        pauseAfterTypingAll: 650
-      };
+/* === DEMO: Timing & Typing Configuration =============================== */
+const DEMO_PHASES = {
+  preType: true,
+  order: ["OpenAI", "Anthropic", "Gemini", "Mistral", "DeepSeek", "Grok"],
+  typeChars: 90,
+  typeSpeed: 40,
+  gapBetweenModels: 540,
+  pauseAfterTypingAll: 650
+};
 
-      const DEMO_CONSENSUS_DELAY_MS = 4200;
-      const DEMO_CONSENSUS_JITTER_MS = 600;
+const DEMO_CONSENSUS_DELAY_MS = 4200;
+const DEMO_CONSENSUS_JITTER_MS = 600;
+const DEMO_DELAY_BOOST_MS = 1800;
 
-      // Ladezeiten etwas länger machen (ohne alles neu zu tippen)
-      const DEMO_DELAY_BOOST_MS = 1800;
-      Object.keys(DEMO_DATA.delays).forEach(k => {
-        DEMO_DATA.delays[k] = (DEMO_DATA.delays[k] || 1500) + DEMO_DELAY_BOOST_MS;
-      });
+Object.keys(DEMO_DATA.delays).forEach(key => {
+  DEMO_DATA.delays[key] = (DEMO_DATA.delays[key] || 1500) + DEMO_DELAY_BOOST_MS;
+});
 
-      const MODEL_TO_BOX = {
-        OpenAI: "openaiResponse",
-        Mistral: "mistralResponse",
-        Anthropic: "claudeResponse",
-        Gemini: "geminiResponse",
-        DeepSeek: "deepseekResponse",
-        Grok: "grokResponse"
-      };
+const MODEL_TO_BOX = {
+  OpenAI: "openaiResponse",
+  Mistral: "mistralResponse",
+  Anthropic: "claudeResponse",
+  Gemini: "geminiResponse",
+  DeepSeek: "deepseekResponse",
+  Grok: "grokResponse"
+};
 
-      const sleep = (ms)=> new Promise(r=>setTimeout(r, ms));
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-      // Tippt Text in das Input/Textarea-Feld
-      async function typeIntoInput(inputEl, text, speed = 14) {
-        if (!inputEl) return;
-        inputEl.focus();
-        inputEl.value = "";
-        inputEl.dispatchEvent(new Event("input", { bubbles: true }));
-        for (let i = 0; i < text.length; i++) {
-          inputEl.value += text[i];
-          inputEl.dispatchEvent(new Event("input", { bubbles: true }));
-          const jitter = Math.random() * 6 - 3; // -3..+3ms
-          await sleep(Math.max(4, speed + jitter));
-          if (typeof inputEl.scrollTop === "number") inputEl.scrollTop = inputEl.scrollHeight;
-        }
-      }
-
-      function getBox(model){
-        const id = MODEL_TO_BOX[model];
-        const box = document.getElementById(id);
-        if (!box || box.classList.contains("excluded") || box.style.display === "none") return null;
-        return box;
-      }
-
-      async function typeInto(el, text, speed){
-        el.textContent = "";
-        for (let i=0;i<text.length;i++){
-          el.textContent += text[i];
-          // kleine Randomisierung wirkt natürlicher
-          const jitter = Math.random()*6 - 3; // -3..+3
-          await sleep(Math.max(4, speed + jitter));
-        }
-      }
-
-        function setSpinnerEl(box){
-            const p = box.querySelector(".collapsible-content");
-            if (p) p.innerHTML = window.spinnerHTML;
-        }
-
-        window.setSpinnerEl = setSpinnerEl;
-
-      // Der eigentliche Demo-Lauf
-      async function runDemoFlow() {
-        // Buttons blocken
-        const sendBtn = document.getElementById("sendButton");
-        const consensusBtn = document.getElementById("consensusButton");
-        if (sendBtn) sendBtn.disabled = true;
-        if (consensusBtn) consensusBtn.disabled = true;
-        window.setAgentModeStatus?.("running");
-
-        // Prompt in das Eingabefeld setzen
-        const qi = document.getElementById("questionInput");
-        if (qi && !qi.value.trim()) qi.value = DEMO_SCENARIO_PROMPT;
-
-        // === 1) Vorphase: so tun, als würden wir an Modelle „eingeben“ ==========
-        // === 1) Vorphase: Prompt in das Input-Feld „tippen“ ======================
-        if (DEMO_PHASES.preType) {
-          const qiEl = document.getElementById("questionInput");
-          const snippet =
-            DEMO_SCENARIO_PROMPT.slice(0, DEMO_PHASES.typeChars) +
-            (DEMO_SCENARIO_PROMPT.length > DEMO_PHASES.typeChars ? "…" : "");
-          await typeIntoInput(qiEl, snippet, DEMO_PHASES.typeSpeed);
-          await sleep(DEMO_PHASES.pauseAfterTypingAll);
-        }
-
-        // === 2) Jetzt erst Spinners in alle aktiven Boxen =======================
-        window.setAgentModeStatus?.("running");
-        Object.keys(MODEL_TO_BOX).forEach(key => {
-          const box = getBox(key);
-          if (box) setSpinnerEl(box);
-        });
-
-        // === 3) Gestaffelte Antworten „einlaufen“ lassen ========================
-        await Promise.all(Object.keys(MODEL_TO_BOX).map(model =>
-          new Promise(resolve => {
-            setTimeout(() => {
-              const box = getBox(model);
-                if (box){
-                const p = box.querySelector(".collapsible-content");
-                if (p && window.injectMarkdown) {
-                    window.injectMarkdown(p, DEMO_DATA.responses[model]);
-                }
-                }
-              resolve();
-            }, DEMO_DATA.delays[model] || 1800);
-          })
-        ));
-
-        // === 4) Consensus/Differences – wie gehabt ==============================
-        window.setAgentModeStatus?.("complete");
-
-        const consensusDiv = document.getElementById("consensusResponse");
-        const mainP = consensusDiv?.querySelector(".consensus-main p");
-        const diffP = consensusDiv?.querySelector(".consensus-differences p");
-        const auto = document.getElementById("autoConsensusToggle")?.checked;
-
-        const renderConsensus = () => {
-        if (mainP && window.injectMarkdown) {
-            window.injectMarkdown(mainP, DEMO_DATA.consensus);
-        }
-        if (diffP) {
-            window.applyCredibilityFrame?.(diffP, DEMO_DATA.differences);
-            const html = marked.parse(
-            (window.colorizeCredibility?.(DEMO_DATA.differences) ?? DEMO_DATA.differences)
-            );
-            diffP.innerHTML = DOMPurify.sanitize(html);
-        }
-        const best = (DEMO_DATA.differences.match(/BestModel:\s*(.*)/i)?.[1] || "").trim();
-        if (best) window.recordModelVote?.(best, "BestModel");
-        };
-
-        if (auto){
-          window.resetCredibilityFrame?.(consensusDiv?.querySelector(".consensus-differences"));
-          if (mainP) mainP.innerHTML = window.spinnerHTML;
-          if (diffP) diffP.innerHTML = window.spinnerHTML;
-          setTimeout(
-            renderConsensus,
-            DEMO_CONSENSUS_DELAY_MS + Math.floor(Math.random() * DEMO_CONSENSUS_JITTER_MS)
-          );
-
-        } else if (consensusBtn){
-          const originalOnclick = consensusBtn.onclick;
-          consensusBtn.onclick = () => {
-            if (mainP) mainP.innerHTML = window.spinnerHTML;
-            if (diffP) diffP.innerHTML = window.spinnerHTML;
-            setTimeout(
-              renderConsensus,
-              DEMO_CONSENSUS_DELAY_MS + Math.floor(Math.random() * DEMO_CONSENSUS_JITTER_MS)
-            );
-            consensusBtn.onclick = originalOnclick;
-          };
-        }
-
-        // Buttons wieder freigeben
-        if (sendBtn) sendBtn.disabled = false;
-        if (consensusBtn) consensusBtn.disabled = false;
-      }
-
-  function createStartDemoChip() {
-    if (localStorage.getItem("demoChipDismissed")) return;
-    const container = document.querySelector(".chat-input-container");
-    if (!container || container.querySelector(".demo-chip")) return;
-
-    const btn = document.createElement("button");
-    btn.className = "demo-chip";
-    btn.type = "button";
-    btn.setAttribute("aria-label","Start interactive demo");
-    btn.textContent = "Start Demo";
-
-    btn.addEventListener("click", async () => {
-      localStorage.setItem("demoChipDismissed","1");
-      btn.remove();
-      await runDemoFlow();
-    });
-
-    container.appendChild(btn);
+function getDemoStorage() {
+  try {
+    return window.localStorage || null;
+  } catch (e) {
+    return null;
   }
-  window.createStartDemoChip = createStartDemoChip;
-  createStartDemoChip();
-  window.runDemoFlow = runDemoFlow;
+}
+
+function shouldAvoidDemoInputFocus() {
+  return window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches ||
+    window.matchMedia?.("(max-width: 768px)")?.matches;
+}
+
+async function typeIntoInput(inputEl, text, speed = 14, options = {}) {
+  if (!inputEl) return;
+  const allowFocus = options.allowFocus ?? !shouldAvoidDemoInputFocus();
+  if (allowFocus) {
+    inputEl.focus({ preventScroll: true });
+  } else if (document.activeElement === inputEl) {
+    inputEl.blur();
+  }
+
+  inputEl.value = "";
+  inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+  for (let i = 0; i < text.length; i++) {
+    inputEl.value += text[i];
+    inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+    const jitter = Math.random() * 6 - 3;
+    await sleep(Math.max(4, speed + jitter));
+    if (typeof inputEl.scrollTop === "number") inputEl.scrollTop = inputEl.scrollHeight;
+  }
+
+  if (!allowFocus && document.activeElement === inputEl) {
+    inputEl.blur();
+  }
+}
+
+function getBox(model) {
+  const id = MODEL_TO_BOX[model];
+  const box = document.getElementById(id);
+  if (!box || box.classList.contains("excluded") || box.style.display === "none") return null;
+  return box;
+}
+
+function setSpinnerEl(box) {
+  const p = box.querySelector(".collapsible-content");
+  if (p) p.innerHTML = window.spinnerHTML;
+}
+
+window.setSpinnerEl = setSpinnerEl;
+
+function getDemoSourcesForModel(model) {
+  return demoSources(DEMO_DATA.sourceKeys[model] || []);
+}
+
+function renderDemoModelResponse(model, outputEl) {
+  const markdown = DEMO_DATA.responses[model] || "";
+  const sources = getDemoSourcesForModel(model);
+  if (window.renderModelResponseWithSources) {
+    window.renderModelResponseWithSources(outputEl, markdown, sources);
+    return;
+  }
+  if (window.injectMarkdown) window.injectMarkdown(outputEl, markdown);
+}
+
+function renderDemoConsensus(mainP, diffP) {
+  let consensusMarkdown = DEMO_DATA.consensus;
+  if (window.registerResponseSources) {
+    consensusMarkdown = window.registerResponseSources(consensusMarkdown, DEMO_DATA.consensusSources);
+  } else if (window.mergeEvidenceSources) {
+    window.mergeEvidenceSources(DEMO_DATA.consensusSources);
+  }
+
+  if (mainP && window.injectMarkdown) {
+    window.injectMarkdown(mainP, consensusMarkdown);
+  }
+  if (diffP) {
+    window.applyCredibilityFrame?.(diffP, DEMO_DATA.differences);
+    const html = marked.parse(
+      (window.colorizeCredibility?.(DEMO_DATA.differences) ?? DEMO_DATA.differences)
+    );
+    diffP.innerHTML = DOMPurify.sanitize(html);
+  }
+  const best = (DEMO_DATA.differences.match(/BestModel:\s*(.*)/i)?.[1] || "").trim();
+  if (best) window.recordModelVote?.(best, "BestModel");
+}
+
+async function runDemoFlow() {
+  const sendBtn = document.getElementById("sendButton");
+  const consensusBtn = document.getElementById("consensusButton");
+  if (sendBtn) sendBtn.disabled = true;
+  if (consensusBtn) consensusBtn.disabled = true;
+  window.setAgentModeStatus?.("running");
+
+  window.currentEvidenceSources = [];
+  window.renderEvidenceSources?.([]);
+
+  const qi = document.getElementById("questionInput");
+  if (qi && !qi.value.trim()) qi.value = DEMO_SCENARIO_PROMPT;
+
+  if (DEMO_PHASES.preType) {
+    const qiEl = document.getElementById("questionInput");
+    const snippet =
+      DEMO_SCENARIO_PROMPT.slice(0, DEMO_PHASES.typeChars) +
+      (DEMO_SCENARIO_PROMPT.length > DEMO_PHASES.typeChars ? "..." : "");
+    await typeIntoInput(qiEl, snippet, DEMO_PHASES.typeSpeed);
+    await sleep(DEMO_PHASES.pauseAfterTypingAll);
+  }
+
+  window.setAgentModeStatus?.("running");
+  Object.keys(MODEL_TO_BOX).forEach(key => {
+    const box = getBox(key);
+    if (box) setSpinnerEl(box);
+  });
+
+  await Promise.all(Object.keys(MODEL_TO_BOX).map(model =>
+    new Promise(resolve => {
+      setTimeout(() => {
+        const box = getBox(model);
+        if (box) {
+          const p = box.querySelector(".collapsible-content");
+          if (p) renderDemoModelResponse(model, p);
+        }
+        resolve();
+      }, DEMO_DATA.delays[model] || 1800);
+    })
+  ));
+
+  window.setAgentModeStatus?.("complete");
+
+  const consensusDiv = document.getElementById("consensusResponse");
+  const mainP = consensusDiv?.querySelector(".consensus-main p");
+  const diffP = consensusDiv?.querySelector(".consensus-differences p");
+  const auto = document.getElementById("autoConsensusToggle")?.checked;
+
+  if (auto) {
+    window.resetCredibilityFrame?.(consensusDiv?.querySelector(".consensus-differences"));
+    if (mainP) mainP.innerHTML = window.spinnerHTML;
+    if (diffP) diffP.innerHTML = window.spinnerHTML;
+    setTimeout(
+      () => renderDemoConsensus(mainP, diffP),
+      DEMO_CONSENSUS_DELAY_MS + Math.floor(Math.random() * DEMO_CONSENSUS_JITTER_MS)
+    );
+  } else if (consensusBtn) {
+    const originalOnclick = consensusBtn.onclick;
+    consensusBtn.onclick = () => {
+      if (mainP) mainP.innerHTML = window.spinnerHTML;
+      if (diffP) diffP.innerHTML = window.spinnerHTML;
+      setTimeout(
+        () => renderDemoConsensus(mainP, diffP),
+        DEMO_CONSENSUS_DELAY_MS + Math.floor(Math.random() * DEMO_CONSENSUS_JITTER_MS)
+      );
+      consensusBtn.onclick = originalOnclick;
+    };
+  }
+
+  if (sendBtn) sendBtn.disabled = false;
+  if (consensusBtn) consensusBtn.disabled = false;
+}
+
+function createStartDemoChip() {
+  const storage = getDemoStorage();
+  if (storage?.getItem("demoChipDismissed")) return;
+  const container = document.querySelector(".chat-input-container");
+  if (!container || container.querySelector(".demo-chip")) return;
+
+  const btn = document.createElement("button");
+  btn.className = "demo-chip";
+  btn.type = "button";
+  btn.setAttribute("aria-label", "Start interactive demo");
+  btn.textContent = "Try Demo";
+
+  btn.addEventListener("click", async () => {
+    storage?.setItem("demoChipDismissed", "1");
+    btn.remove();
+    await runDemoFlow();
+  });
+
+  container.appendChild(btn);
+}
+
+window.runDemoFlow = runDemoFlow;
+window.createStartDemoChip = createStartDemoChip;
+createStartDemoChip();
 
 function toggleSettingsCollapse(contentId, arrowId) {
   const content = document.getElementById(contentId);
   const arrow = document.getElementById(arrowId);
-  
+
   if (content.style.display === "none") {
-    // Einblenden
     content.style.display = "block";
-    if(arrow) arrow.classList.add("rotated"); // Pfeil drehen (optional, siehe CSS)
-    if(arrow) arrow.innerHTML = "&#9650;";    // Oder Pfeil-Zeichen ändern (hoch)
+    if (arrow) arrow.classList.add("rotated");
+    if (arrow) arrow.innerHTML = "&#9650;";
   } else {
-    // Ausblenden
     content.style.display = "none";
-    if(arrow) arrow.classList.remove("rotated");
-    if(arrow) arrow.innerHTML = "&#9660;";    // Pfeil-Zeichen ändern (runter)
+    if (arrow) arrow.classList.remove("rotated");
+    if (arrow) arrow.innerHTML = "&#9660;";
   }
 }
 
