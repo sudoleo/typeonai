@@ -194,7 +194,6 @@
             <span class="search-mode-label deep-switch-label">Deep Think</span>
             <span id="deepthinkDisclaimer" class="deepthink-disclaimer"
               style="display: none; font-size: 0.8em; margin-left: 5px;">
-              Reasoning models. Thoughtful responses.
             </span>
           </div>
           <button type="button" id="modeExplainerTrigger" class="mode-explainer-trigger" aria-controls="modeExplainer" aria-expanded="false" title="Explain modes">
@@ -990,7 +989,7 @@
           Grok: "grok-4.3"
         };
 
-        function updateDeepThinkText(showMobilePopup = false) {
+        function updateDeepThinkText() {
           const deepSearchToggle = document.getElementById("deepSearchToggle");
 
           const deepSearchActive = !!deepSearchToggle && deepSearchToggle.checked;
@@ -998,21 +997,15 @@
           const deepthinkDisclaimer = document.getElementById("deepthinkDisclaimer");
 
           // -------------------------
-          // Texte vorbereiten
+          // Suppress the inline Deep Think explainer next to the controls.
           // -------------------------
-          const deepText = "Reasoning models. Thoughtful responses.";
+          const deepText = "";
 
           // -------------------------
           // Mobile / kleine Screens: Popup
           // -------------------------
           if (isCompactControlLayout()) {
             // Priorität Deep Think: wenn beides an ist, nur Deep Think Text zeigen
-            if (showMobilePopup) {
-              if (deepSearchActive) {
-                showMobileInfoPopup(deepText);
-              }
-            }
-
             if (deepthinkDisclaimer) deepthinkDisclaimer.style.display = "none";
           } else {
             // -------------------------
@@ -1024,7 +1017,7 @@
                 // 1) Deep Think aktiv -> Deep Text
                 // 2) Nur Web Search aktiv -> Web-Search-Text
                 deepthinkDisclaimer.textContent = deepText;
-                deepthinkDisclaimer.style.display = "inline-block";
+                deepthinkDisclaimer.style.display = "none";
               } else {
                 deepthinkDisclaimer.style.display = "none";
               }

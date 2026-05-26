@@ -3711,7 +3711,7 @@ option.early-option {
   min-height: 24px;
   color: var(--text-color);
   line-height: 1;
-  transform: translateY(1.5px);
+  transform: translateY(0);
 }
 
 .agent-mode-switch .slider {

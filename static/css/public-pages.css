@@ -394,6 +394,7 @@ a:hover {
 .mock-mode-label {
   min-width: 0;
   line-height: 1;
+  transform: translateY(2px);
 }
 
 .mock-switch {
