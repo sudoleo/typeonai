@@ -31,6 +31,12 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 window.auth = auth;
 
+function trackAppEvent(eventName, eventData = {}) {
+  if (typeof window.trackUmamiEvent === "function") {
+    window.trackUmamiEvent(eventName, eventData);
+  }
+}
+
 // Standard-Persistenz global setzen (beim Laden, nicht im Click-Handler)
 setPersistence(auth, browserLocalPersistence)
   .catch(() => setPersistence(auth, browserSessionPersistence))
@@ -234,9 +240,11 @@ onIdTokenChanged(auth, async (user) => {
     emailIcon.addEventListener("click", e => {
       e.stopPropagation();
       emailPopup.style.display = emailPopup.style.display === "none" ? "block" : "none";
+      trackAppEvent("app_account_menu_toggled", { open: emailPopup.style.display === "block" });
     });
 
     logoutButton.addEventListener("click", () => {
+      trackAppEvent("auth_logout_click");
       signOut(auth).catch(err => console.error("Logout-Fehler", err));
     });
 
@@ -372,6 +380,7 @@ function mapPasswordResetError(error) {
 document.getElementById("loginButton").addEventListener("click", () => {
   const email = document.getElementById("loginEmail").value;
   const password = document.getElementById("loginPassword").value;
+  trackAppEvent("auth_email_login_started");
   
   // Fehleranzeige erstmal leeren
   loginErr.textContent = "";
@@ -398,11 +407,13 @@ document.getElementById("loginButton").addEventListener("click", () => {
         alert("Please verify your e-mail address first. Check your inbox for the confirmation link.");
         signOut(auth);
       }
+      trackAppEvent("auth_email_login_result", { status: user.emailVerified ? "success" : "unverified" });
     })
     .catch((error) => {
       // Statt error.message → gemappte, neutrale Meldung
       const msg = mapFirebaseLoginError(error);
       loginErr.textContent = msg;
+      trackAppEvent("auth_email_login_result", { status: "error" });
     });
 });
 
@@ -458,11 +469,13 @@ function setMode(mode) {
 toggleRegisterBtn.addEventListener("click", () => {
   const current = formEl.dataset.mode === "register" ? "register" : "login";
   setMode(current === "login" ? "register" : "login");
+  trackAppEvent("auth_mode_changed", { mode: current === "login" ? "register" : "login" });
 });
 
 // --- Registrierung (läuft NICHT über loginButton, sondern über confirmRegisterButton) ---
 confirmRegisterBtn.addEventListener("click", () => {
   registerErr.textContent = "";
+  trackAppEvent("auth_register_started");
 
   const email = (emailEl.value || "").trim();
   const email2 = (emailConfirmEl.value || "").trim();
@@ -508,25 +521,31 @@ confirmRegisterBtn.addEventListener("click", () => {
                 alert("Registration successful! Please confirm your e-mail address by clicking on the link in the e-mail.");
                 signOut(auth);
                 setMode("login");
+                trackAppEvent("auth_register_result", { status: "success" });
               })
               .catch((error) => {
                 // Keine rohen Firebase-Texte
                 console.error("Error sending verification e-mail:", error);
                 registerErr.textContent = "Error sending the verification e-mail. Please try again later.";
+                trackAppEvent("auth_register_result", { status: "email_error" });
               });
           })
           .catch((error) => {
             const msg = mapFirebaseRegisterError(error);
             registerErr.textContent = msg;
+            trackAppEvent("auth_register_result", { status: "error" });
           });
       } else if (data.detail) {
         registerErr.textContent = data.detail;
+        trackAppEvent("auth_register_result", { status: "error" });
       } else {
         registerErr.textContent = "Unexpected response from server.";
+        trackAppEvent("auth_register_result", { status: "error" });
       }
     })
     .catch((error) => {
       registerErr.textContent = error.message;
+      trackAppEvent("auth_register_result", { status: "error" });
     });
 });
 
@@ -535,6 +554,7 @@ setMode("login");
 
 document.getElementById("forgotPasswordButton").addEventListener("click", () => {
   const email = document.getElementById("loginEmail").value;
+  trackAppEvent("auth_password_reset_started");
   if (!email) {
     alert("Please enter your e-mail address to reset the password. Check your spam folder.");
     return;
@@ -542,21 +562,25 @@ document.getElementById("forgotPasswordButton").addEventListener("click", () => 
   sendPasswordResetEmail(auth, email)
     .then(() => {
       alert("An e-mail to reset your password has been sent to " + email);
+      trackAppEvent("auth_password_reset_result", { status: "success" });
     })
     .catch((error) => {
       const msg = mapPasswordResetError(error);
       alert(msg);
+      trackAppEvent("auth_password_reset_result", { status: "error" });
     });
 });
 
 // Klick auf den Login-Bereich: Öffne das Modal, wenn nicht angemeldet, oder melde ab, wenn schon eingeloggt
 document.getElementById("loginContainer").addEventListener("click", () => {
   if (auth.currentUser) {
+    trackAppEvent("auth_logout_click");
     signOut(auth).catch((error) => {
       console.error("Fehler beim Logout:", error);
     });
   } else {
     document.getElementById("loginModal").style.display = "block";
+    trackAppEvent("auth_modal_open");
   }
 });
 
@@ -572,15 +596,18 @@ function isIOS() {
 function handleGoogleSignIn() {
   const loginErrorEl = document.getElementById("loginError");
   if (loginErrorEl) loginErrorEl.textContent = "";
+  trackAppEvent("auth_google_login_started");
 
   // GANZ WICHTIG: signInWithPopup wird direkt im Click-Handler aufgerufen,
   // ohne vorherige await-/Promise-Ketten.
   signInWithPopup(auth, googleProvider)
     .then(result => {
+      trackAppEvent("auth_google_login_result", { status: "success" });
       return afterGoogleLogin(result.user);
     })
     .catch(err => {
       console.error("Google sign-in failed:", err);
+      trackAppEvent("auth_google_login_result", { status: "error" });
 
       if (!loginErrorEl) return;
 
@@ -736,6 +763,7 @@ async function saveBookmark(question, response, modelName, mode) {
             // Und ins UI einfügen
             addBookmarkToDOM(data.bookmark);
         }
+        trackAppEvent("app_bookmark_saved", { type: "model", mode });
     }
 
   } catch (error) {
@@ -768,7 +796,9 @@ async function saveBookmarkConsensus(question, consensusText, differencesText) {
     const data = await res.json();
     if (!res.ok) {
       console.error("Error saving consensus bookmark:", data.detail);
+      return;
     }
+    trackAppEvent("app_bookmark_saved", { type: "consensus" });
   } catch (error) {
     console.error("Error in saveBookmarkConsensus:", error);
   }
@@ -948,6 +978,7 @@ async function deleteBookmark(bookmarkId) {
     window.bookmarksData = window.bookmarksData.filter(b => b.id !== bookmarkId);
     const el = document.querySelector(`.bookmark[data-id="${bookmarkId}"]`);
     if (el) el.remove();
+    trackAppEvent("app_bookmark_deleted");
 
   } catch (error) {
     console.error("Error in deleteBookmark:", error);
@@ -1038,6 +1069,7 @@ function addBookmarkToDOM(bookmark) {
     // oder nehmen das übergebene Objekt.
     const currentData = window.bookmarksData.find(b => b.id === bookmark.id) || bookmark;
     loadSingleBookmarkUI(currentData);
+    trackAppEvent("app_bookmark_opened");
   });
 
   // WICHTIG: prepend statt appendChild, damit es oben erscheint

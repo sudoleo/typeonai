@@ -18,7 +18,7 @@
     })();
   </script>
   <!-- Umami Cloud Tracking -->
-  <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b"></script>
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
 <body class="landing-page">
   <nav class="site-nav" aria-label="Primary">
@@ -45,7 +45,7 @@
         </p>
         <div class="hero-actions">
           <a id="ctaButton" href="/app" class="button-primary">Start comparing</a>
-          <a href="#product" class="button-secondary">Watch the workflow</a>
+          <a href="#product" class="button-secondary" data-umami-event="landing_watch_workflow">Watch the workflow</a>
         </div>
         <div class="hero-proof" aria-label="Product highlights">
           <span>Direct provider answers</span>
@@ -270,7 +270,7 @@
     <section class="final-cta landing-shell">
       <p class="eyebrow">Get the product view</p>
       <h2>Open consens.io and compare your next answer across models.</h2>
-      <a href="/app" class="button-primary">Open app</a>
+      <a href="/app" class="button-primary" data-umami-event="landing_final_open_app">Open app</a>
     </section>
   </main>
 
@@ -332,6 +332,9 @@
         if (button) {
           button.addEventListener("click", () => {
             sessionStorage.setItem("skipLandingRedirect", "1");
+            if (window.umami && typeof window.umami.track === "function") {
+              window.umami.track(id === "ctaButton" ? "landing_hero_start" : "landing_nav_open_app");
+            }
           });
         }
       });

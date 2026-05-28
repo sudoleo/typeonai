@@ -19,7 +19,7 @@
     })();
   </script>
   <!-- Umami Cloud Tracking -->
-  <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b"></script>
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
 <body>
   <nav class="site-nav" aria-label="Primary">
@@ -72,7 +72,41 @@
       </section>
 
       <section class="legal-panel">
-        <h2>3. Provider routing</h2>
+        <h2>3. Usage analytics with Umami</h2>
+        <p>
+          We use Umami Cloud for privacy-focused web analytics. Umami records page views and selected interaction
+          events so we can understand which parts of consens.io are used, improve the product, find friction, and
+          prevent abuse. The tracker is configured to respect browser Do Not Track signals and to exclude URL search
+          parameters and hash fragments.
+        </p>
+        <p>
+          Umami may process technical usage information such as visited pages, referrer, browser, operating system,
+          device type, approximate country, timestamps, and the custom events listed below. Umami states that its
+          tracking code does not use cookies, anonymizes collected data, and does not identify users across websites.
+        </p>
+        <p>
+          The custom events we track are limited to product usage signals: landing-page calls to action, opening or
+          using the app, sending or cancelling a query, completing a model run, generating or cancelling a consensus,
+          copying a consensus or citation, changing interface modes, model selection changes, sidebar section opens,
+          settings/help/feedback actions, login/register/password-reset attempts and outcomes, bookmark save/open/delete
+          actions, API-key test outcomes, and Pro-interest clicks.
+        </p>
+        <p>
+          Event properties are limited to non-content metadata, for example selected mode, number of selected models,
+          provider or model label, status, trigger type, and boolean states such as logged-in, own-keys, Agent Mode,
+          or Auto Consensus. We do <strong>not</strong> send prompts, model answers, consensus text, feedback message
+          text, e-mail addresses, passwords, authentication tokens, API keys, bookmark contents, or other user-entered
+          content to Umami as custom event data.
+        </p>
+        <p class="subtle">
+          Legal basis: Art. 6(1)(f) GDPR, our legitimate interest in measuring aggregate product usage, improving the
+          service, maintaining security, and prioritizing development. You can object to this processing under Art. 21
+          GDPR using the contact details above.
+        </p>
+      </section>
+
+      <section class="legal-panel">
+        <h2>4. Provider routing</h2>
         <p>
           Model requests are sent to the model providers selected for the query, such as OpenAI, Anthropic,
           Mistral AI, Google, DeepSeek, or xAI. consens.io does not add an extra model marketplace or router
@@ -85,7 +119,7 @@
       </section>
 
       <section class="legal-panel">
-        <h2>4. Legal bases under the GDPR</h2>
+        <h2>5. Legal bases under the GDPR</h2>
         <ul>
           <li><strong>Art. 6(1)(b):</strong> performance of the service you request.</li>
           <li><strong>Art. 6(1)(f):</strong> legitimate interests in security, stability, abuse prevention, and aggregated product improvement.</li>
@@ -94,18 +128,18 @@
       </section>
 
       <section class="legal-panel">
-        <h2>5. Recipients, processors, and international transfers</h2>
+        <h2>6. Recipients, processors, and international transfers</h2>
         <p>
           To provide the service, we use infrastructure and model providers, for example hosting,
-          authentication, and AI model providers. They may process data on our instructions as processors,
-          or as independent providers when their interfaces are used. Processing may occur outside the EU/EEA.
-          In such cases, we rely on appropriate safeguards, such as Standard Contractual Clauses, under
-          Art. 44 et seq. GDPR.
+          authentication, Umami Cloud for analytics, and AI model providers. They may process data on our
+          instructions as processors, or as independent providers when their interfaces are used. Processing may
+          occur outside the EU/EEA. In such cases, we rely on appropriate safeguards, such as Standard Contractual
+          Clauses, under Art. 44 et seq. GDPR.
         </p>
       </section>
 
       <section class="legal-panel">
-        <h2>6. Storage periods</h2>
+        <h2>7. Storage periods</h2>
         <p>
           We retain data only as long as necessary for the stated purposes or as required by law. Technical
           logs are generally kept short-term. Model content is retained only insofar as needed for stability,
@@ -114,7 +148,7 @@
       </section>
 
       <section class="legal-panel">
-        <h2>7. Your rights in the EU/EEA</h2>
+        <h2>8. Your rights in the EU/EEA</h2>
         <ul>
           <li>Access, rectification, erasure, restriction, and portability, subject to legal conditions.</li>
           <li>Right to object to processing based on legitimate interests under Art. 21 GDPR.</li>
@@ -124,7 +158,7 @@
       </section>
 
       <section class="legal-panel">
-        <h2>8. Security</h2>
+        <h2>9. Security</h2>
         <p>
           We implement appropriate technical and organizational measures, including access limitation,
           logging, and up-to-date transport encryption.
@@ -132,7 +166,7 @@
       </section>
 
       <section class="legal-panel">
-        <h2>9. Children</h2>
+        <h2>10. Children</h2>
         <p>
           consens.io is not directed at children. Use the service only if you are old enough to use online
           services under the law applicable to you.
@@ -140,7 +174,7 @@
       </section>
 
       <section class="legal-panel">
-        <h2>10. Changes and contact</h2>
+        <h2>11. Changes and contact</h2>
         <p>
           We may update this notice and indicate the last updated date below.
         </p>
@@ -157,7 +191,7 @@
 
   <footer class="footer">
     <div class="footer-inner">
-      <span>Last updated: 16 May 2026</span>
+      <span>Last updated: 28 May 2026</span>
       <div class="footer-links">
         <a href="/app">App</a>
         <a href="/about">About</a>

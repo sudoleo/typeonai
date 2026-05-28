@@ -17,6 +17,34 @@
     window.APP_LIMITS = JSON.parse('{{ limits | tojson | safe }}');
     window.FREE_DEFAULT_MODELS = JSON.parse('{{ default_models | tojson | safe }}');
     window.PRO_DEFAULT_MODELS = JSON.parse('{{ pro_default_models | tojson | safe }}');
+
+    window.trackUmamiEvent = function (eventName, eventData = {}) {
+      if (!eventName || !window.umami || typeof window.umami.track !== "function") return;
+
+      const blockedKeyPattern = /(email|mail|token|key|prompt|question|message|response|answer|password)/i;
+      const safeData = {};
+
+      Object.entries(eventData || {}).forEach(([key, value]) => {
+        if (!key || blockedKeyPattern.test(key)) return;
+        if (value === null || value === undefined) return;
+
+        const valueType = typeof value;
+        if (valueType === "number" || valueType === "boolean") {
+          if (Number.isFinite(value) || valueType === "boolean") {
+            safeData[key] = value;
+          }
+          return;
+        }
+
+        if (valueType === "string") {
+          const trimmed = value.trim();
+          if (!trimmed || trimmed.length > 120 || /@/.test(trimmed)) return;
+          safeData[key] = trimmed;
+        }
+      });
+
+      window.umami.track(eventName, safeData);
+    };
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
@@ -31,11 +59,11 @@
   <!-- DOMPurify (HTML Sanitizer) -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260526-login-app-redirect1"></script>
+  <script type="module" src="/static/firebase.js?v=20260528-umami-events1"></script>
   <script type="module" src="/static/demo.js?v=20260526-demo-sources2"></script>
   <script src="/static/app-ui.js?v=20260523-width-resize1" defer></script>
   <!-- Umami Cloud Tracking -->
-  <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b"></script>
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
 
 <body>
@@ -500,6 +528,23 @@
           </span>
         `;
 
+        function trackAppEvent(eventName, eventData = {}) {
+          if (typeof window.trackUmamiEvent === "function") {
+            window.trackUmamiEvent(eventName, eventData);
+          }
+        }
+
+        function getSelectedModelCount() {
+          return [
+            "selectOpenAI",
+            "selectMistral",
+            "selectClaude",
+            "selectGemini",
+            "selectDeepSeek",
+            "selectGrok"
+          ].filter(id => document.getElementById(id)?.checked).length;
+        }
+
         const deepSearchToggle = document.getElementById("deepSearchToggle");
 
         // Auslesen des aktuellen Zustands (true, wenn aktiviert, sonst false):
@@ -863,6 +908,7 @@
             const newTheme = document.body.classList.contains("dark-mode") ? "light" : "dark";
             localStorage.setItem("theme", newTheme);
             applyTheme(newTheme);
+            trackAppEvent("app_theme_changed", { theme: newTheme });
           });
         });
 
@@ -883,6 +929,7 @@
             this.checked = true;
           }
           localStorage.setItem("autoConsensus", this.checked);
+          trackAppEvent("app_auto_consensus_changed", { enabled: this.checked });
           showMobileInfoPopup(
             typeof window.isAgentModeEnabled === "function" && window.isAgentModeEnabled()
               ? "Auto Consensus stays on while Agent Mode is active."
@@ -969,12 +1016,15 @@
           setExplainerVisible(!hasConfirmed);
 
           trigger.addEventListener("click", () => {
-            setExplainerVisible(explainer.hidden);
+            const nextVisible = explainer.hidden;
+            setExplainerVisible(nextVisible);
+            trackAppEvent("app_mode_help_toggled", { open: nextVisible });
           });
 
           dismiss.addEventListener("click", () => {
             localStorage.setItem(MODE_EXPLAINER_STORAGE_KEY, "true");
             setExplainerVisible(false);
+            trackAppEvent("app_mode_help_confirmed");
           });
         }
 
@@ -1064,7 +1114,10 @@
 
         // DEEP THINK & SMOKE TEST LOGIK
         // Deep Search Toggle Text Update (bestehender Code)
-        document.getElementById("deepSearchToggle").addEventListener("change", () => updateDeepThinkText(true));
+        document.getElementById("deepSearchToggle").addEventListener("change", function () {
+          updateDeepThinkText(true);
+          trackAppEvent("app_deep_think_changed", { enabled: this.checked });
+        });
 
         // --- NEU: Pro Modal Referenzen ---
         const proModal = document.getElementById("proFeatureModal");
@@ -1101,6 +1154,7 @@
             // --- ÄNDERUNG: Prüfung ZUERST durchführen ---
             if (currentUser) {
               // A) USER IST EINGELOGGT
+              trackAppEvent("app_pro_interest_click", { logged_in: true });
 
               // UI Feedback (Erfolg)
               alert("Thanks for your support! We are still early in development and hard at work building this feature. We've noted your interest to help us prioritize it!");
@@ -1124,6 +1178,7 @@
                 console.error("Tracking failed:", err);
               }
             } else {
+              trackAppEvent("app_pro_interest_click", { logged_in: false });
               alert("Please log in to register your interest. We can only track your request if you are signed into your account.");
             }
           });
@@ -1134,6 +1189,7 @@
           // Wir prüfen die globale Variable window.isUserPro
           if (!window.isUserPro) {
             event.preventDefault(); // Verhindert das Umschalten des Toggles
+            trackAppEvent("app_deep_think_locked_click");
 
             // Modal anzeigen
             if (proModal) {
@@ -1327,6 +1383,7 @@
           const textarea = document.getElementById("systemPromptInput");
           textarea.value = localStorage.getItem("systemPrompt");
           modal.style.display = "block";
+          trackAppEvent("app_settings_open");
         });
 
         // Schließen des Modals
@@ -1339,11 +1396,13 @@
           const newPrompt = document.getElementById("systemPromptInput").value.trim();
           localStorage.setItem("systemPrompt", newPrompt); // Speichert auch leere Strings!
           document.getElementById("systemPromptModal").style.display = "none";
+          trackAppEvent("app_settings_saved");
         });
 
         // Öffnen des Hilfemodals beim Klick auf den Hilfebutton
         document.getElementById("helpButton").addEventListener("click", function () {
           document.getElementById("helpModal").style.display = "block";
+          trackAppEvent("app_help_open");
         });
 
         // Schließen des Modals beim Klick auf das Schließen-Symbol
@@ -1361,6 +1420,7 @@
         // Öffnen des Feedback-Modals beim Klick auf den Feedback-Button
         document.getElementById("feedbackButton").addEventListener("click", function () {
           document.getElementById("feedbackModal").style.display = "block";
+          trackAppEvent("app_feedback_open");
         });
 
         // Schließen des Feedback-Modals beim Klick auf das Schließen-Symbol
@@ -1465,6 +1525,7 @@
             sidebar.classList.remove("active");
           }
           updateToggleButton();
+          trackAppEvent("app_sidebar_toggle", { open: !sidebar.classList.contains("collapsed") });
         });
 
         // Fenstergröße prüfen – wenn <1024px, Sidebar einklappen
@@ -1583,9 +1644,11 @@
           }
           if (box.classList.contains("best")) {
             box.classList.remove("best");
+            trackAppEvent("app_best_answer_changed", { box: responseId, selected: false });
           } else {
             document.querySelectorAll(".response-box").forEach(b => b.classList.remove("best"));
             box.classList.add("best");
+            trackAppEvent("app_best_answer_changed", { box: responseId, selected: true });
           }
         };
 
@@ -1613,6 +1676,7 @@
           const isCollapsed = section.classList.toggle("is-collapsed");
           area.classList.toggle("hidden", isCollapsed);
           toggle.setAttribute("aria-expanded", String(!isCollapsed));
+          trackAppEvent("app_sidebar_section_toggled", { section: "models", open: !isCollapsed });
         };
 
         window.toggleAllResponses = function () {
@@ -1919,6 +1983,12 @@
             window.setTimeout(() => {
               document.body.classList.remove("agent-mode-transitioning");
             }, 340);
+            if (persist) {
+              trackAppEvent("app_agent_mode_changed", {
+                enabled: nextEnabled,
+                selected_models: getSelectedModelCount()
+              });
+            }
           }
           updateAgentModeUI();
         }
@@ -2024,6 +2094,11 @@
 
           if (persist) {
             localStorage.setItem("pref_check_" + pref.key, String(checked));
+            trackAppEvent("app_model_selection_changed", {
+              provider: pref.key,
+              enabled: checked,
+              selected_models: getSelectedModelCount()
+            });
           }
 
           if (typeof window.updateConsensusButtonAvailability === "function") {
@@ -2096,6 +2171,10 @@
                 labelText.textContent = selectedLabel;
                 labelText.title = `Choose model: ${selectedLabel}`;
               }
+              trackAppEvent("app_model_picker_changed", {
+                provider: pref.key,
+                model: selectedLabel
+              });
               updateAgentModeUI();
             });
           }
@@ -2121,6 +2200,8 @@
           consensusSelect.addEventListener("change", function () {
             // Speichere die Auswahl im LocalStorage, sobald der User sie ändert
             localStorage.setItem("pref_select_consensus", this.value);
+            const selectedLabel = getModelOptionLabel(this.options[this.selectedIndex]) || this.value;
+            trackAppEvent("app_consensus_model_changed", { model: selectedLabel });
 
             // Optional: Fokus entfernen, wie bei den anderen Pickern
             this.blur();
@@ -2138,6 +2219,7 @@
           const isCollapsed = section.classList.toggle("is-collapsed");
           container.classList.toggle("hidden", isCollapsed);
           toggle.setAttribute("aria-expanded", String(!isCollapsed));
+          trackAppEvent("app_sidebar_section_toggled", { section: "leaderboard", open: !isCollapsed });
         };
 
         window.toggleBookmarks = function () {
@@ -2150,6 +2232,7 @@
           container.classList.toggle("hidden", isCollapsed);
           toggle.setAttribute("aria-expanded", String(!isCollapsed));
           localStorage.setItem("bookmarks_collapsed", String(isCollapsed));
+          trackAppEvent("app_sidebar_section_toggled", { section: "bookmarks", open: !isCollapsed });
         };
 
         function restoreBookmarksState() {
@@ -2564,6 +2647,7 @@
           markPendingQueryResponsesCanceled();
           finishQueryRun(runId);
           document.getElementById("consensusButton").disabled = true;
+          trackAppEvent("app_query_canceled");
         };
 
         // Senden der Frage an die aktiven Modelle
@@ -2587,6 +2671,10 @@
 
           // === DEMO: Früh raus, wenn "Demo" ===
           if (isDemoQuery(question)) {
+            trackAppEvent("app_demo_started", {
+              selected_models: getSelectedModelCount(),
+              agent_mode: typeof window.isAgentModeEnabled === "function" && window.isAgentModeEnabled()
+            });
             // optional: Free/Deep Counter im Sidebar auf einen sicheren Dummy setzen
             document.getElementById("freeUsageDisplay").innerHTML = "Free requests: 25 / 25";
             document.getElementById("deepUsageDisplay").innerHTML = "Deep Think: 12 / 12";
@@ -2603,6 +2691,15 @@
             alert("Please enter a question.");
             return;
           }
+
+          trackAppEvent("app_query_started", {
+            mode,
+            selected_models: getSelectedModelCount(),
+            custom_credentials: document.getElementById("useOwnKeysSwitch")?.checked === true,
+            logged_in: !!window.auth?.currentUser,
+            agent_mode: typeof window.isAgentModeEnabled === "function" && window.isAgentModeEnabled(),
+            auto_consensus: document.getElementById("autoConsensusToggle")?.checked === true
+          });
 
           currentQueryRunId++;
           const queryRunId = currentQueryRunId;
@@ -2911,6 +3008,10 @@
               finishQueryRun(queryRunId);
               if (queryHadBlockingError) {
                 setAgentModeStatus("error", queryBlockingErrorMessage);
+                trackAppEvent("app_query_completed", {
+                  status: "error",
+                  selected_models: totalActive
+                });
                 if (typeof window.updateConsensusButtonAvailability === "function") {
                   window.updateConsensusButtonAvailability();
                 } else {
@@ -2920,6 +3021,10 @@
               }
 
               setAgentModeStatus("complete");
+              trackAppEvent("app_query_completed", {
+                status: "success",
+                selected_models: totalActive
+              });
               const canGenerateConsensus = typeof window.updateConsensusButtonAvailability === "function"
                 ? window.updateConsensusButtonAvailability()
                 : true;
@@ -2929,7 +3034,7 @@
                 // Den Consensus-Button vorübergehend deaktivieren und
                 // erst nach Abschluss der Konsensgenerierung wieder aktivieren.
                 document.getElementById("consensusButton").disabled = true;
-                getConsensus()
+                getConsensus("auto")
                   .then(() => {
                     document.getElementById("consensusButton").disabled = false;
                     if (typeof window.updateConsensusButtonAvailability === "function") {
@@ -3738,11 +3843,12 @@
           currentConsensusController.abort();
           markPendingConsensusCanceled();
           finishConsensusRun(runId);
+          trackAppEvent("app_consensus_canceled");
         };
 
         window.updateConsensusButtonAvailability();
 
-        window.getConsensus = async function () {
+        window.getConsensus = async function (trigger = "manual") {
           if (consensusRequestRunning) {
             window.cancelCurrentConsensus();
             return;
@@ -3854,6 +3960,8 @@
           const needGrok = isIncludedBox(grokBox);
           const includedAnswerCount = [answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok]
             .filter(Boolean).length;
+          const excludedModelCount = [openaiBox, mistralBox, claudeBox, geminiBox, deepseekBox, grokBox]
+            .filter(box => box?.classList.contains("excluded")).length;
 
           if (
             !question ||
@@ -3875,6 +3983,14 @@
             finishConsensusRun(consensusRunId);
             return;
           }
+
+          trackAppEvent("app_consensus_started", {
+            trigger,
+            included_models: includedAnswerCount,
+            excluded_models: excludedModelCount,
+            custom_credentials: useOwnKeys,
+            logged_in: !!window.auth?.currentUser
+          });
 
           if (window.resetCredibilityFrame) {
             window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
@@ -4059,6 +4175,11 @@
               if (auth.currentUser) {
                 saveBookmarkConsensus(question, data.consensus_response, data.differences);
               }
+              trackAppEvent("app_consensus_completed", {
+                status: "success",
+                trigger,
+                included_models: includedAnswerCount
+              });
 
               const bestModelFromConsensus = parseBestModel(data.differences);
               if (bestModelFromConsensus) {
@@ -4073,6 +4194,11 @@
               }
               consensusDiv.querySelector(".consensus-main p").innerText = "Error: " + consensusErrorMessage;
               consensusDiv.querySelector(".consensus-differences p").innerText = "";
+              trackAppEvent("app_consensus_completed", {
+                status: "error",
+                trigger,
+                included_models: includedAnswerCount
+              });
             }
 
           } catch (error) {
@@ -4085,6 +4211,11 @@
             }
             consensusDiv.querySelector(".consensus-main p").innerText = "Error in the consensus calculation.";
             consensusDiv.querySelector(".consensus-differences p").innerText = "";
+            trackAppEvent("app_consensus_completed", {
+              status: "error",
+              trigger,
+              included_models: includedAnswerCount
+            });
           } finally {
             finishConsensusRun(consensusRunId);
           }
@@ -4092,6 +4223,7 @@
 
         // Testet die API Keys und aktualisiert das Feedback
         window.testAllKeys = async function () {
+          trackAppEvent("app_api_keys_test_started");
           const openaiKey = document.getElementById("openaiKey").value;
           const mistralKey = document.getElementById("mistralKey").value;
           const anthropicKey = document.getElementById("anthropicKey").value;
@@ -4136,6 +4268,8 @@
             const geminiResult = data.results["Gemini"];
             const deepseekResult = data.results["DeepSeek"];
             const grokResult = data.results["Grok"];
+            const validCount = [openaiResult, mistralResult, anthropicResult, geminiResult, deepseekResult, grokResult]
+              .filter(result => result === "valid").length;
             const openaiFeedback = document.getElementById("openaiFeedback");
             const mistralFeedback = document.getElementById("mistralFeedback");
             const anthropicFeedback = document.getElementById("anthropicFeedback");
@@ -4154,8 +4288,10 @@
             deepseekFeedback.style.color = deepseekResult === "valid" ? "green" : "red";
             grokFeedback.innerHTML = grokResult === "valid" ? "&#9734;" : "&#10007;";
             grokFeedback.style.color = grokResult === "valid" ? "green" : "red";
+            trackAppEvent("app_api_keys_test_result", { status: "success", valid_count: validCount });
           } catch (error) {
             console.error("Fehler beim Testen der API Keys:", error);
+            trackAppEvent("app_api_keys_test_result", { status: "error" });
             alert("Fehler beim Testen der API Keys: " + error.message);
           } finally {
             spinner.style.display = "none";
@@ -4168,24 +4304,29 @@
             e.preventDefault();
             const message = this.elements["message"].value;
             const email = this.elements["email"].value;
+            trackAppEvent("app_feedback_submit", { logged_in: !!window.auth?.currentUser });
             // Hier rufen wir die neue sendFeedback-Funktion auf, die den Backend-Endpoint nutzt.
             window.sendFeedback(message, email)
               .then(data => {
                 if (data.status === "success") {
                   this.reset();
+                  trackAppEvent("app_feedback_result", { status: "success" });
                   alert("Feedback gesendet!");
                 } else {
+                  trackAppEvent("app_feedback_result", { status: "error" });
                   alert("Fehler: " + data.detail);
                 }
               })
               .catch(error => {
                 console.error("Fehler beim Speichern des Feedbacks:", error);
+                trackAppEvent("app_feedback_result", { status: "error" });
                 alert("Fehler beim Speichern des Feedbacks: " + error.message);
               });
           });
         }
 
         window.clearResponseBoxes = function () {
+          trackAppEvent("app_responses_cleared");
           const boxIds = [
             "openaiResponse",
             "mistralResponse",
@@ -4287,6 +4428,7 @@
         setInterval(updateCountdown, 1000);
 
         document.getElementById("logoLink").addEventListener("click", () => {
+          trackAppEvent("app_logo_home_click");
           // wenn ich wirklich zurück will, entferne den visitedLanding-Flag
           localStorage.removeItem("visitedLanding");
           // und damit gilt beim nächsten Laden der Landing-Seite wieder first-view
@@ -4463,10 +4605,12 @@
               document.body.removeChild(ta);
               closeConsensusActionsMenu();
               showPopup("Consensus copied to clipboard.");
+              trackAppEvent("app_consensus_copied", { type: "answer" });
             } else {
               navigator.clipboard.writeText(toCopy).then(() => {
                 closeConsensusActionsMenu();
                 showPopup("Consensus copied to clipboard.");
+                trackAppEvent("app_consensus_copied", { type: "answer" });
               }).catch(() => {
                 alert("Copy to clipboard failed.");
               });
@@ -4502,10 +4646,12 @@
               document.body.removeChild(ta);
               closeConsensusActionsMenu();
               showPopup("Citation copied to clipboard.");
+              trackAppEvent("app_consensus_copied", { type: "citation" });
             } else {
               navigator.clipboard.writeText(citation).then(() => {
                 closeConsensusActionsMenu();
                 showPopup("Citation copied to clipboard.");
+                trackAppEvent("app_consensus_copied", { type: "citation" });
               }).catch(() => {
                 alert("Copy to clipboard failed.");
               });
