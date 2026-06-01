@@ -21,8 +21,14 @@ def normalize_models_document(data: dict) -> dict:
         models.add(frontier_model)
         normalized[provider] = sorted(models)
 
+    anthropic_models = set(normalized.get("anthropic") or [])
+    anthropic_models.update({cfg.DEFAULT_ANTHROPIC_MODEL, cfg.ANTHROPIC_PRO_MODEL})
+    normalized["anthropic"] = sorted(anthropic_models)
+
     mistral_models = set(normalized.get("mistral") or [])
+    mistral_models.difference_update(cfg.DEPRECATED_MISTRAL_MODELS)
     mistral_models.add(cfg.DEFAULT_MISTRAL_MODEL)
+    mistral_models.add(cfg.MISTRAL_PRO_MODEL)
     normalized["mistral"] = sorted(mistral_models)
 
     deepseek_models = set(normalized.get("deepseek") or [])

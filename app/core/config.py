@@ -50,8 +50,10 @@ REASONING_EFFORT_FOR_DEEP = "low"
 GEMINI_MAX_TOKENS = MAX_TOKENS
 GEMINI_DEEP_MAX_TOKENS = DEEP_SEARCH_MAX_TOKENS
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
-DEFAULT_MISTRAL_MODEL = "mistral-large-latest"
+DEFAULT_MISTRAL_MODEL = "mistral-small-latest"
+MISTRAL_PRO_MODEL = "mistral-medium-3-5"
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"
+ANTHROPIC_PRO_MODEL = "claude-opus-4-8"
 DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
 DEEPSEEK_FLASH_MODEL = "deepseek-v4-flash"
 DEEPSEEK_PRO_MODEL = "deepseek-v4-pro"
@@ -59,7 +61,7 @@ DEFAULT_DEEPSEEK_MODEL = DEEPSEEK_PRO_MODEL
 DEFAULT_GROK_MODEL = "grok-4.20-non-reasoning"
 
 OPENAI_FRONTIER_LOW_MODEL = "gpt-5.5-frontier-low"
-ANTHROPIC_FRONTIER_LOW_MODEL = "claude-opus-4-7-frontier-low"
+ANTHROPIC_FRONTIER_LOW_MODEL = "claude-opus-4-8-frontier-low"
 GEMINI_FRONTIER_LOW_MODEL = "gemini-3.1-pro-preview-frontier-low"
 GROK_FRONTIER_LOW_MODEL = "grok-4.3-frontier-low"
 
@@ -91,8 +93,11 @@ PRO_USAGE_LIMIT = LIMITS["pro_usage_limit"]
 PRO_DEEP_SEARCH_LIMIT = LIMITS["pro_deep_search_limit"]
 
 VALID_LEADERBOARD_MODELS = {
-    "OpenAI", "Mistral", "Claude", "Gemini", "DeepSeek", "Grok",
+    "OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok",
     "OpenAI-Pro", "Mistral-Pro", "Anthropic-Pro", "Gemini-Pro", "DeepSeek-Pro", "Grok-Pro",
+}
+LEADERBOARD_MODEL_ALIASES = {
+    "Claude": "Anthropic",
 }
 
 ALLOWED_OPENAI_MODELS = {
@@ -102,14 +107,19 @@ ALLOWED_OPENAI_MODELS = {
 }
 
 ALLOWED_MISTRAL_MODELS = {
-    "mistral-large-latest", "mistral-medium-latest", "mistral-small-latest",
-    "ministral-3b-latest", "ministral-8b-latest", "pixtral-large-latest",
+    "mistral-large-latest", "mistral-medium-latest", "mistral-small-latest", MISTRAL_PRO_MODEL,
+    "ministral-3b-latest", "ministral-8b-latest",
+}
+MISTRAL_REASONING_MODELS = {DEFAULT_MISTRAL_MODEL, MISTRAL_PRO_MODEL}
+DEPRECATED_MISTRAL_MODELS = {
+    "devstral-small-2507", "devstral-small-latest", "devstral-medium-2507",
+    "mistral-large-2411", "pixtral-large-2411", "pixtral-large-latest",
 }
 
 ALLOWED_ANTHROPIC_MODELS = {
     "claude-haiku-4-5", "claude-sonnet-4-20250514", "claude-3-7-sonnet-20250219", "claude-3-5-haiku-20241022",
     "claude-sonnet-4-5", "claude-opus-4-5", "claude-sonnet-4-6", "claude-opus-4-6",
-    "claude-opus-4-7", ANTHROPIC_FRONTIER_LOW_MODEL,
+    "claude-opus-4-7", ANTHROPIC_PRO_MODEL, ANTHROPIC_FRONTIER_LOW_MODEL,
 }
 
 ALLOWED_GEMINI_MODELS = {
@@ -137,14 +147,17 @@ FRONTIER_LOW_MODEL_IDS_BY_PROVIDER = {
 FRONTIER_LOW_MODELS = set(FRONTIER_LOW_MODEL_IDS_BY_PROVIDER.values())
 EARLY_AND_PRO_MODELS = {DEFAULT_MISTRAL_MODEL, DEEPSEEK_PRO_MODEL}
 EARLY_FREE_MODELS = FRONTIER_LOW_MODELS | EARLY_AND_PRO_MODELS
-REQUIRED_PRO_MODELS = {"mistral-medium-latest"}
+REQUIRED_PRO_MODELS = {MISTRAL_PRO_MODEL, ANTHROPIC_PRO_MODEL}
 DEPRECATED_DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner"}
 REQUIRED_DEEPSEEK_MODELS = {DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL}
 
 def ensure_default_models_allowed():
     ALLOWED_OPENAI_MODELS.add(DEFAULT_OPENAI_MODEL)
+    ALLOWED_MISTRAL_MODELS.difference_update(DEPRECATED_MISTRAL_MODELS)
     ALLOWED_MISTRAL_MODELS.add(DEFAULT_MISTRAL_MODEL)
+    ALLOWED_MISTRAL_MODELS.add(MISTRAL_PRO_MODEL)
     ALLOWED_ANTHROPIC_MODELS.add(DEFAULT_ANTHROPIC_MODEL)
+    ALLOWED_ANTHROPIC_MODELS.add(ANTHROPIC_PRO_MODEL)
     ALLOWED_GEMINI_MODELS.add(DEFAULT_GEMINI_MODEL)
     ALLOWED_DEEPSEEK_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
     ALLOWED_DEEPSEEK_MODELS.update(REQUIRED_DEEPSEEK_MODELS)
@@ -160,14 +173,15 @@ PREMIUM_MODELS = {
     "gpt-5", "gpt-5-chat-latest", "gpt-5.1", "gpt-5.2", "gpt-5.3", "gpt-5.3-chat-latest", "gpt-5.4",
     "gpt-5.5",
     "claude-sonnet-4-5", "claude-opus-4-5", "claude-sonnet-4-6", "claude-opus-4-6",
-    "claude-opus-4-7",
-    "pixtral-large-latest", "mistral-large-latest", "mistral-medium-latest",
+    "claude-opus-4-7", ANTHROPIC_PRO_MODEL,
+    "mistral-large-latest", "mistral-medium-latest", MISTRAL_PRO_MODEL,
     GEMINI_PRO_MODEL, "gemini-2.5-pro",
     DEEPSEEK_PRO_MODEL,
     "grok-4-latest", "grok-3-latest", "grok-4-fast-reasoning-latest", "grok-4.20",
     "grok-4.3",
 }
 PREMIUM_MODELS.difference_update(FRONTIER_LOW_MODELS)
+PREMIUM_MODELS.difference_update(DEPRECATED_MISTRAL_MODELS)
 PREMIUM_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
 PREMIUM_MODELS.update(EARLY_AND_PRO_MODELS)
 PREMIUM_MODELS.update(REQUIRED_PRO_MODELS)
@@ -180,8 +194,11 @@ ALL_ALLOWED_MODELS = (
 MODEL_LABEL_OVERRIDES = {
     "gpt-5.5": "GPT-5.5",
     OPENAI_FRONTIER_LOW_MODEL: "GPT-5.5",
+    "mistral-small-latest": "Mistral Small 4",
+    MISTRAL_PRO_MODEL: "Mistral Medium 3.5",
     "claude-opus-4-7": "Claude Opus 4.7",
-    ANTHROPIC_FRONTIER_LOW_MODEL: "Claude Opus 4.7",
+    ANTHROPIC_PRO_MODEL: "Claude Opus 4.8",
+    ANTHROPIC_FRONTIER_LOW_MODEL: "Claude Opus 4.8",
     GEMINI_PRO_MODEL: "Gemini 3.1",
     GEMINI_FRONTIER_LOW_MODEL: "Gemini 3.1",
     "grok-4.3": "Grok 4.3",
@@ -235,8 +252,8 @@ def rebuild_model_configs():
         ANTHROPIC_FRONTIER_LOW_MODEL: ModelConfig(
             internal_id=ANTHROPIC_FRONTIER_LOW_MODEL,
             provider="anthropic",
-            api_model="claude-opus-4-7",
-            label="Claude Opus 4.7",
+            api_model=ANTHROPIC_PRO_MODEL,
+            label="Claude Opus 4.8",
             is_free=True,
             is_frontier=True,
             is_low_reasoning=True,
@@ -430,11 +447,14 @@ def load_models_from_db():
             if "mistral" in data:
                 ALLOWED_MISTRAL_MODELS.clear()
                 ALLOWED_MISTRAL_MODELS.update(data["mistral"])
+                ALLOWED_MISTRAL_MODELS.difference_update(DEPRECATED_MISTRAL_MODELS)
+                ALLOWED_MISTRAL_MODELS.update({DEFAULT_MISTRAL_MODEL, MISTRAL_PRO_MODEL})
             
             # Update Anthropic
             if "anthropic" in data:
                 ALLOWED_ANTHROPIC_MODELS.clear()
                 ALLOWED_ANTHROPIC_MODELS.update(data["anthropic"])
+                ALLOWED_ANTHROPIC_MODELS.update({DEFAULT_ANTHROPIC_MODEL, ANTHROPIC_PRO_MODEL})
             
             # Update Gemini
             if "gemini" in data:
@@ -463,6 +483,7 @@ def load_models_from_db():
                 PREMIUM_MODELS.update(data["premium"])
                 PREMIUM_MODELS.difference_update(UNSUPPORTED_GEMINI_MODELS)
                 PREMIUM_MODELS.difference_update(FRONTIER_LOW_MODELS)
+                PREMIUM_MODELS.difference_update(DEPRECATED_MISTRAL_MODELS)
                 PREMIUM_MODELS.add(GEMINI_PRO_MODEL)
                 PREMIUM_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
                 PREMIUM_MODELS.update(EARLY_AND_PRO_MODELS)

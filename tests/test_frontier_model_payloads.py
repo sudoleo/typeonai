@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import HTTPException
 
 import app.core.config as cfg
+from app.api.routers.admin import normalize_models_document
 from app.services.llm.base import validate_model
 from app.services.llm.engines import build_provider_payload
 from app.services.llm.citations import source_response
@@ -41,7 +42,7 @@ class FrontierModelPayloadTests(unittest.TestCase):
             (
                 "anthropic",
                 cfg.ANTHROPIC_FRONTIER_LOW_MODEL,
-                "claude-opus-4-7",
+                cfg.ANTHROPIC_PRO_MODEL,
                 {"thinking": {"type": "adaptive"}, "output_config": {"effort": "low"}},
                 {"model", "max_tokens", "system", "messages", "tools", "thinking", "output_config"},
             ),
@@ -92,7 +93,7 @@ class FrontierModelPayloadTests(unittest.TestCase):
     def test_normal_pro_models_keep_api_names_without_low_payloads(self):
         cases = [
             ("openai", "gpt-5.5", "gpt-5.5"),
-            ("anthropic", "claude-opus-4-7", "claude-opus-4-7"),
+            ("anthropic", cfg.ANTHROPIC_PRO_MODEL, cfg.ANTHROPIC_PRO_MODEL),
             ("gemini", cfg.GEMINI_PRO_MODEL, cfg.GEMINI_PRO_MODEL),
             ("grok", "grok-4.3", "grok-4.3"),
         ]
@@ -119,9 +120,51 @@ class FrontierModelPayloadTests(unittest.TestCase):
 
     def test_free_defaults_use_frontier_variants(self):
         self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["openai"], cfg.OPENAI_FRONTIER_LOW_MODEL)
+        self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["mistral"], cfg.DEFAULT_MISTRAL_MODEL)
         self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["anthropic"], cfg.ANTHROPIC_FRONTIER_LOW_MODEL)
         self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["gemini"], cfg.GEMINI_FRONTIER_LOW_MODEL)
         self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["grok"], cfg.GROK_FRONTIER_LOW_MODEL)
+
+    def test_mistral_defaults_use_supported_reasoning_models(self):
+        default_request = build_provider_payload(
+            "mistral",
+            question="payload dry run",
+            system_prompt="system",
+            max_output_tokens=123,
+        )
+        self.assertEqual(default_request["api_model"], cfg.DEFAULT_MISTRAL_MODEL)
+        self.assertEqual(
+            default_request["payload"]["completion_args"]["reasoning_effort"],
+            "high",
+        )
+
+        deep_request = build_provider_payload(
+            "mistral",
+            question="payload dry run",
+            system_prompt="system",
+            deep_search=True,
+            max_output_tokens=123,
+        )
+        self.assertEqual(deep_request["api_model"], cfg.MISTRAL_PRO_MODEL)
+        self.assertEqual(
+            deep_request["payload"]["completion_args"]["reasoning_effort"],
+            "high",
+        )
+        self.assertNotIn("pixtral-large-latest", cfg.ALLOWED_MISTRAL_MODELS)
+
+    def test_required_pro_models_include_normal_opus_48(self):
+        self.assertIn(cfg.ANTHROPIC_PRO_MODEL, cfg.REQUIRED_PRO_MODELS)
+        self.assertIn(cfg.ANTHROPIC_PRO_MODEL, cfg.PREMIUM_MODELS)
+        self.assertNotIn(cfg.ANTHROPIC_PRO_MODEL, cfg.EARLY_FREE_MODELS)
+
+        normalized = normalize_models_document({
+            "anthropic": [cfg.ANTHROPIC_FRONTIER_LOW_MODEL],
+            "mistral": [cfg.DEFAULT_MISTRAL_MODEL],
+            "deepseek": [],
+            "premium": [],
+        })
+        self.assertIn(cfg.ANTHROPIC_PRO_MODEL, normalized["anthropic"])
+        self.assertIn(cfg.ANTHROPIC_PRO_MODEL, normalized["premium"])
 
     def test_server_side_access_control(self):
         validate_model(cfg.OPENAI_FRONTIER_LOW_MODEL, cfg.ALLOWED_OPENAI_MODELS, "OpenAI", is_pro=False)

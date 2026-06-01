@@ -152,6 +152,7 @@ async def record_vote(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=400, detail="Missing required fields: id_token, model or vote_type.")
     if vote_type not in ALLOWED_VOTE_TYPES:
         raise HTTPException(status_code=400, detail="Invalid vote type provided.")
+    model = cfg.LEADERBOARD_MODEL_ALIASES.get(model, model)
     if model not in cfg.VALID_LEADERBOARD_MODELS:
          logging.warning(f"Invalid vote attempt for model '{model}'")
          raise HTTPException(status_code=400, detail="Invalid model name.")

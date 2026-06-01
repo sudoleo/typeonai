@@ -464,8 +464,8 @@
 
                 <option value="Grok-Pro" class="premium-option">Grok-4.3 · Pro</option>
                 <option value="OpenAI-Pro" class="premium-option">GPT-5.5 · Pro</option>
-                <option value="Anthropic-Pro" class="premium-option">Claude Opus 4.7 · Pro</option>
-                <option value="Mistral-Pro" class="premium-option">mistral-large-latest · Pro</option>
+                <option value="Anthropic-Pro" class="premium-option">Claude Opus 4.8 · Pro</option>
+                <option value="Mistral-Pro" class="premium-option">Mistral Medium 3.5 · Pro</option>
                 <option value="Gemini-Pro" class="premium-option">Gemini 3.1 · Pro</option>
                 <option value="DeepSeek-Pro" class="premium-option">DeepSeek V4 Pro · Pro</option>
               </select>
@@ -1032,9 +1032,9 @@
 
         const deepThinkModelLabels = {
           OpenAI: "GPT-5.5",
-          Mistral: "mistral-large-latest",
+          Mistral: "mistral-medium-3-5",
           Gemini: "gemini-3.1-pro-preview",
-          Anthropic: "claude-opus-4-7",
+          Anthropic: "claude-opus-4-8",
           DeepSeek: "DeepSeek V4 Pro",
           Grok: "grok-4.3"
         };
@@ -2318,15 +2318,45 @@
               item.appendChild(badge);
             });
 
-            item.addEventListener("click", event => {
+            let pointerStart = null;
+            let didCommitFromPointer = false;
+
+            function commitSelection(event) {
               event.preventDefault();
               event.stopPropagation();
               if (option.disabled) return;
 
+              select.selectedIndex = option.index;
               select.value = option.value;
-              option.selected = true;
+              select.dispatchEvent(new Event("input", { bubbles: true }));
               select.dispatchEvent(new Event("change", { bubbles: true }));
               collapseExpandedModelPicker(select);
+            }
+
+            item.addEventListener("pointerdown", event => {
+              pointerStart = { x: event.clientX, y: event.clientY };
+              didCommitFromPointer = false;
+            });
+
+            item.addEventListener("pointerup", event => {
+              if (!pointerStart) return;
+              const dx = Math.abs(event.clientX - pointerStart.x);
+              const dy = Math.abs(event.clientY - pointerStart.y);
+              pointerStart = null;
+              if (dx > 8 || dy > 8) return;
+
+              didCommitFromPointer = true;
+              commitSelection(event);
+            });
+
+            item.addEventListener("click", event => {
+              if (didCommitFromPointer) {
+                event.preventDefault();
+                event.stopPropagation();
+                didCommitFromPointer = false;
+                return;
+              }
+              commitSelection(event);
             });
 
             state.menu.appendChild(item);

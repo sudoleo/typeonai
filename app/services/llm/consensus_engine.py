@@ -6,7 +6,6 @@ import logging
 import random
 import requests
 import openai
-from mistralai import Mistral
 import google.generativeai as genai
 import google.auth
 from google.auth.transport.requests import Request as GoogleAuthRequest
@@ -18,7 +17,9 @@ from app.core.config import (
     GEMINI_PRO_MODEL,
     DEFAULT_OPENAI_MODEL,
     DEFAULT_MISTRAL_MODEL,
+    MISTRAL_PRO_MODEL,
     DEFAULT_ANTHROPIC_MODEL,
+    ANTHROPIC_PRO_MODEL,
     DEFAULT_DEEPSEEK_MODEL,
     DEFAULT_GROK_MODEL,
 )
@@ -79,6 +80,30 @@ def _gemini_generate_content_rest(prompt: str, api_key: str | None, model_overri
             if part.get("text"):
                 text_parts.append(part["text"])
     return "\n".join(text_parts).strip() or "Error: Empty response payload."
+
+
+def _mistral_chat_complete(api_key: str, model: str, messages: list[dict], max_tokens: int) -> str:
+    payload = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+    }
+    if model in cfg.MISTRAL_REASONING_MODELS:
+        payload["reasoning_effort"] = "high"
+
+    response = requests.post(
+        "https://api.mistral.ai/v1/chat/completions",
+        json=payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        timeout=120,
+    )
+    if response.status_code >= 400:
+        raise RuntimeError(f"{response.status_code} - {response.text}")
+    data = response.json()
+    return (data.get("choices") or [{}])[0].get("message", {}).get("content", "").strip()
 
 
 def normalize_model_name(model_name: str) -> str:
@@ -260,19 +285,17 @@ def query_consensus(
 
         # --- MISTRAL ---
         elif consensus_model in ["Mistral", "Mistral-Pro"]:
-            client = Mistral(api_key=api_keys.get("Mistral"))
-            # Standard & Pro nutzen aktuell beide 'large', ansonsten hier anpassen
-            model_to_use = "mistral-large-latest" if consensus_model == "Mistral-Pro" else DEFAULT_MISTRAL_MODEL
-            
-            response = client.chat.complete(
-                model=model_to_use,
+            model_to_use = MISTRAL_PRO_MODEL if consensus_model == "Mistral-Pro" else DEFAULT_MISTRAL_MODEL
+
+            return _mistral_chat_complete(
+                api_keys.get("Mistral"),
+                model_to_use,
                 messages=[
                     {"role": "system", "content": ""},
                     {"role": "user", "content": consensus_prompt}
                 ],
-                max_tokens=cfg.CONSENSUS_MAX_TOKENS
+                max_tokens=cfg.CONSENSUS_MAX_TOKENS,
             )
-            return response.choices[0].message.content.strip()
 
         # --- ANTHROPIC ---
         elif consensus_model in ["Anthropic", "Anthropic-Pro"]:
@@ -282,8 +305,7 @@ def query_consensus(
                 "Content-Type": "application/json",
                 "anthropic-version": "2023-06-01"
             }
-            # Haiku vs Sonnet 4.5
-            model_to_use = "claude-opus-4-7" if consensus_model == "Anthropic-Pro" else DEFAULT_ANTHROPIC_MODEL
+            model_to_use = ANTHROPIC_PRO_MODEL if consensus_model == "Anthropic-Pro" else DEFAULT_ANTHROPIC_MODEL
             
             payload = {
                 "model": model_to_use,
@@ -483,16 +505,16 @@ def query_differences(
 
         # MISTRAL
         elif differences_model in ["Mistral", "Mistral-Pro"]:
-            client = Mistral(api_key=api_keys.get("Mistral"))
-            response = client.chat.complete(
-                model=DEFAULT_MISTRAL_MODEL,
+            model_to_use = MISTRAL_PRO_MODEL if differences_model == "Mistral-Pro" else DEFAULT_MISTRAL_MODEL
+            result = _mistral_chat_complete(
+                api_keys.get("Mistral"),
+                model_to_use,
                 messages=[
                     {"role": "system", "content": "Answer in the exact same language as the Model responses."},
                     {"role": "user", "content": differences_prompt}
                 ],
-                max_tokens=cfg.DIFFERENCES_MAX_TOKENS
+                max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
             )
-            result = response.choices[0].message.content.strip()
 
         elif differences_model in ["Anthropic", "Anthropic-Pro"]:
             url = "https://api.anthropic.com/v1/messages"
@@ -501,8 +523,9 @@ def query_differences(
                 "Content-Type": "application/json",
                 "anthropic-version": "2023-06-01"
             }
+            model_to_use = ANTHROPIC_PRO_MODEL if differences_model == "Anthropic-Pro" else DEFAULT_ANTHROPIC_MODEL
             payload = {
-                "model": DEFAULT_ANTHROPIC_MODEL,
+                "model": model_to_use,
                 "max_tokens": cfg.DIFFERENCES_MAX_TOKENS,
                 "system": "Answer in the exact same language as the Model responses.",
                 "messages": [{"role": "user", "content": differences_prompt}]

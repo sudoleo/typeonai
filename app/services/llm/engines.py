@@ -17,7 +17,9 @@ from app.core.config import (
     GEMINI_PRO_MODEL,
     DEFAULT_OPENAI_MODEL,
     DEFAULT_MISTRAL_MODEL,
+    MISTRAL_PRO_MODEL,
     DEFAULT_ANTHROPIC_MODEL,
+    ANTHROPIC_PRO_MODEL,
     DEFAULT_DEEPSEEK_MODEL,
     DEFAULT_GROK_MODEL,
 )
@@ -142,11 +144,17 @@ def build_provider_payload(
 
     if provider_key == "mistral":
         if deep_search:
-            api_model = "mistral-large-latest"
-            internal_model = "deep_search:mistral-large-latest"
+            api_model = MISTRAL_PRO_MODEL
+            internal_model = f"deep_search:{MISTRAL_PRO_MODEL}"
         else:
             internal_model = model_override or DEFAULT_MISTRAL_MODEL
             api_model, _ = cfg.resolve_api_model(model_override, DEFAULT_MISTRAL_MODEL, "mistral")
+        completion_args = {
+            "max_tokens": max_tokens,
+            "temperature": 0.2,
+        }
+        if api_model in cfg.MISTRAL_REASONING_MODELS:
+            completion_args["reasoning_effort"] = "high"
         return {
             "provider": "mistral",
             "endpoint": "conversations",
@@ -158,19 +166,16 @@ def build_provider_payload(
                 "instructions": system_prompt,
                 "inputs": question,
                 "tools": [{"type": "web_search"}],
-                "completion_args": {
-                    "max_tokens": max_tokens,
-                    "temperature": 0.2,
-                },
+                "completion_args": completion_args,
                 "store": False,
             },
         }
 
     if provider_key == "anthropic":
         if deep_search:
-            api_model = "claude-opus-4-7"
+            api_model = ANTHROPIC_PRO_MODEL
             model_config = None
-            internal_model = "deep_search:claude-opus-4-7"
+            internal_model = f"deep_search:{ANTHROPIC_PRO_MODEL}"
         else:
             internal_model = model_override or DEFAULT_ANTHROPIC_MODEL
             api_model, model_config = cfg.resolve_api_model(model_override, DEFAULT_ANTHROPIC_MODEL, "anthropic")
