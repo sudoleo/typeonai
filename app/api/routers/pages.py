@@ -6,7 +6,7 @@ import openai
 from mistralai import Mistral
 import google.generativeai as genai
 from fastapi import APIRouter, Request, Body, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 import requests
 
 from app.core.rate_limit import limiter
@@ -22,6 +22,45 @@ templates = Jinja2Templates(directory="templates")
 
 router = APIRouter()
 
+SITE_URL = "https://www.consens.io"
+SITEMAP_URLS = (
+    {"loc": f"{SITE_URL}/", "lastmod": "2026-06-03", "changefreq": "weekly", "priority": "1.0"},
+    {"loc": f"{SITE_URL}/ai-model-comparison", "lastmod": "2026-06-03", "changefreq": "monthly", "priority": "0.8"},
+    {"loc": f"{SITE_URL}/about", "lastmod": "2026-06-03", "changefreq": "monthly", "priority": "0.6"},
+)
+
+
+@router.get("/robots.txt", response_class=PlainTextResponse)
+def robots_txt():
+    return "\n".join([
+        "User-agent: *",
+        "Allow: /",
+        f"Sitemap: {SITE_URL}/sitemap.xml",
+        "",
+    ])
+
+
+@router.get("/sitemap.xml")
+def sitemap_xml():
+    urls = "\n".join(
+        [
+            "  <url>\n"
+            f"    <loc>{item['loc']}</loc>\n"
+            f"    <lastmod>{item['lastmod']}</lastmod>\n"
+            f"    <changefreq>{item['changefreq']}</changefreq>\n"
+            f"    <priority>{item['priority']}</priority>\n"
+            "  </url>"
+            for item in SITEMAP_URLS
+        ]
+    )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{urls}\n"
+        "</urlset>\n"
+    )
+    return Response(content=xml, media_type="application/xml")
+
 @router.get("/", response_class=HTMLResponse)
 async def landing(request: Request):
     token = request.cookies.get("session") or request.headers.get("Authorization", "").removeprefix("Bearer ")
@@ -32,15 +71,23 @@ async def landing(request: Request):
 
 @router.get("/privacy", response_class=HTMLResponse)
 def privacy(req: Request):
-    return templates.TemplateResponse("privacy.html", {"request": req})
+    response = templates.TemplateResponse("privacy.html", {"request": req})
+    response.headers["X-Robots-Tag"] = "noindex, noarchive"
+    return response
 
 @router.get("/imprint", response_class=HTMLResponse)
 def imprint(req: Request):
-    return templates.TemplateResponse("imprint.html", {"request": req})
+    response = templates.TemplateResponse("imprint.html", {"request": req})
+    response.headers["X-Robots-Tag"] = "noindex, noarchive"
+    return response
 
 @router.get("/about", response_class=HTMLResponse)
 def about(req: Request):
     return templates.TemplateResponse("about.html", {"request": req})
+
+@router.get("/ai-model-comparison", response_class=HTMLResponse)
+def ai_model_comparison(req: Request):
+    return templates.TemplateResponse("ai-model-comparison.html", {"request": req})
 
 @router.get("/app", response_class=HTMLResponse)
 async def read_root(request: Request):
@@ -70,7 +117,7 @@ async def read_root(request: Request):
     model_labels = {model_id: meta["label"] for model_id, meta in model_metadata.items()}
     model_badges = {model_id: meta["badge"] for model_id, meta in model_metadata.items() if meta["badge"]}
 
-    return templates.TemplateResponse("index.html", {
+    response = templates.TemplateResponse("index.html", {
         "request": request, 
         "free_limit": cfg.get_usage_limit(False),
         "limits": cfg.get_limits_config(),
@@ -83,6 +130,8 @@ async def read_root(request: Request):
         "frontier_models": list(cfg.EARLY_FREE_MODELS),
         **firebase_config
     })
+    response.headers["X-Robots-Tag"] = "noindex, follow"
+    return response
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):

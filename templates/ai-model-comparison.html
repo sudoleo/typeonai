@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Compare ChatGPT, Claude, Gemini, Mistral, DeepSeek, Grok, and other AI models side by side with consens.io.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://www.consens.io/ai-model-comparison">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="consens.io">
+  <meta property="og:title" content="AI Model Comparison Tool | consens.io">
+  <meta property="og:description" content="Send one prompt to several leading AI models, compare their original answers, and build a structured consensus.">
+  <meta property="og:url" content="https://www.consens.io/ai-model-comparison">
+  <meta property="og:image" content="https://www.consens.io/static/favicon-square.png">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="AI Model Comparison Tool | consens.io">
+  <meta name="twitter:description" content="Compare AI model answers side by side and see where they agree or disagree.">
+  <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
+  <title>AI Model Comparison Tool | consens.io</title>
+  <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260516-public2">
+  <link rel="icon" href="/static/favicon-square.png?v=20260523-logo1" type="image/png">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": "https://www.consens.io/ai-model-comparison#webpage",
+        "url": "https://www.consens.io/ai-model-comparison",
+        "name": "AI Model Comparison Tool",
+        "description": "Compare AI model answers from leading providers side by side and create a structured consensus."
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://www.consens.io/ai-model-comparison#faq",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is an AI model comparison tool?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "An AI model comparison tool sends the same prompt to multiple AI models and lets you compare the original answers side by side."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Which AI models can consens.io compare?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "consens.io is built around major providers including OpenAI, Anthropic Claude, Google Gemini, Mistral, DeepSeek, and Grok. The exact model line-up can change over time."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Why compare several AI models?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Comparing several models helps reveal agreement, disagreement, missing context, and claims that should be checked before relying on a single answer."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+  <script>
+    (function () {
+      const savedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
+        document.documentElement.classList.add("dark-mode");
+      }
+    })();
+  </script>
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
+</head>
+<body>
+  <nav class="site-nav" aria-label="Primary">
+    <a href="/" class="brand" aria-label="consens.io home">
+      <img src="/static/favicon.png" alt="">
+      <span>consens.io</span>
+    </a>
+    <div class="nav-links">
+      <a href="/about">About</a>
+      <a href="/app" class="nav-cta">Open app</a>
+    </div>
+  </nav>
+
+  <main class="page-shell">
+    <header class="page-header">
+      <p class="eyebrow">AI model comparison</p>
+      <h1>Compare AI models before you trust one answer.</h1>
+      <p class="lead">
+        consens.io sends one prompt to several leading AI models, keeps the original responses visible,
+        and turns the overlap into a structured consensus.
+      </p>
+      <div class="links">
+        <a href="/app" class="button-secondary">Start comparing</a>
+        <a href="/" class="button-secondary">Product overview</a>
+      </div>
+    </header>
+
+    <div class="page-content">
+      <section class="legal-panel notice">
+        <h2>One prompt, several independent answers</h2>
+        <p>
+          Single-model chat can be fast, but it hides uncertainty. consens.io is built for prompts where you
+          want to compare ChatGPT, Claude, Gemini, Mistral, DeepSeek, Grok, and other model families before
+          deciding which answer is useful.
+        </p>
+      </section>
+
+      <section class="legal-panel">
+        <h2>What you can compare</h2>
+        <ul>
+          <li><strong>Answer quality:</strong> see which model gives the clearest, most useful response.</li>
+          <li><strong>Reasoning differences:</strong> inspect where models disagree or make different assumptions.</li>
+          <li><strong>Coverage gaps:</strong> catch missing context that one model may skip.</li>
+          <li><strong>Consensus:</strong> summarize the common ground across selected model outputs.</li>
+        </ul>
+      </section>
+
+      <section class="legal-panel">
+        <h2>Supported model families</h2>
+        <p>
+          consens.io is designed around direct comparison across major AI providers. Availability can change
+          as model providers update their APIs and model line-ups.
+        </p>
+        <div class="model-grid" style="margin-top:16px;">
+          <article class="model-card"><img src="/static/icons/chatgpt.png" alt="OpenAI logo"><span>OpenAI</span><strong>ChatGPT</strong></article>
+          <article class="model-card"><img src="/static/icons/claude.png" alt="Anthropic logo"><span>Anthropic</span><strong>Claude</strong></article>
+          <article class="model-card"><img src="/static/icons/gemini.png" alt="Gemini logo"><span>Google</span><strong>Gemini</strong></article>
+          <article class="model-card"><img src="/static/icons/mistral.png" alt="Mistral logo"><span>Mistral AI</span><strong>Mistral</strong></article>
+          <article class="model-card"><img src="/static/icons/deepseek.png" alt="DeepSeek logo"><span>DeepSeek</span><strong>DeepSeek</strong></article>
+          <article class="model-card"><img src="/static/icons/grok.png" alt="Grok logo"><span>xAI</span><strong>Grok</strong></article>
+        </div>
+      </section>
+
+      <section class="legal-panel">
+        <h2>When AI model comparison helps</h2>
+        <p>
+          Use it for research questions, writing drafts, coding approaches, decision support, study notes,
+          and any prompt where a single confident answer is not enough. The goal is not to declare one model
+          universally best, but to make differences visible before you rely on the output.
+        </p>
+      </section>
+
+      <section class="legal-panel">
+        <h2>FAQ</h2>
+        <h3>What is an AI model comparison tool?</h3>
+        <p>
+          It sends the same prompt to multiple AI models and lets you compare the original answers side by side.
+        </p>
+        <h3>Which AI models can consens.io compare?</h3>
+        <p>
+          consens.io is built around major providers including OpenAI, Anthropic Claude, Google Gemini,
+          Mistral, DeepSeek, and Grok. The exact model line-up can change over time.
+        </p>
+        <h3>Why compare several AI models?</h3>
+        <p>
+          Comparing several models helps reveal agreement, disagreement, missing context, and claims that
+          should be checked before relying on a single answer.
+        </p>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <span>&copy; 2026 consens.io</span>
+      <div class="footer-links">
+        <a href="/">Home</a>
+        <a href="/about">About</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/imprint">Imprint</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
