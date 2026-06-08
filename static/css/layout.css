@@ -7,13 +7,31 @@
   width: min(var(--app-container-width, 900px), calc(100vw - 320px));
   max-width: none;
   margin: 0 auto;
-  background: var(--container-bg);
+  background:
+    linear-gradient(160deg, var(--glass-bg-strong), var(--glass-bg) 54%, var(--glass-bg-soft)),
+    var(--container-bg);
   padding: 15px 20px;
   border-radius: 8px;
-  border: 1px solid var(--sidebar-border);
+  border: 1px solid color-mix(in srgb, var(--glass-border) 72%, var(--sidebar-border));
   box-shadow: var(--box-shadow);
   position: relative;
   container-type: inline-size;
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.28);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.28);
+  isolation: isolate;
+}
+
+.container::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, var(--glass-highlight), transparent 34%),
+    linear-gradient(115deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 42%, color-mix(in srgb, var(--accent-secondary) 6%, transparent));
+  opacity: 0.58;
+  pointer-events: none;
+  z-index: -1;
 }
 
 .container.is-width-resizable {
@@ -69,15 +87,19 @@ body:has(.sidebar.collapsed) .main-wrapper {
   left: 0;
   width: 100%;
   height: 45px;
-  background: var(--container-bg);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-bg-strong) 92%, transparent), color-mix(in srgb, var(--glass-bg) 84%, transparent)),
+    var(--container-bg);
   display: flex;
   align-items: center;
   justify-content: flex-start;
   padding: 0 20px;
   z-index: var(--z-header);
-  border-bottom: 1px solid var(--sidebar-border);
-  box-shadow: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-border) 56%, var(--sidebar-border));
+  box-shadow: 0 10px 34px rgba(37, 52, 67, 0.08), inset 0 1px 0 var(--glass-highlight);
   flex-wrap: nowrap;
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.78)) saturate(1.22);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.78)) saturate(1.22);
 }
 
 .top-bar-right {
@@ -118,7 +140,7 @@ body:has(.sidebar.collapsed) .main-wrapper {
 .top-bar-about {
   font-size: 1em;
   color: var(--text-color);
-  opacity: 0.8;
+  opacity: 0.78;
   white-space: nowrap;
 }
 
@@ -139,7 +161,8 @@ body:has(.sidebar.collapsed) .main-wrapper {
 
 .login-text:hover {
   color: var(--button-bg);
-  text-decoration: underline;
+  text-decoration: none;
+  opacity: 1;
 }
 
 /* --------------------------------------------------------------------------
@@ -152,16 +175,21 @@ body:has(.sidebar.collapsed) .main-wrapper {
   padding: 12px;
   width: 260px;
   height: 100%;
-  background: var(--sidebar-bg);
-  border-right: 1px solid var(--sidebar-border);
+  background:
+    linear-gradient(165deg, color-mix(in srgb, var(--glass-bg-strong) 82%, transparent), color-mix(in srgb, var(--glass-bg) 74%, transparent)),
+    var(--sidebar-bg);
+  border-right: 1px solid color-mix(in srgb, var(--glass-border) 58%, var(--sidebar-border));
   box-sizing: border-box;
   z-index: var(--z-sidebar);
   text-align: center;
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease;
   overflow-y: auto;
   overflow-x: hidden;
   flex-direction: column;
   display: flex;
+  box-shadow: 18px 0 60px rgba(37, 52, 67, 0.08), inset -1px 0 0 color-mix(in srgb, var(--glass-highlight) 48%, transparent);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.18);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.18);
 }
 
 .sidebar.collapsed {
@@ -191,8 +219,9 @@ body:has(.sidebar.collapsed) .main-wrapper {
 }
 
 .sidebar-toggle:hover {
-  background-color: rgba(0,0,0,0.05);
+  background-color: color-mix(in srgb, var(--glass-bg-strong) 72%, transparent);
   border-radius: 50%;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 8px 22px rgba(37, 52, 67, 0.1);
 }
 
 .dark-mode .sidebar-toggle:hover {
@@ -210,7 +239,7 @@ body:has(.sidebar.collapsed) .main-wrapper {
 }
 
 .sidebar-separator {
-  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 72%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--glass-border) 48%, var(--sidebar-border));
   margin: 20px 0;
 }
 
@@ -247,7 +276,8 @@ body:has(.sidebar.collapsed) .main-wrapper {
 }
 
 .sidebar-settings button:hover {
-  background-color: var(--sidebar-hover);
+  background-color: color-mix(in srgb, var(--glass-bg-strong) 70%, var(--sidebar-hover));
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 8px 24px rgba(37, 52, 67, 0.08);
 }
 
 .sidebar-settings button:hover .settings-icon {

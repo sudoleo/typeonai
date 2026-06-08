@@ -23,6 +23,7 @@ class CustomSecurityMiddleware:
                     "img-src 'self' data: https://lh3.googleusercontent.com https:; "
                     "connect-src 'self' "
                     "https://cloud.umami.is "
+                    "https://gateway.umami.is "
                     "https://api-gateway.umami.dev "
                     "https://firestore.googleapis.com "
                     "https://*.firebaseio.com "

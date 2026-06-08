@@ -3,12 +3,16 @@
    ========================================================================== */
 
 body {
-  font-family: 'Roboto', Arial, sans-serif;
-  background-color: var(--bg-color);
+  font-family: "SF Pro Text", Inter, Roboto, Arial, system-ui, -apple-system, "Segoe UI", sans-serif;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--bg-color) 92%, #ffffff 8%) 0%, var(--bg-color) 44%, color-mix(in srgb, var(--accent-secondary) 10%, var(--bg-color)) 100%),
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 36%, color-mix(in srgb, var(--accent-tertiary) 8%, transparent));
+  background-attachment: fixed;
   color: var(--text-color);
   margin: 0;
   padding: 10px;
   padding-top: 10px;
+  min-height: 100vh;
 }
 
 h1, h2, h3 {

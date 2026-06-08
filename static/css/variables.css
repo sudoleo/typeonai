@@ -4,19 +4,19 @@
 
 :root {
   /* Colors - Light Mode */
-  --bg-color: #f8fafc;
-  --container-bg: #ffffff;
-  --text-color: #334155;
-  --input-bg: #ffffff;
-  --input-border: #e2e8f0;
-  --button-bg: #0f172a;
+  --bg-color: #eef3f7;
+  --container-bg: rgba(255, 255, 255, 0.66);
+  --text-color: #243241;
+  --input-bg: rgba(255, 255, 255, 0.58);
+  --input-border: rgba(117, 137, 154, 0.24);
+  --button-bg: #162033;
   --button-text: #ffffff;
-  --response-bg: #ffffff;
+  --response-bg: rgba(255, 255, 255, 0.62);
   /* Additional UI Colors */
-  --sidebar-bg: #f8fafc;
-  --sidebar-border: #e2e8f0;
-  --sidebar-text-muted: #64748b;
-  --sidebar-hover: #f1f5f9;
+  --sidebar-bg: rgba(246, 250, 252, 0.68);
+  --sidebar-border: rgba(114, 132, 148, 0.22);
+  --sidebar-text-muted: #6d7b8b;
+  --sidebar-hover: rgba(255, 255, 255, 0.5);
 
   --code-bg: #f7f7f7;
   --feedback-text-color: #b3b3b3;
@@ -46,12 +46,24 @@
   --vote-exclude-color: var(--clear-button-text);
   
   /* Modern UI / Pulse Tokens */
-  --accent: #418af5;
-  --accent-contrast: #0b234a;
-  --chip-bg: rgba(0,0,0,0.04);
-  --chip-border: rgba(0,0,0,0.12);
-  --chip-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.08);
-  --chip-shadow-active: 0 3px 10px rgba(65,138,245,0.25);
+  --accent: #0f8fb8;
+  --accent-contrast: #053142;
+  --accent-secondary: #57c4a1;
+  --accent-tertiary: #d99b46;
+  --glass-bg: rgba(255, 255, 255, 0.54);
+  --glass-bg-strong: rgba(255, 255, 255, 0.72);
+  --glass-bg-soft: rgba(255, 255, 255, 0.36);
+  --glass-border: rgba(255, 255, 255, 0.58);
+  --glass-edge: rgba(92, 113, 134, 0.22);
+  --glass-highlight: rgba(255, 255, 255, 0.9);
+  --glass-blur: 18px;
+  --liquid-shadow: 0 12px 34px rgba(46, 61, 79, 0.09), 0 1px 6px rgba(46, 61, 79, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.76);
+  --liquid-shadow-hover: 0 18px 48px rgba(46, 61, 79, 0.12), 0 4px 14px rgba(46, 61, 79, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.84);
+  --liquid-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+  --chip-bg: rgba(255,255,255,0.42);
+  --chip-border: rgba(255,255,255,0.58);
+  --chip-shadow: 0 8px 24px rgba(46,61,79,0.09), inset 0 1px 0 rgba(255,255,255,0.72);
+  --chip-shadow-active: 0 10px 28px rgba(15,143,184,0.18);
   --overlay-dim: rgba(0, 0, 0, 0.38);
   --pulse-size: 6px;
   --pulse-alpha: 10%;
@@ -59,13 +71,13 @@
   --pulse-border-boost: 6%;
 
   /* Box Shadows */
-  --box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-  --shadow-hover: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+  --box-shadow: var(--liquid-shadow);
+  --shadow-hover: var(--liquid-shadow-hover);
 
   /* Card Design Tokens - Light */
-  --card-border: 1px solid rgba(0, 0, 0, 0.03);
-  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
-  --card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.05), 0 2px 6px rgba(0, 0, 0, 0.03);
+  --card-border: 1px solid color-mix(in srgb, var(--glass-border) 72%, var(--glass-edge));
+  --card-shadow: var(--liquid-shadow);
+  --card-shadow-hover: var(--liquid-shadow-hover);
 
   /* Credibility Badges (Light) */
   --cred-bg: #e6f4ea;
@@ -86,19 +98,19 @@
 
 /* Colors - Dark Mode */
 .dark-mode {
-  --bg-color: #0d1117;
-  --container-bg: #14171a;
-  --text-color: #e6edf3;
-  --input-bg: #0d1117;
-  --input-border: #2b3036;
-  --button-bg: #bb86fc;
-  --button-text: #0d1117;
-  --response-bg: #1c1f24;
+  --bg-color: #0a0f14;
+  --container-bg: rgba(18, 24, 31, 0.7);
+  --text-color: #edf5fb;
+  --input-bg: rgba(15, 21, 28, 0.62);
+  --input-border: rgba(190, 216, 230, 0.16);
+  --button-bg: #dff5ff;
+  --button-text: #071217;
+  --response-bg: rgba(24, 31, 39, 0.66);
   
-  --sidebar-bg: #14171a;
-  --sidebar-border: #2b3036;
-  --sidebar-text-muted: #8b949e;
-  --sidebar-hover: #1f2328;
+  --sidebar-bg: rgba(17, 23, 30, 0.66);
+  --sidebar-border: rgba(190, 216, 230, 0.16);
+  --sidebar-text-muted: #a2b1bd;
+  --sidebar-hover: rgba(255, 255, 255, 0.08);
 
   --code-bg: #1e1e1e;
   --feedback-text-color: #949494;
@@ -113,7 +125,7 @@
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.5);
   --consensus-button-text: #eee;
   --checkbox-border: #555;
-  --checkbox-checked: #bb86fc;
+  --checkbox-checked: #7dd3fc;
   --icon-color: #fff;
   --help-button-color: #cccccc;
   --help-button-hover: #66b2ff;
@@ -127,19 +139,31 @@
   --vote-exclude-bg: var(--clear-button-bg);
   --vote-exclude-color: var(--clear-button-text);
   
-  --accent: #bb86fc;
-  --accent-contrast: #111;
-  --chip-bg: rgba(255,255,255,0.06);
-  --chip-border: rgba(255,255,255,0.16);
-  --chip-shadow: 0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(0,0,0,0.35);
-  --chip-shadow-active: 0 4px 16px rgba(187,134,252,0.35);
+  --accent: #7dd3fc;
+  --accent-contrast: #062235;
+  --accent-secondary: #8ee6c8;
+  --accent-tertiary: #f3c66f;
+  --glass-bg: rgba(23, 31, 40, 0.5);
+  --glass-bg-strong: rgba(31, 41, 52, 0.72);
+  --glass-bg-soft: rgba(255, 255, 255, 0.07);
+  --glass-border: rgba(226, 244, 255, 0.14);
+  --glass-edge: rgba(226, 244, 255, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.18);
+  --glass-blur: 20px;
+  --liquid-shadow: 0 10px 30px rgba(0, 0, 0, 0.24), 0 1px 7px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --liquid-shadow-hover: 0 14px 42px rgba(0, 0, 0, 0.31), 0 3px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --liquid-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  --chip-bg: rgba(255,255,255,0.08);
+  --chip-border: rgba(226,244,255,0.16);
+  --chip-shadow: 0 10px 26px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.1);
+  --chip-shadow-active: 0 4px 18px rgba(125,211,252,0.22);
   --overlay-dim: rgba(0, 0, 0, 0.62);
 
-  --box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-  --shadow-hover: 0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -1px rgba(0,0,0,0.2);
+  --box-shadow: var(--liquid-shadow);
+  --shadow-hover: var(--liquid-shadow-hover);
 
   /* Card Design Tokens - Dark */
-  --card-border: 1px solid rgba(255, 255, 255, 0.03);
-  --card-shadow: 0 2px 10px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.15);
-  --card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.2);
+  --card-border: 1px solid color-mix(in srgb, var(--glass-border) 78%, var(--glass-edge));
+  --card-shadow: var(--liquid-shadow);
+  --card-shadow-hover: var(--liquid-shadow-hover);
 }

@@ -3,22 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="consens.io compares leading AI models in one workspace and turns their answers into a clear consensus.">
+  <meta name="description" content="consens.io compares model answers in one focused workspace and shows where they agree, differ, and need checking.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://www.consens.io/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="consens.io">
-  <meta property="og:title" content="consens.io - AI answers, compared">
-  <meta property="og:description" content="Compare leading AI models side by side and see where their answers agree, differ, and need checking.">
+  <meta property="og:title" content="consens.io - compare before you trust">
+  <meta property="og:description" content="Compare model answers side by side and see where they agree, differ, and need checking.">
   <meta property="og:url" content="https://www.consens.io/">
   <meta property="og:image" content="https://www.consens.io/static/favicon-square.png">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="consens.io - AI answers, compared">
-  <meta name="twitter:description" content="Compare leading AI models side by side and turn their answers into a structured consensus.">
+  <meta name="twitter:title" content="consens.io - compare before you trust">
+  <meta name="twitter:description" content="Compare model answers side by side and turn them into a structured consensus.">
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
-  <title>consens.io - AI answers, compared</title>
-  <link href="https://fonts.googleapis.com/css?family=Roboto:400,500,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260526-landing-mobile-icons1">
+  <title>consens.io - compare before you trust</title>
+  <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260608-story-responses1">
   <link rel="icon" href="/static/favicon-square.png?v=20260523-logo1" type="image/png">
   <script type="application/ld+json">
   {
@@ -81,20 +81,20 @@
   <main>
     <section class="hero landing-shell">
       <div class="hero-copy">
-        <p class="eyebrow">Multi-model AI workspace</p>
-        <h1>Ask every model. Decide with consensus.</h1>
+        <p class="eyebrow">Comparison workspace</p>
+        <h1>Find agreement. Weigh differences.</h1>
         <p class="lead">
-          consens.io sends one question to several leading AI models, keeps every original answer visible,
-          and creates a structured consensus that shows agreement, differences, and weak spots.
+          Ask once, read each model answer in place, and use the consensus layer to see what holds up,
+          what conflicts, and what needs a closer look.
         </p>
         <div class="hero-actions">
           <a id="ctaButton" href="/app" class="button-primary">Start comparing</a>
           <a href="#product" class="button-secondary" data-umami-event="landing_watch_workflow">Watch the workflow</a>
         </div>
         <div class="hero-proof" aria-label="Product highlights">
-          <span>Direct provider answers</span>
+          <span>Original answers stay visible</span>
           <span>Agent Mode</span>
-          <span>Consensus layer</span>
+          <span>Disagreement surfaced</span>
         </div>
       </div>
 
@@ -157,15 +157,15 @@
       <div class="landing-shell story-layout">
         <div class="story-copy">
           <p class="eyebrow">Product walkthrough</p>
-          <h2>See the app before you open it.</h2>
+          <h2>The workflow is the interface.</h2>
           <p>
-            The landing page now mirrors the actual consens.io workflow: prompt once, compare model answers,
-            then let the consensus panel reconcile the useful parts.
+            The preview mirrors the actual consens.io flow: one prompt, parallel model work,
+            then a consensus view that keeps agreement and disagreement separate.
           </p>
 
           <article class="story-step is-active" data-story-step="ask">
             <span>01</span>
-            <h3>Start with one prompt</h3>
+            <h3>Start from one prompt</h3>
             <p>Use the same input surface from the app, including Agent Mode, Auto Consensus, and Deep Think.</p>
           </article>
           <article id="agent-mode" class="story-step" data-story-step="agent">
@@ -175,7 +175,7 @@
           </article>
           <article class="story-step" data-story-step="consensus">
             <span>03</span>
-            <h3>Read agreement and differences</h3>
+            <h3>Separate agreement from doubt</h3>
             <p>The final panel separates what the models agree on from what still conflicts.</p>
           </article>
         </div>
@@ -228,26 +228,32 @@
                 <div class="mini-response">
                   <strong>Response from ChatGPT</strong>
                   <small><img src="/static/icons/chat_icons/chatgpt.png" alt=""> GPT-5.5</small>
+                  <p class="mini-response-text" data-response-text="Compare models by task fit, source freshness, and how consistently they explain uncertainty."></p>
                 </div>
                 <div class="mini-response">
                   <strong>Response from Mistral</strong>
                   <small><img src="/static/icons/chat_icons/mistral.png" alt=""> mistral-medium-3-5</small>
+                  <p class="mini-response-text" data-response-text="For market research, combine a fast scan with checks against recent sources and opposing views."></p>
                 </div>
                 <div class="mini-response">
                   <strong>Response from Claude</strong>
                   <small><img src="/static/icons/chat_icons/claude.png" alt=""> claude-opus-4-8</small>
+                  <p class="mini-response-text" data-response-text="Reliability improves when the answer separates evidence, assumptions, and open questions."></p>
                 </div>
                 <div class="mini-response">
                   <strong>Response from Gemini</strong>
                   <small><img src="/static/icons/chat_icons/gemini-icon.png" alt=""> gemini-3.1-pro-preview</small>
+                  <p class="mini-response-text" data-response-text="Use the model for synthesis, then verify numbers, dates, and company claims before deciding."></p>
                 </div>
                 <div class="mini-response">
                   <strong>Response from DeepSeek</strong>
                   <small><img src="/static/icons/chat_icons/deepseek.png" alt=""> deepseek-v4-pro</small>
+                  <p class="mini-response-text" data-response-text="The safest result is a short consensus with conflicts called out instead of averaged away."></p>
                 </div>
                 <div class="mini-response">
                   <strong>Response from Grok</strong>
                   <small><img src="/static/icons/chat_icons/grok.png" alt=""> grok-4.3</small>
+                  <p class="mini-response-text" data-response-text="No single answer should settle it. Agreement across models is a useful confidence signal."></p>
                 </div>
               </div>
 
@@ -270,7 +276,7 @@
     <section class="section landing-shell value-section">
       <div>
         <p class="eyebrow">Why consens.io</p>
-        <h2>Built for decisions, not single-model guesswork.</h2>
+        <h2>Built for decisions that need a second view.</h2>
       </div>
       <div class="card-grid">
         <article class="info-card">
@@ -336,11 +342,71 @@
       const steps = Array.from(document.querySelectorAll(".story-step"));
       const stage = document.querySelector(".story-stage .product-window");
       const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const storyResponseItems = stage ? Array.from(stage.querySelectorAll(".scene-consensus .mini-response")) : [];
+      let responseAnimationRun = 0;
+      let responsesAnimated = false;
+
+      const sleep = delay => new Promise(resolve => window.setTimeout(resolve, delay));
+
+      const resetStoryResponses = () => {
+        responseAnimationRun += 1;
+        responsesAnimated = false;
+        storyResponseItems.forEach(item => {
+          const text = item.querySelector(".mini-response-text");
+          item.classList.remove("is-loading", "is-loaded");
+          item.removeAttribute("aria-busy");
+          if (text) text.textContent = "";
+        });
+      };
+
+      const typeStoryResponse = async (text, content, runId) => {
+        text.textContent = "";
+        for (let index = 0; index < content.length; index += 1) {
+          if (runId !== responseAnimationRun) return;
+          text.textContent += content[index];
+          await sleep(10 + Math.random() * 10);
+        }
+      };
+
+      const startStoryResponses = () => {
+        if (!storyResponseItems.length || responsesAnimated) return;
+        responsesAnimated = true;
+        const runId = responseAnimationRun;
+
+        storyResponseItems.forEach((item, index) => {
+          const text = item.querySelector(".mini-response-text");
+          const content = text ? text.dataset.responseText || "" : "";
+          if (!text || !content) return;
+
+          window.setTimeout(async () => {
+            if (runId !== responseAnimationRun) return;
+            item.classList.add("is-loading");
+            item.setAttribute("aria-busy", "true");
+
+            if (reducedMotion) {
+              text.textContent = content;
+            } else {
+              await typeStoryResponse(text, content, runId);
+            }
+
+            if (runId !== responseAnimationRun) return;
+            item.classList.remove("is-loading");
+            item.classList.add("is-loaded");
+            item.removeAttribute("aria-busy");
+          }, reducedMotion ? 0 : index * 180);
+        });
+      };
 
       const setScene = scene => {
         if (!stage) return;
+        const previousScene = stage.dataset.activeScene;
         stage.dataset.activeScene = scene;
         steps.forEach(step => step.classList.toggle("is-active", step.dataset.storyStep === scene));
+        if (scene === "consensus") {
+          startStoryResponses();
+        } else if (previousScene === "consensus") {
+          resetStoryResponses();
+        }
       };
 
       if (steps.length && !reducedMotion) {
