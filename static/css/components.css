@@ -3530,6 +3530,13 @@ header .sidebar-toggle.collapse-btn {
     0 8px 18px color-mix(in srgb, var(--button-bg) 18%, transparent);
 }
 
+.chat-input-container.has-question-input .demo-chip,
+.demo-chip[hidden] {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) scale(.96);
+}
+
 /* --------------------------------------------------------------------------
    Model Pickers & Icons
    -------------------------------------------------------------------------- */

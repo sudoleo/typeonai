@@ -395,12 +395,33 @@ function createStartDemoChip() {
   if (storage?.getItem("demoChipDismissed")) return;
   const container = document.querySelector(".chat-input-container");
   if (!container || container.querySelector(".demo-chip")) return;
+  const questionInput = document.getElementById("questionInput");
 
   const btn = document.createElement("button");
   btn.className = "demo-chip";
   btn.type = "button";
   btn.setAttribute("aria-label", "Start interactive demo");
   btn.textContent = "Try Demo";
+
+  const syncChipState = () => {
+    const hasQuestionText = Boolean(questionInput?.value.length);
+    container.classList.toggle("has-question-input", hasQuestionText);
+    btn.hidden = hasQuestionText;
+    btn.tabIndex = hasQuestionText ? -1 : 0;
+  };
+
+  window.syncDemoChipState = syncChipState;
+
+  if (questionInput) {
+    questionInput.addEventListener("input", event => {
+      syncChipState();
+      if (questionInput.value.length && event.isTrusted) {
+        storage?.setItem("demoChipDismissed", "1");
+        btn.remove();
+      }
+    });
+    questionInput.addEventListener("change", syncChipState);
+  }
 
   btn.addEventListener("click", async () => {
     storage?.setItem("demoChipDismissed", "1");
@@ -409,6 +430,7 @@ function createStartDemoChip() {
   });
 
   container.appendChild(btn);
+  syncChipState();
 }
 
 window.runDemoFlow = runDemoFlow;

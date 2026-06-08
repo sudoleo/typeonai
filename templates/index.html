@@ -4406,6 +4406,8 @@
           const inputBox = document.getElementById("questionInput");
           if (inputBox) {
             inputBox.value = "";
+            inputBox.dispatchEvent(new Event("input", { bubbles: true }));
+            window.syncDemoChipState?.();
           }
 
           setAgentModeStatus("idle");
