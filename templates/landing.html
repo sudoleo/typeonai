@@ -18,7 +18,7 @@
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>consens.io - compare before you trust</title>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260608-story-responses1">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260608-consensus-focus1">
   <link rel="icon" href="/static/favicon-square.png?v=20260523-logo1" type="image/png">
   <script type="application/ld+json">
   {
@@ -258,13 +258,13 @@
               </div>
 
               <div class="consensus-preview story-consensus">
-                <div>
+                <div class="story-consensus-panel story-consensus-answer">
                   <strong>Consensus Answer</strong>
-                  <p>Most models agree on triangulating outputs and checking sources before using the final answer.</p>
+                  <p class="story-consensus-text" data-consensus-text="Most models agree that market research answers should be compared across sources, not accepted from one model alone. The reliable path is to triangulate claims, check freshness, and keep open assumptions visible before using the final answer."></p>
                 </div>
-                <div>
+                <div class="story-consensus-panel story-differences credibility-framed cred-largely">
                   <strong>Differences</strong>
-                  <p>Top reasoning models vary in confidence, source freshness, and technical depth.</p>
+                  <p class="story-consensus-text" data-consensus-text="Top reasoning models vary in confidence, source freshness, and technical depth."></p>
                 </div>
               </div>
             </div>
@@ -343,29 +343,78 @@
       const stage = document.querySelector(".story-stage .product-window");
       const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       const storyResponseItems = stage ? Array.from(stage.querySelectorAll(".scene-consensus .mini-response")) : [];
+      const storyConsensusItems = stage ? Array.from(stage.querySelectorAll(".story-consensus-panel")) : [];
+      const storyConsensus = stage ? stage.querySelector(".story-consensus") : null;
+      const storyInputScene = stage ? stage.querySelector(".scene-ask") : null;
       let responseAnimationRun = 0;
       let responsesAnimated = false;
+      let consensusAnimated = false;
 
-      const sleep = delay => new Promise(resolve => window.setTimeout(resolve, delay));
+      const updateStoryInputVisibility = () => {
+        if (!stage || !storyInputScene) return;
+        if (stage.dataset.activeScene !== "ask") {
+          stage.classList.remove("is-ask-input-visible");
+          return;
+        }
+
+        const rect = storyInputScene.getBoundingClientRect();
+        const visibleTop = Math.max(rect.top, 0);
+        const visibleBottom = Math.min(rect.bottom, window.innerHeight || document.documentElement.clientHeight);
+        const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+        const visibleRatio = rect.height ? visibleHeight / rect.height : 0;
+
+        stage.classList.toggle("is-ask-input-visible", visibleRatio >= 0.55);
+      };
 
       const resetStoryResponses = () => {
         responseAnimationRun += 1;
         responsesAnimated = false;
+        consensusAnimated = false;
         storyResponseItems.forEach(item => {
           const text = item.querySelector(".mini-response-text");
           item.classList.remove("is-loading", "is-loaded");
           item.removeAttribute("aria-busy");
           if (text) text.textContent = "";
         });
+        storyConsensusItems.forEach(item => {
+          const text = item.querySelector(".story-consensus-text");
+          item.classList.remove("is-loading", "is-loaded");
+          item.removeAttribute("aria-busy");
+          if (text) text.textContent = "";
+        });
+        storyConsensus?.classList.remove("is-focus-pulse");
       };
 
-      const typeStoryResponse = async (text, content, runId) => {
-        text.textContent = "";
-        for (let index = 0; index < content.length; index += 1) {
-          if (runId !== responseAnimationRun) return;
-          text.textContent += content[index];
-          await sleep(10 + Math.random() * 10);
-        }
+      const startStoryConsensus = () => {
+        if (!storyConsensusItems.length || consensusAnimated) return;
+        consensusAnimated = true;
+        const runId = responseAnimationRun;
+
+        storyConsensusItems.forEach((item, index) => {
+          const text = item.querySelector(".story-consensus-text");
+          const content = text ? text.dataset.consensusText || "" : "";
+          if (!text || !content) return;
+
+          text.textContent = "";
+          item.classList.remove("is-loaded");
+          item.classList.add("is-loading");
+          item.setAttribute("aria-busy", "true");
+
+          window.setTimeout(() => {
+            if (runId !== responseAnimationRun) return;
+            text.textContent = content;
+            item.classList.remove("is-loading");
+            item.classList.add("is-loaded");
+            item.removeAttribute("aria-busy");
+
+            const allConsensusLoaded = storyConsensusItems.every(panel => panel.classList.contains("is-loaded"));
+            if (allConsensusLoaded && storyConsensus && !reducedMotion) {
+              storyConsensus.classList.remove("is-focus-pulse");
+              void storyConsensus.offsetWidth;
+              storyConsensus.classList.add("is-focus-pulse");
+            }
+          }, reducedMotion ? 0 : 520 + index * 520);
+        });
       };
 
       const startStoryResponses = () => {
@@ -378,23 +427,24 @@
           const content = text ? text.dataset.responseText || "" : "";
           if (!text || !content) return;
 
-          window.setTimeout(async () => {
-            if (runId !== responseAnimationRun) return;
-            item.classList.add("is-loading");
-            item.setAttribute("aria-busy", "true");
+          text.textContent = "";
+          item.classList.remove("is-loaded");
+          item.classList.add("is-loading");
+          item.setAttribute("aria-busy", "true");
 
-            if (reducedMotion) {
-              text.textContent = content;
-            } else {
-              await typeStoryResponse(text, content, runId);
-            }
-
+          window.setTimeout(() => {
             if (runId !== responseAnimationRun) return;
+            text.textContent = content;
             item.classList.remove("is-loading");
             item.classList.add("is-loaded");
             item.removeAttribute("aria-busy");
-          }, reducedMotion ? 0 : index * 180);
+          }, reducedMotion ? 0 : 620 + index * 380);
         });
+
+        window.setTimeout(() => {
+          if (runId !== responseAnimationRun) return;
+          startStoryConsensus();
+        }, reducedMotion ? 0 : 3000);
       };
 
       const setScene = scene => {
@@ -402,6 +452,7 @@
         const previousScene = stage.dataset.activeScene;
         stage.dataset.activeScene = scene;
         steps.forEach(step => step.classList.toggle("is-active", step.dataset.storyStep === scene));
+        updateStoryInputVisibility();
         if (scene === "consensus") {
           startStoryResponses();
         } else if (previousScene === "consensus") {
@@ -436,6 +487,19 @@
         window.addEventListener("scroll", scheduleSceneUpdate, { passive: true });
         window.addEventListener("resize", scheduleSceneUpdate);
         updateSceneFromScroll();
+      }
+
+      if (storyInputScene) {
+        if ("IntersectionObserver" in window) {
+          const inputObserver = new IntersectionObserver(updateStoryInputVisibility, {
+            threshold: [0, 0.25, 0.55, 0.75, 1]
+          });
+          inputObserver.observe(storyInputScene);
+        }
+
+        window.addEventListener("scroll", updateStoryInputVisibility, { passive: true });
+        window.addEventListener("resize", updateStoryInputVisibility);
+        updateStoryInputVisibility();
       }
 
       ["ctaButton", "navCtaButton"].forEach(id => {

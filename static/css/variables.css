@@ -99,15 +99,15 @@
 /* Colors - Dark Mode */
 .dark-mode {
   --bg-color: #0a0f14;
-  --container-bg: rgba(18, 24, 31, 0.7);
+  --container-bg: rgba(18, 24, 31, 0.84);
   --text-color: #edf5fb;
-  --input-bg: rgba(15, 21, 28, 0.62);
+  --input-bg: rgba(15, 21, 28, 0.76);
   --input-border: rgba(190, 216, 230, 0.16);
   --button-bg: #dff5ff;
   --button-text: #071217;
-  --response-bg: rgba(24, 31, 39, 0.66);
+  --response-bg: rgba(24, 31, 39, 0.8);
   
-  --sidebar-bg: rgba(17, 23, 30, 0.66);
+  --sidebar-bg: rgba(17, 23, 30, 0.82);
   --sidebar-border: rgba(190, 216, 230, 0.16);
   --sidebar-text-muted: #a2b1bd;
   --sidebar-hover: rgba(255, 255, 255, 0.08);
@@ -143,21 +143,24 @@
   --accent-contrast: #062235;
   --accent-secondary: #8ee6c8;
   --accent-tertiary: #f3c66f;
-  --glass-bg: rgba(23, 31, 40, 0.5);
-  --glass-bg-strong: rgba(31, 41, 52, 0.72);
-  --glass-bg-soft: rgba(255, 255, 255, 0.07);
-  --glass-border: rgba(226, 244, 255, 0.14);
-  --glass-edge: rgba(226, 244, 255, 0.08);
-  --glass-highlight: rgba(255, 255, 255, 0.18);
-  --glass-blur: 20px;
-  --liquid-shadow: 0 10px 30px rgba(0, 0, 0, 0.24), 0 1px 7px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  --liquid-shadow-hover: 0 14px 42px rgba(0, 0, 0, 0.31), 0 3px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  --liquid-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  --glass-bg: rgba(23, 31, 40, 0.34);
+  --glass-bg-strong: rgba(31, 41, 52, 0.52);
+  --glass-bg-soft: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(226, 244, 255, 0.11);
+  --glass-edge: rgba(226, 244, 255, 0.06);
+  --glass-highlight: rgba(255, 255, 255, 0.1);
+  --glass-blur: 14px;
+  --liquid-shadow: 0 8px 22px rgba(0, 0, 0, 0.2), 0 1px 5px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --liquid-shadow-hover: 0 10px 30px rgba(0, 0, 0, 0.25), 0 2px 9px rgba(0, 0, 0, 0.17), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --liquid-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
   --chip-bg: rgba(255,255,255,0.08);
-  --chip-border: rgba(226,244,255,0.16);
-  --chip-shadow: 0 10px 26px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.1);
-  --chip-shadow-active: 0 4px 18px rgba(125,211,252,0.22);
+  --chip-border: rgba(226,244,255,0.12);
+  --chip-shadow: 0 7px 18px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.06);
+  --chip-shadow-active: 0 3px 14px rgba(125,211,252,0.14);
   --overlay-dim: rgba(0, 0, 0, 0.62);
+  --pulse-alpha: 6%;
+  --pulse-alpha-hover: 10%;
+  --pulse-border-boost: 3%;
 
   --box-shadow: var(--liquid-shadow);
   --shadow-hover: var(--liquid-shadow-hover);

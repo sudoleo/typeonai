@@ -462,13 +462,14 @@ a:hover {
 .typing-line {
   display: inline-block;
   min-height: 25px;
+  max-width: 0;
   color: var(--heading);
   overflow: hidden;
   white-space: nowrap;
   vertical-align: top;
 }
 
-[data-active-scene="ask"] .typing-line {
+[data-active-scene="ask"].is-ask-input-visible .typing-line {
   width: auto;
   max-width: 0;
   border-right: 2px solid var(--accent);
@@ -708,6 +709,30 @@ a:hover {
     var(--response-bg);
 }
 
+.story-consensus {
+  position: relative;
+}
+
+.story-consensus.is-focus-pulse {
+  animation: consensusFocusSettle 1.35s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.story-consensus.is-focus-pulse::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  border-radius: 12px;
+  background:
+    linear-gradient(110deg, transparent 0%, color-mix(in srgb, var(--accent) 12%, transparent) 42%, transparent 70%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--glass-highlight) 40%, transparent),
+    0 0 30px color-mix(in srgb, var(--accent) 16%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  animation: consensusFocusHalo 1.35s cubic-bezier(.22, 1, .36, 1) both;
+}
+
 .consensus-preview > div {
   min-height: 92px;
   padding: 16px;
@@ -720,6 +745,79 @@ a:hover {
 
 .consensus-preview > div + div {
   box-shadow: inset 1px 0 0 color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.story-consensus-panel {
+  position: relative;
+  overflow: hidden;
+  transition: border-color .34s ease, box-shadow .34s ease, transform .34s ease;
+}
+
+.story-consensus-text {
+  opacity: 0;
+  transform: translateY(8px);
+  filter: blur(4px);
+}
+
+.story-consensus-panel.is-loading {
+  border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+}
+
+.story-consensus-panel.is-loading::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 0%, color-mix(in srgb, var(--glass-highlight) 26%, transparent) 36%, transparent 68%);
+  opacity: 0.3;
+  transform: translateX(-100%);
+  animation: responseSweep 3.1s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.story-consensus-panel.is-loading::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 18px;
+  height: 34px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--muted) 12%, transparent), color-mix(in srgb, var(--accent) 10%, transparent), color-mix(in srgb, var(--muted) 10%, transparent)) 0 0 / 68% 9px no-repeat,
+    linear-gradient(90deg, color-mix(in srgb, var(--muted) 9%, transparent), color-mix(in srgb, var(--accent-secondary) 8%, transparent), color-mix(in srgb, var(--muted) 8%, transparent)) 0 22px / 50% 9px no-repeat;
+  border-radius: 999px;
+  opacity: 0.5;
+  animation: responsePlaceholder 2.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.story-consensus-panel.is-loaded {
+  animation: responseSettle .78s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.story-consensus-panel.is-loaded .story-consensus-text {
+  animation: responseTextReveal .8s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.story-differences.credibility-framed {
+  --cred-frame: #4f9f62;
+  --cred-frame-wash: rgba(79, 159, 98, 0.085);
+}
+
+.dark-mode .story-differences.credibility-framed {
+  --cred-frame: #8dd79a;
+  --cred-frame-wash: rgba(141, 215, 154, 0.10);
+}
+
+.story-differences.credibility-framed.is-loaded {
+  animation: storyDifferencesSettle .78s cubic-bezier(.22, 1, .36, 1) both;
+  border-color: color-mix(in srgb, var(--cred-frame) 24%, var(--border));
+  box-shadow:
+    inset 1px 0 0 color-mix(in srgb, var(--cred-frame) 34%, transparent),
+    0 0 0 3px var(--cred-frame-wash);
+}
+
+.story-differences.credibility-framed.is-loaded strong {
+  color: color-mix(in srgb, var(--cred-frame) 75%, var(--heading));
 }
 
 .consensus-preview strong,
@@ -885,41 +983,53 @@ a:hover {
   color: var(--text);
   font-size: 0.78rem;
   line-height: 1.42;
+  opacity: 0;
+  transform: translateY(8px);
+  filter: blur(4px);
 }
 
 .mini-response.is-loading,
 .mini-response.is-loaded {
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
 }
 
 .mini-response.is-loading {
-  transform: translateY(-2px);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 7%, transparent), var(--card-shadow);
 }
 
 .mini-response.is-loading::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(110deg, transparent 0%, color-mix(in srgb, var(--glass-highlight) 38%, transparent) 32%, transparent 58%);
-  opacity: 0.72;
+  background: linear-gradient(110deg, transparent 0%, color-mix(in srgb, var(--glass-highlight) 28%, transparent) 36%, transparent 68%);
+  opacity: 0.34;
   transform: translateX(-100%);
-  animation: responseSweep 1.25s ease-in-out infinite;
+  animation: responseSweep 2.8s ease-in-out infinite;
   pointer-events: none;
 }
 
-.mini-response.is-loading .mini-response-text::after {
+.mini-response.is-loading::after {
   content: "";
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  margin-left: 2px;
-  background: var(--accent);
-  vertical-align: -0.16em;
-  animation: responseCaretBlink .8s step-end infinite;
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 18px;
+  height: 34px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--muted) 12%, transparent), color-mix(in srgb, var(--accent) 10%, transparent), color-mix(in srgb, var(--muted) 10%, transparent)) 0 0 / 72% 9px no-repeat,
+    linear-gradient(90deg, color-mix(in srgb, var(--muted) 9%, transparent), color-mix(in srgb, var(--accent-secondary) 8%, transparent), color-mix(in srgb, var(--muted) 8%, transparent)) 0 22px / 54% 9px no-repeat;
+  border-radius: 999px;
+  opacity: 0.54;
+  animation: responsePlaceholder 2.4s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .mini-response.is-loaded {
-  animation: responseSettle .32s ease both;
+  animation: responseSettle .76s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.mini-response.is-loaded .mini-response-text {
+  animation: responseTextReveal .78s cubic-bezier(.22, 1, .36, 1) both;
 }
 
 .dark-mode .mini-response img[src*="chatgpt"],
@@ -1133,13 +1243,13 @@ canvas {
 
 @keyframes responseSweep {
   0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  42%, 100% { transform: translateX(100%); }
 }
 
 @keyframes responseSettle {
   from {
-    transform: translateY(-2px);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent), var(--card-shadow);
+    transform: translateY(4px);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent), var(--card-shadow);
   }
   to {
     transform: translateY(0);
@@ -1147,8 +1257,69 @@ canvas {
   }
 }
 
-@keyframes responseCaretBlink {
-  50% { opacity: 0; }
+@keyframes responseTextReveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes responsePlaceholder {
+  0%, 100% {
+    opacity: 0.34;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.62;
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes consensusFocusSettle {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  30% {
+    transform: translateY(-3px) scale(1.006);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes consensusFocusHalo {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  24% {
+    opacity: 0.78;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(0) scale(1.02);
+  }
+}
+
+@keyframes storyDifferencesSettle {
+  from {
+    transform: translateY(4px);
+    box-shadow:
+      inset 1px 0 0 color-mix(in srgb, var(--cred-frame) 20%, transparent),
+      0 0 0 1px var(--cred-frame-wash);
+  }
+  to {
+    transform: translateY(0);
+    box-shadow:
+      inset 1px 0 0 color-mix(in srgb, var(--cred-frame) 34%, transparent),
+      0 0 0 3px var(--cred-frame-wash);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
