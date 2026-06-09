@@ -11,6 +11,7 @@ from app.core.config import (
     ALLOWED_OPENAI_MODELS, ALLOWED_MISTRAL_MODELS, ALLOWED_ANTHROPIC_MODELS,
     ALLOWED_GEMINI_MODELS, ALLOWED_DEEPSEEK_MODELS, ALLOWED_GROK_MODELS,
 )
+from app.services.llm.attachments import parse_attachments
 from app.services.llm.base import validate_model, count_words, get_system_prompt
 from app.services.llm.engines import (
     query_openai, query_mistral, query_claude, query_gemini, query_deepseek, query_grok
@@ -98,6 +99,7 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
 
     validate_question_word_limit(question, is_pro_user, deep_search)
     validate_model(model, ALLOWED_OPENAI_MODELS, "OpenAI", is_pro=is_pro_user)
+    attachments = parse_attachments(data, is_pro_user)
 
     active_count = get_valid_active_count(data)
 
@@ -142,7 +144,8 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
         answer = query_openai(
             question, developer_api_key, deep_search=deep_search,
             system_prompt=system_prompt, model_override=model,
-            max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search)
+            max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
+            attachments=attachments
         )
 
         # Remaining berechnen
@@ -162,7 +165,8 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
         answer = query_openai(
             question, api_key, deep_search=deep_search,
             system_prompt=system_prompt, model_override=model,
-            max_output_tokens=cfg.get_output_token_limit(False, deep_search)
+            max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+            attachments=attachments
         )
         return source_response(
             answer,
@@ -202,6 +206,7 @@ def ask_mistral_post(request: Request, data: dict = Body(...)):
 
     validate_question_word_limit(question, is_pro_user, deep_search)
     validate_model(model, ALLOWED_MISTRAL_MODELS, "Mistral", is_pro=is_pro_user)
+    attachments = parse_attachments(data, is_pro_user)
 
     active_count = get_valid_active_count(data)
 
@@ -229,7 +234,8 @@ def ask_mistral_post(request: Request, data: dict = Body(...)):
         
         answer = query_mistral(
             question, developer_api_key, system_prompt, deep_search=deep_search,
-            model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search)
+            model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
+            attachments=attachments
         )
         
         return source_response(
@@ -243,7 +249,8 @@ def ask_mistral_post(request: Request, data: dict = Body(...)):
     elif api_key:
         answer = query_mistral(
             question, api_key, system_prompt, deep_search=deep_search,
-            model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search)
+            model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+            attachments=attachments
         )
         return source_response(answer, free_usage_remaining="Unlimited", deep_remaining="Unlimited", is_pro_user=False, key_used="User API Key")
     else:
@@ -276,6 +283,7 @@ def ask_claude_post(request: Request, data: dict = Body(...)):
 
     validate_question_word_limit(question, is_pro_user, deep_search)
     validate_model(model, ALLOWED_ANTHROPIC_MODELS, "Anthropic", is_pro=is_pro_user)
+    attachments = parse_attachments(data, is_pro_user)
 
     active_count = get_valid_active_count(data)
 
@@ -303,7 +311,8 @@ def ask_claude_post(request: Request, data: dict = Body(...)):
 
         answer = query_claude(
             question, developer_api_key, system_prompt, deep_search=deep_search,
-            model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search)
+            model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
+            attachments=attachments
         )
         
         return source_response(
@@ -317,7 +326,8 @@ def ask_claude_post(request: Request, data: dict = Body(...)):
     elif api_key:
         answer = query_claude(
             question, api_key, system_prompt, deep_search=deep_search,
-            model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search)
+            model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+            attachments=attachments
         )
         return source_response(answer, free_usage_remaining="Unlimited", deep_remaining="Unlimited", is_pro_user=False, key_used="User API Key")
     else:
@@ -352,6 +362,7 @@ def ask_gemini_post(request: Request, data: dict = Body(...)):
     validate_question_word_limit(question, is_pro_user, deep_search)
     max_tokens = cfg.get_output_token_limit(is_pro_user, deep_search)
     validate_model(model, ALLOWED_GEMINI_MODELS, "Gemini", is_pro=is_pro_user)
+    attachments = parse_attachments(data, is_pro_user)
 
     active_count = get_valid_active_count(data)
 
@@ -377,11 +388,11 @@ def ask_gemini_post(request: Request, data: dict = Body(...)):
         if use_own_keys:
             if not (api_key and api_key.strip()):
                 raise HTTPException(status_code=400, detail="Missing user API key for Gemini.")
-            answer = query_gemini(question, user_api_key=api_key.strip(), deep_search=deep_search, system_prompt=system_prompt, model_override=model, max_output_tokens=max_tokens)
+            answer = query_gemini(question, user_api_key=api_key.strip(), deep_search=deep_search, system_prompt=system_prompt, model_override=model, max_output_tokens=max_tokens, attachments=attachments)
             key_info = "User API Key"
         else:
             # Service Account (SaaS Budget)
-            answer = query_gemini(question, user_api_key=None, deep_search=deep_search, system_prompt=system_prompt, model_override=model, max_output_tokens=max_tokens)
+            answer = query_gemini(question, user_api_key=None, deep_search=deep_search, system_prompt=system_prompt, model_override=model, max_output_tokens=max_tokens, attachments=attachments)
             key_info = "Service Account"
 
         return source_response(
@@ -399,7 +410,8 @@ def ask_gemini_post(request: Request, data: dict = Body(...)):
         answer = query_gemini(
             question, user_api_key=api_key.strip(), deep_search=deep_search,
             system_prompt=system_prompt, model_override=model,
-            max_output_tokens=cfg.get_output_token_limit(False, deep_search)
+            max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+            attachments=attachments
         )
         return source_response(answer, key_used="User API Key", is_pro_user=False)
 
@@ -430,6 +442,7 @@ def ask_deepseek_post(request: Request, data: dict = Body(...)):
 
     validate_question_word_limit(question, is_pro_user, deep_search)
     validate_model(model, ALLOWED_DEEPSEEK_MODELS, "DeepSeek", is_pro=is_pro_user)
+    attachments = parse_attachments(data, is_pro_user)
 
     active_count = get_valid_active_count(data)
 
@@ -457,7 +470,8 @@ def ask_deepseek_post(request: Request, data: dict = Body(...)):
 
         answer = query_deepseek(
             question, developer_api_key, system_prompt, deep_search=deep_search,
-            model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search)
+            model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
+            attachments=attachments
         )
         
         return source_response(
@@ -471,7 +485,8 @@ def ask_deepseek_post(request: Request, data: dict = Body(...)):
     elif api_key:
         answer = query_deepseek(
             question, api_key, system_prompt, deep_search=deep_search,
-            model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search)
+            model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+            attachments=attachments
         )
         return source_response(answer, free_usage_remaining="Unlimited", deep_remaining="Unlimited", is_pro_user=False, key_used="User API Key")
     else:
@@ -504,6 +519,7 @@ def ask_grok_post(request: Request, data: dict = Body(...)):
 
     validate_question_word_limit(question, is_pro_user, deep_search)
     validate_model(model, ALLOWED_GROK_MODELS, "Grok", is_pro=is_pro_user)
+    attachments = parse_attachments(data, is_pro_user)
 
     active_count = get_valid_active_count(data)
 
@@ -531,7 +547,8 @@ def ask_grok_post(request: Request, data: dict = Body(...)):
 
         answer = query_grok(
             question, developer_api_key, system_prompt, deep_search=deep_search,
-            model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search)
+            model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
+            attachments=attachments
         )
         
         return source_response(
@@ -545,7 +562,8 @@ def ask_grok_post(request: Request, data: dict = Body(...)):
     elif api_key:
         answer = query_grok(
             question, api_key, system_prompt, deep_search=deep_search,
-            model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search)
+            model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+            attachments=attachments
         )
         return source_response(answer, free_usage_remaining="Unlimited", deep_remaining="Unlimited", is_pro_user=False, key_used="User API Key")
     else:

@@ -23,6 +23,11 @@ from app.core.config import (
     DEFAULT_DEEPSEEK_MODEL,
     DEFAULT_GROK_MODEL,
 )
+from app.services.llm.attachments import (
+    IMAGE_MIMES,
+    build_attachment_question_suffix,
+    native_attachments_for_provider,
+)
 from app.services.llm.base import get_system_prompt
 from app.services.llm.citations import (
     make_llm_result,
@@ -57,6 +62,51 @@ def _log_model_selection(provider: str, api_model: str, deep_search: bool, model
     )
 
 
+def _responses_input_with_attachments(question: str, native_attachments: list[dict]):
+    """Baut den `input` für die Responses API (OpenAI/Grok) mit Datei-Content-Blöcken."""
+    content = []
+    for att in native_attachments:
+        if att["mime"] in IMAGE_MIMES:
+            content.append({
+                "type": "input_image",
+                "image_url": f"data:{att['mime']};base64,{att['data']}",
+            })
+        else:
+            content.append({
+                "type": "input_file",
+                "filename": att["name"],
+                "file_data": f"data:application/pdf;base64,{att['data']}",
+            })
+    content.append({"type": "input_text", "text": question})
+    return [{"role": "user", "content": content}]
+
+
+def _anthropic_content_with_attachments(question: str, native_attachments: list[dict]):
+    content = []
+    for att in native_attachments:
+        if att["mime"] in IMAGE_MIMES:
+            content.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": att["mime"], "data": att["data"]},
+            })
+        else:
+            content.append({
+                "type": "document",
+                "source": {"type": "base64", "media_type": "application/pdf", "data": att["data"]},
+            })
+    content.append({"type": "text", "text": question})
+    return content
+
+
+def _gemini_parts_with_attachments(question_text: str, native_attachments: list[dict]):
+    parts = [
+        {"inline_data": {"mime_type": att["mime"], "data": att["data"]}}
+        for att in native_attachments
+    ]
+    parts.append({"text": question_text})
+    return parts
+
+
 def _openai_responses_payload(
     *,
     model: str,
@@ -64,11 +114,15 @@ def _openai_responses_payload(
     question: str,
     max_tokens: int,
     request_config: dict | None = None,
+    native_attachments: list[dict] | None = None,
 ) -> dict:
     payload = {
         "model": model,
         "instructions": system_prompt,
-        "input": question,
+        "input": (
+            _responses_input_with_attachments(question, native_attachments)
+            if native_attachments else question
+        ),
         "tools": [{"type": "web_search"}],
         "tool_choice": "auto",
         "include": ["web_search_call.action.sources"],
@@ -119,6 +173,7 @@ def build_provider_payload(
     model_override: str | None = None,
     deep_search: bool = False,
     max_output_tokens: int | None = None,
+    attachments: list[dict] | None = None,
 ) -> dict:
     if system_prompt is None:
         system_prompt = get_system_prompt()
@@ -127,6 +182,13 @@ def build_provider_payload(
 
     max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
     provider_key = provider.lower()
+
+    # Anhänge: nativ unterstützte Dateien gehen als Content-Block mit,
+    # alles andere wird als Text-Fallback an die Frage angehängt.
+    native_attachments = native_attachments_for_provider(attachments or [], provider_key)
+    fallback_suffix = build_attachment_question_suffix(attachments or [], provider_key)
+    if fallback_suffix:
+        question = (question or "") + fallback_suffix
 
     if provider_key == "openai":
         if deep_search:
@@ -144,6 +206,7 @@ def build_provider_payload(
             question=question,
             max_tokens=max_tokens,
             request_config=request_config,
+            native_attachments=native_attachments,
         )
         return {
             "provider": "openai",
@@ -195,7 +258,13 @@ def build_provider_payload(
             "model": api_model,
             "max_tokens": max_tokens,
             "system": system_prompt,
-            "messages": [{"role": "user", "content": question}],
+            "messages": [{
+                "role": "user",
+                "content": (
+                    _anthropic_content_with_attachments(question, native_attachments)
+                    if native_attachments else question
+                ),
+            }],
             "tools": [{
                 "type": "web_search_20250305",
                 "name": "web_search",
@@ -223,9 +292,13 @@ def build_provider_payload(
             api_model, model_config = cfg.resolve_api_model(model_override, GEMINI_FLASH_MODEL, "gemini")
         if question and len(question) > 12000:
             question = question[:12000] + " ... [truncated]"
+        gemini_question_text = "Do not ask any questions.\n---\n" + question
         payload = {
             "systemInstruction": {"parts": [{"text": system_prompt}]},
-            "contents": [{"role": "user", "parts": [{"text": "Do not ask any questions.\n---\n" + question}]}],
+            "contents": [{
+                "role": "user",
+                "parts": _gemini_parts_with_attachments(gemini_question_text, native_attachments),
+            }],
             "tools": [{"google_search": {}}],
             "generationConfig": {
                 "maxOutputTokens": max_tokens,
@@ -287,6 +360,7 @@ def build_provider_payload(
             question=question,
             max_tokens=max_tokens,
             request_config=request_config,
+            native_attachments=native_attachments,
         )
         return {
             "provider": "grok",
@@ -346,6 +420,7 @@ def query_openai(
     system_prompt: str = None,
     model_override: str = None,
     max_output_tokens: Optional[int] = None,
+    attachments: Optional[list] = None,
 ) -> str:
     max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
     request_data = build_provider_payload(
@@ -355,6 +430,7 @@ def query_openai(
         model_override=model_override,
         deep_search=deep_search,
         max_output_tokens=max_tokens,
+        attachments=attachments,
     )
 
     _log_model_selection("OpenAI", request_data["api_model"], deep_search, model_override)
@@ -377,6 +453,7 @@ def query_mistral(
     deep_search: bool = False,
     model_override: str = None,
     max_output_tokens: Optional[int] = None,
+    attachments: Optional[list] = None,
 ) -> str:
     """Fragt die Mistral API zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit."""
     # Setze max_tokens basierend auf dem deep_search Flag
@@ -390,6 +467,7 @@ def query_mistral(
             model_override=model_override,
             deep_search=deep_search,
             max_output_tokens=max_tokens,
+            attachments=attachments,
         )
 
         _log_model_selection("Mistral", request_data["api_model"], deep_search, model_override)
@@ -434,6 +512,7 @@ def query_claude(
     deep_search: bool = False,
     model_override: str = None,
     max_output_tokens: Optional[int] = None,
+    attachments: Optional[list] = None,
 ) -> str:
     """Fragt die Anthropic API (Claude) zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit.
        Da die Anthropic API ein Token-Limit erwartet, setzen wir einen sehr hohen Wert ein."""
@@ -454,6 +533,7 @@ def query_claude(
             model_override=model_override,
             deep_search=deep_search,
             max_output_tokens=max_tokens,
+            attachments=attachments,
         )
         payload = request_data["payload"]
 
@@ -479,6 +559,7 @@ def query_gemini(
     system_prompt: str = None,
     model_override: str = None,
     max_output_tokens: Optional[int] = None,
+    attachments: Optional[list] = None,
 ) -> str:
     max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
     request_data = build_provider_payload(
@@ -488,6 +569,7 @@ def query_gemini(
         model_override=model_override,
         deep_search=deep_search,
         max_output_tokens=max_tokens,
+        attachments=attachments,
     )
     model_name = request_data["api_model"]
     _log_model_selection("Gemini", model_name, deep_search, model_override)
@@ -542,6 +624,7 @@ def query_deepseek(
     deep_search: bool = False,
     model_override: str = None,
     max_output_tokens: Optional[int] = None,
+    attachments: Optional[list] = None,
 ) -> str:
     """Fragt DeepSeek zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
     # Setze max_tokens basierend auf dem deep_search Flag
@@ -556,6 +639,7 @@ def query_deepseek(
             model_override=model_override,
             deep_search=deep_search,
             max_output_tokens=max_tokens,
+            attachments=attachments,
         )
         _log_model_selection("DeepSeek", request_data["api_model"], deep_search, model_override)
         response = client.chat.completions.create(**request_data["payload"])
@@ -570,6 +654,7 @@ def query_grok(
     deep_search: bool = False,
     model_override: str = None,
     max_output_tokens: Optional[int] = None,
+    attachments: Optional[list] = None,
 ) -> str:
     """Fragt die Grok API zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
     # Setze max_tokens basierend auf dem deep_search Flag
@@ -583,6 +668,7 @@ def query_grok(
             model_override=model_override,
             deep_search=deep_search,
             max_output_tokens=max_tokens,
+            attachments=attachments,
         )
 
         _log_model_selection("Grok", request_data["api_model"], deep_search, model_override)

@@ -728,18 +728,23 @@ async function saveBookmark(question, response, modelName, mode) {
   // HIER: Quellen holen
   const sources = window.currentEvidenceSources || [];
 
+  // Anhänge der zuletzt gesendeten Frage: nur Metadaten (Name/Typ/Größe),
+  // die Dateidaten selbst werden bewusst NICHT in Firestore gespeichert.
+  const attachmentsMeta = window.lastQuestionAttachmentsMeta || [];
+
   try {
     const res = await fetch("/bookmark", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       // HIER: sources hinzufügen
-      body: JSON.stringify({ 
-        id_token, 
-        question, 
-        response, 
-        modelName, 
+      body: JSON.stringify({
+        id_token,
+        question,
+        response,
+        modelName,
         mode,
-        sources: sources 
+        sources: sources,
+        attachments: attachmentsMeta
       })
     });
     const data = await res.json();
@@ -894,7 +899,13 @@ function loadSingleBookmarkUI(bookmark) {
             questionInput.dispatchEvent(new Event("input", { bubbles: true }));
             window.syncDemoChipState?.();
             // Falls du eine globale Variable für die letzte Frage hast:
-            if (typeof lastQuestion !== 'undefined') lastQuestion = bookmark.query; 
+            if (typeof lastQuestion !== 'undefined') lastQuestion = bookmark.query;
+        }
+
+        // Anhänge des Bookmarks als Vorschau-Chips anzeigen (nur Metadaten,
+        // die Dateien selbst sind nicht gespeichert und werden nicht mitgesendet)
+        if (typeof window.showBookmarkAttachments === "function") {
+            window.showBookmarkAttachments(bookmark.attachments || []);
         }
     }
     // === NEU: Citation-Meta immer nach dem Rendern setzen ===

@@ -6,8 +6,39 @@ from fastapi import APIRouter, Request, Body, HTTPException
 
 from app.core.rate_limit import limiter
 from app.core.security import verify_user_token, extract_id_token, db_firestore
+from app.services.llm.attachments import ALLOWED_ATTACHMENT_MIMES, MAX_ATTACHMENTS
 
 router = APIRouter()
+
+
+def sanitize_attachment_meta(raw):
+    """Reduziert Attachment-Angaben auf reine Metadaten (Name/Typ/Größe).
+
+    Dateidaten werden bewusst verworfen – in Firestore landen nie Datei-Bytes
+    (Dokument-Limit 1 MiB, Kosten). Gibt None zurück, wenn das Feld fehlt,
+    damit bestehende Bookmarks beim Merge unangetastet bleiben.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        return []
+
+    sanitized = []
+    for item in raw:
+        if len(sanitized) >= MAX_ATTACHMENTS:
+            break
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()[:200]
+        mime = str(item.get("mime") or "")
+        if not name or mime not in ALLOWED_ATTACHMENT_MIMES:
+            continue
+        try:
+            size = max(0, int(item.get("size") or 0))
+        except (TypeError, ValueError):
+            size = 0
+        sanitized.append({"name": name, "mime": mime, "size": size})
+    return sanitized
 
 @router.get("/bookmarks")
 @limiter.limit("20/minute")
@@ -47,7 +78,8 @@ async def save_bookmark(request: Request, data: dict = Body(...)):
     modelName    = data.get("modelName")
     mode         = data.get("mode")
     sources      = data.get("sources") # <--- NEU: Quellen auslesen
-    
+    attachments  = sanitize_attachment_meta(data.get("attachments"))
+
     if not (id_token and question and response_text and modelName):
         raise HTTPException(status_code=400, detail="Missing required fields.")
     
@@ -70,6 +102,10 @@ async def save_bookmark(request: Request, data: dict = Body(...)):
     # <--- NEU: Quellen hinzufügen, falls vorhanden
     if sources is not None:
         dataToMerge["sources"] = sources
+
+    # Anhänge: nur Metadaten (Name/Typ/Größe), nie Dateidaten
+    if attachments is not None:
+        dataToMerge["attachments"] = attachments
     
     try:
         # Speichern (merge)

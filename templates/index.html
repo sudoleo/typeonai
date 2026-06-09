@@ -197,10 +197,30 @@
   <div class="container">
     <div class="input-section">
       <div class="chat-input-container" style="position: relative;">
+        <div id="attachmentBar" class="attachment-bar" hidden></div>
         <textarea class="input-field" id="questionInput" placeholder="Enter your question"></textarea>
+        <!-- Attachment-Menü (öffnet über dem Plus-Button) -->
+        <div id="attachMenu" class="attach-menu" hidden>
+          <button type="button" id="attachUploadOption" class="attach-menu-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            <span>Upload document</span>
+            <span class="attach-pro-badge model-picker-pro-badge">Pro</span>
+          </button>
+          <div class="attach-menu-hint">PDF, PNG, JPG, WebP &middot; max 5 MB &middot; up to 2 files</div>
+        </div>
+        <input type="file" id="attachFileInput" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp" multiple hidden>
         <!-- Container für beide Schalter -->
         <div class="consensus-switch-container"
           style="position: absolute; bottom: 10px; left: 10px; display: flex; align-items: center; gap: 20px;">
+          <button type="button" id="attachTrigger" class="attach-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="attachMenu" title="Add attachment" aria-label="Add attachment">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
           <div class="agent-mode-control">
             <label class="switch agent-mode-switch" aria-label="Agent Mode" title="Agent Mode">
               <input type="checkbox" id="toggleAllButton">
@@ -1204,6 +1224,297 @@
         });
 
         updateDeepThinkText();
+
+        // --- ATTACHMENTS (Pro Feature) ---
+        const ATTACH_MAX_FILES = 2;
+        const ATTACH_MAX_BYTES = 5 * 1024 * 1024;
+        const ATTACH_ALLOWED_MIMES = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
+        window.pendingAttachments = [];
+
+        (function initAttachments() {
+          const trigger = document.getElementById("attachTrigger");
+          const menu = document.getElementById("attachMenu");
+          const uploadOption = document.getElementById("attachUploadOption");
+          const fileInput = document.getElementById("attachFileInput");
+          const bar = document.getElementById("attachmentBar");
+          const inputContainer = document.querySelector(".chat-input-container");
+          if (!trigger || !menu || !uploadOption || !fileInput || !bar) return;
+
+          function setMenuOpen(open) {
+            menu.hidden = !open;
+            trigger.setAttribute("aria-expanded", String(open));
+            trigger.classList.toggle("is-open", open);
+            if (inputContainer) inputContainer.classList.toggle("attach-menu-open", open);
+          }
+
+          trigger.addEventListener("click", function (event) {
+            event.stopPropagation();
+            setMenuOpen(menu.hidden);
+          });
+
+          document.addEventListener("click", function (event) {
+            if (!menu.hidden && !menu.contains(event.target) && event.target !== trigger) {
+              setMenuOpen(false);
+            }
+          });
+
+          document.addEventListener("keydown", function (event) {
+            if (event.key !== "Escape") return;
+            const viewer = document.getElementById("attachmentViewerModal");
+            if (viewer && !viewer.hidden) {
+              closeAttachmentViewer();
+              return;
+            }
+            if (!menu.hidden) setMenuOpen(false);
+          });
+
+          // --- Viewer (einfache Vorschau beim Klick auf einen Chip) ---
+          const viewerOverlay = document.getElementById("attachmentViewerModal");
+          const viewerTitle = document.getElementById("attachmentViewerTitle");
+          const viewerBody = document.getElementById("attachmentViewerBody");
+          const viewerClose = document.getElementById("attachmentViewerClose");
+          let viewerObjectUrl = null;
+
+          function closeAttachmentViewer() {
+            if (!viewerOverlay) return;
+            viewerOverlay.hidden = true;
+            if (viewerBody) viewerBody.innerHTML = "";
+            if (viewerObjectUrl) {
+              URL.revokeObjectURL(viewerObjectUrl);
+              viewerObjectUrl = null;
+            }
+          }
+
+          function base64ToBlob(base64Data, mime) {
+            const binary = atob(base64Data);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            return new Blob([bytes], { type: mime });
+          }
+
+          function openAttachmentViewer(att) {
+            if (!viewerOverlay || !viewerBody) return;
+            closeAttachmentViewer();
+            viewerTitle.textContent = att.name;
+            viewerBody.innerHTML = "";
+
+            if (att.previewOnly || !att.data) {
+              const notice = document.createElement("div");
+              notice.className = "attachment-viewer-notice";
+              const icon = document.createElement("span");
+              icon.className = "attachment-chip-icon";
+              icon.textContent = att.mime === "application/pdf" ? "PDF" : "IMG";
+              const text = document.createElement("p");
+              text.textContent = "This file was attached to the saved chat. To keep storage light, only the file name is stored – not the file itself.";
+              notice.appendChild(icon);
+              notice.appendChild(text);
+              viewerBody.appendChild(notice);
+            } else if (att.mime.indexOf("image/") === 0) {
+              const img = document.createElement("img");
+              img.className = "attachment-viewer-image";
+              img.alt = att.name;
+              img.src = "data:" + att.mime + ";base64," + att.data;
+              viewerBody.appendChild(img);
+            } else {
+              try {
+                viewerObjectUrl = URL.createObjectURL(base64ToBlob(att.data, att.mime));
+                const frame = document.createElement("iframe");
+                frame.className = "attachment-viewer-frame";
+                frame.title = att.name;
+                frame.src = viewerObjectUrl;
+                viewerBody.appendChild(frame);
+              } catch (e) {
+                const fallback = document.createElement("p");
+                fallback.className = "attachment-viewer-notice";
+                fallback.textContent = "Preview is not available in this browser.";
+                viewerBody.appendChild(fallback);
+              }
+            }
+
+            viewerOverlay.hidden = false;
+            trackAppEvent("app_attachment_viewed", { mime: att.mime, preview_only: !!att.previewOnly });
+          }
+
+          if (viewerClose) viewerClose.addEventListener("click", closeAttachmentViewer);
+          if (viewerOverlay) {
+            viewerOverlay.addEventListener("click", function (event) {
+              if (event.target === viewerOverlay) closeAttachmentViewer();
+            });
+          }
+
+          uploadOption.addEventListener("click", function () {
+            if (!window.isUserPro) {
+              setMenuOpen(false);
+              trackAppEvent("app_attachment_locked_click");
+              const modal = document.getElementById("proFeatureModal");
+              if (modal) {
+                modal.style.display = "block";
+              } else {
+                alert("File uploads are a Pro feature.");
+              }
+              return;
+            }
+            setMenuOpen(false);
+            fileInput.click();
+          });
+
+          function formatFileSize(bytes) {
+            if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+            return Math.max(1, Math.round(bytes / 1024)) + " KB";
+          }
+
+          function renderAttachmentChips() {
+            bar.innerHTML = "";
+            const items = window.pendingAttachments;
+            bar.hidden = items.length === 0;
+
+            items.forEach(function (att, index) {
+              const chip = document.createElement("div");
+              chip.className = "attachment-chip";
+              if (att.previewOnly) chip.classList.add("is-preview-only");
+              chip.setAttribute("role", "button");
+              chip.tabIndex = 0;
+              chip.title = "Click to preview " + att.name;
+
+              if (!att.previewOnly && att.mime.indexOf("image/") === 0) {
+                const img = document.createElement("img");
+                img.className = "attachment-chip-thumb";
+                img.alt = "";
+                img.src = "data:" + att.mime + ";base64," + att.data;
+                chip.appendChild(img);
+              } else {
+                const icon = document.createElement("span");
+                icon.className = "attachment-chip-icon";
+                if (att.mime.indexOf("image/") === 0) icon.classList.add("is-image");
+                icon.textContent = att.mime.indexOf("image/") === 0 ? "IMG" : "PDF";
+                chip.appendChild(icon);
+              }
+
+              const meta = document.createElement("span");
+              meta.className = "attachment-chip-meta";
+              const nameEl = document.createElement("span");
+              nameEl.className = "attachment-chip-name";
+              nameEl.textContent = att.name;
+              nameEl.title = att.name;
+              const sizeEl = document.createElement("span");
+              sizeEl.className = "attachment-chip-size";
+              sizeEl.textContent = att.previewOnly
+                ? (att.size ? formatFileSize(att.size) + " · saved chat" : "saved chat")
+                : formatFileSize(att.size);
+              meta.appendChild(nameEl);
+              meta.appendChild(sizeEl);
+              chip.appendChild(meta);
+
+              const removeBtn = document.createElement("button");
+              removeBtn.type = "button";
+              removeBtn.className = "attachment-chip-remove";
+              removeBtn.title = "Remove attachment";
+              removeBtn.setAttribute("aria-label", "Remove " + att.name);
+              removeBtn.innerHTML = "&#10005;";
+              removeBtn.addEventListener("click", function (event) {
+                event.stopPropagation();
+                window.pendingAttachments.splice(index, 1);
+                renderAttachmentChips();
+              });
+              chip.appendChild(removeBtn);
+
+              chip.addEventListener("click", function () {
+                openAttachmentViewer(att);
+              });
+              chip.addEventListener("keydown", function (event) {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openAttachmentViewer(att);
+                }
+              });
+
+              bar.appendChild(chip);
+            });
+          }
+
+          window.renderAttachmentChips = renderAttachmentChips;
+
+          window.clearPendingAttachments = function () {
+            if (!window.pendingAttachments.length) return;
+            window.pendingAttachments = [];
+            renderAttachmentChips();
+          };
+
+          function inferMime(file) {
+            if (ATTACH_ALLOWED_MIMES.indexOf(file.type) !== -1) return file.type;
+            const name = (file.name || "").toLowerCase();
+            if (name.endsWith(".pdf")) return "application/pdf";
+            if (name.endsWith(".png")) return "image/png";
+            if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+            if (name.endsWith(".webp")) return "image/webp";
+            return null;
+          }
+
+          fileInput.addEventListener("change", function () {
+            const files = Array.from(fileInput.files || []);
+            fileInput.value = "";
+            if (!files.length) return;
+
+            for (const file of files) {
+              if (window.pendingAttachments.length >= ATTACH_MAX_FILES) {
+                alert("You can attach up to " + ATTACH_MAX_FILES + " files per question.");
+                break;
+              }
+              const mime = inferMime(file);
+              if (!mime) {
+                alert("'" + file.name + "' is not supported. Allowed: PDF, PNG, JPG, WebP.");
+                continue;
+              }
+              if (file.size > ATTACH_MAX_BYTES) {
+                alert("'" + file.name + "' is too large. The limit is 5 MB per file.");
+                continue;
+              }
+
+              const reader = new FileReader();
+              reader.onload = function () {
+                const result = String(reader.result || "");
+                const base64Data = result.split(",", 2)[1] || "";
+                if (!base64Data) return;
+                if (window.pendingAttachments.length >= ATTACH_MAX_FILES) return;
+                window.pendingAttachments.push({
+                  name: file.name,
+                  mime: mime,
+                  size: file.size,
+                  data: base64Data
+                });
+                renderAttachmentChips();
+                trackAppEvent("app_attachment_added", { mime: mime });
+              };
+              reader.readAsDataURL(file);
+            }
+          });
+        })();
+
+        window.getAttachmentsPayload = function () {
+          return (window.pendingAttachments || [])
+            .filter(function (att) { return !att.previewOnly && att.data; })
+            .map(function (att) {
+              return { name: att.name, mime: att.mime, size: att.size, data: att.data };
+            });
+        };
+
+        // Zeigt Anhänge aus einem gespeicherten Bookmark als reine Vorschau-Chips
+        // (nur Metadaten, ohne Dateidaten – wird beim nächsten Senden nicht mitgeschickt).
+        window.showBookmarkAttachments = function (attachmentsMeta) {
+          window.pendingAttachments = (Array.isArray(attachmentsMeta) ? attachmentsMeta : [])
+            .map(function (meta) {
+              return {
+                name: String(meta.name || "attachment"),
+                mime: String(meta.mime || ""),
+                size: Number(meta.size) || 0,
+                data: null,
+                previewOnly: true
+              };
+            });
+          if (typeof window.renderAttachmentChips === "function") {
+            window.renderAttachmentChips();
+          }
+        };
 
         function getConfiguredLimit(key, fallback) {
           const raw = (window.APP_LIMITS || {})[key];
@@ -2789,6 +3100,20 @@
 
           const deepSearchFlag = document.getElementById("deepSearchToggle").checked;
 
+          const attachmentsPayload = (typeof window.getAttachmentsPayload === "function")
+            ? window.getAttachmentsPayload()
+            : [];
+          if (attachmentsPayload.length && !window.isUserPro) {
+            alert("File uploads are a Pro feature. Please remove the attachments or upgrade.");
+            finishQueryRun(queryRunId);
+            return;
+          }
+
+          // Metadaten der mitgeschickten Anhänge merken (für Bookmarks, ohne Dateidaten)
+          window.lastQuestionAttachmentsMeta = attachmentsPayload.map(function (att) {
+            return { name: att.name, mime: att.mime, size: att.size || 0 };
+          });
+
           const baseSpinnerHTML = window.spinnerHTML;
 
           // Nur Boxen der aktuell ausgewählten Modelle
@@ -3161,6 +3486,7 @@
               mode: mode,
               model: document.getElementById("openaiModelSelect").value
             };
+            if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
 
 
             if (!useOwnKeys) {
@@ -3275,6 +3601,7 @@
               mode: mode,
               model: document.getElementById("mistralModelSelect").value
             };
+            if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
 
             if (!useOwnKeys) {
               if (validIdToken) {
@@ -3361,6 +3688,7 @@
               mode: mode,
               model: document.getElementById("claudeModelSelect").value
             };
+            if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
 
             if (!useOwnKeys) {
               if (validIdToken) {
@@ -3446,6 +3774,7 @@
               mode: mode,
               model: document.getElementById("geminiModelSelect").value
             };
+            if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
 
             if (!useOwnKeys) {
               if (validIdToken) {
@@ -3531,6 +3860,7 @@
               mode: mode,
               model: document.getElementById("deepseekModelSelect").value
             };
+            if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
 
             if (!useOwnKeys) {
               if (validIdToken) {
@@ -3616,6 +3946,7 @@
               mode: mode,
               model: document.getElementById("grokModelSelect").value
             };
+            if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
 
             if (!useOwnKeys) {
               if (validIdToken) {
@@ -3687,6 +4018,17 @@
                 console.error("Fehler bei Grok:", error);
                 checkAllResponses();
               });
+          }
+
+          // Echte Anhänge bleiben nach dem Senden sichtbar (z. B. für Folgefragen zum
+          // selben Dokument). Nur Vorschau-Chips aus früher geladenen Bookmarks
+          // gehören nicht zur neuen Frage und werden entfernt.
+          const hadPreviewChips = (window.pendingAttachments || []).some(att => att.previewOnly);
+          if (hadPreviewChips) {
+            window.pendingAttachments = (window.pendingAttachments || []).filter(att => !att.previewOnly);
+            if (typeof window.renderAttachmentChips === "function") {
+              window.renderAttachmentChips();
+            }
           }
         };
 
@@ -5132,6 +5474,17 @@
         <input type="email" name="email" placeholder="Your email (optional)">
         <button type="submit">Submit</button>
       </form>
+    </div>
+  </div>
+
+  <!-- Attachment Viewer (einfache Vorschau für angehängte Dateien) -->
+  <div id="attachmentViewerModal" class="attachment-viewer-overlay" hidden>
+    <div class="attachment-viewer" role="dialog" aria-modal="true" aria-labelledby="attachmentViewerTitle">
+      <div class="attachment-viewer-head">
+        <span id="attachmentViewerTitle" class="attachment-viewer-title"></span>
+        <button type="button" id="attachmentViewerClose" class="attachment-viewer-close" aria-label="Close preview">&#10005;</button>
+      </div>
+      <div id="attachmentViewerBody" class="attachment-viewer-body"></div>
     </div>
   </div>
 

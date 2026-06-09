@@ -6,7 +6,7 @@
    Buttons & Inputs
    -------------------------------------------------------------------------- */
 .button,
-button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(.sidebar-toggle-btn):not(#clearButton):not(#consensusButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle):not(.model-picker-display):not(.model-picker-option):not(.mode-explainer-trigger):not(.mode-explainer-dismiss) {
+button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(.sidebar-toggle-btn):not(#clearButton):not(#consensusButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle):not(.model-picker-display):not(.model-picker-option):not(.mode-explainer-trigger):not(.mode-explainer-dismiss):not(.attach-trigger):not(.attach-menu-item):not(.attachment-chip-remove):not(.attachment-viewer-close) {
   padding: 10px 16px;
   font-size: 1em;
   background-color: var(--button-bg);
@@ -67,6 +67,7 @@ textarea:focus {
 
 .chat-input-container {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   background:
     linear-gradient(160deg, color-mix(in srgb, var(--glass-bg-strong) 76%, transparent), color-mix(in srgb, var(--glass-bg) 84%, transparent)),
@@ -163,6 +164,373 @@ textarea:focus {
   max-width: calc(100% - 146px);
   min-width: 0;
   overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   Attachments (Plus-Menü, Upload, Chips)
+   -------------------------------------------------------------------------- */
+.attach-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--glass-border) 72%, var(--glass-edge));
+  border-radius: 50%;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 55%, transparent), transparent 60%),
+    color-mix(in srgb, var(--glass-bg-strong) 78%, transparent);
+  color: var(--sidebar-text-muted);
+  cursor: pointer;
+  box-shadow: var(--chip-shadow);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(1.15);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(1.15);
+  transition: color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.attach-trigger svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
+}
+
+.attach-trigger:hover,
+.attach-trigger:focus-visible {
+  color: var(--text-color);
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--glass-border));
+  box-shadow: var(--chip-shadow-active), inset 0 1px 0 var(--glass-highlight);
+}
+
+.attach-trigger.is-open {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--glass-border));
+}
+
+.attach-trigger.is-open svg {
+  transform: rotate(45deg);
+}
+
+.chat-input-container.attach-menu-open {
+  overflow: visible;
+}
+
+.attach-menu {
+  position: absolute;
+  left: 10px;
+  bottom: 54px;
+  z-index: 40;
+  min-width: 230px;
+  padding: 6px;
+  border: var(--card-border);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 36%, transparent), transparent 46%),
+    color-mix(in srgb, var(--container-bg) 86%, transparent);
+  box-shadow: var(--card-shadow-hover);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+}
+
+.attach-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-color);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.attach-menu-item:hover,
+.attach-menu-item:focus-visible {
+  background: color-mix(in srgb, var(--glass-bg-strong) 70%, var(--sidebar-hover));
+  border-color: color-mix(in srgb, var(--glass-border) 58%, var(--sidebar-border));
+}
+
+.attach-menu-item svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--sidebar-text-muted);
+}
+
+.attach-menu-item span:nth-of-type(1) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.attach-menu-hint {
+  padding: 5px 10px 6px;
+  color: var(--sidebar-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.attachment-bar {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 2px;
+}
+
+.attachment-bar[hidden] {
+  display: none;
+}
+
+.attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(100%, 260px);
+  padding: 5px 6px 5px 5px;
+  border: 1px solid var(--chip-border);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 42%, transparent), transparent 55%),
+    var(--chip-bg);
+  box-shadow: var(--chip-shadow);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.45)) saturate(1.12);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.45)) saturate(1.12);
+}
+
+.attachment-chip-thumb {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  object-fit: cover;
+  border: 1px solid color-mix(in srgb, var(--glass-border) 64%, transparent);
+}
+
+.attachment-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  background: color-mix(in srgb, #dc2626 14%, transparent);
+  border: 1px solid color-mix(in srgb, #dc2626 30%, transparent);
+  color: color-mix(in srgb, #b91c1c 80%, var(--text-color) 20%);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.dark-mode .attachment-chip-icon {
+  color: color-mix(in srgb, #fca5a5 82%, var(--text-color) 18%);
+}
+
+.attachment-chip-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.attachment-chip-name {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-color);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.attachment-chip-size {
+  color: var(--sidebar-text-muted);
+  font-size: 0.68rem;
+  line-height: 1.2;
+}
+
+.attachment-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--sidebar-text-muted);
+  font-size: 0.7rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.attachment-chip-remove:hover {
+  background: color-mix(in srgb, var(--clear-button-bg) 80%, transparent);
+  color: var(--clear-button-text);
+}
+
+.attachment-chip[role="button"] {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.attachment-chip[role="button"]:hover,
+.attachment-chip[role="button"]:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--chip-border));
+  box-shadow: var(--chip-shadow-active);
+  outline: none;
+}
+
+.attachment-chip.is-preview-only {
+  opacity: 0.82;
+  border-style: dashed;
+}
+
+.attachment-chip-icon.is-image {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: color-mix(in srgb, var(--accent-contrast) 78%, var(--text-color) 22%);
+}
+
+.dark-mode .attachment-chip-icon.is-image {
+  color: color-mix(in srgb, var(--accent) 84%, var(--text-color) 16%);
+}
+
+/* --------------------------------------------------------------------------
+   Attachment Viewer (Vorschau-Modal)
+   -------------------------------------------------------------------------- */
+.attachment-viewer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: var(--overlay-dim);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.attachment-viewer-overlay[hidden] {
+  display: none;
+}
+
+.attachment-viewer {
+  display: flex;
+  flex-direction: column;
+  width: min(94vw, 760px);
+  max-height: min(88dvh, 820px);
+  border: var(--card-border);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 34%, transparent), transparent 42%),
+    var(--container-bg);
+  box-shadow: var(--card-shadow-hover);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  overflow: hidden;
+}
+
+.attachment-viewer-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-border) 62%, var(--sidebar-border));
+}
+
+.attachment-viewer-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-color);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.attachment-viewer-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sidebar-text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.attachment-viewer-close:hover {
+  background: color-mix(in srgb, var(--glass-bg-strong) 68%, var(--sidebar-hover));
+  color: var(--text-color);
+}
+
+.attachment-viewer-body {
+  flex: 1 1 auto;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  overflow: auto;
+}
+
+.attachment-viewer-image {
+  max-width: 100%;
+  max-height: min(72dvh, 680px);
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.attachment-viewer-frame {
+  width: 100%;
+  height: min(72dvh, 680px);
+  border: none;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.attachment-viewer-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 360px;
+  padding: 26px 16px;
+  text-align: center;
+  color: var(--sidebar-text-muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.attachment-viewer-notice .attachment-chip-icon {
+  width: 44px;
+  height: 44px;
+  font-size: 0.74rem;
+}
+
+.attachment-viewer-notice p {
+  margin: 0;
 }
 
 .input-action-btn-subtle {
@@ -4056,6 +4424,7 @@ option.early-option {
   .consensus-switch-container label.switch {
     width: 38px;
     height: 38px;
+    box-sizing: border-box;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -4066,6 +4435,18 @@ option.early-option {
     box-shadow: var(--box-shadow);
     cursor: pointer;
     transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease;
+  }
+
+  .attach-trigger {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    background: var(--response-bg);
+    box-shadow: var(--box-shadow);
+  }
+
+  .attach-menu {
+    bottom: 58px;
   }
 
   .mode-explainer-trigger {
@@ -4140,7 +4521,7 @@ option.early-option {
 
 @media (max-width: 420px) {
   .consensus-switch-container {
-    gap: 6px !important;
+    gap: 5px !important;
     max-width: calc(100% - 118px);
   }
 
@@ -4154,12 +4535,41 @@ option.early-option {
     height: 36px;
   }
 
+  .attach-trigger {
+    width: 36px;
+    height: 36px;
+  }
+
   .input-actions-container {
     gap: 6px;
   }
 
   .input-action-btn-primary {
     padding-inline: 10px;
+  }
+
+  .attachment-chip-name {
+    max-width: 120px;
+  }
+}
+
+/* Sehr kleine Displays: Info-Trigger ausblenden, damit die Bottom-Row
+   einzeilig bleibt und nichts abgeschnitten wird. */
+@media (max-width: 374px) {
+  .mode-explainer-trigger {
+    display: none;
+  }
+}
+
+@media (max-width: 360px) {
+  .consensus-switch-container {
+    gap: 4px !important;
+  }
+
+  .consensus-switch-container label.switch,
+  .attach-trigger {
+    width: 33px;
+    height: 33px;
   }
 }
 

@@ -41,7 +41,7 @@ class CustomSecurityMiddleware:
                     "https://api.openai.com https://api.mistral.ai https://api.anthropic.com "
                     "https://api.x.ai https://api.deepseek.com "
                     "https://cdn.jsdelivr.net; "
-                    "frame-src 'self' https://accounts.google.com https://*.google.com https://*.gstatic.com https://*.firebaseapp.com https://*.web.app;"
+                    "frame-src 'self' blob: https://accounts.google.com https://*.google.com https://*.gstatic.com https://*.firebaseapp.com https://*.web.app;"
                 )
                 headers[b"Content-Security-Policy"] = csp.encode("utf-8")
                 headers[b"X-Content-Type-Options"] = b"nosniff"
