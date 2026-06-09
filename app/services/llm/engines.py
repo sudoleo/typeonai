@@ -33,16 +33,28 @@ from app.services.llm.citations import (
     result_text,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _error(provider: str, error: Exception | str):
     error_text = str(error)
-    logging.error("Provider request failed for %s: %s", provider, error_text)
+    logger.error("Provider request failed for %s: %s", provider, error_text)
     return {
         "text": "",
         "sources": [],
         "error": f"{provider} could not complete this request. Please try again later.",
         "error_detail": error_text,
     }
+
+
+def _log_model_selection(provider: str, api_model: str, deep_search: bool, model_override: str | None):
+    logger.info(
+        "Provider model selected: %s -> %s | deep_search=%s | override=%s",
+        provider,
+        api_model,
+        deep_search,
+        model_override,
+    )
 
 
 def _openai_responses_payload(
@@ -345,7 +357,7 @@ def query_openai(
         max_output_tokens=max_tokens,
     )
 
-    print(f"[MODEL] OpenAI -> {request_data['api_model']} | deep_search={deep_search} | override={model_override}")
+    _log_model_selection("OpenAI", request_data["api_model"], deep_search, model_override)
 
     try:
         return _openai_responses_call(
@@ -380,7 +392,7 @@ def query_mistral(
             max_output_tokens=max_tokens,
         )
 
-        print(f"[MODEL] Mistral -> {request_data['api_model']} | deep_search={deep_search} | override={model_override}")
+        _log_model_selection("Mistral", request_data["api_model"], deep_search, model_override)
 
         payload = request_data["payload"]
         response = requests.post(
@@ -445,7 +457,7 @@ def query_claude(
         )
         payload = request_data["payload"]
 
-        print(f"[MODEL] Claude -> {payload['model']} | deep_search={deep_search} | override={model_override}")
+        _log_model_selection("Claude", payload["model"], deep_search, model_override)
 
         response = requests.post(url, json=payload, headers=headers)
         if response.status_code == 200:
@@ -478,7 +490,7 @@ def query_gemini(
         max_output_tokens=max_tokens,
     )
     model_name = request_data["api_model"]
-    print(f"[MODEL] Gemini -> {model_name} | deep_search={deep_search} | override={model_override}")
+    _log_model_selection("Gemini", model_name, deep_search, model_override)
 
     api_key = (user_api_key or os.environ.get("DEVELOPER_GEMINI_API_KEY") or "").strip()
 
@@ -545,11 +557,11 @@ def query_deepseek(
             deep_search=deep_search,
             max_output_tokens=max_tokens,
         )
-        print(f"[MODEL] DeepSeek -> {request_data['api_model']} | deep_search={deep_search} | override={model_override}")
+        _log_model_selection("DeepSeek", request_data["api_model"], deep_search, model_override)
         response = client.chat.completions.create(**request_data["payload"])
         return response.choices[0].message.content.strip()
     except Exception as e:
-        return f"Error with DeepSeek: {str(e)}"
+        return _error("DeepSeek", e)
     
 def query_grok(
     question: str,
@@ -573,7 +585,7 @@ def query_grok(
             max_output_tokens=max_tokens,
         )
 
-        print(f"[MODEL] Grok -> {request_data['api_model']} | deep_search={deep_search} | override={model_override}")
+        _log_model_selection("Grok", request_data["api_model"], deep_search, model_override)
 
         return _openai_responses_call(
             api_key=api_key,

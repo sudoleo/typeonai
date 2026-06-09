@@ -32,6 +32,10 @@ def build_usage_limit_detail(message: str, code: str, limit_regular: int, curren
     }
 
 
+def parse_boolean_flag(value) -> bool:
+    return str(value).strip().lower() == "true"
+
+
 def get_valid_active_count(data: dict) -> int:
     raw = data.get("active_count", 1)
     if isinstance(raw, bool):
@@ -55,6 +59,9 @@ def get_valid_active_count(data: dict) -> int:
 
 
 def validate_question_word_limit(question: str, is_pro: bool, deep_search: bool):
+    if not isinstance(question, str) or not question.strip():
+        raise HTTPException(status_code=400, detail="Question must not be empty.")
+
     max_words_limit = cfg.get_word_limit(is_pro, deep_search)
     if count_words(question) > max_words_limit:
         raise HTTPException(status_code=400, detail=f"Input exceeds word limit of {max_words_limit}.")
@@ -65,8 +72,7 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
 
     # deep_search robust konvertieren
-    deep_search_raw = data.get("deep_search", False)
-    deep_search = True if str(deep_search_raw).lower() == "true" else False
+    deep_search = parse_boolean_flag(data.get("deep_search", False))
 
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
@@ -174,8 +180,7 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
 @limiter.limit("5/minute")
 def ask_mistral_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
-    deep_search_raw = data.get("deep_search", False)
-    deep_search = True if str(deep_search_raw).lower() == "true" else False
+    deep_search = parse_boolean_flag(data.get("deep_search", False))
 
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
@@ -249,8 +254,7 @@ def ask_mistral_post(request: Request, data: dict = Body(...)):
 @limiter.limit("3/minute")
 def ask_claude_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
-    deep_search_raw = data.get("deep_search", False)
-    deep_search = True if str(deep_search_raw).lower() == "true" else False
+    deep_search = parse_boolean_flag(data.get("deep_search", False))
 
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
@@ -324,8 +328,7 @@ def ask_claude_post(request: Request, data: dict = Body(...)):
 @limiter.limit("3/minute")
 def ask_gemini_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
-    deep_search_raw = data.get("deep_search", False)
-    deep_search = True if str(deep_search_raw).lower() == "true" else False
+    deep_search = parse_boolean_flag(data.get("deep_search", False))
 
     system_prompt = data.get("system_prompt")
     use_own_keys = str(data.get("useOwnKeys", "false")).lower() == "true"
@@ -405,8 +408,7 @@ def ask_gemini_post(request: Request, data: dict = Body(...)):
 @limiter.limit("3/minute")
 def ask_deepseek_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
-    deep_search_raw = data.get("deep_search", False)
-    deep_search = True if str(deep_search_raw).lower() == "true" else False
+    deep_search = parse_boolean_flag(data.get("deep_search", False))
 
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
@@ -480,8 +482,7 @@ def ask_deepseek_post(request: Request, data: dict = Body(...)):
 @limiter.limit("3/minute")
 def ask_grok_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
-    deep_search_raw = data.get("deep_search", False)
-    deep_search = True if str(deep_search_raw).lower() == "true" else False
+    deep_search = parse_boolean_flag(data.get("deep_search", False))
 
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)

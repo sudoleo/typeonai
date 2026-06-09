@@ -5,6 +5,7 @@ from fastapi import HTTPException
 
 import app.core.config as cfg
 from app.api.routers.admin import normalize_models_document
+from app.api.routers.chat import parse_boolean_flag, validate_question_word_limit
 from app.services.llm.base import validate_model
 from app.services.llm.engines import build_provider_payload
 from app.services.llm.citations import source_response
@@ -256,6 +257,18 @@ class FrontierModelPayloadTests(unittest.TestCase):
         self.assertEqual(response["response"], "")
         self.assertIn("could not complete", response["error"])
         self.assertIn("invalid parameter", response["error_detail"])
+
+    def test_question_validation_rejects_empty_input(self):
+        for question in (None, "", "   "):
+            with self.subTest(question=question):
+                with self.assertRaises(HTTPException) as exc:
+                    validate_question_word_limit(question, is_pro=False, deep_search=False)
+                self.assertEqual(exc.exception.status_code, 400)
+
+    def test_boolean_flag_parser_is_whitespace_tolerant(self):
+        self.assertTrue(parse_boolean_flag(" true "))
+        self.assertFalse(parse_boolean_flag("false"))
+        self.assertFalse(parse_boolean_flag(None))
 
 
 if __name__ == "__main__":

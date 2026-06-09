@@ -18,7 +18,7 @@
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>consens.io - compare before you trust</title>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260608-consensus-focus1">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260609-mobile-clean10">
   <link rel="icon" href="/static/favicon-square.png?v=20260523-logo1" type="image/png">
   <script type="application/ld+json">
   {
@@ -189,7 +189,7 @@
             </div>
             <div class="mock-container">
               <div class="mock-input story-scene scene-ask">
-                <span class="mock-placeholder typing-line">Which AI model is most reliable for market research?</span>
+                <span class="mock-placeholder typing-line">Which model is best for research?</span>
                 <div class="mock-switch-row">
                   <span class="mock-mode mock-mode-agent" aria-label="Agent Mode" title="Agent Mode">
                     <span class="mock-switch is-on"></span><span class="mock-mode-label">Agent Mode</span>
@@ -260,10 +260,12 @@
               <div class="consensus-preview story-consensus">
                 <div class="story-consensus-panel story-consensus-answer">
                   <strong>Consensus Answer</strong>
+                  <span class="mobile-consensus-line">Shared conclusion across selected models.</span>
                   <p class="story-consensus-text" data-consensus-text="Most models agree that market research answers should be compared across sources, not accepted from one model alone. The reliable path is to triangulate claims, check freshness, and keep open assumptions visible before using the final answer."></p>
                 </div>
                 <div class="story-consensus-panel story-differences credibility-framed cred-largely">
                   <strong>Differences</strong>
+                  <span class="mobile-consensus-line">Open claims that still need checking.</span>
                   <p class="story-consensus-text" data-consensus-text="Top reasoning models vary in confidence, source freshness, and technical depth."></p>
                 </div>
               </div>
@@ -340,8 +342,10 @@
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       const steps = Array.from(document.querySelectorAll(".story-step"));
+      const storySection = document.querySelector(".scroll-story");
       const stage = document.querySelector(".story-stage .product-window");
       const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const mobileStory = window.matchMedia ? window.matchMedia("(max-width: 700px)") : null;
       const storyResponseItems = stage ? Array.from(stage.querySelectorAll(".scene-consensus .mini-response")) : [];
       const storyConsensusItems = stage ? Array.from(stage.querySelectorAll(".story-consensus-panel")) : [];
       const storyConsensus = stage ? stage.querySelector(".story-consensus") : null;
@@ -389,6 +393,7 @@
         if (!storyConsensusItems.length || consensusAnimated) return;
         consensusAnimated = true;
         const runId = responseAnimationRun;
+        const immediate = reducedMotion || mobileStory?.matches;
 
         storyConsensusItems.forEach((item, index) => {
           const text = item.querySelector(".story-consensus-text");
@@ -397,8 +402,10 @@
 
           text.textContent = "";
           item.classList.remove("is-loaded");
-          item.classList.add("is-loading");
-          item.setAttribute("aria-busy", "true");
+          if (!immediate) {
+            item.classList.add("is-loading");
+            item.setAttribute("aria-busy", "true");
+          }
 
           window.setTimeout(() => {
             if (runId !== responseAnimationRun) return;
@@ -413,7 +420,7 @@
               void storyConsensus.offsetWidth;
               storyConsensus.classList.add("is-focus-pulse");
             }
-          }, reducedMotion ? 0 : 520 + index * 520);
+          }, immediate ? 0 : 520 + index * 520);
         });
       };
 
@@ -454,7 +461,11 @@
         steps.forEach(step => step.classList.toggle("is-active", step.dataset.storyStep === scene));
         updateStoryInputVisibility();
         if (scene === "consensus") {
-          startStoryResponses();
+          if (mobileStory?.matches) {
+            startStoryConsensus();
+          } else {
+            startStoryResponses();
+          }
         } else if (previousScene === "consensus") {
           resetStoryResponses();
         }
@@ -465,13 +476,22 @@
 
         const updateSceneFromScroll = () => {
           pendingFrame = false;
-          const readingLine = window.scrollY + window.innerHeight * 0.6;
+          const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
           let activeStep = steps[0];
 
-          for (const step of steps) {
-            const stepTop = step.getBoundingClientRect().top + window.scrollY;
-            if (stepTop <= readingLine) {
-              activeStep = step;
+          if (mobileStory?.matches && storySection) {
+            const sectionTop = storySection.getBoundingClientRect().top + window.scrollY;
+            const sectionScrollable = Math.max(1, storySection.offsetHeight - viewportHeight);
+            const progress = Math.min(0.999, Math.max(0, (window.scrollY - sectionTop) / sectionScrollable));
+            const activeIndex = Math.min(steps.length - 1, Math.floor(progress * steps.length));
+            activeStep = steps[activeIndex] || activeStep;
+          } else {
+            const readingLine = window.scrollY + viewportHeight * 0.6;
+            for (const step of steps) {
+              const stepTop = step.getBoundingClientRect().top + window.scrollY;
+              if (stepTop <= readingLine) {
+                activeStep = step;
+              }
             }
           }
 
@@ -487,6 +507,8 @@
         window.addEventListener("scroll", scheduleSceneUpdate, { passive: true });
         window.addEventListener("resize", scheduleSceneUpdate);
         updateSceneFromScroll();
+      } else if (steps.length) {
+        setScene("ask");
       }
 
       if (storyInputScene) {
@@ -508,7 +530,10 @@
           button.addEventListener("click", () => {
             sessionStorage.setItem("skipLandingRedirect", "1");
             if (window.umami && typeof window.umami.track === "function") {
-              window.umami.track(id === "ctaButton" ? "landing_hero_start" : "landing_nav_open_app");
+              const eventName = id === "navCtaButton"
+                ? "landing_nav_open_app"
+                : "landing_hero_start";
+              window.umami.track(eventName);
             }
           });
         }

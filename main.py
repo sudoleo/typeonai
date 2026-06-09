@@ -1,5 +1,7 @@
 import os
 import logging
+from contextlib import asynccontextmanager
+
 from dotenv import load_dotenv
 
 from fastapi import FastAPI, HTTPException
@@ -10,7 +12,7 @@ from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY
 
 # Init Environment
 load_dotenv()
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gen-lang-client-0234219247-53b2b1c0e355.json"
+os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", "gen-lang-client-0234219247-53b2b1c0e355.json")
 logging.basicConfig(level=logging.INFO)
 
 from app.core.security import CustomSecurityMiddleware
@@ -19,8 +21,6 @@ from app.core.rate_limit import limiter
 # Import routers
 from app.api.routers import auth, users, bookmarks, chat, pages, admin
 from app.core.config import load_models_from_db
-
-from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

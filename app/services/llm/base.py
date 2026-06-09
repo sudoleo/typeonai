@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 import app.core.config as cfg
@@ -11,8 +12,8 @@ def get_system_prompt() -> str:
         "Please respond briefly and precisely, focusing only on the essentials. No follow-up questions."
     )
 
-def count_words(text: str) -> int:
-    return len(text.strip().split())
+def count_words(text: Optional[str]) -> int:
+    return len((text or "").strip().split())
 
 def validate_model(model: str, allowed: set, provider: str, is_pro: bool = False):
     if model and model not in allowed:

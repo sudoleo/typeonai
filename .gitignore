@@ -1,5 +1,6 @@
 # Ignoriere Umgebungsvariablen und sensible Daten
 .env
+venv/
 __pycache__/
 *.log
 *json
