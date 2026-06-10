@@ -740,6 +740,42 @@ textarea:focus {
   transform: translateY(1px);
 }
 
+.mode-explainer-footer {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  align-self: center;
+}
+
+.mode-explainer-footer .mode-explainer-dismiss {
+  justify-self: stretch;
+}
+
+.mode-explainer-hide-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sidebar-text-muted);
+  font-size: 0.74rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mode-explainer-hide-option input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.mode-explainer-trigger.is-hidden {
+  display: none;
+}
+
 .input-action-btn-primary.is-cancel-action {
   width: 36px;
   height: 36px;
@@ -4415,6 +4451,11 @@ option.early-option {
 
   .mode-explainer-dismiss {
     justify-self: stretch;
+  }
+
+  .mode-explainer-footer {
+    justify-items: start;
+    width: 100%;
   }
 
   .consensus-switch-container {

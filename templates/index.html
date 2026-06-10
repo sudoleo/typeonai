@@ -51,7 +51,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260610-restyle1">
+  <link rel="stylesheet" href="/static/style.css?v=20260610-restyle2">
   <link rel="icon" href="/static/favicon-square.png?v=20260523-logo1" type="image/png">
   <!-- Füge dies im <head> hinzu -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -297,7 +297,13 @@
             </div>
           </div>
         </div>
-        <button type="button" id="modeExplainerDismiss" class="mode-explainer-dismiss">Got it</button>
+        <div class="mode-explainer-footer">
+          <button type="button" id="modeExplainerDismiss" class="mode-explainer-dismiss">Got it</button>
+          <label class="mode-explainer-hide-option" for="modeExplainerHideTrigger">
+            <input type="checkbox" id="modeExplainerHideTrigger">
+            <span>Hide the (i) icon</span>
+          </label>
+        </div>
       </section>
     </div>
 
@@ -1021,11 +1027,13 @@
         }
 
         const MODE_EXPLAINER_STORAGE_KEY = "modeExplainerConfirmed";
+        const MODE_EXPLAINER_TRIGGER_HIDDEN_KEY = "modeExplainerTriggerHidden";
 
         function initModeExplainer() {
           const explainer = document.getElementById("modeExplainer");
           const trigger = document.getElementById("modeExplainerTrigger");
           const dismiss = document.getElementById("modeExplainerDismiss");
+          const hideTriggerCheckbox = document.getElementById("modeExplainerHideTrigger");
           if (!explainer || !trigger || !dismiss) return;
 
           const setExplainerVisible = (visible) => {
@@ -1035,8 +1043,16 @@
             trigger.classList.toggle("is-active", visible);
           };
 
+          const applyTriggerHidden = (hidden) => {
+            trigger.classList.toggle("is-hidden", hidden);
+          };
+
           const hasConfirmed = localStorage.getItem(MODE_EXPLAINER_STORAGE_KEY) === "true";
           setExplainerVisible(!hasConfirmed);
+
+          const triggerHidden = localStorage.getItem(MODE_EXPLAINER_TRIGGER_HIDDEN_KEY) === "true";
+          if (hideTriggerCheckbox) hideTriggerCheckbox.checked = triggerHidden;
+          applyTriggerHidden(triggerHidden);
 
           trigger.addEventListener("click", () => {
             const nextVisible = explainer.hidden;
@@ -1048,6 +1064,13 @@
             localStorage.setItem(MODE_EXPLAINER_STORAGE_KEY, "true");
             setExplainerVisible(false);
             trackAppEvent("app_mode_help_confirmed");
+          });
+
+          hideTriggerCheckbox?.addEventListener("change", () => {
+            const hidden = hideTriggerCheckbox.checked;
+            localStorage.setItem(MODE_EXPLAINER_TRIGGER_HIDDEN_KEY, String(hidden));
+            applyTriggerHidden(hidden);
+            trackAppEvent("app_mode_help_trigger_hidden", { hidden });
           });
         }
 
