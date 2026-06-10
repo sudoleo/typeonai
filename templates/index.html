@@ -501,19 +501,27 @@
             </div>
           </div>
         </div>
+        <!-- Verdict-Header: kompakte Einordnung, bevor der Nutzer liest -->
+        <div id="consensusVerdict" class="consensus-verdict" hidden aria-live="polite"></div>
         <!-- Konsens-Box mit zwei nebeneinanderliegenden Bereichen -->
         <div class="consensus-box" id="consensusResponse">
           <!-- Linker Bereich: Konsens-Antwort (80%) -->
           <div class="consensus-main">
             <h2>Consensus Answer</h2>
             <p></p>
+            <!-- Kernaussagen, deren Anker nicht im Text gefunden wurde -->
+            <div id="consensusClaimsFallback" class="consensus-claims-fallback" hidden></div>
           </div>
           <!-- Rechter Bereich: Unterschiede (20%) -->
           <div class="consensus-differences">
             <h2>Differences</h2>
+            <div id="differencesCards" class="differences-cards" hidden></div>
             <p></p>
           </div>
         </div>
+        <!-- Popover (Desktop) / Bottom Sheet (Mobile) für Claim-Badges -->
+        <div id="claimSheetBackdrop" class="claim-sheet-backdrop" hidden></div>
+        <div id="claimPopover" class="claim-popover" role="dialog" aria-label="Model agreement details" hidden></div>
         <div class="feedback-line">
           <span class="feedback-note">
             Please avoid personal or sensitive data. AI models can make mistakes.
@@ -621,6 +629,133 @@
         }
 
         window.injectMarkdown = injectMarkdown;
+
+        // === Streaming (SSE) Helpers ===
+        // Rendert eintreffende Text-Deltas gedrosselt als Markdown in ein Element.
+        function createStreamRenderer(outputEl, isActiveFn) {
+          const RENDER_INTERVAL_MS = 120;
+          let text = "";
+          let renderTimer = null;
+          let lastRenderAt = 0;
+          let started = false;
+
+          function render() {
+            renderTimer = null;
+            if (isActiveFn && !isActiveFn()) return;
+            lastRenderAt = Date.now();
+            outputEl.innerHTML = DOMPurify.sanitize(marked.parse(text || ""));
+          }
+
+          return {
+            append(chunk) {
+              if (!chunk) return;
+              if (isActiveFn && !isActiveFn()) return;
+              if (!started) {
+                started = true;
+                outputEl.classList.add("is-streaming");
+              }
+              text += chunk;
+              const elapsed = Date.now() - lastRenderAt;
+              if (elapsed >= RENDER_INTERVAL_MS) {
+                if (renderTimer) clearTimeout(renderTimer);
+                render();
+              } else if (!renderTimer) {
+                renderTimer = setTimeout(render, RENDER_INTERVAL_MS - elapsed);
+              }
+            },
+            stop() {
+              if (renderTimer) {
+                clearTimeout(renderTimer);
+                renderTimer = null;
+              }
+              outputEl.classList.remove("is-streaming");
+            }
+          };
+        }
+        window.createStreamRenderer = createStreamRenderer;
+
+        async function readSSEStream(response, onEvent) {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          function dispatch(rawEvent) {
+            let eventName = "message";
+            const dataLines = [];
+            rawEvent.split("\n").forEach(line => {
+              if (line.startsWith("event:")) {
+                eventName = line.slice(6).trim();
+              } else if (line.startsWith("data:")) {
+                dataLines.push(line.slice(5).replace(/^\s/, ""));
+              }
+            });
+            if (!dataLines.length) return;
+            let parsed;
+            try {
+              parsed = JSON.parse(dataLines.join("\n"));
+            } catch (_) {
+              return;
+            }
+            onEvent(eventName, parsed);
+          }
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let separatorIndex;
+            while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
+              const rawEvent = buffer.slice(0, separatorIndex);
+              buffer = buffer.slice(separatorIndex + 2);
+              dispatch(rawEvent);
+            }
+          }
+          if (buffer.trim()) dispatch(buffer);
+        }
+
+        // Führt einen POST-Request aus, der wahlweise als SSE-Stream (stream:true)
+        // oder als normales JSON beantwortet wird (z. B. Fehler/Limits vor Streamstart).
+        // deltaRenderers: { eventName: streamRenderer } für die Live-Anzeige.
+        // Rückgabe: { ok, status, data, streamed } – data hat dieselbe Struktur wie
+        // die bisherige JSON-Antwort (final-Event des Streams bzw. JSON-Body).
+        async function streamSSERequest(url, payload, signal, deltaRenderers) {
+          const renderers = deltaRenderers || {};
+          try {
+            const response = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...payload, stream: true }),
+              signal
+            });
+
+            const contentType = (response.headers.get("content-type") || "").toLowerCase();
+            if (!contentType.includes("text/event-stream") || !response.body) {
+              let data = {};
+              try {
+                data = await response.json();
+              } catch (_) { /* keine JSON-Antwort -> leeres Objekt */ }
+              return { ok: response.ok, status: response.status, data, streamed: false };
+            }
+
+            let finalData = null;
+            await readSSEStream(response, (eventName, data) => {
+              if (eventName === "final" || eventName === "error") {
+                finalData = data;
+                return;
+              }
+              const renderer = renderers[eventName];
+              if (renderer && data && data.text) renderer.append(data.text);
+            });
+
+            if (!finalData) {
+              finalData = { error: "Connection lost before the response was completed." };
+            }
+            return { ok: true, status: response.status, data: finalData, streamed: true };
+          } finally {
+            Object.values(renderers).forEach(renderer => renderer && renderer.stop());
+          }
+        }
+        window.streamSSERequest = streamSSERequest;
 
         function getSourceSiteName(src) {
           const rawUrl = src && src.url ? String(src.url) : "";
@@ -2355,6 +2490,7 @@
         window.setAgentModeStatus = setAgentModeStatus;
         window.updateAgentModeUI = updateAgentModeUI;
         window.isAgentModeEnabled = isAgentModeEnabled;
+        window.setAgentMode = setAgentMode;
 
         function getModelPrefByResponseId(responseId) {
           return modelPrefs.find(pref => pref.responseId === responseId) || null;
@@ -2985,7 +3121,8 @@
 
           boxIds.forEach(id => {
             const contentEl = document.getElementById(id)?.querySelector(".collapsible-content");
-            if (contentEl?.querySelector(".thinking-wrap")) {
+            if (contentEl && (contentEl.querySelector(".thinking-wrap") || contentEl.classList.contains("is-streaming"))) {
+              contentEl.classList.remove("is-streaming");
               contentEl.innerText = "Request canceled.";
             }
           });
@@ -2993,10 +3130,12 @@
           const consensusBox = document.getElementById("consensusResponse");
           const consensusMain = consensusBox?.querySelector(".consensus-main p");
           const consensusDiff = consensusBox?.querySelector(".consensus-differences p");
-          if (consensusMain?.querySelector(".thinking-wrap")) {
+          if (consensusMain && (consensusMain.querySelector(".thinking-wrap") || consensusMain.classList.contains("is-streaming"))) {
+            consensusMain.classList.remove("is-streaming");
             consensusMain.innerText = "Request canceled.";
           }
-          if (consensusDiff?.querySelector(".thinking-wrap")) {
+          if (consensusDiff && (consensusDiff.querySelector(".thinking-wrap") || consensusDiff.classList.contains("is-streaming"))) {
+            consensusDiff.classList.remove("is-streaming");
             consensusDiff.innerText = "";
           }
           if (window.resetCredibilityFrame && consensusBox) {
@@ -3369,6 +3508,8 @@
             document.getElementById("grokResponse").querySelector(".collapsible-content").innerHTML = window.spinnerHTML;
           }
           document.getElementById("consensusResponse").querySelector("p").innerHTML = "";
+          // Veraltete Auswertung (Verdict, Badges, Karten) der vorherigen Frage entfernen
+          window.resetConsensusInsights?.();
 
           // API Keys aus localStorage abrufen
           const openaiKey = localStorage.getItem("openaiKey") || "";
@@ -3532,26 +3673,17 @@
               payload.api_key = localStorage.getItem("openaiKey");
             }
 
-            fetch('/ask_openai', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-              signal: querySignal
-            })
-              .then(async (response) => {
-                // Parse JSON (auch bei Non-2xx), aber werte response.ok aus
-                let data = {};
-                try {
-                  data = await response.json();
-                } catch (_) {
-                  // keine JSON-Antwort (selten) -> leeres Objekt lassen
-                }
-
-                if (!response.ok) {
+            const openaiStreamRenderer = createStreamRenderer(
+              document.getElementById("openaiResponse").querySelector(".collapsible-content"),
+              () => isActiveQueryRun(queryRunId)
+            );
+            streamSSERequest('/ask_openai', payload, querySignal, { "delta": openaiStreamRenderer })
+              .then(({ ok, status, data }) => {
+                if (!ok) {
                   // FastAPI gibt "detail" zurück; wir normalisieren auf eine Error-Message
                   const msg =
                     (data && (data.error || data.detail)) ||
-                    `OpenAI HTTP ${response.status}`;
+                    `OpenAI HTTP ${status}`;
                   throw new Error(msg);
                 }
 
@@ -3646,13 +3778,12 @@
               payload.api_key = localStorage.getItem("mistralKey");
             }
 
-            fetch('/ask_mistral', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-              signal: querySignal
-            })
-              .then(response => response.json())
+            const mistralStreamRenderer = createStreamRenderer(
+              document.getElementById("mistralResponse").querySelector(".collapsible-content"),
+              () => isActiveQueryRun(queryRunId)
+            );
+            streamSSERequest('/ask_mistral', payload, querySignal, { "delta": mistralStreamRenderer })
+              .then(({ data }) => data)
               .then(data => {
                 if (!isActiveQueryRun(queryRunId)) return;
                 let outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
@@ -3733,13 +3864,12 @@
               payload.api_key = localStorage.getItem("anthropicKey");
             }
 
-            fetch('/ask_claude', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-              signal: querySignal
-            })
-              .then(response => response.json())
+            const claudeStreamRenderer = createStreamRenderer(
+              document.getElementById("claudeResponse").querySelector(".collapsible-content"),
+              () => isActiveQueryRun(queryRunId)
+            );
+            streamSSERequest('/ask_claude', payload, querySignal, { "delta": claudeStreamRenderer })
+              .then(({ data }) => data)
               .then(data => {
                 if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document.getElementById("claudeResponse").querySelector(".collapsible-content");
@@ -3819,13 +3949,12 @@
               payload.api_key = localStorage.getItem("geminiKey");
             }
 
-            fetch('/ask_gemini', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-              signal: querySignal
-            })
-              .then(response => response.json())
+            const geminiStreamRenderer = createStreamRenderer(
+              document.getElementById("geminiResponse").querySelector(".collapsible-content"),
+              () => isActiveQueryRun(queryRunId)
+            );
+            streamSSERequest('/ask_gemini', payload, querySignal, { "delta": geminiStreamRenderer })
+              .then(({ data }) => data)
               .then(data => {
                 if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
@@ -3905,13 +4034,12 @@
               payload.api_key = localStorage.getItem("deepseekKey");
             }
 
-            fetch('/ask_deepseek', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-              signal: querySignal
-            })
-              .then(response => response.json())
+            const deepseekStreamRenderer = createStreamRenderer(
+              document.getElementById("deepseekResponse").querySelector(".collapsible-content"),
+              () => isActiveQueryRun(queryRunId)
+            );
+            streamSSERequest('/ask_deepseek', payload, querySignal, { "delta": deepseekStreamRenderer })
+              .then(({ data }) => data)
               .then(data => {
                 if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
@@ -3990,13 +4118,12 @@
               }
               payload.api_key = localStorage.getItem("grokKey");
             }
-            fetch('/ask_grok', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-              signal: querySignal
-            })
-              .then(response => response.json())
+            const grokStreamRenderer = createStreamRenderer(
+              document.getElementById("grokResponse").querySelector(".collapsible-content"),
+              () => isActiveQueryRun(queryRunId)
+            );
+            streamSSERequest('/ask_grok', payload, querySignal, { "delta": grokStreamRenderer })
+              .then(({ data }) => data)
               .then(data => {
                 if (!isActiveQueryRun(queryRunId)) return;
                 const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
@@ -4151,7 +4278,7 @@
             if (!box || box.classList.contains("excluded")) return false;
             if (box.dataset.responseError === "true") return false;
             const contentEl = box.querySelector(".collapsible-content");
-            if (!contentEl || contentEl.querySelector(".thinking-wrap")) return false;
+            if (!contentEl || contentEl.querySelector(".thinking-wrap") || contentEl.classList.contains("is-streaming")) return false;
             const text = contentEl.innerText.trim();
             return text && text !== "Request canceled.";
           }).length;
@@ -4224,10 +4351,12 @@
 
           const mainEl = consensusDiv.querySelector(".consensus-main p");
           const diffEl = consensusDiv.querySelector(".consensus-differences p");
-          if (mainEl?.querySelector(".thinking-wrap")) {
+          if (mainEl && (mainEl.querySelector(".thinking-wrap") || mainEl.classList.contains("is-streaming"))) {
+            mainEl.classList.remove("is-streaming");
             mainEl.innerText = "Request canceled.";
           }
-          if (diffEl?.querySelector(".thinking-wrap")) {
+          if (diffEl && (diffEl.querySelector(".thinking-wrap") || diffEl.classList.contains("is-streaming"))) {
+            diffEl.classList.remove("is-streaming");
             diffEl.innerText = "";
           }
           if (window.resetCredibilityFrame) {
@@ -4484,13 +4613,15 @@
           };
 
           try {
-            const response = await fetch("/consensus", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json"
-              },
-              signal: consensusSignal,
-              body: JSON.stringify({
+            const consensusMainRenderer = createStreamRenderer(
+              consensusDiv.querySelector(".consensus-main p"),
+              () => isActiveConsensusRun(consensusRunId)
+            );
+            // Differences-Deltas werden nicht mehr live gerendert: die Engine
+            // liefert JSON, das erst mit dem final-Event als strukturierte UI
+            // (Verdict, Badges, Karten) dargestellt wird. Der Spinner bleibt
+            // bis dahin stehen.
+            const consensusRequestResult = await streamSSERequest("/consensus", {
                 id_token: id_token,
                 useOwnKeys: useOwnKeys,
                 question: question,
@@ -4511,9 +4642,10 @@
                 deepseek_key: deepseekKey,
                 grok_key: grokKey,
                 keepalive: true
-              })
-            });
-            const data = await response.json();
+              }, consensusSignal, {
+                "consensus.delta": consensusMainRenderer
+              });
+            const data = consensusRequestResult.data;
             const consensusErrorDetail =
               data?.detail && typeof data.detail === "object"
                 ? data.detail
@@ -4523,7 +4655,7 @@
               consensusErrorDetail?.message ||
               data.error ||
               data.detail ||
-              `Consensus HTTP ${response.status}`;
+              `Consensus HTTP ${consensusRequestResult.status}`;
 
             if (!isActiveConsensusRun(consensusRunId)) {
               return;
@@ -4548,7 +4680,7 @@
                 "Deep Think: " + deepRemaining + " / " + currentDeepLimit;
             }
 
-            if (response.ok) {
+            if (consensusRequestResult.ok) {
               const mainEl = consensusDiv.querySelector(".consensus-main p");
               const diffEl = consensusDiv.querySelector(".consensus-differences p");
 
@@ -4558,16 +4690,24 @@
               }
 
               if (diffEl) {
-                const diffsMD = data.differences || "No differences found.";
-                if (window.applyCredibilityFrame) {
-                  window.applyCredibilityFrame(diffEl, diffsMD);
-                }
-                const cleaned = window.colorizeCredibility
-                  ? window.colorizeCredibility(diffsMD)
-                  : diffsMD;
+                // Strukturierte Auswertung (Verdict-Header, Badges, Karten),
+                // fällt bei fehlenden/ungültigen Daten auf den Freitext zurück.
+                const structuredRendered = window.renderConsensusInsights
+                  ? window.renderConsensusInsights(data.differences_data, includedAnswerCount)
+                  : false;
 
-                // Differences auch über injectMarkdown → [S1]-Links inkl.
-                injectMarkdown(diffEl, cleaned);
+                if (!structuredRendered) {
+                  const diffsMD = data.differences || "No differences found.";
+                  if (window.applyCredibilityFrame) {
+                    window.applyCredibilityFrame(diffEl, diffsMD);
+                  }
+                  const cleaned = window.colorizeCredibility
+                    ? window.colorizeCredibility(diffsMD)
+                    : diffsMD;
+
+                  // Differences auch über injectMarkdown → [S1]-Links inkl.
+                  injectMarkdown(diffEl, cleaned);
+                }
               }
 
               if (auth.currentUser) {
@@ -4579,7 +4719,9 @@
                 included_models: includedAnswerCount
               });
 
-              const bestModelFromConsensus = parseBestModel(data.differences);
+              const bestModelFromConsensus =
+                (data.differences_data && data.differences_data.best_model) ||
+                parseBestModel(data.differences);
               if (bestModelFromConsensus) {
                 recordModelVote(bestModelFromConsensus, "BestModel");
               }
@@ -5909,6 +6051,9 @@
         }
 
         function resetCredibilityFrame(target) {
+          // Strukturierte Auswertung (Verdict, Badges, Karten) immer mit zurücksetzen —
+          // alle Aufrufer (Cancel, Fehler, neuer Lauf, Bookmarks, Demo) wollen beides.
+          window.resetConsensusInsights?.();
           const frame = target?.classList?.contains("consensus-differences")
             ? target
             : target?.closest?.(".consensus-differences");
@@ -5963,6 +6108,556 @@
         window.applyCredibilityFrame = applyCredibilityFrame;
         window.resetCredibilityFrame = resetCredibilityFrame;
         window.colorizeCredibility = colorizeCredibility;
+
+        // =====================================================================
+        // Consensus Insights: Verdict-Header, Agreement-Badges, Differences-
+        // Karten. Gespeist aus differences_data (strukturierte Ausgabe des
+        // Differences-Calls). Fällt ohne Daten auf den Freitext-Pfad zurück.
+        // =====================================================================
+        (function () {
+          const MODEL_BOX_IDS = {
+            OpenAI: "openaiResponse",
+            Mistral: "mistralResponse",
+            Anthropic: "claudeResponse",
+            Gemini: "geminiResponse",
+            DeepSeek: "deepseekResponse",
+            Grok: "grokResponse"
+          };
+
+          function $(id) { return document.getElementById(id); }
+
+          function modelDisplayName(model) {
+            const box = $(MODEL_BOX_IDS[model] || "");
+            return (box && box.dataset.shortLabel) || model;
+          }
+
+          function isMobileViewport() {
+            return window.matchMedia("(max-width: 768px)").matches;
+          }
+
+          // --- Textsuche: Whitespace kollabieren, Anführungszeichen vereinheitlichen
+          function normalizeForSearch(value) {
+            return String(value || "")
+              .toLowerCase()
+              .replace(/[“”„‘’«»"]/g, '"')
+              .replace(/\s+/g, " ")
+              .trim();
+          }
+
+          // Sucht den normalisierten Needle in einem Textknoten und liefert die
+          // Original-Offsets (für splitText/Range) zurück.
+          function findRangeInTextNode(node, normNeedle) {
+            const raw = node.nodeValue || "";
+            let norm = "";
+            const map = [];
+            for (let i = 0; i < raw.length; i++) {
+              let ch = raw[i].toLowerCase();
+              if (/[“”„‘’«»"]/.test(ch)) ch = '"';
+              if (/\s/.test(ch)) {
+                if (norm.endsWith(" ") || norm === "") continue;
+                ch = " ";
+              }
+              norm += ch;
+              map.push(i);
+            }
+            const idx = norm.indexOf(normNeedle);
+            if (idx === -1 || !normNeedle) return null;
+            return { start: map[idx], end: map[idx + normNeedle.length - 1] + 1 };
+          }
+
+          function searchVariants(text) {
+            const norm = normalizeForSearch(text).replace(/^(\.{3}|…)\s*/, "").replace(/\s*(\.{3}|…)$/, "");
+            if (!norm) return [];
+            const variants = [norm];
+            const words = norm.split(" ");
+            if (words.length > 8) variants.push(words.slice(0, 8).join(" "));
+            return variants;
+          }
+
+          function findAnchorTarget(container, anchor) {
+            for (const needle of searchVariants(anchor)) {
+              const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+              let node;
+              while ((node = walker.nextNode())) {
+                if (!node.nodeValue || node.parentElement?.closest(".claim-badge, code, pre")) continue;
+                const range = findRangeInTextNode(node, needle);
+                if (range) return { type: "exact", node, range };
+              }
+              const blocks = container.querySelectorAll("p, li, h1, h2, h3, h4, td, blockquote");
+              for (const block of blocks) {
+                if (normalizeForSearch(block.textContent).includes(needle)) {
+                  return { type: "block", block };
+                }
+              }
+            }
+            return null;
+          }
+
+          // --- Popover / Bottom Sheet -------------------------------------
+          function onDocClick(event) {
+            const pop = $("claimPopover");
+            if (!pop || pop.hidden) return;
+            if (pop.contains(event.target)) return;
+            if (event.target.closest?.(".claim-badge")) return;
+            closeClaimPopover();
+          }
+
+          function onKeyDown(event) {
+            if (event.key === "Escape") closeClaimPopover();
+          }
+
+          // Popover/Backdrop nach <body> verschieben: Vorfahren mit
+          // backdrop-filter/transform erzeugen sonst einen eigenen Containing
+          // Block und verschieben absolute/fixed-Koordinaten.
+          function ensureOverlayOnBody(el) {
+            if (el && el.parentElement !== document.body) {
+              document.body.appendChild(el);
+            }
+            return el;
+          }
+
+          function closeClaimPopover() {
+            const pop = $("claimPopover");
+            const backdrop = $("claimSheetBackdrop");
+            if (pop) {
+              pop.hidden = true;
+              pop.classList.remove("is-modal");
+              pop.innerHTML = "";
+              pop.style.left = pop.style.top = pop.style.width = "";
+            }
+            if (backdrop) backdrop.hidden = true;
+            document.removeEventListener("click", onDocClick, true);
+            document.removeEventListener("keydown", onKeyDown, true);
+          }
+
+          function buildModelRow(model, quote, agreeing) {
+            const row = document.createElement("div");
+            row.className = "claim-model-row " + (agreeing ? "is-agree" : "is-dissent");
+
+            const head = document.createElement("div");
+            head.className = "claim-model-head";
+            const name = document.createElement("span");
+            name.className = "claim-model-name";
+            name.textContent = modelDisplayName(model);
+            head.appendChild(name);
+            if (MODEL_BOX_IDS[model]) {
+              const jump = document.createElement("button");
+              jump.type = "button";
+              jump.className = "claim-jump-link";
+              jump.textContent = "View answer";
+              jump.addEventListener("click", function () {
+                closeClaimPopover();
+                jumpToModelAnswer(model, quote);
+              });
+              head.appendChild(jump);
+            }
+            row.appendChild(head);
+
+            if (quote) {
+              const q = document.createElement("blockquote");
+              q.className = "claim-model-quote";
+              q.textContent = quote;
+              row.appendChild(q);
+            }
+            return row;
+          }
+
+          function openClaimPopover(claim, anchorEl) {
+            const pop = ensureOverlayOnBody($("claimPopover"));
+            const backdrop = ensureOverlayOnBody($("claimSheetBackdrop"));
+            if (!pop) return;
+            closeClaimPopover();
+
+            const agreeCount = claim.agree.length;
+            const total = agreeCount + claim.dissent.length;
+
+            const header = document.createElement("div");
+            header.className = "claim-popover-header";
+            const title = document.createElement("span");
+            title.className = "claim-popover-title";
+            title.textContent = claim.dissent.length
+              ? `${agreeCount} of ${total} models agree`
+              : `All ${total} models agree`;
+            const close = document.createElement("button");
+            close.type = "button";
+            close.className = "claim-popover-close";
+            close.setAttribute("aria-label", "Close");
+            close.innerHTML = "&times;";
+            close.addEventListener("click", closeClaimPopover);
+            header.append(title, close);
+            pop.appendChild(header);
+
+            const claimText = document.createElement("div");
+            claimText.className = "claim-popover-claim";
+            claimText.textContent = "“" + claim.anchor + "”";
+            pop.appendChild(claimText);
+
+            if (claim.agree.length) {
+              const section = document.createElement("div");
+              section.className = "claim-popover-section";
+              const label = document.createElement("div");
+              label.className = "claim-section-label is-agree";
+              label.textContent = "Agree";
+              section.appendChild(label);
+              claim.agree.forEach(model => section.appendChild(buildModelRow(model, "", true)));
+              pop.appendChild(section);
+            }
+            if (claim.dissent.length) {
+              const section = document.createElement("div");
+              section.className = "claim-popover-section";
+              const label = document.createElement("div");
+              label.className = "claim-section-label is-dissent";
+              label.textContent = "Deviate";
+              section.appendChild(label);
+              claim.dissent.forEach(item => section.appendChild(buildModelRow(item.model, item.quote, false)));
+              pop.appendChild(section);
+            }
+
+            const asModal = isMobileViewport();
+            pop.classList.toggle("is-modal", asModal);
+            pop.hidden = false;
+            if (asModal) {
+              if (backdrop) {
+                backdrop.hidden = false;
+                backdrop.addEventListener("click", closeClaimPopover, { once: true });
+              }
+            } else if (anchorEl) {
+              // Direkt unter dem Badge, horizontal am Badge zentriert
+              const rect = anchorEl.getBoundingClientRect();
+              const width = Math.min(340, window.innerWidth - 24);
+              pop.style.width = width + "px";
+              const minLeft = window.scrollX + 12;
+              const maxLeft = window.scrollX + window.innerWidth - width - 12;
+              const centered = rect.left + rect.width / 2 - width / 2 + window.scrollX;
+              pop.style.left = Math.max(minLeft, Math.min(centered, maxLeft)) + "px";
+              pop.style.top = (rect.bottom + window.scrollY + 8) + "px";
+            }
+            setTimeout(function () {
+              document.addEventListener("click", onDocClick, true);
+              document.addEventListener("keydown", onKeyDown, true);
+            }, 0);
+          }
+
+          // --- Sprung zur Originalantwort mit Zitat-Highlight ---------------
+          // Markiert das Zitat und gibt das markierte Element zurück (oder null);
+          // das Scrollen übernimmt der Aufrufer.
+          function flashQuote(container, quote) {
+            for (const needle of searchVariants(quote)) {
+              const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+              let node;
+              while ((node = walker.nextNode())) {
+                if (!node.nodeValue || node.parentElement?.closest("code, pre, mark")) continue;
+                const found = findRangeInTextNode(node, needle);
+                if (!found) continue;
+                const range = document.createRange();
+                range.setStart(node, found.start);
+                range.setEnd(node, found.end);
+                const mark = document.createElement("mark");
+                mark.className = "quote-flash";
+                try {
+                  range.surroundContents(mark);
+                } catch (e) {
+                  break;
+                }
+                setTimeout(function () {
+                  const parent = mark.parentNode;
+                  if (!parent) return;
+                  while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+                  parent.removeChild(mark);
+                  parent.normalize();
+                }, 2400);
+                return mark;
+              }
+              const blocks = container.querySelectorAll("p, li, h1, h2, h3, h4, td, blockquote");
+              for (const block of blocks) {
+                if (normalizeForSearch(block.textContent).includes(needle)) {
+                  block.classList.add("quote-flash-block");
+                  setTimeout(function () { block.classList.remove("quote-flash-block"); }, 2400);
+                  return block;
+                }
+              }
+            }
+            return null;
+          }
+
+          function jumpToModelAnswer(model, quote) {
+            const box = $(MODEL_BOX_IDS[model] || "");
+            if (!box) return;
+
+            let delay = 0;
+            if (window.isAgentModeEnabled?.()) {
+              // Agent Mode blendet die Antwort-Boxen aus — erst deaktivieren,
+              // dann nach dem Layout-Übergang springen.
+              window.setAgentMode?.(false, { persist: true });
+              delay = 400;
+            }
+
+            window.setTimeout(function () {
+              const content = box.querySelector(".collapsible-content");
+              const highlight = (content && quote) ? flashQuote(content, quote) : null;
+              // Offset, damit der Box-Header ("Response from …") sichtbar bleibt
+              const headerY = box.getBoundingClientRect().top + window.scrollY - 84;
+
+              if (highlight) {
+                const quoteY = highlight.getBoundingClientRect().top + window.scrollY;
+                if (quoteY - headerY < window.innerHeight * 0.7) {
+                  // Zitat liegt nah am Boxanfang: Header und Zitat zusammen zeigen
+                  window.scrollTo({ top: Math.max(0, headerY), behavior: "smooth" });
+                } else {
+                  // Zitat liegt tief in der Antwort: Zitat mittig anfahren
+                  window.scrollTo({ top: Math.max(0, quoteY - window.innerHeight / 2), behavior: "smooth" });
+                }
+              } else {
+                window.scrollTo({ top: Math.max(0, headerY), behavior: "smooth" });
+                box.classList.add("jump-flash");
+                setTimeout(function () { box.classList.remove("jump-flash"); }, 2000);
+              }
+              window.trackUmamiEvent?.("app_consensus_jump_to_answer", { model: model, found_quote: !!highlight });
+            }, delay);
+          }
+
+          // --- Verdict-Header ------------------------------------------------
+          function renderVerdictHeader(differences, modelCount) {
+            const verdict = $("consensusVerdict");
+            if (!verdict) return;
+            const contradictions = differences.filter(d => d.type === "contradiction").length;
+            const emphases = differences.length - contradictions;
+            const modelsLabel = modelCount + " model" + (modelCount === 1 ? "" : "s");
+
+            let cls, text;
+            if (contradictions === 0) {
+              cls = "is-calm";
+              const detail = emphases > 0
+                ? emphases + " difference" + (emphases === 1 ? "" : "s") + " in emphasis, no contradictions"
+                : "no contradictions found";
+              text = "High agreement — " + modelsLabel + ", " + detail;
+            } else {
+              cls = "is-warn";
+              text = "Caution: the models contradict each other on "
+                + contradictions + " point" + (contradictions === 1 ? "" : "s")
+                + " — " + modelsLabel;
+            }
+
+            verdict.classList.remove("is-calm", "is-warn");
+            verdict.classList.add(cls);
+            verdict.innerHTML = "";
+            const icon = document.createElement("span");
+            icon.className = "verdict-icon";
+            icon.setAttribute("aria-hidden", "true");
+            const label = document.createElement("span");
+            label.className = "verdict-text";
+            label.textContent = text;
+            verdict.append(icon, label);
+            verdict.hidden = false;
+          }
+
+          // --- Agreement-Badges in der Konsens-Antwort -----------------------
+          function makeBadge(claim) {
+            const agreeCount = claim.agree.length;
+            const total = agreeCount + claim.dissent.length;
+            const badge = document.createElement("button");
+            badge.type = "button";
+            badge.className = "claim-badge" + (claim.dissent.length ? " has-dissent" : "");
+            badge.textContent = agreeCount + "/" + total;
+            badge.title = claim.dissent.length
+              ? agreeCount + " of " + total + " models support this — tap for details"
+              : "All " + total + " models that address this agree — tap for details";
+            badge.setAttribute("aria-haspopup", "dialog");
+            badge.addEventListener("click", function (event) {
+              event.stopPropagation();
+              openClaimPopover(claim, badge);
+            });
+            return badge;
+          }
+
+          function renderClaimBadges(claims) {
+            const mainP = document.querySelector("#consensusResponse .consensus-main p");
+            const fallbackBox = $("consensusClaimsFallback");
+            if (!mainP || !fallbackBox) return;
+
+            const unanchored = [];
+            claims.forEach(function (claim) {
+              const target = findAnchorTarget(mainP, claim.anchor);
+              if (!target) {
+                unanchored.push(claim);
+                return;
+              }
+              const badge = makeBadge(claim);
+              if (target.type === "exact") {
+                const node = target.node;
+                const offset = Math.min(target.range.end, node.nodeValue.length);
+                const rest = node.splitText(offset);
+                node.parentNode.insertBefore(badge, rest);
+              } else {
+                target.block.appendChild(badge);
+              }
+            });
+
+            if (unanchored.length) {
+              fallbackBox.innerHTML = "";
+              const title = document.createElement("div");
+              title.className = "claims-fallback-title";
+              title.textContent = "Key claims";
+              fallbackBox.appendChild(title);
+              unanchored.forEach(function (claim) {
+                const row = document.createElement("div");
+                row.className = "claims-fallback-row";
+                const text = document.createElement("span");
+                text.className = "claims-fallback-text";
+                text.textContent = claim.anchor;
+                row.append(text, makeBadge(claim));
+                fallbackBox.appendChild(row);
+              });
+              fallbackBox.hidden = false;
+            }
+          }
+
+          // --- Differences-Karten --------------------------------------------
+          function renderDifferenceCards(differences, modelCount) {
+            const cards = $("differencesCards");
+            const diffP = document.querySelector("#consensusResponse .consensus-differences p");
+            if (!cards) return;
+            cards.innerHTML = "";
+
+            if (!differences.length) {
+              const empty = document.createElement("div");
+              empty.className = "diff-empty-state";
+              const headline = document.createElement("div");
+              headline.className = "diff-empty-headline";
+              headline.textContent = "No substantive contradictions found across the "
+                + modelCount + " answers.";
+              const note = document.createElement("div");
+              note.className = "diff-empty-note";
+              note.textContent = "Agreement is a good signal, but not a guarantee of correctness.";
+              empty.append(headline, note);
+              cards.appendChild(empty);
+            } else {
+              const openByDefault = !isMobileViewport();
+              differences.forEach(function (diff) {
+                const card = document.createElement("details");
+                card.className = "diff-card " + (diff.type === "contradiction" ? "is-contradiction" : "is-emphasis");
+                if (openByDefault) card.open = true;
+
+                const summary = document.createElement("summary");
+                summary.className = "diff-card-summary";
+                const typeTag = document.createElement("span");
+                typeTag.className = "diff-type-tag";
+                typeTag.textContent = diff.type === "contradiction" ? "Contradiction" : "Different emphasis";
+                const claimEl = document.createElement("span");
+                claimEl.className = "diff-card-claim";
+                claimEl.textContent = diff.claim;
+                summary.append(typeTag, claimEl);
+                card.appendChild(summary);
+
+                const body = document.createElement("div");
+                body.className = "diff-card-body";
+                diff.positions.forEach(function (pos, index) {
+                  const posEl = document.createElement("div");
+                  posEl.className = "diff-position";
+
+                  const label = document.createElement("div");
+                  label.className = "diff-position-label";
+                  const names = pos.models.map(modelDisplayName).join(", ");
+                  label.textContent = "Position " + String.fromCharCode(65 + index) + " ("
+                    + (pos.models.length === 1 ? names : pos.models.length + " models: " + names) + ")";
+                  posEl.appendChild(label);
+
+                  if (pos.stance) {
+                    const stance = document.createElement("div");
+                    stance.className = "diff-position-stance";
+                    stance.textContent = pos.stance;
+                    posEl.appendChild(stance);
+                  }
+                  if (pos.quote) {
+                    const quote = document.createElement("blockquote");
+                    quote.className = "diff-position-quote";
+                    quote.textContent = pos.quote;
+                    posEl.appendChild(quote);
+                  }
+
+                  const links = document.createElement("div");
+                  links.className = "diff-position-links";
+                  pos.models.forEach(function (model) {
+                    if (!MODEL_BOX_IDS[model]) return;
+                    const jump = document.createElement("button");
+                    jump.type = "button";
+                    jump.className = "claim-jump-link";
+                    jump.textContent = "Jump to " + modelDisplayName(model);
+                    jump.addEventListener("click", function () { jumpToModelAnswer(model, pos.quote); });
+                    links.appendChild(jump);
+                  });
+                  if (links.childNodes.length) posEl.appendChild(links);
+                  body.appendChild(posEl);
+                });
+
+                if (diff.verify) {
+                  const verify = document.createElement("div");
+                  verify.className = "diff-verify";
+                  verify.textContent = "Worth verifying: " + diff.verify;
+                  body.appendChild(verify);
+                }
+                card.appendChild(body);
+                cards.appendChild(card);
+              });
+            }
+
+            cards.hidden = false;
+            if (diffP) {
+              diffP.innerHTML = "";
+              diffP.hidden = true;
+            }
+          }
+
+          // --- Reset & Haupteinstieg -----------------------------------------
+          function resetConsensusInsights() {
+            closeClaimPopover();
+            const verdict = $("consensusVerdict");
+            if (verdict) {
+              verdict.hidden = true;
+              verdict.innerHTML = "";
+              verdict.classList.remove("is-calm", "is-warn");
+            }
+            const cards = $("differencesCards");
+            if (cards) {
+              cards.hidden = true;
+              cards.innerHTML = "";
+            }
+            const fallbackBox = $("consensusClaimsFallback");
+            if (fallbackBox) {
+              fallbackBox.hidden = true;
+              fallbackBox.innerHTML = "";
+            }
+            document.querySelectorAll(".claim-badge").forEach(function (badge) { badge.remove(); });
+            const diffP = document.querySelector("#consensusResponse .consensus-differences p");
+            if (diffP) diffP.hidden = false;
+          }
+
+          function renderConsensusInsights(data, includedCount) {
+            resetConsensusInsights();
+            if (!data || typeof data !== "object") return false;
+
+            const claims = (Array.isArray(data.claims) ? data.claims : [])
+              .filter(c => c && c.anchor && Array.isArray(c.agree) && Array.isArray(c.dissent));
+            const differences = (Array.isArray(data.differences) ? data.differences : [])
+              .filter(d => d && d.claim && Array.isArray(d.positions) && d.positions.length);
+            const modelCount = (Array.isArray(data.models_compared) && data.models_compared.length)
+              || includedCount || 0;
+
+            renderVerdictHeader(differences, modelCount);
+            renderClaimBadges(claims);
+            renderDifferenceCards(differences, modelCount);
+            window.trackUmamiEvent?.("app_consensus_insights_rendered", {
+              claims: claims.length,
+              differences: differences.length,
+              contradictions: differences.filter(d => d.type === "contradiction").length
+            });
+            return true;
+          }
+
+          window.renderConsensusInsights = renderConsensusInsights;
+          window.resetConsensusInsights = resetConsensusInsights;
+          window.jumpToModelAnswer = jumpToModelAnswer;
+        })();
 
       </script>
 

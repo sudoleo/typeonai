@@ -2,6 +2,7 @@
 import logging
 from fastapi import APIRouter, Request, Body, HTTPException
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
 
 from app.core.rate_limit import limiter
 from app.core.state import usage_counter, deep_search_usage
@@ -17,7 +18,24 @@ from app.services.llm.engines import (
     query_openai, query_mistral, query_claude, query_gemini, query_deepseek, query_grok
 )
 from app.services.llm.citations import source_response
-from app.services.llm.consensus_engine import normalize_model_name, query_consensus, query_differences
+from app.services.llm.streaming import (
+    SSE_HEADERS,
+    sse_pack,
+    streaming_model_response,
+    stream_claude_query,
+    stream_deepseek_query,
+    stream_gemini_query,
+    stream_grok_query,
+    stream_mistral_query,
+    stream_openai_query,
+)
+from app.services.llm.consensus_engine import (
+    normalize_model_name,
+    query_consensus,
+    query_differences,
+    stream_consensus,
+    stream_differences,
+)
 from tool_heuristics import get_realtime_context, get_intent_from_llm
 
 router = APIRouter()
@@ -74,6 +92,7 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
 
     # deep_search robust konvertieren
     deep_search = parse_boolean_flag(data.get("deep_search", False))
+    stream_requested = parse_boolean_flag(data.get("stream", False))
 
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
@@ -141,16 +160,33 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
         if not developer_api_key:
             raise HTTPException(status_code=500, detail="Server error: API key missing")
 
+        # Remaining berechnen
+        remaining_regular = int(limit_regular - usage_counter[uid])
+        remaining_deep = int(limit_deep - deep_search_usage.get(uid, 0))
+
+        if stream_requested:
+            return streaming_model_response(
+                stream_openai_query(
+                    question, developer_api_key, deep_search=deep_search,
+                    system_prompt=system_prompt, model_override=model,
+                    max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
+                    attachments=attachments
+                ),
+                "OpenAI",
+                {
+                    "free_usage_remaining": remaining_regular,
+                    "deep_remaining": remaining_deep,
+                    "is_pro_user": is_pro_user,
+                    "key_used": "Developer API Key",
+                },
+            )
+
         answer = query_openai(
             question, developer_api_key, deep_search=deep_search,
             system_prompt=system_prompt, model_override=model,
             max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
             attachments=attachments
         )
-
-        # Remaining berechnen
-        remaining_regular = int(limit_regular - usage_counter[uid])
-        remaining_deep = int(limit_deep - deep_search_usage.get(uid, 0))
 
         return source_response(
             answer,
@@ -162,6 +198,23 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
 
     # --- 5. Eigener API Key (Bypass Limits) ---
     elif api_key:
+        if stream_requested:
+            return streaming_model_response(
+                stream_openai_query(
+                    question, api_key, deep_search=deep_search,
+                    system_prompt=system_prompt, model_override=model,
+                    max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+                    attachments=attachments
+                ),
+                "OpenAI",
+                {
+                    "free_usage_remaining": "Unlimited",
+                    "deep_remaining": "Unlimited",
+                    "is_pro_user": False,
+                    "key_used": "User API Key",
+                },
+            )
+
         answer = query_openai(
             question, api_key, deep_search=deep_search,
             system_prompt=system_prompt, model_override=model,
@@ -185,6 +238,7 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
 def ask_mistral_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
     deep_search = parse_boolean_flag(data.get("deep_search", False))
+    stream_requested = parse_boolean_flag(data.get("stream", False))
 
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
@@ -231,13 +285,29 @@ def ask_mistral_post(request: Request, data: dict = Body(...)):
         developer_api_key = os.environ.get("DEVELOPER_MISTRAL_API_KEY")
         if not developer_api_key:
              raise HTTPException(status_code=500, detail="Server error: API key missing")
-        
+
+        if stream_requested:
+            return streaming_model_response(
+                stream_mistral_query(
+                    question, developer_api_key, system_prompt, deep_search=deep_search,
+                    model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
+                    attachments=attachments
+                ),
+                "Mistral",
+                {
+                    "free_usage_remaining": int(limit_regular - usage_counter[uid]),
+                    "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
+                    "is_pro_user": is_pro_user,
+                    "key_used": "Developer API Key",
+                },
+            )
+
         answer = query_mistral(
             question, developer_api_key, system_prompt, deep_search=deep_search,
             model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
             attachments=attachments
         )
-        
+
         return source_response(
             answer,
             free_usage_remaining=int(limit_regular - usage_counter[uid]),
@@ -247,6 +317,17 @@ def ask_mistral_post(request: Request, data: dict = Body(...)):
         )
 
     elif api_key:
+        if stream_requested:
+            return streaming_model_response(
+                stream_mistral_query(
+                    question, api_key, system_prompt, deep_search=deep_search,
+                    model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+                    attachments=attachments
+                ),
+                "Mistral",
+                {"free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": False, "key_used": "User API Key"},
+            )
+
         answer = query_mistral(
             question, api_key, system_prompt, deep_search=deep_search,
             model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
@@ -262,6 +343,7 @@ def ask_mistral_post(request: Request, data: dict = Body(...)):
 def ask_claude_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
     deep_search = parse_boolean_flag(data.get("deep_search", False))
+    stream_requested = parse_boolean_flag(data.get("stream", False))
 
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
@@ -309,12 +391,28 @@ def ask_claude_post(request: Request, data: dict = Body(...)):
         if not developer_api_key:
              raise HTTPException(status_code=500, detail="Server error: API key missing")
 
+        if stream_requested:
+            return streaming_model_response(
+                stream_claude_query(
+                    question, developer_api_key, system_prompt, deep_search=deep_search,
+                    model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
+                    attachments=attachments
+                ),
+                "Anthropic",
+                {
+                    "free_usage_remaining": int(limit_regular - usage_counter[uid]),
+                    "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
+                    "is_pro_user": is_pro_user,
+                    "key_used": "Developer API Key",
+                },
+            )
+
         answer = query_claude(
             question, developer_api_key, system_prompt, deep_search=deep_search,
             model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
             attachments=attachments
         )
-        
+
         return source_response(
             answer,
             free_usage_remaining=int(limit_regular - usage_counter[uid]),
@@ -324,6 +422,17 @@ def ask_claude_post(request: Request, data: dict = Body(...)):
         )
 
     elif api_key:
+        if stream_requested:
+            return streaming_model_response(
+                stream_claude_query(
+                    question, api_key, system_prompt, deep_search=deep_search,
+                    model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+                    attachments=attachments
+                ),
+                "Anthropic",
+                {"free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": False, "key_used": "User API Key"},
+            )
+
         answer = query_claude(
             question, api_key, system_prompt, deep_search=deep_search,
             model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
@@ -339,6 +448,7 @@ def ask_claude_post(request: Request, data: dict = Body(...)):
 def ask_gemini_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
     deep_search = parse_boolean_flag(data.get("deep_search", False))
+    stream_requested = parse_boolean_flag(data.get("stream", False))
 
     system_prompt = data.get("system_prompt")
     use_own_keys = str(data.get("useOwnKeys", "false")).lower() == "true"
@@ -388,12 +498,30 @@ def ask_gemini_post(request: Request, data: dict = Body(...)):
         if use_own_keys:
             if not (api_key and api_key.strip()):
                 raise HTTPException(status_code=400, detail="Missing user API key for Gemini.")
-            answer = query_gemini(question, user_api_key=api_key.strip(), deep_search=deep_search, system_prompt=system_prompt, model_override=model, max_output_tokens=max_tokens, attachments=attachments)
+            user_key = api_key.strip()
             key_info = "User API Key"
         else:
             # Service Account (SaaS Budget)
-            answer = query_gemini(question, user_api_key=None, deep_search=deep_search, system_prompt=system_prompt, model_override=model, max_output_tokens=max_tokens, attachments=attachments)
+            user_key = None
             key_info = "Service Account"
+
+        if stream_requested:
+            return streaming_model_response(
+                stream_gemini_query(
+                    question, user_api_key=user_key, deep_search=deep_search,
+                    system_prompt=system_prompt, model_override=model,
+                    max_output_tokens=max_tokens, attachments=attachments
+                ),
+                "Gemini",
+                {
+                    "free_usage_remaining": int(limit_regular - usage_counter[uid]),
+                    "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
+                    "is_pro_user": is_pro_user,
+                    "key_used": key_info,
+                },
+            )
+
+        answer = query_gemini(question, user_api_key=user_key, deep_search=deep_search, system_prompt=system_prompt, model_override=model, max_output_tokens=max_tokens, attachments=attachments)
 
         return source_response(
             answer,
@@ -407,6 +535,19 @@ def ask_gemini_post(request: Request, data: dict = Body(...)):
         # Guest mit eigenem Key
         if not (api_key and api_key.strip()):
             raise HTTPException(status_code=400, detail="No credentials provided.")
+
+        if stream_requested:
+            return streaming_model_response(
+                stream_gemini_query(
+                    question, user_api_key=api_key.strip(), deep_search=deep_search,
+                    system_prompt=system_prompt, model_override=model,
+                    max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+                    attachments=attachments
+                ),
+                "Gemini",
+                {"key_used": "User API Key", "is_pro_user": False},
+            )
+
         answer = query_gemini(
             question, user_api_key=api_key.strip(), deep_search=deep_search,
             system_prompt=system_prompt, model_override=model,
@@ -421,6 +562,7 @@ def ask_gemini_post(request: Request, data: dict = Body(...)):
 def ask_deepseek_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
     deep_search = parse_boolean_flag(data.get("deep_search", False))
+    stream_requested = parse_boolean_flag(data.get("stream", False))
 
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
@@ -468,12 +610,28 @@ def ask_deepseek_post(request: Request, data: dict = Body(...)):
         if not developer_api_key:
              raise HTTPException(status_code=500, detail="Server error: API key missing")
 
+        if stream_requested:
+            return streaming_model_response(
+                stream_deepseek_query(
+                    question, developer_api_key, system_prompt, deep_search=deep_search,
+                    model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
+                    attachments=attachments
+                ),
+                "DeepSeek",
+                {
+                    "free_usage_remaining": int(limit_regular - usage_counter[uid]),
+                    "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
+                    "is_pro_user": is_pro_user,
+                    "key_used": "Developer API Key",
+                },
+            )
+
         answer = query_deepseek(
             question, developer_api_key, system_prompt, deep_search=deep_search,
             model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
             attachments=attachments
         )
-        
+
         return source_response(
             answer,
             free_usage_remaining=int(limit_regular - usage_counter[uid]),
@@ -483,6 +641,17 @@ def ask_deepseek_post(request: Request, data: dict = Body(...)):
         )
 
     elif api_key:
+        if stream_requested:
+            return streaming_model_response(
+                stream_deepseek_query(
+                    question, api_key, system_prompt, deep_search=deep_search,
+                    model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+                    attachments=attachments
+                ),
+                "DeepSeek",
+                {"free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": False, "key_used": "User API Key"},
+            )
+
         answer = query_deepseek(
             question, api_key, system_prompt, deep_search=deep_search,
             model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
@@ -498,6 +667,7 @@ def ask_deepseek_post(request: Request, data: dict = Body(...)):
 def ask_grok_post(request: Request, data: dict = Body(...)):
     question = data.get("question")
     deep_search = parse_boolean_flag(data.get("deep_search", False))
+    stream_requested = parse_boolean_flag(data.get("stream", False))
 
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
@@ -545,12 +715,28 @@ def ask_grok_post(request: Request, data: dict = Body(...)):
         if not developer_api_key:
              raise HTTPException(status_code=500, detail="Server error: API key missing")
 
+        if stream_requested:
+            return streaming_model_response(
+                stream_grok_query(
+                    question, developer_api_key, system_prompt, deep_search=deep_search,
+                    model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
+                    attachments=attachments
+                ),
+                "Grok",
+                {
+                    "free_usage_remaining": int(limit_regular - usage_counter[uid]),
+                    "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
+                    "is_pro_user": is_pro_user,
+                    "key_used": "Developer API Key",
+                },
+            )
+
         answer = query_grok(
             question, developer_api_key, system_prompt, deep_search=deep_search,
             model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
             attachments=attachments
         )
-        
+
         return source_response(
             answer,
             free_usage_remaining=int(limit_regular - usage_counter[uid]),
@@ -560,6 +746,17 @@ def ask_grok_post(request: Request, data: dict = Body(...)):
         )
 
     elif api_key:
+        if stream_requested:
+            return streaming_model_response(
+                stream_grok_query(
+                    question, api_key, system_prompt, deep_search=deep_search,
+                    model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+                    attachments=attachments
+                ),
+                "Grok",
+                {"free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": False, "key_used": "User API Key"},
+            )
+
         answer = query_grok(
             question, api_key, system_prompt, deep_search=deep_search,
             model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
@@ -639,6 +836,7 @@ def consensus(request: Request, data: dict = Body(...)):
     id_token = extract_id_token(request, data)
     use_own_keys = str(data.get("useOwnKeys", "false")).lower() == "true"
     consensus_model = data.get("consensus_model")
+    stream_requested = parse_boolean_flag(data.get("stream", False))
     uid = None
     is_pro = False
     
@@ -835,6 +1033,79 @@ def consensus(request: Request, data: dict = Body(...)):
     if best_model and not answer_by_model.get(best_model):
         raise HTTPException(status_code=400, detail="The answer marked as best is not available.")
 
+    if stream_requested:
+        extra_fields = {}
+        if uid:
+            extra_fields = {
+                "free_usage_remaining": max(0, int(cfg.get_usage_limit(is_pro) - usage_counter.get(uid, 0))),
+                "deep_remaining": max(0, int(cfg.get_deep_search_limit(is_pro) - deep_search_usage.get(uid, 0))),
+                "is_pro_user": is_pro,
+            }
+
+        def consensus_event_source():
+            consensus_text = ""
+            differences_text = ""
+            differences_data = None
+            try:
+                for item in stream_consensus(
+                    question,
+                    answer_openai,
+                    answer_mistral,
+                    answer_claude,
+                    answer_gemini,
+                    answer_deepseek,
+                    answer_grok,
+                    best_model,
+                    excluded_models,
+                    consensus_model,
+                    api_keys,
+                    model_sources=model_sources,
+                ):
+                    if item.get("type") == "delta":
+                        yield sse_pack("consensus.delta", {"text": item.get("text") or ""})
+                    else:
+                        consensus_text = item.get("text") or ""
+
+                for item in stream_differences(
+                    answer_openai,
+                    answer_mistral,
+                    answer_claude,
+                    answer_gemini,
+                    answer_deepseek,
+                    answer_grok,
+                    consensus_text,
+                    api_keys,
+                    differences_model=consensus_model,
+                    excluded_models=excluded_models,
+                ):
+                    if item.get("type") == "delta":
+                        # Das Frontend rendert diese Deltas nicht mehr (die Engine
+                        # liefert JSON); sie halten nur die SSE-Verbindung aktiv.
+                        yield sse_pack("differences.delta", {"text": item.get("text") or ""})
+                    else:
+                        differences_text = item.get("text") or ""
+                        differences_data = item.get("data")
+            except Exception as exc:
+                logging.exception("Consensus streaming failed")
+                if not consensus_text:
+                    consensus_text = f"Consensus error: {exc}"
+                if not differences_text:
+                    differences_text = ""
+
+            payload = {
+                "consensus_response": consensus_text,
+                "differences": differences_text,
+                "differences_data": differences_data,
+            }
+            payload.update(extra_fields)
+            yield sse_pack("final", payload)
+
+        return StreamingResponse(
+            consensus_event_source(),
+            media_type="text/event-stream",
+            headers=dict(SSE_HEADERS),
+        )
+
     consensus_answer = query_consensus(
         question,
         answer_openai,
@@ -850,7 +1121,7 @@ def consensus(request: Request, data: dict = Body(...)):
         model_sources=model_sources,
     )
 
-    differences = query_differences(
+    differences, differences_data = query_differences(
         answer_openai,
         answer_mistral,
         answer_claude,
@@ -863,7 +1134,11 @@ def consensus(request: Request, data: dict = Body(...)):
         excluded_models=excluded_models,
     )
 
-    response = {"consensus_response": consensus_answer, "differences": differences}
+    response = {
+        "consensus_response": consensus_answer,
+        "differences": differences,
+        "differences_data": differences_data,
+    }
     if uid:
         response.update({
             "free_usage_remaining": max(0, int(limit_regular - usage_counter.get(uid, 0))),
