@@ -10,8 +10,8 @@
   background:
     linear-gradient(160deg, var(--glass-bg-strong), var(--glass-bg) 54%, var(--glass-bg-soft)),
     var(--container-bg);
-  padding: 15px 20px;
-  border-radius: 8px;
+  padding: 16px 22px;
+  border-radius: var(--radius-xl);
   border: 1px solid color-mix(in srgb, var(--glass-border) 72%, var(--sidebar-border));
   box-shadow: var(--box-shadow);
   position: relative;
@@ -265,7 +265,7 @@ body:has(.sidebar.collapsed) .main-wrapper {
   font-size: 0.9em;
   padding: 8px 12px;
   width: 100%;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   transition: all 0.2s ease;
 }
 
@@ -401,7 +401,7 @@ body:has(.sidebar.collapsed) .main-wrapper {
   gap: 7px;
   background: color-mix(in srgb, var(--container-bg) 88%, var(--sidebar-hover) 12%);
   border: 1px solid color-mix(in srgb, var(--sidebar-border) 76%, transparent);
-  border-radius: 8px; 
+  border-radius: var(--radius-xs); 
   padding: 10px 11px; 
   font-size: 0.76rem; 
   font-family: inherit;
@@ -433,7 +433,7 @@ body:has(.sidebar.collapsed) .main-wrapper {
   padding: 7px 9px; 
   font-size: 0.8rem; 
   border: 1px solid color-mix(in srgb, var(--sidebar-border) 62%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--container-bg) 74%, var(--sidebar-hover) 26%);
   cursor: pointer;
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
@@ -476,7 +476,7 @@ body:has(.sidebar.collapsed) .main-wrapper {
   margin-bottom: 6px; 
   padding: 9px 34px 9px 10px; 
   border: 1px solid transparent; 
-  border-radius: 8px; 
+  border-radius: var(--radius-xs); 
   text-align: left; 
   transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease; 
   position: relative; 
@@ -533,7 +533,7 @@ body:has(.sidebar.collapsed) .main-wrapper {
   color: var(--clear-button-text);
   outline: none;
 }
-#editSystemPromptBtn { background-color: transparent !important; color: var(--text-color) !important; border: 1px solid var(--sidebar-border) !important; padding: 8px 16px; border-radius: 6px; cursor: pointer; width: 100%; margin: 0; }
+#editSystemPromptBtn { background-color: transparent !important; color: var(--text-color) !important; border: 1px solid var(--sidebar-border) !important; padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; width: 100%; margin: 0; }
 #editSystemPromptBtn:hover { background-color: var(--sidebar-hover) !important; }
 #editSystemPromptBtn .settings-icon { margin-right: 8px; font-size: 14px; display: inline-block; }
 

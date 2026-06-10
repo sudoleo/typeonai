@@ -18,7 +18,7 @@
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>consens.io - compare before you trust</title>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260609-mobile-clean10">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260610-restyle1">
   <link rel="icon" href="/static/favicon-square.png?v=20260523-logo1" type="image/png">
   <script type="application/ld+json">
   {
@@ -106,7 +106,7 @@
         </div>
         <div class="mock-container">
           <div class="mock-input">
-            <span class="mock-placeholder">Will AI replace my job in the next 5 years?</span>
+            <span class="mock-placeholder">What is the longest river in the world?</span>
             <div class="mock-switch-row">
               <span class="mock-attach" aria-label="Add attachment" title="Add attachment">+</span>
               <span class="mock-mode mock-mode-agent" aria-label="Agent Mode" title="Agent Mode">
@@ -143,11 +143,11 @@
           <div class="consensus-preview">
             <div>
               <strong>Consensus Answer</strong>
-              <p>Shared conclusion with the assumptions that multiple models agree on.</p>
+              <p>The Nile is the conventional answer at about 6,650 km. The Amazon is the largest river by volume and may be longer under newer measurements — the models agree the dispute itself is real.</p>
             </div>
             <div>
               <strong>Differences</strong>
-              <p>Claims that need checking before you rely on the result.</p>
+              <p>Three models call it settled for the Nile; quoted lengths differ by up to 600 km.</p>
             </div>
           </div>
         </div>
@@ -190,7 +190,7 @@
             </div>
             <div class="mock-container">
               <div class="mock-input story-scene scene-ask">
-                <span class="mock-placeholder typing-line">Which model is best for research?</span>
+                <span class="mock-placeholder typing-line">What is the longest river in the world?</span>
                 <div class="mock-switch-row">
                   <span class="mock-attach" aria-label="Add attachment" title="Add attachment">+</span>
                   <span class="mock-mode mock-mode-agent" aria-label="Agent Mode" title="Agent Mode">
@@ -227,48 +227,48 @@
               </div>
 
               <div class="response-grid story-scene scene-consensus">
-                <div class="mini-response">
+                <div class="mini-response is-loaded">
                   <strong>Response from ChatGPT</strong>
                   <small><img src="/static/icons/chat_icons/chatgpt.png" alt=""> GPT-5.5</small>
-                  <p class="mini-response-text" data-response-text="Compare models by task fit, source freshness, and how consistently they explain uncertainty."></p>
+                  <p class="mini-response-text" data-response-text="The Nile is traditionally listed as the longest river at about 6,650 km, with the Amazon second at roughly 6,400 km.">The Nile is traditionally listed as the longest river at about 6,650 km, with the Amazon second at roughly 6,400 km.</p>
                 </div>
-                <div class="mini-response">
+                <div class="mini-response is-loaded">
                   <strong>Response from Mistral</strong>
                   <small><img src="/static/icons/chat_icons/mistral.png" alt=""> mistral-medium-3-5</small>
-                  <p class="mini-response-text" data-response-text="For market research, combine a fast scan with checks against recent sources and opposing views."></p>
+                  <p class="mini-response-text" data-response-text="Most references name the Nile at ~6,650 km, though some recent studies argue the Amazon is actually longer.">Most references name the Nile at ~6,650 km, though some recent studies argue the Amazon is actually longer.</p>
                 </div>
-                <div class="mini-response">
+                <div class="mini-response is-loaded">
                   <strong>Response from Claude</strong>
                   <small><img src="/static/icons/chat_icons/claude.png" alt=""> claude-opus-4-8</small>
-                  <p class="mini-response-text" data-response-text="Reliability improves when the answer separates evidence, assumptions, and open questions."></p>
+                  <p class="mini-response-text" data-response-text="It depends on measurement: the Nile is the classic answer, but if the Pará estuary is counted, the Amazon may exceed 7,000 km.">It depends on measurement: the Nile is the classic answer, but if the Pará estuary is counted, the Amazon may exceed 7,000 km.</p>
                 </div>
-                <div class="mini-response">
+                <div class="mini-response is-loaded">
                   <strong>Response from Gemini</strong>
                   <small><img src="/static/icons/chat_icons/gemini-icon.png" alt=""> gemini-3.1-pro-preview</small>
-                  <p class="mini-response-text" data-response-text="Use the model for synthesis, then verify numbers, dates, and company claims before deciding."></p>
+                  <p class="mini-response-text" data-response-text="The Nile, at about 6,650 km. A 2007 Brazilian expedition measured the Amazon at 6,992 km, but that result is not widely accepted.">The Nile, at about 6,650 km. A 2007 Brazilian expedition measured the Amazon at 6,992 km, but that result is not widely accepted.</p>
                 </div>
-                <div class="mini-response">
+                <div class="mini-response is-loaded">
                   <strong>Response from DeepSeek</strong>
                   <small><img src="/static/icons/chat_icons/deepseek.png" alt=""> deepseek-v4-pro</small>
-                  <p class="mini-response-text" data-response-text="The safest result is a short consensus with conflicts called out instead of averaged away."></p>
+                  <p class="mini-response-text" data-response-text="The Amazon is the largest river by discharge. By length, the Nile is usually cited first with estimates of 6,550–6,700 km.">The Amazon is the largest river by discharge. By length, the Nile is usually cited first with estimates of 6,550–6,700 km.</p>
                 </div>
-                <div class="mini-response">
+                <div class="mini-response is-loaded">
                   <strong>Response from Grok</strong>
                   <small><img src="/static/icons/chat_icons/grok.png" alt=""> grok-4.3</small>
-                  <p class="mini-response-text" data-response-text="No single answer should settle it. Agreement across models is a useful confidence signal."></p>
+                  <p class="mini-response-text" data-response-text="Officially the Nile. Some expeditions put the Amazon ahead — it depends on where you decide the river starts.">Officially the Nile. Some expeditions put the Amazon ahead — it depends on where you decide the river starts.</p>
                 </div>
               </div>
 
               <div class="consensus-preview story-consensus">
-                <div class="story-consensus-panel story-consensus-answer">
+                <div class="story-consensus-panel story-consensus-answer is-loaded">
                   <strong>Consensus Answer</strong>
-                  <span class="mobile-consensus-line">Shared conclusion across selected models.</span>
-                  <p class="story-consensus-text" data-consensus-text="Most models agree that market research answers should be compared across sources, not accepted from one model alone. The reliable path is to triangulate claims, check freshness, and keep open assumptions visible before using the final answer."></p>
+                  <span class="mobile-consensus-line">The Nile by convention, the Amazon by some measurements.</span>
+                  <p class="story-consensus-text" data-consensus-text="The models converge: the Nile is the conventional longest river at about 6,650 km, while the Amazon — the largest river by water volume — measures roughly 6,400 km, or up to 6,992 km if a disputed 2007 survey is accepted. A careful answer names both rivers and the measurement dispute instead of hiding it.">The models converge: the Nile is the conventional longest river at about 6,650 km, while the Amazon — the largest river by water volume — measures roughly 6,400 km, or up to 6,992 km if a disputed 2007 survey is accepted. A careful answer names both rivers and the measurement dispute instead of hiding it.</p>
                 </div>
-                <div class="story-consensus-panel story-differences credibility-framed cred-largely">
+                <div class="story-consensus-panel story-differences credibility-framed cred-largely is-loaded">
                   <strong>Differences</strong>
-                  <span class="mobile-consensus-line">Open claims that still need checking.</span>
-                  <p class="story-consensus-text" data-consensus-text="Top reasoning models vary in confidence, source freshness, and technical depth."></p>
+                  <span class="mobile-consensus-line">What still needs checking.</span>
+                  <p class="story-consensus-text" data-consensus-text="Three models state the Nile as settled fact; three treat the 2007 Amazon measurement (6,992 km) as a credible challenger. Quoted lengths differ by up to 600 km.">Three models state the Nile as settled fact; three treat the 2007 Amazon measurement (6,992 km) as a credible challenger. Quoted lengths differ by up to 600 km.</p>
                 </div>
               </div>
             </div>

@@ -3,7 +3,7 @@
    This file aggregates all modular CSS files.
    ========================================================================== */
 
-@import url('./css/variables.css?v=20260608-liquid-glass6');
-@import url('./css/base.css?v=20260608-liquid-glass6');
-@import url('./css/layout.css?v=20260608-liquid-glass6');
-@import url('./css/components.css?v=20260608-liquid-glass6');
+@import url('./css/variables.css?v=20260610-restyle1');
+@import url('./css/base.css?v=20260610-restyle1');
+@import url('./css/layout.css?v=20260610-restyle1');
+@import url('./css/components.css?v=20260610-restyle1');

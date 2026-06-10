@@ -3,13 +3,21 @@
    ========================================================================== */
 
 :root {
+  /* Radius Scale (shared with public pages — keep in sync with public-pages.css) */
+  --radius-xs: 8px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
   /* Colors - Light Mode */
-  --bg-color: #eef3f7;
+  --bg-color: #edf1f7;
   --container-bg: rgba(255, 255, 255, 0.66);
-  --text-color: #243241;
+  --text-color: #233140;
   --input-bg: rgba(255, 255, 255, 0.58);
   --input-border: rgba(117, 137, 154, 0.24);
-  --button-bg: #162033;
+  --button-bg: #15233c;
   --button-text: #ffffff;
   --response-bg: rgba(255, 255, 255, 0.62);
   /* Additional UI Colors */
@@ -46,19 +54,19 @@
   --vote-exclude-color: var(--clear-button-text);
   
   /* Modern UI / Pulse Tokens */
-  --accent: #0f8fb8;
-  --accent-contrast: #053142;
-  --accent-secondary: #57c4a1;
+  --accent: #0c84c2;
+  --accent-contrast: #042b40;
+  --accent-secondary: #4fc2a3;
   --accent-tertiary: #d99b46;
   --glass-bg: rgba(255, 255, 255, 0.54);
   --glass-bg-strong: rgba(255, 255, 255, 0.72);
   --glass-bg-soft: rgba(255, 255, 255, 0.36);
-  --glass-border: rgba(255, 255, 255, 0.58);
-  --glass-edge: rgba(92, 113, 134, 0.22);
+  --glass-border: rgba(255, 255, 255, 0.62);
+  --glass-edge: rgba(92, 113, 134, 0.2);
   --glass-highlight: rgba(255, 255, 255, 0.9);
   --glass-blur: 18px;
-  --liquid-shadow: 0 12px 34px rgba(46, 61, 79, 0.09), 0 1px 6px rgba(46, 61, 79, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.76);
-  --liquid-shadow-hover: 0 18px 48px rgba(46, 61, 79, 0.12), 0 4px 14px rgba(46, 61, 79, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.84);
+  --liquid-shadow: 0 14px 38px rgba(40, 56, 76, 0.08), 0 2px 8px rgba(40, 56, 76, 0.045), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  --liquid-shadow-hover: 0 22px 54px rgba(40, 56, 76, 0.11), 0 4px 16px rgba(40, 56, 76, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.86);
   --liquid-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
   --chip-bg: rgba(255,255,255,0.42);
   --chip-border: rgba(255,255,255,0.58);
@@ -139,7 +147,7 @@
   --vote-exclude-bg: var(--clear-button-bg);
   --vote-exclude-color: var(--clear-button-text);
   
-  --accent: #7dd3fc;
+  --accent: #6ecbf5;
   --accent-contrast: #062235;
   --accent-secondary: #8ee6c8;
   --accent-tertiary: #f3c66f;
