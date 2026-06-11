@@ -4,8 +4,8 @@ from fastapi import APIRouter, Request, Body, HTTPException
 
 from app.core.rate_limit import limiter
 import app.core.config as cfg
-from app.core.security import verify_user_token, is_user_pro, db_firestore
-from app.core.state import usage_counter, deep_search_usage
+from app.core.security import verify_user_token, extract_id_token, is_user_pro, db_firestore
+from app.core.state import usage_counter, deep_search_usage, registered_ips, last_feedback_time
 
 router = APIRouter()
 
@@ -82,6 +82,74 @@ async def get_usage_post(request: Request):
         "deep_total_limit": limit_deep
     }
 
+@router.post("/delete_account")
+@limiter.limit("3/minute")
+async def delete_account(request: Request, data: dict = Body(default={})):
+    """
+    Löscht den Account vollständig (DSGVO Art. 17): Auth-Account, users-Dokument
+    inkl. Bookmarks, Einträge in pro_waitlist und feedback sowie In-Memory-Zustand.
+    allow_unverified=True, damit auch unbestätigte Accounts gelöscht werden können.
+    """
+    id_token = extract_id_token(request, data)
+    if not id_token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    try:
+        uid = verify_user_token(id_token, allow_unverified=True)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Authentication failed")
+
+    errors = []
+
+    # 1. Bookmarks-Subcollection löschen (Subcollections werden nicht automatisch
+    #    mit dem Eltern-Dokument entfernt)
+    try:
+        bookmarks_ref = db_firestore.collection("users").document(uid).collection("bookmarks")
+        for doc in bookmarks_ref.stream():
+            doc.reference.delete()
+    except Exception as e:
+        logging.error(f"delete_account: bookmarks cleanup failed for {uid}: {e}")
+        errors.append("bookmarks")
+
+    # 2. users-Dokument löschen
+    try:
+        db_firestore.collection("users").document(uid).delete()
+    except Exception as e:
+        logging.error(f"delete_account: user doc cleanup failed for {uid}: {e}")
+        errors.append("profile")
+
+    # 3. Waitlist- und Feedback-Einträge des Nutzers löschen
+    for collection_name in ("pro_waitlist", "feedback"):
+        try:
+            docs = db_firestore.collection(collection_name).where("uid", "==", uid).stream()
+            for doc in docs:
+                doc.reference.delete()
+        except Exception as e:
+            logging.error(f"delete_account: {collection_name} cleanup failed for {uid}: {e}")
+            errors.append(collection_name)
+
+    # 4. In-Memory-Zustand bereinigen
+    usage_counter.pop(uid, None)
+    deep_search_usage.pop(uid, None)
+    last_feedback_time.pop(uid, None)
+    for ip, mapped_uid in list(registered_ips.items()):
+        if mapped_uid == uid:
+            registered_ips.pop(ip, None)
+
+    # 5. Auth-Account zuletzt löschen, damit der Nutzer bei Teilfehlern
+    #    erneut authentifiziert löschen kann
+    try:
+        auth.delete_user(uid)
+    except Exception as e:
+        logging.error(f"delete_account: auth deletion failed for {uid}: {e}")
+        raise HTTPException(status_code=500, detail="Account deletion failed. Please try again or contact us.")
+
+    if errors:
+        logging.warning(f"delete_account: partial cleanup for {uid}, failed: {errors}")
+
+    return {"status": "deleted"}
+
+
 @router.post("/track-interest")
 @limiter.limit("5/minute")
 async def track_interest(request: Request, data: dict = Body(...)):
@@ -99,14 +167,13 @@ async def track_interest(request: Request, data: dict = Body(...)):
         uid = verify_user_token(token)
         user_email = auth.get_user(uid).email
         
-        # 2. Daten vorbereiten
+        # 2. Daten vorbereiten (Datenminimierung: keine IP / kein User-Agent,
+        #    Spam-Schutz übernehmen Rate-Limit und Auth-Pflicht)
         interest_data = {
             "uid": uid,
             "email": user_email,
             "timestamp": firestore.SERVER_TIMESTAMP,
-            "source": source,
-            "ip": request.client.host, # IP auch nützlich für Spamschutz
-            "user_agent": request.headers.get("user-agent")
+            "source": source
         }
         
         # 3. In "pro_waitlist" Collection schreiben (Backend Admin SDK hat immer Schreibrechte)
@@ -116,4 +183,4 @@ async def track_interest(request: Request, data: dict = Body(...)):
 
     except Exception as e:
         logging.error(f"Tracking error for token prefix {token[:10]}...: {e}")
-        return {"status": "error", "detail": str(e)}
+        return {"status": "error", "detail": "Could not track interest. Please try again later."}

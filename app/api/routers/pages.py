@@ -81,6 +81,12 @@ def imprint(req: Request):
     response.headers["X-Robots-Tag"] = "noindex, noarchive"
     return response
 
+@router.get("/terms", response_class=HTMLResponse)
+def terms(req: Request):
+    response = templates.TemplateResponse("terms.html", {"request": req})
+    response.headers["X-Robots-Tag"] = "noindex, noarchive"
+    return response
+
 @router.get("/about", response_class=HTMLResponse)
 def about(req: Request):
     return templates.TemplateResponse("about.html", {"request": req})
@@ -173,11 +179,12 @@ async def submit_feedback(request: Request, data: dict = Body(...)):
     if not message or message.strip() == "":
         raise HTTPException(status_code=400, detail="Feedback message must not be empty.")
 
+    # Datenminimierung: keine IP-Adresse speichern, Spam-Schutz läuft über
+    # Rate-Limit und das 30-Sekunden-Fenster pro UID.
     feedback_data = {
         "message": message,
         "email": email,
         "uid": uid,
-        "ip_address": request.client.host,
         "timestamp": now
     }
 
@@ -208,8 +215,8 @@ async def record_vote(request: Request, data: dict = Body(...)):
 
     try:
         uid = verify_user_token(id_token)
-    except Exception as e:
-        raise HTTPException(status_code=401, detail="Authentication failed: " + str(e))
+    except Exception:
+        raise HTTPException(status_code=401, detail="Authentication failed")
 
     try:
         doc_ref = db_firestore.collection("leaderboard").document(model)

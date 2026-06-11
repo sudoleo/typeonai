@@ -36,7 +36,8 @@ async def register_user(request: Request, data: dict = Body(...)):
         # bereits bewusst gesetzte Meldungen durchreichen
         raise
     except Exception as e:
-        logging.error(f"/register failed for {email}: {e}")
+        # Keine E-Mail-Adresse in die Server-Logs schreiben (Datenminimierung)
+        logging.error(f"/register failed: {e}")
         # generische Meldung an den Client
         raise HTTPException(status_code=400, detail="Registration failed. Please try again later.")
     

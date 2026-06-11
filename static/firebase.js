@@ -220,6 +220,10 @@ onIdTokenChanged(auth, async (user) => {
       usageOptions.style.display = "block";
     }
 
+    // Account-Bereich (Löschen) in den Settings einblenden
+    const accountSection = document.getElementById("accountSettingsSection");
+    if (accountSection) accountSection.style.display = "block";
+
     // 5) E‑Mail & Logout als Popup
     const emailInitial = user.email.charAt(0).toUpperCase();
     loginContainer.innerHTML = `
@@ -263,6 +267,9 @@ onIdTokenChanged(auth, async (user) => {
         loginContainer.innerText = "Log in";
 
         if (usageOptions) usageOptions.style.display = "none";
+
+        const accountSection = document.getElementById("accountSettingsSection");
+        if (accountSection) accountSection.style.display = "none";
 
         document.getElementById("bookmarksContainer").innerHTML = "";
         bookmarksLoaded = false;
@@ -587,6 +594,44 @@ document.getElementById("loginContainer").addEventListener("click", () => {
 // Schließen des Modals
 document.getElementById("closeLoginModal").addEventListener("click", () => {
   document.getElementById("loginModal").style.display = "none";
+});
+
+// --- Account löschen (DSGVO Art. 17) ---
+document.getElementById("deleteAccountBtn")?.addEventListener("click", async () => {
+  if (!auth.currentUser) {
+    alert("Please log in first.");
+    return;
+  }
+  const confirmed = window.confirm(
+    "Delete your account permanently?\n\nThis removes your account, bookmarks, and all data stored about you. This cannot be undone."
+  );
+  if (!confirmed) return;
+
+  trackAppEvent("auth_account_deletion_started");
+  try {
+    const token = await auth.currentUser.getIdToken(true);
+    const res = await fetch("/delete_account", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_token: token })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.status === "deleted") {
+      trackAppEvent("auth_account_deletion_result", { status: "success" });
+      try { localStorage.removeItem("id_token"); } catch {}
+      alert("Your account and data have been deleted.");
+      // Der Auth-Account existiert nicht mehr; lokale Session beenden und zur Startseite
+      signOut(auth).catch(() => {});
+      window.location.href = "/?landing=1";
+    } else {
+      trackAppEvent("auth_account_deletion_result", { status: "error" });
+      alert(data.detail || data.error || "Account deletion failed. Please try again or contact us.");
+    }
+  } catch (err) {
+    console.error("Account deletion failed:", err);
+    trackAppEvent("auth_account_deletion_result", { status: "error" });
+    alert("Account deletion failed. Please try again or contact us.");
+  }
 });
 
 function isIOS() {

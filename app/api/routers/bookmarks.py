@@ -86,7 +86,7 @@ async def save_bookmark(request: Request, data: dict = Body(...)):
     try:
         uid = verify_user_token(id_token)
     except Exception as e:
-        raise HTTPException(status_code=401, detail="Authentication failed: " + str(e))
+        raise HTTPException(status_code=401, detail="Authentication failed")
     
     # Berechne die Dokument-ID wie gehabt
     raw_id = base64.b64encode(question.encode()).decode()
@@ -131,7 +131,7 @@ async def save_bookmark(request: Request, data: dict = Body(...)):
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Error saving bookmark: " + str(e))
+        raise HTTPException(status_code=500, detail="Error saving bookmark")
 
 
 @router.post("/bookmark/consensus")
@@ -149,7 +149,7 @@ async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
     try:
         uid = verify_user_token(id_token)
     except Exception as e:
-        raise HTTPException(status_code=401, detail="Authentication failed: " + str(e))
+        raise HTTPException(status_code=401, detail="Authentication failed")
     
     # Berechne Dokument-ID (wie oben)
     doc_id = base64.b64encode(question.encode()).decode()
@@ -169,7 +169,7 @@ async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
         db_firestore.collection("users").document(uid).collection("bookmarks").document(doc_id).set(dataToMerge, merge=True)
         return {"status": "success", "message": "Consensus and differences saved."}
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Error saving consensus: " + str(e))
+        raise HTTPException(status_code=500, detail="Error saving consensus")
 
 
 @router.delete("/bookmark")
@@ -183,10 +183,10 @@ async def delete_bookmark(data: dict):
     try:
         uid = verify_user_token(id_token)
     except Exception as e:
-        raise HTTPException(status_code=401, detail="Authentication failed: " + str(e))
+        raise HTTPException(status_code=401, detail="Authentication failed")
     
     try:
         db_firestore.collection("users").document(uid).collection("bookmarks").document(bookmark_id).delete()
         return {"status": "success", "message": "Bookmark deleted."}
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Error deleting bookmark: " + str(e))
+        raise HTTPException(status_code=500, detail="Error deleting bookmark")

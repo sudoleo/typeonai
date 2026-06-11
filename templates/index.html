@@ -191,7 +191,7 @@
         <span class="settings-icon">⚙️</span>
         <span class="settings-label">Settings</span>
       </button>
-      <span id="version-number">v1.4.1</span>
+      <span id="version-number">v1.6.0</span>
     </div>
   </div>
   <div class="container">
@@ -527,6 +527,8 @@
             Please avoid personal or sensitive data. AI models can make mistakes.
           </span>
           <button id="feedbackButton" class="feedback-button" title="Feedback senden">Feedback</button>
+          <a href="/terms" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Terms of Use"
+            aria-label="Terms of Use">Terms</a>
           <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Privacy Policy"
             aria-label="Privacy Policy">Privacy</a>
           <a href="/imprint" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Imprint"
@@ -5612,7 +5614,17 @@
             </div>
           </div>
 
+          <div id="authConsentNote" class="auth-note" style="display:block;">
+            By signing in or creating an account you agree to the
+            <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Use</a> &mdash; including the
+            transmission of your prompts to the AI providers you select (e.g. OpenAI, Anthropic, Google, Mistral,
+            xAI, DeepSeek) &mdash; and acknowledge the
+            <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Notice</a>.
+          </div>
+
           <div class="auth-footer-links">
+            <a href="/terms" target="_blank" rel="noopener noreferrer" class="privacy-inline-link"
+              title="Terms of Use" aria-label="Terms of Use">Terms</a>
             <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-inline-link"
               title="Privacy Policy" aria-label="Privacy Policy">Privacy</a>
             <a href="/imprint" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Imprint"
@@ -5839,8 +5851,23 @@
             <button id="saveSystemPromptBtn" class="save-prompt-btn">Save System Prompt</button>
           </div>
 
+          <div id="accountSettingsSection" style="display: none;">
+            <hr class="settings-divider">
+            <div class="settings-section">
+              <h3>Account</h3>
+              <p style="font-size: 0.85em; color: #666; margin-top: 5px;">
+                Permanently delete your account, bookmarks, and all data stored about you.
+                This cannot be undone.
+              </p>
+              <button type="button" id="deleteAccountBtn"
+                style="margin-top: 8px; background: none; border: 1px solid #c0392b; color: #c0392b; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 0.9em;">
+                Delete account
+              </button>
+            </div>
+          </div>
+
           <div style="text-align: center; margin-top: 20px; opacity: 0.5; font-size: 0.8em;">
-            v1.4.1
+            v1.6.0
           </div>
         </div>
       </div>

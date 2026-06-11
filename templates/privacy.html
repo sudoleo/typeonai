@@ -29,6 +29,7 @@
     </a>
     <div class="nav-links">
       <a href="/about">About</a>
+      <a href="/terms">Terms</a>
       <a href="/imprint">Imprint</a>
       <a href="/app" class="nav-cta">Open app</a>
     </div>
@@ -55,7 +56,9 @@
       <section class="legal-panel">
         <h2>1. Controller</h2>
         <p>
-          The controller under the GDPR is <strong>consens.io</strong>.<br>
+          The controller under the GDPR is the operator of consens.io:
+          <strong id="controllerName" aria-label="Name inserted via JavaScript"></strong>.
+          The postal address is provided in the <a href="/imprint">Imprint</a>.<br>
           Contact: <a id="contactEmail" href="#" rel="nofollow" aria-label="Email inserted via JavaScript"></a>
         </p>
       </section>
@@ -63,11 +66,14 @@
       <section class="legal-panel">
         <h2>2. Purposes and data we process</h2>
         <ul>
-          <li><strong>Prompts and model outputs:</strong> used to provide the service, send requests to selected AI models, and display answers.</li>
+          <li><strong>Prompts and model outputs:</strong> used to provide the service, send requests to selected AI models, and display answers. We do not permanently store prompts or outputs on our servers unless you save them as bookmarks.</li>
           <li><strong>Technical logs:</strong> timestamps and basic diagnostics for stability, security, and abuse prevention.</li>
-          <li><strong>Optional account data:</strong> if you sign in, for access control, quota handling, bookmarks, and related usage features.</li>
+          <li><strong>Account data:</strong> if you sign up, your e-mail address and a user ID are processed via Google Firebase Authentication (including optional Google Sign-In) for access control, quota handling, and related usage features. Your tier and saved bookmarks (query, answers, sources, attachment metadata) are stored in Google Cloud Firestore until you delete them or your account.</li>
+          <li><strong>Abuse prevention:</strong> to enforce the one-account-per-person rule, we temporarily process your IP address and match it against the account ID. This mapping is held in volatile server memory only and is not written to a database (legal basis: Art. 6(1)(f) GDPR, prevention of quota abuse).</li>
+          <li><strong>Feedback:</strong> if you send feedback, we store your message, the e-mail address you optionally provide, your account ID, and a timestamp, for as long as needed to follow up on the feedback.</li>
+          <li><strong>Pro interest list:</strong> if you click a Pro-interest option, we store your account ID, e-mail address, and a timestamp so we can inform you about this feature.</li>
           <li><strong>Local storage:</strong> used for interface preferences, session flags, and optional user settings. We do not use non-essential cookies.</li>
-          <li><strong>Your own API keys, optional:</strong> if you enter keys, they are stored only locally in your browser and used to call the selected provider.</li>
+          <li><strong>Your own API keys, optional:</strong> if you enter keys, they are stored in your browser only. With each request, the key is transmitted over an encrypted connection through our server to the selected provider. We do not store your keys on the server.</li>
         </ul>
       </section>
 
@@ -88,7 +94,7 @@
           The custom events we track are limited to product usage signals: landing-page calls to action, opening or
           using the app, sending or cancelling a query, completing a model run, generating or cancelling a consensus,
           copying a consensus or citation, changing interface modes, model selection changes, sidebar section opens,
-          settings/help/feedback actions, login/register/password-reset attempts and outcomes, bookmark save/open/delete
+          settings/help/feedback actions, login/register/password-reset/account-deletion attempts and outcomes, bookmark save/open/delete
           actions, API-key test outcomes, and Pro-interest clicks.
         </p>
         <p>
@@ -108,9 +114,15 @@
       <section class="legal-panel">
         <h2>4. Provider routing</h2>
         <p>
-          Model requests are sent to the model providers selected for the query, such as OpenAI, Anthropic,
-          Mistral AI, Google, DeepSeek, or xAI. consens.io does not add an extra model marketplace or router
-          layer between your prompt and those selected providers.
+          Model requests are sent to the model providers selected for the query: OpenAI (USA), Anthropic (USA),
+          Google (USA), Mistral AI (France), xAI (USA), and DeepSeek (People's Republic of China). consens.io does
+          not add an extra model marketplace or router layer between your prompt and those selected providers.
+        </p>
+        <p>
+          <strong>Note on DeepSeek:</strong> DeepSeek processes data in China, a country without an EU adequacy
+          decision. If you select DeepSeek models, your prompt and attachments are transmitted to DeepSeek for
+          processing. If you do not want this, deselect DeepSeek models before sending a query; the other models
+          work independently of this choice. See also the <a href="/terms">Terms of Use</a>.
         </p>
         <p class="subtle">
           Necessary infrastructure providers, authentication services, and selected AI providers may still process
@@ -130,11 +142,20 @@
       <section class="legal-panel">
         <h2>6. Recipients, processors, and international transfers</h2>
         <p>
-          To provide the service, we use infrastructure and model providers, for example hosting,
-          authentication, Umami Cloud for analytics, and AI model providers. They may process data on our
-          instructions as processors, or as independent providers when their interfaces are used. Processing may
-          occur outside the EU/EEA. In such cases, we rely on appropriate safeguards, such as Standard Contractual
-          Clauses, under Art. 44 et seq. GDPR.
+          To provide the service, we use the following categories of providers, who may process data on our
+          instructions as processors or as independent providers when their interfaces are used:
+        </p>
+        <ul>
+          <li><strong>Hosting:</strong> Render (Render Services, Inc., USA) hosts the application server, including technical request logs.</li>
+          <li><strong>Authentication and database:</strong> Google Firebase Authentication and Google Cloud Firestore (Google Ireland Ltd. / Google LLC, USA) for accounts, tier status, and bookmarks.</li>
+          <li><strong>Analytics:</strong> Umami Cloud (see section 3).</li>
+          <li><strong>AI model providers:</strong> the providers selected per query (see section 4).</li>
+        </ul>
+        <p>
+          Processing may occur outside the EU/EEA, in particular in the USA and — only if you select DeepSeek
+          models — in China. For transfers to the USA we rely on the EU-U.S. Data Privacy Framework and/or Standard
+          Contractual Clauses; for other transfers on appropriate safeguards under Art. 44 et seq. GDPR or, for
+          DeepSeek, on your request to route the query to that provider (Art. 49(1)(b) GDPR).
         </p>
       </section>
 
@@ -155,6 +176,11 @@
           <li>Withdrawal of consent with future effect.</li>
           <li>Right to lodge a complaint with a supervisory authority, for example the Lower Saxony DPA.</li>
         </ul>
+        <p>
+          You can delete your account yourself at any time in the app settings ("Delete account"). This removes
+          your authentication account, profile data, bookmarks, and entries you created in the feedback and
+          Pro-interest lists. For anything else, contact us at the address above.
+        </p>
       </section>
 
       <section class="legal-panel">
@@ -191,10 +217,11 @@
 
   <footer class="footer">
     <div class="footer-inner">
-      <span>Last updated: 28 May 2026</span>
+      <span>Last updated: 11 June 2026</span>
       <div class="footer-links">
         <a href="/app">App</a>
         <a href="/about">About</a>
+        <a href="/terms">Terms</a>
         <a href="/imprint">Imprint</a>
       </div>
     </div>
@@ -211,6 +238,10 @@
           el.href = "mailto:" + addr;
         }
       });
+      const nameEl = document.getElementById("controllerName");
+      if (nameEl) {
+        nameEl.textContent = String.fromCharCode(77,97,120,32,80,108,97,99,107);
+      }
     })();
   </script>
 </body>
