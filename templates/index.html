@@ -4614,6 +4614,20 @@
             url: cleanUrl
           };
 
+          // Share-Feature: result_id des letzten Laufs zurücksetzen; Modell-
+          // Labels (Option-Text) für die serverseitige Snapshot-Zitation.
+          window.lastShareResultId = null;
+          const shareModelLabels = {};
+          [["OpenAI", "openaiModelSelect"], ["Mistral", "mistralModelSelect"],
+           ["Anthropic", "claudeModelSelect"], ["Gemini", "geminiModelSelect"],
+           ["DeepSeek", "deepseekModelSelect"], ["Grok", "grokModelSelect"]
+          ].forEach(([provider, selectId]) => {
+            const select = document.getElementById(selectId);
+            if (!select) return;
+            const label = select.options[select.selectedIndex]?.text || select.value || "";
+            if (label) shareModelLabels[provider] = label;
+          });
+
           try {
             const consensusMainRenderer = createStreamRenderer(
               consensusDiv.querySelector(".consensus-main p"),
@@ -4634,6 +4648,7 @@
                 answer_deepseek: answer_deepseek,
                 answer_grok: answer_grok,
                 model_sources: model_sources,
+                model_labels: shareModelLabels,
                 best_model: best_model,
                 consensus_model: consensus_model,
                 excluded_models: excludedModels,
@@ -4683,6 +4698,10 @@
             }
 
             if (consensusRequestResult.ok) {
+              // Share-Feature: nur mit result_id aus dem Final-Event ist
+              // Teilen möglich (serverseitiger Snapshot vorhanden).
+              window.lastShareResultId = data.result_id || null;
+
               const mainEl = consensusDiv.querySelector(".consensus-main p");
               const diffEl = consensusDiv.querySelector(".consensus-differences p");
 
@@ -5202,8 +5221,42 @@
             }
           });
 
+          // 🔗 Share (nur sichtbar, wenn ein result_id-Snapshot existiert)
+          const shareBtn = document.createElement("button");
+          shareBtn.type = "button";
+          shareBtn.id = "consensusShareMenuItem";
+          shareBtn.className = "consensus-copy-icon-btn consensus-share-btn";
+          shareBtn.setAttribute("role", "menuitem");
+          shareBtn.innerHTML = `
+            <span class="copy-icon" aria-hidden="true"></span>
+            <span class="copy-label">Share publicly</span>
+          `;
+          shareBtn.title = "Create a public link to this consensus";
+          shareBtn.addEventListener("click", () => {
+            closeConsensusActionsMenu();
+            openShareDialog("confirm");
+          });
+
+          // 🗂 Verwaltung bestehender Links
+          const mySharesBtn = document.createElement("button");
+          mySharesBtn.type = "button";
+          mySharesBtn.id = "consensusMySharesMenuItem";
+          mySharesBtn.className = "consensus-copy-icon-btn consensus-myshares-btn";
+          mySharesBtn.setAttribute("role", "menuitem");
+          mySharesBtn.innerHTML = `
+            <span class="copy-icon" aria-hidden="true"></span>
+            <span class="copy-label">My shared links</span>
+          `;
+          mySharesBtn.title = "Manage your public share links";
+          mySharesBtn.addEventListener("click", () => {
+            closeConsensusActionsMenu();
+            openShareDialog("list");
+          });
+
           menu.appendChild(copyAnswerBtn);
           menu.appendChild(copyCitationBtn);
+          menu.appendChild(shareBtn);
+          menu.appendChild(mySharesBtn);
           document.body.appendChild(menu);
 
           consensusMenuEl = menu;
@@ -5258,6 +5311,12 @@
             // evtl. vorher schließen (falls irgendwann mehrere Trigger …)
             closeMenu();
 
+            // Share nur mit Snapshot des aktuellen Laufs, Verwaltung nur eingeloggt
+            const shareItem = document.getElementById("consensusShareMenuItem");
+            if (shareItem) shareItem.hidden = !window.lastShareResultId || !window.auth?.currentUser;
+            const mySharesItem = document.getElementById("consensusMySharesMenuItem");
+            if (mySharesItem) mySharesItem.hidden = !window.auth?.currentUser;
+
             // anzeigen, aber unsichtbar, um Breite zu messen
             menu.style.display = "block";
             menu.style.visibility = "hidden";
@@ -5306,6 +5365,225 @@
 
         // am Ende deines DOMContentLoaded-Blocks aufrufen:
         initConsensusCopyButtons();
+
+        // === Share-Dialog (öffentliche Links) ===
+        // Views: "confirm" (Opt-in vor dem Teilen), "success" (Link erstellt),
+        // "list" (eigene Links verwalten/widerrufen).
+
+        function shareDialogEls() {
+          return {
+            modal: document.getElementById("shareModal"),
+            body: document.getElementById("shareModalBody"),
+            title: document.getElementById("shareModalTitle")
+          };
+        }
+
+        function closeShareDialog() {
+          const { modal } = shareDialogEls();
+          if (modal) modal.style.display = "none";
+        }
+
+        function openShareDialog(view) {
+          const { modal } = shareDialogEls();
+          if (!modal) return;
+          if (!window.auth?.currentUser) {
+            showPopup("Please log in to share.");
+            return;
+          }
+          modal.style.display = "block";
+          if (view === "list") {
+            renderShareListView();
+          } else {
+            renderShareConfirmView();
+          }
+        }
+
+        async function shareApiRequest(method, path, body) {
+          const user = window.auth?.currentUser;
+          if (!user) throw new Error("Not logged in");
+          const idToken = await user.getIdToken();
+          const response = await fetch(path, {
+            method,
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer " + idToken
+            },
+            body: body ? JSON.stringify(body) : undefined
+          });
+          let data = {};
+          try { data = await response.json(); } catch (e) { /* leerer Body */ }
+          if (!response.ok) {
+            throw new Error(data.error || data.detail || ("HTTP " + response.status));
+          }
+          return data;
+        }
+
+        function copyShareUrl(url) {
+          if (!navigator.clipboard) {
+            const ta = document.createElement("textarea");
+            ta.value = url;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+            showPopup("Link copied to clipboard.");
+            return;
+          }
+          navigator.clipboard.writeText(url).then(() => {
+            showPopup("Link copied to clipboard.");
+          }).catch(() => {
+            alert("Copy to clipboard failed.");
+          });
+        }
+
+        function renderShareConfirmView() {
+          const { body, title } = shareDialogEls();
+          if (!body) return;
+          title.textContent = "Share this consensus publicly";
+          body.innerHTML = `
+            <p>This creates a <strong>public, read-only page</strong> with the question,
+            the consensus answer, the differences and the sources of this run.</p>
+            <ul class="share-modal-notes">
+              <li>Anyone with the link can view it - no login required.</li>
+              <li>The page contains no account data and is not linked to you publicly.</li>
+              <li>It is a snapshot: later runs will not change it.</li>
+              <li>You can revoke the link at any time under "My shared links".</li>
+            </ul>
+            <div class="share-modal-actions">
+              <button type="button" id="shareConfirmBtn" class="share-primary-btn">Create public link</button>
+              <button type="button" id="shareCancelBtn" class="share-secondary-btn">Cancel</button>
+              <button type="button" id="shareListLink" class="share-link-btn">My shared links</button>
+            </div>
+          `;
+          document.getElementById("shareCancelBtn").addEventListener("click", closeShareDialog);
+          document.getElementById("shareListLink").addEventListener("click", renderShareListView);
+          document.getElementById("shareConfirmBtn").addEventListener("click", async function () {
+            const resultId = window.lastShareResultId;
+            if (!resultId) {
+              showPopup("Please run a consensus first.");
+              return;
+            }
+            this.disabled = true;
+            this.textContent = "Creating link…";
+            try {
+              const data = await shareApiRequest("POST", "/api/share", { result_id: resultId });
+              trackAppEvent("app_share_created", { reused: data.created === false });
+              renderShareSuccessView(data.url);
+            } catch (err) {
+              this.disabled = false;
+              this.textContent = "Create public link";
+              showPopup("Sharing failed: " + err.message);
+            }
+          });
+        }
+
+        function renderShareSuccessView(url) {
+          const { body, title } = shareDialogEls();
+          if (!body) return;
+          title.textContent = "Public link created";
+          body.innerHTML = `
+            <p>Your consensus is now available at:</p>
+            <div class="share-url-row">
+              <input type="text" id="shareUrlInput" readonly>
+              <button type="button" id="shareCopyUrlBtn" class="share-primary-btn">Copy</button>
+            </div>
+            <div class="share-modal-actions">
+              <a id="shareOpenLink" target="_blank" rel="noopener" class="share-secondary-btn">Open page</a>
+              <button type="button" id="shareListLink" class="share-link-btn">My shared links</button>
+            </div>
+          `;
+          const input = document.getElementById("shareUrlInput");
+          input.value = url;
+          input.addEventListener("focus", () => input.select());
+          document.getElementById("shareOpenLink").href = url;
+          document.getElementById("shareCopyUrlBtn").addEventListener("click", () => copyShareUrl(url));
+          document.getElementById("shareListLink").addEventListener("click", renderShareListView);
+        }
+
+        async function renderShareListView() {
+          const { body, title } = shareDialogEls();
+          if (!body) return;
+          title.textContent = "My shared links";
+          body.innerHTML = `<p class="share-list-loading">Loading…</p>`;
+          let data;
+          try {
+            data = await shareApiRequest("GET", "/api/my/shares");
+          } catch (err) {
+            body.innerHTML = "";
+            const p = document.createElement("p");
+            p.textContent = "Could not load your shared links: " + err.message;
+            body.appendChild(p);
+            return;
+          }
+
+          body.innerHTML = "";
+          const shares = (data.shares || []).filter(s => s.status === "active");
+          if (!shares.length) {
+            const p = document.createElement("p");
+            p.textContent = "You have no active shared links.";
+            body.appendChild(p);
+            return;
+          }
+
+          const list = document.createElement("ul");
+          list.className = "share-list";
+          shares.forEach(share => {
+            const item = document.createElement("li");
+            const url = (data.site_url || "") + share.path;
+
+            const question = document.createElement("a");
+            question.className = "share-list-question";
+            question.textContent = share.question || "(untitled)";
+            question.href = url;
+            question.target = "_blank";
+            question.rel = "noopener";
+
+            const actions = document.createElement("div");
+            actions.className = "share-list-actions";
+
+            const copyBtn = document.createElement("button");
+            copyBtn.type = "button";
+            copyBtn.className = "share-secondary-btn";
+            copyBtn.textContent = "Copy link";
+            copyBtn.addEventListener("click", () => copyShareUrl(url));
+
+            const revokeBtn = document.createElement("button");
+            revokeBtn.type = "button";
+            revokeBtn.className = "share-danger-btn";
+            revokeBtn.textContent = "Revoke";
+            revokeBtn.addEventListener("click", async () => {
+              if (!confirm("Revoke this public link? Visitors will no longer be able to open it.")) return;
+              revokeBtn.disabled = true;
+              try {
+                await shareApiRequest("DELETE", "/api/share/" + encodeURIComponent(share.share_id));
+                trackAppEvent("app_share_revoked", {});
+                showPopup("Share link revoked.");
+                item.remove();
+                if (!list.children.length) renderShareListView();
+              } catch (err) {
+                revokeBtn.disabled = false;
+                showPopup("Revoking failed: " + err.message);
+              }
+            });
+
+            actions.appendChild(copyBtn);
+            actions.appendChild(revokeBtn);
+            item.appendChild(question);
+            item.appendChild(actions);
+            list.appendChild(item);
+          });
+          body.appendChild(list);
+        }
+
+        (function initShareModal() {
+          const modal = document.getElementById("shareModal");
+          if (!modal) return;
+          const closeBtn = document.getElementById("closeShareModal");
+          if (closeBtn) closeBtn.addEventListener("click", closeShareDialog);
+          window.addEventListener("click", (event) => {
+            if (event.target === modal) closeShareDialog();
+          });
+        })();
 
         // Initialer Aufruf: Alles sperren (Standard)
         updatePremiumModelsState(false);
@@ -5651,6 +5929,35 @@
         <input type="email" name="email" placeholder="Your email (optional)">
         <button type="submit">Submit</button>
       </form>
+    </div>
+  </div>
+
+  <!-- Share-Modal: öffentliche Links erstellen/verwalten -->
+  <style>
+    .share-modal-content { max-width: 480px; }
+    .share-modal-notes { margin: 12px 0; padding-left: 20px; font-size: 0.9rem; }
+    .share-modal-notes li { margin-bottom: 6px; }
+    .share-modal-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
+    .share-primary-btn, .share-secondary-btn, .share-danger-btn, .share-link-btn {
+      border-radius: 8px; padding: 8px 14px; font: inherit; font-size: 0.9rem; cursor: pointer; text-decoration: none;
+    }
+    .share-primary-btn { border: none; background: var(--accent, #4a7dff); color: #fff; }
+    .share-primary-btn:disabled { opacity: 0.6; cursor: default; }
+    .share-secondary-btn { border: 1px solid rgba(127,127,127,0.4); background: transparent; color: inherit; }
+    .share-danger-btn { border: 1px solid rgba(220,60,60,0.5); background: transparent; color: #c0392b; }
+    .share-link-btn { border: none; background: transparent; color: inherit; opacity: 0.75; text-decoration: underline; padding: 8px 4px; }
+    .share-url-row { display: flex; gap: 8px; margin: 10px 0; }
+    .share-url-row input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(127,127,127,0.4); background: transparent; color: inherit; font-size: 0.85rem; }
+    .share-list { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; }
+    .share-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(127,127,127,0.25); }
+    .share-list-question { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
+    .share-list-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  </style>
+  <div id="shareModal" class="modal">
+    <div class="modal-content share-modal-content">
+      <span class="close" id="closeShareModal">&times;</span>
+      <h2 id="shareModalTitle">Share this consensus publicly</h2>
+      <div id="shareModalBody"></div>
     </div>
   </div>
 

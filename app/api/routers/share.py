@@ -89,6 +89,22 @@ async def my_shares(request: Request):
     return {"status": "success", "shares": shares, "site_url": SITE_URL}
 
 
+@router.post("/api/share/{share_id}/report")
+@limiter.limit("3/minute")
+async def report_share(request: Request, share_id: str, data: dict = Body(default={})):
+    # Bewusst ohne Auth (Besucher sollen melden können) und ohne IP/UA-
+    # Speicherung; Missbrauchsschutz nur über das Rate-Limit.
+    reason = str(data.get("reason") or "other")
+    try:
+        snapshots.report_share(share_id, reason)
+    except ShareError as exc:
+        _raise_share_error(exc)
+    except Exception:
+        logging.exception("report_share failed")
+        raise HTTPException(status_code=500, detail="Error reporting page")
+    return {"status": "success", "message": "Thanks, this page has been reported for review."}
+
+
 def _unavailable_response(request, status_code, heading, message):
     response = templates.TemplateResponse(
         "share_unavailable.html",
@@ -147,11 +163,32 @@ async def share_page(request: Request, slug_id: str):
             "url": source.get("url") or "",
         })
 
+    # Differences: strukturierte Karten, sonst Freitext-Fallback (markdown-
+    # gerendert). Beides read-only aus dem Snapshot – keine LLM-Calls.
+    differences_data = payload["differences_data"] if isinstance(payload["differences_data"], dict) else {}
+    differences = differences_data.get("differences") or []
+    differences_fallback_html = ""
+    if not differences and payload["differences_text"]:
+        differences_fallback_html = render_public_markdown(
+            payload["differences_text"], payload["sources"]
+        )
+    model_count = (
+        len(differences_data.get("models_compared") or [])
+        or len(payload["included_models"])
+    )
+    contradiction_count = sum(1 for d in differences if d.get("type") == "contradiction")
+
     date_iso = payload["answered_at"] or payload["created_at"]
     response = templates.TemplateResponse("share.html", {
         "request": request,
+        "share_id": share_id,
         "question": payload["question"],
         "consensus_html": consensus_html,
+        "differences": differences,
+        "differences_fallback_html": differences_fallback_html,
+        "has_differences_view": bool(differences or differences_fallback_html or differences_data),
+        "model_count": model_count,
+        "contradiction_count": contradiction_count,
         "sources": sources_view,
         "included_models": payload["included_models"],
         "consensus_model": payload["consensus_model"],

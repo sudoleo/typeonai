@@ -489,6 +489,37 @@ def revoke_share(share_id, uid, is_admin=False, db=None):
     })
 
 
+REPORT_REASONS = ("inaccurate", "harmful", "spam", "copyright", "other")
+
+
+def report_share(share_id, reason, db=None):
+    """Besucher-Report: Zähler + Grund-Aggregat, bewusst ohne IP/UA-Speicherung.
+
+    Read-modify-write statt Transaktion: bei Reports ist ein verlorenes
+    Increment unter Race-Bedingungen verschmerzbar. Auto-noindex ab 5 Reports
+    und die Admin-Review-Priorisierung folgen in Etappe 3.
+    """
+    db = db if db is not None else db_firestore
+    data = get_share(share_id, db=db)
+    if data is None or data.get("status") != "active":
+        raise ShareError("not_found", "Share not found.")
+    if reason not in REPORT_REASONS:
+        reason = "other"
+
+    reasons = data.get("report_reasons")
+    reasons = dict(reasons) if isinstance(reasons, dict) else {}
+    reasons[reason] = (reasons.get(reason) or 0) + 1
+    count = data.get("reports_count")
+    count = count + 1 if isinstance(count, int) and count >= 0 else 1
+
+    db.collection(SHARES_COLLECTION).document(share_id).update({
+        "reports_count": count,
+        "report_reasons": reasons,
+        "last_reported_at": firestore.SERVER_TIMESTAMP,
+    })
+    return count
+
+
 def list_shares_for_owner(uid, db=None, max_items=200):
     db = db if db is not None else db_firestore
     docs = db.collection(SHARES_COLLECTION).where("owner_uid", "==", uid).stream()

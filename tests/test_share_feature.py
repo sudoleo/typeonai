@@ -419,6 +419,35 @@ class ShareFlowTests(unittest.TestCase):
         snapshots.revoke_share(created["share_id"], "other-user", is_admin=True, db=self.db)
         self.assertEqual(self.db.stores[snapshots.SHARES_COLLECTION][created["share_id"]]["status"], "revoked")
 
+    def test_report_share_increments_and_aggregates(self):
+        result_id = self._store_pending()
+        created = snapshots.create_share_from_pending(self.uid, result_id,
+                                                      db=self.db, consume_quota=lambda: True)
+        count = snapshots.report_share(created["share_id"], "spam", db=self.db)
+        self.assertEqual(count, 1)
+        count = snapshots.report_share(created["share_id"], "kein-gueltiger-grund", db=self.db)
+        self.assertEqual(count, 2)
+        share = self.db.stores[snapshots.SHARES_COLLECTION][created["share_id"]]
+        self.assertEqual(share["reports_count"], 2)
+        self.assertEqual(share["report_reasons"], {"spam": 1, "other": 1})
+
+    def test_report_share_rejects_inactive_or_unknown(self):
+        with self.assertRaises(ShareError):
+            snapshots.report_share(snapshots.generate_share_id(), "spam", db=self.db)
+        result_id = self._store_pending()
+        created = snapshots.create_share_from_pending(self.uid, result_id,
+                                                      db=self.db, consume_quota=lambda: True)
+        snapshots.revoke_share(created["share_id"], self.uid, db=self.db)
+        with self.assertRaises(ShareError):
+            snapshots.report_share(created["share_id"], "spam", db=self.db)
+
+    def test_report_fields_stay_out_of_public_payload(self):
+        payload = snapshots.public_share_payload({
+            "question": "q", "report_reasons": {"spam": 1}, "last_reported_at": "x",
+        })
+        self.assertNotIn("report_reasons", payload)
+        self.assertNotIn("last_reported_at", payload)
+
     def test_list_shares_for_owner_is_whitelisted(self):
         result_id = self._store_pending()
         created = snapshots.create_share_from_pending(self.uid, result_id,
@@ -483,6 +512,118 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn('content="noindex, follow"', body)
         self.assertIn("Ask your own question", body)
         self.assertNotIn("user-1", body)  # owner_uid darf nie im HTML landen
+
+    def test_differences_cards_and_toggle_rendered(self):
+        doc = self._share_doc(differences_data={
+            "claims": [],
+            "differences": [{
+                "claim": "Die Modelle widersprechen sich bei der Hauptstadt.",
+                "type": "contradiction",
+                "positions": [
+                    {"stance": "Paris ist die Hauptstadt.", "models": ["OpenAI", "Gemini"], "quote": "Paris"},
+                    {"stance": "Lyon ist die Hauptstadt.", "models": ["Grok"], "quote": "Lyon"},
+                ],
+                "verify": "Offizielle Quelle prüfen.",
+            }],
+            "best_model": "OpenAI",
+            "models_compared": ["OpenAI", "Gemini", "Grok"],
+        })
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        body = response.text
+        self.assertIn("toggleDifferencesView", body)
+        self.assertIn("Die Modelle widersprechen sich bei der Hauptstadt.", body)
+        self.assertIn("1 notable difference", body)
+        self.assertIn("1 contradiction", body)
+        self.assertIn("across 3 models", body)
+        self.assertIn("How to verify: Offizielle Quelle prüfen.", body)
+        self.assertIn("Report this page", body)
+
+    def test_differences_fallback_text_rendered(self):
+        doc = self._share_doc(differences_data=None, differences_text="**Unterschied:** nur Detailfragen.")
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        body = response.text
+        self.assertIn("toggleDifferencesView", body)
+        self.assertIn("<strong>Unterschied:</strong>", body)
+
+    def test_rendered_citation_contains_canonical_url(self):
+        doc = self._share_doc()
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        body = response.text
+        canonical = "%s/s/%s-%s" % (share_router.SITE_URL, doc["slug"], self.share_id)
+        self.assertIn("Retrieved from %s" % canonical, body)
+        self.assertIn('rel="canonical" href="%s"' % canonical, body)
+        self.assertIn("copyCitationBtn", body)
+
+    def test_report_endpoint_maps_share_errors(self):
+        with patch.object(share_router.snapshots, "report_share", return_value=1) as mocked:
+            response = self.client.post(
+                "/api/share/%s/report" % self.share_id, json={"reason": "spam"})
+        self.assertEqual(response.status_code, 200)
+        mocked.assert_called_once_with(self.share_id, "spam")
+
+        with patch.object(share_router.snapshots, "report_share",
+                          side_effect=ShareError("not_found", "Share not found.")):
+            response = self.client.post(
+                "/api/share/%s/report" % self.share_id, json={"reason": "spam"})
+        self.assertEqual(response.status_code, 404)
+
+
+class ShareApiRouteTests(unittest.TestCase):
+    """Auth-gated Share-API-Routen mit gemockter Token-Verifikation."""
+
+    @classmethod
+    def setUpClass(cls):
+        app = FastAPI()
+        app.state.limiter = limiter
+        app.include_router(share_router.router)
+        cls.client = TestClient(app)
+        cls.share_id = snapshots.generate_share_id()
+
+    def _auth_patches(self, uid="user-1"):
+        return (
+            patch.object(share_router, "extract_id_token", return_value="tok"),
+            patch.object(share_router, "verify_user_token", return_value=uid),
+        )
+
+    def test_my_shares_requires_auth(self):
+        with patch.object(share_router, "extract_id_token", return_value=None):
+            response = self.client.get("/api/my/shares")
+        self.assertEqual(response.status_code, 401)
+
+    def test_my_shares_returns_owner_list(self):
+        shares = [{"share_id": self.share_id, "path": "/s/slug-%s" % self.share_id,
+                   "question": "Q?", "status": "active", "created_at": ""}]
+        token_patch, verify_patch = self._auth_patches()
+        with token_patch, verify_patch, \
+                patch.object(share_router.snapshots, "list_shares_for_owner",
+                             return_value=shares) as mocked:
+            response = self.client.get("/api/my/shares")
+        self.assertEqual(response.status_code, 200)
+        mocked.assert_called_once_with("user-1")
+        data = response.json()
+        self.assertEqual(data["shares"], shares)
+        self.assertEqual(data["site_url"], share_router.SITE_URL)
+
+    def test_delete_share_revokes_for_owner(self):
+        token_patch, verify_patch = self._auth_patches()
+        with token_patch, verify_patch, \
+                patch.object(share_router, "is_user_admin", return_value=False), \
+                patch.object(share_router.snapshots, "revoke_share") as mocked:
+            response = self.client.delete("/api/share/%s" % self.share_id)
+        self.assertEqual(response.status_code, 200)
+        mocked.assert_called_once_with(self.share_id, "user-1", is_admin=False)
+
+    def test_delete_share_maps_share_errors(self):
+        token_patch, verify_patch = self._auth_patches()
+        with token_patch, verify_patch, \
+                patch.object(share_router, "is_user_admin", return_value=False), \
+                patch.object(share_router.snapshots, "revoke_share",
+                             side_effect=ShareError("forbidden", "You can only revoke your own shares.")):
+            response = self.client.delete("/api/share/%s" % self.share_id)
+        self.assertEqual(response.status_code, 403)
 
 
 if __name__ == "__main__":
