@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, noarchive">
+  <title>{{ heading }} – consens.io</title>
+  <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260610-restyle1">
+  <link rel="icon" href="/static/favicon-square.png?v=20260523-logo1" type="image/png">
+  <script>
+    (function () {
+      const savedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
+        document.documentElement.classList.add("dark-mode");
+      }
+    })();
+  </script>
+</head>
+<body>
+  <nav class="site-nav" aria-label="Primary">
+    <a href="/" class="brand" aria-label="consens.io home">
+      <img src="/static/favicon.png" alt="">
+      <span>consens.io</span>
+    </a>
+    <div class="nav-links">
+      <a href="/about">About</a>
+      <a href="/" class="nav-cta">Ask your own question</a>
+    </div>
+  </nav>
+
+  <main class="page-shell">
+    <header class="page-header">
+      <p class="eyebrow">Shared consensus</p>
+      <h1>{{ heading }}</h1>
+      <p class="lead">{{ message }}</p>
+    </header>
+    <div class="page-content">
+      <section class="legal-panel">
+        <p>
+          consens.io compares answers from multiple AI models and turns them into a structured consensus.
+          You can ask your own question for free.
+        </p>
+        <div class="links">
+          <a href="/" class="button-primary">Ask your own question</a>
+          <a href="/about" class="button-secondary">About consens.io</a>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <span>© 2026 consens.io</span>
+      <div class="footer-links">
+        <a href="/">App</a>
+        <a href="/about">About</a>
+        <a href="/terms">Terms</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/imprint">Imprint</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

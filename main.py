@@ -19,13 +19,20 @@ from app.core.security import CustomSecurityMiddleware
 from app.core.rate_limit import limiter
 
 # Import routers
-from app.api.routers import auth, users, bookmarks, chat, pages, admin
+from app.api.routers import auth, users, bookmarks, chat, pages, admin, share
 from app.core.config import load_models_from_db
+from app.services.share_snapshots import cleanup_expired_pending
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Load models from db on startup
     load_models_from_db()
+    # Abgelaufene pending_results aufräumen (Fallback zur Firestore-TTL-Policy;
+    # der tägliche Render-Restart triggert das regelmäßig)
+    try:
+        cleanup_expired_pending()
+    except Exception:
+        logging.exception("cleanup_expired_pending failed on startup")
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -58,3 +65,4 @@ app.include_router(bookmarks.router)
 app.include_router(chat.router)
 app.include_router(pages.router)
 app.include_router(admin.router)
+app.include_router(share.router)

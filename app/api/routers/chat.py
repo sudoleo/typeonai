@@ -36,6 +36,7 @@ from app.services.llm.consensus_engine import (
     stream_consensus,
     stream_differences,
 )
+from app.services.share_snapshots import persist_pending_result
 from tool_heuristics import get_realtime_context, get_intent_from_llm
 
 router = APIRouter()
@@ -1033,6 +1034,31 @@ def consensus(request: Request, data: dict = Body(...)):
     if best_model and not answer_by_model.get(best_model):
         raise HTTPException(status_code=400, detail="The answer marked as best is not available.")
 
+    # Share-Feature: Ergebnis nur für verifizierte Nutzer persistieren. Bei
+    # useOwnKeys wurde das Token oben nicht geprüft, daher hier best effort.
+    share_uid = uid
+    if share_uid is None and id_token:
+        try:
+            share_uid = verify_user_token(id_token)
+        except Exception:
+            share_uid = None
+    model_labels = data.get("model_labels")
+
+    def persist_share_result(consensus_text, differences_data, differences_text):
+        if not share_uid:
+            return None
+        return persist_pending_result(
+            uid=share_uid,
+            question=question,
+            consensus_md=consensus_text,
+            differences_data=differences_data,
+            differences_text=differences_text,
+            model_sources=model_sources,
+            included_providers=list(included_answers.keys()),
+            model_labels=model_labels,
+            consensus_model=consensus_model,
+        )
+
     if stream_requested:
         extra_fields = {}
         if uid:
@@ -1046,6 +1072,7 @@ def consensus(request: Request, data: dict = Body(...)):
             consensus_text = ""
             differences_text = ""
             differences_data = None
+            stream_failed = False
             try:
                 for item in stream_consensus(
                     question,
@@ -1087,6 +1114,7 @@ def consensus(request: Request, data: dict = Body(...)):
                         differences_data = item.get("data")
             except Exception as exc:
                 logging.exception("Consensus streaming failed")
+                stream_failed = True
                 if not consensus_text:
                     consensus_text = f"Consensus error: {exc}"
                 if not differences_text:
@@ -1097,6 +1125,10 @@ def consensus(request: Request, data: dict = Body(...)):
                 "differences": differences_text,
                 "differences_data": differences_data,
             }
+            if not stream_failed:
+                result_id = persist_share_result(consensus_text, differences_data, differences_text)
+                if result_id:
+                    payload["result_id"] = result_id
             payload.update(extra_fields)
             yield sse_pack("final", payload)
 
@@ -1139,6 +1171,9 @@ def consensus(request: Request, data: dict = Body(...)):
         "differences": differences,
         "differences_data": differences_data,
     }
+    result_id = persist_share_result(consensus_answer, differences_data, differences)
+    if result_id:
+        response["result_id"] = result_id
     if uid:
         response.update({
             "free_usage_remaining": max(0, int(limit_regular - usage_counter.get(uid, 0))),

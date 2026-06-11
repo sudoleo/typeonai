@@ -128,6 +128,17 @@ async def delete_account(request: Request, data: dict = Body(default={})):
             logging.error(f"delete_account: {collection_name} cleanup failed for {uid}: {e}")
             errors.append(collection_name)
 
+    # 3b. Öffentliche Share-Links und zwischengespeicherte Konsens-Ergebnisse
+    #     löschen (DSGVO-Kaskade, Art. 17) – hart, nicht nur revoked
+    for collection_name in ("shares", "pending_results"):
+        try:
+            docs = db_firestore.collection(collection_name).where("owner_uid", "==", uid).stream()
+            for doc in docs:
+                doc.reference.delete()
+        except Exception as e:
+            logging.error(f"delete_account: {collection_name} cleanup failed for {uid}: {e}")
+            errors.append(collection_name)
+
     # 4. In-Memory-Zustand bereinigen
     usage_counter.pop(uid, None)
     deep_search_usage.pop(uid, None)
