@@ -193,21 +193,39 @@ def sanitize_sources(model_sources):
     return sanitized
 
 
-def sanitize_model_labels(model_labels):
+# Modell-Label aus dem Client (Option-Text des Model-Pickers): nur harmlose
+# Zeichen, insbesondere kein Komma – die Zitation joint mit ", ", ein Komma im
+# Label könnte dort zusätzliche Modelle vortäuschen.
+_MODEL_LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:()/+&-]{0,79}$")
+
+
+def sanitize_model_labels(model_labels, included_providers=None):
+    """Labels nur für tatsächlich beteiligte Provider, sonst Provider-Fallback.
+
+    Schlüssel außerhalb von included_providers werden verworfen (begrenzt
+    damit auch die Anzahl), Werte gegen Zeichen-Whitelist + Längenlimit
+    geprüft; ungültige Labels fallen still auf den Provider-Namen zurück.
+    """
     if not isinstance(model_labels, dict):
         return {}
+    allowed = set(PROVIDER_ORDER)
+    if included_providers is not None:
+        allowed &= {str(p) for p in included_providers}
     sanitized = {}
     for provider in PROVIDER_ORDER:
+        if provider not in allowed:
+            continue
         label = model_labels.get(provider)
-        if isinstance(label, str):
-            cleaned = _clip(re.sub(r"[\x00-\x1f\x7f]", "", label), 80)
-            if cleaned:
-                sanitized[provider] = cleaned
+        if not isinstance(label, str):
+            continue
+        cleaned = re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f]", "", label)).strip()
+        if _MODEL_LABEL_RE.match(cleaned):
+            sanitized[provider] = cleaned
     return sanitized
 
 
 def build_included_models(included_providers, model_labels=None):
-    labels = sanitize_model_labels(model_labels)
+    labels = sanitize_model_labels(model_labels, included_providers)
     included = {str(p) for p in (included_providers or [])}
     result = []
     for provider in PROVIDER_ORDER:

@@ -192,6 +192,26 @@ class SanitizerTests(unittest.TestCase):
         )
         self.assertEqual(result, ["OpenAI: gpt-test", "Anthropic Claude", "Grok"])
 
+    def test_model_labels_only_for_included_providers(self):
+        labels = snapshots.sanitize_model_labels(
+            {"OpenAI": "gpt-test", "Gemini": "gemini-test", "Mistral": "mistral-test",
+             "FooAI": "kein echter Provider"},
+            included_providers=["OpenAI", "Gemini", "FooAI"],
+        )
+        self.assertEqual(labels, {"OpenAI": "gpt-test", "Gemini": "gemini-test"})
+
+    def test_model_labels_charset_and_length_fallback(self):
+        labels = snapshots.sanitize_model_labels({
+            "OpenAI": "gpt-5, FakeModel: evil",   # Komma könnte Zitation fälschen
+            "Gemini": "x" * 100,                  # zu lang
+            "Mistral": "<script>x</script>",      # unzulässige Zeichen
+            "Grok": "Grok 4.2 (Beta)",
+        }, included_providers=snapshots.PROVIDER_ORDER)
+        self.assertEqual(labels, {"Grok": "Grok 4.2 (Beta)"})
+        # Provider-Fallback greift in build_included_models:
+        result = snapshots.build_included_models(["OpenAI", "Grok"], {"OpenAI": "bad,label"})
+        self.assertEqual(result, ["OpenAI", "Grok"])
+
 
 class PendingResultTests(unittest.TestCase):
     def test_requires_uid_question_and_consensus(self):
