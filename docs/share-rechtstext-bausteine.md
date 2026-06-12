@@ -1,8 +1,11 @@
 # Rechtstext-Bausteine: Öffentliches Teilen (Share-Feature)
 
-Entwurfs-Bausteine für Terms und Privacy. **Nicht automatisch eingebaut** —
-zur manuellen Übernahme in `templates/terms.html` und `templates/privacy.html`.
-Stand: 2026-06-12 (Etappe 3 des Share-Features).
+Entwurfs-Bausteine für Terms und Privacy.
+**Status: am 2026-06-12 eingepflegt** — Baustein 1+2 als Terms-Abschnitt 7
+(„Public sharing of consensus answers"), Baustein 3+4 als Privacy-Abschnitt 5
+(„Shared pages (public sharing)", inkl. Retention-Liste statt Tabelle aus
+Baustein 5). Dieses Dokument bleibt als Referenz/Begründung erhalten;
+maßgeblich sind ab jetzt die Live-Seiten.
 
 ---
 
