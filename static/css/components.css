@@ -1321,17 +1321,16 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   flex-wrap: wrap;
 }
 
+/* Modellname im Antwort-Header: schlichter Text ohne Chip-Rahmen */
 .response-box .title small {
   font-weight: 650;
   font-size: 0.66rem;
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 9px 3px 6px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--glass-bg-strong) 68%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 60%, transparent);
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
   color: var(--sidebar-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.035em;
@@ -1553,10 +1552,10 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   gap: 8px;
   flex-wrap: nowrap;
   margin: 0 0 14px;
-  /* Platz fuer Share-Pill + Aktionsmenue oben rechts (symmetrisch, damit
+  /* Platz fuer Share- und Menue-Icon oben rechts (symmetrisch, damit
      die Ueberschrift zentriert bleibt) */
-  padding-right: 122px;
-  padding-left: 122px;
+  padding-right: 76px;
+  padding-left: 76px;
   color: var(--text-color);
   font-size: 1.02rem;
   font-weight: 650;
@@ -1663,38 +1662,28 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   gap: 7px;
 }
 
-/* Share-Button oben rechts im Consensus-Bereich */
+/* Share-Button oben rechts im Consensus-Bereich: dezenter Ghost-Icon-Button */
 .consensus-share-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 0 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--sidebar-border));
-  border-radius: 999px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 38%, transparent), transparent 62%),
-    color-mix(in srgb, var(--accent) 8%, var(--response-bg));
-  color: color-mix(in srgb, var(--accent) 68%, var(--text-color));
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--sidebar-text-muted);
   font: inherit;
-  font-size: 0.74rem;
-  font-weight: 700;
-  letter-spacing: 0.015em;
   line-height: 1;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 4px 12px color-mix(in srgb, var(--accent) 9%, transparent);
-  transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease;
+  transition: background-color .15s ease, color .15s ease, transform .12s ease;
 }
 
 .consensus-share-pill:hover,
 .consensus-share-pill:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 44%, var(--sidebar-border));
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 44%, transparent), transparent 62%),
-    color-mix(in srgb, var(--accent) 13%, var(--response-bg));
-  color: color-mix(in srgb, var(--accent) 82%, var(--text-color));
-  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 7px 18px color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
+  color: var(--text-color);
   outline: none;
 }
 
@@ -1703,8 +1692,8 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 }
 
 .share-pill-icon {
-  width: 12px;
-  height: 12px;
+  width: 15px;
+  height: 15px;
   flex: 0 0 auto;
 }
 
@@ -1720,29 +1709,26 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   width: 28px;
   height: 28px;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 66%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--glass-bg-strong) 72%, var(--sidebar-hover) 28%);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
   color: var(--sidebar-text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 3px;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 1px 2px rgba(15, 23, 42, 0.05);
   font: inherit;
   font-size: 0;
   line-height: 1;
-  transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease;
+  transition: background-color .15s ease, color .15s ease, transform .12s ease;
 }
 
 .consensus-actions-toggle:hover,
 .consensus-actions-toggle:focus-visible,
 .consensus-actions-wrapper.open .consensus-actions-toggle {
-  background: color-mix(in srgb, var(--accent) 8%, var(--response-bg));
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--sidebar-border));
-  color: var(--accent);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 12%, transparent);
+  background: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
+  color: var(--text-color);
   outline: none;
 }
 
@@ -4046,6 +4032,7 @@ header .sidebar-toggle.collapse-btn {
   filter: invert(1);
 }
 
+/* Dropdown-Pfeil neben dem Modellnamen: rahmenloser Ghost-Trigger */
 .model-picker-wrapper {
   position: relative;
   display: inline-flex;
@@ -4055,22 +4042,19 @@ header .sidebar-toggle.collapse-btn {
   width: 20px;
   min-width: 20px;
   height: 20px;
-  margin-left: -5px;
+  margin-left: -3px;
   padding: 0;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--glass-bg-strong) 70%, var(--sidebar-hover) 30%);
-  border: 1px solid color-mix(in srgb, var(--glass-border) 58%, var(--sidebar-border));
-  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 1px 2px rgba(15, 23, 42, 0.035);
-  transition: background-color .2s ease, border-color .2s ease, box-shadow .2s ease, color .2s ease, transform .12s ease;
+  background: transparent;
+  border: 0;
+  transition: background-color .2s ease, color .2s ease, transform .12s ease;
   flex-shrink: 0;
   cursor: pointer;
 }
 
 .model-picker-wrapper:hover,
 .model-picker-wrapper:focus-within {
-  background: color-mix(in srgb, var(--accent) 8%, var(--response-bg));
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--sidebar-border));
-  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+  background: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
 }
 
 .model-picker-wrapper:active {
@@ -4786,17 +4770,6 @@ option.early-option {
   .consensus-copy-inline {
     right: 0;
     gap: 6px;
-  }
-
-  /* Mobil: Share-Pill als kompakter Icon-Button */
-  .consensus-share-pill {
-    min-height: 28px;
-    width: 28px;
-    padding: 0;
-  }
-
-  .consensus-share-pill .share-pill-label {
-    display: none;
   }
 
   .consensus-differences h2 {

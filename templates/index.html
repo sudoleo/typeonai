@@ -51,7 +51,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260612-polish2">
+  <link rel="stylesheet" href="/static/style.css?v=20260612-polish3">
   <link rel="icon" href="/static/favicon-square.png?v=20260523-logo1" type="image/png">
   <!-- Füge dies im <head> hinzu -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -5260,14 +5260,11 @@
           shareTopBtn.title = "Share this consensus as a public page";
           shareTopBtn.setAttribute("aria-label", "Share this consensus publicly");
           shareTopBtn.innerHTML = `
-            <svg class="share-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="18" cy="5" r="3"></circle>
-              <circle cx="6" cy="12" r="3"></circle>
-              <circle cx="18" cy="19" r="3"></circle>
-              <line x1="8.6" y1="10.5" x2="15.4" y2="6.5"></line>
-              <line x1="8.6" y1="13.5" x2="15.4" y2="17.5"></line>
+            <svg class="share-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 15V4"></path>
+              <path d="M8.5 7.5 12 4l3.5 3.5"></path>
+              <path d="M5 12v7a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-7"></path>
             </svg>
-            <span class="share-pill-label">Share</span>
           `;
           shareTopBtn.addEventListener("click", () => {
             if (!window.auth?.currentUser) {

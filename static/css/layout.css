@@ -240,6 +240,17 @@ body:has(.sidebar.collapsed) .main-wrapper {
   opacity: 1;
 }
 
+/* Eingeloggt zeigt der Container nur das runde Initial-Symbol –
+   die Pill-Optik (Padding/Rahmen) entfaellt, sonst entsteht ein breites Oval. */
+.login-text:has(.email-container),
+.login-text:has(.email-container):hover {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
 /* --------------------------------------------------------------------------
    Sidebar
    -------------------------------------------------------------------------- */
