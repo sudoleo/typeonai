@@ -143,6 +143,19 @@
             background: var(--bg-secondary);
             color: var(--text-color);
         }
+        .shares-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; }
+        .share-mod-row {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+            padding: 10px 0; border-bottom: 1px solid var(--border-color);
+        }
+        .share-mod-question { flex: 1 1 260px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
+        .share-mod-meta { font-size: 0.8em; opacity: 0.75; flex-basis: 100%; }
+        .share-mod-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75em; font-weight: bold; background: rgba(127,127,127,0.25); }
+        .share-mod-badge.reported { background: #b71c1c; color: #fff; }
+        .share-mod-badge.review { background: #e65100; color: #fff; }
+        .share-mod-badge.indexed { background: #1b5e20; color: #fff; }
+        .share-mod-actions { display: flex; gap: 6px; flex-shrink: 0; }
+        .share-mod-actions button { border: 1px solid var(--border-color); background: transparent; color: var(--text-color); border-radius: 4px; padding: 6px 10px; cursor: pointer; font-size: 0.85em; }
         @media (max-width: 768px) {
             .providers-grid { grid-template-columns: 1fr; }
             .limits-grid { grid-template-columns: 1fr; }
@@ -190,6 +203,16 @@
                 fields: [
                     ['consensus_max_tokens', 'Consensus output tokens'],
                     ['differences_max_tokens', 'Differences output tokens']
+                ]
+            },
+            {
+                title: 'Share Index Quality Filter',
+                fields: [
+                    ['share_min_consensus_chars', 'Min consensus characters'],
+                    ['share_min_sources', 'Min sources'],
+                    ['share_min_models', 'Min models consulted'],
+                    ['share_question_min_chars', 'Min question characters'],
+                    ['share_question_max_chars', 'Max question characters']
                 ]
             }
         ];
@@ -371,10 +394,146 @@
 
         document.getElementById('saveBtn').addEventListener('click', saveModels);
 
+        // === Shared Pages Moderation ===
+        let currentSharesFilter = 'reported';
+
+        function sharesStatus(message, isError) {
+            const el = document.getElementById('sharesStatus');
+            el.textContent = message || '';
+            el.className = isError ? 'error' : 'success';
+        }
+
+        async function shareAdminRequest(method, path, body) {
+            const user = auth.currentUser;
+            if (!user) throw new Error('Not logged in');
+            const idToken = await user.getIdToken();
+            const response = await fetch(path, {
+                method,
+                headers: {
+                    'Authorization': `Bearer ${idToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: body ? JSON.stringify(body) : undefined
+            });
+            let data = {};
+            try { data = await response.json(); } catch (e) { /* leer */ }
+            if (!response.ok) throw new Error(data.error || data.detail || `HTTP ${response.status}`);
+            return data;
+        }
+
+        async function loadShares(filter) {
+            currentSharesFilter = filter;
+            sharesStatus('Loading…', false);
+            let data;
+            try {
+                data = await shareAdminRequest('GET', `/api/admin/shares?filter=${filter}`);
+            } catch (err) {
+                sharesStatus(err.message, true);
+                return;
+            }
+            sharesStatus('', false);
+            renderShares(data.shares || [], data.site_url || '');
+        }
+
+        async function moderateShare(shareId, payload, confirmText) {
+            if (confirmText && !confirm(confirmText)) return;
+            try {
+                await shareAdminRequest('POST', `/api/admin/shares/${encodeURIComponent(shareId)}/moderate`, payload);
+                await loadShares(currentSharesFilter);
+            } catch (err) {
+                sharesStatus(err.message, true);
+            }
+        }
+
+        function renderShares(shares, siteUrl) {
+            const container = document.getElementById('sharesContainer');
+            container.innerHTML = '';
+            if (!shares.length) {
+                container.textContent = currentSharesFilter === 'reported'
+                    ? 'No reported shares.' : 'No shares found.';
+                return;
+            }
+            shares.forEach(share => {
+                const row = document.createElement('div');
+                row.className = 'share-mod-row';
+
+                const link = document.createElement('a');
+                link.className = 'share-mod-question';
+                link.textContent = share.question || '(untitled)';
+                link.href = siteUrl + share.path;
+                link.target = '_blank';
+                link.rel = 'noopener';
+                row.appendChild(link);
+
+                if (share.needs_review) row.appendChild(badge('review', 'needs review'));
+                if (share.reports_count > 0) {
+                    const reasons = Object.entries(share.report_reasons || {})
+                        .map(([k, v]) => `${k}: ${v}`).join(', ');
+                    row.appendChild(badge('reported', `${share.reports_count} report(s)`, reasons));
+                }
+                row.appendChild(badge('', share.status));
+                if (share.indexed) row.appendChild(badge('indexed', 'indexed'));
+                else if (share.index_eligible && share.status === 'active') row.appendChild(badge('', 'eligible'));
+
+                const actions = document.createElement('div');
+                actions.className = 'share-mod-actions';
+                if (share.status === 'blocked') {
+                    actions.appendChild(actionBtn('Unblock', () =>
+                        moderateShare(share.share_id, { action: 'unblock' })));
+                } else if (share.status === 'active') {
+                    actions.appendChild(actionBtn('Block', () =>
+                        moderateShare(share.share_id, { action: 'block' },
+                            'Block this page? It will return 410 for all visitors.')));
+                    if (share.indexed) {
+                        actions.appendChild(actionBtn('De-index', () =>
+                            moderateShare(share.share_id, { indexed: false })));
+                    } else {
+                        actions.appendChild(actionBtn('Index', () =>
+                            moderateShare(share.share_id, { indexed: true },
+                                share.index_eligible ? '' :
+                                'This page does NOT meet the quality filter. Index anyway?')));
+                    }
+                }
+                if (share.needs_review && share.status !== 'blocked') {
+                    actions.appendChild(actionBtn('Mark reviewed', () =>
+                        moderateShare(share.share_id, { indexed: !!share.indexed })));
+                }
+                row.appendChild(actions);
+
+                const meta = document.createElement('div');
+                meta.className = 'share-mod-meta';
+                meta.textContent = `${share.share_id} · created ${share.created_at || '–'}`
+                    + (share.last_reported_at ? ` · last report ${share.last_reported_at}` : '');
+                row.appendChild(meta);
+
+                container.appendChild(row);
+            });
+        }
+
+        function badge(kind, text, title) {
+            const span = document.createElement('span');
+            span.className = 'share-mod-badge' + (kind ? ` ${kind}` : '');
+            span.textContent = text;
+            if (title) span.title = title;
+            return span;
+        }
+
+        function actionBtn(label, onClick) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = label;
+            btn.onclick = onClick;
+            return btn;
+        }
+
+        document.getElementById('loadReportedSharesBtn').addEventListener('click', () => loadShares('reported'));
+        document.getElementById('loadAllSharesBtn').addEventListener('click', () => loadShares('all'));
+
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 const idToken = await user.getIdToken();
                 fetchModels(idToken);
+                loadShares('reported');
             } else {
                 document.getElementById('statusMessage').textContent = 'Please log in to access the admin panel.';
                 document.getElementById('statusMessage').className = 'error';
@@ -413,6 +572,22 @@
         <p style="margin-bottom: 20px; font-size: 0.9em; color: var(--text-color);">Add models to each provider and toggle the <strong>Premium</strong> checkbox to mark them as Pro-only.</p>
         
         <div id="providersContainer" class="providers-grid">
+            <!-- Populated by JavaScript -->
+        </div>
+
+        <div class="admin-header" style="margin-top: 40px;">
+            <h2>Shared Pages Moderation</h2>
+        </div>
+        <p style="margin-bottom: 12px; font-size: 0.9em; color: var(--text-color);">
+            Reported pages first (review-priority, then report count). <strong>Index</strong> puts a page
+            into sitemap-shares.xml and removes its noindex — only do this for eligible pages.
+        </p>
+        <div class="shares-toolbar">
+            <button id="loadReportedSharesBtn" class="admin-btn">Load reported</button>
+            <button id="loadAllSharesBtn" class="admin-btn">Load all</button>
+            <span id="sharesStatus" style="font-size: 0.85em;"></span>
+        </div>
+        <div id="sharesContainer" class="provider-section">
             <!-- Populated by JavaScript -->
         </div>
     </div>

@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from app.api.routers.pages import SITE_URL, robots_txt, sitemap_xml
+from app.api.routers.pages import SITE_URL, robots_txt, sitemap_xml, sitemap_pages_xml
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,8 +15,17 @@ class SeoBasicsTests(unittest.TestCase):
         self.assertIn("Allow: /", content)
         self.assertIn(f"Sitemap: {SITE_URL}/sitemap.xml", content)
 
-    def test_sitemap_contains_public_indexable_pages(self):
+    def test_sitemap_is_index_of_pages_and_shares(self):
         response = sitemap_xml()
+        content = response.body.decode("utf-8")
+
+        self.assertEqual(response.media_type, "application/xml")
+        self.assertIn("<sitemapindex", content)
+        self.assertIn(f"<loc>{SITE_URL}/sitemap-pages.xml</loc>", content)
+        self.assertIn(f"<loc>{SITE_URL}/sitemap-shares.xml</loc>", content)
+
+    def test_pages_sitemap_contains_public_indexable_pages(self):
+        response = sitemap_pages_xml()
         content = response.body.decode("utf-8")
 
         self.assertEqual(response.media_type, "application/xml")

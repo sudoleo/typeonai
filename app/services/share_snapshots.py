@@ -20,8 +20,10 @@ import unicodedata
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
+from cachetools import TTLCache
 from firebase_admin import firestore
 
+import app.core.config as cfg
 from app.core.security import db_firestore
 
 PENDING_COLLECTION = "pending_results"
@@ -38,12 +40,12 @@ MAX_CONSENSUS_CHARS = 100_000
 MAX_DIFFERENCES_TEXT_CHARS = 50_000
 MAX_SOURCES = 50
 
-# Qualitätsfilter v1 (Etappe 3 macht das über die limits-Config steuerbar).
-QUALITY_MIN_CONSENSUS_CHARS = 600
-QUALITY_MIN_SOURCES = 2
-QUALITY_MIN_MODELS = 3
-QUALITY_QUESTION_MIN_CHARS = 15
-QUALITY_QUESTION_MAX_CHARS = 300
+# Ab so vielen Reports wird ein indexierter Share automatisch auf noindex
+# gesetzt und für die Admin-Review priorisiert (kein Auto-Unpublish).
+AUTO_NOINDEX_REPORTS = 5
+
+# Hard-Delete-Frist für widerrufene Shares (DSGVO-Zusage in den Rechtstexten).
+REVOKED_RETENTION_DAYS = 30
 
 # Bewusst ohne '-' und '_': die ID ist das letzte '-'-Segment der URL
 # (/s/{slug}-{id}); ein Bindestrich in der ID würde das Parsen brechen.
@@ -303,13 +305,25 @@ def sanitize_differences_data(data):
     }
 
 
+def _quality_limit(key, fallback):
+    try:
+        value = int(cfg.LIMITS.get(key, fallback))
+    except (TypeError, ValueError):
+        return fallback
+    return value if value >= 0 else fallback
+
+
 def compute_index_eligible(question, consensus_md, sources, included_models):
+    """Qualitätsfilter aus der limits-Config (Admin-UI); nur Eligibility-
+    Anzeige – ``indexed`` setzt ausschließlich der Admin."""
     question = str(question or "")
     return bool(
-        len(str(consensus_md or "")) >= QUALITY_MIN_CONSENSUS_CHARS
-        and len(sources or []) >= QUALITY_MIN_SOURCES
-        and len(included_models or []) >= QUALITY_MIN_MODELS
-        and QUALITY_QUESTION_MIN_CHARS <= len(question) <= QUALITY_QUESTION_MAX_CHARS
+        len(str(consensus_md or "")) >= _quality_limit("share_min_consensus_chars", 600)
+        and len(sources or []) >= _quality_limit("share_min_sources", 2)
+        and len(included_models or []) >= _quality_limit("share_min_models", 3)
+        and _quality_limit("share_question_min_chars", 15)
+            <= len(question)
+            <= _quality_limit("share_question_max_chars", 300)
     )
 
 
@@ -399,6 +413,33 @@ def get_share(share_id, db=None):
     return snap.to_dict() or {}
 
 
+# In-Process-TTL-Cache für die öffentliche /s/-Seite (kein CDN, eine Render-
+# Instanz). Misses werden nicht gecacht, damit frisch erstellte Shares sofort
+# sichtbar sind; Revoke/Block/Auto-noindex invalidieren explizit.
+SHARE_CACHE_TTL_SECONDS = 300
+_share_cache = TTLCache(maxsize=1024, ttl=SHARE_CACHE_TTL_SECONDS)
+# Dedup-Canonical-Lookups (question_hash -> Ziel oder None) separat cachen;
+# jede Moderation kann Canonical-Ziele ändern, daher wird er mit invalidiert.
+_canonical_cache = TTLCache(maxsize=1024, ttl=SHARE_CACHE_TTL_SECONDS)
+
+
+def get_share_cached(share_id, db=None):
+    if share_id in _share_cache:
+        return _share_cache[share_id]
+    data = get_share(share_id, db=db)
+    if data is not None:
+        _share_cache[share_id] = data
+    return data
+
+
+def invalidate_share_cache(share_id=None):
+    if share_id is None:
+        _share_cache.clear()
+    else:
+        _share_cache.pop(share_id, None)
+    _canonical_cache.clear()
+
+
 def create_share_from_pending(uid, result_id, db=None, consume_quota=None):
     """Kopiert ein Pending-Ergebnis in einen unveränderlichen Share-Snapshot.
 
@@ -485,8 +526,175 @@ def revoke_share(share_id, uid, is_admin=False, db=None):
         raise ShareError("forbidden", "You can only revoke your own shares.")
     db.collection(SHARES_COLLECTION).document(share_id).update({
         "status": "revoked",
+        "indexed": False,
         "revoked_at": firestore.SERVER_TIMESTAMP,
     })
+    invalidate_share_cache(share_id)
+
+
+MODERATION_ACTIONS = ("block", "unblock")
+
+
+def moderate_share(share_id, action=None, indexed=None, db=None):
+    """Admin-Moderation: Status blocken/freigeben und/oder ``indexed`` setzen.
+
+    ``indexed`` wird ausschließlich hier (also durch den Admin) auf True
+    gesetzt – nirgends sonst im Code. Jede Moderation gilt als Review und
+    nimmt den Share aus der priorisierten Review-Liste.
+    """
+    db = db if db is not None else db_firestore
+    data = get_share(share_id, db=db)
+    if data is None:
+        raise ShareError("not_found", "Share not found.")
+    if action is not None and action not in MODERATION_ACTIONS:
+        raise ShareError("bad_request", "Unknown moderation action.")
+    if action is None and indexed is None:
+        raise ShareError("bad_request", "Nothing to moderate: pass action and/or indexed.")
+
+    status = data.get("status")
+    updates = {"needs_review": False, "reviewed_at": firestore.SERVER_TIMESTAMP}
+    if action == "block":
+        if status == "revoked":
+            raise ShareError("bad_request", "Share is already revoked.")
+        updates["status"] = "blocked"
+        updates["indexed"] = False
+        updates["blocked_at"] = firestore.SERVER_TIMESTAMP
+        status = "blocked"
+    elif action == "unblock":
+        if status != "blocked":
+            raise ShareError("bad_request", "Only blocked shares can be unblocked.")
+        updates["status"] = "active"
+        status = "active"
+
+    if indexed is not None:
+        if bool(indexed) and status != "active":
+            raise ShareError("bad_request", "Only active shares can be indexed.")
+        updates["indexed"] = bool(indexed)
+
+    db.collection(SHARES_COLLECTION).document(share_id).update(updates)
+    invalidate_share_cache(share_id)
+    merged = dict(data)
+    merged.update(updates)
+    return merged
+
+
+def list_shares_for_admin(db=None, only_reported=False, max_items=500):
+    """Moderationsliste: priorisiert needs_review, dann Report-Anzahl.
+
+    Bewusst ein Collection-Scan mit Limit statt Firestore-Range-Query –
+    das Share-Volumen ist klein (privates Projekt, 20/Tag/UID-Quota).
+    """
+    db = db if db is not None else db_firestore
+    docs = db.collection(SHARES_COLLECTION).limit(max_items).stream()
+    shares = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        reports = data.get("reports_count")
+        reports = reports if isinstance(reports, int) and reports > 0 else 0
+        if only_reported and not reports:
+            continue
+        created_at = data.get("created_at")
+        last_reported = data.get("last_reported_at")
+        shares.append({
+            "share_id": doc.id,
+            "path": share_path(data.get("slug") or "", doc.id),
+            "question": _clip(data.get("question"), 200),
+            "status": data.get("status") or "active",
+            "owner_uid": data.get("owner_uid") or "",
+            "reports_count": reports,
+            "report_reasons": data.get("report_reasons") if isinstance(data.get("report_reasons"), dict) else {},
+            "needs_review": bool(data.get("needs_review")),
+            "indexed": bool(data.get("indexed")),
+            "index_eligible": bool(data.get("index_eligible")),
+            "created_at": created_at.isoformat() if isinstance(created_at, datetime) else "",
+            "last_reported_at": last_reported.isoformat() if isinstance(last_reported, datetime) else "",
+        })
+    shares.sort(key=lambda item: (
+        not item["needs_review"],
+        -item["reports_count"],
+        item["created_at"],
+    ))
+    return shares
+
+
+def cleanup_revoked_shares(db=None, max_docs=500):
+    """30-Tage-Hard-Delete für widerrufene Shares (Aufruf beim App-Start,
+    kein eigener Scheduler – der tägliche Render-Restart reicht)."""
+    db = db if db is not None else db_firestore
+    cutoff = _utcnow() - timedelta(days=REVOKED_RETENTION_DAYS)
+    docs = (
+        db.collection(SHARES_COLLECTION)
+        .where("status", "==", "revoked")
+        .limit(max_docs)
+        .stream()
+    )
+    deleted = 0
+    for doc in docs:
+        data = doc.to_dict() or {}
+        revoked_at = data.get("revoked_at")
+        if isinstance(revoked_at, datetime) and revoked_at < cutoff:
+            doc.reference.delete()
+            invalidate_share_cache(doc.id)
+            deleted += 1
+    if deleted:
+        logging.info("cleanup_revoked_shares: hard-deleted %d revoked shares", deleted)
+    return deleted
+
+
+def find_canonical_share(question_hash_value, db=None, max_candidates=50):
+    """Dedup-Ziel für rel=canonical: ältester aktiver UND indexierter Share
+    mit derselben normalisierten Frage. None, wenn es keinen gibt – ein
+    Canonical darf nie auf eine noindex-Seite zeigen."""
+    if not question_hash_value:
+        return None
+    use_cache = db is None
+    if use_cache and question_hash_value in _canonical_cache:
+        return _canonical_cache[question_hash_value]
+    db = db if db is not None else db_firestore
+    docs = (
+        db.collection(SHARES_COLLECTION)
+        .where("question_hash", "==", question_hash_value)
+        .stream()
+    )
+    best = None
+    for doc in docs:
+        data = doc.to_dict() or {}
+        if data.get("status") != "active" or not data.get("indexed"):
+            continue
+        created_at = data.get("created_at")
+        created_key = created_at.isoformat() if isinstance(created_at, datetime) else "9999"
+        candidate = {"share_id": doc.id, "slug": data.get("slug") or "", "created_key": created_key}
+        if best is None or candidate["created_key"] < best["created_key"]:
+            best = candidate
+        max_candidates -= 1
+        if max_candidates <= 0:
+            break
+    if use_cache:
+        _canonical_cache[question_hash_value] = best
+    return best
+
+
+def list_indexed_share_urls(db=None, max_items=1000):
+    """URLs für sitemap-shares.xml: nur indexed == True und status == active."""
+    db = db if db is not None else db_firestore
+    docs = (
+        db.collection(SHARES_COLLECTION)
+        .where("indexed", "==", True)
+        .limit(max_items)
+        .stream()
+    )
+    urls = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        if data.get("status") != "active":
+            continue
+        created_at = data.get("created_at")
+        urls.append({
+            "path": share_path(data.get("slug") or "", doc.id),
+            "lastmod": created_at.strftime("%Y-%m-%d") if isinstance(created_at, datetime) else "",
+        })
+    urls.sort(key=lambda item: item["path"])
+    return urls
 
 
 REPORT_REASONS = ("inaccurate", "harmful", "spam", "copyright", "other")
@@ -512,11 +720,24 @@ def report_share(share_id, reason, db=None):
     count = data.get("reports_count")
     count = count + 1 if isinstance(count, int) and count >= 0 else 1
 
-    db.collection(SHARES_COLLECTION).document(share_id).update({
+    updates = {
         "reports_count": count,
         "report_reasons": reasons,
         "last_reported_at": firestore.SERVER_TIMESTAMP,
-    })
+    }
+    # Ab der Schwelle: kein Auto-Unpublish, aber raus aus dem Index und
+    # priorisiert in die Admin-Review (Re-Indexierung nur durch den Admin).
+    if count >= AUTO_NOINDEX_REPORTS:
+        updates["needs_review"] = True
+        if data.get("indexed"):
+            updates["indexed"] = False
+            logging.warning(
+                "report_share: auto-noindex for %s after %d reports", share_id, count
+            )
+
+    db.collection(SHARES_COLLECTION).document(share_id).update(updates)
+    if "indexed" in updates:
+        invalidate_share_cache(share_id)
     return count
 
 

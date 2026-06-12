@@ -21,7 +21,7 @@ from app.core.rate_limit import limiter
 # Import routers
 from app.api.routers import auth, users, bookmarks, chat, pages, admin, share
 from app.core.config import load_models_from_db
-from app.services.share_snapshots import cleanup_expired_pending
+from app.services.share_snapshots import cleanup_expired_pending, cleanup_revoked_shares
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -33,6 +33,12 @@ async def lifespan(app: FastAPI):
         cleanup_expired_pending()
     except Exception:
         logging.exception("cleanup_expired_pending failed on startup")
+    # 30-Tage-Hard-Delete für widerrufene Shares (gleicher Mechanismus,
+    # kein eigener Scheduler)
+    try:
+        cleanup_revoked_shares()
+    except Exception:
+        logging.exception("cleanup_revoked_shares failed on startup")
     yield
 
 app = FastAPI(lifespan=lifespan)

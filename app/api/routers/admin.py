@@ -4,8 +4,69 @@ from fastapi import APIRouter, Request, Body, HTTPException
 from app.core.security import extract_id_token, verify_user_token, is_user_admin, db_firestore
 import app.core.config as cfg
 from app.core.config import apply_limits, get_limits_config, load_models_from_db
+from app.services import share_snapshots as snapshots
+from app.services.share_snapshots import ShareError
 
 router = APIRouter()
+
+
+def _require_admin(request, data):
+    id_token = extract_id_token(request, data)
+    if not id_token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    try:
+        uid = verify_user_token(id_token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Authentication failed")
+    if not is_user_admin(uid):
+        raise HTTPException(status_code=403, detail="Admin privileges required")
+    return uid
+
+
+_SHARE_ERROR_STATUS = {"not_found": 404, "bad_request": 400}
+
+
+@router.get("/api/admin/shares")
+def admin_list_shares(request: Request, filter: str = "reported"):
+    _require_admin(request, {})
+    try:
+        shares = snapshots.list_shares_for_admin(only_reported=(filter != "all"))
+    except Exception:
+        logging.exception("admin_list_shares failed")
+        raise HTTPException(status_code=500, detail="Failed to load shares")
+    return {"status": "success", "shares": shares, "site_url": snapshots_site_url()}
+
+
+def snapshots_site_url():
+    # Lazy-Import, um den Router-Importgraphen (pages -> LLM-SDKs) nicht in
+    # jeden admin.py-Import zu ziehen.
+    from app.api.routers.pages import SITE_URL
+    return SITE_URL
+
+
+@router.post("/api/admin/shares/{share_id}/moderate")
+def admin_moderate_share(request: Request, share_id: str, data: dict = Body(...)):
+    _require_admin(request, data)
+    action = data.get("action")
+    indexed = data.get("indexed")
+    if indexed is not None and not isinstance(indexed, bool):
+        raise HTTPException(status_code=400, detail="indexed must be a boolean")
+    try:
+        result = snapshots.moderate_share(share_id, action=action, indexed=indexed)
+    except ShareError as exc:
+        raise HTTPException(status_code=_SHARE_ERROR_STATUS.get(exc.code, 400), detail=exc.message)
+    except Exception:
+        logging.exception("admin_moderate_share failed")
+        raise HTTPException(status_code=500, detail="Failed to moderate share")
+    return {
+        "status": "success",
+        "share": {
+            "share_id": share_id,
+            "share_status": result.get("status"),
+            "indexed": bool(result.get("indexed")),
+            "index_eligible": bool(result.get("index_eligible")),
+        },
+    }
 
 
 def normalize_models_document(data: dict) -> dict:

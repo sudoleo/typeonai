@@ -42,6 +42,24 @@ def robots_txt():
 
 @router.get("/sitemap.xml")
 def sitemap_xml():
+    """Sitemap-Index: statische Seiten + vom Admin indexierte Share-Seiten."""
+    sitemaps = "\n".join(
+        "  <sitemap>\n"
+        f"    <loc>{SITE_URL}{path}</loc>\n"
+        "  </sitemap>"
+        for path in ("/sitemap-pages.xml", "/sitemap-shares.xml")
+    )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{sitemaps}\n"
+        "</sitemapindex>\n"
+    )
+    return Response(content=xml, media_type="application/xml")
+
+
+@router.get("/sitemap-pages.xml")
+def sitemap_pages_xml():
     urls = "\n".join(
         [
             "  <url>\n"

@@ -6,8 +6,10 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import app.core.config as cfg
 from app.core.rate_limit import limiter
 from app.api.routers import share as share_router
+from app.api.routers import admin as admin_router
 from app.services import share_snapshots as snapshots
 from app.services.share_snapshots import ShareError
 from app.services.public_markdown import render_public_markdown, markdown_to_plaintext
@@ -60,15 +62,36 @@ class FakeQueryDoc:
 
 
 class FakeQuery:
-    def __init__(self, store, field, op, value):
+    def __init__(self, store, field, op, value, max_items=None):
         self._store = store
         self._field = field
+        self._op = op
         self._value = value
+        self._max_items = max_items
+
+    def limit(self, n):
+        return FakeQuery(self._store, self._field, self._op, self._value, n)
+
+    def _matches(self, data):
+        if self._field is None:
+            return True
+        actual = data.get(self._field)
+        if self._op == "<":
+            try:
+                return actual is not None and actual < self._value
+            except TypeError:
+                return False
+        return actual == self._value
 
     def stream(self):
+        emitted = 0
         for key, data in list(self._store.items()):
-            if data.get(self._field) == self._value:
-                yield FakeQueryDoc(self._store, key)
+            if not self._matches(data):
+                continue
+            yield FakeQueryDoc(self._store, key)
+            emitted += 1
+            if self._max_items is not None and emitted >= self._max_items:
+                break
 
 
 class FakeCollection:
@@ -80,6 +103,9 @@ class FakeCollection:
 
     def where(self, field, op, value):
         return FakeQuery(self._store, field, op, value)
+
+    def limit(self, n):
+        return FakeQuery(self._store, None, None, None, n)
 
 
 class FakeDb:
@@ -241,6 +267,19 @@ class PendingResultTests(unittest.TestCase):
         self.assertFalse(snapshots.compute_index_eligible(good_question, "x" * 600, sources[:1], models))
         self.assertFalse(snapshots.compute_index_eligible(good_question, "x" * 600, sources, models[:2]))
         self.assertFalse(snapshots.compute_index_eligible("kurz", "x" * 600, sources, models))
+
+    def test_index_eligible_uses_limits_config(self):
+        sources = [{"url": "https://a"}, {"url": "https://b"}]
+        models = ["A", "B", "C"]
+        good_question = "Wie funktioniert Photosynthese?"
+        original = cfg.get_limits_config()
+        try:
+            cfg.apply_limits({**original, "share_min_consensus_chars": 50})
+            self.assertTrue(snapshots.compute_index_eligible(good_question, "x" * 100, sources, models))
+            cfg.apply_limits({**original, "share_min_sources": 5})
+            self.assertFalse(snapshots.compute_index_eligible(good_question, "x" * 600, sources, models))
+        finally:
+            cfg.apply_limits(original)
 
 
 class PublicPayloadTests(unittest.TestCase):
@@ -461,6 +500,163 @@ class ShareFlowTests(unittest.TestCase):
         self.assertEqual(set(shares[0].keys()), {"share_id", "path", "question", "status", "created_at"})
 
 
+class ModerationAndCleanupTests(unittest.TestCase):
+    def setUp(self):
+        self.db = FakeDb()
+        self.uid = "user-1"
+        snapshots.invalidate_share_cache()
+
+    def _make_share(self, **overrides):
+        share_id = snapshots.generate_share_id()
+        doc = make_pending(self.uid)
+        doc.update({
+            "status": "active", "slug": "test-slug", "indexed": False,
+            "index_eligible": True, "reports_count": 0,
+            "question_hash": snapshots.question_hash(doc["question"]),
+            "created_at": datetime(2026, 6, 1, tzinfo=timezone.utc),
+        })
+        doc.update(overrides)
+        self.db.stores[snapshots.SHARES_COLLECTION][share_id] = doc
+        return share_id
+
+    def _share(self, share_id):
+        return self.db.stores[snapshots.SHARES_COLLECTION][share_id]
+
+    def test_block_sets_status_and_clears_indexed(self):
+        share_id = self._make_share(indexed=True, needs_review=True)
+        result = snapshots.moderate_share(share_id, action="block", db=self.db)
+        stored = self._share(share_id)
+        self.assertEqual(stored["status"], "blocked")
+        self.assertFalse(stored["indexed"])
+        self.assertFalse(stored["needs_review"])
+        self.assertEqual(result["status"], "blocked")
+
+    def test_unblock_requires_blocked_status(self):
+        share_id = self._make_share(status="blocked")
+        snapshots.moderate_share(share_id, action="unblock", db=self.db)
+        self.assertEqual(self._share(share_id)["status"], "active")
+        with self.assertRaises(ShareError):
+            snapshots.moderate_share(share_id, action="unblock", db=self.db)
+
+    def test_indexed_only_for_active_shares(self):
+        share_id = self._make_share()
+        snapshots.moderate_share(share_id, indexed=True, db=self.db)
+        self.assertTrue(self._share(share_id)["indexed"])
+        snapshots.moderate_share(share_id, indexed=False, db=self.db)
+        self.assertFalse(self._share(share_id)["indexed"])
+
+        blocked_id = self._make_share(status="blocked")
+        with self.assertRaises(ShareError):
+            snapshots.moderate_share(blocked_id, indexed=True, db=self.db)
+        # De-Indexieren bleibt auch für nicht-aktive erlaubt
+        snapshots.moderate_share(blocked_id, indexed=False, db=self.db)
+
+    def test_moderate_validates_input(self):
+        share_id = self._make_share()
+        with self.assertRaises(ShareError):
+            snapshots.moderate_share(share_id, action="purge", db=self.db)
+        with self.assertRaises(ShareError):
+            snapshots.moderate_share(share_id, db=self.db)
+        with self.assertRaises(ShareError):
+            snapshots.moderate_share(snapshots.generate_share_id(), action="block", db=self.db)
+
+    def test_revoke_cannot_be_blocked(self):
+        share_id = self._make_share(status="revoked")
+        with self.assertRaises(ShareError):
+            snapshots.moderate_share(share_id, action="block", db=self.db)
+
+    def test_auto_noindex_after_report_threshold(self):
+        share_id = self._make_share(indexed=True,
+                                    reports_count=snapshots.AUTO_NOINDEX_REPORTS - 1)
+        snapshots.report_share(share_id, "spam", db=self.db)
+        stored = self._share(share_id)
+        self.assertEqual(stored["reports_count"], snapshots.AUTO_NOINDEX_REPORTS)
+        self.assertFalse(stored["indexed"])
+        self.assertTrue(stored["needs_review"])
+
+    def test_reports_below_threshold_keep_indexed(self):
+        share_id = self._make_share(indexed=True)
+        snapshots.report_share(share_id, "spam", db=self.db)
+        stored = self._share(share_id)
+        self.assertTrue(stored["indexed"])
+        self.assertNotIn("needs_review", stored)
+
+    def test_admin_list_prioritizes_review_and_reports(self):
+        plain = self._make_share()
+        reported = self._make_share(reports_count=2)
+        urgent = self._make_share(reports_count=7, needs_review=True)
+
+        shares = snapshots.list_shares_for_admin(db=self.db)
+        self.assertEqual([s["share_id"] for s in shares], [urgent, reported, plain])
+
+        reported_only = snapshots.list_shares_for_admin(db=self.db, only_reported=True)
+        self.assertEqual([s["share_id"] for s in reported_only], [urgent, reported])
+        # Moderationsfelder vorhanden, Snapshot-Inhalte nicht
+        self.assertNotIn("consensus_md", reported_only[0])
+        self.assertEqual(reported_only[0]["reports_count"], 7)
+
+    def test_cleanup_revoked_shares_after_30_days(self):
+        old = self._make_share(status="revoked",
+                               revoked_at=datetime.now(timezone.utc) - timedelta(days=31))
+        recent = self._make_share(status="revoked",
+                                  revoked_at=datetime.now(timezone.utc) - timedelta(days=5))
+        active = self._make_share()
+
+        deleted = snapshots.cleanup_revoked_shares(db=self.db)
+        store = self.db.stores[snapshots.SHARES_COLLECTION]
+        self.assertEqual(deleted, 1)
+        self.assertNotIn(old, store)
+        self.assertIn(recent, store)
+        self.assertIn(active, store)
+
+    def test_find_canonical_share_prefers_oldest_indexed(self):
+        qh = snapshots.question_hash("Wie funktioniert Photosynthese in Pflanzen?")
+        self._make_share(indexed=False)  # nicht indexiert: kein Canonical-Ziel
+        newer = self._make_share(indexed=True,
+                                 created_at=datetime(2026, 6, 10, tzinfo=timezone.utc))
+        oldest = self._make_share(indexed=True,
+                                  created_at=datetime(2026, 6, 2, tzinfo=timezone.utc))
+        self._make_share(indexed=True, status="revoked",
+                         created_at=datetime(2026, 6, 1, tzinfo=timezone.utc))
+
+        best = snapshots.find_canonical_share(qh, db=self.db)
+        self.assertEqual(best["share_id"], oldest)
+
+        other_hash = snapshots.question_hash("ganz andere frage")
+        self.assertIsNone(snapshots.find_canonical_share(other_hash, db=self.db))
+
+    def test_list_indexed_share_urls_filters(self):
+        indexed = self._make_share(indexed=True)
+        self._make_share(indexed=False)
+        self._make_share(indexed=True, status="blocked")
+
+        urls = snapshots.list_indexed_share_urls(db=self.db)
+        self.assertEqual(len(urls), 1)
+        self.assertIn(indexed, urls[0]["path"])
+        self.assertEqual(urls[0]["lastmod"], "2026-06-01")
+
+    def test_share_cache_returns_cached_until_invalidated(self):
+        share_id = self._make_share()
+        first = snapshots.get_share_cached(share_id, db=self.db)
+        self.assertEqual(first["status"], "active")
+
+        # Direkte Firestore-Änderung: Cache liefert weiter den alten Stand …
+        self._share(share_id)["status"] = "blocked"
+        cached = snapshots.get_share_cached(share_id, db=self.db)
+        self.assertEqual(cached["status"], "active")
+
+        # … bis invalidiert wird (wie bei revoke/moderate).
+        snapshots.invalidate_share_cache(share_id)
+        fresh = snapshots.get_share_cached(share_id, db=self.db)
+        self.assertEqual(fresh["status"], "blocked")
+
+    def test_revoke_invalidates_cache(self):
+        share_id = self._make_share()
+        snapshots.get_share_cached(share_id, db=self.db)
+        snapshots.revoke_share(share_id, self.uid, db=self.db)
+        self.assertEqual(snapshots.get_share_cached(share_id, db=self.db)["status"], "revoked")
+
+
 class SharePageRouteTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -469,6 +665,10 @@ class SharePageRouteTests(unittest.TestCase):
         app.include_router(share_router.router)
         cls.client = TestClient(app)
         cls.share_id = snapshots.generate_share_id()
+
+    def setUp(self):
+        # get_share_cached cached sonst das Dokument des vorherigen Tests
+        snapshots.invalidate_share_cache()
 
     def _share_doc(self, **overrides):
         data = make_pending()
@@ -557,6 +757,60 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn('rel="canonical" href="%s"' % canonical, body)
         self.assertIn("copyCitationBtn", body)
 
+    def test_noindex_page_has_seo_tags_and_cache_control(self):
+        doc = self._share_doc()
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("noindex", response.headers.get("X-Robots-Tag", ""))
+        self.assertEqual(
+            response.headers.get("Cache-Control"),
+            "public, max-age=300, s-maxage=86400, stale-while-revalidate=86400",
+        )
+        body = response.text
+        self.assertIn('property="og:title"', body)
+        self.assertIn('name="twitter:card"', body)
+        self.assertIn('name="description"', body)
+        self.assertIn('"@type": "Article"', body)
+        self.assertIn('"citation"', body)
+        self.assertIn("https://example.org/a", body)
+
+    def test_indexed_page_gets_index_follow(self):
+        doc = self._share_doc(indexed=True)
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        self.assertEqual(response.headers.get("X-Robots-Tag"), "index, follow")
+        self.assertIn('content="index, follow"', response.text)
+        # selbst-kanonisch
+        canonical = "%s/s/%s-%s" % (share_router.SITE_URL, doc["slug"], self.share_id)
+        self.assertIn('rel="canonical" href="%s"' % canonical, response.text)
+
+    def test_noindex_duplicate_points_canonical_to_indexed_share(self):
+        doc = self._share_doc(question_hash="qh-1")
+        target = {"share_id": snapshots.generate_share_id(), "slug": "anderer-slug", "created_key": ""}
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router.snapshots, "find_canonical_share",
+                             return_value=target) as mocked:
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        mocked.assert_called_once_with("qh-1")
+        body = response.text
+        canonical = "%s/s/%s-%s" % (share_router.SITE_URL, target["slug"], target["share_id"])
+        own_url = "%s/s/%s-%s" % (share_router.SITE_URL, doc["slug"], self.share_id)
+        self.assertIn('rel="canonical" href="%s"' % canonical, body)
+        # Zitation bleibt auf der eigenen URL, nur das rel=canonical dedupliziert
+        self.assertIn("Retrieved from %s" % own_url, body)
+        self.assertIn("noindex", response.headers.get("X-Robots-Tag", ""))
+
+    def test_sitemap_shares_lists_only_indexed(self):
+        urls = [{"path": "/s/frage-eins-abc", "lastmod": "2026-06-10"}]
+        with patch.object(share_router.snapshots, "list_indexed_share_urls", return_value=urls):
+            response = self.client.get("/sitemap-shares.xml")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("application/xml", response.headers.get("content-type", ""))
+        body = response.text
+        self.assertIn("<loc>%s/s/frage-eins-abc</loc>" % share_router.SITE_URL, body)
+        self.assertIn("<lastmod>2026-06-10</lastmod>", body)
+
     def test_report_endpoint_maps_share_errors(self):
         with patch.object(share_router.snapshots, "report_share", return_value=1) as mocked:
             response = self.client.post(
@@ -624,6 +878,71 @@ class ShareApiRouteTests(unittest.TestCase):
                              side_effect=ShareError("forbidden", "You can only revoke your own shares.")):
             response = self.client.delete("/api/share/%s" % self.share_id)
         self.assertEqual(response.status_code, 403)
+
+
+class AdminShareRouteTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        app = FastAPI()
+        app.state.limiter = limiter
+        app.include_router(admin_router.router)
+        cls.client = TestClient(app)
+        cls.share_id = snapshots.generate_share_id()
+
+    def _admin_patches(self, is_admin=True):
+        return (
+            patch.object(admin_router, "extract_id_token", return_value="tok"),
+            patch.object(admin_router, "verify_user_token", return_value="admin-1"),
+            patch.object(admin_router, "is_user_admin", return_value=is_admin),
+        )
+
+    def test_list_requires_admin(self):
+        token_patch, verify_patch, admin_patch = self._admin_patches(is_admin=False)
+        with token_patch, verify_patch, admin_patch:
+            response = self.client.get("/api/admin/shares")
+        self.assertEqual(response.status_code, 403)
+
+    def test_list_passes_filter(self):
+        token_patch, verify_patch, admin_patch = self._admin_patches()
+        with token_patch, verify_patch, admin_patch, \
+                patch.object(admin_router, "snapshots_site_url", return_value="https://x"), \
+                patch.object(admin_router.snapshots, "list_shares_for_admin",
+                             return_value=[]) as mocked:
+            response = self.client.get("/api/admin/shares")
+            self.assertEqual(response.status_code, 200)
+            mocked.assert_called_with(only_reported=True)
+
+            response = self.client.get("/api/admin/shares?filter=all")
+            self.assertEqual(response.status_code, 200)
+            mocked.assert_called_with(only_reported=False)
+
+    def test_moderate_forwards_action_and_indexed(self):
+        token_patch, verify_patch, admin_patch = self._admin_patches()
+        result = {"status": "blocked", "indexed": False, "index_eligible": True}
+        with token_patch, verify_patch, admin_patch, \
+                patch.object(admin_router.snapshots, "moderate_share",
+                             return_value=result) as mocked:
+            response = self.client.post(
+                "/api/admin/shares/%s/moderate" % self.share_id,
+                json={"action": "block"})
+        self.assertEqual(response.status_code, 200)
+        mocked.assert_called_once_with(self.share_id, action="block", indexed=None)
+        self.assertEqual(response.json()["share"]["share_status"], "blocked")
+
+    def test_moderate_validates_indexed_type_and_maps_errors(self):
+        token_patch, verify_patch, admin_patch = self._admin_patches()
+        with token_patch, verify_patch, admin_patch:
+            response = self.client.post(
+                "/api/admin/shares/%s/moderate" % self.share_id,
+                json={"indexed": "yes"})
+            self.assertEqual(response.status_code, 400)
+
+            with patch.object(admin_router.snapshots, "moderate_share",
+                              side_effect=ShareError("not_found", "Share not found.")):
+                response = self.client.post(
+                    "/api/admin/shares/%s/moderate" % self.share_id,
+                    json={"action": "block"})
+            self.assertEqual(response.status_code, 404)
 
 
 if __name__ == "__main__":

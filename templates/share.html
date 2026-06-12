@@ -3,9 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="noindex, follow">
+  <meta name="robots" content="{{ robots_meta }}">
   <link rel="canonical" href="{{ canonical_url }}">
   <title>{{ question[:70] }} – consens.io</title>
+  <meta name="description" content="{{ meta_description }}">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="consens.io">
+  <meta property="og:title" content="{{ question[:70] }}">
+  <meta property="og:description" content="{{ meta_description }}">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta property="og:image" content="{{ og_image }}">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{ question[:70] }}">
+  <meta name="twitter:description" content="{{ meta_description }}">
+  <script type="application/ld+json">{{ jsonld | safe }}</script>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/public-pages.css?v=20260610-restyle1">
   <link rel="icon" href="/static/favicon-square.png?v=20260523-logo1" type="image/png">

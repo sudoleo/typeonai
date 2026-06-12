@@ -1,8 +1,9 @@
+import json
 import logging
 import re
 
 from fastapi import APIRouter, Request, Body, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from app.core.rate_limit import limiter
@@ -10,7 +11,11 @@ from app.core.security import verify_user_token, extract_id_token, is_user_admin
 from app.api.routers.pages import SITE_URL
 from app.services import share_snapshots as snapshots
 from app.services.share_snapshots import ShareError
-from app.services.public_markdown import render_public_markdown
+from app.services.public_markdown import render_public_markdown, markdown_to_plaintext
+
+# Browser 5 min, (zukünftiges) CDN 1 Tag; Invalidierung bei Revoke/Block läuft
+# über den In-Process-Cache + kurze max-age, ein CDN gibt es bewusst nicht.
+SHARE_CACHE_CONTROL = "public, max-age=300, s-maxage=86400, stale-while-revalidate=86400"
 
 templates = Jinja2Templates(directory="templates")
 
@@ -115,6 +120,38 @@ def _unavailable_response(request, status_code, heading, message):
     return response
 
 
+@router.get("/sitemap-shares.xml")
+@limiter.limit("30/minute")
+async def sitemap_shares(request: Request):
+    """Nur vom Admin indexierte UND aktive Shares – alles andere ist noindex
+    und hat in der Sitemap nichts verloren."""
+    try:
+        urls = snapshots.list_indexed_share_urls()
+    except Exception:
+        logging.exception("sitemap_shares failed")
+        raise HTTPException(status_code=500, detail="Error building sitemap")
+
+    entries = "\n".join(
+        "  <url>\n"
+        f"    <loc>{SITE_URL}{item['path']}</loc>\n"
+        + (f"    <lastmod>{item['lastmod']}</lastmod>\n" if item["lastmod"] else "")
+        + "    <changefreq>monthly</changefreq>\n"
+        "  </url>"
+        for item in urls
+    )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{entries}\n"
+        "</urlset>\n"
+    )
+    return Response(
+        content=xml,
+        media_type="application/xml",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @router.get("/s/{slug_id}", response_class=HTMLResponse)
 @limiter.limit("30/minute")
 async def share_page(request: Request, slug_id: str):
@@ -126,7 +163,7 @@ async def share_page(request: Request, slug_id: str):
         )
 
     try:
-        data = snapshots.get_share(share_id)
+        data = snapshots.get_share_cached(share_id)
     except Exception:
         logging.exception("share_page lookup failed")
         raise HTTPException(status_code=500, detail="Error loading shared page")
@@ -150,8 +187,27 @@ async def share_page(request: Request, slug_id: str):
         )
 
     payload = snapshots.public_share_payload(data)
-    canonical_url = SITE_URL + snapshots.share_path(canonical_slug, share_id)
+    page_url = SITE_URL + snapshots.share_path(canonical_slug, share_id)
     consensus_html = render_public_markdown(payload["consensus_md"], payload["sources"])
+
+    # Indexierung: nur wenn der Admin "indexed" gesetzt hat (nie automatisch).
+    is_indexed = bool(data.get("indexed"))
+    robots_meta = "index, follow" if is_indexed else "noindex, follow"
+
+    # Canonical-Dedup über question_hash: Nicht indexierte Duplikate zeigen
+    # auf den ältesten aktiven UND indexierten Share derselben Frage. Ein
+    # Canonical zeigt nie auf eine noindex-Seite; ohne Ziel: selbst-kanonisch.
+    canonical_url = page_url
+    if not is_indexed and data.get("question_hash"):
+        try:
+            canonical_target = snapshots.find_canonical_share(data["question_hash"])
+        except Exception:
+            logging.exception("find_canonical_share failed")
+            canonical_target = None
+        if canonical_target and canonical_target["share_id"] != share_id:
+            canonical_url = SITE_URL + snapshots.share_path(
+                canonical_target["slug"], canonical_target["share_id"]
+            )
 
     sources_view = []
     for source in payload["sources"]:
@@ -179,6 +235,28 @@ async def share_page(request: Request, slug_id: str):
     contradiction_count = sum(1 for d in differences if d.get("type") == "contradiction")
 
     date_iso = payload["answered_at"] or payload["created_at"]
+    meta_description = markdown_to_plaintext(payload["consensus_md"], limit=160)
+
+    jsonld = {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": payload["question"][:110],
+        "description": meta_description,
+        "datePublished": date_iso,
+        "dateModified": date_iso,
+        "mainEntityOfPage": {"@type": "WebPage", "@id": page_url},
+        "author": {"@type": "Organization", "name": "consens.io", "url": SITE_URL},
+        "publisher": {
+            "@type": "Organization",
+            "name": "consens.io",
+            "logo": {"@type": "ImageObject", "url": SITE_URL + "/static/favicon-square.png"},
+        },
+        "citation": [s["url"] for s in sources_view if s["url"]][:10],
+        "isAccessibleForFree": True,
+    }
+    # "</" escapen, damit Snapshot-Inhalte das <script>-Element nie schließen können.
+    jsonld_html = json.dumps(jsonld, ensure_ascii=False).replace("</", "<\\/")
+
     response = templates.TemplateResponse("share.html", {
         "request": request,
         "share_id": share_id,
@@ -194,8 +272,14 @@ async def share_page(request: Request, slug_id: str):
         "consensus_model": payload["consensus_model"],
         "date_display": date_iso[:10] if date_iso else "",
         "canonical_url": canonical_url,
-        "citation_text": snapshots.build_citation(payload, canonical_url),
+        "page_url": page_url,
+        "robots_meta": robots_meta,
+        "meta_description": meta_description,
+        "og_image": SITE_URL + "/static/favicon-square.png",
+        "jsonld": jsonld_html,
+        # Zitation immer mit der eigenen URL der Seite (nicht dem Dedup-Canonical).
+        "citation_text": snapshots.build_citation(payload, page_url),
     })
-    # Etappe 1: hartes noindex; die Qualitätsfilter-/indexed-Logik kommt in Etappe 3.
-    response.headers["X-Robots-Tag"] = "noindex, follow"
+    response.headers["X-Robots-Tag"] = robots_meta
+    response.headers["Cache-Control"] = SHARE_CACHE_CONTROL
     return response

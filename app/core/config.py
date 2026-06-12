@@ -35,6 +35,13 @@ DEFAULT_LIMITS = {
     "pro_deep_search_max_tokens": 8192,
     "consensus_max_tokens": 8192,
     "differences_max_tokens": 4096,
+    # Qualitätsfilter für index_eligible von Share-Snapshots (Etappe 3):
+    # steuert nur die Eligibility-Anzeige, indexed setzt weiterhin der Admin.
+    "share_min_consensus_chars": 600,
+    "share_min_sources": 2,
+    "share_min_models": 3,
+    "share_question_min_chars": 15,
+    "share_question_max_chars": 300,
 }
 
 LIMITS = DEFAULT_LIMITS.copy()
