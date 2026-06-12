@@ -343,7 +343,14 @@ class PublicMarkdownTests(unittest.TestCase):
         html = render_public_markdown("Fakt eins. [S1] Fakt zwei. [S1, S2]", self.SOURCES)
         self.assertIn('href="#src-1"', html)
         self.assertIn('href="#src-2"', html)
-        self.assertIn("[S1]", html)
+        # Link-Text ist der erkennbare Site-Name, nicht der technische Marker.
+        self.assertIn(">example<", html)
+        self.assertNotIn("[S1]", html)
+
+    def test_source_tags_without_url_fall_back_to_id(self):
+        html = render_public_markdown("Fakt. [S1]", [{"id": "S1", "url": ""}])
+        self.assertIn('href="#src-1"', html)
+        self.assertIn(">S1<", html)
 
     def test_unknown_source_tags_untouched(self):
         html = render_public_markdown("Fakt. [S9]", self.SOURCES)
@@ -363,6 +370,11 @@ class PublicMarkdownTests(unittest.TestCase):
         self.assertNotIn("<", text)
         self.assertNotIn("#", text)
         self.assertLessEqual(len(text), 15)
+
+    def test_plaintext_strips_source_tags(self):
+        text = markdown_to_plaintext("Fakt eins. [S1] Fakt zwei. [S1, S2]")
+        self.assertNotIn("[S1]", text)
+        self.assertNotIn("[S1, S2]", text)
 
 
 class ShareFlowTests(unittest.TestCase):

@@ -6,7 +6,7 @@
    Buttons & Inputs
    -------------------------------------------------------------------------- */
 .button,
-button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(.sidebar-toggle-btn):not(#clearButton):not(#consensusButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle):not(.model-picker-display):not(.model-picker-option):not(.mode-explainer-trigger):not(.mode-explainer-dismiss):not(.attach-trigger):not(.attach-menu-item):not(.attachment-chip-remove):not(.attachment-viewer-close):not(.claim-badge):not(.claim-jump-link):not(.claim-popover-close) {
+button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(.sidebar-toggle-btn):not(#clearButton):not(#consensusButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.consensus-share-pill):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle):not(.model-picker-display):not(.model-picker-option):not(.mode-explainer-trigger):not(.mode-explainer-dismiss):not(.attach-trigger):not(.attach-menu-item):not(.attachment-chip-remove):not(.attachment-viewer-close):not(.claim-badge):not(.claim-jump-link):not(.claim-popover-close) {
   padding: 10px 16px;
   font-size: 1em;
   background:
@@ -1553,8 +1553,10 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   gap: 8px;
   flex-wrap: nowrap;
   margin: 0 0 14px;
-  padding-right: 38px;
-  padding-left: 38px;
+  /* Platz fuer Share-Pill + Aktionsmenue oben rechts (symmetrisch, damit
+     die Ueberschrift zentriert bleibt) */
+  padding-right: 122px;
+  padding-left: 122px;
   color: var(--text-color);
   font-size: 1.02rem;
   font-weight: 650;
@@ -1658,6 +1660,52 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 7px;
+}
+
+/* Share-Button oben rechts im Consensus-Bereich */
+.consensus-share-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--sidebar-border));
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 38%, transparent), transparent 62%),
+    color-mix(in srgb, var(--accent) 8%, var(--response-bg));
+  color: color-mix(in srgb, var(--accent) 68%, var(--text-color));
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.015em;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 4px 12px color-mix(in srgb, var(--accent) 9%, transparent);
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease;
+}
+
+.consensus-share-pill:hover,
+.consensus-share-pill:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--sidebar-border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 44%, transparent), transparent 62%),
+    color-mix(in srgb, var(--accent) 13%, var(--response-bg));
+  color: color-mix(in srgb, var(--accent) 82%, var(--text-color));
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 7px 18px color-mix(in srgb, var(--accent) 16%, transparent);
+  outline: none;
+}
+
+.consensus-share-pill:active {
+  transform: translateY(1px);
+}
+
+.share-pill-icon {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
 }
 
 .consensus-actions-wrapper {
@@ -1740,6 +1788,14 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.8)) saturate(1.2);
 }
 
+.dark-mode .consensus-actions-menu {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--container-bg) 96%, #ffffff 4%);
+  border-color: color-mix(in srgb, var(--glass-border) 90%, transparent);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
 .consensus-actions-menu.open {
   display: block;
 }
@@ -1769,6 +1825,18 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   background: color-mix(in srgb, var(--accent) 8%, var(--sidebar-hover));
   color: color-mix(in srgb, var(--text-color) 88%, var(--accent));
   outline: none;
+}
+
+.consensus-actions-menu .menu-item-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--sidebar-text-muted);
+}
+
+.consensus-actions-menu .consensus-copy-icon-btn:hover .menu-item-icon,
+.consensus-actions-menu .consensus-copy-icon-btn:focus-visible .menu-item-icon {
+  color: var(--accent);
 }
 
 .copy-icon {
@@ -3575,33 +3643,33 @@ h2[data-tooltip] {
   display: inline-flex;
   align-items: center;
   max-width: min(180px, 100%);
-  margin: 0 1px;
-  padding: 0 2px;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: color-mix(in srgb, var(--accent) 68%, var(--text-color));
-  font-size: 0.72rem;
+  margin: 0 2px;
+  padding: 1px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: color-mix(in srgb, var(--accent) 70%, var(--text-color));
+  font-size: 0.68rem;
   font-weight: 650;
-  line-height: 1.35;
+  letter-spacing: 0.01em;
+  line-height: 1.45;
   text-decoration: none;
-  text-decoration-color: color-mix(in srgb, var(--accent) 28%, transparent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
   vertical-align: baseline;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   transform: translateY(-1px);
-  transition: background-color 0.15s ease, color 0.15s ease, text-decoration-color 0.15s ease;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 36%, transparent);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .source-link:hover,
 .source-link:focus-visible {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  color: var(--text-color);
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: color-mix(in srgb, var(--accent) 50%, var(--text-color));
+  text-decoration: none;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 40%, transparent), 0 3px 9px color-mix(in srgb, var(--accent) 11%, transparent);
   opacity: 1;
 }
 
@@ -3611,12 +3679,14 @@ h2[data-tooltip] {
 }
 
 .dark-mode .source-link {
-  color: color-mix(in srgb, var(--accent) 62%, var(--text-color));
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: color-mix(in srgb, var(--accent) 70%, var(--text-color));
 }
 
 .dark-mode .source-link:hover,
 .dark-mode .source-link:focus-visible {
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  background: color-mix(in srgb, var(--accent) 17%, transparent);
 }
 
 .source-list-cluster {
@@ -4714,12 +4784,24 @@ option.early-option {
   .consensus-main h2 {
     justify-content: flex-start;
     padding-left: 0;
-    padding-right: 34px;
+    padding-right: 72px;
     text-align: left;
   }
 
   .consensus-copy-inline {
     right: 0;
+    gap: 6px;
+  }
+
+  /* Mobil: Share-Pill als kompakter Icon-Button */
+  .consensus-share-pill {
+    min-height: 28px;
+    width: 28px;
+    padding: 0;
+  }
+
+  .consensus-share-pill .share-pill-label {
+    display: none;
   }
 
   .consensus-differences h2 {

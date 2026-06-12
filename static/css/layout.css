@@ -86,6 +86,7 @@ body:has(.sidebar.collapsed) .main-wrapper {
   top: 0;
   left: 0;
   width: 100%;
+  box-sizing: border-box;
   height: 45px;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--glass-bg-strong) 92%, transparent), color-mix(in srgb, var(--glass-bg) 84%, transparent)),
@@ -105,15 +106,16 @@ body:has(.sidebar.collapsed) .main-wrapper {
 .top-bar-right {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   margin-left: auto;
-  margin-right: 30px;
+  margin-right: 8px;
 }
 
 .top-bar-logo {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
+  min-width: 0;
 }
 
 #logoLink {
@@ -124,10 +126,10 @@ body:has(.sidebar.collapsed) .main-wrapper {
 }
 
 .top-bar-favicon {
-  height: 24px;
+  height: 22px;
   width: auto;
   aspect-ratio: 279 / 200;
-  margin-right: 8px;
+  display: block;
   object-fit: contain;
   filter: invert(1);
   transition: filter 0.3s ease;
@@ -137,30 +139,103 @@ body:has(.sidebar.collapsed) .main-wrapper {
   filter: invert(0);
 }
 
-.top-bar-about {
-  font-size: 1em;
+.top-bar-title {
   color: var(--text-color);
-  opacity: 0.78;
+  font-size: 1.01rem;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+  line-height: 1;
   white-space: nowrap;
+}
+
+.top-bar-plan {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+#proBadge {
+  display: none;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, #d4af37 55%, transparent);
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, color-mix(in srgb, #ffffff 24%, transparent), transparent 60%), #c9a232;
+  color: #ffffff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 4px 12px rgba(201, 162, 50, 0.24);
+}
+
+#upgradeLink {
+  display: none;
+  padding: 5px 11px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 85%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--glass-bg-strong) 60%, transparent);
+  color: var(--sidebar-text-muted);
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  transition: color .15s ease, border-color .15s ease, background-color .15s ease;
+}
+
+#upgradeLink:hover {
+  color: var(--text-color);
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--sidebar-border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--glass-bg-strong));
+}
+
+.top-bar-about {
+  font-size: 0.9rem;
+  font-weight: 550;
+  color: color-mix(in srgb, var(--text-color) 76%, var(--sidebar-text-muted));
+  white-space: nowrap;
+  transition: color .15s ease;
+}
+
+.top-bar-about:hover {
+  color: var(--text-color);
 }
 
 .top-bar-divider {
   width: 1px;
-  height: 18px;
-  background: rgba(128, 128, 128, 0.4);
+  height: 16px;
+  background: color-mix(in srgb, var(--sidebar-border) 80%, transparent);
 }
 
 .login-text {
-  cursor: pointer;
-  font-size: 1em;
-  transition: color 0.3s;
-  color: var(--text-color);
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  min-height: 30px;
+  padding: 0 13px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 80%, transparent);
+  border-radius: var(--radius-pill);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 36%, transparent), transparent 62%),
+    color-mix(in srgb, var(--glass-bg-strong) 62%, transparent);
+  color: var(--text-color);
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 1px 3px rgba(15, 23, 42, 0.05);
+  transition: color .15s ease, border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
 }
 
 .login-text:hover {
-  color: var(--button-bg);
+  color: var(--text-color);
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--sidebar-border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 42%, transparent), transparent 62%),
+    color-mix(in srgb, var(--accent) 8%, var(--glass-bg-strong));
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 6px 16px color-mix(in srgb, var(--accent) 10%, transparent);
   text-decoration: none;
   opacity: 1;
 }
@@ -211,17 +286,18 @@ body:has(.sidebar.collapsed) .main-wrapper {
   justify-content: center;
   background: transparent;
   border: none;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  margin-right: 15px;
-  width: 40px;
-  height: 40px;
+  margin-right: 10px;
+  width: 34px;
+  height: 34px;
   z-index: var(--z-sidebar-toggle);
+  transition: background-color .15s ease, box-shadow .15s ease;
 }
 
 .sidebar-toggle:hover {
   background-color: color-mix(in srgb, var(--glass-bg-strong) 72%, transparent);
-  border-radius: 50%;
-  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 8px 22px rgba(37, 52, 67, 0.1);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 6px 16px rgba(37, 52, 67, 0.08);
 }
 
 .dark-mode .sidebar-toggle:hover {
@@ -230,17 +306,47 @@ body:has(.sidebar.collapsed) .main-wrapper {
 
 .burger-icon {
   display: inline-block;
-  width: 40px;
-  height: 40px;
-  line-height: 40px;
-  font-size: 22px;
+  width: 34px;
+  height: 34px;
+  line-height: 34px;
+  font-size: 19px;
   text-align: center;
   color: var(--icon-color);
 }
 
+/* Sections sind eigenstaendige Cards – die alten Trennlinien entfallen. */
 .sidebar-separator {
-  border-top: 1px solid color-mix(in srgb, var(--glass-border) 48%, var(--sidebar-border));
-  margin: 20px 0;
+  display: none;
+}
+
+/* Einheitliche Section-Cards (Usage, Models, Leaderboard, Bookmarks) */
+.sidebar-section,
+#usageOptions {
+  margin: 0 0 10px;
+  padding: 11px 12px 12px;
+  border: 1px solid color-mix(in srgb, var(--glass-border) 52%, var(--sidebar-border));
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 26%, transparent), transparent 46%),
+    color-mix(in srgb, var(--container-bg) 76%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 58%, transparent), 0 4px 14px rgba(37, 52, 67, 0.045);
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.sidebar-section.is-collapsed {
+  padding-bottom: 11px;
+}
+
+.sidebar-static-heading {
+  text-align: left;
+  margin: 0 0 9px;
+  padding: 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sidebar-text-muted);
+  font-weight: 700;
 }
 
 .sidebar-settings {
@@ -286,13 +392,18 @@ body:has(.sidebar.collapsed) .main-wrapper {
 
 .sidebar-section h2 {
   text-align: left;
-  margin: 0 0 8px;
+  margin: 0;
   padding: 0;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   color: var(--sidebar-text-muted);
-  font-weight: 600;
+  font-weight: 700;
+}
+
+/* Geoeffnete Sections: etwas Abstand zwischen Heading und Inhalt */
+.sidebar-section:not(.is-collapsed) h2 {
+  margin-bottom: 8px;
 }
 
 .sidebar-section .sidebar-toggle-heading {
@@ -389,30 +500,35 @@ body:has(.sidebar.collapsed) .main-wrapper {
 }
 
 
-/* --- Restored missing styles --- */
-#usageOptions {
-  text-align: left;
-  margin: 0 0 14px;
-  padding: 0;
-}
-#usageDisplay { 
-  display: flex; 
+/* --- Usage (Section-Card-Look kommt von #usageOptions oben) --- */
+#usageDisplay {
+  display: flex;
   flex-direction: column;
-  gap: 7px;
-  background: color-mix(in srgb, var(--container-bg) 88%, var(--sidebar-hover) 12%);
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 76%, transparent);
-  border-radius: var(--radius-xs); 
-  padding: 10px 11px; 
-  font-size: 0.76rem; 
+  gap: 0;
+  font-size: 0.78rem;
   font-family: inherit;
-  color: var(--text-color); 
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.035);
+  color: var(--text-color);
 }
 #usageDisplay span {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 10px;
+  min-height: 26px;
+  align-items: center;
   line-height: 1.25;
+  color: var(--sidebar-text-muted);
+}
+#usageDisplay span + span {
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 42%, transparent);
+}
+#usageDisplay span:empty {
+  display: none;
+}
+#usageDisplay strong {
+  color: var(--text-color);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
 }
 #usageDisplay br { display: none; }
 
@@ -420,21 +536,25 @@ body:has(.sidebar.collapsed) .main-wrapper {
   display: flex;
   flex-direction: column;
   flex-wrap: nowrap;
-  gap: 5px;
+  gap: 6px;
   padding: 0;
-  margin-top: 8px;
+  margin-top: 2px;
 }
-.model-selection label { 
-  display: flex; 
-  align-items: center; 
-  gap: 9px; 
+.model-selection label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   width: 100%;
-  min-height: 32px;
-  padding: 7px 9px; 
-  font-size: 0.8rem; 
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 62%, transparent);
-  border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--container-bg) 74%, var(--sidebar-hover) 26%);
+  min-height: 34px;
+  padding: 7px 10px;
+  font-size: 0.8rem;
+  font-weight: 550;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 56%, transparent);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 22%, transparent), transparent 58%),
+    color-mix(in srgb, var(--container-bg) 72%, var(--sidebar-hover) 28%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 46%, transparent);
   cursor: pointer;
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   color: var(--text-color);
@@ -443,10 +563,12 @@ body:has(.sidebar.collapsed) .main-wrapper {
 }
 .model-selection label.is-unselected {
   width: 100%;
-  min-height: 32px;
+  min-height: 34px;
   justify-content: flex-start;
   color: var(--sidebar-text-muted);
+  font-weight: 500;
   background: transparent;
+  box-shadow: none;
   opacity: 1;
 }
 .model-selection label.is-unselected input {
@@ -466,23 +588,26 @@ body:has(.sidebar.collapsed) .main-wrapper {
 }
 
 #bookmarksContainer {
-  margin-top: 10px;
+  margin-top: 2px;
 }
 
-.bookmark { 
-  cursor: pointer; 
-  background: color-mix(in srgb, var(--container-bg) 72%, var(--sidebar-hover) 28%); 
-  font-size: 0.79rem; 
-  margin-bottom: 6px; 
-  padding: 9px 34px 9px 10px; 
-  border: 1px solid transparent; 
-  border-radius: var(--radius-xs); 
-  text-align: left; 
-  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease; 
-  position: relative; 
-  width: 100%; 
-  display: block; 
-  color: inherit; 
+.bookmark {
+  cursor: pointer;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 18%, transparent), transparent 58%),
+    color-mix(in srgb, var(--container-bg) 70%, var(--sidebar-hover) 30%);
+  font-size: 0.79rem;
+  margin-bottom: 6px;
+  padding: 8px 34px 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 48%, transparent);
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 40%, transparent);
+  text-align: left;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  position: relative;
+  width: 100%;
+  display: block;
+  color: inherit;
   box-sizing: border-box;
 }
 .bookmark p {
@@ -493,6 +618,7 @@ body:has(.sidebar.collapsed) .main-wrapper {
   overflow-wrap: anywhere;
   padding-right: 0;
   margin: 0;
+  min-height: calc(2 * 1.35em); /* zwei Zeilen reservieren – alle Items gleich hoch */
   line-height: 1.35;
 }
 .sidebar .bookmark:hover {
@@ -533,7 +659,18 @@ body:has(.sidebar.collapsed) .main-wrapper {
   color: var(--clear-button-text);
   outline: none;
 }
-#editSystemPromptBtn { background-color: transparent !important; color: var(--text-color) !important; border: 1px solid var(--sidebar-border) !important; padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; width: 100%; margin: 0; }
+#editSystemPromptBtn {
+  background-color: color-mix(in srgb, var(--container-bg) 64%, transparent) !important;
+  color: var(--text-color) !important;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent) !important;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 44%, transparent);
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  margin: 0;
+}
 #editSystemPromptBtn:hover { background-color: var(--sidebar-hover) !important; }
 #editSystemPromptBtn .settings-icon { margin-right: 8px; font-size: 14px; display: inline-block; }
 
@@ -542,9 +679,11 @@ body:has(.sidebar.collapsed) .main-wrapper {
     top: 45px;
     width: min(82vw, 360px);
     height: calc(100% - 45px);
-    padding: 10px;
-    background: var(--container-bg);
-    box-shadow: 16px 0 40px rgba(15, 23, 42, 0.16);
+    padding: 12px;
+    background:
+      linear-gradient(165deg, color-mix(in srgb, var(--glass-bg-strong) 88%, transparent), color-mix(in srgb, var(--glass-bg) 80%, transparent)),
+      color-mix(in srgb, var(--container-bg) 96%, transparent);
+    box-shadow: 16px 0 48px rgba(15, 23, 42, 0.18), inset -1px 0 0 color-mix(in srgb, var(--glass-highlight) 48%, transparent);
     transform: translateX(-100%);
   }
 
@@ -553,9 +692,9 @@ body:has(.sidebar.collapsed) .main-wrapper {
   }
 
   .sidebar-content {
-    margin-top: 8px;
+    margin-top: 6px;
     margin-bottom: 88px;
-    padding: 10px;
+    padding: 2px;
   }
 
   .sidebar-settings {
@@ -583,12 +722,12 @@ body:has(.sidebar.collapsed) .main-wrapper {
   }
 
   .top-bar {
-    padding-inline: 12px;
+    padding-inline: 10px 12px;
   }
 
   .top-bar-right {
-    gap: 14px;
-    margin-right: 34px;
+    gap: 10px;
+    margin-right: 0;
   }
 
   .top-bar .mode-switch {
@@ -600,8 +739,26 @@ body:has(.sidebar.collapsed) .main-wrapper {
     display: none;
   }
 
+  .top-bar-logo {
+    gap: 8px;
+  }
+
+  .top-bar-favicon {
+    height: 20px;
+  }
+
   .top-bar-title {
-    display: none;
+    font-size: 0.96rem;
+  }
+
+  .login-text {
+    min-height: 29px;
+    padding-inline: 12px;
+    font-size: 0.83rem;
+  }
+
+  .sidebar-toggle {
+    margin-right: 6px;
   }
 
   .container {

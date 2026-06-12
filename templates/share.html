@@ -18,7 +18,7 @@
   <meta name="twitter:description" content="{{ meta_description }}">
   <script type="application/ld+json">{{ jsonld | safe }}</script>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260610-restyle1">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260612-polish1">
   <link rel="icon" href="/static/favicon-square.png?v=20260523-logo1" type="image/png">
   <script>
     (function () {
@@ -31,43 +31,7 @@
   </script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
-  <style>
-    .share-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.85rem; opacity: 0.75; margin: 0 0 6px; }
-    .share-md { line-height: 1.65; overflow-wrap: anywhere; }
-    .share-md p, .share-md ul, .share-md ol, .share-md table, .share-md blockquote, .share-md pre { margin: 0 0 14px; }
-    .share-md h1, .share-md h2, .share-md h3, .share-md h4 { margin: 22px 0 10px; line-height: 1.3; }
-    .share-md ul, .share-md ol { padding-left: 22px; }
-    .share-md pre { overflow-x: auto; padding: 12px; border-radius: 10px; background: rgba(0, 0, 0, 0.06); }
-    .dark-mode .share-md pre { background: rgba(255, 255, 255, 0.08); }
-    .share-md code { font-size: 0.9em; }
-    .share-md table { border-collapse: collapse; display: block; overflow-x: auto; }
-    .share-md th, .share-md td { border: 1px solid rgba(127, 127, 127, 0.35); padding: 6px 10px; text-align: left; }
-    .share-md blockquote { border-left: 3px solid rgba(127, 127, 127, 0.45); padding-left: 12px; opacity: 0.9; }
-    .share-md a[href^="#src-"] { text-decoration: none; font-size: 0.8em; vertical-align: super; }
-    .share-sources li { margin: 0 0 8px; overflow-wrap: anywhere; }
-    .share-sources li:target { background: rgba(127, 127, 127, 0.15); border-radius: 6px; }
-    .share-citation-text { font-size: 0.85rem; opacity: 0.85; overflow-wrap: anywhere; }
-    .share-disclaimer { font-size: 0.85rem; opacity: 0.7; }
-    .share-toggle { display: inline-flex; gap: 4px; margin: 18px 0 0; padding: 4px; border: 1px solid rgba(127, 127, 127, 0.35); border-radius: 999px; }
-    .share-toggle button { border: none; background: transparent; color: inherit; font: inherit; font-size: 0.9rem; padding: 7px 18px; border-radius: 999px; cursor: pointer; opacity: 0.7; }
-    .share-toggle button[aria-pressed="true"] { background: rgba(127, 127, 127, 0.18); opacity: 1; font-weight: 600; }
-    .diff-verdict { font-weight: 600; margin: 0 0 16px; }
-    .diff-card { border: 1px solid rgba(127, 127, 127, 0.3); border-radius: 12px; padding: 14px 16px; margin: 0 0 14px; }
-    .diff-card h3 { margin: 6px 0 10px; font-size: 1rem; line-height: 1.4; }
-    .diff-type { display: inline-block; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 10px; border-radius: 999px; background: rgba(127, 127, 127, 0.18); }
-    .diff-type-contradiction { background: rgba(220, 60, 60, 0.16); color: #c0392b; }
-    .dark-mode .diff-type-contradiction { color: #ff8a7a; }
-    .diff-position { margin: 0 0 10px; }
-    .diff-stance { margin: 0 0 2px; }
-    .diff-models { margin: 0; font-size: 0.8rem; opacity: 0.7; }
-    .diff-position blockquote { margin: 4px 0 0; padding-left: 10px; border-left: 3px solid rgba(127, 127, 127, 0.45); font-size: 0.88rem; opacity: 0.9; }
-    .diff-verify { margin: 10px 0 0; font-size: 0.85rem; font-style: italic; opacity: 0.8; }
-    .share-report { margin-top: 10px; font-size: 0.85rem; }
-    .share-report-toggle { border: none; background: transparent; color: inherit; font: inherit; font-size: 0.85rem; opacity: 0.6; text-decoration: underline; cursor: pointer; padding: 0; }
-    .share-report-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
-    .share-report-form select { font: inherit; font-size: 0.85rem; padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(127, 127, 127, 0.4); background: transparent; color: inherit; }
-    .share-report-form button { font: inherit; font-size: 0.85rem; padding: 6px 14px; border-radius: 8px; border: 1px solid rgba(127, 127, 127, 0.4); background: transparent; color: inherit; cursor: pointer; }
-  </style>
+  <!-- Share-Seiten-Styles liegen konsolidiert in public-pages.css (Abschnitt "Share page") -->
 </head>
 <body>
   <nav class="site-nav" aria-label="Primary">
@@ -82,9 +46,9 @@
   </nav>
 
   <main class="page-shell">
-    <header class="page-header">
+    <header class="page-header share-header">
       <p class="eyebrow">Shared consensus</p>
-      <h1>{{ question }}</h1>
+      <h1 class="share-question{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}">{{ question }}</h1>
       <div class="share-meta">
         {% if date_display %}<span>{{ date_display }}</span>{% endif %}
         {% if consensus_model %}<span>Consensus model: {{ consensus_model }}</span>{% endif %}
@@ -147,7 +111,11 @@
         <ol class="share-sources">
           {% for source in sources %}
           <li {% if source.num %}id="src-{{ source.num }}"{% endif %}>
-            <a href="{{ source.url }}" target="_blank" rel="nofollow noopener noreferrer">{{ source.title }}</a>
+            <span class="share-source-num" aria-hidden="true">{{ source.num or loop.index }}</span>
+            <span class="share-source-body">
+              <a class="share-source-title" href="{{ source.url }}" target="_blank" rel="nofollow noopener noreferrer">{{ source.title }}</a>
+              {% if source.domain and source.domain != source.title %}<span class="share-source-domain">{{ source.domain }}</span>{% endif %}
+            </span>
           </li>
           {% endfor %}
         </ol>

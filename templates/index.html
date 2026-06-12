@@ -51,7 +51,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260610-restyle2">
+  <link rel="stylesheet" href="/static/style.css?v=20260612-polish1">
   <link rel="icon" href="/static/favicon-square.png?v=20260523-logo1" type="image/png">
   <!-- Füge dies im <head> hinzu -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -86,12 +86,10 @@
 
     <!-- Rechte Seite -->
     <div class="top-bar-right">
-      <h2>
-        <span id="proBadge"
-          style="display: none; background: #d4af37; color: white; font-size: 0.5em; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 5px;">PRO</span>
-        <a id="upgradeLink" href="#"
-          style="display: none; color: #999; font-size: 0.5em; text-decoration: none; vertical-align: middle; margin-left: 5px; cursor: pointer; border: 1px solid #444; padding: 1px 5px; border-radius: 4px; margin-right: -10px;">upgrade</a>
-      </h2>
+      <div class="top-bar-plan">
+        <span id="proBadge" style="display: none;">PRO</span>
+        <a id="upgradeLink" href="#" style="display: none;">Upgrade</a>
+      </div>
       <!-- Neuer About-Link -->
       <div id="loginContainer" class="login-text">Log in</div>
       <!-- Dünner vertikaler Strich -->
@@ -117,6 +115,7 @@
     <div class="sidebar-content">
 
       <div id="usageOptions" style="margin-top: 0;">
+        <h2 class="sidebar-static-heading">Usage</h2>
         <div id="usageDisplay">
           <span id="freeUsageDisplay">Free requests: ...</span><br>
           <span id="deepUsageDisplay">Deep Think: ...</span><br>
@@ -5141,7 +5140,10 @@
           copyAnswerBtn.className = "consensus-copy-icon-btn consensus-copy-btn";
           copyAnswerBtn.setAttribute("role", "menuitem");
           copyAnswerBtn.innerHTML = `
-            <span class="copy-icon" aria-hidden="true"></span>
+            <svg class="menu-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="9" y="9" width="11" height="11" rx="2.5"></rect>
+              <path d="M5 15H4.5A2.5 2.5 0 0 1 2 12.5v-8A2.5 2.5 0 0 1 4.5 2h8A2.5 2.5 0 0 1 15 4.5V5"></path>
+            </svg>
             <span class="copy-label">Copy consensus</span>
           `;
           copyAnswerBtn.title = "Copy consensus answer";
@@ -5186,7 +5188,9 @@
           copyCitationBtn.className = "consensus-copy-icon-btn consensus-citation-btn";
           copyCitationBtn.setAttribute("role", "menuitem");
           copyCitationBtn.innerHTML = `
-            <span class="copy-icon" aria-hidden="true"></span>
+            <svg class="menu-item-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+              <path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"></path>
+            </svg>
             <span class="copy-label">Copy citation</span>
           `;
           copyCitationBtn.title = "Copy consensus citation";
@@ -5221,42 +5225,10 @@
             }
           });
 
-          // 🔗 Share (nur sichtbar, wenn ein result_id-Snapshot existiert)
-          const shareBtn = document.createElement("button");
-          shareBtn.type = "button";
-          shareBtn.id = "consensusShareMenuItem";
-          shareBtn.className = "consensus-copy-icon-btn consensus-share-btn";
-          shareBtn.setAttribute("role", "menuitem");
-          shareBtn.innerHTML = `
-            <span class="copy-icon" aria-hidden="true"></span>
-            <span class="copy-label">Share publicly</span>
-          `;
-          shareBtn.title = "Create a public link to this consensus";
-          shareBtn.addEventListener("click", () => {
-            closeConsensusActionsMenu();
-            openShareDialog("confirm");
-          });
-
-          // 🗂 Verwaltung bestehender Links
-          const mySharesBtn = document.createElement("button");
-          mySharesBtn.type = "button";
-          mySharesBtn.id = "consensusMySharesMenuItem";
-          mySharesBtn.className = "consensus-copy-icon-btn consensus-myshares-btn";
-          mySharesBtn.setAttribute("role", "menuitem");
-          mySharesBtn.innerHTML = `
-            <span class="copy-icon" aria-hidden="true"></span>
-            <span class="copy-label">My shared links</span>
-          `;
-          mySharesBtn.title = "Manage your public share links";
-          mySharesBtn.addEventListener("click", () => {
-            closeConsensusActionsMenu();
-            openShareDialog("list");
-          });
-
+          // Share lebt nicht mehr im Copy/Citation-Menü, sondern als eigener
+          // Button oben rechts im Consensus-Bereich (siehe initConsensusCopyButtons).
           menu.appendChild(copyAnswerBtn);
           menu.appendChild(copyCitationBtn);
-          menu.appendChild(shareBtn);
-          menu.appendChild(mySharesBtn);
           document.body.appendChild(menu);
 
           consensusMenuEl = menu;
@@ -5280,6 +5252,31 @@
           const inlineBar = document.createElement("span");
           inlineBar.className = "consensus-copy-inline";
 
+          // 🔗 Eigenstaendiger Share-Button oben rechts im Consensus-Bereich
+          const shareTopBtn = document.createElement("button");
+          shareTopBtn.type = "button";
+          shareTopBtn.id = "consensusShareButton";
+          shareTopBtn.className = "consensus-share-pill";
+          shareTopBtn.title = "Share this consensus as a public page";
+          shareTopBtn.setAttribute("aria-label", "Share this consensus publicly");
+          shareTopBtn.innerHTML = `
+            <svg class="share-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="18" cy="5" r="3"></circle>
+              <circle cx="6" cy="12" r="3"></circle>
+              <circle cx="18" cy="19" r="3"></circle>
+              <line x1="8.6" y1="10.5" x2="15.4" y2="6.5"></line>
+              <line x1="8.6" y1="13.5" x2="15.4" y2="17.5"></line>
+            </svg>
+            <span class="share-pill-label">Share</span>
+          `;
+          shareTopBtn.addEventListener("click", () => {
+            if (!window.auth?.currentUser) {
+              showPopup("Please log in to share a consensus publicly.");
+              return;
+            }
+            openShareDialog("confirm");
+          });
+
           // Wrapper im Pill-Look
           const actionsWrapper = document.createElement("div");
           actionsWrapper.className = "consensus-actions-wrapper";
@@ -5298,6 +5295,7 @@
           toggleBtn.querySelector(".caret").textContent = "";
 
           actionsWrapper.appendChild(toggleBtn);
+          inlineBar.appendChild(shareTopBtn);
           inlineBar.appendChild(actionsWrapper);
           heading.appendChild(inlineBar);
 
@@ -5310,12 +5308,6 @@
           function openMenu() {
             // evtl. vorher schließen (falls irgendwann mehrere Trigger …)
             closeMenu();
-
-            // Share nur mit Snapshot des aktuellen Laufs, Verwaltung nur eingeloggt
-            const shareItem = document.getElementById("consensusShareMenuItem");
-            if (shareItem) shareItem.hidden = !window.lastShareResultId || !window.auth?.currentUser;
-            const mySharesItem = document.getElementById("consensusMySharesMenuItem");
-            if (mySharesItem) mySharesItem.hidden = !window.auth?.currentUser;
 
             // anzeigen, aber unsichtbar, um Breite zu messen
             menu.style.display = "block";
@@ -5457,6 +5449,11 @@
           `;
           document.getElementById("shareCancelBtn").addEventListener("click", closeShareDialog);
           document.getElementById("shareListLink").addEventListener("click", renderShareListView);
+          if (!window.lastShareResultId) {
+            const confirmBtn = document.getElementById("shareConfirmBtn");
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = "Run a consensus first";
+          }
           document.getElementById("shareConfirmBtn").addEventListener("click", async function () {
             const resultId = window.lastShareResultId;
             if (!resultId) {
@@ -5935,23 +5932,48 @@
   <!-- Share-Modal: öffentliche Links erstellen/verwalten -->
   <style>
     .share-modal-content { max-width: 480px; }
-    .share-modal-notes { margin: 12px 0; padding-left: 20px; font-size: 0.9rem; }
+    .share-modal-notes { margin: 12px 0; padding-left: 20px; font-size: 0.88rem; line-height: 1.5; color: color-mix(in srgb, var(--text-color) 86%, var(--sidebar-text-muted)); }
     .share-modal-notes li { margin-bottom: 6px; }
     .share-modal-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
     .share-primary-btn, .share-secondary-btn, .share-danger-btn, .share-link-btn {
-      border-radius: 8px; padding: 8px 14px; font: inherit; font-size: 0.9rem; cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center; justify-content: center; min-height: 36px;
+      border-radius: var(--radius-sm); padding: 0 15px; font: inherit; font-size: 0.88rem; font-weight: 650;
+      line-height: 1; cursor: pointer; text-decoration: none;
+      transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease;
     }
-    .share-primary-btn { border: none; background: var(--accent, #4a7dff); color: #fff; }
-    .share-primary-btn:disabled { opacity: 0.6; cursor: default; }
-    .share-secondary-btn { border: 1px solid rgba(127,127,127,0.4); background: transparent; color: inherit; }
-    .share-danger-btn { border: 1px solid rgba(220,60,60,0.5); background: transparent; color: #c0392b; }
-    .share-link-btn { border: none; background: transparent; color: inherit; opacity: 0.75; text-decoration: underline; padding: 8px 4px; }
+    .share-primary-btn {
+      border: 1px solid color-mix(in srgb, var(--button-bg) 86%, #ffffff 14%);
+      background: linear-gradient(180deg, color-mix(in srgb, #ffffff 14%, transparent), transparent 52%), var(--button-bg);
+      color: var(--button-text);
+      box-shadow: 0 10px 24px color-mix(in srgb, var(--button-bg) 18%, transparent), inset 0 1px 0 color-mix(in srgb, #ffffff 32%, transparent);
+    }
+    .share-primary-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 14px 30px color-mix(in srgb, var(--button-bg) 24%, transparent), inset 0 1px 0 color-mix(in srgb, #ffffff 36%, transparent); }
+    .share-primary-btn:disabled { opacity: 0.55; cursor: default; box-shadow: none; }
+    .share-secondary-btn {
+      border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent);
+      background: color-mix(in srgb, var(--glass-bg-strong) 58%, transparent);
+      color: var(--text-color);
+      box-shadow: inset 0 1px 0 var(--glass-highlight);
+    }
+    .share-secondary-btn:hover { border-color: color-mix(in srgb, var(--accent) 32%, var(--sidebar-border)); background: color-mix(in srgb, var(--accent) 7%, var(--glass-bg-strong)); }
+    .share-danger-btn { border: 1px solid color-mix(in srgb, var(--clear-button-text) 36%, transparent); background: transparent; color: var(--clear-button-text); }
+    .share-danger-btn:hover { background: color-mix(in srgb, var(--clear-button-bg) 64%, transparent); border-color: color-mix(in srgb, var(--clear-button-text) 52%, transparent); }
+    .share-link-btn { border: none; background: transparent; color: var(--sidebar-text-muted); text-decoration: underline; text-underline-offset: 2px; padding: 0 4px; font-weight: 550; }
+    .share-link-btn:hover { color: var(--text-color); }
     .share-url-row { display: flex; gap: 8px; margin: 10px 0; }
-    .share-url-row input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(127,127,127,0.4); background: transparent; color: inherit; font-size: 0.85rem; }
+    .share-url-row input {
+      flex: 1; min-width: 0; padding: 8px 11px; border-radius: var(--radius-sm);
+      border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent);
+      background: color-mix(in srgb, var(--input-bg) 84%, transparent); color: inherit; font-size: 0.85rem;
+      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+    }
+    .share-url-row input:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border)); box-shadow: var(--liquid-focus-ring); }
     .share-list { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; }
-    .share-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(127,127,127,0.25); }
-    .share-list-question { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
+    .share-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent); }
+    .share-list li:last-child { border-bottom: none; }
+    .share-list-question { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-size: 0.9rem; }
     .share-list-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .share-list-actions .share-secondary-btn, .share-list-actions .share-danger-btn { min-height: 30px; padding: 0 11px; font-size: 0.8rem; }
   </style>
   <div id="shareModal" class="modal">
     <div class="modal-content share-modal-content">

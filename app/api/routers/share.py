@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Request, Body, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -11,7 +12,11 @@ from app.core.security import verify_user_token, extract_id_token, is_user_admin
 from app.api.routers.pages import SITE_URL
 from app.services import share_snapshots as snapshots
 from app.services.share_snapshots import ShareError
-from app.services.public_markdown import render_public_markdown, markdown_to_plaintext
+from app.services.public_markdown import (
+    render_public_markdown,
+    markdown_to_plaintext,
+    source_site_name,
+)
 
 # Browser 5 min, (zukünftiges) CDN 1 Tag; Invalidierung bei Revoke/Block läuft
 # über den In-Process-Cache + kurze max-age, ein CDN gibt es bewusst nicht.
@@ -212,11 +217,24 @@ async def share_page(request: Request, slug_id: str):
     sources_view = []
     for source in payload["sources"]:
         match = re.match(r"^S(\d+)$", str(source.get("id") or ""))
+        url = source.get("url") or ""
+        try:
+            domain = re.sub(r"^www\.", "", urlsplit(url).hostname or "")
+        except ValueError:
+            domain = ""
+        # Nichtssagende Titel (leer, nur eine Zahl oder die nackte URL)
+        # fallen auf die Domain zurück, damit Quellen zuordenbar bleiben.
+        title = str(source.get("title") or "").strip()
+        if not title or title == url or re.fullmatch(r"\d+", title):
+            title = domain or url
+        site_label = source_site_name(url)
         sources_view.append({
             "num": match.group(1) if match else "",
             "id": source.get("id") or "",
-            "title": source.get("title") or source.get("url") or "",
-            "url": source.get("url") or "",
+            "title": title,
+            "url": url,
+            "domain": domain,
+            "site": site_label,
         })
 
     # Differences: strukturierte Karten, sonst Freitext-Fallback (markdown-
