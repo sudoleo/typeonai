@@ -2537,17 +2537,15 @@ h2[data-tooltip] {
   align-items: center;
   gap: 6px;
   min-height: 28px;
-  padding: 4px 5px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 66%, transparent);
+  padding: 4px 6px;
+  border: 0;
   border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--container-bg) 70%, var(--sidebar-hover) 30%);
-  transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
+  background: transparent;
+  transition: background-color .15s ease;
 }
 
 .leaderboard-row:hover {
-  background: color-mix(in srgb, var(--accent) 8%, var(--sidebar-hover));
-  border-color: color-mix(in srgb, var(--accent) 22%, var(--sidebar-border));
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
 }
 
 .leaderboard-rank {
@@ -2577,10 +2575,10 @@ h2[data-tooltip] {
 
 #leaderboardContent .vote {
   min-width: 0;
-  padding: 2px 5px;
+  padding: 2px 6px;
   border-radius: 7px;
-  background: color-mix(in srgb, var(--accent) 11%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 0;
   color: color-mix(in srgb, var(--accent) 82%, var(--text-color));
   font-size: 0.66rem;
   font-weight: 700;
@@ -2597,10 +2595,7 @@ h2[data-tooltip] {
 }
 
 .leaderboard-empty {
-  padding: 7px 8px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 80%, transparent);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--sidebar-hover) 50%, transparent);
+  padding: 6px 2px;
   color: var(--sidebar-text-muted);
   font-size: 0.74rem;
   line-height: 1.4;
