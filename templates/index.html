@@ -5278,7 +5278,7 @@
           const actionsWrapper = document.createElement("div");
           actionsWrapper.className = "consensus-actions-wrapper";
 
-          // Sichtbarer Trigger: NUR Icon + Caret, KEINE Beschriftung
+          // Sichtbarer Trigger: Zitat-Icon (wie im Dropdown), KEINE Beschriftung
           const toggleBtn = document.createElement("button");
           toggleBtn.type = "button";
           toggleBtn.className = "consensus-actions-toggle";
@@ -5286,10 +5286,10 @@
           toggleBtn.setAttribute("aria-haspopup", "menu");
           toggleBtn.setAttribute("aria-expanded", "false");
           toggleBtn.innerHTML = `
-            <span class="copy-icon" aria-hidden="true"></span>
-            <span class="caret">▾</span>
+            <svg class="quote-toggle-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"></path>
+            </svg>
           `;
-          toggleBtn.querySelector(".caret").textContent = "";
 
           actionsWrapper.appendChild(toggleBtn);
           inlineBar.appendChild(shareTopBtn);
@@ -5928,10 +5928,13 @@
 
   <!-- Share-Modal: öffentliche Links erstellen/verwalten -->
   <style>
-    .share-modal-content { max-width: 480px; }
-    .share-modal-notes { margin: 12px 0; padding-left: 20px; font-size: 0.88rem; line-height: 1.5; color: color-mix(in srgb, var(--text-color) 86%, var(--sidebar-text-muted)); }
-    .share-modal-notes li { margin-bottom: 6px; }
-    .share-modal-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
+    .share-modal-content { max-width: 480px; text-align: left; }
+    .share-modal-content h2 { margin: 0 24px 14px 0; text-align: left; font-size: 1.12rem; line-height: 1.3; }
+    .share-modal-content p { margin: 0 0 12px; }
+    .share-modal-notes { margin: 12px 0; padding-left: 18px; font-size: 0.88rem; line-height: 1.5; color: color-mix(in srgb, var(--text-color) 86%, var(--sidebar-text-muted)); }
+    .share-modal-notes li { margin-bottom: 6px; padding-left: 2px; }
+    .share-modal-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 18px; }
+    .share-modal-actions .share-link-btn { margin-left: auto; }
     .share-primary-btn, .share-secondary-btn, .share-danger-btn, .share-link-btn {
       display: inline-flex; align-items: center; justify-content: center; min-height: 36px;
       border-radius: var(--radius-sm); padding: 0 15px; font: inherit; font-size: 0.88rem; font-weight: 650;

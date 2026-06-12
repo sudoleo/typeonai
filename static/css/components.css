@@ -1736,24 +1736,10 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   transform: translateY(1px);
 }
 
-.consensus-actions-toggle .copy-icon {
-  width: 10px;
-  height: 10px;
-}
-
-.consensus-actions-toggle .caret {
-  width: 0;
-  height: 0;
-  border-left: 3px solid transparent;
-  border-right: 3px solid transparent;
-  border-top: 4px solid currentColor;
-  font-size: 0;
-  line-height: 0;
-  transition: transform .15s ease;
-}
-
-.consensus-actions-wrapper.open .caret {
-  transform: rotate(180deg);
+.consensus-actions-toggle .quote-toggle-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
 }
 
 .consensus-actions-menu {

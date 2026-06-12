@@ -2313,26 +2313,36 @@ canvas {
   color: color-mix(in srgb, var(--accent) 48%, var(--text));
 }
 
-/* Quellenliste: nummerierte Badges + Titel + Domain */
+/* Quellenliste: kompakte einzeilige Eintraege (Nummer + Titel + Domain),
+   ab Tablet zweispaltig, lange Listen starten eingeklappt. */
 .share-sources {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1px 24px;
+}
+
+@media (min-width: 701px) {
+  .share-sources {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .share-sources li {
   display: flex;
-  align-items: flex-start;
-  gap: 11px;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
   margin: 0;
-  padding: 9px 8px;
-  border-radius: var(--radius-sm);
-  overflow-wrap: anywhere;
+  padding: 5px 6px;
+  border-radius: var(--radius-xs);
   transition: background-color .2s ease;
 }
 
-.share-sources li + li {
-  border-top: 1px solid color-mix(in srgb, var(--border) 56%, transparent);
+.share-sources.is-collapsed li:nth-child(n+9) {
+  display: none;
 }
 
 .share-sources li:target {
@@ -2344,15 +2354,13 @@ canvas {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  margin-top: 1px;
+  min-width: 20px;
+  height: 20px;
   padding: 0 4px;
-  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
   color: color-mix(in srgb, var(--accent) 64%, var(--text));
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -2360,15 +2368,21 @@ canvas {
 
 .share-source-body {
   min-width: 0;
-  display: grid;
-  gap: 2px;
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 
 .share-source-title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: color-mix(in srgb, var(--text) 88%, var(--accent));
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 .share-source-title:hover {
@@ -2376,9 +2390,38 @@ canvas {
 }
 
 .share-source-domain {
+  flex: 0 0 auto;
+  max-width: 38%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--muted);
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   font-weight: 550;
+}
+
+.share-sources-toggle {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  margin-top: 10px;
+  padding: 0 13px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1;
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background-color .15s ease;
+}
+
+.share-sources-toggle:hover {
+  color: var(--heading);
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
 .share-citation-text {

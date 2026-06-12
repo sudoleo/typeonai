@@ -613,6 +613,7 @@ body:has(.sidebar.collapsed) .main-wrapper {
 .sidebar .bookmark:hover {
   background-color: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
 }
+/* Loeschen-X erst beim Hovern des Bookmarks einblenden */
 .delete-bookmark {
   position: absolute !important;
   right: 8px !important;
@@ -627,9 +628,16 @@ body:has(.sidebar.collapsed) .main-wrapper {
   cursor: pointer;
   font-size: 0;
   font-weight: 600;
-  opacity: 0.48;
+  opacity: 0;
   transform: translateY(-50%) !important;
   transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+/* Touch-Geraete haben kein Hover: X dezent sichtbar lassen */
+@media (hover: none) {
+  .delete-bookmark {
+    opacity: 0.5;
+  }
 }
 .delete-bookmark::before {
   content: "\00d7";

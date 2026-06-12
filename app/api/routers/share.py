@@ -32,6 +32,12 @@ _SHARE_ERROR_STATUS = {
     "quota_exceeded": 429,
 }
 
+# "BestModel: Grok" (ggf. mit Markdown-Sternchen) im Differences-Freitext.
+_BEST_MODEL_RE = re.compile(
+    r"^\s*\**\s*Best\s*Model\s*\**\s*[:\-]\s*(.+?)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
 
 def _require_uid(request, data):
     id_token = extract_id_token(request, data)
@@ -241,10 +247,19 @@ async def share_page(request: Request, slug_id: str):
     # gerendert). Beides read-only aus dem Snapshot – keine LLM-Calls.
     differences_data = payload["differences_data"] if isinstance(payload["differences_data"], dict) else {}
     differences = differences_data.get("differences") or []
+    best_model_display = str(differences_data.get("best_model") or "").strip()
     differences_fallback_html = ""
     if not differences and payload["differences_text"]:
+        # Die technische "BestModel: X"-Zeile aus dem Freitext ziehen und
+        # stattdessen als gestaltetes Element unter den Differences anzeigen.
+        fallback_text = str(payload["differences_text"])
+        match = _BEST_MODEL_RE.search(fallback_text)
+        if match:
+            if not best_model_display:
+                best_model_display = match.group(1).strip()
+            fallback_text = _BEST_MODEL_RE.sub("", fallback_text).strip()
         differences_fallback_html = render_public_markdown(
-            payload["differences_text"], payload["sources"]
+            fallback_text, payload["sources"]
         )
     model_count = (
         len(differences_data.get("models_compared") or [])
@@ -282,6 +297,7 @@ async def share_page(request: Request, slug_id: str):
         "consensus_html": consensus_html,
         "differences": differences,
         "differences_fallback_html": differences_fallback_html,
+        "best_model_display": best_model_display,
         "has_differences_view": bool(differences or differences_fallback_html or differences_data),
         "model_count": model_count,
         "contradiction_count": contradiction_count,

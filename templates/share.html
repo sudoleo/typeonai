@@ -97,9 +97,12 @@
           </p>
           {% for diff in differences %}{{ difference_card(diff) }}{% endfor %}
           {% elif differences_fallback_html %}
-          <div class="share-md">{{ differences_fallback_html | safe }}</div>
+          <div class="share-md share-differences-md">{{ differences_fallback_html | safe }}</div>
           {% else %}
           <p class="diff-verdict">The {{ model_count }} models broadly agree &ndash; no notable differences found.</p>
+          {% endif %}
+          {% if best_model_display %}
+          <p class="share-best-model"><span class="share-best-model-label">Best answer</span>{{ best_model_display }}</p>
           {% endif %}
         </section>
       </div>
@@ -108,7 +111,7 @@
       {% if sources %}
       <section class="legal-panel">
         <h2>Sources</h2>
-        <ol class="share-sources">
+        <ol id="shareSources" class="share-sources{% if sources | length > 8 %} is-collapsed{% endif %}">
           {% for source in sources %}
           <li {% if source.num %}id="src-{{ source.num }}"{% endif %}>
             <span class="share-source-num" aria-hidden="true">{{ source.num or loop.index }}</span>
@@ -119,6 +122,9 @@
           </li>
           {% endfor %}
         </ol>
+        {% if sources | length > 8 %}
+        <button type="button" id="shareSourcesToggle" class="share-sources-toggle">Show all {{ sources | length }} sources</button>
+        {% endif %}
       </section>
       {% endif %}
 
@@ -188,6 +194,31 @@
       }
       consensusBtn.addEventListener("click", function () { show("consensus"); });
       differencesBtn.addEventListener("click", function () { show("differences"); });
+    })();
+
+    // Lange Quellenlisten: eingeklappt starten, "Show all" klappt auf.
+    // Anker-Sprünge aus Inline-Citations (#src-N) klappen automatisch auf.
+    (function () {
+      const list = document.getElementById("shareSources");
+      const toggle = document.getElementById("shareSourcesToggle");
+      if (!list || !toggle) return;
+
+      function expand() {
+        list.classList.remove("is-collapsed");
+        toggle.hidden = true;
+      }
+      toggle.addEventListener("click", expand);
+
+      function expandForHash() {
+        const hash = window.location.hash || "";
+        if (hash.indexOf("#src-") !== 0) return;
+        expand();
+        // Das Ziel war beim Klick evtl. noch versteckt – Scroll nachholen.
+        const target = document.getElementById(hash.slice(1));
+        if (target) target.scrollIntoView({ block: "center" });
+      }
+      window.addEventListener("hashchange", expandForHash);
+      expandForHash();
     })();
 
     (function () {
