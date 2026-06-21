@@ -267,6 +267,13 @@ async def share_page(request: Request, slug_id: str):
     )
     contradiction_count = sum(1 for d in differences if d.get("type") == "contradiction")
 
+    # "Verwandte Fragen": nur indexierte, aktive Shares (read-only, gecacht).
+    try:
+        related_shares = snapshots.list_related_shares(share_id, payload["question"])
+    except Exception:
+        logging.exception("list_related_shares failed")
+        related_shares = []
+
     date_iso = payload["answered_at"] or payload["created_at"]
     meta_description = markdown_to_plaintext(payload["consensus_md"], limit=160)
 
@@ -302,6 +309,7 @@ async def share_page(request: Request, slug_id: str):
         "model_count": model_count,
         "contradiction_count": contradiction_count,
         "sources": sources_view,
+        "related_shares": related_shares,
         "included_models": payload["included_models"],
         "consensus_model": payload["consensus_model"],
         "date_display": date_iso[:10] if date_iso else "",

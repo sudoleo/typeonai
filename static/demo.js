@@ -106,7 +106,7 @@ const DEMO_DATA = {
   <ol>
     <li>If you are vegetarian most days, make B12 the first check. Food sources can be inconsistent unless you regularly use fortified foods [S1].</li>
     <li>If you get little sun or live through long winters, vitamin D becomes a practical candidate; a 25-OH-D blood test can guide dosing [S2].</li>
-    <li>If you never eat fish, algae oil is the direct EPA/DHA option; flax, chia and walnuts mainly provide ALA, not much preformed EPA/DHA [S3].</li>
+    <li>If you never eat fish, flax, chia and walnuts cover ALA, and for most healthy adults that is enough — a routine algae-oil supplement is optional rather than essential [S3].</li>
     <li>If your salt is non-iodized and seaweed is rare, iodine may be a gap, especially around pregnancy planning [S4].</li>
     <li>If fatigue or heavy periods are part of the picture, check ferritin or an iron panel before taking iron [S5].</li>
     <li>If you train hard, creatine monohydrate at a small daily dose is a reasonable performance-oriented add-on [S6].</li>
@@ -193,10 +193,56 @@ const DEMO_DATA = {
   <p>Overall recommendation: choose the smallest targeted set, avoid overlapping high-dose products, and recheck labs after a defined interval. This remains general information, not personal medical advice.</p>
 </div>`,
 
-  differences:
-`The consensus answer is largely credible.
+  // Strukturierte Auswertung – exakt das Schema, das eine echte Consensus-Query
+  // liefert. Treibt Verdict-Header, Agreement-Badges und die Differences-Karten
+  // (inkl. Contradiction) über window.renderConsensusInsights.
+  differencesData: {
+    models_compared: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"],
+    best_model: "Anthropic",
+    claims: [
+      {
+        anchor: "routine supplement or reliably fortified foods",
+        agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"],
+        dissent: []
+      },
+      {
+        anchor: "Iron should follow ferritin or an iron panel",
+        agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"],
+        dissent: []
+      },
+      {
+        anchor: "algae EPA/DHA is the direct fish-free option",
+        agree: ["OpenAI", "Anthropic", "DeepSeek", "Grok"],
+        dissent: [
+          { model: "Mistral", quote: "a routine algae-oil supplement is optional rather than essential" }
+        ]
+      }
+    ],
+    differences: [
+      {
+        claim: "Do fish-free vegetarians need an algae omega-3 supplement?",
+        type: "contradiction",
+        positions: [
+          {
+            stance: "Algae EPA/DHA is the recommended route.",
+            models: ["OpenAI", "DeepSeek", "Grok"],
+            quote: "algae-based EPA/DHA is the vegetarian route when fish is absent"
+          },
+          {
+            stance: "Plant ALA is enough for most; it's optional.",
+            models: ["Mistral"],
+            quote: "a routine algae-oil supplement is optional rather than essential"
+          }
+        ],
+        verify: "Check your ALA intake and whether pregnancy or a condition raises your EPA/DHA need."
+      }
+    ]
+  },
 
-Most models agree on the important hierarchy: B12 first; vitamin D, iodine and algae EPA/DHA when lifestyle or diet indicates; iron only with labs; calcium by intake calculation; creatine mainly for training goals. The answers differ in tone and workflow, but not in the main practical advice.
+  differences:
+`The consensus answer is partially credible.
+
+The models broadly agree on the hierarchy: B12 first; vitamin D, iodine and omega-3 as diet and lifestyle indicate; iron only with labs; calcium by intake calculation; creatine mainly for training goals. They differ on one substantive point — whether a fish-free vegetarian really needs an algae-based omega-3 supplement, or whether plant ALA is enough for most people.
 
 BestModel: Anthropic`
 };
@@ -229,6 +275,74 @@ const MODEL_TO_BOX = {
 };
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Staffel-Startzeiten + Tempo für das Token-Streaming der Demo-Antworten.
+const DEMO_STREAM_STARTS = { OpenAI: 500, Anthropic: 1150, Gemini: 1800, Mistral: 2450, DeepSeek: 3100, Grok: 3750 };
+const DEMO_RESPONSE_STREAM = { wordsPerTick: 2, tickMs: 55 };
+const DEMO_CONSENSUS_STREAM = { wordsPerTick: 2, tickMs: 46 };
+
+// Läuft hoch, sobald ein neuer Demo-Durchlauf startet, damit alte
+// Streaming-Timer aus einem vorherigen Lauf sauber abbrechen.
+let demoRunId = 0;
+
+// Zerlegt eine HTML-Antwort in Tokens: Tags bleiben ganz, Text wird in
+// Wörter/Whitespace gesplittet, damit beim schrittweisen Aufbau nie ein
+// halbes Tag im DOM landet.
+function tokenizeForStream(html) {
+  const tokens = [];
+  const re = /<[^>]+>|[^<]+/g;
+  let match;
+  while ((match = re.exec(html))) {
+    const part = match[0];
+    if (part[0] === "<") {
+      tokens.push(part);
+    } else {
+      const pieces = part.match(/\s+|[^\s]+/g) || [];
+      for (const piece of pieces) tokens.push(piece);
+    }
+  }
+  return tokens;
+}
+
+// Baut die Antwort wortweise auf – wie ein echter Streaming-Response.
+// Tags zählen nicht gegen das Wort-Budget, der Browser schließt offene
+// Tags beim Zuweisen von innerHTML automatisch, daher bleibt das Markup gültig.
+function streamDemoInto(outputEl, html, runId, opts = {}) {
+  return new Promise(resolve => {
+    if (!outputEl) { resolve(); return; }
+    const wordsPerTick = opts.wordsPerTick || 3;
+    const tickMs = opts.tickMs || 38;
+    const tokens = tokenizeForStream(html || "");
+    let index = 0;
+    let acc = "";
+    outputEl.innerHTML = "";
+    outputEl.classList.add("is-streaming");
+
+    const finish = () => {
+      outputEl.classList.remove("is-streaming");
+      resolve();
+    };
+
+    const tick = () => {
+      if (runId !== demoRunId) { finish(); return; }
+      let added = 0;
+      while (index < tokens.length && added < wordsPerTick) {
+        const token = tokens[index++];
+        acc += token;
+        if (token[0] !== "<" && token.trim()) added++;
+      }
+      outputEl.innerHTML = acc;
+      if (typeof outputEl.scrollTop === "number") outputEl.scrollTop = outputEl.scrollHeight;
+      if (index < tokens.length) {
+        setTimeout(tick, tickMs);
+      } else {
+        finish();
+      }
+    };
+
+    tick();
+  });
+}
 
 function getDemoStorage() {
   try {
@@ -295,7 +409,8 @@ function renderDemoModelResponse(model, outputEl) {
   if (window.injectMarkdown) window.injectMarkdown(outputEl, markdown);
 }
 
-function renderDemoConsensus(mainP, diffP) {
+async function renderDemoConsensus(mainP, diffP) {
+  const runId = demoRunId;
   let consensusMarkdown = DEMO_DATA.consensus;
   if (window.registerResponseSources) {
     consensusMarkdown = window.registerResponseSources(consensusMarkdown, DEMO_DATA.consensusSources);
@@ -303,21 +418,38 @@ function renderDemoConsensus(mainP, diffP) {
     window.mergeEvidenceSources(DEMO_DATA.consensusSources);
   }
 
-  if (mainP && window.injectMarkdown) {
-    window.injectMarkdown(mainP, consensusMarkdown);
+  // Konsens-Antwort als Streaming-Response aufbauen, danach sauber rendern,
+  // damit [S1]-Quellenlinks und Copy-Buttons korrekt entstehen.
+  if (mainP) {
+    await streamDemoInto(mainP, DEMO_DATA.consensus, runId, DEMO_CONSENSUS_STREAM);
+    if (runId !== demoRunId) return;
+    if (window.injectMarkdown) window.injectMarkdown(mainP, consensusMarkdown);
   }
-  if (diffP) {
+
+  // Differences exakt wie bei echten Queries: strukturierte Auswertung mit
+  // Verdict-Header, Agreement-Badges und Contradiction-Karten. Nur wenn die
+  // strukturierten Daten fehlen, greift der Legacy-Freitext.
+  const includedCount = (DEMO_DATA.differencesData?.models_compared || []).length || 6;
+  const structuredRendered = window.renderConsensusInsights
+    ? window.renderConsensusInsights(DEMO_DATA.differencesData, includedCount)
+    : false;
+
+  if (!structuredRendered && diffP) {
     window.applyCredibilityFrame?.(diffP, DEMO_DATA.differences);
     const html = marked.parse(
       (window.colorizeCredibility?.(DEMO_DATA.differences) ?? DEMO_DATA.differences)
     );
     diffP.innerHTML = DOMPurify.sanitize(html);
   }
-  const best = (DEMO_DATA.differences.match(/BestModel:\s*(.*)/i)?.[1] || "").trim();
+
+  const best =
+    DEMO_DATA.differencesData?.best_model ||
+    (DEMO_DATA.differences.match(/BestModel:\s*(.*)/i)?.[1] || "").trim();
   if (best) window.recordModelVote?.(best, "BestModel");
 }
 
 async function runDemoFlow() {
+  const runId = ++demoRunId;
   const sendBtn = document.getElementById("sendButton");
   const consensusBtn = document.getElementById("consensusButton");
   if (sendBtn) sendBtn.disabled = true;
@@ -345,18 +477,23 @@ async function runDemoFlow() {
     if (box) setSpinnerEl(box);
   });
 
+  // Jede Modellantwort läuft zeitversetzt als Streaming-Response ein und wird
+  // danach sauber gerendert (für [S1]-Quellenlinks und Copy-Buttons).
   await Promise.all(Object.keys(MODEL_TO_BOX).map(model =>
     new Promise(resolve => {
-      setTimeout(() => {
+      const start = DEMO_STREAM_STARTS[model] ?? (DEMO_DATA.delays[model] || 1800);
+      setTimeout(async () => {
         const box = getBox(model);
-        if (box) {
-          const p = box.querySelector(".collapsible-content");
-          if (p) renderDemoModelResponse(model, p);
-        }
+        const p = box?.querySelector(".collapsible-content");
+        if (!p) { resolve(); return; }
+        await streamDemoInto(p, DEMO_DATA.responses[model] || "", runId, DEMO_RESPONSE_STREAM);
+        if (runId === demoRunId) renderDemoModelResponse(model, p);
         resolve();
-      }, DEMO_DATA.delays[model] || 1800);
+      }, start);
     })
   ));
+
+  if (runId !== demoRunId) return;
 
   window.setAgentModeStatus?.("complete");
 
@@ -366,6 +503,7 @@ async function runDemoFlow() {
   const auto = document.getElementById("autoConsensusToggle")?.checked;
 
   if (auto) {
+    window.resetConsensusInsights?.();
     window.resetCredibilityFrame?.(consensusDiv?.querySelector(".consensus-differences"));
     if (mainP) mainP.innerHTML = window.spinnerHTML;
     if (diffP) diffP.innerHTML = window.spinnerHTML;
@@ -376,6 +514,8 @@ async function runDemoFlow() {
   } else if (consensusBtn) {
     const originalOnclick = consensusBtn.onclick;
     consensusBtn.onclick = () => {
+      window.resetConsensusInsights?.();
+      window.resetCredibilityFrame?.(consensusDiv?.querySelector(".consensus-differences"));
       if (mainP) mainP.innerHTML = window.spinnerHTML;
       if (diffP) diffP.innerHTML = window.spinnerHTML;
       setTimeout(

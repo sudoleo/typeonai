@@ -221,6 +221,11 @@ def sanitize_model_labels(model_labels, included_providers=None):
         if not isinstance(label, str):
             continue
         cleaned = re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f]", "", label)).strip()
+        # Der Option-Text aus dem Frontend trägt teils ein Badge-Suffix
+        # (" · New", "• Pro"). Für die Zitation nur den reinen Modellnamen
+        # behalten – sonst scheitert die Whitelist am "·" und der Name fiele
+        # ganz auf den Provider-Namen zurück.
+        cleaned = re.split(r"\s*[·•]\s*", cleaned, maxsplit=1)[0].strip()
         if _MODEL_LABEL_RE.match(cleaned):
             sanitized[provider] = cleaned
     return sanitized
@@ -421,6 +426,10 @@ _share_cache = TTLCache(maxsize=1024, ttl=SHARE_CACHE_TTL_SECONDS)
 # Dedup-Canonical-Lookups (question_hash -> Ziel oder None) separat cachen;
 # jede Moderation kann Canonical-Ziele ändern, daher wird er mit invalidiert.
 _canonical_cache = TTLCache(maxsize=1024, ttl=SHARE_CACHE_TTL_SECONDS)
+# "Verwandte Fragen"-Vorschläge (share_id -> Liste). Längere TTL, da nur aus
+# dem selten wechselnden Index-Set gespeist; bei Moderation mit-invalidiert.
+RELATED_CACHE_TTL_SECONDS = 900
+_related_cache = TTLCache(maxsize=512, ttl=RELATED_CACHE_TTL_SECONDS)
 
 
 def get_share_cached(share_id, db=None):
@@ -438,6 +447,7 @@ def invalidate_share_cache(share_id=None):
     else:
         _share_cache.pop(share_id, None)
     _canonical_cache.clear()
+    _related_cache.clear()
 
 
 def create_share_from_pending(uid, result_id, db=None, consume_quota=None):
@@ -695,6 +705,72 @@ def list_indexed_share_urls(db=None, max_items=1000):
         })
     urls.sort(key=lambda item: item["path"])
     return urls
+
+
+# Häufige Füllwörter (EN/DE), die für die Themen-Ähnlichkeit nichts beitragen.
+_RELATED_STOPWORDS = frozenset("""
+the and for are was were can could should would will what which who how why when
+where does did with without from into about over under not yes vs versus this that
+these those your our their its his her been being have has had any all more most
+der die das und oder ist sind war wie warum wann wer wem wen ein eine einen einem
+einer fuer von zu im in am an mit ohne auf ueber unter nicht kein keine ja auch
+""".split())
+
+
+def _question_tokens(question):
+    """Themen-Tokens einer Frage für die Ähnlichkeitswertung (lower, entstoppt)."""
+    tokens = re.findall(r"[a-z0-9]+", str(question or "").lower())
+    return {t for t in tokens if len(t) >= 3 and t not in _RELATED_STOPWORDS}
+
+
+def list_related_shares(exclude_share_id, question, db=None, limit=4, scan_limit=400):
+    """Vorschläge "verwandte Fragen" für die öffentliche Share-Seite.
+
+    Bewusst NUR indexierte UND aktive Shares (admin-freigegeben) – nie
+    noindex/private/gesperrte Snapshots. Relevanz über Token-Überlappung der
+    Frage, Tie-Break und Fallback über Aktualität. Read-only, gecacht.
+    """
+    use_cache = db is None and bool(exclude_share_id)
+    if use_cache and exclude_share_id in _related_cache:
+        return _related_cache[exclude_share_id]
+
+    db = db if db is not None else db_firestore
+    query_tokens = _question_tokens(question)
+    docs = (
+        db.collection(SHARES_COLLECTION)
+        .where("indexed", "==", True)
+        .limit(scan_limit)
+        .stream()
+    )
+
+    candidates = []
+    for doc in docs:
+        if doc.id == exclude_share_id:
+            continue
+        data = doc.to_dict() or {}
+        if data.get("status") != "active":
+            continue
+        candidate_question = data.get("question") or ""
+        overlap = len(query_tokens & _question_tokens(candidate_question)) if query_tokens else 0
+        created_at = data.get("created_at")
+        created_key = created_at.isoformat() if isinstance(created_at, datetime) else ""
+        candidates.append({
+            "path": share_path(data.get("slug") or "", doc.id),
+            "question": _clip(candidate_question, 200),
+            "models_count": len(data.get("included_models") or []),
+            "overlap": overlap,
+            "created_key": created_key,
+        })
+
+    # Beste Überlappung zuerst, bei Gleichstand die neuesten.
+    candidates.sort(key=lambda item: (item["overlap"], item["created_key"]), reverse=True)
+    related = [
+        {"path": c["path"], "question": c["question"], "models_count": c["models_count"]}
+        for c in candidates[:limit]
+    ]
+    if use_cache:
+        _related_cache[exclude_share_id] = related
+    return related
 
 
 REPORT_REASONS = ("inaccurate", "harmful", "spam", "copyright", "other")

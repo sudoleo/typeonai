@@ -238,6 +238,23 @@ class SanitizerTests(unittest.TestCase):
         result = snapshots.build_included_models(["OpenAI", "Grok"], {"OpenAI": "bad,label"})
         self.assertEqual(result, ["OpenAI", "Grok"])
 
+    def test_model_labels_strip_badge_suffix(self):
+        labels = snapshots.sanitize_model_labels({
+            "OpenAI": "GPT-5.1 · New",
+            "Gemini": "Gemini 2.5 Flash • Pro",
+            "Grok": "Grok 4.2",
+        }, included_providers=snapshots.PROVIDER_ORDER)
+        self.assertEqual(labels, {
+            "OpenAI": "GPT-5.1",
+            "Gemini": "Gemini 2.5 Flash",
+            "Grok": "Grok 4.2",
+        })
+        result = snapshots.build_included_models(
+            ["OpenAI", "Gemini"],
+            {"OpenAI": "GPT-5.1 · New", "Gemini": "Gemini 2.5 Flash • Pro"},
+        )
+        self.assertEqual(result, ["OpenAI: GPT-5.1", "Google Gemini: Gemini 2.5 Flash"])
+
 
 class PendingResultTests(unittest.TestCase):
     def test_requires_uid_question_and_consensus(self):
@@ -647,6 +664,40 @@ class ModerationAndCleanupTests(unittest.TestCase):
         self.assertIn(indexed, urls[0]["path"])
         self.assertEqual(urls[0]["lastmod"], "2026-06-01")
 
+    def test_list_related_shares_only_indexed_active_and_excludes_self(self):
+        current = self._make_share(indexed=True,
+                                   question="Wie funktioniert Photosynthese in Pflanzen?")
+        related = self._make_share(indexed=True,
+                                   question="Photosynthese und Chlorophyll erklaert",
+                                   slug="photo-slug")
+        self._make_share(indexed=False, question="Photosynthese fuer Kinder")  # noindex
+        self._make_share(indexed=True, status="blocked",
+                         question="Photosynthese im Detail")  # gesperrt
+
+        items = snapshots.list_related_shares(current, "Photosynthese", db=self.db)
+        paths = [item["path"] for item in items]
+        self.assertEqual(len(items), 1)
+        self.assertIn(related, paths[0])
+        self.assertNotIn(current, paths[0])
+        self.assertEqual(set(items[0].keys()), {"path", "question", "models_count"})
+
+    def test_list_related_shares_ranks_by_token_overlap(self):
+        current = self._make_share(indexed=True, question="How do solar panels work?")
+        relevant = self._make_share(indexed=True,
+                                    question="Are solar panels worth the cost?",
+                                    slug="solar-slug",
+                                    created_at=datetime(2026, 5, 1, tzinfo=timezone.utc))
+        unrelated = self._make_share(indexed=True,
+                                     question="What is the capital of France?",
+                                     slug="france-slug",
+                                     created_at=datetime(2026, 6, 30, tzinfo=timezone.utc))
+
+        items = snapshots.list_related_shares(current, "How do solar panels work?",
+                                              db=self.db)
+        # Themen-Treffer schlaegt den neueren, aber unverwandten Share.
+        self.assertIn(relevant, items[0]["path"])
+        self.assertEqual(len(items), 2)
+
     def test_share_cache_returns_cached_until_invalidated(self):
         share_id = self._make_share()
         first = snapshots.get_share_cached(share_id, db=self.db)
@@ -758,6 +809,27 @@ class SharePageRouteTests(unittest.TestCase):
         body = response.text
         self.assertIn("toggleDifferencesView", body)
         self.assertIn("<strong>Unterschied:</strong>", body)
+
+    def test_related_questions_section_rendered(self):
+        doc = self._share_doc()
+        related = [
+            {"path": "/s/solar-abc", "question": "Are solar panels worth it?", "models_count": 4},
+        ]
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router.snapshots, "list_related_shares", return_value=related):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        body = response.text
+        self.assertIn("Related questions", body)
+        self.assertIn("Are solar panels worth it?", body)
+        self.assertIn("/s/solar-abc", body)
+        self.assertIn("4 models compared", body)
+
+    def test_related_questions_section_hidden_when_empty(self):
+        doc = self._share_doc()
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router.snapshots, "list_related_shares", return_value=[]):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        self.assertNotIn("Related questions", response.text)
 
     def test_rendered_citation_contains_canonical_url(self):
         doc = self._share_doc()

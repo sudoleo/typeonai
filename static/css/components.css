@@ -4018,6 +4018,39 @@ header .sidebar-toggle.collapse-btn {
   filter: invert(1);
 }
 
+/* Dezenter Hinweis "kein Internetzugang" neben dem DeepSeek-Modellnamen.
+   Bewusst zurückhaltend (gedämpftes Bernstein, halbtransparent); voll
+   sichtbar erst bei Hover/Fokus, der Tooltip erklärt den Hinweis. */
+.no-web-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  margin-left: -2px;
+  color: var(--accent-tertiary);
+  opacity: 0.62;
+  cursor: help;
+  flex-shrink: 0;
+  transition: opacity .2s ease, color .2s ease;
+}
+
+.no-web-indicator svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+.no-web-indicator:hover,
+.no-web-indicator:focus-visible {
+  opacity: 1;
+  outline: none;
+}
+
+.response-box.excluded .no-web-indicator {
+  display: none;
+}
+
 /* Dropdown-Pfeil neben dem Modellnamen: rahmenloser Ghost-Trigger */
 .model-picker-wrapper {
   position: relative;

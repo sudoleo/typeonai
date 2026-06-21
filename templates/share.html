@@ -18,7 +18,7 @@
   <meta name="twitter:description" content="{{ meta_description }}">
   <script type="application/ld+json">{{ jsonld | safe }}</script>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260612-polish3">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260621-related1">
   <link rel="icon" href="/static/favicon-square.png?v=20260523-logo1" type="image/png">
   <script>
     (function () {
@@ -55,7 +55,7 @@
         {% if included_models %}<span>Models consulted: {{ included_models | join(", ") }}</span>{% endif %}
       </div>
       {% if has_differences_view %}
-      <div class="share-toggle" role="group" aria-label="Switch between consensus and differences">
+      <div class="share-toggle has-cue" role="group" aria-label="Switch between consensus and differences">
         <button type="button" id="toggleConsensusView" aria-pressed="true">Consensus</button>
         <button type="button" id="toggleDifferencesView" aria-pressed="false">Differences</button>
       </div>
@@ -132,10 +132,28 @@
       <section class="legal-panel">
         <h2>Cite this answer</h2>
         <p class="share-citation-text" id="shareCitationText">{{ citation_text }}</p>
+        <button type="button" id="citationToggle" class="share-sources-toggle share-citation-toggle"
+                aria-controls="shareCitationText" aria-expanded="true" hidden>Show full citation</button>
         <div class="links">
           <button type="button" id="copyCitationBtn" class="button-secondary" data-umami-event="share_page_copy_citation">Copy citation</button>
           <a href="/" class="button-primary">Ask your own question</a>
         </div>
+      </section>
+      {% endif %}
+
+      {% if related_shares %}
+      <section class="legal-panel share-related" aria-labelledby="relatedHeading">
+        <h2 id="relatedHeading">Related questions</h2>
+        <ul class="share-related-list">
+          {% for item in related_shares %}
+          <li>
+            <a href="{{ item.path }}" class="share-related-item" data-umami-event="share_related_click">
+              <span class="share-related-q">{{ item.question }}</span>
+              {% if item.models_count %}<span class="share-related-meta">{{ item.models_count }} model{{ "s" if item.models_count != 1 }} compared</span>{% endif %}
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
       </section>
       {% endif %}
 
@@ -193,7 +211,12 @@
         differencesBtn.setAttribute("aria-pressed", String(!consensus));
       }
       consensusBtn.addEventListener("click", function () { show("consensus"); });
-      differencesBtn.addEventListener("click", function () { show("differences"); });
+      differencesBtn.addEventListener("click", function () {
+        show("differences");
+        // Hinweis-Punkt dauerhaft entfernen, sobald die Ansicht entdeckt wurde.
+        const toggle = differencesBtn.closest(".share-toggle");
+        if (toggle) toggle.classList.remove("has-cue");
+      });
     })();
 
     // Lange Quellenlisten: eingeklappt starten, "Show all" klappt auf.
@@ -249,6 +272,30 @@
           submitBtn.disabled = false;
           alert("Reporting failed. Please try again later.");
         });
+      });
+    })();
+
+    // Citation standardmäßig einklappen (Progressive Enhancement: ohne JS
+    // bleibt der volle Text sichtbar). Der Copy-Button kopiert weiter den
+    // kompletten Text, da dieser stets vollständig im DOM bleibt.
+    (function () {
+      const toggle = document.getElementById("citationToggle");
+      const textEl = document.getElementById("shareCitationText");
+      if (!toggle || !textEl) return;
+
+      textEl.classList.add("is-collapsed");
+      // Toggle nur zeigen, wenn im eingeklappten Zustand wirklich Text verborgen ist.
+      if (textEl.scrollHeight - textEl.clientHeight < 4) {
+        textEl.classList.remove("is-collapsed");
+        return;
+      }
+      toggle.hidden = false;
+      toggle.setAttribute("aria-expanded", "false");
+
+      toggle.addEventListener("click", function () {
+        const collapsed = textEl.classList.toggle("is-collapsed");
+        toggle.setAttribute("aria-expanded", String(!collapsed));
+        toggle.textContent = collapsed ? "Show full citation" : "Show less";
       });
     })();
 

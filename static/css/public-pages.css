@@ -2266,6 +2266,40 @@ canvas {
   box-shadow: 0 4px 12px rgba(37, 52, 67, 0.1), inset 0 1px 0 var(--glass-highlight);
 }
 
+/* Dezenter Hinweis, dass es eine Differences-Ansicht gibt: kleiner Punkt
+   direkt hinter dem Button-Text (vertikal zentriert), der beim Laden ein
+   paarmal sanft "pingt" und dann ruhig stehen bleibt. Verschwindet, sobald
+   die Ansicht geöffnet wurde. */
+.share-toggle.has-cue #toggleDifferencesView::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent);
+  animation: shareDiffCuePing 2.2s ease-out 3;
+}
+
+/* Sobald die Differences-Ansicht aktiv ist, keinen Hinweis mehr zeigen. */
+.share-toggle.has-cue #toggleDifferencesView[aria-pressed="true"]::after {
+  display: none;
+}
+
+@keyframes shareDiffCuePing {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 48%, transparent); }
+  70% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .share-toggle.has-cue #toggleDifferencesView::after {
+    animation: none;
+  }
+}
+
 .share-md {
   line-height: 1.68;
   overflow-wrap: anywhere;
@@ -2280,6 +2314,11 @@ canvas {
 .share-md table { border-collapse: collapse; display: block; overflow-x: auto; }
 .share-md th, .share-md td { border: 1px solid color-mix(in srgb, var(--border) 86%, transparent); padding: 6px 10px; text-align: left; }
 .share-md blockquote { border-left: 3px solid color-mix(in srgb, var(--accent) 38%, var(--border)); padding-left: 12px; color: var(--muted); }
+.share-md hr { border: 0; border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent); margin: 16px 0; }
+
+/* Differences-Freitext (alle Modelle einig): etwas Luft vom Best-Answer-Block */
+.share-differences-md { margin-bottom: 4px; }
+.share-differences-md > :last-child { margin-bottom: 0; }
 
 /* Inline-Citations: gleiche Chip-Sprache wie .source-link in der App */
 .share-md a[href^="#src-"] {
@@ -2430,6 +2469,18 @@ canvas {
   overflow-wrap: anywhere;
 }
 
+/* Eingeklappt: nur die ersten Zeilen, der Rest folgt per "Show full citation" */
+.share-citation-text.is-collapsed {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.share-citation-toggle {
+  margin-top: 8px;
+}
+
 .share-disclaimer {
   font-size: 0.85rem;
   color: var(--muted);
@@ -2503,6 +2554,96 @@ canvas {
   margin: 10px 0 0;
   font-size: 0.85rem;
   font-style: italic;
+  color: var(--muted);
+}
+
+/* "Best answer"-Hervorhebung unter den Differences – gilt für strukturierte
+   Karten und den Einig-Fall (Freitext-Fallback) gleichermaßen. */
+.share-best-model {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  color: var(--heading);
+  font-weight: 650;
+}
+
+.share-best-model-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent-secondary) 34%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent-secondary) 16%, transparent);
+  color: color-mix(in srgb, var(--accent-secondary) 58%, var(--text));
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* "Verwandte Fragen": dezente Liste interner Links auf andere indexierte Shares */
+.share-related-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+@media (min-width: 701px) {
+  .share-related-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.share-related-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100%;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--glass-border) 56%, var(--border));
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 22%, transparent), transparent 50%),
+    color-mix(in srgb, var(--glass-bg-strong) 48%, transparent);
+  color: var(--text);
+  transition: border-color .16s ease, background-color .16s ease, transform .16s ease;
+}
+
+.share-related-item:hover,
+.share-related-item:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--glass-bg-strong));
+  color: var(--text);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.share-related-q {
+  font-size: 0.92rem;
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--heading);
+  /* Maximal zwei Zeilen, lange Fragen sauber abschneiden */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.share-related-item:hover .share-related-q {
+  color: var(--accent);
+}
+
+.share-related-meta {
+  font-size: 0.74rem;
+  font-weight: 550;
   color: var(--muted);
 }
 
