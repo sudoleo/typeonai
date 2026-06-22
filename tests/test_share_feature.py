@@ -255,6 +255,36 @@ class SanitizerTests(unittest.TestCase):
         )
         self.assertEqual(result, ["OpenAI: GPT-5.1", "Google Gemini: Gemini 2.5 Flash"])
 
+    def test_consulted_models_view_maps_icon_and_model(self):
+        view = snapshots.consulted_models_view(
+            ["OpenAI: gpt-5.1", "Google Gemini", "Grok"]
+        )
+        self.assertEqual(view[0]["provider"], "OpenAI")
+        self.assertEqual(view[0]["model"], "gpt-5.1")
+        self.assertTrue(view[0]["icon"].endswith("chatgpt.png"))
+        # Eintrag ohne Modellname behält Provider-Label, kein Icon-Verlust:
+        self.assertEqual(view[1]["provider"], "Gemini")
+        self.assertEqual(view[1]["model"], "")
+        self.assertTrue(view[1]["icon"].endswith("gemini-icon.png"))
+        # Unbekanntes Label bleibt erhalten, aber ohne Icon:
+        unknown = snapshots.consulted_models_view(["FooAI: x"])
+        self.assertEqual(unknown[0]["provider"], "")
+        self.assertEqual(unknown[0]["icon"], "")
+
+    def test_consensus_model_view_resolves_provider_and_pro(self):
+        pro = snapshots.consensus_model_view("Anthropic-Pro")
+        self.assertEqual(pro["provider"], "Anthropic")
+        self.assertTrue(pro["pro"])
+        self.assertTrue(pro["icon"].endswith("claude.png"))
+        self.assertTrue(pro["model"])  # konkretes Modell aufgelöst
+        # Frontier-ID per Substring -> Gemini:
+        frontier = snapshots.consensus_model_view(
+            snapshots.cfg.GEMINI_FRONTIER_LOW_MODEL
+        )
+        self.assertEqual(frontier["provider"], "Gemini")
+        self.assertFalse(frontier["pro"])
+        self.assertIsNone(snapshots.consensus_model_view(""))
+
 
 class PendingResultTests(unittest.TestCase):
     def test_requires_uid_question_and_consensus(self):

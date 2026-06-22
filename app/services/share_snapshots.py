@@ -65,6 +65,17 @@ PROVIDER_CITATION_LABELS = {
     "DeepSeek": "DeepSeek",
     "Grok": "Grok",
 }
+# Provider-Logos analog zum Model-Picker auf /app (static/icons/chat_icons/).
+PROVIDER_ICONS = {
+    "OpenAI": "chatgpt.png",
+    "Mistral": "mistral.png",
+    "Anthropic": "claude.png",
+    "Gemini": "gemini-icon.png",
+    "DeepSeek": "deepseek.png",
+    "Grok": "grok.png",
+}
+# Reverse-Map: Zitations-Label -> Provider-Key (Labels sind eindeutig).
+_CITATION_LABEL_TO_PROVIDER = {v: k for k, v in PROVIDER_CITATION_LABELS.items()}
 
 _UMLAUT_MAP = str.maketrans({
     "ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss",
@@ -242,6 +253,81 @@ def build_included_models(included_providers, model_labels=None):
         model_name = labels.get(provider)
         result.append("%s: %s" % (display, model_name) if model_name else display)
     return result
+
+
+# Konsens-Engine-Key -> konkretes Modell (deterministisch, analog zu
+# consensus_engine.run_consensus). Der Snapshot speichert nur den Engine-Key,
+# das konkrete Modell wird hier rekonstruiert – gilt auch für Alt-Snapshots.
+_CONSENSUS_ENGINE_MODELS = {
+    "OpenAI": cfg.DEFAULT_OPENAI_MODEL,
+    "OpenAI-Pro": "gpt-5.5",
+    "Mistral": cfg.DEFAULT_MISTRAL_MODEL,
+    "Mistral-Pro": cfg.MISTRAL_PRO_MODEL,
+    "Anthropic": cfg.DEFAULT_ANTHROPIC_MODEL,
+    "Anthropic-Pro": cfg.ANTHROPIC_PRO_MODEL,
+    "Gemini": cfg.GEMINI_FLASH_MODEL,
+    "Gemini-Pro": cfg.GEMINI_PRO_MODEL,
+    cfg.GEMINI_FRONTIER_LOW_MODEL: cfg.GEMINI_FRONTIER_LOW_MODEL,
+    "DeepSeek": cfg.DEFAULT_DEEPSEEK_MODEL,
+    "DeepSeek-Pro": "deepseek-v4-pro",
+    "Grok": cfg.DEFAULT_GROK_MODEL,
+    "Grok-Pro": "grok-4.3",
+}
+
+
+def consensus_model_view(consensus_model):
+    """Strukturierte Ansicht des Konsens-Modells (Icon + konkretes Modell).
+
+    Der gespeicherte Wert ist ein Engine-Key wie "Anthropic" oder
+    "Gemini-Pro"; daraus werden Provider (für das Logo), das konkrete Modell
+    (lesbares Label) und das Pro-Flag rekonstruiert. Unbekannte Werte bleiben
+    ohne Icon erhalten.
+    """
+    raw = str(consensus_model or "").strip()
+    if not raw:
+        return None
+    is_pro = raw.endswith("-Pro")
+    base = raw[:-4] if is_pro else raw
+    provider = base if base in PROVIDER_ICONS else None
+    if provider is None:
+        low = raw.lower()
+        for key in PROVIDER_ICONS:
+            if key.lower() in low:
+                provider = key
+                break
+    icon = PROVIDER_ICONS.get(provider) if provider else None
+    model_id = _CONSENSUS_ENGINE_MODELS.get(raw)
+    model_label = cfg.get_model_label(model_id) if model_id else ""
+    return {
+        "provider": provider or "",
+        "label": PROVIDER_CITATION_LABELS.get(provider) if provider else raw,
+        "model": model_label,
+        "icon": ("/static/icons/chat_icons/%s" % icon) if icon else "",
+        "pro": is_pro,
+    }
+
+
+def consulted_models_view(included_models):
+    """Strukturierte Ansicht der konsultierten Modelle für die Share-Seite.
+
+    Macht aus den flachen Zitations-Strings ("Anthropic Claude: opus-4")
+    wieder Provider-Label, Modellname und passendes Logo, damit das Template
+    je Anbieter ein Icon-Chip rendern kann. Unbekannte Einträge bleiben ohne
+    Icon erhalten (graceful fallback).
+    """
+    view = []
+    for entry in included_models or []:
+        label, _, model_name = str(entry).partition(": ")
+        label = label.strip()
+        provider = _CITATION_LABEL_TO_PROVIDER.get(label)
+        icon = PROVIDER_ICONS.get(provider) if provider else None
+        view.append({
+            "provider": provider or "",
+            "label": label,
+            "model": model_name.strip(),
+            "icon": ("/static/icons/chat_icons/%s" % icon) if icon else "",
+        })
+    return view
 
 
 def _sanitize_str_list(value, item_limit, max_items):
