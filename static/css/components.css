@@ -52,7 +52,7 @@ textarea:focus {
    -------------------------------------------------------------------------- */
 .input-section {
   text-align: center;
-  margin-bottom: 20px;
+  margin-bottom: 36px;
 }
 
 .visually-hidden {
@@ -835,29 +835,24 @@ textarea:focus {
   flex: 1;
   min-width: 280px;
   padding: 12px 16px;
-  background:
-    linear-gradient(160deg, color-mix(in srgb, var(--glass-bg-strong) 70%, transparent), color-mix(in srgb, var(--glass-bg) 82%, transparent)),
-    var(--response-bg);
   border-radius: var(--radius-lg);
-  border: var(--card-border);
-  box-shadow: var(--card-shadow);
   transition: background 0.3s, box-shadow 0.3s, border 0.3s, transform 0.3s;
   position: relative;
-  backdrop-filter: blur(calc(var(--glass-blur) * 0.62)) saturate(1.18);
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.62)) saturate(1.18);
   isolation: isolate;
 }
 
+/* Response cards are frameless — no background, border, shadow or blur.
+   They live directly on the app canvas; only their header divider remains. */
 .response-box {
   overflow: hidden;
   will-change: transform;
+  padding: 4px 6px 14px;
 }
 
 .response-box:not(.excluded) {
   min-height: 104px;
 }
 
-.response-box::before,
 .consensus-box::before {
   content: "";
   position: absolute;
@@ -871,16 +866,12 @@ textarea:focus {
   z-index: -1;
 }
 
-@container (min-width: 1120px) {
-  .response-section {
-    justify-content: flex-start;
-  }
-
-  .response-section > .response-box {
-    flex: 0 1 calc((100% - 30px) / 3);
-    max-width: calc((100% - 30px) / 3);
-    box-sizing: border-box;
-  }
+/* Exactly two response cards per row (never three), regardless of width.
+   Narrow viewports still collapse to one column via the 280px min-width. */
+.response-section > .response-box:not(.excluded) {
+  flex: 1 1 calc((100% - 15px) / 2);
+  max-width: calc((100% - 15px) / 2);
+  box-sizing: border-box;
 }
 
 .agent-mode-panel {
@@ -1257,37 +1248,45 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   z-index: 40;
 }
 
+/* Subtle, frameless hover affordance instead of a lifted card frame. */
 .response-box:hover {
-  box-shadow: var(--card-shadow-hover);
-  border-color: color-mix(in srgb, var(--glass-border) 76%, var(--accent) 18%);
+  background: color-mix(in srgb, var(--glass-bg-soft) 38%, transparent);
+  border-radius: var(--radius-md);
 }
 
+/* "Best" is marked with a left accent bar + faint tint — no full frame. */
 .response-box.best {
-  border: 1px solid #22c55e;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15), var(--card-shadow);
+  background: color-mix(in srgb, #22c55e 7%, transparent);
+  box-shadow: inset 3px 0 0 #22c55e;
+  border-radius: var(--radius-md);
 }
 
 .dark-mode .response-box.best {
-  border-color: #4ade80;
-  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.15), var(--card-shadow);
+  background: color-mix(in srgb, #4ade80 9%, transparent);
+  box-shadow: inset 3px 0 0 #4ade80;
 }
 
 .response-box.best:hover {
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15), var(--card-shadow-hover);
+  background: color-mix(in srgb, #22c55e 11%, transparent);
 }
 
 .dark-mode .response-box.best:hover {
-  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.15), var(--card-shadow-hover);
+  background: color-mix(in srgb, #4ade80 13%, transparent);
 }
 
+/* Excluded answers collapse to a small "set aside" pill so they stay legible
+   on the frameless canvas. */
 .response-box.excluded {
   order: 10;
   flex: 0 1 96px;
   min-width: 88px;
   max-width: 104px;
   min-height: 0;
-  padding: 5px 8px;
+  padding: 5px 10px;
   opacity: 0.72;
+  background: color-mix(in srgb, var(--glass-bg-soft) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--glass-border) 55%, var(--glass-edge));
+  border-radius: var(--radius-pill);
 }
 
 .response-box h2 {
@@ -1436,13 +1435,14 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   margin-top: 12px;
   padding: 8px;
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--glass-bg-strong) 74%, var(--accent) 5%), color-mix(in srgb, var(--glass-bg) 86%, transparent)),
-    var(--response-bg);
+    linear-gradient(135deg, color-mix(in srgb, var(--glass-bg-strong) 50%, var(--accent) 4%), color-mix(in srgb, var(--glass-bg) 58%, transparent));
   border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--glass-border));
   box-shadow: var(--card-shadow), 0 0 0 3px color-mix(in srgb, var(--accent) 4%, transparent);
   border-radius: var(--radius-lg);
   width: 100%;
   box-sizing: border-box;
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.62)) saturate(1.18);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.62)) saturate(1.18);
 }
 
 .consensus-box p {
@@ -1452,8 +1452,8 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 .consensus-main {
   flex: 4;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 42%, transparent), transparent 38%),
-    color-mix(in srgb, var(--response-bg) 88%, var(--glass-bg-strong) 12%);
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 30%, transparent), transparent 40%),
+    color-mix(in srgb, var(--glass-bg-soft) 30%, transparent);
   padding: 18px 20px 20px;
   min-height: 78px;
   border-radius: var(--radius-md);
@@ -1473,8 +1473,8 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 .consensus-differences {
   flex: 1;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 28%, transparent), transparent 42%),
-    color-mix(in srgb, var(--response-bg) 84%, var(--sidebar-hover) 16%);
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 24%, transparent), transparent 44%),
+    color-mix(in srgb, var(--glass-bg-soft) 26%, transparent);
   padding: 16px 16px 18px;
   min-height: 78px;
   border-radius: var(--radius-md);
@@ -4354,17 +4354,17 @@ header .sidebar-toggle.collapse-btn {
   overflow: hidden;
   text-overflow: clip;
 
-  --model-max-width: 100px;
+  --model-max-width: 160px;
   max-width: var(--model-max-width);
 
-  /* Mask gradient for smooth fade-out at the right end */
-  mask-image: linear-gradient(to right, #000 calc(var(--model-max-width) - 24px), transparent var(--model-max-width));
-  -webkit-mask-image: linear-gradient(to right, #000 calc(var(--model-max-width) - 24px), transparent var(--model-max-width));
+  /* Soft fade at the right end — narrow zone so more of the name stays readable */
+  mask-image: linear-gradient(to right, #000 calc(var(--model-max-width) - 14px), transparent var(--model-max-width));
+  -webkit-mask-image: linear-gradient(to right, #000 calc(var(--model-max-width) - 14px), transparent var(--model-max-width));
 }
 
 @media (max-width: 640px) {
   .model-name-trigger {
-    --model-max-width: 70px;
+    --model-max-width: 120px;
   }
 }
 

@@ -200,7 +200,9 @@ function initAppWidthResizer() {
 
 function bindAppUiControls() {
   bindSettingsModalControls();
-  initAppWidthResizer();
+  // App-width resize handles were removed with the framed container; the app
+  // now uses a fixed, fluid canvas width. initAppWidthResizer is left defined
+  // but no longer invoked.
 }
 
 if (document.readyState === "loading") {

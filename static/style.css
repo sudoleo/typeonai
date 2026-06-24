@@ -3,7 +3,7 @@
    This file aggregates all modular CSS files.
    ========================================================================== */
 
-@import url('./css/variables.css?v=20260621-related1');
-@import url('./css/base.css?v=20260621-related1');
-@import url('./css/layout.css?v=20260621-related1');
-@import url('./css/components.css?v=20260621-related1');
+@import url('./css/variables.css?v=20260624-canvas2');
+@import url('./css/base.css?v=20260624-canvas2');
+@import url('./css/layout.css?v=20260624-canvas2');
+@import url('./css/components.css?v=20260624-canvas2');

@@ -51,7 +51,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260621-related1">
+  <link rel="stylesheet" href="/static/style.css?v=20260624-canvas2">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -66,7 +66,7 @@
   <!-- Firebase-Code wird jetzt ausgelagert -->
   <script type="module" src="/static/firebase.js?v=20260528-umami-events1"></script>
   <script type="module" src="/static/demo.js?v=20260621-demo-stream-diff3"></script>
-  <script src="/static/app-ui.js?v=20260523-width-resize1" defer></script>
+  <script src="/static/app-ui.js?v=20260624-canvas1" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
@@ -331,7 +331,7 @@
 
       <div class="response-box" id="openaiResponse" data-model="OpenAI" data-short-label="OpenAI">
         <h2 data-short-label="OpenAI">
-          <span class="title">Response from ChatGPT
+          <span class="title">ChatGPT
             <small>
               <img src="/static/icons/chat_icons/chatgpt.png" class="model-icon chatgpt-logo" alt="icon">
               <span id="openaiModelText">{{ model_labels.get(default_models['openai'], default_models['openai']) }}</span>
@@ -355,7 +355,7 @@
 
       <div class="response-box" id="mistralResponse" data-model="Mistral" data-short-label="Mistral">
         <h2 data-short-label="Mistral">
-          <span class="title">Response from Mistral
+          <span class="title">Mistral
             <small><img src="/static/icons/chat_icons/mistral.png" class="model-icon" alt="icon"><span
                 id="mistralModelText">{{ model_labels.get(default_models['mistral'], default_models['mistral']) }}</span></small>
             <span class="model-picker-wrapper">
@@ -377,7 +377,7 @@
 
       <div class="response-box" id="claudeResponse" data-model="Anthropic" data-short-label="Claude">
         <h2 data-short-label="Claude">
-          <span class="title">Response from Claude
+          <span class="title">Claude
             <small><img src="/static/icons/chat_icons/claude.png" class="model-icon" alt="icon"><span
                 id="claudeModelText">{{ model_labels.get(default_models['anthropic'], default_models['anthropic']) }}</span></small>
             <span class="model-picker-wrapper">
@@ -399,7 +399,7 @@
 
       <div class="response-box" id="geminiResponse" data-model="Gemini" data-short-label="Gemini">
         <h2 data-short-label="Gemini">
-          <span class="title">Response from Gemini
+          <span class="title">Gemini
             <small><img src="/static/icons/chat_icons/gemini-icon.png" class="model-icon" alt="icon"><span
                 id="geminiModelText">{{ model_labels.get(default_models['gemini'], default_models['gemini']) }}</span></small>
             <span class="model-picker-wrapper">
@@ -421,7 +421,7 @@
 
       <div class="response-box" id="deepseekResponse" data-model="DeepSeek" data-short-label="DeepSeek">
         <h2 data-short-label="DeepSeek">
-          <span class="title">Response from DeepSeek
+          <span class="title">DeepSeek
             <small><img src="/static/icons/chat_icons/deepseek.png" class="model-icon" alt="icon"><span
                 id="deepseekModelText">{{ model_labels.get(default_models['deepseek'], default_models['deepseek']) }}</span></small>
             <span class="no-web-indicator" tabindex="0" role="img"
@@ -452,7 +452,7 @@
 
       <div class="response-box" id="grokResponse" data-model="Grok" data-short-label="Grok">
         <h2 data-short-label="Grok">
-          <span class="title">Response from Grok
+          <span class="title">Grok
             <small>
               <img src="/static/icons/chat_icons/grok.png" class="model-icon grok-logo" alt="Grok icon">
               <span id="grokModelText">{{ model_labels.get(default_models['grok'], default_models['grok']) }}</span>

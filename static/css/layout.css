@@ -3,66 +3,18 @@
    ========================================================================== */
 
 /* Main Containers */
+/* Frameless app canvas: the container is now an invisible layout wrapper.
+   Only the input box (action surface) and the consensus box (result surface)
+   keep their glass; the response cards float directly on the canvas. The
+   element itself stays for centering + container queries (container-type). */
 .container {
-  width: min(var(--app-container-width, 900px), calc(100vw - 320px));
+  width: min(var(--app-container-width, 980px), calc(100vw - 320px));
   max-width: none;
   margin: 0 auto;
-  background:
-    linear-gradient(160deg, var(--glass-bg-strong), var(--glass-bg) 54%, var(--glass-bg-soft)),
-    var(--container-bg);
-  padding: 16px 22px;
-  border-radius: var(--radius-xl);
-  border: 1px solid color-mix(in srgb, var(--glass-border) 72%, var(--sidebar-border));
-  box-shadow: var(--box-shadow);
+  padding: 0;
   position: relative;
   container-type: inline-size;
-  backdrop-filter: blur(var(--glass-blur)) saturate(1.28);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.28);
   isolation: isolate;
-}
-
-.container::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background:
-    linear-gradient(180deg, var(--glass-highlight), transparent 34%),
-    linear-gradient(115deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 42%, color-mix(in srgb, var(--accent-secondary) 6%, transparent));
-  opacity: 0.58;
-  pointer-events: none;
-  z-index: -1;
-}
-
-.container.is-width-resizable {
-  overflow: visible;
-}
-
-.app-width-resize-handle {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 18px;
-  z-index: 25;
-  cursor: ew-resize;
-  touch-action: none;
-}
-
-.app-width-resize-handle.left {
-  left: -9px;
-}
-
-.app-width-resize-handle.right {
-  right: -9px;
-}
-
-body.app-width-resizing {
-  cursor: ew-resize;
-  user-select: none;
-}
-
-body.app-width-resizing * {
-  cursor: ew-resize !important;
 }
 
 .main-wrapper {
@@ -702,12 +654,6 @@ body:has(.sidebar.collapsed) .main-wrapper {
   .container {
     width: min(var(--app-container-width, 900px), calc(100% - 20px));
     box-sizing: border-box;
-  }
-}
-
-@media (max-width: 1023px) {
-  .app-width-resize-handle {
-    display: none;
   }
 }
 
