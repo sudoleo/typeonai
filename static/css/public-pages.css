@@ -11,29 +11,33 @@
   --radius-xl: 20px;
   --radius-pill: 999px;
 
-  --page-bg: #edf1f7;
-  --panel-bg: rgba(255, 255, 255, 0.66);
-  --panel-soft: rgba(255, 255, 255, 0.44);
-  --text: #233140;
-  --heading: #101926;
-  --muted: #66758a;
-  --border: rgba(114, 132, 148, 0.2);
+  /* Flat Apple palette, aligned with the landing page (landing.css) */
+  --page-bg: #f5f5f7;
+  --panel-bg: #ffffff;
+  --panel-soft: #ffffff;
+  --text: #1d1d1f;
+  --heading: #1d1d1f;
+  --muted: #6e6e73;
+  --border: rgba(0, 0, 0, 0.10);
   --accent: #0c84c2;
+  --accent-hover: #0a6fa4;
   --accent-secondary: #4fc2a3;
   --accent-tertiary: #d99b46;
-  --button-bg: #15233c;
+  --button-bg: #0c84c2;
   --button-text: #ffffff;
-  --response-bg: rgba(255, 255, 255, 0.62);
-  --glass-bg: rgba(255, 255, 255, 0.54);
-  --glass-bg-strong: rgba(255, 255, 255, 0.74);
-  --glass-bg-soft: rgba(255, 255, 255, 0.36);
-  --glass-border: rgba(255, 255, 255, 0.62);
-  --glass-highlight: rgba(255, 255, 255, 0.9);
-  --glass-edge: rgba(92, 113, 134, 0.2);
-  --glass-blur: 24px;
-  --shadow: 0 26px 80px rgba(40, 56, 76, 0.12), 0 4px 16px rgba(40, 56, 76, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --response-bg: rgba(255, 255, 255, 0.70);
+  --glass-bg: rgba(255, 255, 255, 0.60);
+  --glass-bg-strong: rgba(255, 255, 255, 0.85);
+  --glass-bg-soft: rgba(255, 255, 255, 0.40);
+  --glass-border: rgba(255, 255, 255, 0.70);
+  --glass-highlight: rgba(255, 255, 255, 0.90);
+  --glass-edge: rgba(92, 113, 134, 0.18);
+  --glass-blur: 18px;
+  --shadow: 0 14px 38px rgba(40, 56, 76, 0.08), 0 2px 8px rgba(40, 56, 76, 0.045), inset 0 1px 0 rgba(255, 255, 255, 0.78);
   --card-shadow: 0 14px 38px rgba(40, 56, 76, 0.08), 0 2px 8px rgba(40, 56, 76, 0.045), inset 0 1px 0 rgba(255, 255, 255, 0.78);
   --card-shadow-hover: 0 22px 54px rgba(40, 56, 76, 0.11), 0 4px 16px rgba(40, 56, 76, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  --hairline: rgba(0, 0, 0, 0.08);
+  --hairline-soft: rgba(0, 0, 0, 0.06);
   --radius: var(--radius-lg);
   --maxw: 1180px;
   --agent-pulse-duration: 1.15s;
@@ -44,29 +48,32 @@
 
 :root.dark-mode,
 .dark-mode {
-  --page-bg: #0a0f14;
-  --panel-bg: rgba(18, 24, 31, 0.7);
-  --panel-soft: rgba(255, 255, 255, 0.07);
-  --text: #edf5fb;
+  --page-bg: #161618;
+  --panel-bg: #1d1d20;
+  --panel-soft: #1d1d20;
+  --text: #f5f5f7;
   --heading: #f8fafc;
-  --muted: #a2b1bd;
-  --border: rgba(190, 216, 230, 0.16);
-  --accent: #6ecbf5;
+  --muted: #a1a1a6;
+  --border: rgba(255, 255, 255, 0.12);
+  --accent: #3aa9e0;
+  --accent-hover: #5cbbed;
   --accent-secondary: #8ee6c8;
   --accent-tertiary: #f3c66f;
-  --button-bg: #dff5ff;
-  --button-text: #071217;
-  --response-bg: rgba(24, 31, 39, 0.66);
-  --glass-bg: rgba(23, 31, 40, 0.5);
-  --glass-bg-strong: rgba(31, 41, 52, 0.72);
-  --glass-bg-soft: rgba(255, 255, 255, 0.07);
-  --glass-border: rgba(226, 244, 255, 0.14);
-  --glass-highlight: rgba(255, 255, 255, 0.18);
-  --glass-edge: rgba(226, 244, 255, 0.08);
-  --glass-blur: 26px;
-  --shadow: 0 16px 48px rgba(0, 0, 0, 0.3), 0 2px 9px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --card-shadow: 0 12px 36px rgba(0, 0, 0, 0.22), 0 1px 7px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --card-shadow-hover: 0 16px 44px rgba(0, 0, 0, 0.28), 0 2px 10px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.11);
+  --button-bg: #3aa9e0;
+  --button-text: #06121a;
+  --response-bg: rgba(28, 28, 31, 0.80);
+  --glass-bg: rgba(23, 31, 40, 0.40);
+  --glass-bg-strong: rgba(40, 42, 48, 0.62);
+  --glass-bg-soft: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.10);
+  --glass-highlight: rgba(255, 255, 255, 0.08);
+  --glass-edge: rgba(226, 244, 255, 0.06);
+  --glass-blur: 16px;
+  --shadow: 0 8px 22px rgba(0, 0, 0, 0.20), 0 1px 5px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --card-shadow: 0 8px 22px rgba(0, 0, 0, 0.20), 0 1px 5px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --card-shadow-hover: 0 10px 30px rgba(0, 0, 0, 0.25), 0 2px 9px rgba(0, 0, 0, 0.17), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --hairline: rgba(255, 255, 255, 0.10);
+  --hairline-soft: rgba(255, 255, 255, 0.07);
   color-scheme: dark;
 }
 
@@ -83,28 +90,20 @@ html {
 body {
   min-height: 100vh;
   margin: 0;
-  font: 16px/1.6 "SF Pro Text", Inter, Roboto, Arial, system-ui, -apple-system, "Segoe UI", sans-serif;
-  background:
-    linear-gradient(145deg, color-mix(in srgb, var(--page-bg) 92%, #ffffff 8%) 0%, var(--page-bg) 44%, color-mix(in srgb, var(--accent-secondary) 10%, var(--page-bg)) 100%),
-    linear-gradient(90deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 36%, color-mix(in srgb, var(--accent-tertiary) 8%, transparent));
-  background-attachment: fixed;
+  font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--page-bg);
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 .landing-page {
-  background:
-    linear-gradient(120deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 30%, color-mix(in srgb, var(--accent-secondary) 7%, transparent) 72%, transparent),
-    linear-gradient(180deg, color-mix(in srgb, #ffffff 20%, transparent), transparent 42%),
-    var(--page-bg);
-  background-attachment: fixed;
+  background: var(--page-bg);
 }
 
 .dark-mode.landing-page,
 .dark-mode .landing-page {
-  background:
-    linear-gradient(120deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 32%, color-mix(in srgb, var(--accent-secondary) 8%, transparent) 74%, transparent),
-    linear-gradient(180deg, rgba(255,255,255,0.06), transparent 42%),
-    var(--page-bg);
+  background: var(--page-bg);
 }
 
 a {
@@ -134,13 +133,10 @@ a:hover {
   gap: 20px;
   min-height: 54px;
   padding: 0 clamp(16px, 3vw, 26px);
-  border-bottom: 1px solid color-mix(in srgb, var(--glass-border) 58%, var(--border));
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--glass-bg-strong) 90%, transparent), color-mix(in srgb, var(--glass-bg) 82%, transparent)),
-    var(--panel-bg);
-  box-shadow: 0 10px 34px rgba(37, 52, 67, 0.08), inset 0 1px 0 var(--glass-highlight);
-  backdrop-filter: blur(calc(var(--glass-blur) * 0.78)) saturate(1.22);
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.78)) saturate(1.22);
+  border-bottom: 1px solid var(--hairline-soft);
+  background: color-mix(in srgb, var(--panel-bg) 72%, transparent);
+  backdrop-filter: saturate(1.6) blur(18px);
+  -webkit-backdrop-filter: saturate(1.6) blur(18px);
 }
 
 .brand {
@@ -193,51 +189,45 @@ a:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 40px;
-  padding: 0 18px;
-  border-radius: var(--radius-sm);
-  font-weight: 700;
-  letter-spacing: 0.005em;
+  min-height: 44px;
+  padding: 0 22px;
+  border-radius: var(--radius-pill);
+  font-weight: 500;
+  letter-spacing: 0;
   line-height: 1;
   transition: transform .18s ease, border-color .18s ease, background-color .18s ease, color .18s ease, box-shadow .18s ease;
 }
 
 .nav-cta {
-  min-height: 35px;
+  min-height: 34px;
   padding-inline: 16px;
-  border-radius: var(--radius-pill);
-  font-size: 0.86rem;
+  font-size: 0.88rem;
 }
 
 .nav-cta,
 .button-primary {
-  border: 1px solid color-mix(in srgb, var(--button-bg) 86%, #ffffff 14%);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, #ffffff 14%, transparent), transparent 52%),
-    var(--button-bg);
+  border: 1px solid transparent;
+  background: var(--accent);
   color: var(--button-text);
-  box-shadow: 0 12px 28px color-mix(in srgb, var(--button-bg) 20%, transparent), inset 0 1px 0 color-mix(in srgb, #ffffff 34%, transparent);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
 .nav-cta:hover,
 .button-primary:hover {
+  background: var(--accent-hover);
   color: var(--button-text);
   transform: translateY(-1px);
-  box-shadow: 0 16px 34px color-mix(in srgb, var(--button-bg) 26%, transparent), inset 0 1px 0 color-mix(in srgb, #ffffff 38%, transparent);
 }
 
 .button-secondary {
-  border: 1px solid color-mix(in srgb, var(--glass-border) 62%, var(--border));
-  background: color-mix(in srgb, var(--glass-bg-strong) 68%, transparent);
+  border: 1px solid var(--border);
+  background: transparent;
   color: var(--heading);
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
-  backdrop-filter: blur(calc(var(--glass-blur) * 0.45)) saturate(1.14);
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.45)) saturate(1.14);
 }
 
 .button-secondary:hover {
-  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
-  background: color-mix(in srgb, var(--accent) 8%, var(--panel-bg));
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  color: var(--accent);
 }
 
 .landing-shell,
@@ -265,10 +255,10 @@ a:hover {
   gap: 8px;
   margin: 0 0 16px;
   color: var(--accent);
-  font-size: 0.74rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  line-height: 1;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
   text-transform: uppercase;
 }
 
@@ -279,8 +269,8 @@ a:hover {
 .page-header h1 {
   margin: 0;
   color: var(--heading);
-  font-weight: 800;
-  letter-spacing: 0;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .hero h1 {
@@ -1350,6 +1340,8 @@ a:hover {
   margin: 0 0 12px;
   color: var(--heading);
   font-size: clamp(1.18rem, 2vw, 1.48rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
   line-height: 1.2;
 }
 
@@ -1389,10 +1381,11 @@ canvas {
 }
 
 .footer {
-  padding: 24px 0 36px;
-  border-top: 1px solid var(--border);
+  padding: 40px 0;
+  border-top: 1px solid var(--hairline-soft);
+  background: var(--panel-bg);
   color: var(--muted);
-  font-size: 0.92rem;
+  font-size: 0.9rem;
 }
 
 .footer-inner {

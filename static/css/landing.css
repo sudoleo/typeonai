@@ -1,0 +1,1221 @@
+/* ==========================================================================
+   consens.io — Landing page (Apple-style chrome + /app liquid-glass mockups)
+   Self-contained: drives ONLY the marketing landing page. Other public pages
+   (public-pages.css) and the /app stay untouched.
+   The page chrome (sections, type, nav) is flat & Apple-clean; the product
+   mockups reuse the real /app liquid-glass language so they don't feel foreign.
+   ========================================================================== */
+
+:root {
+  /* --- Apple colour system (one accent) --- */
+  --text-primary: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --bg-white: #ffffff;
+  --bg-grey: #f5f5f7;
+  --accent: #0c84c2;            /* brand blue from the logo */
+  --accent-hover: #0a6fa4;
+  --accent-secondary: #4fc2a3;
+  --accent-tertiary: #d99b46;
+
+  /* Aliases so ported /app components resolve */
+  --text-color: var(--text-primary);
+  --sidebar-text-muted: var(--text-secondary);
+  --sidebar-border: rgba(114, 132, 148, 0.22);
+  --sidebar-hover: rgba(255, 255, 255, 0.5);
+  --slider-bg: #ccc;
+  --button-bg: #15233c;
+
+  /* --- Liquid-glass tokens (from the app) --- */
+  --response-bg: rgba(255, 255, 255, 0.66);
+  --container-bg: rgba(255, 255, 255, 0.72);
+  --glass-bg: rgba(255, 255, 255, 0.54);
+  --glass-bg-strong: rgba(255, 255, 255, 0.72);
+  --glass-bg-soft: rgba(255, 255, 255, 0.36);
+  --glass-border: rgba(255, 255, 255, 0.62);
+  --glass-edge: rgba(92, 113, 134, 0.2);
+  --glass-highlight: rgba(255, 255, 255, 0.9);
+  --glass-blur: 18px;
+  --liquid-shadow: 0 14px 38px rgba(40, 56, 76, 0.08), 0 2px 8px rgba(40, 56, 76, 0.045), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  --liquid-shadow-hover: 0 22px 54px rgba(40, 56, 76, 0.11), 0 4px 16px rgba(40, 56, 76, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  --liquid-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+
+  --hairline: rgba(0, 0, 0, 0.08);
+  --hairline-soft: rgba(0, 0, 0, 0.06);
+
+  /* Radius scale (kept in sync with the app) */
+  --radius-xs: 8px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+  --card-radius: 18px;
+  --card-shadow: var(--liquid-shadow);
+  --card-shadow-lift: var(--liquid-shadow-hover);
+
+  /* Rhythm */
+  --maxw: 1120px;
+  --section-pad: clamp(76px, 11vw, 150px);
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+
+:root.dark-mode,
+.dark-mode {
+  --text-primary: #f5f5f7;
+  --text-secondary: #a1a1a6;
+  --bg-white: #0a0a0c;
+  --bg-grey: #161618;
+  --accent: #3aa9e0;
+  --accent-hover: #5cbbed;
+  --accent-secondary: #8ee6c8;
+  --accent-tertiary: #f3c66f;
+
+  --sidebar-border: rgba(190, 216, 230, 0.16);
+  --sidebar-hover: rgba(255, 255, 255, 0.08);
+  --slider-bg: #636363;
+  --button-bg: #dff5ff;
+
+  --response-bg: rgba(24, 31, 39, 0.8);
+  --container-bg: rgba(18, 24, 31, 0.84);
+  --glass-bg: rgba(23, 31, 40, 0.34);
+  --glass-bg-strong: rgba(31, 41, 52, 0.52);
+  --glass-bg-soft: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(226, 244, 255, 0.11);
+  --glass-edge: rgba(226, 244, 255, 0.06);
+  --glass-highlight: rgba(255, 255, 255, 0.1);
+  --glass-blur: 14px;
+  --liquid-shadow: 0 8px 22px rgba(0, 0, 0, 0.2), 0 1px 5px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --liquid-shadow-hover: 0 10px 30px rgba(0, 0, 0, 0.25), 0 2px 9px rgba(0, 0, 0, 0.17), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  --hairline: rgba(255, 255, 255, 0.10);
+  --hairline-soft: rgba(255, 255, 255, 0.07);
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg-white);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 17px;
+  line-height: 1.47;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: inherit; text-decoration: none; }
+img { display: block; max-width: 100%; }
+
+/* --------------------------------------------------------------------------
+   Typography (strict scale)
+   -------------------------------------------------------------------------- */
+.lp-eyebrow {
+  display: block;
+  margin: 0 0 18px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lp-display {
+  margin: 0;
+  font-size: clamp(2.6rem, 7vw, 5rem);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+}
+
+.lp-h2 {
+  margin: 0;
+  font-size: clamp(2rem, 4.4vw, 3rem);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.lp-lead {
+  margin: 22px 0 0;
+  max-width: 40ch;
+  color: var(--text-secondary);
+  font-size: clamp(1.0625rem, 1.5vw, 1.1875rem);
+  line-height: 1.47;
+}
+
+/* --------------------------------------------------------------------------
+   Layout primitives
+   -------------------------------------------------------------------------- */
+.lp-shell {
+  width: min(var(--maxw), calc(100% - 44px));
+  margin: 0 auto;
+}
+
+.lp-section { padding: var(--section-pad) 0; }
+.lp-section--white { background: var(--bg-white); }
+.lp-section--grey { background: var(--bg-grey); }
+.lp-head { max-width: 760px; }
+.lp-head .lp-lead { max-width: 52ch; }
+
+/* --------------------------------------------------------------------------
+   Buttons — one pill style; secondary is a text link with a chevron
+   -------------------------------------------------------------------------- */
+.lp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  padding: 0 26px;
+  border: 0;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 1.0625rem;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+
+.lp-btn--primary {
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.lp-btn--primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.dark-mode .lp-btn--primary { color: #06121a; }
+
+.lp-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 48px;
+  color: var(--accent);
+  font-size: 1.0625rem;
+  font-weight: 500;
+}
+
+.lp-link::after {
+  content: "›";
+  font-size: 1.25em;
+  line-height: 1;
+  transform: translateY(-0.04em);
+  transition: transform .2s ease;
+}
+
+.lp-link:hover::after { transform: translate(3px, -0.04em); }
+
+/* --------------------------------------------------------------------------
+   Navigation — light glass bar
+   -------------------------------------------------------------------------- */
+.lp-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  height: 54px;
+  padding: 0 clamp(16px, 3vw, 26px);
+  background: color-mix(in srgb, var(--bg-white) 72%, transparent);
+  -webkit-backdrop-filter: saturate(1.6) blur(18px);
+  backdrop-filter: saturate(1.6) blur(18px);
+  border-bottom: 1px solid var(--hairline-soft);
+}
+
+.lp-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.lp-brand img { width: 24px; height: auto; filter: invert(1); }
+.dark-mode .lp-brand img,
+.dark-mode .lp-mocklogo img { filter: none; }
+
+.lp-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+}
+
+.lp-nav-links a:not(.lp-nav-cta):hover { color: var(--text-primary); }
+
+.lp-nav-cta {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 500;
+  transition: background-color .2s ease;
+}
+
+.lp-nav-cta:hover { background: var(--accent-hover); color: #ffffff; }
+.dark-mode .lp-nav-cta { color: #06121a; }
+
+/* --------------------------------------------------------------------------
+   Hero — tighter top spacing
+   -------------------------------------------------------------------------- */
+/* Hero band fills the monitor height: the grey section below starts at the
+   bottom of the viewport, not partway up the screen. */
+.lp-section--hero { padding: clamp(16px, 2.5vw, 32px) 0 0; }
+@media (min-width: 760px) {
+  .lp-section--hero {
+    min-height: calc(100svh - 54px);
+    display: flex;
+    align-items: center;
+  }
+  .lp-section--hero > .lp-hero { width: min(var(--maxw), calc(100% - 44px)); }
+}
+
+.lp-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.18fr);
+  align-items: center;
+  gap: clamp(28px, 4vw, 60px);
+  padding-top: clamp(8px, 1.5vw, 24px);
+  padding-bottom: clamp(40px, 6vw, 72px);
+}
+
+.lp-hero .lp-lead { max-width: 34ch; }
+
+.lp-hero-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin-top: 32px;
+}
+
+/* --------------------------------------------------------------------------
+   Liquid-glass product window
+   -------------------------------------------------------------------------- */
+.lp-window {
+  position: relative;
+  isolation: isolate;
+  border-radius: var(--card-radius);
+  border: 1px solid color-mix(in srgb, var(--glass-border) 68%, var(--glass-edge));
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--glass-bg-strong) 76%, transparent), color-mix(in srgb, var(--glass-bg) 86%, transparent)),
+    var(--container-bg);
+  box-shadow: var(--liquid-shadow);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.24);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.24);
+  overflow: hidden;
+}
+
+.lp-window::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 50%, transparent), transparent 34%),
+    linear-gradient(115deg, color-mix(in srgb, var(--accent) 6%, transparent), transparent 40%);
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.lp-window-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 44px;
+  padding: 0 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-border) 54%, var(--glass-edge));
+  background: color-mix(in srgb, var(--glass-bg-strong) 82%, transparent);
+}
+
+.lp-mocklogo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.lp-mocklogo img { width: 20px; height: auto; filter: invert(1); }
+.lp-window-bar .lp-mock-login { margin-left: auto; color: var(--text-secondary); font-size: 0.88rem; }
+
+.lp-window-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 18px; }
+.lp-window-body > * { min-width: 0; }
+
+/* Mockup windows carry ONE soft shadow on the frame; inner panels stay flat
+   (border + top gloss only) so shadows don't stack, like the /app input box. */
+.lp-window .lp-prompt,
+.lp-window .lp-agent,
+.lp-window .lp-response,
+.lp-window .consensus-main,
+.lp-window .consensus-differences {
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+/* Hero mockup floats gently in the air while loading: slow, calming drift. */
+.lp-hero .lp-window { animation: lpFloat 7s ease-in-out infinite; will-change: transform; }
+@keyframes lpFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+
+/* --- Prompt field --- */
+.lp-prompt {
+  position: relative;
+  min-height: 132px;
+  padding: 18px;
+  padding-bottom: 60px;
+  border: 1px solid color-mix(in srgb, var(--glass-border) 62%, var(--glass-edge));
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 32%, transparent), transparent 42%),
+    var(--response-bg);
+  box-shadow: var(--liquid-shadow);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.6)) saturate(1.16);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.6)) saturate(1.16);
+}
+
+.lp-prompt-text {
+  display: block;
+  min-height: 24px;
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+/* Scene 01: the question is typed in with a blinking cursor on scroll-in */
+.lp-prompt-text.is-typing::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.16em;
+  background: var(--accent);
+  animation: lpCaret 0.8s step-end infinite;
+}
+@keyframes lpCaret { 50% { opacity: 0; } }
+
+/* Controls pinned to the BOTTOM of the input box. Left group: attach (+) +
+   the three toggles on a single line. Right group: clear + send. */
+.lp-prompt-bar {
+  position: absolute;
+  left: 18px;
+  right: 102px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.lp-attach {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--glass-border) 72%, var(--glass-edge));
+  border-radius: 50%;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 55%, transparent), transparent 60%),
+    color-mix(in srgb, var(--glass-bg-strong) 78%, transparent);
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.lp-attach svg { width: 16px; height: 16px; }
+
+.lp-modes {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+  gap: 5px 12px;
+}
+
+.lp-mode {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  color: color-mix(in srgb, var(--text-primary) 88%, var(--text-secondary));
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* --- Glassy toggle, matching the /app switch (green = on) --- */
+.lp-switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.18)),
+    color-mix(in srgb, var(--slider-bg) 58%, var(--glass-bg-strong));
+  box-shadow:
+    0 4px 10px rgba(46, 61, 79, 0.08),
+    inset 0 1px 1px rgba(255, 255, 255, 0.82),
+    inset 0 -1px 2px rgba(46, 61, 79, 0.12);
+  -webkit-backdrop-filter: blur(12px) saturate(1.18);
+  backdrop-filter: blur(12px) saturate(1.18);
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.lp-switch::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.42) 36%, rgba(255, 255, 255, 0.2) 62%),
+    color-mix(in srgb, var(--glass-bg-strong) 78%, transparent);
+  box-shadow:
+    0 3px 8px rgba(46, 61, 79, 0.1),
+    inset 0 1px 1px rgba(255, 255, 255, 0.9),
+    inset 0 -1px 2px rgba(46, 61, 79, 0.1);
+  transition: transform 0.3s ease, background 0.3s ease, border-color 0.3s ease;
+}
+
+.lp-mode.is-on .lp-switch {
+  border-color: color-mix(in srgb, #36c66a 42%, rgba(255, 255, 255, 0.72));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.06)),
+    linear-gradient(90deg, #30d667, #4fca5b);
+  box-shadow:
+    0 0 14px rgba(48, 214, 103, 0.16),
+    inset 0 1px 1px rgba(255, 255, 255, 0.42),
+    inset 0 -1px 2px rgba(7, 88, 39, 0.18);
+}
+
+.lp-mode.is-on .lp-switch::after {
+  transform: translateX(16px);
+  border-color: rgba(210, 255, 224, 0.78);
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255, 255, 255, 0.96), rgba(211, 255, 225, 0.48) 38%, rgba(39, 194, 91, 0.44) 72%),
+    rgba(255, 255, 255, 0.34);
+}
+
+.dark-mode .lp-switch {
+  border-color: rgba(226, 244, 255, 0.16);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    color-mix(in srgb, var(--slider-bg) 72%, var(--glass-bg-strong));
+}
+
+/* Right action group: clear (ghost) + send (filled icon) */
+.lp-actions {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lp-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.lp-clear svg { width: 18px; height: 18px; }
+
+.lp-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--button-bg) 70%, var(--glass-border));
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #ffffff 13%, transparent), transparent),
+    var(--button-bg);
+  color: var(--button-text, #fff);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 32%, transparent);
+}
+
+.lp-send svg { width: 16px; height: 16px; }
+.dark-mode .lp-send { color: #06121a; }
+
+/* --- Agent run state (shimmer sweep + pulse, like the app) --- */
+.lp-agent {
+  position: relative;
+  overflow: hidden;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--glass-border) 62%, var(--glass-edge));
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(140deg, color-mix(in srgb, var(--glass-bg-strong) 66%, var(--accent) 8%), color-mix(in srgb, var(--glass-bg) 86%, transparent)),
+    var(--response-bg);
+  box-shadow: var(--liquid-shadow);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.6)) saturate(1.16);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.6)) saturate(1.16);
+}
+
+.lp-agent::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(110deg, transparent 0%, color-mix(in srgb, var(--glass-highlight) 36%, transparent) 24%, transparent 47%),
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--button-bg) 10%, transparent), transparent);
+  transform: translateX(-22%);
+  pointer-events: none;
+  animation: lpAgentSweep 2.8s ease-in-out infinite;
+}
+
+.lp-agent > * { position: relative; z-index: 1; }
+
+.lp-agent-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.lp-agent-eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lp-agent-head strong { font-size: 1.05rem; font-weight: 600; color: var(--text-primary); }
+
+.lp-agent-count {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--glass-bg-strong) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.lp-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+.lp-chips span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--glass-bg-strong) 68%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.lp-chips img { width: 14px; height: 14px; object-fit: contain; }
+
+.lp-pulse { display: flex; gap: 7px; margin-top: 16px; height: 16px; align-items: center; }
+
+.lp-pulse i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--button-bg) 78%, var(--text-primary) 22%);
+  animation: lpPulse 1.15s ease-in-out infinite;
+}
+
+.lp-pulse i:nth-child(2) { animation-delay: .14s; }
+.lp-pulse i:nth-child(3) { animation-delay: .28s; }
+.lp-pulse i:nth-child(4) { animation-delay: .42s; }
+
+.lp-agent-note { margin: 14px 0 0; color: var(--text-secondary); font-size: 0.84rem; }
+
+@keyframes lpAgentSweep {
+  0%, 100% { transform: translateX(-22%); }
+  50% { transform: translateX(18%); }
+}
+
+@keyframes lpPulse {
+  0%, 100% { opacity: 0.45; transform: translateY(0) scale(0.86); }
+  45% { opacity: 1; transform: translateY(-4px) scale(1); }
+}
+
+/* --- Parallel responses (glass cards) --- */
+.lp-responses {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.lp-response {
+  position: relative;
+  overflow: hidden;
+  padding: 14px 15px;
+  border: 1px solid color-mix(in srgb, var(--glass-border) 60%, var(--glass-edge));
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 28%, transparent), transparent 42%),
+    var(--response-bg);
+  box-shadow: var(--liquid-shadow);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(1.12);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(1.12);
+}
+
+.lp-response strong { display: block; font-size: 0.86rem; font-weight: 650; color: var(--text-primary); }
+
+/* Model name in the response header: plain text, no chip frame (like the /app) */
+.lp-response small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 7px;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.lp-response small img { width: 13px; height: 13px; object-fit: contain; }
+
+.lp-response p {
+  margin: 11px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 52%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+/* --------------------------------------------------------------------------
+   Scene 03 — Consensus + Differences, rebuilt to mirror the real /app
+   -------------------------------------------------------------------------- */
+.lp-scene-visual { margin-top: clamp(36px, 5vw, 56px); }
+.lp-scene-01 .lp-window { max-width: 620px; }
+.lp-scene-03 .lp-scene-visual { margin-top: clamp(40px, 5vw, 60px); }
+
+/* Verdict banner (full width, above the box) */
+.consensus-verdict {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 11px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--glass-bg-strong) 70%, transparent);
+  box-shadow: var(--liquid-shadow);
+  font-size: 0.94rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.consensus-verdict .verdict-icon { flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%; }
+
+.consensus-verdict.is-calm {
+  background: color-mix(in srgb, #2c7a2c 9%, var(--response-bg));
+  border-color: color-mix(in srgb, #2c7a2c 28%, var(--sidebar-border));
+  color: color-mix(in srgb, #196a35 72%, var(--text-color));
+}
+.consensus-verdict.is-calm .verdict-icon { background: #2c7a2c; }
+
+.consensus-verdict.is-warn {
+  background: color-mix(in srgb, #b97718 11%, var(--response-bg));
+  border-color: color-mix(in srgb, #b97718 36%, var(--sidebar-border));
+  color: color-mix(in srgb, #8a5a10 78%, var(--text-color));
+}
+.consensus-verdict.is-warn .verdict-icon { background: #d99b46; }
+
+.dark-mode .consensus-verdict.is-calm { color: color-mix(in srgb, #8ee6c8 70%, var(--text-color)); }
+.dark-mode .consensus-verdict.is-warn { color: color-mix(in srgb, #f3c66f 76%, var(--text-color)); }
+
+/* The two-pane consensus box */
+.consensus-box {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  padding: 8px;
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--glass-border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--glass-bg-strong) 74%, var(--accent) 5%), color-mix(in srgb, var(--glass-bg) 86%, transparent)),
+    var(--response-bg);
+  box-shadow: var(--liquid-shadow), 0 0 0 3px color-mix(in srgb, var(--accent) 4%, transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+}
+
+.consensus-main {
+  flex: 1.7;
+  min-width: 0;
+  position: relative;
+  padding: 20px 22px 22px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 42%, transparent), transparent 38%),
+    color-mix(in srgb, var(--response-bg) 88%, var(--glass-bg-strong) 12%);
+  box-shadow: 0 12px 34px rgba(46, 61, 79, 0.08), inset 0 1px 0 var(--glass-highlight);
+}
+
+.dark-mode .consensus-main { box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.24); }
+
+.consensus-differences {
+  flex: 1;
+  min-width: min(320px, 100%);
+  position: relative;
+  padding: 18px 18px 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 45%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 28%, transparent), transparent 42%),
+    color-mix(in srgb, var(--response-bg) 84%, var(--sidebar-hover) 16%);
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--accent) 12%, transparent), inset 0 1px 0 var(--glass-highlight);
+}
+
+/* The differences PANEL itself stays neutral (no coloured edge). Only the inner
+   contradiction card (.diff-card.is-contradiction) carries the amber accent. */
+.consensus-differences.credibility-framed.cred-partially {
+  border-color: color-mix(in srgb, var(--sidebar-border) 60%, transparent);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+.consensus-main > h2 {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 0 64px;
+  color: var(--text-color);
+  font-size: 1.02rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.consensus-main > h2 img { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
+
+.consensus-differences > h2 {
+  margin: 0 0 12px;
+  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.consensus-main-text { margin: 0; color: color-mix(in srgb, var(--text-color) 92%, var(--sidebar-text-muted)); font-size: 0.98rem; line-height: 1.72; }
+.consensus-main-text p { margin: 0 0 0.8em; }
+.consensus-main-text p:last-child { margin-bottom: 0; }
+.consensus-main-text strong { color: var(--text-color); font-weight: 700; }
+.consensus-main-text ul { margin: 0 0 0.8em; padding-left: 20px; }
+.consensus-main-text li { margin: 4px 0; }
+
+/* Inline action icons (share + citation), top-right of the consensus answer —
+   dezente Ghost-Icon-Buttons, exakt wie in der /app. */
+.lp-consensus-actions {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.consensus-share-pill,
+.consensus-actions-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--sidebar-text-muted);
+}
+.share-pill-icon { width: 15px; height: 15px; }
+.quote-toggle-icon { width: 16px; height: 16px; }
+
+/* Key claims (claims-fallback) */
+.consensus-claims-fallback {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 60%, transparent);
+}
+.claims-fallback-title {
+  margin-bottom: 6px;
+  color: var(--sidebar-text-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.claims-fallback-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 0.88rem;
+  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+}
+.claims-fallback-text { min-width: 0; overflow-wrap: anywhere; }
+
+.claim-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-height: 20px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 80%, transparent);
+  background: color-mix(in srgb, var(--sidebar-hover) 70%, transparent);
+  color: color-mix(in srgb, var(--text-color) 76%, var(--sidebar-text-muted));
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.claim-badge.has-dissent {
+  background: color-mix(in srgb, #d99b46 16%, var(--response-bg));
+  border-color: color-mix(in srgb, #b97718 44%, var(--sidebar-border));
+  color: color-mix(in srgb, #8a5a10 80%, var(--text-color));
+}
+.dark-mode .claim-badge.has-dissent { color: color-mix(in srgb, #f3c66f 80%, var(--text-color)); }
+
+/* Differences cards */
+.differences-cards { display: flex; flex-direction: column; gap: 10px; }
+
+.diff-card {
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent);
+  background: color-mix(in srgb, var(--response-bg) 90%, var(--glass-bg-strong) 10%);
+  overflow: hidden;
+}
+.diff-card.is-contradiction {
+  border-color: color-mix(in srgb, #b97718 44%, var(--sidebar-border));
+  box-shadow: inset 3px 0 0 #d99b46;
+}
+.diff-card-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+}
+.diff-type-tag {
+  align-self: flex-start;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: color-mix(in srgb, var(--sidebar-hover) 80%, transparent);
+  color: var(--sidebar-text-muted);
+}
+.diff-card.is-contradiction .diff-type-tag {
+  background: color-mix(in srgb, #d99b46 22%, var(--response-bg));
+  color: color-mix(in srgb, #8a5a10 80%, var(--text-color));
+}
+.dark-mode .diff-card.is-contradiction .diff-type-tag { color: color-mix(in srgb, #f3c66f 82%, var(--text-color)); }
+.diff-card-claim {
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--text-color) 92%, var(--sidebar-text-muted));
+  overflow-wrap: anywhere;
+}
+.diff-card-body { padding: 2px 12px 12px; }
+.diff-position { padding: 8px 0; }
+.diff-position + .diff-position { border-top: 1px dashed color-mix(in srgb, var(--sidebar-border) 65%, transparent); }
+.diff-position-label {
+  margin-bottom: 3px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--text-color) 80%, var(--sidebar-text-muted));
+}
+.diff-position-stance {
+  font-size: 0.83rem;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  overflow-wrap: anywhere;
+}
+.diff-position-quote {
+  margin: 5px 0 0;
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 36%, var(--sidebar-border));
+  color: color-mix(in srgb, var(--text-color) 76%, var(--sidebar-text-muted));
+  font-size: 0.8rem;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+.diff-position-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.claim-jump-link {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--sidebar-border));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: color-mix(in srgb, var(--accent) 78%, var(--text-color));
+  font-size: 0.74rem;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: box-shadow .2s ease, background-color .2s ease;
+}
+.claim-jump-link:hover { box-shadow: var(--liquid-focus-ring); }
+.diff-verify {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-xs);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--sidebar-border));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  font-size: 0.79rem;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------------------
+   Why section — three uniform glass cards
+   -------------------------------------------------------------------------- */
+.lp-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  margin-top: clamp(40px, 5vw, 64px);
+}
+
+.lp-card {
+  padding: 28px;
+  border-radius: var(--card-radius);
+  border: 1px solid color-mix(in srgb, var(--glass-border) 60%, var(--glass-edge));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 30%, transparent), transparent 42%),
+    color-mix(in srgb, var(--glass-bg-strong) 72%, transparent);
+  box-shadow: var(--liquid-shadow);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(1.12);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(1.12);
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+
+.lp-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--glass-border));
+  box-shadow: var(--liquid-shadow-hover);
+}
+
+.lp-card .lp-eyebrow { margin-bottom: 14px; }
+.lp-card h3 { margin: 0 0 10px; font-size: 1.2rem; font-weight: 600; letter-spacing: -0.01em; color: var(--text-primary); }
+.lp-card p { margin: 0; color: var(--text-secondary); font-size: 0.98rem; line-height: 1.5; }
+
+/* --------------------------------------------------------------------------
+   Model coverage — uniform monochrome logos
+   -------------------------------------------------------------------------- */
+.lp-logos {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: clamp(40px, 5vw, 64px);
+}
+
+.lp-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 28px 12px;
+  border-radius: var(--card-radius);
+  text-align: center;
+}
+
+.lp-logo-mark { display: flex; align-items: center; justify-content: center; height: 40px; }
+
+.lp-logo-mark img {
+  height: 34px;
+  width: auto;
+  object-fit: contain;
+  filter: grayscale(1) brightness(0) opacity(0.42);
+  transition: filter .2s ease, opacity .2s ease;
+}
+.dark-mode .lp-logo-mark img { filter: grayscale(1) brightness(0) invert(1) opacity(0.52); }
+.lp-logo:hover .lp-logo-mark img { filter: none; opacity: 1; }
+
+.lp-logo span { color: var(--text-secondary); font-size: 0.92rem; font-weight: 500; }
+
+/* --------------------------------------------------------------------------
+   Final CTA
+   -------------------------------------------------------------------------- */
+.lp-final { display: grid; justify-items: center; text-align: center; gap: 26px; }
+.lp-final .lp-head { max-width: 720px; }
+.lp-final .lp-h2 { margin: 0 auto; }
+
+/* --------------------------------------------------------------------------
+   Footer
+   -------------------------------------------------------------------------- */
+.lp-footer {
+  padding: 40px 0;
+  background: var(--bg-white);
+  border-top: 1px solid var(--hairline-soft);
+}
+.lp-footer-inner {
+  width: min(var(--maxw), calc(100% - 44px));
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+.lp-footer-links { display: flex; flex-wrap: wrap; gap: 18px; }
+.lp-footer-links a:hover { color: var(--text-primary); }
+
+/* --------------------------------------------------------------------------
+   Scroll reveal (one fade-up per scene)
+   -------------------------------------------------------------------------- */
+.lp-reveal { opacity: 0; transform: translateY(12px); transition: opacity .4s ease-out, transform .4s ease-out; }
+.lp-reveal.is-visible { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-reveal { opacity: 1; transform: none; transition: none; }
+  .lp-pulse i, .lp-agent::before, .lp-hero .lp-window, .lp-prompt-text.is-typing::after { animation: none; }
+  html { scroll-behavior: auto; }
+}
+
+/* --------------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------------- */
+@media (max-width: 960px) {
+  .lp-hero { grid-template-columns: 1fr; gap: 36px; }
+  .lp-hero .lp-window { max-width: 560px; }
+  .lp-responses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lp-card-grid { grid-template-columns: 1fr; gap: 14px; }
+  .lp-logos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+  /* Scene 03: stack panels, consensus first */
+  .consensus-box { flex-direction: column; }
+  .consensus-main, .consensus-differences { flex: 1 1 auto; min-width: 0; }
+
+  /* Tablet & phone: the toggle switches become compact icon buttons, exactly
+     like the /app's input row, instead of full text switches. */
+  .lp-prompt-bar { right: 96px; gap: 10px; }
+  .lp-attach {
+    width: 38px; height: 38px;
+    border-radius: var(--radius-xs);
+    box-shadow: var(--liquid-shadow);
+  }
+  .lp-modes { gap: 7px; }
+  .lp-mode {
+    width: 38px;
+    height: 38px;
+    justify-content: center;
+    gap: 0;
+    font-size: 0;
+    border: 1px solid color-mix(in srgb, var(--sidebar-border) 80%, transparent);
+    border-radius: var(--radius-xs);
+    background: var(--response-bg);
+    color: var(--text-secondary);
+    box-shadow: var(--liquid-shadow);
+  }
+  .lp-mode .lp-switch { display: none; }
+  .lp-mode::before {
+    content: "";
+    width: 18px;
+    height: 18px;
+    background: currentColor;
+    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+    -webkit-mask-position: center; mask-position: center;
+    -webkit-mask-size: contain; mask-size: contain;
+  }
+  .lp-mode--agent::before { -webkit-mask-image: url("../favicon.png"); mask-image: url("../favicon.png"); }
+  .lp-mode--consensus::before { -webkit-mask-image: url("../icons/consensus.png"); mask-image: url("../icons/consensus.png"); }
+  .lp-mode--deep::before { -webkit-mask-image: url("../icons/deepsearch.png"); mask-image: url("../icons/deepsearch.png"); }
+  .lp-mode.is-on {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border));
+    background: color-mix(in srgb, var(--accent) 12%, var(--response-bg));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  .lp-clear, .lp-send { width: 38px; height: 38px; }
+}
+
+@media (max-width: 600px) {
+  body { font-size: 16px; }
+  .lp-shell { width: calc(100% - 32px); }
+  .lp-nav-links a:not(.lp-nav-cta) { display: none; }
+  .lp-window-body { padding: 14px; gap: 12px; }
+  .lp-responses { grid-template-columns: 1fr; }
+  .lp-logos { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .lp-logo { padding: 22px 10px; }
+  .consensus-main { padding: 18px 16px 18px; }
+  .consensus-differences { padding: 16px 14px 18px; }
+  .consensus-main > h2 { padding: 0 56px; }
+  .lp-footer-inner { flex-direction: column; align-items: flex-start; }
+
+  /* Phone input row: tighter spacing so attach + 3 icon buttons + actions fit */
+  .lp-prompt { min-height: 116px; padding: 16px; padding-bottom: 58px; }
+  .lp-prompt-bar { left: 16px; right: 96px; gap: 8px; }
+  .lp-modes { gap: 6px; }
+  .lp-actions { right: 14px; gap: 6px; }
+}

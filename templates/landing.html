@@ -17,8 +17,7 @@
   <meta name="twitter:description" content="Compare model answers side by side and turn them into a structured consensus.">
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>consens.io - compare before you trust</title>
-  <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260621-related1">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260624-glass3">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -65,212 +64,192 @@
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
-<body class="landing-page">
-  <nav class="site-nav" aria-label="Primary">
-    <a href="/" class="brand" aria-label="consens.io home">
+<body>
+  <nav class="lp-nav" aria-label="Primary">
+    <a href="/" class="lp-brand" aria-label="consens.io home">
       <img src="/static/favicon.png" alt="">
       <span>consens.io</span>
     </a>
-    <div class="nav-links">
+    <div class="lp-nav-links">
       <a href="#product">Product</a>
       <a href="#agent-mode">Agent Mode</a>
       <a href="#models">Models</a>
       <a href="/ai-model-comparison">AI comparison</a>
-      <a id="navCtaButton" href="/app" class="nav-cta">Open app</a>
+      <a id="navCtaButton" href="/app" class="lp-nav-cta">Open app</a>
     </div>
   </nav>
 
   <main>
-    <section class="hero landing-shell">
-      <div class="hero-copy">
-        <p class="eyebrow">Comparison workspace</p>
-        <h1>Find agreement. Weigh differences.</h1>
-        <p class="lead">
-          Ask once. Read every model's answer side by side, then let the consensus layer
-          show where they agree — and where they don't.
-        </p>
-        <div class="hero-actions">
-          <a id="ctaButton" href="/app" class="button-primary">Start comparing</a>
-          <a href="#product" class="button-secondary" data-umami-event="landing_watch_workflow">Watch the workflow</a>
+    <!-- ====================================================== HERO -->
+    <section class="lp-section lp-section--white lp-section--hero">
+      <div class="lp-shell lp-hero">
+        <div class="lp-hero-copy">
+          <p class="lp-eyebrow">Comparison workspace</p>
+          <h1 class="lp-display">See where they differ.<br>Trust where they agree.</h1>
+          <p class="lp-lead">
+            Ask once. Read every model's answer side by side, then let the consensus
+            layer show where they agree, and where they don't.
+          </p>
+          <div class="lp-hero-actions">
+            <a id="ctaButton" href="/app" class="lp-btn lp-btn--primary">Start comparing</a>
+            <a href="#product" class="lp-link" data-umami-event="landing_watch_workflow">Watch the workflow</a>
+          </div>
         </div>
-        <div class="hero-proof" aria-label="Product highlights">
-          <span>Original answers stay visible</span>
-          <span>Agent Mode</span>
-          <span>Disagreement surfaced</span>
-        </div>
-      </div>
 
-      <div class="product-window hero-window" aria-label="consens.io app preview">
-        <div class="mock-topbar">
-          <span class="mock-burger" aria-hidden="true"></span>
-          <span class="mock-logo"><img src="/static/favicon.png" alt=""> consens.io</span>
-          <span class="mock-login">Log in</span>
-        </div>
-        <div class="mock-container">
-          <div class="mock-input">
-            <span class="mock-placeholder">What is the longest river in the world?</span>
-            <div class="mock-switch-row">
-              <span class="mock-attach" aria-label="Add attachment" title="Add attachment">+</span>
-              <span class="mock-mode mock-mode-agent" aria-label="Agent Mode" title="Agent Mode">
-                <span class="mock-switch is-on"></span><span class="mock-mode-label">Agent Mode</span>
-              </span>
-              <span class="mock-mode mock-mode-consensus" aria-label="Auto Consensus" title="Auto Consensus">
-                <span class="mock-switch is-on"></span><span class="mock-mode-label">Auto Consensus</span>
-              </span>
-              <span class="mock-mode mock-mode-deep" aria-label="Deep Think" title="Deep Think">
-                <span class="mock-switch is-on"></span><span class="mock-mode-label">Deep Think</span>
-              </span>
-            </div>
-            <button class="mock-send">Send</button>
+        <div class="lp-window" aria-label="consens.io app preview">
+          <div class="lp-window-bar">
+            <span class="lp-mocklogo"><img src="/static/favicon.png" alt=""> consens.io</span>
+            <span class="lp-mock-login">Log in</span>
           </div>
-          <div class="agent-card is-running">
-            <div class="agent-card-head">
-              <div>
-                <span>Agent Mode</span>
-                <strong>Models are working</strong>
+          <div class="lp-window-body">
+            <div class="lp-prompt">
+              <span class="lp-prompt-text">What is the longest river in the world?</span>
+              <div class="lp-prompt-bar">
+                <button class="lp-attach" type="button" tabindex="-1" aria-label="Add attachment">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </button>
+                <div class="lp-modes">
+                  <span class="lp-mode is-on lp-mode--agent"><i class="lp-switch"></i>Agent Mode</span>
+                  <span class="lp-mode is-on lp-mode--consensus"><i class="lp-switch"></i>Auto Consensus</span>
+                  <span class="lp-mode lp-mode--deep"><i class="lp-switch"></i>Deep Think</span>
+                </div>
               </div>
-              <em>6 models</em>
+              <div class="lp-actions">
+                <button class="lp-clear" type="button" tabindex="-1" aria-label="Clear all responses">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                </button>
+                <button class="lp-send" type="button" tabindex="-1" aria-label="Send question">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+              </div>
             </div>
-            <div class="agent-chips">
-              <span>OpenAI - GPT-5.5</span>
-              <span>Mistral - mistral-medium-3-5</span>
-              <span>Claude - claude-opus-4-8</span>
-              <span>Gemini - gemini-3.1-pro-preview</span>
-              <span>DeepSeek - deepseek-v4-pro</span>
-              <span>Grok - grok-4.3</span>
-            </div>
-            <div class="agent-pulse" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-            <p>Querying selected models in parallel.</p>
-          </div>
-          <div class="consensus-preview">
-            <div>
-              <strong>Consensus</strong>
-              <p>The Nile by convention (~6,650 km), the Amazon by volume.</p>
-            </div>
-            <div>
-              <strong>Differences</strong>
-              <p>3 of 6 call it settled. Lengths vary by up to 600 km.</p>
+            <div class="lp-agent">
+              <div class="lp-agent-head">
+                <div>
+                  <span class="lp-agent-eyebrow">Agent Mode</span>
+                  <strong>Models are working</strong>
+                </div>
+                <span class="lp-agent-count">6 models</span>
+              </div>
+              <div class="lp-chips">
+                <span><img src="/static/icons/chat_icons/chatgpt.png" alt="">OpenAI - GPT-5.5</span>
+                <span><img src="/static/icons/chat_icons/mistral.png" alt="">Mistral - mistral-medium-3-5</span>
+                <span><img src="/static/icons/chat_icons/claude.png" alt="">Claude - claude-opus-4-8</span>
+                <span><img src="/static/icons/chat_icons/gemini-icon.png" alt="">Gemini - gemini-3.1-pro-preview</span>
+                <span><img src="/static/icons/chat_icons/deepseek.png" alt="">DeepSeek - deepseek-v4-pro</span>
+                <span><img src="/static/icons/chat_icons/grok.png" alt="">Grok - grok-4.3</span>
+              </div>
+              <div class="lp-pulse" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+              <p class="lp-agent-note">Querying selected models in parallel.</p>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <section id="product" class="scroll-story">
-      <div class="landing-shell story-layout">
-        <div class="story-copy">
-          <p class="eyebrow">Product walkthrough</p>
-          <h2>The workflow is the interface.</h2>
-          <p>
-            The preview mirrors the actual consens.io flow: one prompt, parallel model work,
-            then a consensus view that keeps agreement and disagreement separate.
-          </p>
-
-          <article class="story-step is-active" data-story-step="ask">
-            <span>01</span>
-            <h3>Start from one prompt</h3>
-            <p>Use the same input surface from the app, including Agent Mode, Auto Consensus, and Deep Think.</p>
-          </article>
-          <article id="agent-mode" class="story-step" data-story-step="agent">
-            <span>02</span>
-            <h3>Watch Agent Mode run</h3>
-            <p>Selected models are grouped into one run, with chips and a live activity state.</p>
-          </article>
-          <article class="story-step" data-story-step="consensus">
-            <span>03</span>
-            <h3>Separate agreement from doubt</h3>
-            <p>The final panel separates what the models agree on from what still conflicts.</p>
-          </article>
+    <!-- ====================================================== WALKTHROUGH -->
+    <!-- Scene 01 -->
+    <section id="product" class="lp-section lp-section--grey lp-scene-01">
+      <div class="lp-shell">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">01 · Ask</p>
+          <h2 class="lp-h2">Start from one prompt.</h2>
+          <p class="lp-lead">One input surface, the same as the app: Agent Mode, Auto Consensus, and Deep Think.</p>
         </div>
-
-        <div class="story-stage" aria-label="Animated product excerpt">
-          <div class="product-window" data-active-scene="ask">
-            <div class="mock-topbar">
-              <span class="mock-burger" aria-hidden="true"></span>
-              <span class="mock-logo"><img src="/static/favicon.png" alt=""> consens.io</span>
-              <span class="mock-login">About us</span>
+        <div class="lp-scene-visual lp-reveal">
+          <div class="lp-window">
+            <div class="lp-window-bar">
+              <span class="lp-mocklogo"><img src="/static/favicon.png" alt=""> consens.io</span>
+              <span class="lp-mock-login">About us</span>
             </div>
-            <div class="mock-container">
-              <div class="mock-input story-scene scene-ask">
-                <span class="mock-placeholder typing-line">What is the longest river in the world?</span>
-                <div class="mock-switch-row">
-                  <span class="mock-attach" aria-label="Add attachment" title="Add attachment">+</span>
-                  <span class="mock-mode mock-mode-agent" aria-label="Agent Mode" title="Agent Mode">
-                    <span class="mock-switch is-on"></span><span class="mock-mode-label">Agent Mode</span>
-                  </span>
-                  <span class="mock-mode mock-mode-consensus" aria-label="Auto Consensus" title="Auto Consensus">
-                    <span class="mock-switch is-on"></span><span class="mock-mode-label">Auto Consensus</span>
-                  </span>
-                  <span class="mock-mode mock-mode-deep" aria-label="Deep Think" title="Deep Think">
-                    <span class="mock-switch is-on"></span><span class="mock-mode-label">Deep Think</span>
-                  </span>
+            <div class="lp-window-body">
+              <div class="lp-prompt">
+                <span class="lp-prompt-text" data-type-loop="What is the longest river in the world?|Which programming language should I learn first?|Is intermittent fasting actually effective?"></span>
+                <div class="lp-prompt-bar">
+                  <button class="lp-attach" type="button" tabindex="-1" aria-label="Add attachment">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  </button>
+                  <div class="lp-modes">
+                    <span class="lp-mode is-on lp-mode--agent"><i class="lp-switch"></i>Agent Mode</span>
+                    <span class="lp-mode is-on lp-mode--consensus"><i class="lp-switch"></i>Auto Consensus</span>
+                    <span class="lp-mode lp-mode--deep"><i class="lp-switch"></i>Deep Think</span>
+                  </div>
                 </div>
-                <button class="mock-send">Send</button>
+                <div class="lp-actions">
+                  <button class="lp-clear" type="button" tabindex="-1" aria-label="Clear all responses">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                  </button>
+                  <button class="lp-send" type="button" tabindex="-1" aria-label="Send question">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                  </button>
+                </div>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
-              <div class="agent-card story-scene scene-agent is-running">
-                <div class="agent-card-head">
+    <!-- Scene 02 -->
+    <section id="agent-mode" class="lp-section lp-section--white lp-scene-02">
+      <div class="lp-shell">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">02 · Run</p>
+          <h2 class="lp-h2">Watch Agent Mode run.</h2>
+          <p class="lp-lead">Selected models are grouped into one run and queried in parallel, each answer kept intact.</p>
+        </div>
+        <div class="lp-scene-visual lp-reveal">
+          <div class="lp-window">
+            <div class="lp-window-body">
+              <div class="lp-agent">
+                <div class="lp-agent-head">
                   <div>
-                    <span>Agent Mode</span>
+                    <span class="lp-agent-eyebrow">Agent Mode</span>
                     <strong>Models are working</strong>
                   </div>
-                  <em>Elapsed 00:08</em>
+                  <span class="lp-agent-count">6 models</span>
                 </div>
-                <div class="agent-chips">
-                  <span>OpenAI - GPT-5.5</span>
-                  <span>Mistral - mistral-medium-3-5</span>
-                  <span>Claude - claude-opus-4-8</span>
-                  <span>Gemini - gemini-3.1-pro-preview</span>
-                  <span>DeepSeek - deepseek-v4-pro</span>
-                  <span>Grok - grok-4.3</span>
+                <div class="lp-chips">
+                  <span><img src="/static/icons/chat_icons/chatgpt.png" alt="">ChatGPT</span>
+                  <span><img src="/static/icons/chat_icons/mistral.png" alt="">Mistral</span>
+                  <span><img src="/static/icons/chat_icons/claude.png" alt="">Claude</span>
+                  <span><img src="/static/icons/chat_icons/gemini-icon.png" alt="">Gemini</span>
+                  <span><img src="/static/icons/chat_icons/deepseek.png" alt="">DeepSeek</span>
+                  <span><img src="/static/icons/chat_icons/grok.png" alt="">Grok</span>
                 </div>
-                <div class="agent-pulse" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-                <p>Querying selected models in parallel.</p>
+                <div class="lp-pulse" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+                <p class="lp-agent-note">Querying selected models in parallel.</p>
               </div>
-
-              <div class="response-grid story-scene scene-consensus">
-                <div class="mini-response is-loaded">
-                  <strong>Response from ChatGPT</strong>
+              <div class="lp-responses">
+                <div class="lp-response">
+                  <strong>ChatGPT</strong>
                   <small><img src="/static/icons/chat_icons/chatgpt.png" alt=""> GPT-5.5</small>
-                  <p class="mini-response-text" data-response-text="The Nile is traditionally listed as the longest river at about 6,650 km, with the Amazon second at roughly 6,400 km.">The Nile is traditionally listed as the longest river at about 6,650 km, with the Amazon second at roughly 6,400 km.</p>
+                  <p>The Nile is traditionally listed first at about 6,650 km, the Amazon second.</p>
                 </div>
-                <div class="mini-response is-loaded">
-                  <strong>Response from Mistral</strong>
-                  <small><img src="/static/icons/chat_icons/mistral.png" alt=""> mistral-medium-3-5</small>
-                  <p class="mini-response-text" data-response-text="Most references name the Nile at ~6,650 km, though some recent studies argue the Amazon is actually longer.">Most references name the Nile at ~6,650 km, though some recent studies argue the Amazon is actually longer.</p>
+                <div class="lp-response">
+                  <strong>Mistral</strong>
+                  <small><img src="/static/icons/chat_icons/mistral.png" alt=""> mistral-medium</small>
+                  <p>Most references name the Nile, though some studies argue the Amazon is longer.</p>
                 </div>
-                <div class="mini-response is-loaded">
-                  <strong>Response from Claude</strong>
+                <div class="lp-response">
+                  <strong>Claude</strong>
                   <small><img src="/static/icons/chat_icons/claude.png" alt=""> claude-opus-4-8</small>
-                  <p class="mini-response-text" data-response-text="It depends on measurement: the Nile is the classic answer, but if the Pará estuary is counted, the Amazon may exceed 7,000 km.">It depends on measurement: the Nile is the classic answer, but if the Pará estuary is counted, the Amazon may exceed 7,000 km.</p>
+                  <p>It depends on measurement: counting the Pará estuary, the Amazon may exceed 7,000 km.</p>
                 </div>
-                <div class="mini-response is-loaded">
-                  <strong>Response from Gemini</strong>
-                  <small><img src="/static/icons/chat_icons/gemini-icon.png" alt=""> gemini-3.1-pro-preview</small>
-                  <p class="mini-response-text" data-response-text="The Nile, at about 6,650 km. A 2007 Brazilian expedition measured the Amazon at 6,992 km, but that result is not widely accepted.">The Nile, at about 6,650 km. A 2007 Brazilian expedition measured the Amazon at 6,992 km, but that result is not widely accepted.</p>
+                <div class="lp-response">
+                  <strong>Gemini</strong>
+                  <small><img src="/static/icons/chat_icons/gemini-icon.png" alt=""> gemini-3.1-pro</small>
+                  <p>The Nile, ~6,650 km. A 2007 expedition measured the Amazon at 6,992 km.</p>
                 </div>
-                <div class="mini-response is-loaded">
-                  <strong>Response from DeepSeek</strong>
+                <div class="lp-response">
+                  <strong>DeepSeek</strong>
                   <small><img src="/static/icons/chat_icons/deepseek.png" alt=""> deepseek-v4-pro</small>
-                  <p class="mini-response-text" data-response-text="The Amazon is the largest river by discharge. By length, the Nile is usually cited first with estimates of 6,550–6,700 km.">The Amazon is the largest river by discharge. By length, the Nile is usually cited first with estimates of 6,550–6,700 km.</p>
+                  <p>Largest by discharge is the Amazon. By length the Nile is usually cited first.</p>
                 </div>
-                <div class="mini-response is-loaded">
-                  <strong>Response from Grok</strong>
+                <div class="lp-response">
+                  <strong>Grok</strong>
                   <small><img src="/static/icons/chat_icons/grok.png" alt=""> grok-4.3</small>
-                  <p class="mini-response-text" data-response-text="Officially the Nile. Some expeditions put the Amazon ahead — it depends on where you decide the river starts.">Officially the Nile. Some expeditions put the Amazon ahead — it depends on where you decide the river starts.</p>
-                </div>
-              </div>
-
-              <div class="consensus-preview story-consensus">
-                <div class="story-consensus-panel story-consensus-answer is-loaded">
-                  <strong>Consensus Answer</strong>
-                  <span class="mobile-consensus-line">The Nile by convention, the Amazon by some measurements.</span>
-                  <p class="story-consensus-text" data-consensus-text="The models converge: the Nile is the conventional longest river at about 6,650 km, while the Amazon — the largest river by water volume — measures roughly 6,400 km, or up to 6,992 km if a disputed 2007 survey is accepted. A careful answer names both rivers and the measurement dispute instead of hiding it.">The models converge: the Nile is the conventional longest river at about 6,650 km, while the Amazon — the largest river by water volume — measures roughly 6,400 km, or up to 6,992 km if a disputed 2007 survey is accepted. A careful answer names both rivers and the measurement dispute instead of hiding it.</p>
-                </div>
-                <div class="story-consensus-panel story-differences credibility-framed cred-largely is-loaded">
-                  <strong>Differences</strong>
-                  <span class="mobile-consensus-line">What still needs checking.</span>
-                  <p class="story-consensus-text" data-consensus-text="Three models state the Nile as settled fact; three treat the 2007 Amazon measurement (6,992 km) as a credible challenger. Quoted lengths differ by up to 600 km.">Three models state the Nile as settled fact; three treat the 2007 Amazon measurement (6,992 km) as a credible challenger. Quoted lengths differ by up to 600 km.</p>
+                  <p>Officially the Nile. Some expeditions put the Amazon ahead. It depends on the source.</p>
                 </div>
               </div>
             </div>
@@ -279,61 +258,140 @@
       </div>
     </section>
 
-    <section class="section landing-shell value-section">
-      <div>
-        <p class="eyebrow">Why consens.io</p>
-        <h2>Built for decisions that need a second view.</h2>
-      </div>
-      <div class="card-grid">
-        <article class="info-card">
-          <p class="kicker">Compare</p>
-          <h3>Original answers stay visible</h3>
-          <p>Read each model response side by side before the consensus layer summarizes it.</p>
-        </article>
-        <article class="info-card">
-          <p class="kicker">Verify</p>
-          <h3>Disagreement is surfaced</h3>
-          <p>The app highlights differences instead of hiding them inside one confident answer.</p>
-        </article>
-        <article class="info-card">
-          <p class="kicker">Control</p>
-          <h3>You choose the models</h3>
-          <p>Select providers, switch reasoning modes, and decide which outputs count toward consensus.</p>
-        </article>
-      </div>
-    </section>
-
-    <section id="models" class="section landing-shell">
-      <div class="section-heading-row">
-        <div>
-          <p class="eyebrow">Model coverage</p>
-          <h2>One workspace for leading AI providers.</h2>
+    <!-- Scene 03 — THE HIGHLIGHT -->
+    <section class="lp-section lp-section--grey lp-scene-03">
+      <div class="lp-shell">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">03 · Decide</p>
+          <h2 class="lp-h2">Separate agreement from doubt.</h2>
+          <p class="lp-lead">The final view keeps what the models agree on apart from what still conflicts, so both panels stay fully readable.</p>
         </div>
-        <p class="section-intro">
-          consens.io is designed around direct comparison across major model families, so every answer can be checked against independent alternatives.
-        </p>
-      </div>
-      <div class="model-grid">
-        <article class="model-card"><img src="/static/icons/chatgpt.png" alt=""><span>OpenAI</span><strong>ChatGPT</strong></article>
-        <article class="model-card"><img src="/static/icons/claude.png" alt=""><span>Anthropic</span><strong>Claude</strong></article>
-        <article class="model-card"><img src="/static/icons/gemini.png" alt=""><span>Google</span><strong>Gemini</strong></article>
-        <article class="model-card"><img src="/static/icons/mistral.png" alt=""><span>Mistral AI</span><strong>Mistral</strong></article>
-        <article class="model-card"><img src="/static/icons/deepseek.png" alt=""><span>DeepSeek</span><strong>DeepSeek</strong></article>
-        <article class="model-card"><img src="/static/icons/grok.png" alt=""><span>xAI</span><strong>Grok</strong></article>
+        <div class="lp-scene-visual lp-reveal">
+          <div class="consensus-verdict is-warn">
+            <span class="verdict-icon" aria-hidden="true"></span>
+            <span class="verdict-text">Caution: the models contradict each other on 1 point, 6 models compared</span>
+          </div>
+          <div class="consensus-box">
+            <div class="consensus-main">
+              <div class="lp-consensus-actions">
+                <button class="consensus-share-pill" type="button" tabindex="-1" aria-label="Share this consensus publicly">
+                  <svg class="share-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"></path><path d="M8.5 7.5 12 4l3.5 3.5"></path><path d="M5 12v7a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-7"></path></svg>
+                </button>
+                <button class="consensus-actions-toggle" type="button" tabindex="-1" aria-label="Copy options">
+                  <svg class="quote-toggle-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"></path></svg>
+                </button>
+              </div>
+              <h2>Consensus Answer</h2>
+              <div class="consensus-main-text">
+                <p><strong>The Nile is the conventional longest river, but the Amazon has a credible claim.</strong></p>
+                <p>The models converge on the framing: the Nile is the established answer at about 6,650 km, while the Amazon, the largest river by water volume, measures roughly 6,400 km, or up to 6,992 km if a disputed 2007 survey is accepted.</p>
+                <ul>
+                  <li>By convention and most references, the Nile leads on length.</li>
+                  <li>The Amazon is unambiguously the largest river by discharge.</li>
+                  <li>The dispute is about where the river starts, not the underlying data.</li>
+                </ul>
+                <p>A careful answer names both rivers and the measurement dispute instead of hiding it inside one confident number.</p>
+              </div>
+              <div class="consensus-claims-fallback">
+                <div class="claims-fallback-title">Key claims</div>
+                <div class="claims-fallback-row"><span class="claims-fallback-text">The Nile is the conventional longest river (~6,650 km)</span><span class="claim-badge">6/6</span></div>
+                <div class="claims-fallback-row"><span class="claims-fallback-text">The Amazon is the largest river by water volume</span><span class="claim-badge">6/6</span></div>
+                <div class="claims-fallback-row"><span class="claims-fallback-text">A 2007 survey measured the Amazon at 6,992 km</span><span class="claim-badge has-dissent">3/6</span></div>
+              </div>
+            </div>
+            <div class="consensus-differences credibility-framed cred-partially">
+              <h2>Differences</h2>
+              <div class="differences-cards">
+                <div class="diff-card is-contradiction">
+                  <div class="diff-card-summary">
+                    <span class="diff-type-tag">Contradiction</span>
+                    <span class="diff-card-claim">Is the Nile definitively the longest river?</span>
+                  </div>
+                  <div class="diff-card-body">
+                    <div class="diff-position">
+                      <div class="diff-position-label">Position A (3 models: ChatGPT, Mistral, DeepSeek)</div>
+                      <div class="diff-position-stance">The Nile is the settled answer at ~6,650 km.</div>
+                      <blockquote class="diff-position-quote">the Nile is traditionally listed as the longest river at about 6,650 km</blockquote>
+                      <div class="diff-position-links"><a class="claim-jump-link" href="#agent-mode">Jump to ChatGPT</a></div>
+                    </div>
+                    <div class="diff-position">
+                      <div class="diff-position-label">Position B (3 models: Claude, Gemini, Grok)</div>
+                      <div class="diff-position-stance">The 2007 Amazon survey is a credible challenger.</div>
+                      <blockquote class="diff-position-quote">if the Pará estuary is counted, the Amazon may exceed 7,000 km</blockquote>
+                      <div class="diff-position-links"><a class="claim-jump-link" href="#agent-mode">Jump to Claude</a></div>
+                    </div>
+                    <div class="diff-verify">Worth verifying: check whether the source counts the Pará estuary as part of the Amazon.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
-    <section class="final-cta landing-shell">
-      <p class="eyebrow">Get the product view</p>
-      <h2>Open consens.io and compare your next answer across models.</h2>
-      <a href="/app" class="button-primary" data-umami-event="landing_final_open_app">Open app</a>
+    <!-- ====================================================== WHY -->
+    <section class="lp-section lp-section--white">
+      <div class="lp-shell">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">Why consens.io</p>
+          <h2 class="lp-h2">Built for decisions that need a second view.</h2>
+        </div>
+        <div class="lp-card-grid lp-reveal">
+          <article class="lp-card">
+            <p class="lp-eyebrow">Compare</p>
+            <h3>Original answers stay visible</h3>
+            <p>Read each model response side by side before the consensus layer summarizes it.</p>
+          </article>
+          <article class="lp-card">
+            <p class="lp-eyebrow">Verify</p>
+            <h3>Disagreement is surfaced</h3>
+            <p>The app highlights differences instead of hiding them inside one confident answer.</p>
+          </article>
+          <article class="lp-card">
+            <p class="lp-eyebrow">Control</p>
+            <h3>You choose the models</h3>
+            <p>Select providers, switch reasoning modes, and decide which outputs count toward consensus.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================== MODELS -->
+    <section id="models" class="lp-section lp-section--grey">
+      <div class="lp-shell">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">Model coverage</p>
+          <h2 class="lp-h2">One workspace for leading AI providers.</h2>
+          <p class="lp-lead">Direct comparison across major model families, so every answer can be checked against independent alternatives.</p>
+        </div>
+        <div class="lp-logos lp-reveal">
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chatgpt.png" alt="OpenAI ChatGPT"></span><span>ChatGPT</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/claude.png" alt="Anthropic Claude"></span><span>Claude</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/gemini.png" alt="Google Gemini"></span><span>Gemini</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/mistral.png" alt="Mistral AI"></span><span>Mistral</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/deepseek.png" alt="DeepSeek"></span><span>DeepSeek</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/grok.png" alt="xAI Grok"></span><span>Grok</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================== FINAL CTA -->
+    <section class="lp-section lp-section--white">
+      <div class="lp-shell lp-final">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">Get the product view</p>
+          <h2 class="lp-h2">Open consens.io and compare your next answer across models.</h2>
+        </div>
+        <a href="/app" class="lp-btn lp-btn--primary lp-reveal" data-umami-event="landing_final_open_app">Open app</a>
+      </div>
     </section>
   </main>
 
-  <footer class="footer">
-    <div class="footer-inner">
+  <footer class="lp-footer">
+    <div class="lp-footer-inner">
       <span>&copy; 2026 consens.io</span>
-      <div class="footer-links">
+      <div class="lp-footer-links">
         <a href="/app">App</a>
         <a href="/ai-model-comparison">AI comparison</a>
         <a href="/about">About</a>
@@ -346,202 +404,68 @@
 
   <script>
     document.addEventListener("DOMContentLoaded", () => {
-      const steps = Array.from(document.querySelectorAll(".story-step"));
-      const storySection = document.querySelector(".scroll-story");
-      const stage = document.querySelector(".story-stage .product-window");
+      // Lean scroll reveal: one fade-up per block when it enters the viewport.
+      const revealItems = Array.from(document.querySelectorAll(".lp-reveal"));
       const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const mobileStory = window.matchMedia ? window.matchMedia("(max-width: 700px)") : null;
-      const storyResponseItems = stage ? Array.from(stage.querySelectorAll(".scene-consensus .mini-response")) : [];
-      const storyConsensusItems = stage ? Array.from(stage.querySelectorAll(".story-consensus-panel")) : [];
-      const storyConsensus = stage ? stage.querySelector(".story-consensus") : null;
-      const storyInputScene = stage ? stage.querySelector(".scene-ask") : null;
-      let responseAnimationRun = 0;
-      let responsesAnimated = false;
-      let consensusAnimated = false;
 
-      const updateStoryInputVisibility = () => {
-        if (!stage || !storyInputScene) return;
-        if (stage.dataset.activeScene !== "ask") {
-          stage.classList.remove("is-ask-input-visible");
-          return;
-        }
-
-        const rect = storyInputScene.getBoundingClientRect();
-        const visibleTop = Math.max(rect.top, 0);
-        const visibleBottom = Math.min(rect.bottom, window.innerHeight || document.documentElement.clientHeight);
-        const visibleHeight = Math.max(0, visibleBottom - visibleTop);
-        const visibleRatio = rect.height ? visibleHeight / rect.height : 0;
-
-        stage.classList.toggle("is-ask-input-visible", visibleRatio >= 0.55);
-      };
-
-      const resetStoryResponses = () => {
-        responseAnimationRun += 1;
-        responsesAnimated = false;
-        consensusAnimated = false;
-        storyResponseItems.forEach(item => {
-          const text = item.querySelector(".mini-response-text");
-          item.classList.remove("is-loading", "is-loaded");
-          item.removeAttribute("aria-busy");
-          if (text) text.textContent = "";
-        });
-        storyConsensusItems.forEach(item => {
-          const text = item.querySelector(".story-consensus-text");
-          item.classList.remove("is-loading", "is-loaded");
-          item.removeAttribute("aria-busy");
-          if (text) text.textContent = "";
-        });
-        storyConsensus?.classList.remove("is-focus-pulse");
-      };
-
-      const startStoryConsensus = () => {
-        if (!storyConsensusItems.length || consensusAnimated) return;
-        consensusAnimated = true;
-        const runId = responseAnimationRun;
-        const immediate = reducedMotion || mobileStory?.matches;
-
-        storyConsensusItems.forEach((item, index) => {
-          const text = item.querySelector(".story-consensus-text");
-          const content = text ? text.dataset.consensusText || "" : "";
-          if (!text || !content) return;
-
-          text.textContent = "";
-          item.classList.remove("is-loaded");
-          if (!immediate) {
-            item.classList.add("is-loading");
-            item.setAttribute("aria-busy", "true");
-          }
-
-          window.setTimeout(() => {
-            if (runId !== responseAnimationRun) return;
-            text.textContent = content;
-            item.classList.remove("is-loading");
-            item.classList.add("is-loaded");
-            item.removeAttribute("aria-busy");
-
-            const allConsensusLoaded = storyConsensusItems.every(panel => panel.classList.contains("is-loaded"));
-            if (allConsensusLoaded && storyConsensus && !reducedMotion) {
-              storyConsensus.classList.remove("is-focus-pulse");
-              void storyConsensus.offsetWidth;
-              storyConsensus.classList.add("is-focus-pulse");
+      if (reducedMotion || !("IntersectionObserver" in window)) {
+        revealItems.forEach(el => el.classList.add("is-visible"));
+      } else {
+        const observer = new IntersectionObserver((entries, obs) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("is-visible");
+              obs.unobserve(entry.target);
             }
-          }, immediate ? 0 : 520 + index * 520);
-        });
-      };
-
-      const startStoryResponses = () => {
-        if (!storyResponseItems.length || responsesAnimated) return;
-        responsesAnimated = true;
-        const runId = responseAnimationRun;
-
-        storyResponseItems.forEach((item, index) => {
-          const text = item.querySelector(".mini-response-text");
-          const content = text ? text.dataset.responseText || "" : "";
-          if (!text || !content) return;
-
-          text.textContent = "";
-          item.classList.remove("is-loaded");
-          item.classList.add("is-loading");
-          item.setAttribute("aria-busy", "true");
-
-          window.setTimeout(() => {
-            if (runId !== responseAnimationRun) return;
-            text.textContent = content;
-            item.classList.remove("is-loading");
-            item.classList.add("is-loaded");
-            item.removeAttribute("aria-busy");
-          }, reducedMotion ? 0 : 620 + index * 380);
-        });
-
-        window.setTimeout(() => {
-          if (runId !== responseAnimationRun) return;
-          startStoryConsensus();
-        }, reducedMotion ? 0 : 3000);
-      };
-
-      const setScene = scene => {
-        if (!stage) return;
-        const previousScene = stage.dataset.activeScene;
-        stage.dataset.activeScene = scene;
-        steps.forEach(step => step.classList.toggle("is-active", step.dataset.storyStep === scene));
-        updateStoryInputVisibility();
-        if (scene === "consensus") {
-          if (mobileStory?.matches) {
-            startStoryConsensus();
-          } else {
-            startStoryResponses();
-          }
-        } else if (previousScene === "consensus") {
-          resetStoryResponses();
-        }
-      };
-
-      if (steps.length && !reducedMotion) {
-        let pendingFrame = false;
-
-        const updateSceneFromScroll = () => {
-          pendingFrame = false;
-          const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-          let activeStep = steps[0];
-
-          if (mobileStory?.matches && storySection) {
-            const sectionTop = storySection.getBoundingClientRect().top + window.scrollY;
-            const sectionScrollable = Math.max(1, storySection.offsetHeight - viewportHeight);
-            const progress = Math.min(0.999, Math.max(0, (window.scrollY - sectionTop) / sectionScrollable));
-            const activeIndex = Math.min(steps.length - 1, Math.floor(progress * steps.length));
-            activeStep = steps[activeIndex] || activeStep;
-          } else {
-            const readingLine = window.scrollY + viewportHeight * 0.6;
-            for (const step of steps) {
-              const stepTop = step.getBoundingClientRect().top + window.scrollY;
-              if (stepTop <= readingLine) {
-                activeStep = step;
-              }
-            }
-          }
-
-          setScene(activeStep.dataset.storyStep);
-        };
-
-        const scheduleSceneUpdate = () => {
-          if (pendingFrame) return;
-          pendingFrame = true;
-          window.requestAnimationFrame(updateSceneFromScroll);
-        };
-
-        window.addEventListener("scroll", scheduleSceneUpdate, { passive: true });
-        window.addEventListener("resize", scheduleSceneUpdate);
-        updateSceneFromScroll();
-      } else if (steps.length) {
-        setScene("ask");
-      }
-
-      if (storyInputScene) {
-        if ("IntersectionObserver" in window) {
-          const inputObserver = new IntersectionObserver(updateStoryInputVisibility, {
-            threshold: [0, 0.25, 0.55, 0.75, 1]
           });
-          inputObserver.observe(storyInputScene);
-        }
-
-        window.addEventListener("scroll", updateStoryInputVisibility, { passive: true });
-        window.addEventListener("resize", updateStoryInputVisibility);
-        updateStoryInputVisibility();
+        }, { threshold: 0.14, rootMargin: "0px 0px -8% 0px" });
+        revealItems.forEach(el => observer.observe(el));
       }
 
+      // Scene 01: cycle a few example questions, typed in with a cursor. Loops
+      // gently only while the prompt is in view, so it stays unobtrusive.
+      const typeTarget = document.querySelector(".lp-prompt-text[data-type-loop], .lp-prompt-text[data-type-text]");
+      if (typeTarget) {
+        const list = (typeTarget.dataset.typeLoop || typeTarget.dataset.typeText || "")
+          .split("|").map(s => s.trim()).filter(Boolean);
+        if (reducedMotion || !("IntersectionObserver" in window) || !list.length) {
+          typeTarget.textContent = list[0] || "";
+        } else {
+          const sleep = ms => new Promise(r => window.setTimeout(r, ms));
+          let running = false, visible = false, q = 0;
+          const loop = async () => {
+            if (running) return;
+            running = true;
+            typeTarget.classList.add("is-typing");
+            while (visible) {
+              const text = list[q % list.length];
+              for (let i = 1; i <= text.length && visible; i++) { typeTarget.textContent = text.slice(0, i); await sleep(48 + Math.random() * 28); }
+              if (!visible) break;
+              await sleep(2000);
+              for (let i = text.length; i >= 0 && visible; i--) { typeTarget.textContent = text.slice(0, i); await sleep(24); }
+              await sleep(450);
+              q += 1;
+            }
+            typeTarget.classList.remove("is-typing");
+            running = false;
+          };
+          const typeObserver = new IntersectionObserver(entries => {
+            entries.forEach(entry => { visible = entry.isIntersecting; if (visible) loop(); });
+          }, { threshold: 0.4 });
+          typeObserver.observe(typeTarget.closest(".lp-window") || typeTarget);
+        }
+      }
+
+      // Preserve app entry behaviour + analytics on the CTAs.
       ["ctaButton", "navCtaButton"].forEach(id => {
         const button = document.getElementById(id);
-        if (button) {
-          button.addEventListener("click", () => {
-            sessionStorage.setItem("skipLandingRedirect", "1");
-            if (window.umami && typeof window.umami.track === "function") {
-              const eventName = id === "navCtaButton"
-                ? "landing_nav_open_app"
-                : "landing_hero_start";
-              window.umami.track(eventName);
-            }
-          });
-        }
+        if (!button) return;
+        button.addEventListener("click", () => {
+          sessionStorage.setItem("skipLandingRedirect", "1");
+          if (window.umami && typeof window.umami.track === "function") {
+            window.umami.track(id === "navCtaButton" ? "landing_nav_open_app" : "landing_hero_start");
+          }
+        });
       });
     });
   </script>
