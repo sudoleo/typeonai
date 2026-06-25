@@ -232,6 +232,7 @@ onIdTokenChanged(auth, async (user) => {
         <div id="emailPopup" class="email-popup" style="display: none; position: absolute; top: 45px; right: 0; background-color: var(--container-bg, #fff); border: 1px solid var(--sidebar-border, #ddd); border-radius: 8px; padding: 15px 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); z-index: 100; min-width: 150px;">
           <div class="popup-content" style="display: flex; flex-direction: column; align-items: flex-start;">
             <span class="user-email" style="margin-bottom: 12px; font-weight: 500; font-size: 0.95rem; color: var(--text-color);">${user.email}</span>
+            <a id="sharedLinksButton" class="top-bar-about" style="cursor: pointer; text-decoration: none; align-self: flex-start; padding: 5px 0;">Shared links</a>
             <a id="logoutButton" class="top-bar-about" style="cursor: pointer; text-decoration: none; align-self: flex-start; padding: 5px 0;">Logout</a>
           </div>
         </div>
@@ -240,12 +241,26 @@ onIdTokenChanged(auth, async (user) => {
     const emailIcon = document.getElementById("emailIcon");
     const emailPopup = document.getElementById("emailPopup");
     const logoutButton = document.getElementById("logoutButton");
+    const sharedLinksButton = document.getElementById("sharedLinksButton");
 
     emailIcon.addEventListener("click", e => {
       e.stopPropagation();
       emailPopup.style.display = emailPopup.style.display === "none" ? "block" : "none";
       trackAppEvent("app_account_menu_toggled", { open: emailPopup.style.display === "block" });
     });
+
+    // Übersicht der geteilten Consensus-Links direkt aus dem User-Menü öffnen.
+    // stopPropagation ist wichtig: der umschließende #loginContainer hat einen
+    // Klick-Handler, der eingeloggte Nutzer sonst ausloggt.
+    if (sharedLinksButton) {
+      sharedLinksButton.addEventListener("click", e => {
+        e.stopPropagation();
+        emailPopup.style.display = "none";
+        if (typeof window.openShareDialog === "function") {
+          window.openShareDialog("list");
+        }
+      });
+    }
 
     logoutButton.addEventListener("click", () => {
       trackAppEvent("auth_logout_click");
@@ -823,7 +838,7 @@ async function saveBookmark(question, response, modelName, mode) {
 
 window.saveBookmark = saveBookmark;
 
-async function saveBookmarkConsensus(question, consensusText, differencesText) {
+async function saveBookmarkConsensus(question, consensusText, differencesText, differencesData) {
   if (!auth.currentUser) return;
   const id_token = await auth.currentUser?.getIdToken(/* forceRefresh= */ false);
   if (!id_token) return;
@@ -840,6 +855,9 @@ async function saveBookmarkConsensus(question, consensusText, differencesText) {
          question: question,
          consensusText: consensusText,
          differencesText: differencesText,
+         // Strukturierte Differences (Verdict, Karten, Badges) mitspeichern,
+         // damit das Bookmark dieselbe Ansicht wie eine echte Query zeigt.
+         differencesData: differencesData || null,
          sources: sources // HIER: Hinzufügen
        })
     });
@@ -908,21 +926,57 @@ function loadSingleBookmarkUI(bookmark) {
         setModelContent("grokResponse", bookmark.responses["Grok"]);
 
         // --- Konsens Boxen ---
+        // Strukturierten Zustand (Verdict, Karten, Badges) eines früheren Laufs
+        // zuerst zurücksetzen, damit das geladene Bookmark nicht dessen Reste zeigt.
+        window.resetConsensusInsights?.();
+        const consensusDiv = document.getElementById("consensusResponse");
+        if (window.resetCredibilityFrame) {
+            window.resetCredibilityFrame(consensusDiv?.querySelector(".consensus-differences"));
+        }
+
+        const consensusText = bookmark.responses["consensus"] || "";
+
+        // WICHTIG: Die Konsens-Antwort zuerst rendern – die Claim-Badges
+        // (Modell-Zustimmung) verankern sich am Text der Hauptantwort.
         const conMain = document.querySelector("#consensusResponse .consensus-main p");
-        renderContent(conMain, bookmark.responses["consensus"]);
-        
-        // --- Differences Box (mit Badge-Logik) ---
+        renderContent(conMain, consensusText);
+
+        // --- Differences Box ---
         const conDiff = document.querySelector("#consensusResponse .consensus-differences p");
-        
-        // Optional: Falls du die "Credibility Badges" (Farben) auch im Bookmark sehen willst:
-        let diffText = bookmark.responses["differences"] || "";
-        if (window.applyCredibilityFrame) {
-            window.applyCredibilityFrame(conDiff, diffText);
+
+        // Strukturierte Ansicht (Verdict, Modellvergleich-Karten, Claim-Badges)
+        // exakt wie nach einer echten Query rendern – sofern das Bookmark die
+        // strukturierten differences_data enthält. Sonst Freitext-Fallback.
+        const differencesData = bookmark.responses["differences_data"];
+        const includedCount = ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"]
+            .filter(name => (bookmark.responses[name] || "").trim()).length;
+
+        let structuredRendered = false;
+        if (window.renderConsensusInsights && differencesData && typeof differencesData === "object") {
+            structuredRendered = window.renderConsensusInsights(differencesData, includedCount);
         }
-        if (window.colorizeCredibility) {
-            diffText = window.colorizeCredibility(diffText);
+
+        if (!structuredRendered) {
+            // Freitext-Fallback (ältere Bookmarks ohne differences_data),
+            // inkl. optionaler Credibility-Badges (Farben).
+            let diffText = bookmark.responses["differences"] || "";
+            if (window.applyCredibilityFrame) {
+                window.applyCredibilityFrame(conDiff, diffText);
+            }
+            if (window.colorizeCredibility) {
+                diffText = window.colorizeCredibility(diffText);
+            }
+            renderContent(conDiff, diffText);
         }
-        renderContent(conDiff, diffText);
+
+        // Konsens-Bereich genau wie nach einer echten Anfrage einblenden – aber nur,
+        // wenn das Bookmark tatsächlich einen Konsens enthält. So erscheint der
+        // (rahmenlose) Bereich sichtbar und funktional (Copy, Quellen-Links).
+        if (consensusText.trim()) {
+            window.revealConsensusOutput?.();
+        } else {
+            window.hideConsensusOutput?.();
+        }
 
         // Toggles setzen (Deep Think) - wie gehabt
         if (bookmark.mode) {

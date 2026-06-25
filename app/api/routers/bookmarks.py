@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request, Body, HTTPException
 from app.core.rate_limit import limiter
 from app.core.security import verify_user_token, extract_id_token, db_firestore
 from app.services.llm.attachments import ALLOWED_ATTACHMENT_MIMES, MAX_ATTACHMENTS
+from app.services.share_snapshots import sanitize_differences_data
 
 router = APIRouter()
 
@@ -141,26 +142,34 @@ async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
     question = data.get("question")
     consensusText = data.get("consensusText")
     differencesText = data.get("differencesText")
+    differencesData = data.get("differencesData")
     sources = data.get("sources")
-    
+
     if not id_token or not question or consensusText is None or differencesText is None:
         raise HTTPException(status_code=400, detail="Missing required fields.")
-    
+
     try:
         uid = verify_user_token(id_token)
     except Exception as e:
         raise HTTPException(status_code=401, detail="Authentication failed")
-    
+
     # Berechne Dokument-ID (wie oben)
     doc_id = base64.b64encode(question.encode()).decode()
     doc_id = re.sub(r'[^a-zA-Z0-9]', '_', doc_id)[:50]
-    
+
     dataToMerge = {
         "responses": {
             "consensus": consensusText,
             "differences": differencesText
         }
     }
+
+    # Strukturierte Differences whitelisten/kappen (gleiche Validierung wie beim
+    # Share-Snapshot) und mitspeichern, damit das Bookmark Verdict, Karten und
+    # Modellvergleiche wie eine echte Query rendern kann.
+    sanitized_diff_data = sanitize_differences_data(differencesData)
+    if sanitized_diff_data is not None:
+        dataToMerge["responses"]["differences_data"] = sanitized_diff_data
 
     if sources is not None:
         dataToMerge["sources"] = sources

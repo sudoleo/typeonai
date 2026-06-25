@@ -454,6 +454,8 @@ async function runDemoFlow() {
   const consensusBtn = document.getElementById("consensusButton");
   if (sendBtn) sendBtn.disabled = true;
   if (consensusBtn) consensusBtn.disabled = true;
+  // Neue Demo-Runde: Konsens-Bereich zunächst ausblenden.
+  window.hideConsensusOutput?.();
   window.setAgentModeStatus?.("running");
 
   window.currentEvidenceSources = [];
@@ -500,30 +502,21 @@ async function runDemoFlow() {
   const consensusDiv = document.getElementById("consensusResponse");
   const mainP = consensusDiv?.querySelector(".consensus-main p");
   const diffP = consensusDiv?.querySelector(".consensus-differences p");
-  const auto = document.getElementById("autoConsensusToggle")?.checked;
+  // Auto Consensus ist standardmäßig an (Einstellungen). Ist es nicht explizit
+  // deaktiviert, läuft der Konsens automatisch, sobald alle Antworten da sind.
+  const auto = document.getElementById("autoConsensusToggle")?.checked !== false;
 
   if (auto) {
     window.resetConsensusInsights?.();
     window.resetCredibilityFrame?.(consensusDiv?.querySelector(".consensus-differences"));
+    // Rahmenlosen Konsens-Bereich sanft einblenden, sobald alle Antworten fertig sind.
+    window.revealConsensusOutput?.();
     if (mainP) mainP.innerHTML = window.spinnerHTML;
     if (diffP) diffP.innerHTML = window.spinnerHTML;
     setTimeout(
       () => renderDemoConsensus(mainP, diffP),
       DEMO_CONSENSUS_DELAY_MS + Math.floor(Math.random() * DEMO_CONSENSUS_JITTER_MS)
     );
-  } else if (consensusBtn) {
-    const originalOnclick = consensusBtn.onclick;
-    consensusBtn.onclick = () => {
-      window.resetConsensusInsights?.();
-      window.resetCredibilityFrame?.(consensusDiv?.querySelector(".consensus-differences"));
-      if (mainP) mainP.innerHTML = window.spinnerHTML;
-      if (diffP) diffP.innerHTML = window.spinnerHTML;
-      setTimeout(
-        () => renderDemoConsensus(mainP, diffP),
-        DEMO_CONSENSUS_DELAY_MS + Math.floor(Math.random() * DEMO_CONSENSUS_JITTER_MS)
-      );
-      consensusBtn.onclick = originalOnclick;
-    };
   }
 
   if (sendBtn) sendBtn.disabled = false;

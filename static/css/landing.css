@@ -390,13 +390,13 @@ img { display: block; max-width: 100%; }
 /* --- Prompt field --- */
 .lp-prompt {
   position: relative;
-  min-height: 132px;
-  padding: 18px;
-  padding-bottom: 60px;
-  border: 1px solid color-mix(in srgb, var(--glass-border) 62%, var(--glass-edge));
+  min-height: 142px;
+  padding: 20px;
+  padding-bottom: 62px;
+  border: 1px solid color-mix(in srgb, var(--glass-border) 54%, var(--glass-edge));
   border-radius: var(--radius-lg);
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 32%, transparent), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 42%, transparent), transparent 44%),
     var(--response-bg);
   box-shadow: var(--liquid-shadow);
   -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.6)) saturate(1.16);
@@ -423,17 +423,20 @@ img { display: block; max-width: 100%; }
 }
 @keyframes lpCaret { 50% { opacity: 0; } }
 
-/* Controls pinned to the BOTTOM of the input box. Left group: attach (+) +
-   the three toggles on a single line. Right group: clear + send. */
+/* Controls pinned to the BOTTOM of the input box, matching the /app layout. */
 .lp-prompt-bar {
   position: absolute;
-  left: 18px;
-  right: 102px;
+  left: 20px;
+  right: 246px;
   bottom: 14px;
   display: flex;
   align-items: center;
   gap: 12px;
   min-width: 0;
+}
+
+.lp-window .lp-prompt {
+  box-shadow: var(--liquid-shadow), inset 0 1px 0 var(--glass-highlight);
 }
 
 .lp-attach {
@@ -469,7 +472,7 @@ img { display: block; max-width: 100%; }
   flex: 0 0 auto;
   gap: 6px;
   color: color-mix(in srgb, var(--text-primary) 88%, var(--text-secondary));
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -477,8 +480,8 @@ img { display: block; max-width: 100%; }
 /* --- Glassy toggle, matching the /app switch (green = on) --- */
 .lp-switch {
   position: relative;
-  width: 38px;
-  height: 22px;
+  width: 50px;
+  height: 26px;
   flex: 0 0 auto;
   border-radius: 999px;
   overflow: hidden;
@@ -500,8 +503,8 @@ img { display: block; max-width: 100%; }
   position: absolute;
   top: 1px;
   left: 1px;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.78);
   background:
@@ -526,7 +529,7 @@ img { display: block; max-width: 100%; }
 }
 
 .lp-mode.is-on .lp-switch::after {
-  transform: translateX(16px);
+  transform: translateX(24px);
   border-color: rgba(210, 255, 224, 0.78);
   background:
     radial-gradient(circle at 34% 26%, rgba(255, 255, 255, 0.96), rgba(211, 255, 225, 0.48) 38%, rgba(39, 194, 91, 0.44) 72%),
@@ -544,10 +547,58 @@ img { display: block; max-width: 100%; }
 .lp-actions {
   position: absolute;
   right: 16px;
-  bottom: 14px;
+  bottom: 12px;
   display: flex;
   align-items: center;
+  gap: 9px;
+}
+
+.lp-consensus-picker {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+
+.lp-consensus-picker span {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  color: var(--sidebar-text-muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lp-consensus-picker button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--glass-border) 66%, var(--sidebar-border));
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 50%, transparent), transparent 62%),
+    color-mix(in srgb, var(--glass-bg-strong) 80%, transparent);
+  color: var(--text-primary);
+  box-shadow: var(--chip-shadow, 0 8px 20px rgba(46, 61, 79, 0.08)), inset 0 1px 0 var(--glass-highlight);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.lp-consensus-picker button i {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--sidebar-text-muted);
 }
 
 .lp-clear {
@@ -555,8 +606,8 @@ img { display: block; max-width: 100%; }
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -572,11 +623,11 @@ img { display: block; max-width: 100%; }
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 44px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--button-bg) 70%, var(--glass-border));
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   background:
     linear-gradient(180deg, color-mix(in srgb, #ffffff 13%, transparent), transparent),
     var(--button-bg);
@@ -699,15 +750,17 @@ img { display: block; max-width: 100%; }
 .lp-response {
   position: relative;
   overflow: hidden;
-  padding: 14px 15px;
-  border: 1px solid color-mix(in srgb, var(--glass-border) 60%, var(--glass-edge));
-  border-radius: var(--radius-md);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 28%, transparent), transparent 42%),
-    var(--response-bg);
-  box-shadow: var(--liquid-shadow);
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(1.12);
-  backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(1.12);
+  padding: 4px 4px 2px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.lp-window .lp-response {
+  box-shadow: none;
 }
 
 .lp-response strong { display: block; font-size: 0.86rem; font-weight: 650; color: var(--text-primary); }
@@ -785,51 +838,45 @@ img { display: block; max-width: 100%; }
 .consensus-box {
   display: flex;
   align-items: stretch;
-  gap: 14px;
-  padding: 8px;
-  border-radius: var(--radius-lg);
-  border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--glass-border));
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--glass-bg-strong) 74%, var(--accent) 5%), color-mix(in srgb, var(--glass-bg) 86%, transparent)),
-    var(--response-bg);
-  box-shadow: var(--liquid-shadow), 0 0 0 3px color-mix(in srgb, var(--accent) 4%, transparent);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
-  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  gap: 28px;
+  padding: 0;
+  border-radius: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
 }
 
 .consensus-main {
   flex: 1.7;
   min-width: 0;
   position: relative;
-  padding: 20px 22px 22px;
+  padding: 10px 16px 12px;
   border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 42%, transparent), transparent 38%),
-    color-mix(in srgb, var(--response-bg) 88%, var(--glass-bg-strong) 12%);
-  box-shadow: 0 12px 34px rgba(46, 61, 79, 0.08), inset 0 1px 0 var(--glass-highlight);
+  border: 0;
+  background: none;
+  box-shadow: none;
 }
 
-.dark-mode .consensus-main { box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.24); }
+.dark-mode .consensus-main { box-shadow: none; }
 
 .consensus-differences {
   flex: 1;
   min-width: min(320px, 100%);
   position: relative;
-  padding: 18px 18px 20px;
+  padding: 10px 16px 12px 24px;
   border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 45%, transparent);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 28%, transparent), transparent 42%),
-    color-mix(in srgb, var(--response-bg) 84%, var(--sidebar-hover) 16%);
-  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--accent) 12%, transparent), inset 0 1px 0 var(--glass-highlight);
+  border: 1px solid transparent;
+  border-left: 1px solid color-mix(in srgb, var(--sidebar-border) 52%, transparent);
+  background: none;
+  box-shadow: none;
 }
 
 /* The differences PANEL itself stays neutral (no coloured edge). Only the inner
    contradiction card (.diff-card.is-contradiction) carries the amber accent. */
 .consensus-differences.credibility-framed.cred-partially {
-  border-color: color-mix(in srgb, var(--sidebar-border) 60%, transparent);
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  border-color: transparent;
+  border-left-color: color-mix(in srgb, var(--sidebar-border) 52%, transparent);
+  box-shadow: none;
 }
 
 .consensus-main > h2 {
@@ -1154,8 +1201,13 @@ img { display: block; max-width: 100%; }
   .lp-logos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
   /* Scene 03: stack panels, consensus first */
-  .consensus-box { flex-direction: column; }
+  .consensus-box { flex-direction: column; gap: 10px; }
   .consensus-main, .consensus-differences { flex: 1 1 auto; min-width: 0; }
+  .consensus-differences {
+    border-left: 0;
+    border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 52%, transparent);
+    padding: 14px 16px 8px;
+  }
 
   /* Tablet & phone: the toggle switches become compact icon buttons, exactly
      like the /app's input row, instead of full text switches. */
@@ -1189,8 +1241,6 @@ img { display: block; max-width: 100%; }
     -webkit-mask-size: contain; mask-size: contain;
   }
   .lp-mode--agent::before { -webkit-mask-image: url("../favicon.png"); mask-image: url("../favicon.png"); }
-  .lp-mode--consensus::before { -webkit-mask-image: url("../icons/consensus.png"); mask-image: url("../icons/consensus.png"); }
-  .lp-mode--deep::before { -webkit-mask-image: url("../icons/deepsearch.png"); mask-image: url("../icons/deepsearch.png"); }
   .lp-mode.is-on {
     color: var(--accent);
     border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border));
@@ -1208,8 +1258,8 @@ img { display: block; max-width: 100%; }
   .lp-responses { grid-template-columns: 1fr; }
   .lp-logos { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .lp-logo { padding: 22px 10px; }
-  .consensus-main { padding: 18px 16px 18px; }
-  .consensus-differences { padding: 16px 14px 18px; }
+  .consensus-main { padding: 10px 16px 12px; }
+  .consensus-differences { padding: 14px 16px 8px; }
   .consensus-main > h2 { padding: 0 56px; }
   .lp-footer-inner { flex-direction: column; align-items: flex-start; }
 
@@ -1218,4 +1268,43 @@ img { display: block; max-width: 100%; }
   .lp-prompt-bar { left: 16px; right: 96px; gap: 8px; }
   .lp-modes { gap: 6px; }
   .lp-actions { right: 14px; gap: 6px; }
+}
+
+/* Keep landing prompt mockups aligned with the real /app input instead of
+   switching back to the older compact icon-only demo controls. */
+@media (max-width: 960px) {
+  .lp-prompt { min-height: 142px; padding: 20px; padding-bottom: 62px; }
+  .lp-prompt-bar { left: 20px; right: 246px; bottom: 14px; gap: 12px; }
+  .lp-attach { width: 30px; height: 30px; border-radius: 50%; box-shadow: none; }
+  .lp-mode {
+    width: auto;
+    height: auto;
+    justify-content: flex-start;
+    gap: 6px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: color-mix(in srgb, var(--text-primary) 88%, var(--text-secondary));
+    font-size: 0.82rem;
+  }
+  .lp-mode .lp-switch { display: block; }
+  .lp-mode::before { content: none; }
+  .lp-clear { width: 30px; height: 30px; }
+  .lp-send { width: 38px; height: 38px; border-radius: 50%; }
+}
+
+@media (max-width: 600px) {
+  .lp-prompt-bar { right: 172px; gap: 10px; }
+  .lp-mode { font-size: 0.78rem; }
+  .lp-switch { width: 44px; height: 24px; }
+  .lp-switch::after { width: 20px; height: 20px; }
+  .lp-mode.is-on .lp-switch::after { transform: translateX(20px); }
+  .lp-consensus-picker span { display: none; }
+  .lp-consensus-picker button {
+    max-width: 100px;
+    padding: 0 9px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }

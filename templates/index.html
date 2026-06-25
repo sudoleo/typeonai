@@ -51,7 +51,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260624-canvas2">
+  <link rel="stylesheet" href="/static/style.css?v=20260625-consensus-pad1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -64,9 +64,9 @@
   <!-- DOMPurify (HTML Sanitizer) -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260528-umami-events1"></script>
+  <script type="module" src="/static/firebase.js?v=20260625-bookmark-consensus1"></script>
   <script type="module" src="/static/demo.js?v=20260621-demo-stream-diff3"></script>
-  <script src="/static/app-ui.js?v=20260624-canvas1" defer></script>
+  <script src="/static/app-ui.js?v=20260625-bookmark-consensus1" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
@@ -192,7 +192,7 @@
         <span class="settings-icon">⚙️</span>
         <span class="settings-label">Settings</span>
       </button>
-      <span id="version-number">v1.7.0</span>
+      <span id="version-number">v1.8.0</span>
     </div>
   </div>
   <div class="container">
@@ -211,6 +211,20 @@
             <span class="attach-pro-badge model-picker-pro-badge">Pro</span>
           </button>
           <div class="attach-menu-hint">PDF, PNG, JPG, WebP &middot; max 5 MB &middot; up to 2 files</div>
+          <div class="attach-menu-divider"></div>
+          <!-- Deep Think lebt jetzt im (+)-Kontextmenü -->
+          <label class="attach-menu-toggle" for="deepSearchToggle" title="Deep Think">
+            <span class="attach-menu-toggle-icon" aria-hidden="true"></span>
+            <span class="attach-menu-toggle-text">
+              <span class="search-mode-label deep-switch-label">Deep Think</span>
+              <span class="attach-menu-toggle-sub">Stronger reasoning models for harder questions.</span>
+              <span id="deepthinkDisclaimer" class="deepthink-disclaimer" style="display: none;"></span>
+            </span>
+            <span class="switch deep-switch attach-menu-switch">
+              <input type="checkbox" id="deepSearchToggle">
+              <span class="slider"></span>
+            </span>
+          </label>
         </div>
         <input type="file" id="attachFileInput" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp" multiple hidden>
         <!-- Container für beide Schalter -->
@@ -229,25 +243,6 @@
             </label>
             <span class="agent-mode-label">Agent Mode</span>
           </div>
-          <!-- Auto-Konsens-Switch -->
-          <div class="auto-consensus">
-            <label class="switch" aria-label="Auto Consensus" title="Auto Consensus">
-              <input type="checkbox" id="autoConsensusToggle">
-              <span class="slider"></span>
-            </label>
-            <span class="auto-consensus-label">Auto Consensus</span>
-          </div>
-          <!-- Search Mode Switch, standardmäßig leicht ausgegraut -->
-          <div class="search-mode deep-search-mode">
-            <label class="switch deep-switch" aria-label="Deep Think" title="Deep Think">
-              <input type="checkbox" id="deepSearchToggle">
-              <span class="slider"></span>
-            </label>
-            <span class="search-mode-label deep-switch-label">Deep Think</span>
-            <span id="deepthinkDisclaimer" class="deepthink-disclaimer"
-              style="display: none; font-size: 0.8em; margin-left: 5px;">
-            </span>
-          </div>
           <button type="button" id="modeExplainerTrigger" class="mode-explainer-trigger" aria-controls="modeExplainer" aria-expanded="false" title="Explain modes">
             <span aria-hidden="true">i</span>
             <span class="visually-hidden">Explain modes</span>
@@ -255,6 +250,28 @@
         </div>
         <!-- Actions bottom right -->
         <div class="input-actions-container">
+          <!-- Consensus-Modell-Auswahl direkt links neben den Aktionen -->
+          <div class="consensus-model consensus-model-inline" title="Model that synthesises the final consensus">
+            <span class="consensus-label">Consensus</span>
+            <div class="select-wrapper">
+              <select id="consensusModelDropdown" aria-label="Consensus model">
+                <option value="{{ default_models['gemini'] }}" class="early-option" data-model-label="{{ model_labels.get(default_models['gemini'], default_models['gemini']) }}" data-model-badge="{{ model_badges.get(default_models['gemini'], '') }}" selected>{{ model_labels.get(default_models['gemini'], default_models['gemini']) }}{% if model_badges.get(default_models['gemini'], '') %} · {{ model_badges.get(default_models['gemini'], '') }}{% endif %}</option>
+                <option value="Grok">{{ model_labels.get(consensus_default_models['grok'], consensus_default_models['grok']) }}</option>
+                <option value="OpenAI">{{ model_labels.get(consensus_default_models['openai'], consensus_default_models['openai']) }}</option>
+                <option value="Anthropic">{{ model_labels.get(consensus_default_models['anthropic'], consensus_default_models['anthropic']) }}</option>
+                <option value="Mistral">{{ model_labels.get(consensus_default_models['mistral'], consensus_default_models['mistral']) }}</option>
+                <option value="Gemini">{{ model_labels.get(consensus_default_models['gemini'], consensus_default_models['gemini']) }}</option>
+                <option value="DeepSeek">{{ model_labels.get(consensus_default_models['deepseek'], consensus_default_models['deepseek']) }}</option>
+
+                <option value="Grok-Pro" class="premium-option">Grok-4.3 · Pro</option>
+                <option value="OpenAI-Pro" class="premium-option">GPT-5.5 · Pro</option>
+                <option value="Anthropic-Pro" class="premium-option">Claude Opus 4.8 · Pro</option>
+                <option value="Mistral-Pro" class="premium-option">Mistral Medium 3.5 · Pro</option>
+                <option value="Gemini-Pro" class="premium-option">Gemini 3.1 · Pro</option>
+                <option value="DeepSeek-Pro" class="premium-option">DeepSeek V4 Pro · Pro</option>
+              </select>
+            </div>
+          </div>
           <button id="clearButton" class="input-action-btn-subtle" onclick="clearResponseBoxes()" title="Clear all responses" aria-label="Clear all responses">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;">
               <polyline points="3 6 5 6 21 6"></polyline>
@@ -286,14 +303,14 @@
             <span class="mode-explainer-icon mode-explainer-icon-consensus" aria-hidden="true"></span>
             <div>
               <strong>Auto Consensus</strong>
-              <p>Creates the final consensus once enough answers are ready.</p>
+              <p>Synthesises the final consensus automatically once every answer is ready. Toggle it in Settings.</p>
             </div>
           </div>
           <div class="mode-explainer-item">
             <span class="mode-explainer-icon mode-explainer-icon-deep" aria-hidden="true"></span>
             <div>
               <strong>Deep Think</strong>
-              <p>Uses stronger reasoning models for harder questions.</p>
+              <p>Stronger reasoning models for harder questions. Find it in the (+) menu.</p>
             </div>
           </div>
         </div>
@@ -478,54 +495,27 @@
     <!-- Konsens-Section -->
     <div class="consensus-section">
       <div class="consensus-wrapper">
-        <!-- Konsens-Kontrolle: Schalter, Button und Dropdown wie gehabt -->
-        <div class="consensus-controls">
-          <!-- Tooltip-Wrapper um den Button -->
-          <div class="tooltip">
-            <button id="consensusButton" onclick="getConsensus()">Generate Consensus</button>
-            <!-- Das Hover-Feld mit weiteren Infos -->
-            <div class="tooltiptext">
-              Combine four responses into a final, consistent consensus by reconciling contradictions and errors.
+        <!-- Konsens erscheint rahmenlos und erst, wenn alle Antworten fertig sind -->
+        <div id="consensusOutput" class="consensus-output is-hidden">
+          <!-- Dezenter Trennstrich zwischen Antwort-Grid und Konsens-Bereich -->
+          <div class="consensus-divider" aria-hidden="true"></div>
+          <!-- Verdict-Header: kompakte Einordnung, bevor der Nutzer liest -->
+          <div id="consensusVerdict" class="consensus-verdict" hidden aria-live="polite"></div>
+          <!-- Konsens-Box mit zwei nebeneinanderliegenden Bereichen -->
+          <div class="consensus-box" id="consensusResponse">
+            <!-- Linker Bereich: Konsens-Antwort (80%) -->
+            <div class="consensus-main">
+              <h2>Consensus Answer</h2>
+              <p></p>
+              <!-- Kernaussagen, deren Anker nicht im Text gefunden wurde -->
+              <div id="consensusClaimsFallback" class="consensus-claims-fallback" hidden></div>
             </div>
-          </div>
-          <div class="consensus-model">
-            <label for="consensusModelDropdown" class="consensus-label">Consensus Model:</label>
-            <div class="select-wrapper">
-              <select id="consensusModelDropdown">
-                <option value="{{ default_models['gemini'] }}" class="early-option" data-model-label="{{ model_labels.get(default_models['gemini'], default_models['gemini']) }}" data-model-badge="{{ model_badges.get(default_models['gemini'], '') }}" selected>{{ model_labels.get(default_models['gemini'], default_models['gemini']) }}{% if model_badges.get(default_models['gemini'], '') %} · {{ model_badges.get(default_models['gemini'], '') }}{% endif %}</option>
-                <option value="Grok">{{ model_labels.get(consensus_default_models['grok'], consensus_default_models['grok']) }}</option>
-                <option value="OpenAI">{{ model_labels.get(consensus_default_models['openai'], consensus_default_models['openai']) }}</option>
-                <option value="Anthropic">{{ model_labels.get(consensus_default_models['anthropic'], consensus_default_models['anthropic']) }}</option>
-                <option value="Mistral">{{ model_labels.get(consensus_default_models['mistral'], consensus_default_models['mistral']) }}</option>
-                <option value="Gemini">{{ model_labels.get(consensus_default_models['gemini'], consensus_default_models['gemini']) }}</option>
-                <option value="DeepSeek">{{ model_labels.get(consensus_default_models['deepseek'], consensus_default_models['deepseek']) }}</option>
-
-                <option value="Grok-Pro" class="premium-option">Grok-4.3 · Pro</option>
-                <option value="OpenAI-Pro" class="premium-option">GPT-5.5 · Pro</option>
-                <option value="Anthropic-Pro" class="premium-option">Claude Opus 4.8 · Pro</option>
-                <option value="Mistral-Pro" class="premium-option">Mistral Medium 3.5 · Pro</option>
-                <option value="Gemini-Pro" class="premium-option">Gemini 3.1 · Pro</option>
-                <option value="DeepSeek-Pro" class="premium-option">DeepSeek V4 Pro · Pro</option>
-              </select>
+            <!-- Rechter Bereich: Unterschiede (20%) -->
+            <div class="consensus-differences">
+              <h2>Differences</h2>
+              <div id="differencesCards" class="differences-cards" hidden></div>
+              <p></p>
             </div>
-          </div>
-        </div>
-        <!-- Verdict-Header: kompakte Einordnung, bevor der Nutzer liest -->
-        <div id="consensusVerdict" class="consensus-verdict" hidden aria-live="polite"></div>
-        <!-- Konsens-Box mit zwei nebeneinanderliegenden Bereichen -->
-        <div class="consensus-box" id="consensusResponse">
-          <!-- Linker Bereich: Konsens-Antwort (80%) -->
-          <div class="consensus-main">
-            <h2>Consensus Answer</h2>
-            <p></p>
-            <!-- Kernaussagen, deren Anker nicht im Text gefunden wurde -->
-            <div id="consensusClaimsFallback" class="consensus-claims-fallback" hidden></div>
-          </div>
-          <!-- Rechter Bereich: Unterschiede (20%) -->
-          <div class="consensus-differences">
-            <h2>Differences</h2>
-            <div id="differencesCards" class="differences-cards" hidden></div>
-            <p></p>
           </div>
         </div>
         <!-- Popover (Desktop) / Bottom Sheet (Mobile) für Claim-Badges -->
@@ -1777,7 +1767,7 @@
           } catch (e) { console.error(e); }
         }
 
-        const SIDEBAR_OVERLAY_BREAKPOINT = 1465;
+        const SIDEBAR_OVERLAY_BREAKPOINT = 1549;
 
         function usesOverlaySidebar() {
           return window.matchMedia(`(max-width: ${SIDEBAR_OVERLAY_BREAKPOINT}px)`).matches;
@@ -2352,10 +2342,11 @@
         }
 
         function setAutoConsensusForAgentMode(enabled) {
+          // Auto Consensus lebt jetzt in den Einstellungen. In Agent Mode bleibt
+          // es zwingend an und wird ausgegraut, damit der Konsens garantiert läuft.
           const autoToggle = document.getElementById("autoConsensusToggle");
-          const autoWrap = document.querySelector(".auto-consensus");
-          const autoSwitch = autoWrap?.querySelector("label.switch");
           if (!autoToggle) return;
+          const autoWrap = autoToggle.closest(".settings-section");
 
           if (enabled) {
             autoToggle.checked = true;
@@ -2364,13 +2355,9 @@
 
           autoToggle.disabled = !!enabled;
           autoWrap?.classList.toggle("is-agent-locked", !!enabled);
-          if (autoSwitch) {
-            autoSwitch.classList.toggle("locked", !!enabled);
-            autoSwitch.title = enabled
-              ? "Auto Consensus is always on in Agent Mode"
-              : "Auto Consensus";
-            autoSwitch.setAttribute("aria-label", autoSwitch.title);
-          }
+          autoToggle.title = enabled
+            ? "Auto Consensus is always on in Agent Mode"
+            : "";
         }
 
         function updateAgentModeUI() {
@@ -2999,7 +2986,36 @@
 
         // Globale Variable
         let consensusGenerated = false;
-        document.getElementById("consensusButton").disabled = true;
+
+        // Der frühere "Generate Consensus"-Button ist entfernt – Konsens läuft
+        // automatisch. Dieser Helfer hält die bestehende Gate-Logik null-sicher.
+        function setConsensusGate(disabled) {
+          const btn = document.getElementById("consensusButton");
+          if (btn) btn.disabled = disabled;
+        }
+
+        // Rahmenloser Konsens-Bereich: erst sichtbar, wenn alle Antworten fertig sind.
+        const consensusOutputEl = document.getElementById("consensusOutput");
+        let consensusRevealTimer = null;
+        window.revealConsensusOutput = function () {
+          if (!consensusOutputEl) return;
+          if (consensusRevealTimer) { clearTimeout(consensusRevealTimer); consensusRevealTimer = null; }
+          consensusOutputEl.classList.remove("is-hidden");
+          // Doppelter Frame, damit der Übergang (Fade-In + Slide-Up) sauber startet.
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => consensusOutputEl.classList.add("is-visible"));
+          });
+        };
+        window.hideConsensusOutput = function () {
+          if (!consensusOutputEl) return;
+          consensusOutputEl.classList.remove("is-visible");
+          if (consensusRevealTimer) clearTimeout(consensusRevealTimer);
+          consensusRevealTimer = setTimeout(() => {
+            consensusOutputEl.classList.add("is-hidden");
+          }, 280);
+        };
+
+        setConsensusGate(true);
 
         function isDemoQuery(q) {
           return (q || "").trim().toLowerCase() === "demo";
@@ -3091,8 +3107,7 @@
             ? `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <rect x="8" y="8" width="8" height="8" rx="1.3"></rect>
             </svg>`
-            : `Send
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: 16px; height: 16px;">
+            : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: 16px; height: 16px;">
               <line x1="22" y1="2" x2="11" y2="13"></line>
               <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
             </svg>`;
@@ -3163,7 +3178,8 @@
           currentQueryController.abort();
           markPendingQueryResponsesCanceled();
           finishQueryRun(runId);
-          document.getElementById("consensusButton").disabled = true;
+          setConsensusGate(true);
+          window.hideConsensusOutput?.();
           trackAppEvent("app_query_canceled");
         };
 
@@ -3225,7 +3241,9 @@
           queryRequestRunning = true;
           setSendButtonRunning(true);
           // Keep consensus unavailable until the current model run produces enough complete answers.
-          document.getElementById("consensusButton").disabled = true;
+          setConsensusGate(true);
+          // Bei jeder neuen Frage den Konsens-Bereich wieder ausblenden.
+          window.hideConsensusOutput?.();
 
           // 1. Definiere useOwnKeys frühzeitig
           const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
@@ -3444,7 +3462,7 @@
                   if (outputEl) markModelError(outputEl, message, prepareData);
                 });
                 finishQueryRun(queryRunId);
-                document.getElementById("consensusButton").disabled = true;
+                setConsensusGate(true);
                 return;
               }
               console.warn("No valid system_prompt from /prepare, keeping base.");
@@ -3470,9 +3488,8 @@
 
           const deepSearchActive = document.getElementById("deepSearchToggle").checked;
 
-          // Konsens-Button deaktivieren, solange noch Antworten fehlen
-          const consensusBtn = document.getElementById("consensusButton");
-          consensusBtn.disabled = true;
+          // Konsens unterbinden, solange noch Antworten fehlen
+          setConsensusGate(true);
           totalRequiredResponses = 0;
 
           const openaiBox = document.getElementById("openaiResponse");
@@ -3545,11 +3562,7 @@
                   status: "error",
                   selected_models: totalActive
                 });
-                if (typeof window.updateConsensusButtonAvailability === "function") {
-                  window.updateConsensusButtonAvailability();
-                } else {
-                  document.getElementById("consensusButton").disabled = true;
-                }
+                setConsensusGate(true);
                 return;
               }
 
@@ -3558,36 +3571,20 @@
                 status: "success",
                 selected_models: totalActive
               });
-              const canGenerateConsensus = typeof window.updateConsensusButtonAvailability === "function"
-                ? window.updateConsensusButtonAvailability()
+
+              // Konsens läuft jetzt immer automatisch – außer er ist in den
+              // Einstellungen deaktiviert. Erst wenn ALLE Antworten fertig sind
+              // (inkl. Agent Mode) und genug Antworten vorliegen, blenden wir den
+              // rahmenlosen Konsens-Bereich sanft ein und starten die Synthese.
+              const autoConsensusOn = document.getElementById("autoConsensusToggle")?.checked !== false;
+              const canGenerate = typeof window.canGenerateConsensus === "function"
+                ? window.canGenerateConsensus()
                 : true;
 
-              if (document.getElementById("autoConsensusToggle").checked && canGenerateConsensus) {
-                // Auto Consensus ist aktiviert: 
-                // Den Consensus-Button vorübergehend deaktivieren und
-                // erst nach Abschluss der Konsensgenerierung wieder aktivieren.
-                document.getElementById("consensusButton").disabled = true;
-                getConsensus("auto")
-                  .then(() => {
-                    document.getElementById("consensusButton").disabled = false;
-                    if (typeof window.updateConsensusButtonAvailability === "function") {
-                      window.updateConsensusButtonAvailability();
-                    }
-                  })
-                  .catch((error) => {
-                    console.error("Fehler bei der Konsensgenerierung:", error);
-                    document.getElementById("consensusButton").disabled = false;
-                    if (typeof window.updateConsensusButtonAvailability === "function") {
-                      window.updateConsensusButtonAvailability();
-                    }
-                  });
-              } else {
-                // Auto Consensus nicht aktiviert – beide Buttons direkt freigeben.
-                if (typeof window.updateConsensusButtonAvailability === "function") {
-                  window.updateConsensusButtonAvailability();
-                } else {
-                  document.getElementById("consensusButton").disabled = false;
-                }
+              if (autoConsensusOn && canGenerate) {
+                getConsensus("auto").catch((error) => {
+                  console.error("Fehler bei der Konsensgenerierung:", error);
+                });
               }
             }
           }
@@ -3596,11 +3593,7 @@
           if (totalActive === 0) {
             setAgentModeStatus("idle");
             finishQueryRun(queryRunId);
-            if (typeof window.updateConsensusButtonAvailability === "function") {
-              window.updateConsensusButtonAvailability();
-            } else {
-              document.getElementById("consensusButton").disabled = true;
-            }
+            setConsensusGate(true);
             return;
           }
 
@@ -4295,9 +4288,9 @@
           }).length;
         }
 
-        window.updateConsensusButtonAvailability = function () {
-          const consensusButton = document.getElementById("consensusButton");
-          if (!consensusButton) return false;
+        // Reine Logik: Darf gerade ein Konsens erzeugt werden? Unabhängig vom
+        // (entfernten) Button, damit Auto-Consensus weiter zuverlässig auslöst.
+        window.canGenerateConsensus = function () {
           if (consensusRequestRunning) return true;
 
           const agentModeWaitingForResponses =
@@ -4305,19 +4298,23 @@
             && window.isAgentModeEnabled()
             && agentModeStatus === "running";
 
-          if (agentModeWaitingForResponses) {
-            consensusButton.disabled = true;
-            consensusButton.title = "Consensus is available after all Agent Mode responses finish";
-            consensusButton.setAttribute("aria-label", consensusButton.title);
-            return false;
-          }
+          if (agentModeWaitingForResponses) return false;
 
-          const canGenerate = getCompletedIncludedAnswerCount() >= 2;
-          consensusButton.disabled = !canGenerate;
-          consensusButton.title = canGenerate
-            ? "Generate Consensus"
-            : "Consensus requires at least two completed model answers";
-          consensusButton.setAttribute("aria-label", consensusButton.title);
+          return getCompletedIncludedAnswerCount() >= 2;
+        };
+
+        // Kompatibilitätsshim: hält einen evtl. vorhandenen Button im Takt,
+        // bleibt aber ohne Button ein No-op und liefert nur den Zustand zurück.
+        window.updateConsensusButtonAvailability = function () {
+          const canGenerate = window.canGenerateConsensus();
+          const consensusButton = document.getElementById("consensusButton");
+          if (consensusButton && !consensusRequestRunning) {
+            consensusButton.disabled = !canGenerate;
+            consensusButton.title = canGenerate
+              ? "Generate Consensus"
+              : "Consensus requires at least two completed model answers";
+            consensusButton.setAttribute("aria-label", consensusButton.title);
+          }
           return canGenerate;
         };
 
@@ -4533,6 +4530,8 @@
           if (window.resetCredibilityFrame) {
             window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
           }
+          // Rahmenlosen Konsens-Bereich sanft einblenden (Fade-In + Slide-Up).
+          window.revealConsensusOutput?.();
           setConsensusSynthesizing(true);
           consensusDiv.querySelector(".consensus-main p").innerHTML = window.consensusSpinnerHTML || window.spinnerHTML;
           consensusDiv.querySelector(".consensus-differences p").innerHTML = window.consensusDifferencesSpinnerHTML || window.spinnerHTML;
@@ -4743,7 +4742,7 @@
               }
 
               if (auth.currentUser) {
-                saveBookmarkConsensus(question, data.consensus_response, data.differences);
+                saveBookmarkConsensus(question, data.consensus_response, data.differences, data.differences_data);
               }
               trackAppEvent("app_consensus_completed", {
                 status: "success",
@@ -4908,8 +4907,9 @@
             "grokResponse"
           ];
 
-          // Deaktiviere den Consensus-Button, sofern nötig.
-          document.getElementById("consensusButton").disabled = true;
+          // Konsens unterbinden und den rahmenlosen Bereich wieder ausblenden.
+          setConsensusGate(true);
+          window.hideConsensusOutput?.();
 
           // Lösche den Inhalt aller Modell-Antwortboxen.
           boxIds.forEach(id => {
@@ -5581,6 +5581,10 @@
           body.appendChild(list);
         }
 
+        // Global verfügbar machen, damit z.B. das User-Icon-Menü (firebase.js)
+        // die Übersicht der geteilten Links direkt öffnen kann.
+        window.openShareDialog = openShareDialog;
+
         (function initShareModal() {
           const modal = document.getElementById("shareModal");
           if (!modal) return;
@@ -6128,6 +6132,20 @@
           <hr class="settings-divider">
 
           <div class="settings-section">
+            <label for="autoConsensusToggle" class="custom-checkbox-label"
+              style="width: 100%; display: flex; justify-content: space-between; font-weight: bold;">
+              Auto Consensus
+              <input type="checkbox" id="autoConsensusToggle">
+            </label>
+            <p style="font-size: 0.85em; color: #666; margin-top: 5px;">
+              Automatically synthesise a consensus once every model has finished answering. On by default;
+              turn it off to keep only the individual answers.
+            </p>
+          </div>
+
+          <hr class="settings-divider">
+
+          <div class="settings-section">
             <label for="useOwnKeysSwitch" class="custom-checkbox-label"
               style="width: 100%; display: flex; justify-content: space-between; font-weight: bold;">
               Use your own API keys
@@ -6208,7 +6226,7 @@
           </div>
 
           <div style="text-align: center; margin-top: 20px; opacity: 0.5; font-size: 0.8em;">
-            v1.7.0
+            v1.8.0
           </div>
         </div>
       </div>

@@ -102,7 +102,7 @@ function initAppWidthResizer() {
     const sidebar = document.querySelector(".sidebar");
     const sidebarVisible = sidebar
       && !sidebar.classList.contains("collapsed")
-      && window.matchMedia("(min-width: 1466px)").matches;
+      && window.matchMedia("(min-width: 1550px)").matches;
     const leftClearance = sidebarVisible ? Math.ceil(sidebar.getBoundingClientRect().right + 24) : 20;
     const symmetricMax = viewportWidth - (leftClearance * 2);
     return Math.max(minWidth, Math.min(viewportWidth - 20, symmetricMax));

@@ -17,7 +17,7 @@
   <meta name="twitter:description" content="Compare model answers side by side and turn them into a structured consensus.">
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>consens.io - compare before you trust</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260624-glass3">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260625-consensus-pad1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -110,11 +110,13 @@
                 </button>
                 <div class="lp-modes">
                   <span class="lp-mode is-on lp-mode--agent"><i class="lp-switch"></i>Agent Mode</span>
-                  <span class="lp-mode is-on lp-mode--consensus"><i class="lp-switch"></i>Auto Consensus</span>
-                  <span class="lp-mode lp-mode--deep"><i class="lp-switch"></i>Deep Think</span>
                 </div>
               </div>
               <div class="lp-actions">
+                <div class="lp-consensus-picker" aria-label="Consensus model">
+                  <span>Consensus</span>
+                  <button type="button" tabindex="-1">Gemini 3.1 <i aria-hidden="true"></i></button>
+                </div>
                 <button class="lp-clear" type="button" tabindex="-1" aria-label="Clear all responses">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                 </button>
@@ -154,7 +156,7 @@
         <div class="lp-head lp-reveal">
           <p class="lp-eyebrow">01 · Ask</p>
           <h2 class="lp-h2">Start from one prompt.</h2>
-          <p class="lp-lead">One input surface, the same as the app: Agent Mode, Auto Consensus, and Deep Think.</p>
+          <p class="lp-lead">One input surface, the same as the app: Agent Mode, consensus model selection, and one send action.</p>
         </div>
         <div class="lp-scene-visual lp-reveal">
           <div class="lp-window">
@@ -171,11 +173,13 @@
                   </button>
                   <div class="lp-modes">
                     <span class="lp-mode is-on lp-mode--agent"><i class="lp-switch"></i>Agent Mode</span>
-                    <span class="lp-mode is-on lp-mode--consensus"><i class="lp-switch"></i>Auto Consensus</span>
-                    <span class="lp-mode lp-mode--deep"><i class="lp-switch"></i>Deep Think</span>
                   </div>
                 </div>
                 <div class="lp-actions">
+                  <div class="lp-consensus-picker" aria-label="Consensus model">
+                    <span>Consensus</span>
+                    <button type="button" tabindex="-1">Gemini 3.1 <i aria-hidden="true"></i></button>
+                  </div>
                   <button class="lp-clear" type="button" tabindex="-1" aria-label="Clear all responses">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                   </button>
