@@ -302,8 +302,8 @@
           <div class="mode-explainer-item">
             <span class="mode-explainer-icon mode-explainer-icon-consensus" aria-hidden="true"></span>
             <div>
-              <strong>Auto Consensus</strong>
-              <p>Synthesises the final consensus automatically once every answer is ready. Toggle it in Settings.</p>
+              <strong>Consensus</strong>
+              <p>The model answers are merged into one consensus answer. Choose which model writes it with the Consensus selector next to Send.</p>
             </div>
           </div>
           <div class="mode-explainer-item">
@@ -5839,9 +5839,13 @@
         }
       })();
     </script>
+  </div>
+  <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
+       .container setzt container-type/isolation und wäre damit der Containing
+       Block für position:fixed – das klemmt das Login-Modal in die App-Spalte. -->
 
-    <!-- Login Modal -->
-    <div id="loginModal" class="modal">
+  <!-- Login Modal -->
+  <div id="loginModal" class="modal">
       <div class="modal-content auth-modal" id="loginModalContent">
         <span class="close" id="closeLoginModal">&times;</span>
 
@@ -5923,7 +5927,6 @@
         </form>
       </div>
     </div>
-  </div>
 
   <div id="disclaimerPopup" class="popup">
     <p>Deep Think Mode!</p>
@@ -7043,6 +7046,85 @@
           window.renderConsensusInsights = renderConsensusInsights;
           window.resetConsensusInsights = resetConsensusInsights;
           window.jumpToModelAnswer = jumpToModelAnswer;
+        })();
+
+        // --------------------------------------------------------------------
+        // Konsens-Layout: Breite des Differences-Bereichs dynamisch an die
+        // Inhaltsmenge anpassen. Ist die Consensus-Antwort kurz, die
+        // Differences aber lang, bekommt Differences mehr Breite (statt schmal
+        // und sehr hoch zu werden). Wir gleichen die natürlichen Inhaltshöhen
+        // beider Spalten an, indem die Breiten proportional zur Inhaltsfläche
+        // (natürliche Höhe × aktuelle Breite) verteilt werden.
+        // --------------------------------------------------------------------
+        (function setupConsensusColumnBalancer() {
+          const box = document.getElementById("consensusResponse");
+          if (!box) return;
+          const main = box.querySelector(".consensus-main");
+          const diff = box.querySelector(".consensus-differences");
+          if (!main || !diff || typeof ResizeObserver === "undefined") return;
+
+          const MIN_DIFF = 0.18; // Differences nie schmaler als ~18 %
+          const MAX_DIFF = 0.5;  // ...und nie breiter als die Antwortspalte
+          let appliedFrac = null;
+          let scheduled = false;
+
+          const resetColumns = () => {
+            main.style.flex = "";
+            diff.style.flex = "";
+            appliedFrac = null;
+          };
+
+          // Natürliche Inhaltshöhe messen: align-items:stretch zwingt beide
+          // Spalten sonst auf dieselbe (gestreckte) Höhe, daher kurz auf
+          // flex-start setzen, messen und zurücksetzen.
+          const naturalHeight = (col) => {
+            const prev = col.style.alignSelf;
+            col.style.alignSelf = "flex-start";
+            const h = col.scrollHeight;
+            col.style.alignSelf = prev;
+            return h;
+          };
+
+          const balance = () => {
+            scheduled = false;
+            // Gestapeltes Mobil-Layout, ausgeblendet oder im Lade-/Synthese-
+            // Zustand: das Stylesheet entscheiden lassen.
+            if (!box.offsetParent
+                || box.classList.contains("is-synthesizing")
+                || getComputedStyle(box).flexDirection !== "row") {
+              if (appliedFrac !== null) resetColumns();
+              return;
+            }
+            const wMain = main.clientWidth;
+            const wDiff = diff.clientWidth;
+            if (wMain <= 0 || wDiff <= 0) return;
+
+            const areaMain = naturalHeight(main) * wMain;
+            const areaDiff = naturalHeight(diff) * wDiff;
+            if (areaMain <= 0 || areaDiff <= 0) return;
+
+            let frac = areaDiff / (areaMain + areaDiff);
+            frac = Math.max(MIN_DIFF, Math.min(MAX_DIFF, frac));
+
+            // Rückkopplungsschleife vermeiden: nur bei spürbarer Änderung neu
+            // schreiben (Breitenänderung triggert den ResizeObserver erneut).
+            if (appliedFrac !== null && Math.abs(frac - appliedFrac) < 0.02) return;
+            appliedFrac = frac;
+            main.style.flex = (1 - frac).toFixed(4);
+            diff.style.flex = frac.toFixed(4);
+          };
+
+          const schedule = () => {
+            if (scheduled) return;
+            scheduled = true;
+            requestAnimationFrame(balance);
+          };
+
+          const ro = new ResizeObserver(schedule);
+          ro.observe(main);
+          ro.observe(diff);
+          window.addEventListener("resize", schedule);
+          window.balanceConsensusColumns = schedule;
         })();
 
       </script>
