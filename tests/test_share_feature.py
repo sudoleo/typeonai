@@ -762,6 +762,11 @@ class SharePageRouteTests(unittest.TestCase):
     def setUp(self):
         # get_share_cached cached sonst das Dokument des vorherigen Tests
         snapshots.invalidate_share_cache()
+        self.related_shares_patch = patch.object(
+            share_router.snapshots, "list_related_shares", return_value=[]
+        )
+        self.related_shares_patch.start()
+        self.addCleanup(self.related_shares_patch.stop)
 
     def _share_doc(self, **overrides):
         data = make_pending()
