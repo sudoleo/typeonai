@@ -131,7 +131,7 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
 
 ### Consensus & Differences
 - `getConsensus` (`consensus-run.js`) sammelt die vorhandenen Modellantworten +
-  `excluded_models` + `best_model` + `consensus_model` und ruft **`POST /consensus`**
+  `excluded_models` + `consensus_model` und ruft **`POST /consensus`**
   (`stream:true`).
 - Backend (`chat.py::consensus` → `consensus_engine.py`): validiert (mind. **2**
   eingeschlossene Antworten), prüft Engine-Keys, dann `stream_consensus` gefolgt von
@@ -210,8 +210,7 @@ tool_heuristics.py           Intent-Erkennung + Realtime-Kontext (weather/stock/
 Wichtige Verträge im Backend:
 - Provider-Label-Set überall identisch: `OpenAI, Mistral, Anthropic, Gemini,
   DeepSeek, Grok` (Claude→Anthropic). `normalize_model_name` vereinheitlicht.
-- `/consensus` braucht **mind. 2** nicht-ausgeschlossene Antworten; `best_model`
-  darf nicht ausgeschlossen sein.
+- `/consensus` braucht **mind. 2** nicht-ausgeschlossene Antworten.
 - `*-Pro`-Consensus-Engines und Premium-Modelle sind Pro-gated.
 
 ---

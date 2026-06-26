@@ -93,11 +93,12 @@ body:has(.sidebar.collapsed) .main-wrapper {
 
 .top-bar-title {
   color: var(--text-color);
-  font-size: 1.01rem;
-  font-weight: 700;
-  letter-spacing: -0.012em;
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.022em;
   line-height: 1;
   white-space: nowrap;
+  font-feature-settings: "kern" 1;
 }
 
 .top-bar-plan {

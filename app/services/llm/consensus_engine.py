@@ -189,7 +189,6 @@ def _build_consensus_prompt(
     answer_gemini: str,
     answer_deepseek: str,
     answer_grok: str,
-    best_model: str,
     excluded_models: list,
     model_sources=None,
 ) -> str:
@@ -234,24 +233,14 @@ def _build_consensus_prompt(
         "Provide only the final, balanced answer."
     )
 
-    if best_model:
-        prompt_parts.append(
-            f"The user marked the Answer from the Model: {best_model} as the best one. "
-            "You receive multiple expert opinions on a specific question. "
-            "Your task is to combine these responses into a comprehensive, correct, and coherent answer. "
-            "Note: Experts can also make mistakes. Therefore, try to identify and exclude possible errors by comparing the answers. "
-            "Structure the answer clearly and coherently. "
-            + user_facing_instruction
-        )
-    else:
-        prompt_parts.append(
-            "You receive multiple expert opinions on a specific question. "
-            "Treat all expert opinions equally. Do not focus on the answer of one model. "
-            "Your task is to combine these responses into a comprehensive, correct, and coherent answer. "
-            "Note: Experts can also make mistakes. Therefore, try to identify and exclude possible errors by comparing the answers. "
-            "Structure the answer clearly and coherently. "
-            + user_facing_instruction
-        )
+    prompt_parts.append(
+        "You receive multiple expert opinions on a specific question. "
+        "Treat all expert opinions equally. Do not focus on the answer of one model. "
+        "Your task is to combine these responses into a comprehensive, correct, and coherent answer. "
+        "Note: Experts can also make mistakes. Therefore, try to identify and exclude possible errors by comparing the answers. "
+        "Structure the answer clearly and coherently. "
+        + user_facing_instruction
+    )
 
     return "".join(prompt_parts)
 
@@ -264,7 +253,6 @@ def query_consensus(
     answer_gemini: str,
     answer_deepseek: str,
     answer_grok: str,
-    best_model: str,
     excluded_models: list,
     consensus_model: str,
     api_keys: dict,
@@ -282,7 +270,6 @@ def query_consensus(
         answer_gemini,
         answer_deepseek,
         answer_grok,
-        best_model,
         excluded_models,
         model_sources=model_sources,
     )
@@ -981,7 +968,6 @@ def stream_consensus(
     answer_gemini: str,
     answer_deepseek: str,
     answer_grok: str,
-    best_model: str,
     excluded_models: list,
     consensus_model: str,
     api_keys: dict,
@@ -995,7 +981,6 @@ def stream_consensus(
         answer_gemini,
         answer_deepseek,
         answer_grok,
-        best_model,
         excluded_models,
         model_sources=model_sources,
     )

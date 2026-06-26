@@ -199,10 +199,6 @@
     consensusDiv.querySelector(".consensus-main p").innerHTML = window.consensusSpinnerHTML || window.spinnerHTML;
     consensusDiv.querySelector(".consensus-differences p").innerHTML = window.consensusDifferencesSpinnerHTML || window.spinnerHTML;
 
-    // Hole den best markierten Modus (falls vorhanden)
-    const bestBox = document.querySelector(".response-box.best:not(.excluded)");
-    let best_model = bestBox ? bestBox.getAttribute("data-model") : "";
-
     // Die übrigen Parameter wie "excluded_models" werden wie bisher ermittelt
     const excludedModels = [];
     if (openaiBox.classList.contains("excluded")) {
@@ -322,7 +318,6 @@
           answer_grok: answer_grok,
           model_sources: model_sources,
           model_labels: shareModelLabels,
-          best_model: best_model,
           consensus_model: consensus_model,
           excluded_models: excludedModels,
           openai_key: openaiKey,

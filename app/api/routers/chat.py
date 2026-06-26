@@ -890,7 +890,6 @@ def consensus(request: Request, data: dict = Body(...)):
     answer_gemini   = data.get("answer_gemini")
     answer_deepseek = data.get("answer_deepseek")
     answer_grok     = data.get("answer_grok")
-    best_model      = data.get("best_model", "")
     excluded_models = data.get("excluded_models", [])
     model_sources   = data.get("model_sources", {})
     if not isinstance(excluded_models, list):
@@ -898,15 +897,6 @@ def consensus(request: Request, data: dict = Body(...)):
     excluded_models = list({normalize_model_name(model) for model in excluded_models if model})
     if not isinstance(model_sources, dict):
         model_sources = {}
-
-    answer_by_model = {
-        "OpenAI": answer_openai,
-        "Mistral": answer_mistral,
-        "Anthropic": answer_claude,
-        "Gemini": answer_gemini,
-        "DeepSeek": answer_deepseek,
-        "Grok": answer_grok,
-    }
 
     if "OpenAI" in excluded_models:
         answer_openai = None
@@ -1028,12 +1018,6 @@ def consensus(request: Request, data: dict = Body(...)):
                     detail=f"Missing API key for selected consensus engine: {engine}."
                 )
 
-    best_model = normalize_model_name(best_model)
-    if best_model and best_model in excluded_models:
-        raise HTTPException(status_code=400, detail="The answer marked as best must not be excluded.")
-    if best_model and not answer_by_model.get(best_model):
-        raise HTTPException(status_code=400, detail="The answer marked as best is not available.")
-
     # Share-Feature: Ergebnis nur für verifizierte Nutzer persistieren. Bei
     # useOwnKeys wurde das Token oben nicht geprüft, daher hier best effort.
     share_uid = uid
@@ -1082,7 +1066,6 @@ def consensus(request: Request, data: dict = Body(...)):
                     answer_gemini,
                     answer_deepseek,
                     answer_grok,
-                    best_model,
                     excluded_models,
                     consensus_model,
                     api_keys,
@@ -1146,7 +1129,6 @@ def consensus(request: Request, data: dict = Body(...)):
         answer_gemini,
         answer_deepseek,
         answer_grok,
-        best_model,
         excluded_models,
         consensus_model,
         api_keys,

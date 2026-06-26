@@ -53,7 +53,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260626-sidebar-pinned1">
+  <link rel="stylesheet" href="/static/style.css?v=20260627-wordmark1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -72,7 +72,7 @@
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
   <script src="/static/js/app-core.js?v=20260626-extract1" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
-  <script src="/static/js/model-picker.js?v=20260626-extract1" defer></script>
+  <script src="/static/js/model-picker.js?v=20260626-remove-best-star1" defer></script>
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
   <script src="/static/js/markdown-stream.js?v=20260626-extract1" defer></script>
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
@@ -91,7 +91,7 @@
   <script src="/static/js/user-tier.js?v=20260626-extract1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-insights.js?v=20260626-extract1" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260626-extract2" defer></script>
+  <script src="/static/js/consensus-run.js?v=20260626-remove-best-star1" defer></script>
   <script src="/static/js/query-send.js?v=20260626-extract2" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
@@ -224,7 +224,7 @@
         <span class="settings-icon">⚙️</span>
         <span class="settings-label">Settings</span>
       </button>
-      <span id="version-number">v1.8.0</span>
+      <span id="version-number">v1.8.2</span>
     </div>
   </div>
   <div class="container">
@@ -395,7 +395,6 @@
             </span>
           </span>
           <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('openaiResponse')" title="Mark as best answer">&#9733;</span>
             <span class="exclude-btn" onclick="toggleExclude('openaiResponse')" title="Exclude answer">&#10005;</span>
           </div>
         </h2>
@@ -417,7 +416,6 @@
             </span>
           </span>
           <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('mistralResponse')" title="Mark as best answer">&#9733;</span>
             <span class="exclude-btn" onclick="toggleExclude('mistralResponse')" title="Exclude answer">&#10005;</span>
           </div>
         </h2>
@@ -439,7 +437,6 @@
             </span>
           </span>
           <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('claudeResponse')" title="Mark as best answer">&#9733;</span>
             <span class="exclude-btn" onclick="toggleExclude('claudeResponse')" title="Exclude answer">&#10005;</span>
           </div>
         </h2>
@@ -461,7 +458,6 @@
             </span>
           </span>
           <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('geminiResponse')" title="Mark as best answer">&#9733;</span>
             <span class="exclude-btn" onclick="toggleExclude('geminiResponse')" title="Exclude answer">&#10005;</span>
           </div>
         </h2>
@@ -492,7 +488,6 @@
             </span>
           </span>
           <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('deepseekResponse')" title="Mark as best answer">&#9733;</span>
             <span class="exclude-btn" onclick="toggleExclude('deepseekResponse')" title="Exclude answer">&#10005;</span>
           </div>
         </h2>
@@ -516,7 +511,6 @@
             </span>
           </span>
           <div class="control-icons">
-            <span class="best-btn" onclick="toggleBest('grokResponse')" title="Mark as best answer">&#9733;</span>
             <span class="exclude-btn" onclick="toggleExclude('grokResponse')" title="Exclude answer">&#10005;</span>
           </div>
         </h2>
@@ -571,7 +565,7 @@
       </div>
     </div>
 
-    <script src="/static/js/app-init.js?v=20260626-extract3" defer></script>
+    <script src="/static/js/app-init.js?v=20260627-demo-info1" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing
@@ -962,7 +956,7 @@
           </div>
 
           <div style="text-align: center; margin-top: 20px; opacity: 0.5; font-size: 0.8em;">
-            v1.8.0
+            v1.8.2
           </div>
         </div>
       </div>

@@ -227,8 +227,9 @@
             trigger.classList.toggle("is-hidden", hidden);
           };
 
-          const hasConfirmed = localStorage.getItem(MODE_EXPLAINER_STORAGE_KEY) === "true";
-          setExplainerVisible(!hasConfirmed);
+          // Standardmäßig eingeklappt – auch für neue Nutzer. Der Bereich wird nur
+          // bewusst über den (i)-Trigger geöffnet.
+          setExplainerVisible(false);
 
           const triggerHidden = localStorage.getItem(MODE_EXPLAINER_TRIGGER_HIDDEN_KEY) === "true";
           if (hideTriggerCheckbox) hideTriggerCheckbox.checked = triggerHidden;
@@ -841,24 +842,6 @@
         // global machen, falls du es anderswo brauchst
         window.renderEvidenceSources = renderEvidenceSources;
 
-        // Globale Funktionen (für Inline-Aufrufe)
-        window.toggleBest = function (responseId) {
-          const box = document.getElementById(responseId);
-          if (box.classList.contains("excluded")) return;
-          // Nur Popup anzeigen, wenn die Antwort nicht bereits als "best" markiert ist
-          if (!box.classList.contains("best")) {
-            showPopup("You mark this answer as the best answer. This way it will be highlighted and given special attention in the consensus.");
-          }
-          if (box.classList.contains("best")) {
-            box.classList.remove("best");
-            trackAppEvent("app_best_answer_changed", { box: responseId, selected: false });
-          } else {
-            document.querySelectorAll(".response-box").forEach(b => b.classList.remove("best"));
-            box.classList.add("best");
-            trackAppEvent("app_best_answer_changed", { box: responseId, selected: true });
-          }
-        };
-
         // API Testbereich umschalten (für den Pfeil in der API Keys Section)
         window.toggleApiTest = function () {
           const area = document.getElementById("apiTestArea");
@@ -899,14 +882,11 @@
           if (arrow) arrow.classList.toggle("rotated");
         };
 
-        // Exclude/Include einer Antwort-Box (falls nicht als "best" markiert)
+        // Exclude/Include einer Antwort-Box
         // ➜ steuert jetzt auch die Sidebar-Checkboxen / modelSelectionArea mit
         window.toggleExclude = function (responseId) {
           const box = document.getElementById(responseId);
           if (!box) return;
-
-          // "Best" bleibt unverändert
-          if (box.classList.contains("best")) return;
 
           const checkbox = getCheckboxForResponse(responseId);
 

@@ -107,9 +107,6 @@
           excludeBtn.title = checked ? "Exclude answer" : "Include answer";
           excludeBtn.setAttribute("aria-label", checked ? "Exclude answer" : "Include answer");
         }
-        if (!checked) {
-          box.classList.remove("best");
-        }
       };
 
       if (animate) {

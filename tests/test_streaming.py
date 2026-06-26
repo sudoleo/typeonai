@@ -115,7 +115,6 @@ class ConsensusStreamTests(unittest.TestCase):
     def test_invalid_consensus_engine(self):
         events = list(stream_consensus(
             "Q?", "a", "b", None, None, None, None,
-            best_model="",
             excluded_models=[],
             consensus_model="DoesNotExist",
             api_keys={},

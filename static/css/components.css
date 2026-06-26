@@ -1485,26 +1485,6 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   border-radius: var(--radius-md);
 }
 
-/* "Best" is marked with a left accent bar + faint tint — no full frame. */
-.response-box.best {
-  background: color-mix(in srgb, #22c55e 7%, transparent);
-  box-shadow: inset 3px 0 0 #22c55e;
-  border-radius: var(--radius-md);
-}
-
-.dark-mode .response-box.best {
-  background: color-mix(in srgb, #4ade80 9%, transparent);
-  box-shadow: inset 3px 0 0 #4ade80;
-}
-
-.response-box.best:hover {
-  background: color-mix(in srgb, #22c55e 11%, transparent);
-}
-
-.dark-mode .response-box.best:hover {
-  background: color-mix(in srgb, #4ade80 13%, transparent);
-}
-
 /* Excluded answers collapse to a small "set aside" pill so they stay legible
    on the frameless canvas. */
 .response-box.excluded {
@@ -1603,7 +1583,6 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   line-height: 1;
 }
 
-.best-btn,
 .exclude-btn {
   display: inline-block;
   width: 20px;
@@ -1614,16 +1593,6 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   cursor: pointer;
   transition: background-color 0.3s, border-color 0.3s, opacity 0.3s;
   color: #888;
-}
-
-.best-btn {
-  font-size: small;
-}
-
-.response-box.best .best-btn {
-  background-color: green;
-  border-color: green;
-  color: #fff;
 }
 
 .response-box.excluded .exclude-btn {
@@ -1647,16 +1616,6 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   background-color: var(--sidebar-hover);
   color: var(--text-color);
   opacity: 1;
-}
-
-.response-box.best .exclude-btn,
-.response-box.excluded .best-btn {
-  opacity: 0.5;
-  pointer-events: none;
-}
-
-.response-box.excluded .best-btn {
-  display: none;
 }
 
 /* Rahmenloses Konsens-Layout: sitzt direkt auf dem Seitenhintergrund,
@@ -4222,56 +4181,67 @@ header .sidebar-toggle.collapse-btn {
   left: 20px;
   top: 50%;
   transform: translateY(-50%);
-  height: 32px;
-  padding: 0 12px;
+  height: 34px;
+  padding: 0 15px 0 7px;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 8px;
   line-height: 1;
   font-family: inherit;
   font-size: 0.82rem;
-  font-weight: 650;
+  font-weight: 600;
+  letter-spacing: 0.005em;
   color: var(--button-text);
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--button-bg) 88%, var(--accent) 12%), var(--button-bg));
-  border: 1px solid color-mix(in srgb, var(--button-bg) 82%, white 18%);
+    linear-gradient(135deg, color-mix(in srgb, var(--button-bg) 92%, var(--accent) 8%), var(--button-bg));
+  border: 1px solid color-mix(in srgb, var(--button-bg) 80%, white 20%);
   border-radius: 999px;
   cursor: pointer;
   user-select: none;
-  opacity: .95;
   z-index: 5;
-  transition: opacity .15s ease, transform .12s ease, box-shadow .2s ease, background-color .2s ease, border-color .2s ease;
+  transition: transform .18s ease, box-shadow .22s ease, border-color .22s ease, background .22s ease;
   box-shadow:
-    0 8px 18px color-mix(in srgb, var(--button-bg) 18%, transparent),
-    inset 0 1px 0 color-mix(in srgb, white 22%, transparent);
-  animation: chipPulse 2.9s ease-in-out infinite both;
+    0 1px 1px color-mix(in srgb, var(--button-bg) 28%, transparent),
+    0 6px 16px color-mix(in srgb, var(--button-bg) 14%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 15%, transparent);
+  animation: demoChipIn .42s cubic-bezier(.22, 1, .36, 1) both;
 }
 
+/* Play glyph — a crisp, recognizable demo affordance. Drawn in the chip's own
+   text color so it stays legible in both light and dark themes. */
 .demo-chip::before {
   content: "";
+  flex: none;
   width: 0;
   height: 0;
+  margin-left: 2px;
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
-  border-left: 7px solid currentColor;
-  margin-left: 1px;
-  opacity: .94;
+  border-left: 8px solid currentColor;
+  border-radius: 1px;
 }
 
 .demo-chip:hover {
-  border-color: color-mix(in srgb, var(--button-bg) 70%, white 30%);
+  transform: translateY(calc(-50% - 1px));
+  border-color: color-mix(in srgb, var(--button-bg) 64%, white 36%);
   box-shadow:
-    0 10px 24px color-mix(in srgb, var(--button-bg) 24%, transparent),
-    0 0 0 5px color-mix(in srgb, var(--button-bg) 10%, transparent),
-    inset 0 1px 0 color-mix(in srgb, white 28%, transparent);
-  opacity: 1;
+    0 2px 3px color-mix(in srgb, var(--button-bg) 24%, transparent),
+    0 10px 24px color-mix(in srgb, var(--button-bg) 20%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 20%, transparent);
+}
+
+.demo-chip:active {
+  transform: translateY(-50%);
+  box-shadow:
+    0 1px 1px color-mix(in srgb, var(--button-bg) 28%, transparent),
+    inset 0 1px 2px color-mix(in srgb, var(--button-bg) 30%, transparent);
 }
 
 .demo-chip:focus-visible {
   outline: none;
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent),
-    0 8px 18px color-mix(in srgb, var(--button-bg) 18%, transparent);
+    0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent),
+    0 6px 16px color-mix(in srgb, var(--button-bg) 14%, transparent);
 }
 
 .chat-input-container.has-question-input .demo-chip,
@@ -5458,23 +5428,15 @@ option.early-option {
   }
 }
 
-@keyframes chipPulse {
-
-  0%,
-  100% {
-    box-shadow:
-      0 8px 18px color-mix(in srgb, var(--button-bg) 18%, transparent),
-      0 0 0 var(--pulse-size) color-mix(in srgb, var(--button-bg) var(--pulse-alpha), transparent),
-      inset 0 1px 0 color-mix(in srgb, white 22%, transparent);
-    transform: translateY(-50%) scale(1);
+@keyframes demoChipIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateX(-6px);
   }
 
-  50% {
-    box-shadow:
-      0 10px 22px color-mix(in srgb, var(--button-bg) 22%, transparent),
-      0 0 0 calc(var(--pulse-size) + 3px) color-mix(in srgb, var(--button-bg) var(--pulse-alpha-hover), transparent),
-      inset 0 1px 0 color-mix(in srgb, white 28%, transparent);
-    transform: translateY(-50%) scale(1.015);
+  to {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
   }
 }
 
