@@ -255,7 +255,7 @@ Modell-IDs/Tier-Zuordnung/Labels: ausschließlich in `app/core/config.py` pflege
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Baseline laut Handoff: **145 passed**.
+  Letzte bekannte Baseline: **145 passed**.
 - **Frontend hat keine automatisierten Tests.** Nach JS-Änderungen die manuelle
   **`docs/smoke-checklist.md`** durchgehen.
 - JS-Syntaxcheck einzelner Module:
