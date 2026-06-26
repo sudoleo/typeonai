@@ -67,6 +67,8 @@
   <script type="module" src="/static/firebase.js?v=20260625-bookmark-consensus1"></script>
   <script type="module" src="/static/demo.js?v=20260621-demo-stream-diff3"></script>
   <script src="/static/app-ui.js?v=20260625-bookmark-consensus1" defer></script>
+  <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
+  <script src="/static/js/app-core.js?v=20260626-extract1" defer></script>
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
   <script src="/static/js/markdown-stream.js?v=20260626-extract1" defer></script>
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
@@ -580,22 +582,16 @@
           </span>
         `;
 
-        function trackAppEvent(eventName, eventData = {}) {
-          if (typeof window.trackUmamiEvent === "function") {
-            window.trackUmamiEvent(eventName, eventData);
-          }
-        }
-
-        function getSelectedModelCount() {
-          return [
-            "selectOpenAI",
-            "selectMistral",
-            "selectClaude",
-            "selectGemini",
-            "selectDeepSeek",
-            "selectGrok"
-          ].filter(id => document.getElementById(id)?.checked).length;
-        }
+        // Geteilte Config + Helfer kommen aus static/js/app-core.js (window.App).
+        // Lokale Aliase, damit die bestehenden Aufrufstellen in initApp
+        // unverändert bleiben (Übergangsbus, siehe app-core.js).
+        const {
+          modelPrefs,
+          deepThinkModelLabels,
+          getModelOptionLabel,
+          getSelectedModelCount,
+          trackAppEvent
+        } = window.App;
 
         const deepSearchToggle = document.getElementById("deepSearchToggle");
 
@@ -798,14 +794,7 @@
 
         initModeExplainer();
 
-        const deepThinkModelLabels = {
-          OpenAI: "GPT-5.5",
-          Mistral: "mistral-medium-3-5",
-          Gemini: "gemini-3.1-pro-preview",
-          Anthropic: "claude-opus-4-8",
-          DeepSeek: "DeepSeek V4 Pro",
-          Grok: "grok-4.3"
-        };
+        // deepThinkModelLabels stammt aus app-core.js (window.App), siehe Alias oben.
 
         function updateDeepThinkText() {
           const deepSearchToggle = document.getElementById("deepSearchToggle");
@@ -1500,21 +1489,8 @@
 
         // --- MODEL PREFERENCES WIEDERHERSTELLUNG ---
 
-        // Definition der Modelle und IDs
-        const modelPrefs = [
-          { key: "OpenAI", provider: "openai", label: "OpenAI", checkId: "selectOpenAI", selectId: "openaiModelSelect", responseId: "openaiResponse", textId: "openaiModelText" },
-          { key: "Mistral", provider: "mistral", label: "Mistral", checkId: "selectMistral", selectId: "mistralModelSelect", responseId: "mistralResponse", textId: "mistralModelText" },
-          { key: "Anthropic", provider: "anthropic", label: "Claude", checkId: "selectClaude", selectId: "claudeModelSelect", responseId: "claudeResponse", textId: "claudeModelText" },
-          { key: "Gemini", provider: "gemini", label: "Gemini", checkId: "selectGemini", selectId: "geminiModelSelect", responseId: "geminiResponse", textId: "geminiModelText" },
-          { key: "DeepSeek", provider: "deepseek", label: "DeepSeek", checkId: "selectDeepSeek", selectId: "deepseekModelSelect", responseId: "deepseekResponse", textId: "deepseekModelText" },
-          { key: "Grok", provider: "grok", label: "Grok", checkId: "selectGrok", selectId: "grokModelSelect", responseId: "grokResponse", textId: "grokModelText" }
-        ];
-
-        function getModelOptionLabel(option) {
-          const explicitLabel = option?.dataset?.modelLabel;
-          if (explicitLabel) return explicitLabel;
-          return (option?.textContent || "").replace(/(?:\s*(?:\u00c2\u00b7|\u00b7)\s*(?:Pro|Early))+$/i, "").trim();
-        }
+        // modelPrefs und getModelOptionLabel stammen aus app-core.js (window.App),
+        // siehe Alias oben.
 
         function setPickerToValue(select, labelText, value) {
           if (!select || !value) return false;
