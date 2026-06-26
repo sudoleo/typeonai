@@ -79,6 +79,8 @@
   <script src="/static/js/attachments.js?v=20260626-extract1" defer></script>
   <!-- Agent Mode (aus index.html ausgelagert) -->
   <script src="/static/js/agent-mode.js?v=20260626-extract1" defer></script>
+  <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
+  <script src="/static/js/consensus-lifecycle.js?v=20260626-extract1" defer></script>
   <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
   <script src="/static/js/share-dialog.js?v=20260626-extract1" defer></script>
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
@@ -693,30 +695,7 @@
           });
         });
 
-        // --- Speichern des Auto Consensus Zustands ---
-        const autoConsensusToggle = document.getElementById("autoConsensusToggle");
-        // Beim Laden den gespeicherten Zustand auslesen
-        let storedAutoConsensus = localStorage.getItem("autoConsensus");
-        if (storedAutoConsensus === null) {
-          // Falls noch kein Wert gespeichert wurde, Standard: true (an)
-          autoConsensusToggle.checked = true;
-          localStorage.setItem("autoConsensus", "true");
-        } else {
-          autoConsensusToggle.checked = storedAutoConsensus === "true";
-        }
-        // Bei Änderung den neuen Zustand speichern
-        autoConsensusToggle.addEventListener("change", function () {
-          if (typeof window.isAgentModeEnabled === "function" && window.isAgentModeEnabled() && !this.checked) {
-            this.checked = true;
-          }
-          localStorage.setItem("autoConsensus", this.checked);
-          trackAppEvent("app_auto_consensus_changed", { enabled: this.checked });
-          showMobileInfoPopup(
-            typeof window.isAgentModeEnabled === "function" && window.isAgentModeEnabled()
-              ? "Auto Consensus stays on while Agent Mode is active."
-              : "Auto Consensus automatically generates a consensus after the model responses."
-          );
-        });
+        window.App.consensusLifecycle.initAutoConsensusToggle();
 
         const questionInput = document.getElementById("questionInput");
         const defaultQuestionPlaceholder = "Enter your question";
@@ -777,6 +756,7 @@
             popup.classList.remove("show");
           }, 7000);
         }
+        window.showMobileInfoPopup = showMobileInfoPopup;
 
         const MODE_EXPLAINER_STORAGE_KEY = "modeExplainerConfirmed";
         const MODE_EXPLAINER_TRIGGER_HIDDEN_KEY = "modeExplainerTriggerHidden";
@@ -1682,33 +1662,13 @@
         // Globale Variable
         let consensusGenerated = false;
 
-        // Der frühere "Generate Consensus"-Button ist entfernt – Konsens läuft
-        // automatisch. Dieser Helfer hält die bestehende Gate-Logik null-sicher.
-        function setConsensusGate(disabled) {
-          const btn = document.getElementById("consensusButton");
-          if (btn) btn.disabled = disabled;
-        }
+        const consensusLifecycle = window.App.consensusLifecycle;
 
-        // Rahmenloser Konsens-Bereich: erst sichtbar, wenn alle Antworten fertig sind.
-        const consensusOutputEl = document.getElementById("consensusOutput");
-        let consensusRevealTimer = null;
-        window.revealConsensusOutput = function () {
-          if (!consensusOutputEl) return;
-          if (consensusRevealTimer) { clearTimeout(consensusRevealTimer); consensusRevealTimer = null; }
-          consensusOutputEl.classList.remove("is-hidden");
-          // Doppelter Frame, damit der Übergang (Fade-In + Slide-Up) sauber startet.
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => consensusOutputEl.classList.add("is-visible"));
-          });
-        };
-        window.hideConsensusOutput = function () {
-          if (!consensusOutputEl) return;
-          consensusOutputEl.classList.remove("is-visible");
-          if (consensusRevealTimer) clearTimeout(consensusRevealTimer);
-          consensusRevealTimer = setTimeout(() => {
-            consensusOutputEl.classList.add("is-hidden");
-          }, 280);
-        };
+        // Der frühere "Generate Consensus"-Button ist entfernt - Konsens läuft
+        // automatisch. Lokaler Alias hält die bestehenden Aufrufstellen stabil.
+        function setConsensusGate(disabled) {
+          consensusLifecycle.setGate(disabled);
+        }
 
         setConsensusGate(true);
 
@@ -2958,128 +2918,23 @@
 
         // Globale Variable, um die letzte verarbeitete Frage zu speichern.
         let lastQuestion = "";
-        let currentConsensusController = null;
-        let currentConsensusRunId = 0;
-        let consensusRequestRunning = false;
-
-        function getCompletedIncludedAnswerCount() {
-          const boxIds = [
-            "openaiResponse",
-            "mistralResponse",
-            "claudeResponse",
-            "geminiResponse",
-            "deepseekResponse",
-            "grokResponse"
-          ];
-
-          return boxIds.filter(id => {
-            const box = document.getElementById(id);
-            if (!box || box.classList.contains("excluded")) return false;
-            if (box.dataset.responseError === "true") return false;
-            const contentEl = box.querySelector(".collapsible-content");
-            if (!contentEl || contentEl.querySelector(".thinking-wrap") || contentEl.classList.contains("is-streaming")) return false;
-            const text = contentEl.innerText.trim();
-            return text && text !== "Request canceled.";
-          }).length;
-        }
-
-        // Reine Logik: Darf gerade ein Konsens erzeugt werden? Unabhängig vom
-        // (entfernten) Button, damit Auto-Consensus weiter zuverlässig auslöst.
-        window.canGenerateConsensus = function () {
-          if (consensusRequestRunning) return true;
-
-          const agentModeWaitingForResponses =
-            typeof window.isAgentModeEnabled === "function"
-            && window.isAgentModeEnabled()
-            && window.isAgentModeRunning();
-
-          if (agentModeWaitingForResponses) return false;
-
-          return getCompletedIncludedAnswerCount() >= 2;
-        };
-
-        // Kompatibilitätsshim: hält einen evtl. vorhandenen Button im Takt,
-        // bleibt aber ohne Button ein No-op und liefert nur den Zustand zurück.
-        window.updateConsensusButtonAvailability = function () {
-          const canGenerate = window.canGenerateConsensus();
-          const consensusButton = document.getElementById("consensusButton");
-          if (consensusButton && !consensusRequestRunning) {
-            consensusButton.disabled = !canGenerate;
-            consensusButton.title = canGenerate
-              ? "Generate Consensus"
-              : "Consensus requires at least two completed model answers";
-            consensusButton.setAttribute("aria-label", consensusButton.title);
-          }
-          return canGenerate;
-        };
-
-        function setConsensusButtonRunning(isRunning) {
-          const consensusButton = document.getElementById("consensusButton");
-          if (!consensusButton) return;
-
-          consensusButton.disabled = false;
-          consensusButton.classList.toggle("is-cancel-action", isRunning);
-          consensusButton.title = isRunning ? "Cancel consensus" : "Generate Consensus";
-          consensusButton.setAttribute("aria-label", isRunning ? "Cancel consensus" : "Generate Consensus");
-          consensusButton.textContent = isRunning ? "Stop Consensus generation" : "Generate Consensus";
-          if (!isRunning && window.updateConsensusButtonAvailability) {
-            window.updateConsensusButtonAvailability();
-          }
-        }
 
         function isActiveConsensusRun(runId) {
-          return consensusRequestRunning
-            && runId === currentConsensusRunId
-            && currentConsensusController
-            && !currentConsensusController.signal.aborted;
+          return consensusLifecycle.isActiveRun(runId);
         }
 
         function finishConsensusRun(runId) {
-          if (runId !== currentConsensusRunId) return;
-          consensusRequestRunning = false;
-          currentConsensusController = null;
-          setConsensusSynthesizing(false);
-          setConsensusButtonRunning(false);
+          consensusLifecycle.finishRun(runId);
         }
 
         function setConsensusSynthesizing(isSynthesizing) {
-          document
-            .getElementById("consensusResponse")
-            ?.classList.toggle("is-synthesizing", !!isSynthesizing);
+          consensusLifecycle.setSynthesizing(isSynthesizing);
         }
-
-        function markPendingConsensusCanceled() {
-          const consensusDiv = document.getElementById("consensusResponse");
-          if (!consensusDiv) return;
-
-          const mainEl = consensusDiv.querySelector(".consensus-main p");
-          const diffEl = consensusDiv.querySelector(".consensus-differences p");
-          if (mainEl && (mainEl.querySelector(".thinking-wrap") || mainEl.classList.contains("is-streaming"))) {
-            mainEl.classList.remove("is-streaming");
-            mainEl.innerText = "Request canceled.";
-          }
-          if (diffEl && (diffEl.querySelector(".thinking-wrap") || diffEl.classList.contains("is-streaming"))) {
-            diffEl.classList.remove("is-streaming");
-            diffEl.innerText = "";
-          }
-          if (window.resetCredibilityFrame) {
-            window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
-          }
-        }
-
-        window.cancelCurrentConsensus = function () {
-          if (!consensusRequestRunning || !currentConsensusController) return;
-          const runId = currentConsensusRunId;
-          currentConsensusController.abort();
-          markPendingConsensusCanceled();
-          finishConsensusRun(runId);
-          trackAppEvent("app_consensus_canceled");
-        };
 
         window.updateConsensusButtonAvailability();
 
         window.getConsensus = async function (trigger = "manual") {
-          if (consensusRequestRunning) {
+          if (consensusLifecycle.isRunning()) {
             window.cancelCurrentConsensus();
             return;
           }
@@ -3095,12 +2950,9 @@
             return;
           }
 
-          currentConsensusRunId++;
-          const consensusRunId = currentConsensusRunId;
-          currentConsensusController = new AbortController();
-          const consensusSignal = currentConsensusController.signal;
-          consensusRequestRunning = true;
-          setConsensusButtonRunning(true);
+          const consensusRun = consensusLifecycle.startRun();
+          const consensusRunId = consensusRun.runId;
+          const consensusSignal = consensusRun.signal;
 
           const question =
             (document.getElementById("questionInput")?.value ?? lastQuestion ?? "")
