@@ -57,11 +57,31 @@
     return (option?.textContent || "").replace(/(?:\s*(?:Â·|·)\s*(?:Pro|Early))+$/i, "").trim();
   }
 
+  // Kurzlebiges Hinweis-Popup (cross-cutting UI-Helfer, von vielen Clustern genutzt).
+  function showPopup(message) {
+    const popup = document.createElement('div');
+    popup.className = 'explanation-popup';
+    popup.innerText = message;
+    document.body.appendChild(popup);
+
+    setTimeout(() => {
+      popup.style.opacity = '1';
+    }, 100);
+
+    setTimeout(() => {
+      popup.style.opacity = '0';
+      setTimeout(() => {
+        popup.remove();
+      }, 300);
+    }, 3000);
+  }
+
   Object.assign(window.App, {
     modelPrefs,
     deepThinkModelLabels,
     getModelOptionLabel,
     getSelectedModelCount,
-    trackAppEvent
+    trackAppEvent,
+    showPopup
   });
 })();
