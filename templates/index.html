@@ -79,6 +79,8 @@
   <script src="/static/js/agent-mode.js?v=20260626-extract1" defer></script>
   <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
   <script src="/static/js/share-dialog.js?v=20260626-extract1" defer></script>
+  <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
+  <script src="/static/js/user-tier.js?v=20260626-extract1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-insights.js?v=20260626-extract1" defer></script>
   <!-- Umami Cloud Tracking -->
@@ -608,6 +610,15 @@
         // initCustomModelPicker ist eine gehoistete Funktionsdeklaration, daher
         // hier bereits referenzierbar.
         window.App.initCustomModelPicker = initCustomModelPicker;
+
+        // Tier-/Pro-UI ist nach static/js/user-tier.js ausgelagert; lokale Aliase
+        // für die Aufrufstellen in initApp.
+        const updateUserTierUI = window.updateUserTierUI;
+        const updatePremiumModelsState = window.updatePremiumModelsState;
+        // Brücken: user-tier.js nutzt diese (noch in initApp lebenden) Helfer.
+        // Beide sind gehoistete Funktionsdeklarationen.
+        window.App.updateDeepThinkText = updateDeepThinkText;
+        window.App.applyTierDefaultModels = applyTierDefaultModels;
 
         const deepSearchToggle = document.getElementById("deepSearchToggle");
 
@@ -4418,142 +4429,8 @@
 
         window.isUserPro = false;
 
-        function updateUserTierUI(isPro, isLoggedIn = false) { // Standardmäßig false
-          // 1. Globalen Status aktualisieren
-          window.isUserPro = isPro;
-
-          // 2. Elemente referenzieren
-          const badge = document.getElementById("proBadge");
-          const upgradeLink = document.getElementById("upgradeLink");
-          const deepSearchLabel = document.querySelector('.switch.deep-switch');
-
-          // === CASE 1: NICHT EINGELOGGT ===
-          if (!isLoggedIn) {
-            // Alles verstecken
-            if (badge) badge.style.display = "none";
-            if (upgradeLink) upgradeLink.style.display = "none";
-
-            // Optional: Standard-Limits (Free) oder ganz sperren
-            setCurrentUsageLimits(false);
-
-            if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false);
-
-            // Deep Search sperren (wie bei Free User)
-            if (deepSearchLabel) {
-              deepSearchLabel.classList.add("locked");
-              deepSearchLabel.title = "Login required";
-            }
-            return; // Funktion hier beenden!
-          }
-
-          // === CASE 2: EINGELOGGT (Pro oder Free) ===
-          if (isPro) {
-            // --- PRO USER ---
-            if (badge) badge.style.display = "inline-block";
-            if (upgradeLink) upgradeLink.style.display = "none";
-
-            // Limits
-            setCurrentUsageLimits(true);
-
-            // Dropdowns entsperren
-            if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(true);
-
-            // Deep Search entsperren
-            if (deepSearchLabel) {
-              deepSearchLabel.classList.remove("locked");
-              deepSearchLabel.title = "Deep Think enabled";
-              const input = deepSearchLabel.querySelector('input');
-              if (input) input.style.pointerEvents = "auto";
-            }
-
-          } else {
-            // --- FREE USER (EINGELOGGT) ---
-            if (badge) badge.style.display = "none";
-            if (upgradeLink) upgradeLink.style.display = "inline-block"; // Hier zeigen wir Upgrade
-
-            // Limits
-            setCurrentUsageLimits(false);
-
-            // Dropdowns sperren
-            if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false);
-
-            // Deep Search ausschalten & sperren
-            const deepToggle = document.getElementById("deepSearchToggle");
-            if (deepToggle && deepToggle.checked) {
-              deepToggle.checked = false;
-              if (typeof updateDeepThinkText === 'function') updateDeepThinkText();
-            }
-            if (deepSearchLabel) {
-              deepSearchLabel.classList.add("locked");
-              deepSearchLabel.title = "Pro feature only";
-
-              // WICHTIG: Klicks auf dem gesamten Label erlauben, damit der Listener feuert
-              deepSearchLabel.style.pointerEvents = "auto";
-
-              const input = deepSearchLabel.querySelector('input');
-              if (input) input.style.pointerEvents = "auto";
-            }
-          }
-        }
-
-        function updatePremiumModelsState(isPro) {
-          // Dropdown-IDs definieren (Consensus und OpenAI)
-          const dropdownIds = [
-            "consensusModelDropdown",
-            "openaiModelSelect",
-            "mistralModelSelect",
-            "claudeModelSelect",
-            "geminiModelSelect",
-            "deepseekModelSelect",
-            "grokModelSelect"
-          ];
-
-          dropdownIds.forEach(id => {
-            const dropdown = document.getElementById(id);
-            if (!dropdown) return;
-
-            const premiumOptions = dropdown.querySelectorAll('option.premium-option');
-
-            premiumOptions.forEach(option => {
-              option.textContent = option.textContent
-                .replace(/^Pro:\s*/i, '')
-                .replace(' (Pro only)', '')
-                .trim();
-
-              if (isPro) {
-                // --- PRO USER ---
-                option.disabled = false;
-
-              } else {
-                // --- FREE USER ---
-                option.disabled = true;
-
-                // Falls durch einen Fehler (Cache) ausgewählt -> Reset
-                if (option.selected) {
-                  dropdown.selectedIndex = 0;
-                }
-              }
-            });
-          });
-
-          if (typeof applyTierDefaultModels === "function") {
-            applyTierDefaultModels(isPro);
-          }
-
-          if (window.restoreModelSelections) {
-            window.restoreModelSelections();
-          }
-
-          if (typeof window.syncCustomModelPickers === "function") {
-            window.syncCustomModelPickers();
-          }
-
-          // FIX: Nach dem Restore prüfen, ob Deep Think aktiv ist, 
-          // und die Texte wieder auf die Reasoning-Namen setzen.
-          if (typeof updateDeepThinkText === "function") {
-            updateDeepThinkText();
-          }
-        }
+        // Tier-/Pro-UI (updateUserTierUI, updatePremiumModelsState) ist nach
+        // static/js/user-tier.js ausgelagert. Exporte gleichen Namens auf window.
 
         // Event Listener für den neuen Upgrade-Link im Header
         const headerUpgradeLink = document.getElementById("upgradeLink");
@@ -4647,7 +4524,6 @@
         // Optional: Beim Scrollen verstecken, damit er nicht "floated"
         window.addEventListener('scroll', hideTooltip, true);
 
-        window.updateUserTierUI = updateUserTierUI;
         }
 
         if (document.readyState === "loading") {
