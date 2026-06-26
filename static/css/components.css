@@ -4851,7 +4851,8 @@ option.early-option {
     display: none !important;
   }
 
-  .consensus-switch-container label.switch {
+  .consensus-switch-container label.switch,
+  .agent-mode-control label.switch {
     width: 38px;
     height: 38px;
     box-sizing: border-box;
@@ -4890,21 +4891,29 @@ option.early-option {
   }
 
   .consensus-switch-container label.switch:hover,
-  .consensus-switch-container label.switch:focus-within {
+  .consensus-switch-container label.switch:focus-within,
+  .agent-mode-control label.switch:hover,
+  .agent-mode-control label.switch:focus-within {
     color: var(--text-color);
     border-color: color-mix(in srgb, var(--accent) 28%, var(--sidebar-border));
     background: var(--sidebar-hover);
   }
 
-  .consensus-switch-container label.switch:active {
+  .consensus-switch-container label.switch:active,
+  .agent-mode-control label.switch:active {
     transform: translateY(1px);
   }
 
-  .consensus-switch-container label.switch:has(input:checked) {
+  .consensus-switch-container label.switch:has(input:checked),
+  .agent-mode-control label.switch:has(input:checked) {
     color: var(--button-bg);
     border-color: var(--button-bg);
     background: color-mix(in srgb, var(--button-bg) 14%, var(--response-bg));
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--button-bg) 12%, transparent);
+  }
+
+  .agent-mode-control .slider {
+    display: none;
   }
 
   .consensus-switch-container label.switch:has(input:focus-visible) {
@@ -4916,7 +4925,8 @@ option.early-option {
     opacity: .72;
   }
 
-  .consensus-switch-container label.switch::before {
+  .consensus-switch-container label.switch::before,
+  .agent-mode-control label.switch::before {
     content: "";
     width: 18px;
     height: 18px;

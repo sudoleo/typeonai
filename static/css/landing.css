@@ -1271,8 +1271,9 @@ img { display: block; max-width: 100%; }
 }
 
 /* Keep landing prompt mockups aligned with the real /app input instead of
-   switching back to the older compact icon-only demo controls. */
-@media (max-width: 960px) {
+   switching back to the older compact icon-only demo controls.
+   Only applies to tablets — phones (≤600px) keep the compact icon layout. */
+@media (min-width: 601px) and (max-width: 960px) {
   .lp-prompt { min-height: 142px; padding: 20px; padding-bottom: 62px; }
   .lp-prompt-bar { left: 20px; right: 246px; bottom: 14px; gap: 12px; }
   .lp-attach { width: 30px; height: 30px; border-radius: 50%; box-shadow: none; }
@@ -1295,11 +1296,7 @@ img { display: block; max-width: 100%; }
 }
 
 @media (max-width: 600px) {
-  .lp-prompt-bar { right: 172px; gap: 10px; }
-  .lp-mode { font-size: 0.78rem; }
-  .lp-switch { width: 44px; height: 24px; }
-  .lp-switch::after { width: 20px; height: 20px; }
-  .lp-mode.is-on .lp-switch::after { transform: translateX(20px); }
+  /* Phone: compact icon layout — no text label on lp-mode, lp-switch visible as icon button */
   .lp-consensus-picker span { display: none; }
   .lp-consensus-picker button {
     max-width: 100px;

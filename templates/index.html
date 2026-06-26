@@ -51,7 +51,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260625-consensus-pad1">
+  <link rel="stylesheet" href="/static/style.css?v=20260626-sidebar-pinned1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -114,7 +114,8 @@
   </header>
   <br><br><br>
   <div class="sidebar">
-    <div class="sidebar-content">
+    <!-- Pinned: Usage, Models, Leaderboard — does not scroll with bookmarks -->
+    <div class="sidebar-pinned">
 
       <div id="usageOptions" style="margin-top: 0;">
         <h2 class="sidebar-static-heading">Usage</h2>
@@ -157,7 +158,6 @@
         </div>
       </div>
 
-      <!-- Trennstrich zwischen API Keys und Leaderboard -->
       <div class="sidebar-separator"></div>
 
       <!-- Leaderboard -->
@@ -173,9 +173,12 @@
         </div>
       </div>
 
-      <!-- Trennstrich zwischen API Keys und Leaderboard -->
       <div class="sidebar-separator"></div>
 
+    </div>
+
+    <!-- Scrollable: Bookmarks with search -->
+    <div class="sidebar-content">
       <div class="sidebar-section bookmarks-section">
         <h2 class="sidebar-toggle-heading">
           <button id="bookmarksToggle" class="sidebar-toggle-btn" type="button" onclick="toggleBookmarks()" aria-expanded="true" aria-controls="bookmarksContainer" data-tooltip="All your chats if you are logged in.">
@@ -183,6 +186,9 @@
             <span class="sidebar-toggle-arrow" aria-hidden="true">&#8250;</span>
           </button>
         </h2>
+        <div class="sidebar-search-box">
+          <input type="search" id="chatSearch" placeholder="Chats durchsuchen…" autocomplete="off" aria-label="Chats durchsuchen">
+        </div>
         <div id="bookmarksContainer"></div>
       </div>
     </div>
@@ -2692,6 +2698,15 @@
           toggle.setAttribute("aria-expanded", String(!isCollapsed));
           trackAppEvent("app_sidebar_section_toggled", { section: "leaderboard", open: !isCollapsed });
         };
+
+        // Chat search filtering
+        document.getElementById("chatSearch")?.addEventListener("input", function () {
+          const q = this.value.trim().toLowerCase();
+          document.querySelectorAll("#bookmarksContainer .bookmark").forEach(el => {
+            const text = el.querySelector("p")?.textContent?.toLowerCase() || "";
+            el.style.display = q && !text.includes(q) ? "none" : "";
+          });
+        });
 
         window.toggleBookmarks = function () {
           const section = document.querySelector(".bookmarks-section");
