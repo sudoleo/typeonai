@@ -7,6 +7,42 @@ Branch: `refactor/index-extraction`
 Letzter Refactor-Code-Commit vor dieser Handoff-Datei:
 `1a0befe Refactor: extract consensus lifecycle`
 
+## Update 2026-06-26: Phase 3 + 4 abgeschlossen
+
+Die JS-Extraktion aus `templates/index.html` ist abgeschlossen. Die Datei
+enthält jetzt nur noch den Jinja-`<head>`-Config-Block und Markup plus die
+Modul-`<script>`-Tags - **kein App-JS mehr inline** (7149 -> 4254 -> 1147 Zeilen).
+
+Neue Module seit diesem Handoff (verhaltenserhaltend, je per Browser-Smoke +
+145 Backend-Tests verifiziert):
+
+- `04b4d84` `static/js/consensus-run.js`: `window.getConsensus` (/consensus-Payload,
+  SSE-Stream, Ergebnis-Rendering, Citation/Share-Meta) + `parseBestModel`.
+- `5af8171` `static/js/query-send.js`: `window.sendQuestion` (/prepare +
+  /ask_*-Fan-out, Streaming, Usage/Tier-UI, Auto-Consensus-Trigger), Query-Run-State,
+  `window.cancelCurrentQuery`, Query-Helfer (isDemoQuery/predictSearchIntent/
+  getActiveMode/setSendButtonRunning/...). index.html fragt jetzt
+  `window.isQueryRequestRunning()` statt das private Flag; `validateInputText`
+  bleibt inline und wird via `window.validateInputText` geteilt.
+- `a8a0317` `static/js/app-init.js`: das restliche `initApp()` (Theme, Usage/Limits +
+  User-Status, Response-Box-UI-Toggles, Sidebar/Layout, Modals, Tooltips,
+  Evidence-Rendering, API-Key-Test, alles DOM-Wiring). Deferred Script am
+  `</body>`-Ende -> laeuft nach allen anderen Modulen, ruft `initApp()` direkt
+  (DOM bereits geparst). Die einzige inline-Jinja-Stelle (`{{ free_limit }}`)
+  ist via `window.FREE_LIMIT` im `<head>`-Config-Block gebridged.
+
+### Bewusst noch NICHT angefangen
+
+- **Echter State-Refactor**: `window.App` ist weiterhin ein Uebergangsbus, DOM
+  dient vielerorts als State (z. B. `dataset.consensusAnswer`, `.excluded`-Klassen).
+  Das Aufloesen kommt erst nach erfolgreicher Extraktion.
+- **CSS-Aufraeumen**: noch offen.
+- Bekannter toter Code, der mitgewandert ist (nicht angefasst): `predictSearchIntent`
+  (nie aufgerufen), `consensusGenerated` (nur geschrieben), `showDisclaimerPopup`
+  (in index.html, ungenutzt).
+
+Das Folgende beschreibt den Stand VOR Phase 3/4 und ist historisch.
+
 ## Bereits extrahierte Module
 
 - `static/js/app-core.js`: temporaerer `window.App`-Bus, Modell-Konfiguration, gemeinsame UI-/Tracking-Helfer.
