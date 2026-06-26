@@ -221,9 +221,12 @@ class FrontierModelPayloadTests(unittest.TestCase):
             cfg.rebuild_model_configs()
 
     def test_saved_preferences_are_not_overwritten_when_present(self):
-        template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('localStorage.getItem("pref_select_" + pref.key) !== null', template)
-        self.assertIn("return;", template)
+        # applyTierDefaultModels lebt seit dem index.html-Refactor in
+        # static/js/model-picker.js. Der Guard (gespeicherte Auswahl wird nicht
+        # von Tier-Defaults ueberschrieben) muss dort erhalten bleiben.
+        module = (ROOT / "static" / "js" / "model-picker.js").read_text(encoding="utf-8")
+        self.assertIn('localStorage.getItem("pref_select_" + pref.key) !== null', module)
+        self.assertIn("return;", module)
 
     def test_consensus_picker_defaults_to_gemini_frontier_low(self):
         template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
