@@ -148,17 +148,12 @@
         const questionInput = document.getElementById("questionInput");
         const defaultQuestionPlaceholder = "Enter your question";
         const lockedQuestionPlaceholder = "Sign in to start asking questions for free.";
-        const apiKeyStorageKeys = ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey", "grokKey"];
-        function hasStoredApiKeys() {
-          return apiKeyStorageKeys.some(key => (localStorage.getItem(key) || "").trim() !== "");
-        }
-
         function hasVerifiedSession() {
-          return Boolean(window.auth?.currentUser?.emailVerified || localStorage.getItem("id_token"));
+          return Boolean(window.auth?.currentUser?.emailVerified);
         }
 
         window.userCanAskQuestions = function () {
-          return hasVerifiedSession() || hasStoredApiKeys();
+          return hasVerifiedSession();
         };
 
         window.updateQuestionInputAccess = function () {
@@ -173,7 +168,7 @@
 
           if (sendButton && !sendButton.classList.contains("is-cancel-action")) {
             sendButton.disabled = !canAsk;
-            sendButton.title = canAsk ? "Send question" : "Sign in or add API keys to ask questions";
+            sendButton.title = canAsk ? "Send question" : "Sign in to ask questions or use your own API keys";
           }
 
           return canAsk;
@@ -1193,12 +1188,36 @@
         // Testet die API Keys und aktualisiert das Feedback
         window.testAllKeys = async function () {
           trackAppEvent("app_api_keys_test_started");
+          const currentUser = window.auth?.currentUser;
+          if (!currentUser || !currentUser.emailVerified) {
+            alert("Please log in with a verified account before saving or testing your own API keys.");
+            trackAppEvent("app_api_keys_test_result", { status: "auth_required" });
+            return;
+          }
+
           const openaiKey = document.getElementById("openaiKey").value;
           const mistralKey = document.getElementById("mistralKey").value;
           const anthropicKey = document.getElementById("anthropicKey").value;
           const geminiKey = document.getElementById("geminiKey").value;
           const deepseekKey = document.getElementById("deepseekKey").value;
           const grokKey = document.getElementById("grokKey").value;
+          const enteredKeys = [openaiKey, mistralKey, anthropicKey, geminiKey, deepseekKey, grokKey]
+            .filter(key => (key || "").trim() !== "");
+          if (!enteredKeys.length) {
+            alert("Enter at least one API key to test.");
+            trackAppEvent("app_api_keys_test_result", { status: "no_keys" });
+            return;
+          }
+
+          let idToken = "";
+          try {
+            idToken = await currentUser.getIdToken();
+          } catch (error) {
+            alert("Your login session could not be verified. Please log in again.");
+            trackAppEvent("app_api_keys_test_result", { status: "auth_error" });
+            return;
+          }
+
           localStorage.setItem("openaiKey", openaiKey);
           localStorage.setItem("mistralKey", mistralKey);
           localStorage.setItem("anthropicKey", anthropicKey);
@@ -1213,8 +1232,12 @@
           try {
             const response = await fetch("/check_keys", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + idToken
+              },
               body: JSON.stringify({
+                id_token: idToken,
                 openai_key: openaiKey,
                 mistral_key: mistralKey,
                 anthropic_key: anthropicKey,
@@ -1224,8 +1247,12 @@
               })
             });
             if (!response.ok) {
-              const errorText = await response.text();
-              throw new Error(errorText);
+              let errorMessage = "API key check failed.";
+              try {
+                const errorData = await response.json();
+                errorMessage = errorData.detail || errorData.error || errorMessage;
+              } catch (_) {}
+              throw new Error(errorMessage);
             }
             const data = await response.json();
             if (!data || !data.results) {

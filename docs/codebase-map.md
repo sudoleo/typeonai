@@ -43,7 +43,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `pages.py` | HTML-Seiten + SEO: `/` (Landing, redirect→`/app` bei Session), `/app` (Haupt-App), `/admin`, `/about`, `/ai-model-comparison`, `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys`. |
+| `pages.py` | HTML-Seiten + SEO: `/` (Landing, redirect→`/app` bei Session), `/app` (Haupt-App), `/admin`, `/about`, `/ai-model-comparison`, `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`. |
 | `auth.py` | `/register`, `/confirm-registration`. |
 | `users.py` | `/user_status`, `/usage`, `/delete_account`, `/track-interest`. |
@@ -123,7 +123,8 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
    `stream:true`. Backend prüft Auth, Pro-Status, Deep-Search-Berechtigung,
    Wortlimit (`validate_question_word_limit`) und Modell (`validate_model`),
    parst Attachments, zählt Usage hoch (`active_count` teilt den Increment:
-   `1/active_count`).
+   `1/active_count`). Eigene Provider-Keys dürfen nur verifizierte Nutzer
+   verwenden; sie umgehen die Free-Usage-Zählung, aber nicht Auth/Pro-Gates.
 3. **SSE-Protokoll Modellantwort** (`streaming_model_response` in `streaming.py`):
    `event: delta {text}` … dann `event: final {response, sources,
    free_usage_remaining, deep_remaining, is_pro_user, key_used}`. Bei Fehler kommt
@@ -161,6 +162,8 @@ Metadaten (Name/Typ/Größe) — siehe `bookmarks.py::sanitize_attachment_meta`.
   E-Mail-verifizierte Nutzer; `allow_unverified=True` nur für Registrierung/Delete).
 - Token-Quelle: `extract_id_token` liest Body `id_token`, sonst `Authorization:
   Bearer`, sonst Cookie `session`.
+- Eigene API-Keys sind ein eingeloggtes Feature: `/check_keys`, `/ask_*` mit
+  User-Key und `/consensus` mit `useOwnKeys` verlangen ein verifiziertes Token.
 - Pro-Status: `is_user_pro` liest Firestore `users/{uid}.tier ∈ {premium, pro}`.
   Admin: `users/{uid}.role == admin`.
 - **Usage-Zähler liegen In-Memory** (`app/core/state.py`: `usage_counter`,

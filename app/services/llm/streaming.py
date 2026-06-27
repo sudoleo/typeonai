@@ -664,7 +664,7 @@ def streaming_model_response(stream_gen: Generator[StreamEvent, None, None], pro
             logger.exception("Streaming failed for %s", provider_label)
             payload = {
                 "error": f"{provider_label} could not complete this request. Please try again later.",
-                "error_detail": str(exc),
+                "error_code": "provider_stream_failed",
                 "response": "",
                 "sources": [],
             }

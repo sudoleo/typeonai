@@ -77,12 +77,19 @@
     const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
 
     let id_token = null;
-    if (!useOwnKeys && window.auth && window.auth.currentUser) {
+    if (window.auth && window.auth.currentUser) {
       try {
         id_token = await window.auth.currentUser.getIdToken();
       } catch (e) {
         console.error("Token refresh error in consensus:", e);
       }
+    }
+    if (!id_token) {
+      window.App.showPopup(useOwnKeys
+        ? "Please log in before using your own API keys."
+        : "Please log in before generating a consensus.");
+      finishConsensusRun(consensusRunId);
+      return;
     }
 
     // Wenn die Frage neu oder geändert ist, werden Firebase-Votes aktualisiert.

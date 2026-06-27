@@ -41,6 +41,8 @@ from tool_heuristics import get_realtime_context, get_intent_from_llm
 
 router = APIRouter()
 
+OWN_KEYS_LOGIN_REQUIRED = "Please log in to use your own API keys."
+
 def build_usage_limit_detail(message: str, code: str, limit_regular: int, current_usage, limit_deep: int, current_deep_usage):
     return {
         "error": message,
@@ -97,7 +99,7 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
 
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
-    api_key = data.get("api_key")
+    api_key = str(data.get("api_key") or "").strip()
     model = data.get("model")
 
     is_pro_user = False
@@ -123,7 +125,7 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
 
     active_count = get_valid_active_count(data)
 
-    if uid:
+    if uid and not api_key:
         increment = 1.0 / active_count
         
         # Limits festlegen basierend auf Status
@@ -199,19 +201,21 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
 
     # --- 5. Eigener API Key (Bypass Limits) ---
     elif api_key:
+        if not uid:
+            raise HTTPException(status_code=401, detail=OWN_KEYS_LOGIN_REQUIRED)
         if stream_requested:
             return streaming_model_response(
                 stream_openai_query(
                     question, api_key, deep_search=deep_search,
                     system_prompt=system_prompt, model_override=model,
-                    max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+                    max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
                     attachments=attachments
                 ),
                 "OpenAI",
                 {
                     "free_usage_remaining": "Unlimited",
                     "deep_remaining": "Unlimited",
-                    "is_pro_user": False,
+                    "is_pro_user": is_pro_user,
                     "key_used": "User API Key",
                 },
             )
@@ -219,14 +223,14 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
         answer = query_openai(
             question, api_key, deep_search=deep_search,
             system_prompt=system_prompt, model_override=model,
-            max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+            max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
             attachments=attachments
         )
         return source_response(
             answer,
             free_usage_remaining="Unlimited",
             deep_remaining="Unlimited",
-            is_pro_user=False,
+            is_pro_user=is_pro_user,
             key_used="User API Key"
         )
 
@@ -243,7 +247,7 @@ def ask_mistral_post(request: Request, data: dict = Body(...)):
 
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
-    api_key = data.get("api_key")
+    api_key = str(data.get("api_key") or "").strip()
     model = data.get("model")
 
     is_pro_user = False
@@ -265,7 +269,7 @@ def ask_mistral_post(request: Request, data: dict = Body(...)):
 
     active_count = get_valid_active_count(data)
 
-    if uid:
+    if uid and not api_key:
         increment = 1.0 / active_count
         limit_regular = cfg.get_usage_limit(is_pro_user)
         limit_deep = cfg.get_deep_search_limit(is_pro_user)
@@ -318,23 +322,25 @@ def ask_mistral_post(request: Request, data: dict = Body(...)):
         )
 
     elif api_key:
+        if not uid:
+            raise HTTPException(status_code=401, detail=OWN_KEYS_LOGIN_REQUIRED)
         if stream_requested:
             return streaming_model_response(
                 stream_mistral_query(
                     question, api_key, system_prompt, deep_search=deep_search,
-                    model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+                    model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
                     attachments=attachments
                 ),
                 "Mistral",
-                {"free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": False, "key_used": "User API Key"},
+                {"free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": is_pro_user, "key_used": "User API Key"},
             )
 
         answer = query_mistral(
             question, api_key, system_prompt, deep_search=deep_search,
-            model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+            model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
             attachments=attachments
         )
-        return source_response(answer, free_usage_remaining="Unlimited", deep_remaining="Unlimited", is_pro_user=False, key_used="User API Key")
+        return source_response(answer, free_usage_remaining="Unlimited", deep_remaining="Unlimited", is_pro_user=is_pro_user, key_used="User API Key")
     else:
         raise HTTPException(status_code=400, detail="No auth provided.")
 
@@ -348,7 +354,7 @@ def ask_claude_post(request: Request, data: dict = Body(...)):
 
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
-    api_key = data.get("api_key")
+    api_key = str(data.get("api_key") or "").strip()
     model = data.get("model")
 
     is_pro_user = False
@@ -370,7 +376,7 @@ def ask_claude_post(request: Request, data: dict = Body(...)):
 
     active_count = get_valid_active_count(data)
 
-    if uid:
+    if uid and not api_key:
         increment = 1.0 / active_count
         limit_regular = cfg.get_usage_limit(is_pro_user)
         limit_deep = cfg.get_deep_search_limit(is_pro_user)
@@ -423,23 +429,25 @@ def ask_claude_post(request: Request, data: dict = Body(...)):
         )
 
     elif api_key:
+        if not uid:
+            raise HTTPException(status_code=401, detail=OWN_KEYS_LOGIN_REQUIRED)
         if stream_requested:
             return streaming_model_response(
                 stream_claude_query(
                     question, api_key, system_prompt, deep_search=deep_search,
-                    model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+                    model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
                     attachments=attachments
                 ),
                 "Anthropic",
-                {"free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": False, "key_used": "User API Key"},
+                {"free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": is_pro_user, "key_used": "User API Key"},
             )
 
         answer = query_claude(
             question, api_key, system_prompt, deep_search=deep_search,
-            model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+            model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
             attachments=attachments
         )
-        return source_response(answer, free_usage_remaining="Unlimited", deep_remaining="Unlimited", is_pro_user=False, key_used="User API Key")
+        return source_response(answer, free_usage_remaining="Unlimited", deep_remaining="Unlimited", is_pro_user=is_pro_user, key_used="User API Key")
     else:
         raise HTTPException(status_code=400, detail="No auth provided.")
 
@@ -452,9 +460,9 @@ def ask_gemini_post(request: Request, data: dict = Body(...)):
     stream_requested = parse_boolean_flag(data.get("stream", False))
 
     system_prompt = data.get("system_prompt")
-    use_own_keys = str(data.get("useOwnKeys", "false")).lower() == "true"
+    use_own_keys = parse_boolean_flag(data.get("useOwnKeys", False))
     id_token = extract_id_token(request, data)
-    api_key = (data.get("api_key") or data.get("gemini_key"))
+    api_key = str(data.get("api_key") or data.get("gemini_key") or "").strip()
     model = data.get("model")
 
     is_pro_user = False
@@ -477,6 +485,38 @@ def ask_gemini_post(request: Request, data: dict = Body(...)):
 
     active_count = get_valid_active_count(data)
 
+    if api_key:
+        use_own_keys = True
+
+    if uid and use_own_keys:
+        if not (api_key and api_key.strip()):
+            raise HTTPException(status_code=400, detail="Missing user API key for Gemini.")
+        user_key = api_key.strip()
+
+        if stream_requested:
+            return streaming_model_response(
+                stream_gemini_query(
+                    question, user_api_key=user_key, deep_search=deep_search,
+                    system_prompt=system_prompt, model_override=model,
+                    max_output_tokens=max_tokens, attachments=attachments
+                ),
+                "Gemini",
+                {"free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": is_pro_user, "key_used": "User API Key"},
+            )
+
+        answer = query_gemini(
+            question, user_api_key=user_key, deep_search=deep_search,
+            system_prompt=system_prompt, model_override=model,
+            max_output_tokens=max_tokens, attachments=attachments
+        )
+        return source_response(
+            answer,
+            free_usage_remaining="Unlimited",
+            deep_remaining="Unlimited",
+            is_pro_user=is_pro_user,
+            key_used="User API Key"
+        )
+
     if uid:
         increment = 1.0 / active_count
         limit_regular = cfg.get_usage_limit(is_pro_user)
@@ -495,21 +535,10 @@ def ask_gemini_post(request: Request, data: dict = Body(...)):
         if deep_search:
             deep_search_usage[uid] = current_deep_usage + increment
 
-        # Entscheidung: Key oder Service Account
-        if use_own_keys:
-            if not (api_key and api_key.strip()):
-                raise HTTPException(status_code=400, detail="Missing user API key for Gemini.")
-            user_key = api_key.strip()
-            key_info = "User API Key"
-        else:
-            # Service Account (SaaS Budget)
-            user_key = None
-            key_info = "Service Account"
-
         if stream_requested:
             return streaming_model_response(
                 stream_gemini_query(
-                    question, user_api_key=user_key, deep_search=deep_search,
+                    question, user_api_key=None, deep_search=deep_search,
                     system_prompt=system_prompt, model_override=model,
                     max_output_tokens=max_tokens, attachments=attachments
                 ),
@@ -518,44 +547,22 @@ def ask_gemini_post(request: Request, data: dict = Body(...)):
                     "free_usage_remaining": int(limit_regular - usage_counter[uid]),
                     "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
                     "is_pro_user": is_pro_user,
-                    "key_used": key_info,
+                    "key_used": "Service Account",
                 },
             )
 
-        answer = query_gemini(question, user_api_key=user_key, deep_search=deep_search, system_prompt=system_prompt, model_override=model, max_output_tokens=max_tokens, attachments=attachments)
+        answer = query_gemini(question, user_api_key=None, deep_search=deep_search, system_prompt=system_prompt, model_override=model, max_output_tokens=max_tokens, attachments=attachments)
 
         return source_response(
             answer,
             free_usage_remaining=int(limit_regular - usage_counter[uid]),
             deep_remaining=int(limit_deep - deep_search_usage.get(uid, 0)),
             is_pro_user=is_pro_user,
-            key_used=key_info
+            key_used="Service Account"
         )
 
     else:
-        # Guest mit eigenem Key
-        if not (api_key and api_key.strip()):
-            raise HTTPException(status_code=400, detail="No credentials provided.")
-
-        if stream_requested:
-            return streaming_model_response(
-                stream_gemini_query(
-                    question, user_api_key=api_key.strip(), deep_search=deep_search,
-                    system_prompt=system_prompt, model_override=model,
-                    max_output_tokens=cfg.get_output_token_limit(False, deep_search),
-                    attachments=attachments
-                ),
-                "Gemini",
-                {"key_used": "User API Key", "is_pro_user": False},
-            )
-
-        answer = query_gemini(
-            question, user_api_key=api_key.strip(), deep_search=deep_search,
-            system_prompt=system_prompt, model_override=model,
-            max_output_tokens=cfg.get_output_token_limit(False, deep_search),
-            attachments=attachments
-        )
-        return source_response(answer, key_used="User API Key", is_pro_user=False)
+        raise HTTPException(status_code=401, detail=OWN_KEYS_LOGIN_REQUIRED if api_key else "Authentication required")
 
 
 @router.post("/ask_deepseek")
@@ -567,7 +574,7 @@ def ask_deepseek_post(request: Request, data: dict = Body(...)):
 
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
-    api_key = data.get("api_key")
+    api_key = str(data.get("api_key") or "").strip()
     model = data.get("model")
 
     is_pro_user = False
@@ -589,7 +596,7 @@ def ask_deepseek_post(request: Request, data: dict = Body(...)):
 
     active_count = get_valid_active_count(data)
 
-    if uid:
+    if uid and not api_key:
         increment = 1.0 / active_count
         limit_regular = cfg.get_usage_limit(is_pro_user)
         limit_deep = cfg.get_deep_search_limit(is_pro_user)
@@ -642,23 +649,25 @@ def ask_deepseek_post(request: Request, data: dict = Body(...)):
         )
 
     elif api_key:
+        if not uid:
+            raise HTTPException(status_code=401, detail=OWN_KEYS_LOGIN_REQUIRED)
         if stream_requested:
             return streaming_model_response(
                 stream_deepseek_query(
                     question, api_key, system_prompt, deep_search=deep_search,
-                    model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+                    model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
                     attachments=attachments
                 ),
                 "DeepSeek",
-                {"free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": False, "key_used": "User API Key"},
+                {"free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": is_pro_user, "key_used": "User API Key"},
             )
 
         answer = query_deepseek(
             question, api_key, system_prompt, deep_search=deep_search,
-            model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+            model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
             attachments=attachments
         )
-        return source_response(answer, free_usage_remaining="Unlimited", deep_remaining="Unlimited", is_pro_user=False, key_used="User API Key")
+        return source_response(answer, free_usage_remaining="Unlimited", deep_remaining="Unlimited", is_pro_user=is_pro_user, key_used="User API Key")
     else:
         raise HTTPException(status_code=400, detail="No auth provided.")
 
@@ -672,7 +681,7 @@ def ask_grok_post(request: Request, data: dict = Body(...)):
 
     system_prompt = data.get("system_prompt")
     id_token = extract_id_token(request, data)
-    api_key = data.get("api_key")
+    api_key = str(data.get("api_key") or "").strip()
     model = data.get("model")
 
     is_pro_user = False
@@ -694,7 +703,7 @@ def ask_grok_post(request: Request, data: dict = Body(...)):
 
     active_count = get_valid_active_count(data)
 
-    if uid:
+    if uid and not api_key:
         increment = 1.0 / active_count
         limit_regular = cfg.get_usage_limit(is_pro_user)
         limit_deep = cfg.get_deep_search_limit(is_pro_user)
@@ -747,23 +756,25 @@ def ask_grok_post(request: Request, data: dict = Body(...)):
         )
 
     elif api_key:
+        if not uid:
+            raise HTTPException(status_code=401, detail=OWN_KEYS_LOGIN_REQUIRED)
         if stream_requested:
             return streaming_model_response(
                 stream_grok_query(
                     question, api_key, system_prompt, deep_search=deep_search,
-                    model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+                    model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
                     attachments=attachments
                 ),
                 "Grok",
-                {"free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": False, "key_used": "User API Key"},
+                {"free_usage_remaining": "Unlimited", "deep_remaining": "Unlimited", "is_pro_user": is_pro_user, "key_used": "User API Key"},
             )
 
         answer = query_grok(
             question, api_key, system_prompt, deep_search=deep_search,
-            model_override=model, max_output_tokens=cfg.get_output_token_limit(False, deep_search),
+            model_override=model, max_output_tokens=cfg.get_output_token_limit(is_pro_user, deep_search),
             attachments=attachments
         )
-        return source_response(answer, free_usage_remaining="Unlimited", deep_remaining="Unlimited", is_pro_user=False, key_used="User API Key")
+        return source_response(answer, free_usage_remaining="Unlimited", deep_remaining="Unlimited", is_pro_user=is_pro_user, key_used="User API Key")
     else:
         raise HTTPException(status_code=400, detail="No auth provided.")
 
@@ -773,6 +784,7 @@ async def prepare(request: Request, data: dict = Body(...)):
     if not question:
         raise HTTPException(status_code=400, detail="Missing 'question' in request body.")
 
+    use_own_keys = parse_boolean_flag(data.get("useOwnKeys", False))
     id_token = extract_id_token(request, data)
     if not id_token:
         raise HTTPException(status_code=401, detail="Authentication required to analyze intent.")
@@ -783,7 +795,7 @@ async def prepare(request: Request, data: dict = Body(...)):
         limit = cfg.get_usage_limit(is_pro)
         deep_limit = cfg.get_deep_search_limit(is_pro)
         current_usage = usage_counter.get(uid, 0)
-        if current_usage >= limit:
+        if not use_own_keys and current_usage >= limit:
             current_deep_usage = deep_search_usage.get(uid, 0)
             msg = "Pro usage limit reached." if is_pro else "Free usage limit reached. Upgrade to Pro or use your own API keys."
             raise HTTPException(
@@ -842,45 +854,50 @@ def consensus(request: Request, data: dict = Body(...)):
     is_pro = False
     
     # 1. Auth & Usage Check
-    if id_token:
-        if not use_own_keys:
-            try:
-                uid = verify_user_token(id_token)
-                is_pro = is_user_pro(uid)  # WICHTIG: Pro-Status prüfen
-            except Exception:
-                raise HTTPException(status_code=401, detail="Invalid token")
+    if not id_token:
+        raise HTTPException(
+            status_code=401,
+            detail=OWN_KEYS_LOGIN_REQUIRED if use_own_keys else "Authentication required",
+        )
 
-            if isinstance(consensus_model, str) and consensus_model.endswith("-Pro") and not is_pro:
-                raise HTTPException(status_code=403, detail="Premium consensus engines are reserved for Pro users.")
+    try:
+        uid = verify_user_token(id_token)
+        is_pro = is_user_pro(uid)  # WICHTIG: Pro-Status prüfen
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
-            # Limits basierend auf Status festlegen
-            limit_regular = cfg.get_usage_limit(is_pro)
-            limit_deep = cfg.get_deep_search_limit(is_pro)
+    if not use_own_keys:
+        if isinstance(consensus_model, str) and consensus_model.endswith("-Pro") and not is_pro:
+            raise HTTPException(status_code=403, detail="Premium consensus engines are reserved for Pro users.")
 
-            # Aktuellen Verbrauch abrufen
-            current_usage = usage_counter.get(uid, 0)
-            current_deep_usage = deep_search_usage.get(uid, 0)
+        # Limits basierend auf Status festlegen
+        limit_regular = cfg.get_usage_limit(is_pro)
+        limit_deep = cfg.get_deep_search_limit(is_pro)
 
-            # Reguläre Usage Prüfung (gilt immer für Consensus Request)
-            if current_usage >= limit_regular:
-                msg = "Pro usage limit reached." if is_pro else "Your free quota has been used up. Please store your own API keys or upgrade to Pro."
-                raise HTTPException(
-                    status_code=403,
-                    detail=build_usage_limit_detail(
-                        msg,
-                        "usage_limit_exceeded",
-                        limit_regular,
-                        current_usage,
-                        limit_deep,
-                        current_deep_usage,
-                    )
+        # Aktuellen Verbrauch abrufen
+        current_usage = usage_counter.get(uid, 0)
+        current_deep_usage = deep_search_usage.get(uid, 0)
+
+        # Reguläre Usage Prüfung (gilt immer für Consensus Request)
+        if current_usage >= limit_regular:
+            msg = "Pro usage limit reached." if is_pro else "Your free quota has been used up. Please store your own API keys or upgrade to Pro."
+            raise HTTPException(
+                status_code=403,
+                detail=build_usage_limit_detail(
+                    msg,
+                    "usage_limit_exceeded",
+                    limit_regular,
+                    current_usage,
+                    limit_deep,
+                    current_deep_usage,
                 )
-            
-            # Reguläre Usage erhöhen
-            usage_counter[uid] = current_usage + 1
+            )
+        
+        # Reguläre Usage erhöhen
+        usage_counter[uid] = current_usage + 1
     else:
-        # Gast / ohne Token -> muss eigene Keys nutzen
-        use_own_keys = True
+        limit_regular = cfg.get_usage_limit(is_pro)
+        limit_deep = cfg.get_deep_search_limit(is_pro)
 
     # Parameter extrahieren
     question        = data.get("question")
@@ -1018,14 +1035,8 @@ def consensus(request: Request, data: dict = Body(...)):
                     detail=f"Missing API key for selected consensus engine: {engine}."
                 )
 
-    # Share-Feature: Ergebnis nur für verifizierte Nutzer persistieren. Bei
-    # useOwnKeys wurde das Token oben nicht geprüft, daher hier best effort.
+    # Share-Feature: Ergebnis nur für verifizierte Nutzer persistieren.
     share_uid = uid
-    if share_uid is None and id_token:
-        try:
-            share_uid = verify_user_token(id_token)
-        except Exception:
-            share_uid = None
     model_labels = data.get("model_labels")
 
     def persist_share_result(consensus_text, differences_data, differences_text):

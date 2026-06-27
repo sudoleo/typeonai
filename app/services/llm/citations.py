@@ -33,7 +33,7 @@ def source_response(result: Any, **extra: Any) -> Dict[str, Any]:
     if isinstance(result, dict) and result.get("error"):
         payload = {
             "error": str(result.get("error") or "This model could not complete the request."),
-            "error_detail": str(result.get("error_detail") or ""),
+            "error_code": str(result.get("error_code") or "provider_request_failed"),
             "response": "",
             "sources": result_sources(result),
         }

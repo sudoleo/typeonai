@@ -87,7 +87,7 @@ class StreamingModelResponseTests(unittest.TestCase):
             yield {"type": "delta", "text": "partial"}
             yield {
                 "type": "final",
-                "result": {"text": "", "sources": [], "error": "OpenAI could not complete this request. Please try again later.", "error_detail": "boom"},
+                "result": {"text": "", "sources": [], "error": "OpenAI could not complete this request. Please try again later.", "error_code": "provider_request_failed"},
             }
 
         response = streaming_model_response(gen(), "OpenAI", {"free_usage_remaining": 1})
@@ -107,7 +107,8 @@ class StreamingModelResponseTests(unittest.TestCase):
         self.assertEqual(events[-1][0], "final")
         final = events[-1][1]
         self.assertIn("Mistral could not complete this request", final["error"])
-        self.assertEqual(final["error_detail"], "connection dropped")
+        self.assertEqual(final["error_code"], "provider_stream_failed")
+        self.assertNotIn("error_detail", final)
         self.assertEqual(final["key_used"], "User API Key")
 
 

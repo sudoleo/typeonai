@@ -255,11 +255,12 @@ class FrontierModelPayloadTests(unittest.TestCase):
             "text": "",
             "sources": [],
             "error": "OpenAI could not complete this request. Please try again later.",
-            "error_detail": "400 - invalid parameter",
+            "error_code": "provider_request_failed",
         })
         self.assertEqual(response["response"], "")
         self.assertIn("could not complete", response["error"])
-        self.assertIn("invalid parameter", response["error_detail"])
+        self.assertEqual(response["error_code"], "provider_request_failed")
+        self.assertNotIn("error_detail", response)
 
     def test_question_validation_rejects_empty_input(self):
         for question in (None, "", "   "):

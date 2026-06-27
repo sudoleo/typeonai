@@ -288,8 +288,7 @@
       // --- NEU: Frisches Token holen ---
       let validIdToken = null;
 
-      // Nur versuchen, ein Token zu holen, wenn wir keine eigenen Keys nutzen UND ein User da ist
-      if (!useOwnKeys && window.auth && window.auth.currentUser) {
+      if (window.auth && window.auth.currentUser) {
         try {
           // true erzwingt Refresh, false (Standard) nimmt Cache wenn gültig.
           // false reicht meistens, aber bei Fehlern ist das SDK smart genug.
@@ -302,6 +301,15 @@
           // Fallback: Versuche es trotzdem mit dem alten Token aus dem Storage, falls vorhanden
           validIdToken = localStorage.getItem("id_token");
         }
+      }
+
+      if (!validIdToken) {
+        alert(useOwnKeys
+          ? "Please log in before using your own API keys."
+          : "Please log in before sending a question.");
+        finishQueryRun(queryRunId);
+        setConsensusGate(true);
+        return;
       }
 
       // 0. Zuerst den gespeicherten Prompt aus dem Speicher holen
@@ -468,7 +476,8 @@
           question: question,
           system_prompt: storedSystemPrompt,
           deep_search: deepSearchFlag,
-          mode: mode
+          mode: mode,
+          useOwnKeys: useOwnKeys
         };
 
         // Nur anhängen, wenn wirklich vorhanden
@@ -689,7 +698,9 @@
           deep_search: deepSearchFlag,      // oben definiert
           system_prompt: effectiveSystemPrompt,
           mode: mode,
-          model: document.getElementById("openaiModelSelect").value
+          model: document.getElementById("openaiModelSelect").value,
+          id_token: validIdToken,
+          useOwnKeys: useOwnKeys
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
 
@@ -704,7 +715,7 @@
         } else {
           if (!validateUserKey("openaiKey")) {
             const outputEl = document.getElementById("openaiResponse").querySelector(".collapsible-content");
-            outputEl.innerHTML = "Please log in or store your own API keys.";
+            outputEl.innerHTML = "Please log in and enter your own API key.";
             alert("Please enter a valid OpenAI API key.");
             currentQueryController?.abort();
             markPendingQueryResponsesCanceled();
@@ -795,7 +806,9 @@
           active_count: 1,
           system_prompt: effectiveSystemPrompt,
           mode: mode,
-          model: document.getElementById("mistralModelSelect").value
+          model: document.getElementById("mistralModelSelect").value,
+          id_token: validIdToken,
+          useOwnKeys: useOwnKeys
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
 
@@ -809,7 +822,7 @@
         } else {
           if (!validateUserKey("mistralKey")) {
             const outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
-            outputEl.innerHTML = "Please log in or store your own API keys.";
+            outputEl.innerHTML = "Please log in and enter your own API key.";
             alert("Please enter a valid Mistral API key.");
             currentQueryController?.abort();
             markPendingQueryResponsesCanceled();
@@ -842,7 +855,7 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "Please log in or store your own API keys.", data);
+              markModelError(outputEl, "Please log in and enter your own API key.", data);
             }
             // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -881,7 +894,9 @@
           active_count: 1,
           system_prompt: effectiveSystemPrompt,
           mode: mode,
-          model: document.getElementById("claudeModelSelect").value
+          model: document.getElementById("claudeModelSelect").value,
+          id_token: validIdToken,
+          useOwnKeys: useOwnKeys
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
 
@@ -895,7 +910,7 @@
         } else {
           if (!validateUserKey("anthropicKey")) {
             const outputEl = document.getElementById("claudeResponse").querySelector(".collapsible-content");
-            outputEl.innerHTML = "Please log in or store your own API keys.";
+            outputEl.innerHTML = "Please log in and enter your own API key.";
             alert("Please enter a valid Anthropic API Key.");
             currentQueryController?.abort();
             markPendingQueryResponsesCanceled();
@@ -927,7 +942,7 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "Please log in or store your own API keys.", data);
+              markModelError(outputEl, "Please log in and enter your own API key.", data);
             }
             // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -966,7 +981,9 @@
           deep_search: deepSearchFlag,
           system_prompt: effectiveSystemPrompt,
           mode: mode,
-          model: document.getElementById("geminiModelSelect").value
+          model: document.getElementById("geminiModelSelect").value,
+          id_token: validIdToken,
+          useOwnKeys: useOwnKeys
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
 
@@ -980,7 +997,7 @@
         } else {
           if (!validateUserKey("geminiKey")) {
             const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
-            outputEl.innerHTML = "Please log in or store your own API keys.";
+            outputEl.innerHTML = "Please log in and enter your own API key.";
             alert("Please enter a valid Gemini API Key.");
             currentQueryController?.abort();
             markPendingQueryResponsesCanceled();
@@ -1012,7 +1029,7 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "Please log in or store your own API keys.", data);
+              markModelError(outputEl, "Please log in and enter your own API key.", data);
             }
             // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -1051,7 +1068,9 @@
           active_count: 1,
           system_prompt: effectiveSystemPrompt,
           mode: mode,
-          model: document.getElementById("deepseekModelSelect").value
+          model: document.getElementById("deepseekModelSelect").value,
+          id_token: validIdToken,
+          useOwnKeys: useOwnKeys
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
 
@@ -1065,7 +1084,7 @@
         } else {
           if (!validateUserKey("deepseekKey")) {
             const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
-            outputEl.innerHTML = "Please log in or store your own API keys.";
+            outputEl.innerHTML = "Please log in and enter your own API key.";
             alert("Please enter a valid DeepSeek API key.");
             currentQueryController?.abort();
             markPendingQueryResponsesCanceled();
@@ -1097,7 +1116,7 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "Please log in or store your own API keys.", data);
+              markModelError(outputEl, "Please log in and enter your own API key.", data);
             }
             // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -1136,7 +1155,9 @@
           active_count: 1,
           system_prompt: effectiveSystemPrompt,
           mode: mode,
-          model: document.getElementById("grokModelSelect").value
+          model: document.getElementById("grokModelSelect").value,
+          id_token: validIdToken,
+          useOwnKeys: useOwnKeys
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
 
@@ -1150,7 +1171,7 @@
         } else {
           if (!validateUserKey("grokKey")) {
             const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
-            outputEl.innerHTML = "Please log in or store your own API keys.";
+            outputEl.innerHTML = "Please log in and enter your own API key.";
             alert("Please enter a valid Grok API key.");
             currentQueryController?.abort();
             markPendingQueryResponsesCanceled();
@@ -1181,7 +1202,7 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "Please log in or store your own API keys.", data);
+              markModelError(outputEl, "Please log in and enter your own API key.", data);
             }
             // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;

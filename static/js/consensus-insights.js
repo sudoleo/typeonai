@@ -518,11 +518,10 @@
               empty.append(headline, note);
               cards.appendChild(empty);
             } else {
-              const openByDefault = !isMobileViewport();
               differences.forEach(function (diff) {
                 const card = document.createElement("details");
                 card.className = "diff-card " + (diff.type === "contradiction" ? "is-contradiction" : "is-emphasis");
-                if (openByDefault) card.open = true;
+                card.open = true;
 
                 const summary = document.createElement("summary");
                 summary.className = "diff-card-summary";

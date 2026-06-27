@@ -251,6 +251,14 @@ def is_valid(key):
 @router.post("/check_keys")
 @limiter.limit("3/minute")
 async def check_keys(request: Request, data: dict = Body(...)):
+    id_token = extract_id_token(request, data)
+    if not id_token:
+        raise HTTPException(status_code=401, detail="Please log in to test and use your own API keys.")
+    try:
+        verify_user_token(id_token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Authentication failed")
+
     try:
         openai_key = data.get("openai_key")
         mistral_key = data.get("mistral_key")
@@ -258,13 +266,17 @@ async def check_keys(request: Request, data: dict = Body(...)):
         gemini_key = data.get("gemini_key")
         deepseek_key = data.get("deepseek_key")
         grok_key = data.get("grok_key")
+
+        submitted_keys = [openai_key, mistral_key, anthropic_key, gemini_key, deepseek_key, grok_key]
+        if not any(is_valid(key) for key in submitted_keys):
+            raise HTTPException(status_code=400, detail="Enter at least one API key to test.")
         
         results = {}
         
         # OpenAI Handshake
         try:
             if openai_key and len(openai_key) > 10:
-                client = openai.OpenAI(api_key=openai_key)
+                client = openai.OpenAI(api_key=openai_key, timeout=15)
                 response = client.chat.completions.create(
                     model=cfg.DEFAULT_MODEL_BY_PROVIDER["openai"],
                     messages=[
@@ -277,12 +289,13 @@ async def check_keys(request: Request, data: dict = Body(...)):
             else:
                 results["OpenAI"] = "invalid"
         except Exception as e:
-            results["OpenAI"] = f"invalid: {str(e)}"
+            logging.warning("OpenAI key check failed: %s", e)
+            results["OpenAI"] = "invalid"
         
         # Mistral Handshake
         try:
             if mistral_key and len(mistral_key) > 10:
-                client = Mistral(api_key=mistral_key)
+                client = Mistral(api_key=mistral_key, timeout_ms=15000)
                 response = client.chat.complete(
                     model=cfg.DEFAULT_MODEL_BY_PROVIDER["mistral"],
                     messages=[{"role": "user", "content": "ping"}],
@@ -292,7 +305,8 @@ async def check_keys(request: Request, data: dict = Body(...)):
             else:
                 results["Mistral"] = "invalid"
         except Exception as e:
-            results["Mistral"] = f"invalid: {str(e)}"
+            logging.warning("Mistral key check failed: %s", e)
+            results["Mistral"] = "invalid"
             
         # Anthropic Handshake
         try:
@@ -308,32 +322,38 @@ async def check_keys(request: Request, data: dict = Body(...)):
                     "max_tokens": 5,
                     "messages": [{"role": "user", "content": "ping"}]
                 }
-                resp = requests.post(url, json=payload, headers=headers)
+                resp = requests.post(url, json=payload, headers=headers, timeout=15)
                 if resp.status_code == 200:
                     results["Anthropic"] = "valid"
                 else:
-                    results["Anthropic"] = f"invalid: {resp.status_code}"
+                    results["Anthropic"] = "invalid"
             else:
                 results["Anthropic"] = "invalid"
         except Exception as e:
-            results["Anthropic"] = f"invalid: {str(e)}"
+            logging.warning("Anthropic key check failed: %s", e)
+            results["Anthropic"] = "invalid"
             
         # Gemini Handshake
         try:
             if gemini_key and len(gemini_key) > 10:
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel(cfg.DEFAULT_MODEL_BY_PROVIDER["gemini"])
-                resp = model.generate_content("ping", generation_config={"max_output_tokens": 5})
+                resp = model.generate_content(
+                    "ping",
+                    generation_config={"max_output_tokens": 5},
+                    request_options={"timeout": 15},
+                )
                 results["Gemini"] = "valid"
             else:
                 results["Gemini"] = "invalid"
         except Exception as e:
-            results["Gemini"] = f"invalid: {str(e)}"
+            logging.warning("Gemini key check failed: %s", e)
+            results["Gemini"] = "invalid"
 
         # DeepSeek Handshake
         try:
             if deepseek_key and len(deepseek_key) > 10:
-                client = openai.OpenAI(api_key=deepseek_key, base_url="https://api.deepseek.com")
+                client = openai.OpenAI(api_key=deepseek_key, base_url="https://api.deepseek.com", timeout=15)
                 response = client.chat.completions.create(
                     model=cfg.DEFAULT_MODEL_BY_PROVIDER["deepseek"],
                     messages=[{"role": "user", "content": "ping"}],
@@ -343,12 +363,13 @@ async def check_keys(request: Request, data: dict = Body(...)):
             else:
                 results["DeepSeek"] = "invalid"
         except Exception as e:
-            results["DeepSeek"] = f"invalid: {str(e)}"
+            logging.warning("DeepSeek key check failed: %s", e)
+            results["DeepSeek"] = "invalid"
             
         # Grok Handshake
         try:
             if grok_key and len(grok_key) > 10:
-                client = openai.OpenAI(api_key=grok_key, base_url="https://api.x.ai/v1")
+                client = openai.OpenAI(api_key=grok_key, base_url="https://api.x.ai/v1", timeout=15)
                 response = client.chat.completions.create(
                     model=cfg.DEFAULT_MODEL_BY_PROVIDER["grok"],
                     messages=[{"role": "user", "content": "ping"}],
@@ -358,9 +379,13 @@ async def check_keys(request: Request, data: dict = Body(...)):
             else:
                 results["Grok"] = "invalid"
         except Exception as e:
-            results["Grok"] = f"invalid: {str(e)}"
+            logging.warning("Grok key check failed: %s", e)
+            results["Grok"] = "invalid"
             
-        return results
+        return {"results": results}
         
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error checking keys: {str(e)}")
+        logging.exception("Error checking API keys")
+        raise HTTPException(status_code=500, detail="Error checking API keys.")

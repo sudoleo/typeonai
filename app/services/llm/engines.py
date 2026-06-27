@@ -48,7 +48,7 @@ def _error(provider: str, error: Exception | str):
         "text": "",
         "sources": [],
         "error": f"{provider} could not complete this request. Please try again later.",
-        "error_detail": error_text,
+        "error_code": "provider_request_failed",
     }
 
 
