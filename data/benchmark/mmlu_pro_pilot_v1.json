@@ -1,0 +1,21 @@
+{
+  "version": "mmlu_pro_pilot_v1",
+  "source_repo": "TIGER-Lab/MMLU-Pro",
+  "seed": 20260627,
+  "count": 5,
+  "question_ids": [
+    754,
+    1714,
+    8311,
+    9891,
+    11800
+  ],
+  "categories": {
+    "business": 1,
+    "engineering": 1,
+    "law": 1,
+    "math": 1,
+    "physics": 1
+  },
+  "role": "pilot"
+}

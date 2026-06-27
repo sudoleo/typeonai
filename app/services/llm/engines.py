@@ -115,6 +115,7 @@ def _openai_responses_payload(
     max_tokens: int,
     request_config: dict | None = None,
     native_attachments: list[dict] | None = None,
+    benchmark_mode: bool = False,
 ) -> dict:
     payload = {
         "model": model,
@@ -123,11 +124,14 @@ def _openai_responses_payload(
             _responses_input_with_attachments(question, native_attachments)
             if native_attachments else question
         ),
-        "tools": [{"type": "web_search"}],
-        "tool_choice": "auto",
-        "include": ["web_search_call.action.sources"],
         "max_output_tokens": max_tokens,
     }
+    if not benchmark_mode:
+        # Closed-book Benchmark-Läufe (benchmark_mode) lassen das Web-Such-Tool weg;
+        # die normale App injiziert es weiterhin.
+        payload["tools"] = [{"type": "web_search"}]
+        payload["tool_choice"] = "auto"
+        payload["include"] = ["web_search_call.action.sources"]
     if request_config:
         payload.update(request_config)
     return payload
@@ -174,6 +178,7 @@ def build_provider_payload(
     deep_search: bool = False,
     max_output_tokens: int | None = None,
     attachments: list[dict] | None = None,
+    benchmark_mode: bool = False,
 ) -> dict:
     if system_prompt is None:
         system_prompt = get_system_prompt()
@@ -207,6 +212,7 @@ def build_provider_payload(
             max_tokens=max_tokens,
             request_config=request_config,
             native_attachments=native_attachments,
+            benchmark_mode=benchmark_mode,
         )
         return {
             "provider": "openai",
@@ -230,20 +236,22 @@ def build_provider_payload(
         }
         if api_model in cfg.MISTRAL_REASONING_MODELS:
             completion_args["reasoning_effort"] = "high"
+        mistral_payload = {
+            "model": api_model,
+            "instructions": system_prompt,
+            "inputs": question,
+            "completion_args": completion_args,
+            "store": False,
+        }
+        if not benchmark_mode:
+            mistral_payload["tools"] = [{"type": "web_search"}]
         return {
             "provider": "mistral",
             "endpoint": "conversations",
             "internal_model": internal_model,
             "api_model": api_model,
             "is_low_reasoning": False,
-            "payload": {
-                "model": api_model,
-                "instructions": system_prompt,
-                "inputs": question,
-                "tools": [{"type": "web_search"}],
-                "completion_args": completion_args,
-                "store": False,
-            },
+            "payload": mistral_payload,
         }
 
     if provider_key == "anthropic":
@@ -265,12 +273,13 @@ def build_provider_payload(
                     if native_attachments else question
                 ),
             }],
-            "tools": [{
+        }
+        if not benchmark_mode:
+            payload["tools"] = [{
                 "type": "web_search_20250305",
                 "name": "web_search",
                 "max_uses": 5,
-            }],
-        }
+            }]
         if model_config and model_config.is_low_reasoning:
             _merge_nested_config(payload, model_config.low_config)
         return {
@@ -299,7 +308,6 @@ def build_provider_payload(
                 "role": "user",
                 "parts": _gemini_parts_with_attachments(gemini_question_text, native_attachments),
             }],
-            "tools": [{"google_search": {}}],
             "generationConfig": {
                 "maxOutputTokens": max_tokens,
                 "temperature": 0.2,
@@ -309,6 +317,8 @@ def build_provider_payload(
                 "threshold": "BLOCK_ONLY_HIGH",
             }],
         }
+        if not benchmark_mode:
+            payload["tools"] = [{"google_search": {}}]
         if model_config and model_config.is_low_reasoning:
             _merge_nested_config(payload, model_config.low_config)
         return {
@@ -361,6 +371,7 @@ def build_provider_payload(
             max_tokens=max_tokens,
             request_config=request_config,
             native_attachments=native_attachments,
+            benchmark_mode=benchmark_mode,
         )
         return {
             "provider": "grok",

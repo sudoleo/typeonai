@@ -1,0 +1,8 @@
+# Benchmark-only Dev-Dependencies (NICHT in der Produktions-requirements.txt).
+# Das benchmark/-Paket ist ein isoliertes Offline-Tool; die Produktion und das
+# Render-Image bleiben unveraendert. Lokal installieren mit:
+#   pip install -r benchmark/requirements-benchmark.txt
+#
+# huggingface-hub und pandas sind bereits in der Haupt-requirements.txt vorhanden;
+# fuer das Lesen der MMLU-Pro-Parquets fehlt nur ein Parquet-Engine:
+pyarrow==21.0.0

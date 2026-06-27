@@ -6,6 +6,12 @@ __pycache__/
 *json
 consensai-firebase-adminsdk-fbsvc-9064a77134.json
 
+# Benchmark: Run-Outputs bleiben lokal, die eingefrorenen Sample-Manifeste
+# werden committet (E3) – trotz der globalen *json-Regel oben.
+data/benchmark/runs/
+!data/benchmark/mmlu_pro_pilot_v1.json
+!data/benchmark/mmlu_pro_sample_v1.json
+
 # Recording assets and local video generation tooling
 recordings/
 recording/
