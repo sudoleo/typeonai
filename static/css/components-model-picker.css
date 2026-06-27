@@ -847,10 +847,6 @@ option.early-option {
     text-align: center;
   }
 
-  .consensus-controls {
-    gap: 8px;
-  }
-
   #consensusButton {
     padding: 7px 10px;
     font-size: 0.82rem;

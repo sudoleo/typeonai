@@ -1122,21 +1122,6 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   opacity: 0.8;
 }
 
-.consensus-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0 0 8px;
-}
-
-.consensus-controls .tooltip {
-  flex: 0 0 auto;
-}
-
 #consensusButton {
   display: inline-flex;
   align-items: center;
