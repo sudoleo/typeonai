@@ -119,6 +119,14 @@ class TransportTests(unittest.TestCase):
         transport.execute(self._request_data("anthropic"), "secret", http_post=post)
         self.assertEqual(captured["headers"]["x-api-key"], "secret")
 
+    def test_gemini_key_path_does_not_use_adc(self):
+        captured = {}
+        raw = CANONICAL["gemini"][0]
+        post = make_post(captured, FakeResponse(raw))
+        transport.execute(self._request_data("gemini"), "secret", http_post=post)
+        self.assertEqual(captured["params"], {"key": "secret"})
+        self.assertNotIn("Authorization", captured["headers"])
+
     def test_http_error_is_structured(self):
         post = make_post({}, FakeResponse({}, status_code=500))
         result = transport.execute(self._request_data("openai"), "k", http_post=post)
@@ -133,6 +141,24 @@ class TransportTests(unittest.TestCase):
         result = transport.execute(self._request_data("openai"), "k", http_post=boom)
         self.assertEqual(result["error_code"], "transport_request_failed")
         self.assertIn("network down", result["error"])
+
+
+def test_gemini_adc_fallback_when_no_key(monkeypatch):
+    """Ohne Gemini-Key: ADC-Bearer-Header statt ?key= – wie in Produktion.
+    Die ADC-Funktion wird gemockt (kein echter Token-Refresh, kein HTTP)."""
+    monkeypatch.setattr(
+        transport, "_gemini_adc_headers",
+        lambda: {"Authorization": "Bearer adc-token", "Content-Type": "application/json"},
+    )
+    captured = {}
+    raw = CANONICAL["gemini"][0]
+    post = make_post(captured, FakeResponse(raw))
+    result = transport.execute(
+        {"provider": "gemini", "api_model": "m", "payload": {}}, None, http_post=post
+    )
+    assert result["error"] is None
+    assert captured["params"] is None
+    assert captured["headers"]["Authorization"] == "Bearer adc-token"
 
 
 if __name__ == "__main__":

@@ -263,7 +263,7 @@ class BenchmarkRunner:
         if consensus_fn is None:
             consensus_fn = _default_consensus_fn(api_keys, self.consensus_model)
 
-        self._write_manifest_if_missing(run_dir)
+        self.write_or_validate_manifest(run_dir)
 
         result = RunResult(run_id=run_id, spent_usd=spent)
 
@@ -469,12 +469,10 @@ class BenchmarkRunner:
         result.stopped = True
         result.stop_reason = f"budget cap ${budget} would be exceeded before {where}"
 
-    def _write_manifest_if_missing(self, run_dir: Path) -> None:
-        manifest_path = run_dir / "manifest.json"
-        if manifest_path.exists():
-            return
-        manifest = {
-            "run_id": run_dir.name,
+    def build_manifest(self, run_id: str) -> dict:
+        """Eingefrorene Run-Config (E6). Enthaelt **keine** Secrets."""
+        return {
+            "run_id": run_id,
             "created": _now_iso(),
             "label_mode": self.label_mode,
             "include_synth_alone": self.include_synth_alone,
@@ -485,21 +483,79 @@ class BenchmarkRunner:
             "models": config.resolve_pins(),
             "pricing_usd_per_1m": config.PRICING_USD_PER_1M,
         }
+
+    # Felder, die beim Resume mit dem bestehenden Manifest uebereinstimmen
+    # muessen (eingefrorene Config, E6).
+    _MANIFEST_FROZEN_FIELDS = (
+        "label_mode", "include_synth_alone", "consensus_model",
+        "temperature", "output_token_limit", "system_prompt", "models",
+    )
+
+    def write_or_validate_manifest(self, run_dir: Path) -> dict:
+        """Schreibt das Manifest beim ersten Lauf; beim Resume wird das
+        bestehende Manifest gegen die aktuelle Config geprueft und bei Drift in
+        eingefrorenen Feldern abgebrochen (E6)."""
+        run_dir = Path(run_dir)
         run_dir.mkdir(parents=True, exist_ok=True)
-        manifest_path.write_text(
-            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-        )
+        manifest_path = run_dir / "manifest.json"
+        current = self.build_manifest(run_dir.name)
+
+        if not manifest_path.exists():
+            manifest_path.write_text(
+                json.dumps(current, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
+            return current
+
+        existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+        drifted = [
+            field
+            for field in self._MANIFEST_FROZEN_FIELDS
+            if existing.get(field) != current.get(field)
+        ]
+        if drifted:
+            raise RuntimeError(
+                f"Run config drifted from frozen manifest {manifest_path} in: {', '.join(drifted)}"
+            )
+        return existing
 
 
 def _now_iso() -> str:
     return _dt.datetime.now(_dt.timezone.utc).isoformat()
 
 
-def _redact_payload(payload):
-    """Request-Payload fuer die JSONL-Ablage. Die Payloads tragen keine Secrets
-    (API-Keys stehen in Headern/Params, nicht im Body); hier wird der Payload
-    unveraendert uebernommen."""
-    return payload
+# Feld-Namen, deren Werte als Secret behandelt und redigiert werden.
+_SECRET_MARKERS = (
+    "authorization", "api_key", "apikey", "api-key", "x-api-key",
+    "token", "bearer", "secret", "password", "credential",
+)
+# Keys, die komplett rausfliegen (Header-Bloecke landen ohnehin nicht im Body,
+# werden aber defensiv entfernt).
+_DROP_KEYS = ("headers", "header")
+_REDACTED = "[REDACTED]"
+
+
+def _is_secret_key(key: str) -> bool:
+    lowered = str(key).lower()
+    return any(marker in lowered for marker in _SECRET_MARKERS)
+
+
+def _redact_payload(value):
+    """Rekursive Redaction fuer die JSONL-Ablage: typische Secret-Felder
+    (Authorization/api_key/x-api-key/token/bearer/...) und ganze Header-Bloecke
+    werden durch ``[REDACTED]`` ersetzt. Die produktiven Payloads tragen zwar
+    keine Secrets im Body (Keys stehen in Headern/Params), aber die Redaction
+    stellt das auch bei kuenftigen Aenderungen sicher (Pflicht, kein No-op)."""
+    if isinstance(value, dict):
+        out = {}
+        for key, sub in value.items():
+            if str(key).lower() in _DROP_KEYS or _is_secret_key(key):
+                out[key] = _REDACTED
+            else:
+                out[key] = _redact_payload(sub)
+        return out
+    if isinstance(value, (list, tuple)):
+        return [_redact_payload(item) for item in value]
+    return value
 
 
 def _default_consensus_fn(api_keys: dict, consensus_model: str):

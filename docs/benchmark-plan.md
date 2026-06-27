@@ -467,6 +467,22 @@ aktiv); Test 6 (anonymize) noch nicht gebaut (Audit-Modus ist Phase 3).
 `--dry-run` liefert Kostenprojektion + Tool-Audit grün (Pilot ≈ \$2.23,
 Final ≈ \$43.69, Schätzungen). **Kein echter Call ausgeführt.**
 
+**Phase 2.5a — Pilot-Startfähigkeit ohne Live-Run:** *(umgesetzt, Stand 2026-06-28.)*
+Neue import-sichere Helper-Schicht `app/services/llm/credentials.py` (einzige
+Quelle der `DEVELOPER_*_API_KEY`-Namen; reuse der produktiven ADC-Funktion
+`engines._google_adc_headers`) — **kein** Router-Eingriff, Produktion unverändert.
+CLI erweitert: `--pilot --run-id --resume --budget --live`; legt deterministisch
+`data/benchmark/runs/<run_id>/` an, schreibt/validiert das Manifest (Drift-Abbruch
+bei eingefrorenen Feldern, E6). Ohne `--live`: sichere Dry-Run-Vorschau, **kein**
+HTTP. Mit `--live`: Credential-Check aller 6 Provider (fehlende → Abbruch mit
+Liste, **vor** jedem Call), Gemini per Key **oder** ADC; danach Preflight
+(Audit + Projektion). Die echte Ausführung bleibt **bewusst gesperrt**
+(`LIVE_EXECUTION_ENABLED = False`) und löst selbst keinen HTTP-Call aus.
+`transport` unterstützt jetzt den Gemini-ADC-Fallback. `_redact_payload` ist
+**kein No-op** mehr: rekursive Redaction von Authorization/api_key/x-api-key/token/
+bearer + Header-Blöcken → keine Secrets in JSONL/Manifest. Gesamt-Suite 210 passed
+(62 Benchmark-Tests). **Weiterhin kein echter Call ausgeführt.**
+
 **Phase 3 — 5-Fragen-Pilot (separates Sample):** `--pilot --budget <klein>` über
 das eigenständige Pilot-Sample; Hauptpfad (Modellnamen) plus **optionaler
 anonymisierter Audit-Modus** (E5: gleiche gespeicherte Antworten, einmal Namen /

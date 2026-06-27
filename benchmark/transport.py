@@ -57,22 +57,28 @@ def _url(provider: str, request_data: dict) -> str:
     raise ValueError(f"Unsupported provider for transport: {provider}")
 
 
-def _headers(provider: str, api_key: str) -> dict:
+def _gemini_adc_headers() -> dict:
+    """ADC-Bearer-Header fuer Gemini (Live-Pfad). In Tests gemockt – wird nur
+    aufgerufen, wenn fuer Gemini **kein** API-Key vorliegt."""
+    from app.services.llm.credentials import gemini_adc_headers
+
+    return gemini_adc_headers()
+
+
+def _auth_for(provider: str, api_key: str | None) -> tuple[dict, dict | None]:
+    """Liefert (headers, params) je Provider. Gemini nutzt den API-Key in den
+    Query-Params; ohne Key faellt es – wie die Produktion – auf ADC-Header zurueck."""
     if provider == "anthropic":
         return {
             "x-api-key": api_key,
             "Content-Type": "application/json",
             "anthropic-version": "2023-06-01",
-        }
+        }, None
     if provider == "gemini":
-        return {"Content-Type": "application/json"}
-    return _bearer(api_key)
-
-
-def _params(provider: str, api_key: str) -> dict | None:
-    if provider == "gemini" and api_key:
-        return {"key": api_key}
-    return None
+        if api_key:
+            return {"Content-Type": "application/json"}, {"key": api_key}
+        return _gemini_adc_headers(), None
+    return _bearer(api_key), None
 
 
 def parse_text_and_sources(provider: str, raw: dict) -> tuple[str, list]:
@@ -160,8 +166,7 @@ def execute(
     post = http_post or requests.post
 
     url = _url(provider, request_data)
-    headers = _headers(provider, api_key)
-    params = _params(provider, api_key)
+    headers, params = _auth_for(provider, api_key)
 
     started = time.perf_counter()
     try:
