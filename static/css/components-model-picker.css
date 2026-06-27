@@ -131,45 +131,6 @@
   outline: none;
 }
 
-.model-picker-wrapper select.model-picker-expanded {
-  inset: auto auto auto 0;
-  top: calc(100% + 8px);
-  width: 286px;
-  max-width: min(286px, 82vw);
-  height: auto;
-  min-height: 0;
-  padding: 7px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 72%, transparent);
-  border-radius: var(--radius-md);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.58)),
-    color-mix(in srgb, var(--container-bg) 94%, #ffffff 6%);
-  color: var(--text-color);
-  box-shadow: 0 14px 36px rgba(46, 61, 79, 0.12), 0 2px 8px rgba(46, 61, 79, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  appearance: auto;
-  cursor: default;
-  font-size: 0.84rem;
-  line-height: 1.3;
-}
-
-.model-picker-wrapper select option {
-  color: var(--text-color);
-  background: var(--container-bg);
-  padding: 8px 10px;
-  min-height: 30px;
-  font-weight: 500;
-}
-
-.model-picker-wrapper select option:checked {
-  color: var(--text-color);
-  background: color-mix(in srgb, var(--accent) 14%, var(--container-bg));
-}
-
-.model-picker-wrapper select option:hover,
-.model-picker-wrapper select option:focus {
-  background: color-mix(in srgb, var(--accent) 8%, var(--sidebar-hover));
-}
-
 .custom-model-picker {
   position: relative;
 }
@@ -380,38 +341,6 @@
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
   outline: none;
-}
-
-option.premium-option {
-  color: color-mix(in srgb, var(--text-color) 82%, var(--accent));
-  background-color: color-mix(in srgb, var(--container-bg) 92%, var(--accent) 8%);
-  font-weight: 600;
-}
-
-option.premium-option:disabled {
-  color: color-mix(in srgb, var(--sidebar-text-muted) 84%, var(--accent)) !important;
-  background-color: color-mix(in srgb, var(--container-bg) 94%, var(--accent) 6%) !important;
-}
-
-option.early-option {
-  color: color-mix(in srgb, var(--text-color) 88%, #0f766e 12%);
-  background-color: color-mix(in srgb, var(--container-bg) 94%, #14b8a6 6%);
-  font-weight: 600;
-}
-
-.dark-mode option.premium-option {
-  color: color-mix(in srgb, var(--text-color) 82%, var(--accent));
-  background-color: color-mix(in srgb, var(--container-bg) 90%, var(--accent) 10%);
-}
-
-.dark-mode option.premium-option:disabled {
-  color: color-mix(in srgb, var(--sidebar-text-muted) 82%, var(--accent)) !important;
-  background-color: color-mix(in srgb, var(--container-bg) 92%, var(--accent) 8%) !important;
-}
-
-.dark-mode option.early-option {
-  color: color-mix(in srgb, var(--text-color) 88%, #5eead4 12%);
-  background-color: color-mix(in srgb, var(--container-bg) 91%, #14b8a6 9%);
 }
 
 .agent-mode-control,
