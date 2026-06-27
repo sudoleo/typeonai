@@ -1,0 +1,415 @@
+/* --------------------------------------------------------------------------
+   Collapsible
+   -------------------------------------------------------------------------- */
+.collapsible-content {
+  max-height: 1000px;
+  overflow-y: auto;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  padding: 8px;
+  background-color: transparent;
+  border-radius: 4px;
+  margin-top: 5px;
+  font-size: 0.9em;
+}
+
+.source-link {
+  display: inline-flex;
+  align-items: center;
+  max-width: min(180px, 100%);
+  margin: 0 2px;
+  padding: 1px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: color-mix(in srgb, var(--accent) 70%, var(--text-color));
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.45;
+  text-decoration: none;
+  vertical-align: baseline;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 36%, transparent);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.source-link:hover,
+.source-link:focus-visible {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: color-mix(in srgb, var(--accent) 50%, var(--text-color));
+  text-decoration: none;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 40%, transparent), 0 3px 9px color-mix(in srgb, var(--accent) 11%, transparent);
+  opacity: 1;
+}
+
+.source-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.dark-mode .source-link {
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: color-mix(in srgb, var(--accent) 70%, var(--text-color));
+}
+
+.dark-mode .source-link:hover,
+.dark-mode .source-link:focus-visible {
+  background: color-mix(in srgb, var(--accent) 17%, transparent);
+}
+
+.source-list-cluster {
+  display: block;
+  width: min(100%, 580px);
+  margin: 8px 0 12px;
+  padding: 0;
+  color: var(--text-color);
+}
+
+.source-list-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 2px 0;
+  color: var(--sidebar-text-muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.35;
+  cursor: pointer;
+  list-style: none;
+}
+
+.source-list-summary::-webkit-details-marker {
+  display: none;
+}
+
+.source-list-summary::after {
+  content: "show";
+  color: color-mix(in srgb, var(--accent) 76%, var(--text-color));
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.source-list-cluster[open] .source-list-summary::after {
+  content: "hide";
+}
+
+.source-list {
+  display: grid;
+  gap: 6px;
+  max-height: 260px;
+  margin: 6px 0 0;
+  padding: 0 0 0 20px;
+  overflow: auto;
+  color: var(--sidebar-text-muted);
+  font-size: 0.82rem;
+}
+
+.source-list-item {
+  padding-left: 2px;
+}
+
+.source-list-link {
+  color: color-mix(in srgb, var(--text-color) 90%, var(--accent));
+  font-weight: 600;
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.source-list-link:hover,
+.source-list-link:focus-visible {
+  color: var(--text-color);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  text-underline-offset: 2px;
+}
+
+.source-list-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.source-list-meta {
+  display: inline-block;
+  margin-left: 8px;
+  color: var(--sidebar-text-muted);
+  font-size: 0.74rem;
+  font-weight: 500;
+}
+
+.collapsible-content.collapsed {
+  max-height: 0;
+  opacity: 0;
+  padding: 0 8px;
+  margin-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.collapse-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  opacity: 0.6;
+  cursor: pointer;
+  transition: opacity .15s ease, transform .12s ease;
+  position: relative;
+  overflow: visible;
+}
+
+.collapse-btn:hover {
+  opacity: 0.9;
+  transform: translateY(0.5px);
+}
+
+.collapse-btn .arrow {
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-color);
+  transition: transform .2s ease, opacity .15s ease;
+  position: relative;
+  z-index: 1;
+  margin-left: -5px;
+  margin-top: -2px;
+}
+
+.collapse-btn .arrow.rotated {
+  transform: rotate(-90deg);
+  opacity: 0.9;
+}
+
+header .sidebar-toggle.collapse-btn {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+}
+
+/* --------------------------------------------------------------------------
+   Checkboxes
+   -------------------------------------------------------------------------- */
+.custom-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.custom-checkbox-label input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--checkbox-border);
+  border-radius: 4px;
+  transition: background-color 0.3s, border-color 0.3s;
+  position: relative;
+}
+
+.custom-checkbox-label input[type="checkbox"]:checked {
+  background-color: var(--checkbox-checked);
+  border-color: var(--checkbox-checked);
+}
+
+.custom-checkbox-label input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 4px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* --------------------------------------------------------------------------
+   Badges & Chips
+   -------------------------------------------------------------------------- */
+.cred-badge {
+  display: inline-block;
+  padding: 2px 7px 3px;
+  border-radius: var(--radius-sm);
+  font-weight: 650;
+  font-size: 0.86rem;
+  line-height: 1.28;
+  border: 1px solid var(--cred-border);
+  background: var(--cred-bg);
+  color: var(--cred-fg);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.cred-badge:hover {
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--cred-fg) 28%, transparent);
+}
+
+.cred-very {
+  --cred-bg: rgba(47, 143, 78, 0.11);
+  --cred-border: rgba(47, 143, 78, 0.18);
+  --cred-fg: #196a35;
+  --cred-frame: #2f8f4e;
+  --cred-frame-wash: rgba(47, 143, 78, 0.09);
+}
+
+.cred-largely {
+  --cred-bg: rgba(79, 159, 98, 0.10);
+  --cred-border: rgba(79, 159, 98, 0.16);
+  --cred-fg: #2e7d32;
+  --cred-frame: #4f9f62;
+  --cred-frame-wash: rgba(79, 159, 98, 0.085);
+}
+
+.cred-partially {
+  --cred-bg: rgba(194, 138, 44, 0.12);
+  --cred-border: rgba(194, 138, 44, 0.20);
+  --cred-fg: #8a4f00;
+  --cred-frame: #c28a2c;
+  --cred-frame-wash: rgba(194, 138, 44, 0.095);
+}
+
+.cred-hardly {
+  --cred-bg: rgba(198, 90, 95, 0.12);
+  --cred-border: rgba(198, 90, 95, 0.20);
+  --cred-fg: #c62828;
+  --cred-frame: #c65a5f;
+  --cred-frame-wash: rgba(198, 90, 95, 0.09);
+}
+
+.cred-not {
+  --cred-bg: rgba(184, 66, 66, 0.12);
+  --cred-border: rgba(184, 66, 66, 0.20);
+  --cred-fg: #b71c1c;
+  --cred-frame: #b84242;
+  --cred-frame-wash: rgba(184, 66, 66, 0.095);
+}
+
+.dark-mode .cred-very {
+  --cred-bg: rgba(99, 201, 133, 0.12);
+  --cred-border: rgba(99, 201, 133, 0.22);
+  --cred-fg: #7bd597;
+  --cred-frame: #63c985;
+  --cred-frame-wash: rgba(99, 201, 133, 0.11);
+}
+
+.dark-mode .cred-largely {
+  --cred-bg: rgba(141, 215, 154, 0.11);
+  --cred-border: rgba(141, 215, 154, 0.20);
+  --cred-fg: #98e3a6;
+  --cred-frame: #8dd79a;
+  --cred-frame-wash: rgba(141, 215, 154, 0.10);
+}
+
+.dark-mode .cred-partially {
+  --cred-bg: rgba(225, 177, 96, 0.12);
+  --cred-border: rgba(225, 177, 96, 0.22);
+  --cred-fg: #ffcf7a;
+  --cred-frame: #e1b160;
+  --cred-frame-wash: rgba(225, 177, 96, 0.11);
+}
+
+.dark-mode .cred-hardly {
+  --cred-bg: rgba(231, 127, 131, 0.12);
+  --cred-border: rgba(231, 127, 131, 0.22);
+  --cred-fg: #ff9a9a;
+  --cred-frame: #e77f83;
+  --cred-frame-wash: rgba(231, 127, 131, 0.11);
+}
+
+.dark-mode .cred-not {
+  --cred-bg: rgba(225, 111, 111, 0.12);
+  --cred-border: rgba(225, 111, 111, 0.22);
+  --cred-fg: #ff8080;
+  --cred-frame: #e16f6f;
+  --cred-frame-wash: rgba(225, 111, 111, 0.11);
+}
+
+.demo-chip {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 34px;
+  padding: 0 15px 0 7px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  color: var(--button-text);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--button-bg) 92%, var(--accent) 8%), var(--button-bg));
+  border: 1px solid color-mix(in srgb, var(--button-bg) 80%, white 20%);
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+  z-index: 5;
+  transition: transform .18s ease, box-shadow .22s ease, border-color .22s ease, background .22s ease;
+  box-shadow:
+    0 1px 1px color-mix(in srgb, var(--button-bg) 28%, transparent),
+    0 6px 16px color-mix(in srgb, var(--button-bg) 14%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 15%, transparent);
+  animation: demoChipIn .42s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+/* Play glyph — a crisp, recognizable demo affordance. Drawn in the chip's own
+   text color so it stays legible in both light and dark themes. */
+.demo-chip::before {
+  content: "";
+  flex: none;
+  width: 0;
+  height: 0;
+  margin-left: 2px;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 8px solid currentColor;
+  border-radius: 1px;
+}
+
+.demo-chip:hover {
+  transform: translateY(calc(-50% - 1px));
+  border-color: color-mix(in srgb, var(--button-bg) 64%, white 36%);
+  box-shadow:
+    0 2px 3px color-mix(in srgb, var(--button-bg) 24%, transparent),
+    0 10px 24px color-mix(in srgb, var(--button-bg) 20%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 20%, transparent);
+}
+
+.demo-chip:active {
+  transform: translateY(-50%);
+  box-shadow:
+    0 1px 1px color-mix(in srgb, var(--button-bg) 28%, transparent),
+    inset 0 1px 2px color-mix(in srgb, var(--button-bg) 30%, transparent);
+}
+
+.demo-chip:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent),
+    0 6px 16px color-mix(in srgb, var(--button-bg) 14%, transparent);
+}
+
+.chat-input-container.has-question-input .demo-chip,
+.demo-chip[hidden] {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) scale(.96);
+}
+

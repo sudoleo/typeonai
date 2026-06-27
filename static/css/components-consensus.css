@@ -1,0 +1,1310 @@
+/* --------------------------------------------------------------------------
+   Response & Consensus Boxes
+   -------------------------------------------------------------------------- */
+.response-section {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  position: relative;
+}
+
+.response-section:has(.response-box.excluded)::after {
+  content: "";
+  order: 9;
+  flex: 0 0 100%;
+  height: 0;
+}
+
+.response-section:has(.response-box.excluded) {
+  justify-content: flex-start;
+}
+
+.response-box,
+.consensus-box {
+  flex: 1;
+  min-width: 280px;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  transition: background 0.3s, box-shadow 0.3s, border 0.3s, transform 0.3s;
+  position: relative;
+  isolation: isolate;
+}
+
+/* Response cards are frameless — no background, border, shadow or blur.
+   They live directly on the app canvas; only their header divider remains. */
+.response-box {
+  overflow: hidden;
+  will-change: transform;
+  padding: 4px 6px 14px;
+}
+
+.response-box:not(.excluded) {
+  min-height: 104px;
+}
+
+.consensus-box::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 56%, transparent), transparent 38%),
+    linear-gradient(120deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 42%, color-mix(in srgb, var(--accent-tertiary) 4%, transparent));
+  opacity: 0.66;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Exactly two response cards per row (never three), regardless of width.
+   Narrow viewports still collapse to one column via the 280px min-width. */
+.response-section > .response-box:not(.excluded) {
+  flex: 1 1 calc((100% - 15px) / 2);
+  max-width: calc((100% - 15px) / 2);
+  box-sizing: border-box;
+}
+
+/* Einspaltig: Boxen nehmen die volle verfügbare Breite ein (nicht nur ~50%). */
+@media (max-width: 600px) {
+  .response-section > .response-box:not(.excluded) {
+    flex: 1 1 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+}
+
+.agent-mode-panel {
+  display: none;
+  flex: 1 1 100%;
+  min-width: 280px;
+  padding: 16px 18px;
+  background:
+    linear-gradient(140deg, color-mix(in srgb, var(--glass-bg-strong) 66%, var(--accent) 8%), color-mix(in srgb, var(--glass-bg) 86%, transparent)),
+    var(--response-bg);
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--card-shadow);
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  z-index: 2;
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.8)) saturate(1.25);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.8)) saturate(1.25);
+}
+
+.agent-mode-panel:has(.model-picker-menu.is-open) {
+  overflow: visible;
+  z-index: 1500;
+}
+
+.agent-mode-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(110deg, transparent 0%, color-mix(in srgb, var(--glass-highlight) 36%, transparent) 24%, transparent 47%),
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--button-bg) 8%, transparent), transparent);
+  opacity: 0;
+  transform: translateX(-20%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.agent-mode-panel:has(.model-picker-menu.is-open)::before {
+  animation: none;
+  opacity: 0;
+}
+
+.agent-mode-enabled .response-section > .response-box {
+  display: none;
+}
+
+.agent-mode-enabled .agent-mode-panel {
+  display: block;
+}
+
+.agent-mode-transitioning.agent-mode-enabled .agent-mode-panel {
+  animation: agentPanelIn 0.32s cubic-bezier(0.2, 0, 0, 1);
+}
+
+body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .response-box {
+  animation: modelBoxesIn 0.28s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.agent-mode-running .agent-mode-panel::before {
+  animation: agentModeSweep 2.8s ease-in-out infinite;
+  opacity: 1;
+}
+
+.agent-mode-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.agent-mode-kicker {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--sidebar-text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.agent-mode-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+
+.agent-mode-metrics {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.agent-mode-count {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent);
+  border-radius: 999px;
+  color: var(--sidebar-text-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--glass-bg-strong) 78%, transparent);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+.agent-mode-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  position: relative;
+  z-index: 30;
+}
+
+@media (min-width: 900px) {
+  .agent-mode-models {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, max-content));
+    align-items: start;
+    justify-content: start;
+  }
+
+  .agent-mode-models .agent-mode-chip {
+    max-width: min(100%, 320px);
+  }
+}
+
+.agent-mode-chip {
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px 5px 9px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent);
+  border-radius: 999px;
+  background: var(--chip-bg);
+  color: var(--text-color);
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.15;
+  overflow: visible;
+  position: relative;
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .12s ease;
+  box-shadow: var(--chip-shadow);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.45)) saturate(1.16);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.45)) saturate(1.16);
+}
+
+.agent-mode-chip-label {
+  flex: 0 0 auto;
+  max-width: 88px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-mode-chip-model {
+  min-width: 0;
+  max-width: 155px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--sidebar-text-muted);
+  font-weight: 600;
+}
+
+.agent-mode-chip:hover,
+.agent-mode-chip:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--sidebar-border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--container-bg));
+  box-shadow: var(--chip-shadow-active), 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent), inset 0 1px 0 var(--glass-highlight);
+}
+
+.agent-mode-chip:active {
+  transform: translateY(1px);
+}
+
+.agent-mode-picker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.agent-mode-picker:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+  opacity: 0.02;
+}
+
+.agent-mode-chip.is-enhanced {
+  z-index: 2;
+}
+
+.agent-mode-chip.is-open,
+.agent-mode-chip.is-expanded {
+  z-index: 1400;
+}
+
+.agent-mode-chip.is-enhanced .agent-mode-picker.native-model-picker {
+  pointer-events: none;
+}
+
+.agent-mode-chip .model-picker-display {
+  max-width: min(190px, 42vw);
+  min-height: 18px;
+  padding: 0 16px 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 650;
+  line-height: 1.1;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  position: relative;
+}
+
+.agent-mode-chip .model-picker-display::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 4px solid var(--sidebar-text-muted);
+  transform: translateY(-45%);
+}
+
+.agent-mode-chip .model-picker-menu {
+  top: calc(100% + 8px);
+  z-index: 1500;
+}
+
+.agent-mode-animation {
+  display: none;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  margin-top: 15px;
+  position: relative;
+  z-index: 1;
+}
+
+.agent-mode-running .agent-mode-animation {
+  display: flex;
+}
+
+.agent-mode-animation span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--button-bg) 78%, var(--text-color) 22%);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--button-bg) 22%, transparent);
+  animation: agentModePulse 1.15s ease-in-out infinite;
+}
+
+.agent-mode-animation span:nth-child(2) {
+  animation-delay: 0.14s;
+}
+
+.agent-mode-animation span:nth-child(3) {
+  animation-delay: 0.28s;
+}
+
+.agent-mode-animation span:nth-child(4) {
+  animation-delay: 0.42s;
+}
+
+.agent-mode-status {
+  margin-top: 12px;
+  color: var(--sidebar-text-muted);
+  font-size: 0.86rem;
+  line-height: 1.35;
+  position: relative;
+  z-index: 1;
+}
+
+.agent-mode-timer {
+  display: none;
+  align-items: center;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--glass-bg-strong) 78%, transparent);
+  color: var(--sidebar-text-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  position: relative;
+  z-index: 1;
+}
+
+.agent-mode-timer.is-visible {
+  display: inline-flex;
+}
+
+.agent-mode-running .agent-mode-timer {
+  color: var(--button-bg);
+  border-color: color-mix(in srgb, var(--button-bg) 34%, var(--sidebar-border));
+  background: color-mix(in srgb, var(--button-bg) 8%, var(--glass-bg-strong));
+}
+
+.dark-mode .agent-mode-panel {
+  background:
+    linear-gradient(140deg, color-mix(in srgb, var(--response-bg) 82%, var(--accent) 8%), color-mix(in srgb, var(--glass-bg) 88%, transparent)),
+    var(--container-bg);
+}
+
+@keyframes agentModePulse {
+  0%, 100% {
+    transform: translateY(0) scale(0.86);
+    opacity: 0.48;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--button-bg) 18%, transparent);
+  }
+  45% {
+    transform: translateY(-5px) scale(1);
+    opacity: 1;
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--button-bg) 0%, transparent);
+  }
+}
+
+@keyframes agentModeSweep {
+  0%, 100% {
+    transform: translateX(-22%);
+  }
+  50% {
+    transform: translateX(18%);
+  }
+}
+
+@keyframes agentPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes modelBoxesIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.response-box:has(.model-picker-wrapper.is-expanded) {
+  overflow: visible;
+  z-index: 40;
+}
+
+/* Subtle, frameless hover affordance instead of a lifted card frame. */
+.response-box:hover {
+  background: color-mix(in srgb, var(--glass-bg-soft) 38%, transparent);
+  border-radius: var(--radius-md);
+}
+
+/* Excluded answers collapse to a small "set aside" pill so they stay legible
+   on the frameless canvas. */
+.response-box.excluded {
+  order: 10;
+  flex: 0 1 96px;
+  min-width: 88px;
+  max-width: 104px;
+  min-height: 0;
+  padding: 5px 10px;
+  opacity: 0.72;
+  background: color-mix(in srgb, var(--glass-bg-soft) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--glass-border) 55%, var(--glass-edge));
+  border-radius: var(--radius-pill);
+}
+
+.response-box h2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin: 2px 0 8px;
+  padding: 0 0 9px;
+  border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 52%, transparent);
+  font-size: 0.94rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.response-box.excluded h2 {
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+  padding: 0;
+  border-bottom: 0;
+  line-height: 1.1;
+}
+
+.response-box .title {
+  font-weight: 650;
+  text-align: left;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+/* Modellname im Antwort-Header: schlichter Text ohne Chip-Rahmen */
+.response-box .title small {
+  font-weight: 650;
+  font-size: 0.66rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: var(--sidebar-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+}
+
+.response-box.excluded .collapsible-content {
+  display: none;
+}
+
+.response-box.excluded h2::before {
+  content: attr(data-short-label);
+  display: block;
+  max-width: calc(100% - 22px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--sidebar-text-muted);
+  pointer-events: none;
+}
+
+.response-box.excluded .title small,
+.response-box.excluded .model-picker-wrapper {
+  display: none !important;
+}
+
+.response-box.excluded .title {
+  display: none;
+}
+
+.control-icons {
+  display: flex;
+  align-items: flex-start;
+  align-self: flex-start;
+  gap: 6px;
+  margin-right: 0;
+  padding-top: 0;
+  line-height: 1;
+}
+
+.exclude-btn {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  text-align: center;
+  line-height: 20px;
+  border-radius: 75%;
+  cursor: pointer;
+  transition: background-color 0.3s, border-color 0.3s, opacity 0.3s;
+  color: #888;
+}
+
+.response-box.excluded .exclude-btn {
+  pointer-events: auto;
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--sidebar-text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  opacity: 0.82;
+}
+
+.response-box.excluded .control-icons {
+  margin: 0;
+  padding: 0;
+  align-items: center;
+}
+
+.response-box.excluded .exclude-btn:hover,
+.response-box.excluded .exclude-btn:focus-visible {
+  background-color: var(--sidebar-hover);
+  color: var(--text-color);
+  opacity: 1;
+}
+
+/* Rahmenloses Konsens-Layout: sitzt direkt auf dem Seitenhintergrund,
+   ohne Karte, Rahmen oder Schatten. */
+.consensus-box {
+  display: flex;
+  align-items: stretch;
+  gap: 28px;
+  margin-top: 6px;
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 10px;
+}
+
+.consensus-box p {
+  text-align: left;
+}
+
+.consensus-main {
+  flex: 4;
+  background: none;
+  padding: 10px 16px 12px;
+  min-height: 92px;
+  border-radius: var(--radius-md);
+  border: 0;
+  box-shadow: none;
+  overflow-x: auto;
+  min-width: 0;
+  position: relative;
+  isolation: isolate;
+  transition: background 0.3s, box-shadow 0.3s, border 0.3s;
+}
+
+.consensus-differences {
+  flex: 1;
+  background: none;
+  /* dezenter vertikaler Trenner zwischen Antwort und Unterschieden */
+  padding: 10px 16px 12px 24px;
+  min-height: 92px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  border-left: 1px solid color-mix(in srgb, var(--sidebar-border) 52%, transparent);
+  box-shadow: none;
+  overflow-y: auto;
+  min-width: 0;
+  position: relative;
+  isolation: isolate;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease;
+}
+
+.consensus-main::before,
+.consensus-differences::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(110deg, transparent 0%, color-mix(in srgb, var(--glass-highlight) 34%, transparent) 24%, transparent 48%),
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--button-bg) 10%, transparent), transparent);
+  background-position: center, -140% 0;
+  background-size: 100% 100%, 220% 100%;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.consensus-box.is-synthesizing .consensus-main,
+.consensus-box.is-synthesizing .consensus-differences {
+  border-color: transparent;
+  box-shadow: none;
+  /* abgerundete, dezent gefüllte Ladefläche statt eckigem Block */
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  background: color-mix(in srgb, var(--glass-bg-soft) 28%, transparent);
+}
+
+.consensus-box.is-synthesizing .consensus-differences {
+  border-left-color: transparent;
+}
+
+.dark-mode .consensus-box.is-synthesizing .consensus-main,
+.dark-mode .consensus-box.is-synthesizing .consensus-differences {
+  background: color-mix(in srgb, var(--response-bg) 60%, transparent);
+}
+
+.consensus-box.is-synthesizing .consensus-main::before {
+  animation: consensusSynthesisSweep 3.15s ease-in-out infinite;
+  opacity: 1;
+}
+
+.consensus-box.is-synthesizing .consensus-differences::before {
+  animation: consensusSynthesisSweep 3.15s ease-in-out 0.18s infinite;
+  opacity: 0.72;
+}
+
+.consensus-differences:hover {
+  /* frameless: kein Karten-Schatten beim Hover */
+  box-shadow: none;
+}
+
+.consensus-differences.credibility-framed {
+  border-color: color-mix(in srgb, var(--cred-frame) 24%, var(--sidebar-border));
+  box-shadow:
+    inset 1px 0 0 color-mix(in srgb, var(--cred-frame) 34%, transparent),
+    0 0 0 3px var(--cred-frame-wash);
+}
+
+.consensus-differences.credibility-framed:hover {
+  box-shadow:
+    inset 1px 0 0 color-mix(in srgb, var(--cred-frame) 42%, transparent),
+    0 10px 24px rgba(15, 23, 42, 0.045),
+    0 0 0 3px var(--cred-frame-wash);
+}
+
+.consensus-differences.credibility-framed h2 {
+  color: color-mix(in srgb, var(--cred-frame) 75%, var(--text-color));
+}
+
+.consensus-main h2 {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  margin: 0 0 14px;
+  /* Platz fuer Share- und Menue-Icon oben rechts (symmetrisch, damit
+     die Ueberschrift zentriert bleibt) */
+  padding-right: 76px;
+  padding-left: 76px;
+  color: var(--text-color);
+  font-size: 1.02rem;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.consensus-main h2 img {
+  display: inline-block !important;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.consensus-main > p {
+  margin: 0;
+  color: color-mix(in srgb, var(--text-color) 92%, var(--sidebar-text-muted));
+  font-size: 0.98rem;
+  line-height: 1.72;
+  overflow-wrap: anywhere;
+  position: relative;
+  z-index: 1;
+}
+
+.consensus-main > p p,
+.consensus-differences > p p {
+  margin: 0 0 0.8em;
+}
+
+.consensus-main > p p:last-child,
+.consensus-differences > p p:last-child {
+  margin-bottom: 0;
+}
+
+.consensus-differences h2 {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 12px;
+  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.consensus-differences > p {
+  margin: 0;
+  color: color-mix(in srgb, var(--text-color) 86%, var(--sidebar-text-muted));
+  font-size: 0.84rem;
+  line-height: 1.52;
+  overflow-wrap: anywhere;
+  position: relative;
+  z-index: 1;
+}
+
+.consensus-differences ul,
+.consensus-differences ol {
+  margin: 8px 0 0;
+  padding-left: 17px;
+}
+
+.consensus-differences li {
+  margin: 4px 0;
+  padding-left: 2px;
+}
+
+.consensus-differences hr {
+  height: 1px;
+  margin: 10px 0;
+  border: 0;
+  background: color-mix(in srgb, var(--sidebar-border) 70%, transparent);
+}
+
+/* Frameless: im Dark Mode keine Karten-Hintergründe/Schatten am Konsens-Block */
+.dark-mode .consensus-box {
+  background: none;
+}
+
+.dark-mode .consensus-main {
+  box-shadow: none;
+}
+
+.dark-mode .consensus-main:hover {
+  box-shadow: none;
+}
+
+.dark-mode .consensus-differences {
+  border-left-color: color-mix(in srgb, var(--sidebar-border) 60%, transparent);
+}
+
+.dark-mode .consensus-differences.credibility-framed:hover {
+  box-shadow:
+    inset 1px 0 0 color-mix(in srgb, var(--cred-frame, var(--accent)) 34%, transparent),
+    0 12px 30px rgba(0, 0, 0, 0.28),
+    0 0 0 3px var(--cred-frame-wash, transparent);
+}
+
+.consensus-copy-inline {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+/* Share-Button oben rechts im Consensus-Bereich: dezenter Ghost-Icon-Button */
+.consensus-share-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--sidebar-text-muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease, transform .12s ease;
+}
+
+.consensus-share-pill:hover,
+.consensus-share-pill:focus-visible {
+  background: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
+  color: var(--text-color);
+  outline: none;
+}
+
+.consensus-share-pill:active {
+  transform: translateY(1px);
+}
+
+.share-pill-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.consensus-actions-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+}
+
+.consensus-actions-toggle {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--sidebar-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0;
+  line-height: 1;
+  transition: background-color .15s ease, color .15s ease, transform .12s ease;
+}
+
+.consensus-actions-toggle:hover,
+.consensus-actions-toggle:focus-visible,
+.consensus-actions-wrapper.open .consensus-actions-toggle {
+  background: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
+  color: var(--text-color);
+  outline: none;
+}
+
+.consensus-actions-toggle:active {
+  transform: translateY(1px);
+}
+
+.consensus-actions-toggle .quote-toggle-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.consensus-actions-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: none;
+  min-width: 188px;
+  padding: 6px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.52)),
+    color-mix(in srgb, var(--container-bg) 94%, #ffffff 6%);
+  border: 1px solid color-mix(in srgb, var(--glass-border) 64%, var(--sidebar-border));
+  border-radius: var(--radius-md);
+  box-shadow: 0 14px 36px rgba(46, 61, 79, 0.12), 0 2px 8px rgba(46, 61, 79, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  z-index: var(--z-dropdown);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.8)) saturate(1.2);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.8)) saturate(1.2);
+}
+
+.dark-mode .consensus-actions-menu {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--container-bg) 96%, #ffffff 4%);
+  border-color: color-mix(in srgb, var(--glass-border) 90%, transparent);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.consensus-actions-menu.open {
+  display: block;
+}
+
+.consensus-actions-menu .consensus-copy-icon-btn {
+  width: 100%;
+  min-height: 34px;
+  margin: 0;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-color);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  line-height: 1.1;
+  text-align: left;
+}
+
+.consensus-actions-menu .consensus-copy-icon-btn:hover,
+.consensus-actions-menu .consensus-copy-icon-btn:focus-visible {
+  background: color-mix(in srgb, var(--accent) 8%, var(--sidebar-hover));
+  color: color-mix(in srgb, var(--text-color) 88%, var(--accent));
+  outline: none;
+}
+
+.consensus-actions-menu .menu-item-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--sidebar-text-muted);
+}
+
+.consensus-actions-menu .consensus-copy-icon-btn:hover .menu-item-icon,
+.consensus-actions-menu .consensus-copy-icon-btn:focus-visible .menu-item-icon {
+  color: var(--accent);
+}
+
+.copy-icon {
+  position: relative;
+  width: 11px;
+  height: 11px;
+  display: inline-block;
+  flex: 0 0 auto;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  box-sizing: border-box;
+}
+
+.copy-icon::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  box-sizing: border-box;
+  opacity: 0.45;
+}
+
+.consensus-section {
+  margin-top: 28px;
+}
+
+.consensus-wrapper {
+  width: 100%;
+}
+
+/* --------------------------------------------------------------------------
+   Konsens-Reveal: erscheint erst, wenn alle Antworten fertig sind
+   (Fade-In + dezenter Slide-Up).
+   -------------------------------------------------------------------------- */
+.consensus-output {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.45s ease, transform 0.45s ease;
+  will-change: opacity, transform;
+}
+
+.consensus-output.is-hidden {
+  display: none;
+}
+
+.consensus-output.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .consensus-output {
+    transition: opacity 0.2s ease;
+    transform: none;
+  }
+}
+
+/* Dezenter horizontaler Trennstrich zwischen Antwort-Grid und Konsens-Bereich,
+   im selben Stil wie die Linien unter den Modellnamen. */
+.consensus-divider {
+  height: 0;
+  margin: 4px 0 26px;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 52%, transparent);
+}
+
+/* Verdict-Topbar bekommt mehr Luft zum darunterliegenden Konsens-Text */
+.consensus-output .consensus-verdict {
+  margin-top: 0;
+  margin-bottom: 18px;
+}
+
+.feedback-line {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 20px;
+  margin: 12px 0 0;
+  padding: 3px 2px 0;
+  color: var(--feedback-text-color);
+  font-size: 11px;
+  line-height: 1.25;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.feedback-note {
+  color: var(--feedback-text-color);
+}
+
+.privacy-inline-link,
+.feedback-button {
+  position: relative;
+  z-index: 6;
+  color: var(--feedback-text-color) !important;
+  font-size: inherit !important;
+  line-height: inherit;
+  text-decoration: underline !important;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.privacy-inline-link:hover,
+.feedback-button:hover {
+  color: var(--feedback-text-hover-color) !important;
+  opacity: 1;
+}
+
+.consensus-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0 0 8px;
+}
+
+.consensus-controls .tooltip {
+  flex: 0 0 auto;
+}
+
+#consensusButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 1px solid color-mix(in srgb, var(--button-bg) 70%, var(--glass-border));
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #ffffff 13%, transparent), transparent),
+    var(--button-bg);
+  color: var(--button-text);
+  box-shadow: 0 12px 26px color-mix(in srgb, var(--button-bg) 18%, transparent), inset 0 1px 0 color-mix(in srgb, #ffffff 32%, transparent);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: opacity .15s ease, transform .15s ease, box-shadow .2s ease, border-color .2s ease;
+}
+
+#consensusButton::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  background: currentColor;
+  -webkit-mask: url("../icons/consensus.png") no-repeat center;
+  mask: url("../icons/consensus.png") no-repeat center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+#consensusButton.is-cancel-action {
+  gap: 8px;
+  background: #eeeeee;
+  color: #111111;
+  border-color: transparent;
+  box-shadow: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  min-height: 36px;
+}
+
+#consensusButton.is-cancel-action:hover {
+  background: #e4e4e4;
+  opacity: 1;
+  transform: none;
+  box-shadow: none;
+}
+
+#consensusButton.is-cancel-action::before {
+  display: none;
+}
+
+#consensusButton.is-cancel-action::after {
+  content: "";
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 1.5px;
+  background: currentColor;
+}
+
+.dark-mode #consensusButton.is-cancel-action {
+  background: #25272c;
+  color: #ffffff;
+}
+
+.dark-mode #consensusButton.is-cancel-action:hover {
+  background: #30333a;
+}
+
+#consensusButton:hover {
+  opacity: 1;
+  transform: translateY(-1px);
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--button-bg) 24%, transparent), inset 0 1px 0 color-mix(in srgb, #ffffff 36%, transparent);
+}
+
+#consensusButton:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+#consensusButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--button-bg) 12%, transparent);
+}
+
+.consensus-model {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.consensus-label {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  color: var(--sidebar-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.consensus-model .select-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.consensus-model .select-wrapper select {
+  width: clamp(170px, 26vw, 230px);
+  min-height: 36px;
+  padding: 8px 32px 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 68%, transparent);
+  border-radius: var(--radius-sm);
+  appearance: none;
+  background: color-mix(in srgb, var(--input-bg) 92%, var(--sidebar-hover) 8%);
+  color: var(--text-color);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.84rem;
+  line-height: 1.2;
+  transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+}
+
+.consensus-model .select-wrapper.is-enhanced select.native-model-picker {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 1px;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.consensus-model .select-wrapper .model-picker-display {
+  width: clamp(170px, 26vw, 230px);
+  min-height: 36px;
+  padding: 8px 32px 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 68%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--input-bg) 92%, var(--sidebar-hover) 8%);
+  color: var(--text-color);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.84rem;
+  line-height: 1.2;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+}
+
+.consensus-model .select-wrapper::after {
+  content: "";
+  position: absolute;
+  right: 11px;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--sidebar-text-muted);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.consensus-model .select-wrapper select:hover,
+.consensus-model .select-wrapper select:focus,
+.consensus-model .select-wrapper .model-picker-display:hover,
+.consensus-model .select-wrapper .model-picker-display:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--sidebar-border));
+  background: color-mix(in srgb, var(--input-bg) 88%, var(--accent) 12%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 11%, transparent);
+  outline: none;
+}
+
+.consensus-model .select-wrapper select option {
+  color: var(--text-color);
+  background: var(--container-bg);
+  padding: 8px 10px;
+}
+

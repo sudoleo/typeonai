@@ -1,0 +1,302 @@
+/* --------------------------------------------------------------------------
+   Loading Indicators
+   -------------------------------------------------------------------------- */
+.spinner {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  display: inline-block;
+  border: 2px solid color-mix(in srgb, var(--sidebar-border) 72%, transparent);
+  border-top-color: var(--sidebar-text-muted);
+  border-radius: 50%;
+  animation: spin 0.85s linear infinite;
+}
+
+.thinking-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--sidebar-text-muted);
+  font-size: 0.92rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.thinking {
+  display: inline-flex;
+  align-items: baseline;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.consensus-thinking-wrap {
+  align-items: center;
+  gap: 10px;
+  color: color-mix(in srgb, var(--button-bg) 72%, var(--text-color));
+  font-size: 0.94rem;
+  font-weight: 650;
+  white-space: normal;
+}
+
+.consensus-thinking {
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.consensus-loader {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  width: 58px;
+  min-width: 58px;
+  height: 18px;
+  line-height: 0;
+}
+
+.consensus-loader span {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--button-bg) 72%, var(--text-color) 28%);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--button-bg) 16%, transparent);
+  opacity: 0.42;
+  transform: scale(0.84);
+  animation: consensusLoaderDots 1.2s ease-in-out infinite;
+}
+
+.consensus-loader span:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.consensus-loader span:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+.consensus-loader span:nth-child(4) {
+  animation-delay: 0.36s;
+}
+
+.typing-dots {
+  display: inline-flex;
+  width: 4ch;
+  justify-content: flex-start;
+  white-space: pre;
+}
+
+.typing-dots::before {
+  content: " ";
+}
+
+.typing-dots span {
+  opacity: 0;
+}
+
+.typing-dots span:nth-child(1) {
+  animation: typing-dot-one 1.2s steps(1, end) infinite;
+}
+
+.typing-dots span:nth-child(2) {
+  animation: typing-dot-two 1.2s steps(1, end) infinite;
+}
+
+.typing-dots span:nth-child(3) {
+  animation: typing-dot-three 1.2s steps(1, end) infinite;
+}
+
+.response-box .collapsible-content .thinking-wrap,
+#consensusResponse .thinking-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  .typing-dots span,
+  .consensus-loader span,
+  .consensus-box.is-synthesizing .consensus-main::before,
+  .consensus-box.is-synthesizing .consensus-differences::before {
+    animation: none;
+  }
+
+  .typing-dots span,
+  .consensus-loader span {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Animations
+   -------------------------------------------------------------------------- */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes consensusSynthesisSweep {
+  0%, 100% {
+    background-position: center, -140% 0;
+  }
+  50% {
+    background-position: center, 140% 0;
+  }
+}
+
+@keyframes consensusLoaderDots {
+  0%, 100% {
+    opacity: 0.42;
+    transform: scale(0.84);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--button-bg) 14%, transparent);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--button-bg) 0%, transparent);
+  }
+}
+
+@keyframes typing-dot-one {
+
+  0%,
+  20% {
+    opacity: 0;
+  }
+
+  21%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes typing-dot-two {
+
+  0%,
+  45% {
+    opacity: 0;
+  }
+
+  46%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes typing-dot-three {
+
+  0%,
+  70% {
+    opacity: 0;
+  }
+
+  71%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInAnimation {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes demoChipIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateX(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Restored Missing Button & Icon Styles
+   -------------------------------------------------------------------------- */
+
+
+
+/* Fix for Logout Button */
+.logout-button {
+  background-color: transparent !important;
+  color: var(--text-color) !important;
+  border: 1px solid var(--sidebar-border) !important;
+  padding: 6px 12px !important;
+  cursor: pointer;
+  border-radius: var(--radius-sm) !important;
+  transition: background-color 0.2s ease;
+}
+
+.logout-button:hover {
+  background-color: var(--sidebar-hover) !important;
+}
+
+#emailPopup .top-bar-about,
+#logoutButton {
+  display: inline-flex !important;
+  align-items: center;
+  color: var(--text-color) !important;
+  font-size: 0.92rem;
+  line-height: 1.2;
+  opacity: 0.9;
+}
+
+#emailPopup .top-bar-about:hover,
+#logoutButton:hover {
+  color: var(--button-bg) !important;
+  opacity: 1;
+}
+
+/* Fix for Feedback Button */
+.feedback-button {
+  background: transparent !important;
+  border: none !important;
+  color: inherit !important;
+  padding: 0 !important;
+  font-size: inherit !important;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.feedback-button:hover {
+  opacity: 0.8;
+}
+
+/* Fix for Consensus Icon */
+.consensus-main h2 img {
+  filter: invert(1);
+  transition: filter 0.3s ease;
+}
+
+.dark-mode .consensus-main h2 img {
+  filter: invert(0);
+}
+
+
