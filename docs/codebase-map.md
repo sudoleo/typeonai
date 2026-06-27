@@ -260,6 +260,10 @@ Modell-IDs/Tier-Zuordnung/Labels: ausschließlich in `app/core/config.py` pflege
   Letzte bekannte Baseline: **145 passed**.
 - **Frontend hat keine automatisierten Tests.** Nach JS-Änderungen die manuelle
   **`docs/smoke-checklist.md`** durchgehen.
+- **Benchmark-Runner** (`benchmark/`, kein GUI-Pfad): `python -m benchmark
+  --smoke|--pilot|--final`. `--smoke` ist ein dedizierter 1-Frage-MMLU-Pro-Pfad
+  mit eigenem Manifest/Run-Kontext; Live-AusfÃ¼hrung bleibt durch
+  `LIVE_EXECUTION_ENABLED` hart gegatet.
 - JS-Syntaxcheck einzelner Module:
   ```powershell
   node --check static\js\<modul>.js

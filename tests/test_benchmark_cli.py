@@ -30,11 +30,21 @@ def patched(monkeypatch, tmp_path):
 def test_parse_args_supports_new_flags():
     args = cli._parse_args(["--pilot", "--run-id", "r1", "--budget", "5", "--live"])
     assert args.pilot and args.live and args.run_id == "r1" and args.budget == 5.0
+    smoke = cli._parse_args(["--smoke", "--run-id", "s1", "--budget", "1", "--live"])
+    assert smoke.smoke and smoke.live and smoke.run_id == "s1" and smoke.budget == 1.0
+
+
+def test_sample_flags_are_mutually_exclusive():
+    with pytest.raises(SystemExit):
+        cli._parse_args(["--smoke", "--pilot"])
+    with pytest.raises(SystemExit):
+        cli._parse_args(["--smoke", "--final"])
 
 
 def test_resolve_run_id_precedence():
     assert cli.resolve_run_id(cli._parse_args(["--resume", "abc"])) == "abc"
     assert cli.resolve_run_id(cli._parse_args(["--run-id", "xyz"])) == "xyz"
+    assert cli.resolve_run_id(cli._parse_args(["--smoke"])) == "smoke"
     assert cli.resolve_run_id(cli._parse_args(["--pilot"])) == "pilot"
     assert cli.resolve_run_id(cli._parse_args([])) == "final"
 
@@ -51,6 +61,30 @@ def test_dry_run_creates_run_dir_and_manifest_without_http(patched, capsys):
 def test_run_id_flag_controls_directory(patched):
     cli.main(["--pilot", "--run-id", "custom_run", "--dry-run"])
     assert (config.RUNS_DIR / "custom_run" / "manifest.json").exists()
+
+
+def test_smoke_dry_run_uses_own_directory_and_manifest(patched, capsys):
+    rc = cli.main(["--smoke", "--dry-run"])
+    assert rc == 0
+    run_dir = config.RUNS_DIR / "smoke"
+    assert (run_dir / "manifest.json").exists()
+    assert not (run_dir / "calls.jsonl").exists()
+    manifest = (run_dir / "manifest.json").read_text(encoding="utf-8")
+    assert '"sample_role": "smoke"' in manifest
+    assert '"sample_manifest": "mmlu_pro_smoke_v1.json"' in manifest
+    assert "smoke (1 questions)" in capsys.readouterr().out
+
+
+def test_smoke_live_requires_budget(patched, capsys):
+    rc = cli.main(["--smoke", "--live"])
+    assert rc == 2
+    assert "requires an explicit --budget" in capsys.readouterr().err
+
+
+def test_smoke_rejects_limit(patched, capsys):
+    rc = cli.main(["--smoke", "--limit", "1", "--dry-run"])
+    assert rc == 2
+    assert "--limit is not allowed" in capsys.readouterr().err
 
 
 def test_live_aborts_on_missing_credentials(patched, monkeypatch, capsys):
@@ -74,6 +108,19 @@ def test_live_preflight_passes_but_is_gated_no_http(patched, monkeypatch, capsys
     run_dir = config.RUNS_DIR / "pilot"
     assert (run_dir / "manifest.json").exists()
     # Gate -> keine Ausfuehrung, kein calls.jsonl
+    assert not (run_dir / "calls.jsonl").exists()
+
+
+def test_smoke_live_preflight_passes_but_is_gated_no_http(patched, monkeypatch, capsys):
+    monkeypatch.setattr(credentials, "resolve_developer_api_keys",
+                        lambda providers=None: {p: "k" for p in cli.REQUIRED_PROVIDERS})
+    rc = cli.main(["--smoke", "--live", "--budget", "5"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Preflight" in out
+    assert "GATED" in out
+    run_dir = config.RUNS_DIR / "smoke"
+    assert (run_dir / "manifest.json").exists()
     assert not (run_dir / "calls.jsonl").exists()
 
 

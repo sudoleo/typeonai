@@ -338,7 +338,7 @@ def query_consensus(
                 return f"Error with Anthropic: {response.status_code} - {response.text}"
 
         # --- GEMINI ---
-        elif consensus_model in ["Gemini", "Gemini-Pro", cfg.GEMINI_FRONTIER_LOW_MODEL]:
+        elif consensus_model in ["Gemini", "Gemini-Pro", cfg.GEMINI_FRONTIER_LOW_MODEL, cfg.GEMINI_PRO_MODEL]:
             gemini_key = api_keys.get("Gemini")
             if consensus_model == cfg.GEMINI_FRONTIER_LOW_MODEL:
                 return _gemini_generate_content_rest(
@@ -354,7 +354,7 @@ def query_consensus(
                 genai.configure()
 
             # Flash vs Pro
-            model_name = GEMINI_PRO_MODEL if consensus_model == "Gemini-Pro" else GEMINI_FLASH_MODEL
+            model_name = GEMINI_PRO_MODEL if consensus_model in ["Gemini-Pro", cfg.GEMINI_PRO_MODEL] else GEMINI_FLASH_MODEL
             
             model = genai.GenerativeModel(model_name)
             generation_config = {"max_output_tokens": int(cfg.CONSENSUS_MAX_TOKENS)}
@@ -912,7 +912,7 @@ def _stream_consensus_engine(consensus_model: str, api_keys: dict, consensus_pro
             max_tokens=max_tokens,
         )
 
-    elif consensus_model in ["Gemini", "Gemini-Pro", cfg.GEMINI_FRONTIER_LOW_MODEL]:
+    elif consensus_model in ["Gemini", "Gemini-Pro", cfg.GEMINI_FRONTIER_LOW_MODEL, cfg.GEMINI_PRO_MODEL]:
         gemini_key = api_keys.get("Gemini")
         if consensus_model == cfg.GEMINI_FRONTIER_LOW_MODEL:
             yield from stream_gemini_prompt_text(
@@ -922,7 +922,7 @@ def _stream_consensus_engine(consensus_model: str, api_keys: dict, consensus_pro
                 max_tokens=max_tokens,
             )
         else:
-            model_name = GEMINI_PRO_MODEL if consensus_model == "Gemini-Pro" else GEMINI_FLASH_MODEL
+            model_name = GEMINI_PRO_MODEL if consensus_model in ["Gemini-Pro", cfg.GEMINI_PRO_MODEL] else GEMINI_FLASH_MODEL
             yield from stream_gemini_text(
                 api_key=gemini_key,
                 model=model_name,

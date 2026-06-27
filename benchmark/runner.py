@@ -172,6 +172,8 @@ class BenchmarkRunner:
         output_tokens: int = config.OUTPUT_TOKEN_LIMIT,
         label_mode: str = config.DEFAULT_LABEL_MODE,
         include_synth_alone: bool = config.INCLUDE_SYNTH_ALONE,
+        sample_role: str = "benchmark",
+        sample_manifest: str | None = None,
     ):
         self.models = list(models)
         self.consensus_model = consensus_model
@@ -179,6 +181,8 @@ class BenchmarkRunner:
         self.output_tokens = int(output_tokens)
         self.label_mode = label_mode
         self.include_synth_alone = include_synth_alone
+        self.sample_role = sample_role
+        self.sample_manifest = sample_manifest
 
     def build_model_request(self, model: config.BenchmarkModel, user_prompt: str) -> dict:
         """Baut den closed-book Payload eines Modells (benchmark_mode=True)."""
@@ -352,18 +356,11 @@ class BenchmarkRunner:
                 if skey in skip:
                     result.cells_skipped += 1
                 else:
-                    est = estimate_model_cell(consensus_api_model, user_prompt, self.output_tokens)["est_cost_usd"]
+                    est = estimate_model_cell(consensus_api_model, user_prompt, CONSENSUS_MAX_TOKENS)["est_cost_usd"]
                     if should_stop_for_budget(spent, est, budget):
                         self._mark_stopped(result, budget, f"synth_alone q{qid}")
                         return result
-                    request_data = build_provider_payload(
-                        cfg.get_model_config(self.consensus_model).provider,
-                        question=user_prompt,
-                        system_prompt=self.system_prompt,
-                        model_override=self.consensus_model,
-                        max_output_tokens=self.output_tokens,
-                        benchmark_mode=True,
-                    )
+                    request_data = self.build_synth_request(user_prompt)
                     audit.assert_no_web_tools(request_data["payload"], context=f"synth:{qid}")
                     api_key = api_keys.get(config.PROVIDER_API_KEY_NAME[request_data["provider"]])
                     outcome = transport_execute(request_data, api_key)
@@ -385,6 +382,26 @@ class BenchmarkRunner:
                     result.cells_written += 0 if outcome.get("error") else 1
 
         return result
+
+    def build_synth_request(self, user_prompt: str) -> dict:
+        """Baut den Synthesizer-alone-Payload mit demselben Modellpin und den
+        effektiven Output-/Temperatur-Settings wie der Consensus-Pfad."""
+        model_config = cfg.get_model_config(self.consensus_model)
+        if not model_config or not model_config.provider:
+            raise ValueError(f"Consensus model is not resolvable: {self.consensus_model}")
+        request_data = build_provider_payload(
+            model_config.provider,
+            question=user_prompt,
+            system_prompt=self.system_prompt,
+            model_override=self.consensus_model,
+            max_output_tokens=CONSENSUS_MAX_TOKENS,
+            benchmark_mode=True,
+        )
+        # query_consensus nutzt Gemini Pro ohne explizite Temperatur; Synth-alone
+        # muss fuer den Benchmark dieselben effektiven Settings dokumentieren/nutzen.
+        if model_config.provider == "gemini":
+            request_data["payload"].get("generationConfig", {}).pop("temperature", None)
+        return request_data
 
     # --- run()-Helfer ------------------------------------------------------
 
@@ -475,22 +492,54 @@ class BenchmarkRunner:
         return {
             "run_id": run_id,
             "created": _now_iso(),
+            "sample_role": self.sample_role,
+            "sample_manifest": self.sample_manifest,
             "label_mode": self.label_mode,
             "include_synth_alone": self.include_synth_alone,
             "consensus_model": self.consensus_model,
             "temperature": config.TEMPERATURE,
             "output_token_limit": self.output_tokens,
+            "consensus_output_token_limit": CONSENSUS_MAX_TOKENS,
             "system_prompt": self.system_prompt,
-            "models": config.resolve_pins(),
+            "models": self._model_manifest_rows(),
+            "consensus": self._consensus_manifest_row(),
+            "synth_alone": self._synth_manifest_row(),
             "pricing_usd_per_1m": config.PRICING_USD_PER_1M,
         }
 
     # Felder, die beim Resume mit dem bestehenden Manifest uebereinstimmen
     # muessen (eingefrorene Config, E6).
     _MANIFEST_FROZEN_FIELDS = (
-        "label_mode", "include_synth_alone", "consensus_model",
-        "temperature", "output_token_limit", "system_prompt", "models",
+        "sample_role", "sample_manifest", "label_mode", "include_synth_alone",
+        "consensus_model", "temperature", "output_token_limit",
+        "consensus_output_token_limit", "system_prompt", "models", "consensus",
+        "synth_alone",
     )
+
+    def _model_manifest_rows(self) -> list[dict]:
+        rows = []
+        for model in self.models:
+            request_data = self.build_model_request(model, "manifest dry run")
+            rows.append(_manifest_row_for_request(model, request_data, self.output_tokens))
+        return rows
+
+    def _consensus_manifest_row(self) -> dict:
+        request_data = self.build_synth_request("manifest dry run")
+        return _manifest_row_for_request(
+            config.BenchmarkModel(
+                request_data["provider"],
+                self.consensus_model,
+                request_data["api_model"],
+                "provider_default",
+            ),
+            request_data,
+            CONSENSUS_MAX_TOKENS,
+        )
+
+    def _synth_manifest_row(self) -> dict:
+        row = self._consensus_manifest_row()
+        row["matches_consensus"] = True
+        return row
 
     def write_or_validate_manifest(self, run_dir: Path) -> dict:
         """Schreibt das Manifest beim ersten Lauf; beim Resume wird das
@@ -698,6 +747,142 @@ class BenchmarkRunner:
             summary = results_mod.write_results(run_dir, consensus_model=self.consensus_model)
 
         return result, audits, summary
+
+    def run_smoke(
+        self,
+        records: list[dict],
+        *,
+        run_dir: Path,
+        api_keys: dict | None = None,
+        transport_execute=transport.execute,
+        consensus_fn=None,
+        budget: float | None = None,
+        retry_failed: bool = False,
+    ):
+        """Dedizierter 1-Frage-Smoke: 6 Modellzellen + Consensus +
+        Synthesizer-alone, keine E4-Zusatzaudits. Schreibt bei erfolgreichem
+        Abschluss ``calls.jsonl``, ``audits.json`` und ``results.json``."""
+        self.validate_smoke_setup(records)
+        run_dir = Path(run_dir)
+        result = self.run(
+            records,
+            run_dir=run_dir,
+            api_keys=api_keys or {},
+            transport_execute=transport_execute,
+            consensus_fn=consensus_fn,
+            budget=budget,
+            retry_failed=retry_failed,
+        )
+        audits = None
+        summary = None
+        if not result.stopped:
+            audits = {
+                "option_permutation": {
+                    "enabled": False,
+                    "reason": "disabled_for_smoke",
+                },
+                "consensus_order": {
+                    "enabled": False,
+                    "reason": "disabled_for_smoke",
+                },
+            }
+            (run_dir / "audits.json").write_text(
+                json.dumps(audits, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
+            from benchmark import results as results_mod
+
+            summary = results_mod.write_results(run_dir, consensus_model=self.consensus_model)
+        return result, audits, summary
+
+    def validate_smoke_setup(self, records: list[dict]) -> None:
+        """Harte Smoke-Invarianten, bevor ein echter Smoke-Lauf starten darf."""
+        if len(records) != 1:
+            raise ValueError(f"Smoke requires exactly 1 question, got {len(records)}")
+        if len(self.models) != 6 or len({model.provider for model in self.models}) != 6:
+            raise ValueError("Smoke requires exactly six distinct candidate models")
+        if not self.consensus_model:
+            raise ValueError("Smoke requires exactly one consensus model")
+        if not self.include_synth_alone:
+            raise ValueError("Smoke requires synth_alone to be enabled")
+        synth = self._synth_manifest_row()
+        consensus = self._consensus_manifest_row()
+        comparable_keys = (
+            "provider", "internal_id", "resolved_api_model", "reasoning_settings",
+            "temperature", "temperature_source", "output_token_limit",
+        )
+        if any(synth.get(key) != consensus.get(key) for key in comparable_keys):
+            raise ValueError("Synthesizer-alone settings must match consensus settings")
+
+
+def _manifest_row_for_request(
+    model: config.BenchmarkModel,
+    request_data: dict,
+    output_token_limit: int,
+) -> dict:
+    payload = request_data["payload"]
+    resolved_api_model = request_data["api_model"]
+    return {
+        "provider": model.provider,
+        "internal_id": model.internal_id,
+        "frozen_api_model": model.api_model,
+        "resolved_api_model": resolved_api_model,
+        "reasoning": model.reasoning,
+        "reasoning_settings": _reasoning_settings(request_data["provider"], payload),
+        "temperature": _temperature(payload),
+        "temperature_source": "payload" if _temperature(payload) is not None else "provider_default",
+        "output_token_limit": _output_token_limit(payload, output_token_limit),
+        "alias_status": {
+            "internal_alias": model.internal_id != resolved_api_model,
+            "latest_alias": _is_latest_alias(model.internal_id) or _is_latest_alias(resolved_api_model),
+            "preview": "preview" in model.internal_id.lower() or "preview" in resolved_api_model.lower(),
+        },
+        "is_low_reasoning": bool(request_data.get("is_low_reasoning")),
+        "matches": resolved_api_model == model.api_model,
+    }
+
+
+def _reasoning_settings(provider: str, payload: dict):
+    if provider in ("openai", "grok"):
+        return payload.get("reasoning")
+    if provider == "mistral":
+        return {"reasoning_effort": payload.get("completion_args", {}).get("reasoning_effort")}
+    if provider == "anthropic":
+        settings = {}
+        if "thinking" in payload:
+            settings["thinking"] = payload["thinking"]
+        if "output_config" in payload:
+            settings["output_config"] = payload["output_config"]
+        return settings or None
+    if provider == "gemini":
+        thinking = payload.get("generationConfig", {}).get("thinkingConfig")
+        return {"thinkingConfig": thinking} if thinking else None
+    return None
+
+
+def _temperature(payload: dict):
+    if "temperature" in payload:
+        return payload.get("temperature")
+    if "completion_args" in payload:
+        return payload.get("completion_args", {}).get("temperature")
+    if "generationConfig" in payload:
+        return payload.get("generationConfig", {}).get("temperature")
+    return None
+
+
+def _output_token_limit(payload: dict, fallback: int) -> int:
+    if "max_output_tokens" in payload:
+        return int(payload["max_output_tokens"])
+    if "max_tokens" in payload:
+        return int(payload["max_tokens"])
+    if "completion_args" in payload and "max_tokens" in payload["completion_args"]:
+        return int(payload["completion_args"]["max_tokens"])
+    if "generationConfig" in payload and "maxOutputTokens" in payload["generationConfig"]:
+        return int(payload["generationConfig"]["maxOutputTokens"])
+    return int(fallback)
+
+
+def _is_latest_alias(model_id: str) -> bool:
+    return str(model_id or "").endswith("-latest")
 
 
 def _permutation_consistent(original_letter, permuted_letter, order: list[int]):

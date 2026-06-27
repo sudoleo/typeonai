@@ -1,11 +1,12 @@
 # consens.io — Consensus Benchmark Snapshot (MMLU‑Pro) — Plan
 
-> Status: **Phase 2 umgesetzt.** Dieses Dokument ist die verbindliche Grundlage.
+> Status: **Phase 2.6 vorbereitet.** Dieses Dokument ist die verbindliche Grundlage.
 > Gebaut: `benchmark_mode` (default-off, 4.1), das isolierte `benchmark/`-Paket
 > inkl. **vollständigem `runner.run()`-Pfad** (JSONL-Append, Resume mit
 > kontrolliertem Fehler-Retry, Budget-Stopp), disjunkte Pilot-/Final-Manifeste
-> (5 / 98 = 7×14, committet), Tests aus §9 (1–5) grün **plus** ein
-> End-to-end-Test des `run()`-Loops mit Fake-Transport/-Consensus (kein HTTP,
+> (5 / 98 = 7×14, committet), ein **dediziertes disjunktes 1-Frage-Smoke-
+> Manifest**, Tests aus §9 (1–5) grün **plus** End-to-end-Tests des `run()`-,
+> `run_pilot()`- und `run_smoke()`-Pfads mit Fake-Transport/-Consensus (kein HTTP,
 > keine Keys), `--dry-run` mit Kostenprojektion + Tool-Audit. Es wurde **kein**
 > API-Call an ein LLM ausgeführt. Stand: 2026-06-28.
 >
@@ -284,13 +285,15 @@ benchmark/
   audit.py         # assert_no_web_tools + Optionen-Permutations-Audit
                    #   + Consensus-Reihenfolge-Audit (Response A–F: normal/
                    #   umgekehrt/gemischt, nur Consensus neu berechnen)
-  __main__.py      # CLI: --dry-run --pilot --limit N --budget USD --resume <run_id>
+  __main__.py      # CLI: --dry-run --smoke/--pilot/--final --limit N
+                   #      --budget USD --resume <run_id>
 ```
 
 Zusätzliche Daten-/Doku-Artefakte:
 
 ```
 data/benchmark/
+  mmlu_pro_smoke_v1.json    # eingefrorene Smoke-ID (1 Frage, disjunkt)
   mmlu_pro_pilot_v1.json     # eingefrorene Pilot-IDs (committet)
   mmlu_pro_sample_v1.json    # eingefrorene finale IDs (committet, disjunkt zum Pilot)
   runs/<run_id>/manifest.json
@@ -498,7 +501,24 @@ Label-Permutation hängt am aufgeschobenen geordneten/anonymisierten Builder (E5
 Alles mit Fake-Transport/-Consensus getestet. Gesamt-Suite 225 passed
 (77 Benchmark-Tests). **Weiterhin kein echter Call ausgeführt; Live-Gate bleibt zu.**
 
-**Phase 3 — 5-Fragen-Pilot (separates Sample):** `--pilot --budget <klein>` über
+**Phase 2.6 — Dedizierter Smoke-Pfad + reguläre Zielmodellmatrix:** *(vorbereitet,
+Stand 2026-06-28.)* Die Benchmark-Zielmatrix nutzt jetzt die regulären
+hochwertigen Produkt-IDs statt `frontier-low`: OpenAI `gpt-5.5`, Mistral
+`mistral-medium-3-5`, Anthropic `claude-opus-4-8`, Gemini
+`gemini-3.1-pro-preview`, DeepSeek `deepseek-v4-pro`, Grok `grok-4.3`.
+Consensus und Synthesizer-alone pinnen beide `gemini-3.1-pro-preview`; das
+Manifest dokumentiert Provider, `internal_id`, aufgelöstes `api_model`,
+effektive Reasoning-/Thinking-Settings, Temperatur, Output-Limits sowie
+Alias-/Preview-Status. Neuer CLI-Modus `--smoke` nutzt
+`mmlu_pro_smoke_v1.json` (genau 1 Frage, disjunkt zu Pilot und Final), erzeugt
+einen eigenen Run-Kontext `sample_role: "smoke"` und deaktiviert die beiden
+E4-Zusatzaudits explizit in `audits.json`. `--smoke --live` verlangt zwingend
+`--budget`; der globale Live-Gate bleibt geschlossen, daher löst auch Smoke
+weiterhin keinen echten Provider-Call aus.
+
+**Phase 3 — 1-Frage-Smoke, danach 5-Fragen-Pilot:** zuerst `--smoke --live
+--budget <klein>` über das dedizierte Smoke-Sample, sobald der Live-Gate bewusst
+geöffnet wird; danach `--pilot --budget <klein>` über
 das eigenständige Pilot-Sample; Hauptpfad (Modellnamen) plus **optionaler
 anonymisierter Audit-Modus** (E5: gleiche gespeicherte Antworten, einmal Namen /
 einmal `Response A–F`, ohne erneuten Kandidaten-Call) sowie alle drei Audits aus E4.

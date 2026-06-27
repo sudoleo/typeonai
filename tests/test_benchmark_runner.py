@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from benchmark import audit
+from benchmark import audit, config
 from benchmark.runner import (
     BenchmarkRunner,
     cell_key,
@@ -83,6 +83,39 @@ class DryRunTests(unittest.TestCase):
 
     def test_assert_no_web_tools_passes_for_clean_payload(self):
         audit.assert_no_web_tools({"model": "x", "messages": [{"role": "user", "content": "hi"}]})
+
+
+class ManifestModelConfigTests(unittest.TestCase):
+    def test_manifest_records_regular_model_matrix_and_effective_settings(self):
+        runner = BenchmarkRunner(sample_role="smoke", sample_manifest="mmlu_pro_smoke_v1.json")
+        manifest = runner.build_manifest("smoke")
+        models = {row["provider"]: row for row in manifest["models"]}
+
+        self.assertEqual(models["openai"]["internal_id"], "gpt-5.5")
+        self.assertEqual(models["openai"]["resolved_api_model"], "gpt-5.5")
+        self.assertIsNone(models["openai"]["reasoning_settings"])
+        self.assertFalse(models["openai"]["alias_status"]["internal_alias"])
+
+        self.assertEqual(models["mistral"]["internal_id"], config.cfg.MISTRAL_PRO_MODEL)
+        self.assertEqual(models["mistral"]["resolved_api_model"], config.cfg.MISTRAL_PRO_MODEL)
+        self.assertEqual(models["mistral"]["reasoning_settings"], {"reasoning_effort": "high"})
+        self.assertFalse(models["mistral"]["alias_status"]["latest_alias"])
+
+        self.assertEqual(models["anthropic"]["internal_id"], config.cfg.ANTHROPIC_PRO_MODEL)
+        self.assertIsNone(models["anthropic"]["reasoning_settings"])
+        self.assertEqual(models["gemini"]["internal_id"], config.cfg.GEMINI_PRO_MODEL)
+        self.assertIsNone(models["gemini"]["reasoning_settings"])
+        self.assertTrue(models["gemini"]["alias_status"]["preview"])
+        self.assertEqual(models["grok"]["internal_id"], "grok-4.3")
+        self.assertIsNone(models["grok"]["reasoning_settings"])
+
+        self.assertEqual(manifest["sample_role"], "smoke")
+        self.assertEqual(manifest["consensus"]["internal_id"], config.cfg.GEMINI_PRO_MODEL)
+        self.assertEqual(manifest["consensus"]["output_token_limit"], manifest["consensus_output_token_limit"])
+        self.assertIsNone(manifest["consensus"]["temperature"])
+        self.assertEqual(manifest["synth_alone"]["internal_id"], manifest["consensus"]["internal_id"])
+        self.assertEqual(manifest["synth_alone"]["reasoning_settings"], manifest["consensus"]["reasoning_settings"])
+        self.assertEqual(manifest["synth_alone"]["temperature"], manifest["consensus"]["temperature"])
 
 
 if __name__ == "__main__":

@@ -129,5 +129,49 @@ class RunPilotTests(unittest.TestCase):
             self.assertFalse((run_dir / "results.json").exists())
 
 
+class RunSmokeTests(unittest.TestCase):
+    def test_run_smoke_writes_base_artifacts_without_e4_audits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "smoke"
+            runner = BenchmarkRunner(sample_role="smoke", sample_manifest="mmlu_pro_smoke_v1.json")
+            result, audits, summary = runner.run_smoke(
+                QUESTIONS[:1], run_dir=run_dir, api_keys={},
+                transport_execute=fake_transport_fixed("B"),
+                consensus_fn=fake_consensus_fixed,
+            )
+            self.assertFalse(result.stopped)
+            self.assertEqual(result.cells_written, 8)
+            for name in ("calls.jsonl", "manifest.json", "audits.json", "results.json"):
+                self.assertTrue((run_dir / name).exists(), f"missing {name}")
+
+            saved = json.loads((run_dir / "audits.json").read_text(encoding="utf-8"))
+            self.assertFalse(saved["option_permutation"]["enabled"])
+            self.assertEqual(saved["option_permutation"]["reason"], "disabled_for_smoke")
+            self.assertFalse(saved["consensus_order"]["enabled"])
+            self.assertEqual(saved["consensus_order"]["reason"], "disabled_for_smoke")
+            self.assertEqual(audits, saved)
+            self.assertEqual(summary["n_questions"], 1)
+
+            cells = [
+                json.loads(line)
+                for line in (run_dir / "calls.jsonl").read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(len(cells), 8)
+            self.assertEqual(sum(1 for c in cells if c["role"] == "model"), 6)
+            self.assertEqual(sum(1 for c in cells if c["role"] == "consensus"), 1)
+            self.assertEqual(sum(1 for c in cells if c["role"] == "synth_alone"), 1)
+
+    def test_run_smoke_validates_exactly_one_question(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = BenchmarkRunner(sample_role="smoke", sample_manifest="mmlu_pro_smoke_v1.json")
+            with self.assertRaises(ValueError):
+                runner.run_smoke(
+                    QUESTIONS, run_dir=Path(tmp) / "smoke", api_keys={},
+                    transport_execute=fake_transport_fixed("B"),
+                    consensus_fn=fake_consensus_fixed,
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

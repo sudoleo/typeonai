@@ -1,0 +1,13 @@
+{
+  "version": "mmlu_pro_smoke_v1",
+  "source_repo": "TIGER-Lab/MMLU-Pro",
+  "seed": null,
+  "count": 1,
+  "question_ids": [
+    70
+  ],
+  "categories": {
+    "business": 1
+  },
+  "role": "smoke"
+}

@@ -10,6 +10,8 @@ Sicherheits-Modell (Phase 2.5a – Pilot-Startfaehigkeit **ohne** Live-Run):
   (``LIVE_EXECUTION_ENABLED = False``) und loest selbst **keinen** HTTP-Call aus.
 
 Aufrufe:
+  python -m benchmark --dry-run --smoke
+  python -m benchmark --smoke --live --budget 5          # Preflight (gated)
   python -m benchmark --dry-run --pilot
   python -m benchmark --pilot --run-id pilot_v1 --budget 5
   python -m benchmark --pilot --live --budget 5            # Preflight (gated)
@@ -39,7 +41,10 @@ LIVE_EXECUTION_ENABLED = False
 def _parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="python -m benchmark")
     parser.add_argument("--dry-run", action="store_true", help="Payloads bauen, kein HTTP")
-    parser.add_argument("--pilot", action="store_true", help="Pilot-Sample statt Final-Sample")
+    sample = parser.add_mutually_exclusive_group()
+    sample.add_argument("--smoke", action="store_true", help="dediziertes 1-Frage-Smoke-Sample")
+    sample.add_argument("--pilot", action="store_true", help="Pilot-Sample statt Final-Sample")
+    sample.add_argument("--final", action="store_true", help="Final-Sample explizit waehlen")
     parser.add_argument("--limit", type=int, default=None, help="auf N Fragen begrenzen")
     parser.add_argument("--budget", type=float, default=None, help="Budget-Cap in USD")
     parser.add_argument("--run-id", dest="run_id", default=None, help="explizite Run-ID")
@@ -58,6 +63,8 @@ def resolve_run_id(args: argparse.Namespace) -> str:
         return args.resume
     if args.run_id:
         return args.run_id
+    if args.smoke:
+        return "smoke"
     return "pilot" if args.pilot else "final"
 
 
@@ -75,8 +82,24 @@ def _load_records():
     return dataset.records_from_dataframe(df)
 
 
-def _manifest_ids(pilot: bool):
-    path = config.PILOT_MANIFEST if pilot else config.SAMPLE_MANIFEST
+def sample_role(args: argparse.Namespace) -> str:
+    if args.smoke:
+        return "smoke"
+    if args.pilot:
+        return "pilot"
+    return "final"
+
+
+def _manifest_path(role: str):
+    if role == "smoke":
+        return config.SMOKE_MANIFEST
+    if role == "pilot":
+        return config.PILOT_MANIFEST
+    return config.SAMPLE_MANIFEST
+
+
+def _manifest_ids(role: str):
+    path = _manifest_path(role)
     if not path.exists():
         print(f"ERROR: Sample-Manifest fehlt: {path}", file=sys.stderr)
         raise SystemExit(2)
@@ -84,16 +107,21 @@ def _manifest_ids(pilot: bool):
 
 
 def get_records(args: argparse.Namespace):
-    ids = _manifest_ids(args.pilot)
+    role = sample_role(args)
+    ids = _manifest_ids(role)
     if args.limit is not None:
+        if role == "smoke":
+            print("ERROR: --smoke uses exactly one fixed question; --limit is not allowed.", file=sys.stderr)
+            raise SystemExit(2)
         ids = ids[: args.limit]
     return dataset.records_for_ids(_load_records(), ids)
 
 
 def _print_dry_run(runner: BenchmarkRunner, records, args, header: str) -> None:
     report = runner.dry_run(records)
+    role = sample_role(args)
     print(f"=== {header} ===")
-    print(f"Sample:            {'pilot' if args.pilot else 'final'} ({len(records)} questions)")
+    print(f"Sample:            {role} ({len(records)} questions)")
     print(f"Model cells:       {report.model_cells}")
     print(f"Consensus cells:   {report.consensus_cells}")
     print(f"Synth-alone cells: {report.synth_cells}")
@@ -109,8 +137,19 @@ def _print_dry_run(runner: BenchmarkRunner, records, args, header: str) -> None:
 def main(argv=None) -> int:
     args = _parse_args(argv)
     config.assert_pins_match_config()
+    try:
+        _validate_args(args)
+        if args.smoke:
+            _validate_smoke_manifests()
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
 
-    runner = BenchmarkRunner()
+    role = sample_role(args)
+    runner = BenchmarkRunner(
+        sample_role=role,
+        sample_manifest=_manifest_path(role).name,
+    )
     run_id = resolve_run_id(args)
     run_dir = config.RUNS_DIR / run_id
     records = get_records(args)
@@ -149,15 +188,24 @@ def main(argv=None) -> int:
         )
         return 0
 
-    # Naechster Schritt (separat freizugeben): echter Lauf inkl. E4-Audits +
-    # Auswertung (calls.jsonl, audits.json, results.json).
-    result, _audits, summary = runner.run_pilot(
-        records,
-        run_dir=run_dir,
-        api_keys=api_keys,
-        budget=args.budget,
-        retry_failed=bool(args.resume),
-    )
+    # Naechster Schritt (separat freizugeben): echter Lauf. Smoke laeuft ohne
+    # E4-Zusatzaudits; Pilot laeuft mit E4-Audits.
+    if args.smoke:
+        result, _audits, summary = runner.run_smoke(
+            records,
+            run_dir=run_dir,
+            api_keys=api_keys,
+            budget=args.budget,
+            retry_failed=bool(args.resume),
+        )
+    else:
+        result, _audits, summary = runner.run_pilot(
+            records,
+            run_dir=run_dir,
+            api_keys=api_keys,
+            budget=args.budget,
+            retry_failed=bool(args.resume),
+        )
     print(
         f"Run finished: written={result.cells_written} skipped={result.cells_skipped} "
         f"failed={result.cells_failed} spent=${result.spent_usd:.4f} stopped={result.stopped}"
@@ -166,6 +214,38 @@ def main(argv=None) -> int:
         print(f"Results: {run_dir / 'results.json'} (n={summary['n_questions']}, "
               f"disagreement={summary['n_disagreement']})")
     return 0
+
+
+def _validate_args(args: argparse.Namespace) -> None:
+    if args.smoke and args.limit is not None:
+        raise ValueError("--smoke uses exactly one fixed question; --limit is not allowed")
+    if args.smoke and args.live and args.budget is None:
+        raise ValueError("--smoke --live requires an explicit --budget value")
+
+
+def _validate_smoke_manifests() -> None:
+    smoke = dataset.load_sample_manifest(config.SMOKE_MANIFEST)
+    pilot = dataset.load_sample_manifest(config.PILOT_MANIFEST)
+    final = dataset.load_sample_manifest(config.SAMPLE_MANIFEST)
+    smoke_ids = smoke.get("question_ids") or []
+    if smoke.get("role") != "smoke":
+        raise ValueError("Smoke manifest must have role='smoke'")
+    if len(smoke_ids) != config.SMOKE_SIZE:
+        raise ValueError(f"Smoke manifest must contain exactly {config.SMOKE_SIZE} question")
+    smoke_id = smoke_ids[0]
+    if smoke_id in set(pilot.get("question_ids") or []):
+        raise ValueError(f"Smoke question {smoke_id} overlaps with pilot sample")
+    if smoke_id in set(final.get("question_ids") or []):
+        raise ValueError(f"Smoke question {smoke_id} overlaps with final sample")
+    runner = BenchmarkRunner(sample_role="smoke", sample_manifest=config.SMOKE_MANIFEST.name)
+    runner.validate_smoke_setup([{
+        "question_id": smoke_id,
+        "question": "validation only",
+        "options": ["A", "B"],
+        "answer": "A",
+        "answer_index": 0,
+        "category": "validation",
+    }])
 
 
 if __name__ == "__main__":

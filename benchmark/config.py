@@ -22,6 +22,7 @@ import app.core.config as cfg
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = REPO_ROOT / "data" / "benchmark"
+SMOKE_MANIFEST = DATA_DIR / "mmlu_pro_smoke_v1.json"
 PILOT_MANIFEST = DATA_DIR / "mmlu_pro_pilot_v1.json"
 SAMPLE_MANIFEST = DATA_DIR / "mmlu_pro_sample_v1.json"
 RUNS_DIR = DATA_DIR / "runs"
@@ -35,6 +36,7 @@ HF_TEST_GLOB = "data/test-*.parquet"
 # --- Sampling (E3 / E3b) ---------------------------------------------------
 
 PILOT_SIZE = 5
+SMOKE_SIZE = 1
 QUESTIONS_PER_CATEGORY = 7
 EXPECTED_CATEGORIES = 14
 FINAL_SIZE = QUESTIONS_PER_CATEGORY * EXPECTED_CATEGORIES  # 98
@@ -70,24 +72,23 @@ class BenchmarkModel:
     provider: str
     internal_id: str
     api_model: str
-    reasoning: str  # beschreibend: "low" | "high" | "none"
+    reasoning: str  # beschreibend; effektive Payload-Settings stehen im Manifest
 
 
-# Die sechs Modelle = freie Default-Experience von consens.io
-# (FREE_DEFAULT_MODEL_BY_PROVIDER), api_model hart eingefroren.
+# Die sechs Modelle = regulaere hochwertige Modellpfade fuer Smoke/Pilot/Final,
+# ohne frontier-low Aliase. api_model ist hart eingefroren.
 MODELS: tuple[BenchmarkModel, ...] = (
-    BenchmarkModel("openai", cfg.OPENAI_FRONTIER_LOW_MODEL, "gpt-5.5", "low"),
-    BenchmarkModel("mistral", cfg.DEFAULT_MISTRAL_MODEL, "mistral-small-latest", "high"),
-    BenchmarkModel("anthropic", cfg.ANTHROPIC_FRONTIER_LOW_MODEL, cfg.ANTHROPIC_PRO_MODEL, "low"),
-    BenchmarkModel("gemini", cfg.GEMINI_FRONTIER_LOW_MODEL, cfg.GEMINI_PRO_MODEL, "low"),
-    BenchmarkModel("deepseek", cfg.DEFAULT_DEEPSEEK_MODEL, cfg.DEEPSEEK_PRO_MODEL, "none"),
-    BenchmarkModel("grok", cfg.GROK_FRONTIER_LOW_MODEL, "grok-4.3", "low"),
+    BenchmarkModel("openai", "gpt-5.5", "gpt-5.5", "provider_default"),
+    BenchmarkModel("mistral", cfg.MISTRAL_PRO_MODEL, cfg.MISTRAL_PRO_MODEL, "provider_default"),
+    BenchmarkModel("anthropic", cfg.ANTHROPIC_PRO_MODEL, cfg.ANTHROPIC_PRO_MODEL, "provider_default"),
+    BenchmarkModel("gemini", cfg.GEMINI_PRO_MODEL, cfg.GEMINI_PRO_MODEL, "provider_default"),
+    BenchmarkModel("deepseek", cfg.DEEPSEEK_PRO_MODEL, cfg.DEEPSEEK_PRO_MODEL, "provider_default"),
+    BenchmarkModel("grok", "grok-4.3", "grok-4.3", "provider_default"),
 )
 
-# Consensus-Synthese-Modell (Pin). query_consensus akzeptiert diesen Wert direkt
-# (GEMINI_FRONTIER_LOW_MODEL ist ein eigener Branch). Entspricht dem produktiven
-# Default des Consensus-Pickers.
-CONSENSUS_MODEL = cfg.GEMINI_FRONTIER_LOW_MODEL
+# Consensus-Synthese-Modell (Pin): regulaerer Gemini-3.1-Pro-Preview-Pfad.
+# Synthesizer-alone nutzt exakt denselben Pin.
+CONSENSUS_MODEL = cfg.GEMINI_PRO_MODEL
 
 # Provider-Name -> API-Key-Schluessel, wie query_consensus ihn erwartet.
 PROVIDER_API_KEY_NAME = {
@@ -105,7 +106,7 @@ PROVIDER_API_KEY_NAME = {
 
 PRICING_USD_PER_1M: dict[str, dict[str, float]] = {
     "gpt-5.5": {"input": 1.25, "output": 10.0},
-    "mistral-small-latest": {"input": 0.10, "output": 0.30},
+    cfg.MISTRAL_PRO_MODEL: {"input": 0.40, "output": 2.0},
     cfg.ANTHROPIC_PRO_MODEL: {"input": 5.0, "output": 25.0},
     cfg.GEMINI_PRO_MODEL: {"input": 1.25, "output": 10.0},
     cfg.DEEPSEEK_PRO_MODEL: {"input": 0.28, "output": 0.42},

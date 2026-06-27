@@ -11,6 +11,7 @@ consensai-firebase-adminsdk-fbsvc-9064a77134.json
 data/benchmark/runs/
 !data/benchmark/mmlu_pro_pilot_v1.json
 !data/benchmark/mmlu_pro_sample_v1.json
+!data/benchmark/mmlu_pro_smoke_v1.json
 
 # Recording assets and local video generation tooling
 recordings/
