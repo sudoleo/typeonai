@@ -1,10 +1,13 @@
 # consens.io — Consensus Benchmark Snapshot (MMLU‑Pro) — Plan
 
 > Status: **Phase 2 umgesetzt.** Dieses Dokument ist die verbindliche Grundlage.
-> Gebaut: `benchmark_mode` (default-off, 4.1), das isolierte `benchmark/`-Paket,
-> disjunkte Pilot-/Final-Manifeste (5 / 98 = 7×14, committet), Tests aus §9 (1–5)
-> grün, `--dry-run` mit Kostenprojektion + Tool-Audit. Es wurde **kein** API-Call
-> an ein LLM ausgeführt. Stand: 2026-06-28.
+> Gebaut: `benchmark_mode` (default-off, 4.1), das isolierte `benchmark/`-Paket
+> inkl. **vollständigem `runner.run()`-Pfad** (JSONL-Append, Resume mit
+> kontrolliertem Fehler-Retry, Budget-Stopp), disjunkte Pilot-/Final-Manifeste
+> (5 / 98 = 7×14, committet), Tests aus §9 (1–5) grün **plus** ein
+> End-to-end-Test des `run()`-Loops mit Fake-Transport/-Consensus (kein HTTP,
+> keine Keys), `--dry-run` mit Kostenprojektion + Tool-Audit. Es wurde **kein**
+> API-Call an ein LLM ausgeführt. Stand: 2026-06-28.
 >
 > **Korrektur zu §2:** Die Annahme „keine neue Dependency zwingend" war falsch —
 > `pandas.read_parquet` braucht ein Parquet-Engine (pyarrow/fastparquet), das im
@@ -454,10 +457,15 @@ beschlossen, `benchmark/`-Layout + Manifest-Schema festgezurrt.
 `build_provider_payload` gebaut; Consensus-Anonymisierung (4.2) **nicht** Teil von
 Phase 2. `benchmark/`-Paket mit Hauptpfad (Consensus mit Modellnamen) angelegt;
 disjunkte Pilot-/Final-Samples gezogen und committet (5 / Final = 7×14 = 98);
-Tests aus §9 (1–5) grün — Gesamt-Suite 186 passed (Baseline 148 + 38 neu, davon
-1 nur mit Parquet-Engine aktiv); Test 6 (anonymize) noch nicht gebaut (Audit-Modus
-ist Phase 3). `--dry-run` liefert Kostenprojektion + Tool-Audit grün
-(Pilot ≈ \$2.23, Final ≈ \$43.69, Schätzungen). **Kein echter Call ausgeführt.**
+Tests aus §9 (1–5) grün; zusätzlich `runner.run()` vollständig gebaut (Zellen-Loop
+6 Modelle → Consensus → optional Synth-allein, JSONL-Append, Resume überspringt
+nur erfolgreiche Zellen, Fehler werden gespeichert + via `retry_failed` kontrolliert
+erneut behandelbar, Budget-Cap stoppt **vor** dem nächsten Call) und per
+End-to-end-Test mit Fake-Transport/-Consensus abgesichert (ohne HTTP/Keys).
+Gesamt-Suite 191 passed (Baseline 148 + 43 neu, davon 1 nur mit Parquet-Engine
+aktiv); Test 6 (anonymize) noch nicht gebaut (Audit-Modus ist Phase 3).
+`--dry-run` liefert Kostenprojektion + Tool-Audit grün (Pilot ≈ \$2.23,
+Final ≈ \$43.69, Schätzungen). **Kein echter Call ausgeführt.**
 
 **Phase 3 — 5-Fragen-Pilot (separates Sample):** `--pilot --budget <klein>` über
 das eigenständige Pilot-Sample; Hauptpfad (Modellnamen) plus **optionaler
