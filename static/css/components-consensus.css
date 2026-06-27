@@ -732,6 +732,12 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   display: inline-block !important;
   margin: 0;
   flex-shrink: 0;
+  filter: invert(1);
+  transition: filter 0.3s ease;
+}
+
+.dark-mode .consensus-main h2 img {
+  filter: invert(0);
 }
 
 .consensus-main > p {
@@ -1075,8 +1081,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   color: var(--feedback-text-color);
 }
 
-.privacy-inline-link,
-.feedback-button {
+.privacy-inline-link {
   position: relative;
   z-index: 6;
   color: var(--feedback-text-color) !important;
@@ -1088,10 +1093,33 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   pointer-events: auto;
 }
 
-.privacy-inline-link:hover,
-.feedback-button:hover {
+.privacy-inline-link:hover {
   color: var(--feedback-text-hover-color) !important;
   opacity: 1;
+}
+
+/* Footer "Feedback" button: rendered as an inline disclaimer link like the
+   privacy links beside it, but it is a <button>, so the background/border/
+   padding are reset. (Consolidated here from the former "Restored" block.) */
+.feedback-button {
+  position: relative;
+  z-index: 6;
+  background: transparent !important;
+  border: none !important;
+  color: inherit !important;
+  padding: 0 !important;
+  font-size: inherit !important;
+  font-family: inherit;
+  line-height: inherit;
+  text-decoration: underline !important;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.feedback-button:hover {
+  color: var(--feedback-text-hover-color) !important;
+  opacity: 0.8;
 }
 
 .consensus-controls {

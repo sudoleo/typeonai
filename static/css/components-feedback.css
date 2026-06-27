@@ -238,12 +238,9 @@
 }
 
 /* --------------------------------------------------------------------------
-   Restored Missing Button & Icon Styles
+   Top-bar & Auth Buttons (logout, account popup)
    -------------------------------------------------------------------------- */
 
-
-
-/* Fix for Logout Button */
 .logout-button {
   background-color: transparent !important;
   color: var(--text-color) !important;
@@ -272,31 +269,6 @@
 #logoutButton:hover {
   color: var(--button-bg) !important;
   opacity: 1;
-}
-
-/* Fix for Feedback Button */
-.feedback-button {
-  background: transparent !important;
-  border: none !important;
-  color: inherit !important;
-  padding: 0 !important;
-  font-size: inherit !important;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.feedback-button:hover {
-  opacity: 0.8;
-}
-
-/* Fix for Consensus Icon */
-.consensus-main h2 img {
-  filter: invert(1);
-  transition: filter 0.3s ease;
-}
-
-.dark-mode .consensus-main h2 img {
-  filter: invert(0);
 }
 
 
