@@ -111,19 +111,34 @@ def test_live_preflight_passes_but_is_gated_no_http(patched, monkeypatch, capsys
     assert not (run_dir / "calls.jsonl").exists()
 
 
-def test_smoke_live_preflight_passes_but_is_gated_no_http(patched, monkeypatch, capsys):
+def test_smoke_live_executes_when_smoke_gate_enabled(patched, monkeypatch, capsys):
     monkeypatch.setattr(credentials, "resolve_developer_api_keys",
                         lambda providers=None: {p: "k" for p in cli.REQUIRED_PROVIDERS})
+    called = {"smoke": False}
+
+    def fake_run_smoke(self, records, **kwargs):
+        called["smoke"] = True
+        return (
+            type("Result", (), {
+                "cells_written": 8, "cells_skipped": 0, "cells_failed": 0,
+                "spent_usd": 0.1234, "stopped": False,
+            })(),
+            {"option_permutation": {"enabled": False}},
+            {"n_questions": 1, "n_disagreement": 0},
+        )
+
+    monkeypatch.setattr(runner_mod.BenchmarkRunner, "run_smoke", fake_run_smoke)
     rc = cli.main(["--smoke", "--live", "--budget", "5"])
     assert rc == 0
     out = capsys.readouterr().out
     assert "Preflight" in out
-    assert "GATED" in out
+    assert "Run finished" in out
+    assert called["smoke"]
     run_dir = config.RUNS_DIR / "smoke"
     assert (run_dir / "manifest.json").exists()
-    assert not (run_dir / "calls.jsonl").exists()
 
 
 def test_live_execution_stays_gated_constant():
-    # Sicherheitsnetz: in Phase 2.5a bleibt der Live-Run hart gesperrt.
+    # Sicherheitsnetz: Pilot/Final bleiben hart gesperrt.
     assert cli.LIVE_EXECUTION_ENABLED is False
+    assert cli.SMOKE_LIVE_EXECUTION_ENABLED is True

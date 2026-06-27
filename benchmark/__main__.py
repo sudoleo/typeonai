@@ -7,11 +7,12 @@ Sicherheits-Modell (Phase 2.5a – Pilot-Startfaehigkeit **ohne** Live-Run):
   validiert (fehlende -> klarer Abbruch mit Provider-Liste), Run-Verzeichnis +
   Manifest angelegt/geprueft und ein Preflight (Audit + Projektion) gefahren.
   Die eigentliche Ausfuehrung ist in dieser Phase **bewusst gesperrt**
-  (``LIVE_EXECUTION_ENABLED = False``) und loest selbst **keinen** HTTP-Call aus.
+  Pilot/Final bleiben mit ``LIVE_EXECUTION_ENABLED = False`` gesperrt; Smoke
+  ist ueber ``SMOKE_LIVE_EXECUTION_ENABLED = True`` separat freigegeben.
 
 Aufrufe:
   python -m benchmark --dry-run --smoke
-  python -m benchmark --smoke --live --budget 5          # Preflight (gated)
+  python -m benchmark --smoke --live --budget 5
   python -m benchmark --dry-run --pilot
   python -m benchmark --pilot --run-id pilot_v1 --budget 5
   python -m benchmark --pilot --live --budget 5            # Preflight (gated)
@@ -32,10 +33,10 @@ from benchmark.runner import BenchmarkRunner
 # nutzt Gemini, das bereits in der Liste steht).
 REQUIRED_PROVIDERS = ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"]
 
-# Harter Gate: die echte Zellen-Ausfuehrung ist in Phase 2.5a gesperrt. Das
-# Umlegen (+ Verdrahten von runner.run()) ist der naechste, separate Schritt
-# (1-Frage-Live-Smoke-Test).
+# Globaler Gate: Pilot/Final bleiben gesperrt, bis sie bewusst freigegeben werden.
 LIVE_EXECUTION_ENABLED = False
+# Separater Gate fuer den kontrollierten 1-Frage-Smoke.
+SMOKE_LIVE_EXECUTION_ENABLED = True
 
 
 def _parse_args(argv=None) -> argparse.Namespace:
@@ -181,10 +182,10 @@ def main(argv=None) -> int:
     print(f"Budget cap:        {f'${args.budget:.2f}' if args.budget is not None else '(none)'}")
     print("Credentials:       OK for all 6 providers")
 
-    if not LIVE_EXECUTION_ENABLED:
+    if not _live_execution_allowed(args):
         print(
-            "LIVE EXECUTION GATED (Phase 2.5a): preflight passed, no HTTP call made. "
-            "Enable runner.run() wiring + LIVE_EXECUTION_ENABLED for the smoke test."
+            "LIVE EXECUTION GATED: preflight passed, no HTTP call made. "
+            "Enable the appropriate live gate for this sample mode."
         )
         return 0
 
@@ -221,6 +222,10 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--smoke uses exactly one fixed question; --limit is not allowed")
     if args.smoke and args.live and args.budget is None:
         raise ValueError("--smoke --live requires an explicit --budget value")
+
+
+def _live_execution_allowed(args: argparse.Namespace) -> bool:
+    return bool(LIVE_EXECUTION_ENABLED or (args.smoke and SMOKE_LIVE_EXECUTION_ENABLED))
 
 
 def _validate_smoke_manifests() -> None:
