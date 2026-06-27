@@ -149,8 +149,9 @@ def main(argv=None) -> int:
         )
         return 0
 
-    # Naechster Schritt (separat freizugeben): echter Lauf.
-    result = runner.run(
+    # Naechster Schritt (separat freizugeben): echter Lauf inkl. E4-Audits +
+    # Auswertung (calls.jsonl, audits.json, results.json).
+    result, _audits, summary = runner.run_pilot(
         records,
         run_dir=run_dir,
         api_keys=api_keys,
@@ -161,6 +162,9 @@ def main(argv=None) -> int:
         f"Run finished: written={result.cells_written} skipped={result.cells_skipped} "
         f"failed={result.cells_failed} spent=${result.spent_usd:.4f} stopped={result.stopped}"
     )
+    if summary:
+        print(f"Results: {run_dir / 'results.json'} (n={summary['n_questions']}, "
+              f"disagreement={summary['n_disagreement']})")
     return 0
 
 

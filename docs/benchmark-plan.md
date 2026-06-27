@@ -483,6 +483,21 @@ Liste, **vor** jedem Call), Gemini per Key **oder** ADC; danach Preflight
 bearer + Header-Blöcken → keine Secrets in JSONL/Manifest. Gesamt-Suite 210 passed
 (62 Benchmark-Tests). **Weiterhin kein echter Call ausgeführt.**
 
+**Phase 2.5b — Auswertung + E4-Audits verdrahtet:** *(umgesetzt, Stand 2026-06-28.)*
+Neues `benchmark/results.py`: `calls.jsonl` → `results.json` mit Vergleichsgrößen
+je Einzelmodell, **Majority Vote**, **Consensus**, **Synthesizer-allein** —
+Accuracy gesamt **und** auf der Uneinigkeits-Teilmenge, dazu `no_majority`,
+abstain/unparseable, Fehler-/Parse-Quote, Kosten und Latenzen; Resume-Retry-Zeilen
+werden dedupliziert (Erfolg gewinnt). `majority_vote`/`NO_MAJORITY` sind damit
+nicht mehr tot (genutzt in `results.py`; aus `runner.py`-Import entfernt). Die
+beiden E4-Audits sind im Pilot-Flow verdrahtet (`runner.run_pilot` →
+`audit_option_permutation` + `audit_consensus_order`, gespeichert in `audits.json`)
+und ohne erneute Kandidaten-Calls. Hinweis: Der Consensus-Reihenfolge-Audit misst
+mit dem produktiven (festen Label-Order-)Prompt zunächst Synthese-Stabilität; echte
+Label-Permutation hängt am aufgeschobenen geordneten/anonymisierten Builder (E5).
+Alles mit Fake-Transport/-Consensus getestet. Gesamt-Suite 225 passed
+(77 Benchmark-Tests). **Weiterhin kein echter Call ausgeführt; Live-Gate bleibt zu.**
+
 **Phase 3 — 5-Fragen-Pilot (separates Sample):** `--pilot --budget <klein>` über
 das eigenständige Pilot-Sample; Hauptpfad (Modellnamen) plus **optionaler
 anonymisierter Audit-Modus** (E5: gleiche gespeicherte Antworten, einmal Namen /

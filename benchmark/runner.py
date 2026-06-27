@@ -15,6 +15,7 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import logging
+import random
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -22,8 +23,8 @@ import app.core.config as cfg
 from app.services.llm.engines import build_provider_payload
 
 from benchmark import audit, config, cost, transport
-from benchmark.parse import NO_MAJORITY, extract_letter, grade, majority_vote
-from benchmark.prompt import build_mc_question
+from benchmark.parse import extract_letter, grade
+from benchmark.prompt import LETTERS, build_mc_question
 
 logger = logging.getLogger(__name__)
 
@@ -517,6 +518,200 @@ class BenchmarkRunner:
                 f"Run config drifted from frozen manifest {manifest_path} in: {', '.join(drifted)}"
             )
         return existing
+
+    # --- E4-Audits (im Pilot-Flow ausgefuehrt + gespeichert) ---------------
+
+    def _stored_answers(self, index: dict, qid: int) -> dict[str, str]:
+        """Bereits gespeicherte (erfolgreiche) Kandidatenantworten je Provider
+        aus ``calls.jsonl`` – Basis fuer beide Audits, ohne erneute Calls."""
+        answers: dict[str, str] = {}
+        for model in self.models:
+            stored = index.get(cell_key(qid, "model", model.provider), {}).get("success")
+            if stored:
+                answers[model.provider] = stored.get("parsed_text") or ""
+        return answers
+
+    def audit_option_permutation(
+        self,
+        records: list[dict],
+        run_dir: Path,
+        *,
+        transport_execute=transport.execute,
+        api_keys: dict | None = None,
+        rng: random.Random | None = None,
+        subset_size: int = 2,
+    ) -> dict:
+        """Positions-Bias-Audit (E4-2): mischt auf einem kleinen Subset die
+        Optionen und prueft, dass die extrahierte Antwort auf **denselben
+        Options-Inhalt** zeigt (nicht auf eine feste Buchstabenposition)."""
+        run_dir = Path(run_dir)
+        api_keys = api_keys or {}
+        rng = rng or random.Random(config.PILOT_SEED)
+        index = index_existing(load_existing_records(run_dir / "calls.jsonl"))
+        subset = records[: max(0, subset_size)]
+
+        checks: list[dict] = []
+        for record in subset:
+            qid = record["question_id"]
+            new_options, _new_idx, _new_letter, order = audit.permute_options(
+                record["options"], record["answer_index"], rng
+            )
+            user_prompt = build_mc_question(record["question"], new_options)
+            for model in self.models:
+                stored = index.get(cell_key(qid, "model", model.provider), {}).get("success")
+                original_letter = stored.get("extracted_letter") if stored else None
+
+                request_data = build_provider_payload(
+                    model.provider,
+                    question=user_prompt,
+                    system_prompt=self.system_prompt,
+                    model_override=model.internal_id,
+                    max_output_tokens=self.output_tokens,
+                    benchmark_mode=True,
+                )
+                audit.assert_no_web_tools(request_data["payload"], context=f"perm:{model.provider}:{qid}")
+                api_key = api_keys.get(config.PROVIDER_API_KEY_NAME[model.provider])
+                outcome = transport_execute(request_data, api_key)
+                permuted_letter = (
+                    None if outcome.get("error") else extract_letter(outcome.get("text"), options=new_options)
+                )
+                checks.append({
+                    "question_id": qid,
+                    "provider": model.provider,
+                    "original_letter": original_letter,
+                    "permuted_letter": permuted_letter,
+                    "consistent": _permutation_consistent(original_letter, permuted_letter, order),
+                })
+
+        conclusive = [c for c in checks if c["consistent"] is not None]
+        return {
+            "subset_question_ids": [r["question_id"] for r in subset],
+            "checks": checks,
+            "consistent": sum(1 for c in conclusive if c["consistent"]),
+            "conclusive": len(conclusive),
+            "total": len(checks),
+        }
+
+    def audit_consensus_order(
+        self,
+        records: list[dict],
+        run_dir: Path,
+        *,
+        consensus_fn=None,
+        api_keys: dict | None = None,
+        rng: random.Random | None = None,
+    ) -> dict:
+        """Reihenfolge-Invarianz der Consensus-Synthese (E4-3): rechnet den
+        Consensus auf identischen, **bereits gespeicherten** Kandidatenantworten
+        in drei Reihenfolgen neu (normal/umgekehrt/gemischt) – **keine** erneuten
+        Kandidaten-Calls – und protokolliert die Stabilitaet des extrahierten
+        Buchstabens.
+
+        Hinweis: Der produktive Consensus-Prompt listet die Experten in fester
+        Label-Reihenfolge; bei reiner Reihenfolge-Variation der Antworten misst
+        dieser Audit daher zunaechst die Synthese-Stabilitaet/Nichtdeterminismus.
+        Echte Label-Reihenfolge-Permutation haengt am aufgeschobenen
+        geordneten/anonymisierten Prompt-Builder (E5).
+        """
+        run_dir = Path(run_dir)
+        api_keys = api_keys or {}
+        rng = rng or random.Random(config.FINAL_SEED)
+        if consensus_fn is None:
+            consensus_fn = _default_consensus_fn(api_keys, self.consensus_model)
+        index = index_existing(load_existing_records(run_dir / "calls.jsonl"))
+
+        questions: list[dict] = []
+        for record in records:
+            answers = self._stored_answers(index, record["question_id"])
+            if len(answers) < 2:
+                continue
+            providers = [m.provider for m in self.models if m.provider in answers]
+
+            def recompute(order, _answers=answers, _record=record):
+                ordered = {provider: _answers[provider] for provider in order}
+                text = consensus_fn(question=_record["question"], answers=ordered, model_sources=None)
+                return extract_letter(text, options=_record["options"])
+
+            outcome = audit.run_consensus_order_audit(providers, recompute, rng)
+            questions.append({
+                "question_id": record["question_id"],
+                "letters": outcome["letters"],
+                "stable": outcome["stable"],
+            })
+
+        return {
+            "questions": questions,
+            "stable": sum(1 for q in questions if q["stable"]),
+            "total": len(questions),
+        }
+
+    # --- Pilot-Orchestrierung (run + Audits + Auswertung) ------------------
+
+    def run_pilot(
+        self,
+        records: list[dict],
+        *,
+        run_dir: Path,
+        api_keys: dict | None = None,
+        transport_execute=transport.execute,
+        consensus_fn=None,
+        budget: float | None = None,
+        retry_failed: bool = False,
+        permutation_subset: int = 2,
+        rng: random.Random | None = None,
+    ):
+        """Voller Pilot-Flow: Zellen-Loop -> E4-Audits -> Auswertung.
+        Schreibt ``calls.jsonl``, ``audits.json`` und ``results.json``.
+        Injizierbarer Transport/Consensus -> ohne HTTP/Keys testbar.
+        """
+        run_dir = Path(run_dir)
+        api_keys = api_keys or {}
+        rng = rng or random.Random(config.FINAL_SEED)
+
+        result = self.run(
+            records,
+            run_dir=run_dir,
+            api_keys=api_keys,
+            transport_execute=transport_execute,
+            consensus_fn=consensus_fn,
+            budget=budget,
+            retry_failed=retry_failed,
+        )
+
+        audits = None
+        summary = None
+        if not result.stopped:
+            audits = {
+                "option_permutation": self.audit_option_permutation(
+                    records, run_dir, transport_execute=transport_execute,
+                    api_keys=api_keys, rng=rng, subset_size=permutation_subset,
+                ),
+                "consensus_order": self.audit_consensus_order(
+                    records, run_dir, consensus_fn=consensus_fn, api_keys=api_keys, rng=rng,
+                ),
+            }
+            (run_dir / "audits.json").write_text(
+                json.dumps(audits, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
+            from benchmark import results as results_mod
+
+            summary = results_mod.write_results(run_dir, consensus_model=self.consensus_model)
+
+        return result, audits, summary
+
+
+def _permutation_consistent(original_letter, permuted_letter, order: list[int]):
+    """True/False ob die permutierte Antwort auf dieselbe Original-Option zeigt;
+    None, wenn nicht entscheidbar (eine Seite ohne Buchstabe)."""
+    if not original_letter or not permuted_letter:
+        return None
+    if original_letter not in LETTERS or permuted_letter not in LETTERS:
+        return None
+    original_index = LETTERS.index(original_letter)
+    permuted_position = LETTERS.index(permuted_letter)
+    if permuted_position >= len(order):
+        return None
+    return order[permuted_position] == original_index
 
 
 def _now_iso() -> str:
