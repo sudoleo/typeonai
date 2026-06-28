@@ -451,6 +451,44 @@ Alle **ohne** echte API-Calls (Mocks/Fixtures); bestehende Pytest-Baseline
 
 ---
 
+## 10b. Methodik-Entscheidungen (Phase 3, getroffen)
+
+Reaktion auf ein externes Review. Bewusst entschieden, nicht implizit gelassen:
+
+### M1 — Output-Token-Politik: lieber Erfolg mit mehr Tokens
+Reasoning-Modelle dürfen nicht **vor** der `FINAL_ANSWER`-Zeile abbrechen. Befund
+aus den Pilots: bei 4096 brachen Rechenwege ab; bei 12288 verbrannte DeepSeek auf
+einer harten Engineering-Frage das gesamte Budget intern (0 sichtbarer Output).
+Entscheidung (User): `OUTPUT_TOKEN_LIMIT = 24576`, `CONSENSUS_OUTPUT_TOKEN_LIMIT =
+32768` (`benchmark/config.py`). Das Limit muss nicht ausgeschöpft werden — die
+**Kosten richten sich nach Ist-Usage**, nicht nach dem Cap. Truncation wird im
+Auswertungs-Output sichtbar (abstain + completion_tokens == Limit).
+
+### M2 — Temperatur: Produktions-Defaults beibehalten (reale Experience)
+Nur Mistral/Gemini tragen `temp 0.2`, die übrigen Provider laufen auf
+Provider-Default (siehe `engines.build_provider_payload`). Ein reiner Wissens-
+Benchmark wäre mit `temp 0` sauberer/reproduzierbarer, **misst aber ein anderes
+System** als das, was Nutzer real bekommen. Konsistent zu E5 (Label-Modus =
+„reale Experience") wird die **Produktions-Temperatur-Politik beibehalten** und je
+Modell + Quelle im Manifest dokumentiert (`temperature` + `temperature_source`).
+Der Snapshot ist damit bewusst **nicht** bit-reproduzierbar (Roh-Antworten sind
+gespeichert); das wird auf der Website transparent gemacht.
+
+### M3 — Erfolgskriterium vorab + Konfidenzintervalle
+Vorab festgelegt, bevor der finale 98er-Lauf interpretiert wird:
+1. **Parse-Qualität (Gate):** `parse_rate ≥ 0.95` für **jedes** System; sonst
+   zuerst Prompt/Token-Limit nachschärfen, nicht Accuracy interpretieren.
+2. **Kernaussage Consensus:** Consensus-Accuracy ≥ Mittel der sechs Einzelmodelle
+   **und** auf der **Uneinigkeits-Teilmenge** ≥ Majority Vote. „Schlägt jedes
+   Modell immer" ist **nicht** das Kriterium (siehe §0).
+3. **Berichten mit Unsicherheit:** Alle Accuracys werden mit **Wilson-95%-
+   Konfidenzintervall** ausgewiesen (`results.py::_wilson_ci`, in `results.json`
+   + Admin-Visualisierung). Bei n=98 (und erst recht auf der Uneinigkeits-
+   Teilmenge) sind die CIs breit — Aussagen nur treffen, wo sich die Intervalle
+   nicht stark überlappen.
+
+---
+
 ## 11. Phasen
 
 **Phase 1 — Analyse/Architektur** *(erledigt; dieses Dokument).* Befunde, E1–E4

@@ -43,18 +43,19 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `pages.py` | HTML-Seiten + SEO: `/` (Landing, redirect→`/app` bei Session), `/app` (Haupt-App), `/admin`, `/about`, `/ai-model-comparison`, `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
+| `pages.py` | HTML-Seiten + SEO: `/` (Landing, redirect→`/app` bei Session), `/app` (Haupt-App), `/admin`, `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`. |
 | `auth.py` | `/register`, `/confirm-registration`. |
 | `users.py` | `/user_status`, `/usage`, `/delete_account`, `/track-interest`. |
 | `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus`. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
-| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST). Alle hinter `is_user_admin`. |
+| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest `benchmark/report_reader.py` – stdlib-only, **kein** LLM-Importgraph). Alle hinter `is_user_admin`. |
 
 **Zentrale Templates** (`templates/`, gerendert mit `Jinja2Templates`):
 `landing.html` (Marketing), `index.html` (die App — Haupt-Markup + Script-Tags),
-`admin.html`, `share.html` (öffentliche Consensus-Seite), `share_unavailable.html`,
-plus statische Rechts-/SEO-Seiten. **`index.html` enthält kein App-JS inline mehr**
+`admin.html`, `admin_benchmark.html` (Admin-Benchmark-Visualisierung, eigenes
+Template + Firebase-Auth-Modul wie `admin.html`), `share.html` (öffentliche
+Consensus-Seite), `share_unavailable.html`, plus statische Rechts-/SEO-Seiten. **`index.html` enthält kein App-JS inline mehr**
 — nur den Jinja-Config-Block im `<head>` und die Modul-`<script>`-Tags.
 
 ---

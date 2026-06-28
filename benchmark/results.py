@@ -11,6 +11,7 @@ Hier werden ``majority_vote`` und ``NO_MAJORITY`` tatsaechlich genutzt.
 from __future__ import annotations
 
 import json
+import math
 import statistics
 from pathlib import Path
 
@@ -23,6 +24,20 @@ MODEL_PROVIDERS = [model.provider for model in config.MODELS]
 
 def _ratio(numerator: int, denominator: int):
     return round(numerator / denominator, 4) if denominator else None
+
+
+def _wilson_ci(correct: int, n: int, z: float = 1.96):
+    """Wilson-Score-95%-Konfidenzintervall fuer eine Trefferquote (Plan §4:
+    Accuracy mit Konfidenzintervallen berichten). Bei kleinem n (z. B. 98 Fragen
+    oder die Uneinigkeits-Teilmenge) ist die normale Naeherung zu optimistisch –
+    Wilson ist dort robust. Gibt ``[lo, hi]`` (gerundet) oder None bei n=0."""
+    if not n:
+        return None
+    phat = correct / n
+    denom = 1 + z * z / n
+    center = (phat + z * z / (2 * n)) / denom
+    margin = (z * math.sqrt((phat * (1 - phat) + z * z / (4 * n)) / n)) / denom
+    return [round(max(0.0, center - margin), 4), round(min(1.0, center + margin), 4)]
 
 
 def _latency_stats(latencies: list) -> dict:
@@ -67,7 +82,9 @@ def _cell_system_stats(cells: dict, qids: list[int], dis_set: set[int]) -> dict:
 
     return {
         "accuracy_overall": _ratio(correct, len(qids)),
+        "accuracy_overall_ci": _wilson_ci(correct, len(qids)),
         "accuracy_disagreement": _ratio(correct_dis, len(dis_set)),
+        "accuracy_disagreement_ci": _wilson_ci(correct_dis, len(dis_set)),
         "correct": correct,
         "total": len(qids),
         "attempted": attempted,
@@ -131,7 +148,9 @@ def aggregate(records: list[dict], *, consensus_model: str = config.CONSENSUS_MO
                 maj_correct_dis += 1
     systems["majority_vote"] = {
         "accuracy_overall": _ratio(maj_correct, n_questions),
+        "accuracy_overall_ci": _wilson_ci(maj_correct, n_questions),
         "accuracy_disagreement": _ratio(maj_correct_dis, n_dis),
+        "accuracy_disagreement_ci": _wilson_ci(maj_correct_dis, n_dis),
         "correct": maj_correct,
         "total": n_questions,
         "no_majority": no_majority,

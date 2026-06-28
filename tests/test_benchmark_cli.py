@@ -169,8 +169,56 @@ def test_smoke_live_executes_when_smoke_gate_enabled(patched, monkeypatch, capsy
     assert (run_dir / "manifest.json").exists()
 
 
+def test_final_preview_requires_budget(patched, capsys):
+    rc = cli.main(["--final", "--limit", "10", "--live"])
+    assert rc == 2
+    assert "requires an explicit --budget" in capsys.readouterr().err
+
+
+def test_final_limit_over_preview_cap_is_rejected(patched, capsys):
+    rc = cli.main(["--final", "--limit", "50", "--live", "--budget", "8"])
+    assert rc == 2
+    assert "capped at" in capsys.readouterr().err
+
+
+def test_full_final_without_limit_stays_gated(patched, monkeypatch, capsys):
+    # Der volle Final-Run (ohne --limit) bleibt durch LIVE_EXECUTION_ENABLED gesperrt.
+    monkeypatch.setattr(credentials, "resolve_developer_api_keys",
+                        lambda providers=None: {p: "k" for p in cli.REQUIRED_PROVIDERS})
+    rc = cli.main(["--final", "--live", "--budget", "8"])
+    assert rc == 0
+    assert "GATED" in capsys.readouterr().out
+    assert not (config.RUNS_DIR / "final" / "calls.jsonl").exists()
+
+
+def test_final_preview_executes_when_preview_gate_enabled(patched, monkeypatch, capsys):
+    monkeypatch.setattr(credentials, "resolve_developer_api_keys",
+                        lambda providers=None: {p: "k" for p in cli.REQUIRED_PROVIDERS})
+    called = {"run": False}
+
+    def fake_run_pilot(self, records, **kwargs):
+        called["run"] = True
+        return (
+            type("Result", (), {
+                "cells_written": 80, "cells_skipped": 0, "cells_failed": 0,
+                "spent_usd": 2.5, "stopped": False,
+            })(),
+            {"option_permutation": {"enabled": True}},
+            {"n_questions": 10, "n_disagreement": 3},
+        )
+
+    monkeypatch.setattr(runner_mod.BenchmarkRunner, "run_pilot", fake_run_pilot)
+    rc = cli.main(["--final", "--limit", "10", "--live", "--budget", "8", "--run-id", "preview_x"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Run finished" in out
+    assert called["run"]
+
+
 def test_live_execution_stays_gated_constant():
-    # Sicherheitsnetz: Final bleibt hart gesperrt; Smoke/Pilot sind separat freigegeben.
+    # Sicherheitsnetz: voller Final-Run bleibt hart gesperrt; Smoke/Pilot/Preview separat.
     assert cli.LIVE_EXECUTION_ENABLED is False
     assert cli.SMOKE_LIVE_EXECUTION_ENABLED is True
     assert cli.PILOT_LIVE_EXECUTION_ENABLED is True
+    assert cli.PREVIEW_LIVE_EXECUTION_ENABLED is True
+    assert cli.PREVIEW_MAX_QUESTIONS == 20

@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>consens.io - Benchmark Runs</title>
+    <script>
+        window.FIREBASE_CONFIG = {
+          apiKey: "{{ firebase_api_key }}",
+          authDomain: "{{ firebase_auth_domain }}",
+          projectId: "{{ firebase_project_id }}",
+          storageBucket: "{{ firebase_storage_bucket }}",
+          messagingSenderId: "{{ firebase_messaging_sender_id }}",
+          appId: "{{ firebase_app_id }}"
+        };
+    </script>
+    <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .bm-container { max-width: 1200px; margin: 90px auto 60px; padding: 20px; }
+        .bm-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 20px; }
+        .bm-toolbar select {
+            padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border-color);
+            background: var(--bg-secondary); color: var(--text-color); min-width: 280px;
+            color-scheme: dark; /* macht die native Dropdown-Liste im Darkmode lesbar */
+        }
+        .bm-toolbar select option { background: var(--bg-secondary); color: var(--text-color); }
+        .bm-status { font-size: 0.85em; opacity: 0.8; }
+        .bm-status.error { color: #f44336; opacity: 1; }
+        .bm-card {
+            background: var(--bg-secondary); border-radius: 8px; padding: 18px 20px;
+            margin-bottom: 22px; box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+        }
+        .bm-card h3 { margin: 0 0 14px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
+        .bm-meta-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px 18px;
+        }
+        .bm-meta-grid div { font-size: 0.9em; }
+        .bm-meta-grid span { opacity: 0.65; display: block; font-size: 0.78em; text-transform: uppercase; letter-spacing: .03em; }
+        table.bm-table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
+        table.bm-table th, table.bm-table td { padding: 7px 9px; text-align: right; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+        table.bm-table th:first-child, table.bm-table td:first-child { text-align: left; }
+        table.bm-table thead th { opacity: 0.7; font-size: 0.8em; text-transform: uppercase; letter-spacing: .03em; }
+        tr.bm-aggregate td { font-weight: 700; background: rgba(127,127,127,0.10); }
+        .bm-bar-wrap { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: 0.88em; }
+        .bm-bar-label { flex: 0 0 150px; }
+        .bm-bar-track { flex: 1; height: 16px; background: rgba(127,127,127,0.18); border-radius: 4px; overflow: hidden; }
+        .bm-bar-fill { height: 100%; background: var(--button-bg, #4caf50); border-radius: 4px; }
+        .bm-bar-fill.consensus { background: #1b5e20; }
+        .bm-bar-val { flex: 0 0 56px; text-align: right; }
+        .bm-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.78em; font-weight: 700; }
+        .bm-pill.ok { background: #1b5e20; color: #fff; }
+        .bm-pill.warn { background: #e65100; color: #fff; }
+        .bm-pill.bad { background: #b71c1c; color: #fff; }
+        .bm-matrix-wrap { overflow-x: auto; }
+        table.bm-matrix { border-collapse: collapse; font-size: 0.82em; }
+        table.bm-matrix th, table.bm-matrix td { padding: 5px 7px; text-align: center; border: 1px solid var(--border-color); }
+        table.bm-matrix th { opacity: 0.8; font-size: 0.78em; }
+        table.bm-matrix td.qcat { text-align: left; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cell-correct { background: rgba(27,94,32,0.55); color: #fff; }
+        .cell-wrong { background: rgba(183,28,28,0.55); color: #fff; }
+        .cell-abstain { background: rgba(127,127,127,0.30); }
+        .cell-error { background: rgba(230,81,0,0.45); }
+        .bm-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.8em; margin-top: 10px; opacity: 0.85; }
+        .bm-legend span { display: inline-flex; align-items: center; gap: 5px; }
+        .bm-swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 1px solid var(--border-color); }
+        .bm-empty { opacity: 0.7; font-style: italic; }
+        @media (max-width: 700px) { .bm-bar-label { flex-basis: 110px; } }
+    </style>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+
+        const app = initializeApp(window.FIREBASE_CONFIG);
+        const auth = getAuth(app);
+
+        const SYSTEM_LABELS = {
+            "model:openai": "OpenAI", "model:mistral": "Mistral", "model:anthropic": "Anthropic",
+            "model:gemini": "Gemini", "model:deepseek": "DeepSeek", "model:grok": "Grok",
+            "majority_vote": "Majority Vote", "consensus": "Consensus", "synth_alone": "Synthesizer alone",
+        };
+        const AGGREGATE_KEYS = new Set(["majority_vote", "consensus", "synth_alone"]);
+
+        function setStatus(msg, isError) {
+            const el = document.getElementById('bmStatus');
+            el.textContent = msg || '';
+            el.className = 'bm-status' + (isError ? ' error' : '');
+        }
+
+        async function api(path) {
+            const user = auth.currentUser;
+            if (!user) throw new Error('Not logged in');
+            const idToken = await user.getIdToken();
+            const res = await fetch(path, { headers: { 'Authorization': `Bearer ${idToken}` } });
+            let data = {};
+            try { data = await res.json(); } catch (e) { /* ignore */ }
+            if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+            return data;
+        }
+
+        function fmtPct(v) { return (v === null || v === undefined) ? '–' : (v * 100).toFixed(1) + '%'; }
+        function fmtCi(ci) {
+            if (!Array.isArray(ci)) return '';
+            return ` [${(ci[0] * 100).toFixed(0)}–${(ci[1] * 100).toFixed(0)}]`;
+        }
+        function fmtUsd(v) { return (v === null || v === undefined) ? '–' : '$' + Number(v).toFixed(4); }
+        function fmtMs(v) { return (v === null || v === undefined) ? '–' : Math.round(v) + ' ms'; }
+        function el(tag, props = {}, children = []) {
+            const node = document.createElement(tag);
+            Object.assign(node, props);
+            for (const c of [].concat(children)) {
+                if (c == null) continue;
+                node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+            }
+            return node;
+        }
+
+        async function loadRuns() {
+            setStatus('Loading runs…');
+            let data;
+            try { data = await api('/api/admin/benchmark/runs'); }
+            catch (err) { setStatus(err.message, true); return; }
+            const runs = data.runs || [];
+            const sel = document.getElementById('runSelect');
+            sel.innerHTML = '';
+            if (!runs.length) {
+                setStatus('No benchmark runs found on disk.', true);
+                document.getElementById('runDetail').innerHTML = '';
+                return;
+            }
+            runs.forEach(r => {
+                const cost = r.total_cost_usd != null ? ` · ${fmtUsd(r.total_cost_usd)}` : '';
+                const n = r.n_questions != null ? ` · ${r.n_questions}Q` : '';
+                sel.appendChild(el('option', {
+                    value: r.run_id,
+                    textContent: `${r.run_id} (${r.sample_role || '?'}${n}${cost})`
+                }));
+            });
+            setStatus('');
+            loadRun(sel.value);
+        }
+
+        async function loadRun(runId) {
+            if (!runId) return;
+            setStatus('Loading ' + runId + '…');
+            let data;
+            try { data = await api('/api/admin/benchmark/runs/' + encodeURIComponent(runId)); }
+            catch (err) { setStatus(err.message, true); return; }
+            setStatus('');
+            renderRun(data.run);
+        }
+
+        function renderRun(run) {
+            const root = document.getElementById('runDetail');
+            root.innerHTML = '';
+            if (!run) { root.appendChild(el('p', { className: 'bm-empty', textContent: 'No data.' })); return; }
+            root.appendChild(renderManifest(run.manifest, run.run_id));
+            if (run.results) {
+                root.appendChild(renderAccuracyBars(run.results));
+                root.appendChild(renderComparisonTable(run.results));
+            } else {
+                root.appendChild(el('div', { className: 'bm-card' },
+                    el('p', { className: 'bm-empty', textContent: 'No results.json yet (run not finished or dry-run only).' })));
+            }
+            if (run.audits) root.appendChild(renderAudits(run.audits));
+            if (run.questions && run.questions.length) root.appendChild(renderMatrix(run.questions));
+        }
+
+        function metaItem(label, value) {
+            return el('div', {}, [el('span', { textContent: label }), document.createTextNode(value == null ? '–' : String(value))]);
+        }
+
+        function renderManifest(m, runId) {
+            const card = el('div', { className: 'bm-card' }, el('h3', { textContent: 'Run · ' + runId }));
+            m = m || {};
+            const grid = el('div', { className: 'bm-meta-grid' }, [
+                metaItem('Sample', m.sample_role),
+                metaItem('Label mode', m.label_mode),
+                metaItem('Consensus model', m.consensus_model),
+                metaItem('Temperature', m.temperature),
+                metaItem('Output token limit', m.output_token_limit),
+                metaItem('Consensus token limit', m.consensus_output_token_limit),
+                metaItem('Synth alone', String(m.include_synth_alone)),
+                metaItem('Created', m.created),
+            ]);
+            card.appendChild(grid);
+            if (Array.isArray(m.models) && m.models.length) {
+                const t = el('table', { className: 'bm-table' });
+                t.appendChild(el('thead', {}, el('tr', {}, [
+                    el('th', { textContent: 'Provider' }), el('th', { textContent: 'internal_id' }),
+                    el('th', { textContent: 'resolved api_model' }), el('th', { textContent: 'output limit' }),
+                    el('th', { textContent: 'temperature' }),
+                ])));
+                const tb = el('tbody');
+                m.models.forEach(row => tb.appendChild(el('tr', {}, [
+                    el('td', { textContent: row.provider }),
+                    el('td', { textContent: row.internal_id }),
+                    el('td', { textContent: row.resolved_api_model }),
+                    el('td', { textContent: row.output_token_limit }),
+                    el('td', { textContent: row.temperature == null ? 'provider default' : row.temperature }),
+                ])));
+                t.appendChild(tb);
+                card.appendChild(el('div', { style: 'margin-top:14px' }, t));
+            }
+            return card;
+        }
+
+        function orderedSystemKeys(systems) {
+            const models = Object.keys(systems).filter(k => k.startsWith('model:'));
+            const aggr = ['majority_vote', 'consensus', 'synth_alone'].filter(k => k in systems);
+            return models.concat(aggr);
+        }
+
+        function renderAccuracyBars(results) {
+            const card = el('div', { className: 'bm-card' }, el('h3', {
+                textContent: `Accuracy (overall) · ${results.n_questions ?? '?'} questions · ${results.n_disagreement ?? 0} disagreement`
+            }));
+            const systems = results.systems || {};
+            orderedSystemKeys(systems).forEach(key => {
+                const acc = systems[key].accuracy_overall;
+                const pct = acc == null ? 0 : acc * 100;
+                const fill = el('div', { className: 'bm-bar-fill' + (key === 'consensus' ? ' consensus' : '') });
+                fill.style.width = pct.toFixed(1) + '%';
+                card.appendChild(el('div', { className: 'bm-bar-wrap' }, [
+                    el('div', { className: 'bm-bar-label', textContent: SYSTEM_LABELS[key] || key }),
+                    el('div', { className: 'bm-bar-track' }, fill),
+                    el('div', { className: 'bm-bar-val', textContent: fmtPct(acc) }),
+                ]));
+            });
+            return card;
+        }
+
+        function renderComparisonTable(results) {
+            const card = el('div', { className: 'bm-card' }, el('h3', { textContent: 'System comparison' }));
+            const systems = results.systems || {};
+            const t = el('table', { className: 'bm-table' });
+            t.appendChild(el('thead', {}, el('tr', {}, [
+                'System', 'Acc. overall (95% CI)', 'Acc. disagreement (95% CI)', 'Correct', 'Parse rate', 'Abstain', 'Errors', 'Cost', 'Latency avg'
+            ].map(h => el('th', { textContent: h })))));
+            const tb = el('tbody');
+            orderedSystemKeys(systems).forEach(key => {
+                const s = systems[key];
+                const lat = (s.latency_ms || {}).avg;
+                const tr = el('tr', AGGREGATE_KEYS.has(key) ? { className: 'bm-aggregate' } : {}, [
+                    el('td', { textContent: SYSTEM_LABELS[key] || key }),
+                    el('td', { textContent: fmtPct(s.accuracy_overall) + fmtCi(s.accuracy_overall_ci) }),
+                    el('td', { textContent: fmtPct(s.accuracy_disagreement) + fmtCi(s.accuracy_disagreement_ci) }),
+                    el('td', { textContent: `${s.correct ?? '–'}/${s.total ?? '–'}` }),
+                    el('td', { textContent: s.parse_rate == null ? '–' : fmtPct(s.parse_rate) }),
+                    el('td', { textContent: s.abstain ?? (key === 'majority_vote' ? `${s.no_majority ?? 0} no-maj` : '–') }),
+                    el('td', { textContent: s.error ?? '–' }),
+                    el('td', { textContent: s.cost_usd == null ? '–' : fmtUsd(s.cost_usd) }),
+                    el('td', { textContent: lat == null ? '–' : fmtMs(lat) }),
+                ]);
+                tb.appendChild(tr);
+            });
+            t.appendChild(tb);
+            card.appendChild(t);
+            const totals = results.totals || {};
+            card.appendChild(el('p', { className: 'bm-status', style: 'margin-top:10px',
+                textContent: `Total: ${totals.cells ?? '–'} cells · ${fmtUsd(totals.cost_usd)} · ${totals.errors ?? 0} errors` }));
+            return card;
+        }
+
+        function auditPill(passed, total) {
+            const kind = (total === 0) ? 'warn' : (passed === total ? 'ok' : 'bad');
+            return el('span', { className: 'bm-pill ' + kind, textContent: `${passed}/${total}` });
+        }
+
+        function renderAudits(audits) {
+            const card = el('div', { className: 'bm-card' }, el('h3', { textContent: 'E4 audits' }));
+            const perm = audits.option_permutation || {};
+            const order = audits.consensus_order || {};
+
+            const permRow = el('div', { className: 'bm-bar-wrap' }, [
+                el('div', { className: 'bm-bar-label', textContent: 'Option permutation' }),
+            ]);
+            if (perm.enabled === false) {
+                permRow.appendChild(el('span', { className: 'bm-pill warn', textContent: 'disabled (' + (perm.reason || 'n/a') + ')' }));
+            } else {
+                permRow.appendChild(auditPill(perm.consistent ?? 0, perm.conclusive ?? perm.total ?? 0));
+                permRow.appendChild(el('span', { className: 'bm-status', textContent: ` consistent of ${perm.conclusive ?? 0} conclusive (${perm.total ?? 0} checks)` }));
+            }
+            card.appendChild(permRow);
+
+            const orderRow = el('div', { className: 'bm-bar-wrap' }, [
+                el('div', { className: 'bm-bar-label', textContent: 'Consensus order' }),
+            ]);
+            if (order.enabled === false) {
+                orderRow.appendChild(el('span', { className: 'bm-pill warn', textContent: 'disabled (' + (order.reason || 'n/a') + ')' }));
+            } else {
+                orderRow.appendChild(auditPill(order.stable ?? 0, order.total ?? 0));
+                orderRow.appendChild(el('span', { className: 'bm-status', textContent: ' stable across normal/reversed/shuffled' }));
+            }
+            card.appendChild(orderRow);
+            return card;
+        }
+
+        function letterCell(cell) {
+            if (!cell) return el('td', { className: 'cell-abstain', textContent: '·' });
+            if (cell.error) return el('td', { className: 'cell-error', textContent: 'err' });
+            if (cell.abstain || !cell.letter) return el('td', { className: 'cell-abstain', textContent: '–' });
+            return el('td', { className: cell.correct ? 'cell-correct' : 'cell-wrong', textContent: cell.letter });
+        }
+
+        function renderMatrix(questions) {
+            const card = el('div', { className: 'bm-card' }, el('h3', { textContent: 'Per-question matrix' }));
+            const providers = [];
+            questions.forEach(q => Object.keys(q.models || {}).forEach(p => { if (!providers.includes(p)) providers.push(p); }));
+
+            const wrap = el('div', { className: 'bm-matrix-wrap' });
+            const t = el('table', { className: 'bm-matrix' });
+            const head = ['#', 'Category', 'GT'].concat(providers.map(p => p.slice(0, 4)))
+                .concat(['Maj', 'Cons', 'Synth', '≠']);
+            t.appendChild(el('thead', {}, el('tr', {}, head.map(h => el('th', { textContent: h })))));
+            const tb = el('tbody');
+            questions.forEach(q => {
+                const tr = el('tr', {}, [
+                    el('td', { textContent: q.question_id }),
+                    el('td', { className: 'qcat', textContent: q.category || '', title: q.category || '' }),
+                    el('td', { textContent: q.ground_truth || '' }),
+                ]);
+                providers.forEach(p => tr.appendChild(letterCell((q.models || {})[p])));
+                tr.appendChild(letterCell(q.majority));
+                tr.appendChild(letterCell(q.consensus));
+                tr.appendChild(letterCell(q.synth_alone));
+                tr.appendChild(el('td', { textContent: q.disagreement ? '✓' : '' }));
+                tb.appendChild(tr);
+            });
+            t.appendChild(tb);
+            wrap.appendChild(t);
+            card.appendChild(wrap);
+            card.appendChild(el('div', { className: 'bm-legend' }, [
+                legendSwatch('cell-correct', 'correct'), legendSwatch('cell-wrong', 'wrong'),
+                legendSwatch('cell-abstain', 'abstain / no answer'), legendSwatch('cell-error', 'error'),
+            ]));
+            return card;
+        }
+
+        function legendSwatch(cls, label) {
+            return el('span', {}, [el('span', { className: 'bm-swatch ' + cls }), document.createTextNode(label)]);
+        }
+
+        document.getElementById('runSelect').addEventListener('change', e => loadRun(e.target.value));
+        document.getElementById('refreshBtn').addEventListener('click', loadRuns);
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                loadRuns();
+            } else {
+                setStatus('Please log in as an admin to view benchmark runs.', true);
+                window.location.href = '/';
+            }
+        });
+    </script>
+    <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
+</head>
+<body class="dark-mode">
+    <header class="top-bar">
+        <div class="top-bar-logo">
+            <a href="/" id="logoLink"><img src="/static/favicon.png" alt="Favicon" class="top-bar-favicon"></a>
+            <span class="top-bar-title">consens.io Benchmark</span>
+        </div>
+        <div class="top-bar-right">
+            <a href="/admin" class="top-bar-about">Admin</a>
+            <a href="/app" class="top-bar-about">Back to App</a>
+        </div>
+    </header>
+
+    <div class="bm-container">
+        <div class="bm-toolbar">
+            <label for="runSelect" style="font-weight:700">Run:</label>
+            <select id="runSelect"></select>
+            <button id="refreshBtn" class="admin-btn">Refresh</button>
+            <span id="bmStatus" class="bm-status"></span>
+        </div>
+        <div id="runDetail"></div>
+    </div>
+</body>
+</html>

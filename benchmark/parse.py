@@ -7,35 +7,44 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
-
-from benchmark.prompt import LETTERS
 
 NO_MAJORITY = "no_majority"
 
-_FINAL_MARKER = "FINAL_ANSWER: "
+# Toleranter FINAL_ANSWER-Marker auf der **letzten nicht-leeren Zeile**:
+# case-insensitive, Unterstrich oder Leerzeichen ("FINAL_ANSWER"/"FINAL ANSWER"),
+# optionale Klammern um den Buchstaben, optionaler Schluss-Punkt. Markdown-Fettung
+# (``*``) wird vor dem Matchen entfernt, damit ``**FINAL_ANSWER: B**`` matcht.
+# Bewusst **kein** semantischer Fallback ("the answer is …", "Option B", lose
+# Buchstabenzeilen) – der Marker muss kommen; die Toleranz faengt nur
+# Formatierungs-Kleinkram ab (Plan §7 + Pilot-Befund: Modelle haengen oft Punkt
+# oder Klammern an).
+_FINAL_LINE_RE = re.compile(
+    r"^final[_ ]?answer\s*:\s*\(?\s*([A-J])\s*\)?\s*\.?$",
+    re.IGNORECASE,
+)
 
 
 def extract_letter(text: str, options: list[str] | None = None) -> str | None:
     """Extrahiert den gewaehlten Options-Buchstaben aus einer Modellantwort.
 
-    Benchmark-Contract: Die letzte nicht-leere Zeile muss exakt
-    ``FINAL_ANSWER: X`` enthalten. Begruendungstext davor wird nicht
-    interpretiert. ``options`` bleibt als kompatibler Parameter erhalten, wird
-    aber absichtlich nicht fuer semantische Fallbacks genutzt.
+    Benchmark-Contract: Die letzte nicht-leere Zeile muss der
+    ``FINAL_ANSWER: X``-Marker sein (formattolerant, s. ``_FINAL_LINE_RE``).
+    Begruendungstext davor wird nicht interpretiert. ``options`` bleibt als
+    kompatibler Parameter erhalten, wird aber absichtlich **nicht** fuer
+    semantische Fallbacks genutzt.
     """
     if not text:
         return None
     lines = [line.strip() for line in str(text).splitlines() if line.strip()]
     if not lines:
         return None
-    final_line = lines[-1]
-    if not final_line.startswith(_FINAL_MARKER):
+    final_line = lines[-1].replace("*", "").strip()
+    match = _FINAL_LINE_RE.match(final_line)
+    if not match:
         return None
-    letter = final_line[len(_FINAL_MARKER):]
-    if len(letter) != 1 or letter not in LETTERS:
-        return None
-    return letter
+    return match.group(1).upper()
 
 
 def majority_vote(letters: list[str | None]) -> str:

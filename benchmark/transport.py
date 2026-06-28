@@ -151,12 +151,19 @@ def _as_int(value) -> int:
         return 0
 
 
+# Grosszuegiges Read-Timeout: Reasoning-Modelle generieren bei hohen Output-Limits
+# (24576/32768) teils mehrere Minuten. Bei 120s lief Mistral im 10er-Preview (q271)
+# in einen Read-Timeout. Der Benchmark ist ein Batch-Job (nicht latenzkritisch) und
+# kann fehlgeschlagene Zellen ohnehin per Resume erneut versuchen.
+DEFAULT_TIMEOUT_SECONDS = 600
+
+
 def execute(
     request_data: dict,
     api_key: str,
     *,
     http_post=None,
-    timeout: int = 120,
+    timeout: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> dict:
     """Fuehrt einen einzelnen Provider-Call aus und liefert ein einheitliches
     Ergebnis-Dict: ``{text, sources, usage, raw, status, latency_ms, error,

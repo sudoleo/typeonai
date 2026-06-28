@@ -28,7 +28,8 @@ from benchmark.prompt import LETTERS, build_consensus_question, build_mc_questio
 
 logger = logging.getLogger(__name__)
 
-CONSENSUS_MAX_TOKENS = int(cfg.CONSENSUS_MAX_TOKENS)
+# Benchmark-eigenes Consensus-Output-Limit (NICHT der Produktions-Default 8192).
+CONSENSUS_MAX_TOKENS = int(config.CONSENSUS_OUTPUT_TOKEN_LIMIT)
 
 
 # --- Resume ----------------------------------------------------------------
@@ -947,8 +948,17 @@ def _redact_payload(value):
 
 
 def _default_consensus_fn(api_keys: dict, consensus_model: str):
-    """Standard-Consensus: produktive query_consensus-Logik (mit Modellnamen, E5)."""
+    """Standard-Consensus: produktive query_consensus-Logik (mit Modellnamen, E5).
+
+    ``query_consensus`` liest sein Output-Limit aus dem Modul-Global
+    ``cfg.CONSENSUS_MAX_TOKENS`` (Default 8192) und nimmt keinen Parameter. Da der
+    Benchmark in einem **eigenen Prozess** laeuft, spiegeln wir hier das
+    Benchmark-Limit in dieses Global – die Produktion (anderer Prozess) bleibt
+    unberuehrt. So bricht die Synthese auf langen Aufgaben nicht vorzeitig ab.
+    """
     from app.services.llm.consensus_engine import query_consensus
+
+    cfg.CONSENSUS_MAX_TOKENS = int(config.CONSENSUS_OUTPUT_TOKEN_LIMIT)
 
     def _fn(question: str, answers: dict, model_sources=None) -> str:
         return query_consensus(

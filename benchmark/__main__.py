@@ -16,7 +16,12 @@ Aufrufe:
   python -m benchmark --dry-run --pilot
   python -m benchmark --pilot --run-id pilot_v1 --budget 5
   python -m benchmark --pilot --live --budget 5
+  python -m benchmark --final --limit 10 --live --budget 8  # begrenzter Preview
   python -m benchmark --resume pilot_v1 --live --budget 5  # Resume-Preflight
+
+Der volle ``--final``-Lauf (ohne --limit) bleibt durch ``LIVE_EXECUTION_ENABLED``
+gesperrt; ein begrenzter Final-Sample-Preview laeuft ueber den separaten
+``PREVIEW_LIVE_EXECUTION_ENABLED``-Gate (max. ``PREVIEW_MAX_QUESTIONS`` Fragen).
 """
 
 from __future__ import annotations
@@ -33,12 +38,18 @@ from benchmark.runner import BenchmarkRunner
 # nutzt Gemini, das bereits in der Liste steht).
 REQUIRED_PROVIDERS = ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"]
 
-# Globaler Gate: Final bleibt gesperrt, bis er bewusst freigegeben wird.
+# Globaler Gate: der volle 98-Fragen-Final-Run bleibt gesperrt, bis er bewusst
+# freigegeben wird.
 LIVE_EXECUTION_ENABLED = False
 # Separater Gate fuer den kontrollierten 1-Frage-Smoke.
 SMOKE_LIVE_EXECUTION_ENABLED = True
 # Separater Gate fuer den kontrollierten 5-Fragen-Pilot.
 PILOT_LIVE_EXECUTION_ENABLED = True
+# Separater Gate fuer einen begrenzten Final-Sample-PREVIEW (``--final --limit N``)
+# OHNE den vollen Lauf zu oeffnen. Der ungebremste ``--final`` (ohne --limit oder
+# ueber PREVIEW_MAX_QUESTIONS hinaus) braucht weiterhin LIVE_EXECUTION_ENABLED.
+PREVIEW_LIVE_EXECUTION_ENABLED = True
+PREVIEW_MAX_QUESTIONS = 20
 
 
 def _parse_args(argv=None) -> argparse.Namespace:
@@ -226,6 +237,23 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--smoke --live requires an explicit --budget value")
     if args.pilot and args.live and args.budget is None:
         raise ValueError("--pilot --live requires an explicit --budget value")
+    if _is_final_preview(args) and args.live and args.budget is None:
+        raise ValueError("--final --limit (preview) requires an explicit --budget value")
+    if args.final and args.limit is not None and not _is_final_preview(args):
+        raise ValueError(
+            f"--final --limit preview is capped at {PREVIEW_MAX_QUESTIONS} questions; "
+            "the full run requires LIVE_EXECUTION_ENABLED"
+        )
+
+
+def _is_final_preview(args: argparse.Namespace) -> bool:
+    """Begrenzter Final-Sample-Preview: ``--final`` mit kleinem ``--limit``.
+    Der volle Lauf (kein/zu grosses --limit) faellt NICHT hierunter."""
+    return bool(
+        args.final
+        and args.limit is not None
+        and 0 < args.limit <= PREVIEW_MAX_QUESTIONS
+    )
 
 
 def _live_execution_allowed(args: argparse.Namespace) -> bool:
@@ -233,6 +261,7 @@ def _live_execution_allowed(args: argparse.Namespace) -> bool:
         LIVE_EXECUTION_ENABLED
         or (args.smoke and SMOKE_LIVE_EXECUTION_ENABLED)
         or (args.pilot and PILOT_LIVE_EXECUTION_ENABLED)
+        or (_is_final_preview(args) and PREVIEW_LIVE_EXECUTION_ENABLED)
     )
 
 

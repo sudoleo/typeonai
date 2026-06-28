@@ -20,15 +20,21 @@ class ExtractLetterTests(unittest.TestCase):
         self.assertIsNone(extract_letter("FINAL_ANSWER: B\nAdditional text."))
         self.assertEqual(extract_letter("Reasoning.\nFINAL_ANSWER: B\n\n"), "B")
 
-    def test_marker_format_is_strict(self):
-        self.assertIsNone(extract_letter("Final answer: B"))
-        self.assertIsNone(extract_letter("FINAL_ANSWER: (B)"))
-        self.assertIsNone(extract_letter("FINAL_ANSWER: B."))
-        self.assertIsNone(extract_letter("final_answer: B"))
-        self.assertIsNone(extract_letter("FINAL_ANSWER:B"))
-        self.assertIsNone(extract_letter("FINAL_ANSWER: b"))
+    def test_marker_format_is_tolerant(self):
+        # Formatierungs-Kleinkram, den reale Modelle anhaengen, wird verziehen.
+        self.assertEqual(extract_letter("FINAL_ANSWER: (B)"), "B")
+        self.assertEqual(extract_letter("FINAL_ANSWER: B."), "B")
+        self.assertEqual(extract_letter("FINAL_ANSWER: (B)."), "B")
+        self.assertEqual(extract_letter("final_answer: B"), "B")
+        self.assertEqual(extract_letter("Final answer: B"), "B")
+        self.assertEqual(extract_letter("FINAL ANSWER: B"), "B")
+        self.assertEqual(extract_letter("FINAL_ANSWER:B"), "B")
+        self.assertEqual(extract_letter("FINAL_ANSWER: b"), "B")
+        self.assertEqual(extract_letter("**FINAL_ANSWER: C**"), "C")
+        self.assertEqual(extract_letter("Reasoning.\n**FINAL_ANSWER: J.**"), "J")
 
     def test_no_semantic_option_text_or_letter_fallback(self):
+        # Ohne Marker wird NICHT geraten – auch nicht aus klaren Antwortphrasen.
         options = ["London", "Paris", "Berlin"]
         self.assertIsNone(extract_letter("Paris is the capital.", options=options))
         self.assertIsNone(extract_letter("The answer is (B)."))

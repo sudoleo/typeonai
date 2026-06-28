@@ -60,7 +60,19 @@ SYSTEM_PROMPT = (
 
 TEMPERATURE = 0.2  # nur Mistral/Gemini-Payloads tragen Temperatur (build_provider_payload);
 # OpenAI/Anthropic/DeepSeek/Grok nutzen Provider-Defaults (im Manifest dokumentiert).
-OUTPUT_TOKEN_LIMIT = 4096
+OUTPUT_TOKEN_LIMIT = 24576  # Reasoning-Modelle (DeepSeek/Mistral/Gemini) duerfen
+# nicht vor der FINAL_ANSWER-Zeile abbrechen. Pilot-Befund: bei 4096 brachen
+# Rechenwege ab; bei 12288 verbrannte DeepSeek auf q11800 das ganze Budget intern
+# (0 sichtbarer Output). Politik (User): lieber Erfolg mit mehr Tokens als Abbruch.
+# Das Limit muss nicht ausgeschoepft werden; Kosten richten sich nach Ist-Usage.
+
+# Eigenes Consensus-Output-Limit fuer den Benchmark (unabhaengig vom Produktions-
+# Default cfg.CONSENSUS_MAX_TOKENS=8192). Die Synthese liest 6 Kandidatenantworten
+# und braucht reichlich Raum, damit sie nicht vor der FINAL_ANSWER-Zeile abbricht.
+# Wird im Benchmark-Prozess vor dem Consensus-Call in cfg.CONSENSUS_MAX_TOKENS
+# gespiegelt (siehe runner._default_consensus_fn) – Produktion bleibt unberuehrt,
+# da der Benchmark ein separater Prozess ist.
+CONSENSUS_OUTPUT_TOKEN_LIMIT = 32768
 INCLUDE_SYNTH_ALONE = True  # vierte Vergleichsgroesse "Synthesizer allein" (Plan §10)
 DEFAULT_LABEL_MODE = "names"  # Hauptpfad mit Modellnamen (E5)
 

@@ -172,6 +172,21 @@ async def admin_page(request: Request):
         **firebase_config
     })
 
+@router.get("/admin/benchmark", response_class=HTMLResponse)
+async def admin_benchmark_page(request: Request):
+    firebase_config = {
+        "firebase_api_key": os.environ.get("FIREBASE_API_KEY"),
+        "firebase_auth_domain": os.environ.get("FIREBASE_AUTH_DOMAIN"),
+        "firebase_project_id": os.environ.get("FIREBASE_PROJECT_ID"),
+        "firebase_storage_bucket": os.environ.get("FIREBASE_STORAGE_BUCKET"),
+        "firebase_messaging_sender_id": os.environ.get("FIREBASE_MESSAGING_SENDER_ID"),
+        "firebase_app_id": os.environ.get("FIREBASE_APP_ID")
+    }
+    return templates.TemplateResponse("admin_benchmark.html", {
+        "request": request,
+        **firebase_config
+    })
+
 @router.post("/feedback")
 @limiter.limit("3/minute")
 async def submit_feedback(request: Request, data: dict = Body(...)):

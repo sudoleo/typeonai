@@ -69,6 +69,33 @@ def admin_moderate_share(request: Request, share_id: str, data: dict = Body(...)
     }
 
 
+@router.get("/api/admin/benchmark/runs")
+def admin_list_benchmark_runs(request: Request):
+    _require_admin(request, {})
+    # Lazy-Import: stdlib-only Reader, zieht NICHT den LLM-Importgraphen.
+    from benchmark import report_reader
+    try:
+        runs = report_reader.list_runs()
+    except Exception:
+        logging.exception("admin_list_benchmark_runs failed")
+        raise HTTPException(status_code=500, detail="Failed to load benchmark runs")
+    return {"status": "success", "runs": runs}
+
+
+@router.get("/api/admin/benchmark/runs/{run_id}")
+def admin_get_benchmark_run(request: Request, run_id: str):
+    _require_admin(request, {})
+    from benchmark import report_reader
+    try:
+        run = report_reader.get_run(run_id)
+    except Exception:
+        logging.exception("admin_get_benchmark_run failed")
+        raise HTTPException(status_code=500, detail="Failed to load benchmark run")
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {"status": "success", "run": run}
+
+
 def normalize_models_document(data: dict) -> dict:
     normalized = dict(data or {})
     provider_frontier = {
