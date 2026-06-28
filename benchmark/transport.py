@@ -126,9 +126,19 @@ def extract_usage(provider: str, raw: dict) -> dict:
     if provider == "gemini":
         meta = raw.get("usageMetadata") or raw.get("usage_metadata") or {}
         prompt = _as_int(meta.get("promptTokenCount") or meta.get("prompt_token_count"))
-        completion = _as_int(
+        # Gemini ist der einzige Provider, dessen ``candidatesTokenCount`` die
+        # Reasoning-Tokens *ausschliesst* (``thoughtsTokenCount`` ist ein eigenes
+        # Feld). Thinking wird aber zum Output-Tarif abgerechnet. Wir falten es in
+        # ``completion`` ein, damit (a) die Kosten stimmen und (b) Gemini konsistent
+        # mit OpenAI/Anthropic/DeepSeek ist, deren Output-Tokens das Reasoning
+        # bereits enthalten. ``prompt + completion == total`` bleibt damit gewahrt.
+        visible = _as_int(
             meta.get("candidatesTokenCount") or meta.get("candidates_token_count")
         )
+        thoughts = _as_int(
+            meta.get("thoughtsTokenCount") or meta.get("thoughts_token_count")
+        )
+        completion = visible + thoughts
         total = _as_int(meta.get("totalTokenCount") or meta.get("total_token_count"))
     else:
         usage = raw.get("usage") or {}

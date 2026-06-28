@@ -104,6 +104,24 @@ class TransportTests(unittest.TestCase):
                 self.assertEqual(result["status"], 200)
                 self.assertIs(result["raw"], raw)
 
+    def test_gemini_thinking_tokens_count_as_completion(self):
+        """Reasoning-Modelle (Gemini 3.x) liefern ``thoughtsTokenCount`` separat;
+        Thinking wird zum Output-Tarif abgerechnet, muss also in ``completion``
+        landen (sonst werden die Kosten zu niedrig geschaetzt)."""
+        raw = {
+            "candidates": [{"content": {"parts": [{"text": "FINAL_ANSWER: B"}]}}],
+            "usageMetadata": {
+                "promptTokenCount": 30,
+                "candidatesTokenCount": 5,
+                "thoughtsTokenCount": 800,
+                "totalTokenCount": 835,
+            },
+        }
+        post = make_post({}, FakeResponse(raw))
+        result = transport.execute(self._request_data("gemini"), "k", http_post=post)
+        # 5 sichtbare + 800 Thinking = 805 billable Output-Tokens.
+        self.assertEqual(result["usage"], {"prompt": 30, "completion": 805, "total": 835})
+
     def test_gemini_key_goes_into_params_not_headers(self):
         captured = {}
         raw = CANONICAL["gemini"][0]
