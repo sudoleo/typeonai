@@ -592,7 +592,7 @@
         }
 
         // Beispiel für das Setzen des systemPrompt-Wertes, falls noch nicht gesetzt:
-        const defaultPrompt = "Please respond briefly and precisely, focusing only on the essentials.";
+        const defaultPrompt = "Please answer thoroughly and precisely, explaining your reasoning and covering the relevant details. Do not oversimplify. Do not ask any follow-up or clarifying questions; answer directly with the information available.";
         if (!localStorage.getItem("systemPrompt")) {
           localStorage.setItem("systemPrompt", defaultPrompt);
         }

@@ -9,7 +9,7 @@ def get_system_prompt() -> str:
     today_str = now.strftime("%A, %Y-%m-%d")
     return (
         f"Today is {today_str}. "
-        "Please respond briefly and precisely, focusing only on the essentials. No follow-up questions."
+        "Please answer thoroughly and precisely, explaining your reasoning and covering the relevant details. Do not oversimplify. No follow-up questions."
     )
 
 def count_words(text: Optional[str]) -> int:

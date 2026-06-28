@@ -1,4 +1,23 @@
-const DEFAULT_SYSTEM_PROMPT = "Please respond briefly and precisely, focusing only on the essentials.";
+const DEFAULT_SYSTEM_PROMPT = "Please answer thoroughly and precisely, explaining your reasoning and covering the relevant details. Do not oversimplify. Do not ask any follow-up or clarifying questions; answer directly with the information available.";
+
+// Einmalige Migration: Bestandsnutzer, die noch auf dem alten "respond briefly"-Default
+// stehen, werden auf den neuen Default gehoben. Individuell angepasste Prompts bleiben
+// unberührt, da nur der exakte alte Default-String ersetzt wird.
+(function migrateLegacySystemPrompt() {
+  const LEGACY_DEFAULTS = [
+    "Please respond briefly and precisely, focusing only on the essentials.",
+    "Please respond briefly and precisely, focusing only on the essentials. No follow-up questions.",
+    "Please answer thoroughly and precisely, explaining your reasoning and covering the relevant details. Do not oversimplify.",
+  ];
+  try {
+    const stored = localStorage.getItem("systemPrompt");
+    if (stored !== null && LEGACY_DEFAULTS.includes(stored.trim())) {
+      localStorage.setItem("systemPrompt", DEFAULT_SYSTEM_PROMPT);
+    }
+  } catch (e) {
+    // localStorage nicht verfügbar (z. B. Private Mode) — kein Abbruch nötig.
+  }
+})();
 
 function getStoredSystemPrompt() {
   const stored = localStorage.getItem("systemPrompt");

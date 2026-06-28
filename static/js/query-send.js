@@ -318,7 +318,7 @@
       // 1. Dann basePrompt definieren
       const basePrompt =
         savedPrompt ||
-        "Please respond briefly and precisely, focusing only on the essentials.";
+        "Please answer thoroughly and precisely, explaining your reasoning and covering the relevant details. Do not oversimplify. Do not ask any follow-up or clarifying questions; answer directly with the information available.";
 
       // 2. Dann die Datums-Berechnung
       const dateObj = new Date();

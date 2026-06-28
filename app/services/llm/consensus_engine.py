@@ -230,7 +230,8 @@ def _build_consensus_prompt(
         "include the existing source tag such as [S1] next to that claim. "
         "Use only source tags that were provided in the opinions or their compact source lists; never invent new source IDs. "
         "Use citations sparingly and only where they add verifiability. "
-        "Provide only the final, balanced answer."
+        "Provide only the final, balanced answer. "
+        "Do not ask the user any follow-up or clarifying questions; answer directly with the information available."
     )
 
     prompt_parts.append(
