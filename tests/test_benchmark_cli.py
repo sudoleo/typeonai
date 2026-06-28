@@ -81,6 +81,12 @@ def test_smoke_live_requires_budget(patched, capsys):
     assert "requires an explicit --budget" in capsys.readouterr().err
 
 
+def test_pilot_live_requires_budget(patched, capsys):
+    rc = cli.main(["--pilot", "--live"])
+    assert rc == 2
+    assert "requires an explicit --budget" in capsys.readouterr().err
+
+
 def test_smoke_rejects_limit(patched, capsys):
     rc = cli.main(["--smoke", "--limit", "1", "--dry-run"])
     assert rc == 2
@@ -91,24 +97,49 @@ def test_live_aborts_on_missing_credentials(patched, monkeypatch, capsys):
     monkeypatch.setattr(credentials, "resolve_developer_api_keys",
                         lambda providers=None: {p: None for p in cli.REQUIRED_PROVIDERS})
     monkeypatch.setattr(credentials, "gemini_adc_available", lambda: False)
-    rc = cli.main(["--pilot", "--live"])
+    rc = cli.main(["--pilot", "--live", "--budget", "5"])
     assert rc == 2
     assert "missing credentials" in capsys.readouterr().err
     assert not (config.RUNS_DIR / "pilot" / "calls.jsonl").exists()
 
 
-def test_live_preflight_passes_but_is_gated_no_http(patched, monkeypatch, capsys):
+def test_final_live_preflight_passes_but_is_gated_no_http(patched, monkeypatch, capsys):
     monkeypatch.setattr(credentials, "resolve_developer_api_keys",
                         lambda providers=None: {p: "k" for p in cli.REQUIRED_PROVIDERS})
-    rc = cli.main(["--pilot", "--live", "--budget", "5"])
+    rc = cli.main(["--final", "--live", "--budget", "5"])
     assert rc == 0
     out = capsys.readouterr().out
     assert "Preflight" in out
     assert "GATED" in out
-    run_dir = config.RUNS_DIR / "pilot"
+    run_dir = config.RUNS_DIR / "final"
     assert (run_dir / "manifest.json").exists()
     # Gate -> keine Ausfuehrung, kein calls.jsonl
     assert not (run_dir / "calls.jsonl").exists()
+
+
+def test_pilot_live_executes_when_pilot_gate_enabled(patched, monkeypatch, capsys):
+    monkeypatch.setattr(credentials, "resolve_developer_api_keys",
+                        lambda providers=None: {p: "k" for p in cli.REQUIRED_PROVIDERS})
+    called = {"pilot": False}
+
+    def fake_run_pilot(self, records, **kwargs):
+        called["pilot"] = True
+        return (
+            type("Result", (), {
+                "cells_written": 40, "cells_skipped": 0, "cells_failed": 0,
+                "spent_usd": 1.2345, "stopped": False,
+            })(),
+            {"option_permutation": {"enabled": True}},
+            {"n_questions": 5, "n_disagreement": 2},
+        )
+
+    monkeypatch.setattr(runner_mod.BenchmarkRunner, "run_pilot", fake_run_pilot)
+    rc = cli.main(["--pilot", "--live", "--budget", "5"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Preflight" in out
+    assert "Run finished" in out
+    assert called["pilot"]
 
 
 def test_smoke_live_executes_when_smoke_gate_enabled(patched, monkeypatch, capsys):
@@ -139,6 +170,7 @@ def test_smoke_live_executes_when_smoke_gate_enabled(patched, monkeypatch, capsy
 
 
 def test_live_execution_stays_gated_constant():
-    # Sicherheitsnetz: Pilot/Final bleiben hart gesperrt.
+    # Sicherheitsnetz: Final bleibt hart gesperrt; Smoke/Pilot sind separat freigegeben.
     assert cli.LIVE_EXECUTION_ENABLED is False
     assert cli.SMOKE_LIVE_EXECUTION_ENABLED is True
+    assert cli.PILOT_LIVE_EXECUTION_ENABLED is True

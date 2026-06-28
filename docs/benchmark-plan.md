@@ -513,8 +513,9 @@ Alias-/Preview-Status. Neuer CLI-Modus `--smoke` nutzt
 `mmlu_pro_smoke_v1.json` (genau 1 Frage, disjunkt zu Pilot und Final), erzeugt
 einen eigenen Run-Kontext `sample_role: "smoke"` und deaktiviert die beiden
 E4-Zusatzaudits explizit in `audits.json`. `--smoke --live` verlangt zwingend
-`--budget`; der globale Live-Gate für Pilot/Final bleibt geschlossen. Smoke ist
-über einen separaten Smoke-only Gate kontrolliert live ausführbar.
+`--budget`; der globale Live-Gate für den finalen 98-Fragen-Run bleibt
+geschlossen. Smoke und Pilot sind über separate Gates kontrolliert live
+ausführbar.
 
 **Phase 3 — 1-Frage-Smoke, danach 5-Fragen-Pilot:** zuerst `--smoke --live
 --budget <klein>` über das dedizierte Smoke-Sample; danach `--pilot --budget <klein>` über

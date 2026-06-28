@@ -15,7 +15,7 @@ Aufrufe:
   python -m benchmark --smoke --live --budget 5
   python -m benchmark --dry-run --pilot
   python -m benchmark --pilot --run-id pilot_v1 --budget 5
-  python -m benchmark --pilot --live --budget 5            # Preflight (gated)
+  python -m benchmark --pilot --live --budget 5
   python -m benchmark --resume pilot_v1 --live --budget 5  # Resume-Preflight
 """
 
@@ -33,10 +33,12 @@ from benchmark.runner import BenchmarkRunner
 # nutzt Gemini, das bereits in der Liste steht).
 REQUIRED_PROVIDERS = ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"]
 
-# Globaler Gate: Pilot/Final bleiben gesperrt, bis sie bewusst freigegeben werden.
+# Globaler Gate: Final bleibt gesperrt, bis er bewusst freigegeben wird.
 LIVE_EXECUTION_ENABLED = False
 # Separater Gate fuer den kontrollierten 1-Frage-Smoke.
 SMOKE_LIVE_EXECUTION_ENABLED = True
+# Separater Gate fuer den kontrollierten 5-Fragen-Pilot.
+PILOT_LIVE_EXECUTION_ENABLED = True
 
 
 def _parse_args(argv=None) -> argparse.Namespace:
@@ -222,10 +224,16 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--smoke uses exactly one fixed question; --limit is not allowed")
     if args.smoke and args.live and args.budget is None:
         raise ValueError("--smoke --live requires an explicit --budget value")
+    if args.pilot and args.live and args.budget is None:
+        raise ValueError("--pilot --live requires an explicit --budget value")
 
 
 def _live_execution_allowed(args: argparse.Namespace) -> bool:
-    return bool(LIVE_EXECUTION_ENABLED or (args.smoke and SMOKE_LIVE_EXECUTION_ENABLED))
+    return bool(
+        LIVE_EXECUTION_ENABLED
+        or (args.smoke and SMOKE_LIVE_EXECUTION_ENABLED)
+        or (args.pilot and PILOT_LIVE_EXECUTION_ENABLED)
+    )
 
 
 def _validate_smoke_manifests() -> None:
