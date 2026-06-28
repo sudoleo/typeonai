@@ -579,3 +579,79 @@ Uneinigkeits-Teilmenge). **Kein Differences-Run** (E7).
 Unterseite rendern (eigenes Template, analog `templates/ai-model-comparison.html`);
 CSP/`?v=`-Cache-Busting beachten; Methodik + MMLU‑Pro-Attribution + „closed-book,
 Websuche deaktiviert" transparent ausweisen.
+
+---
+
+## 12. Final-Run-Befunde & Disagreement-Folgeexperiment (Stand 2026-06-29)
+
+### Final-Run `final_v1` (98 Fragen) — gelaufen, publiziert
+Voller Lauf live, 784 Zellen, **0 Fehler**, parse_rate 1.0 außer DeepSeek (3
+Abstains). Auf `/admin/benchmark` publiziert (`--publish-run final_v1`). Realer
+Spend ~$5–6 (getrackte $26 sind zu ~84 % die cap-basierte Consensus-Überschätzung).
+Die E4-Audits wurden **bewusst übersprungen** und `results.json` direkt aus
+`calls.jsonl` erzeugt — Grund siehe Falle unten.
+
+**Ergebnis (Accuracy, Wilson-CI):** Anthropic 94,9 % > Consensus = Majority =
+OpenAI 93,9 % > Grok = Synth-allein 92,9 % > Gemini 90,8 % > Mistral 88,8 % >
+DeepSeek 87,8 %. **Kernbefunde:**
+1. **Consensus schlägt das beste Einzelmodell nicht** — Anthropic-korrekt ist eine
+   echte Obermenge von Consensus-korrekt (0 Rescues darüber hinaus).
+2. **Consensus ≈ Majority Vote** (identisch auf 94/98; die 4 Abweichungen = 1
+   Rescue / 1 Harm / 2 Ties = Nullsumme). Der LLM-Synthesizer nutzt seinen
+   Informationsvorsprung (er sieht die Begründungen, nicht nur die Stimmen) nicht.
+3. **Sample für einen Frontier-Pool zu leicht:** 78/98 einstimmig richtig, Ø
+   5,49/6 Modelle korrekt → Aggregation kann nur auf ~20 Fragen überhaupt wirken.
+4. Richtige **Erfolgsmetrik = `Consensus − Synth-allein`** (kontrolliert fürs
+   Eigenwissen des Synthesizers), nicht `Consensus − bestes Modell`. In `final_v1`:
+   +1 Frage gesamt, +1 auf der Uneinigkeits-Teilmenge → schwach positiv.
+
+**Statistik-Vorbehalt:** 94,9 vs 93,9 % = **eine** Frage (93 vs 92/98); CIs
+überlappen massiv. Aussagen über die Struktur (Superset) sind belastbarer als der
+Punktwert. Strategisch: MMLU-Pro (closed-book Fakten-MC, Frontier nahe Decke) ist
+der **falsche Test** für die Consensus-Prämisse; der eigentliche Test wäre
+recherchepflichtiges/prüfbares Reasoning mit Web-Tools AN.
+
+### FALLE — E4-Audits skalieren nicht auf große Samples
+`run_pilot` läuft nach der Kandidaten-Schleife durch `audit_option_permutation`
+(12) + `audit_consensus_order` (n×3!) + `audit_anonymized_consensus` (n) — bei 98
+Fragen **~404 Calls, nicht budget-gegated und ohne Checkpoint** (`audits.json`
+erst nach allen dreien). Vor jedem künftigen Volllauf: Audits budget-gaten +
+checkpointen ODER `consensus_order`/`anonymized` auf ein Subset (z. B. die
+Uneinigkeitsfragen) begrenzen. `results.json` braucht **keine** Audits:
+`benchmark.results.write_results(run_dir, consensus_model=config.CONSENSUS_MODEL)`.
+
+### Phase 6 — Disagreement-Charakterisierung (gebaut, NOCH NICHT gelaufen)
+**Frage:** Hält das Muster „Consensus ≈ Majority, verliert auf Uneinigkeit gegen
+das beste Modell" auf einer **größeren, uneinigkeits-dichten** Stichprobe — oder
+war es `final_v1`-Rauschen (nur ~15 Uneinigkeitsfälle)? Erst **charakterisieren**,
+dann *nur falls* sich ein konsistentes Problem zeigt, über einen Prompt-Eingriff
+entscheiden. **Bewusst KEINE Prompt-Änderung** in diesem Lauf — sonst wären Sample
+und Prompt gleichzeitig verändert und nichts mehr zuordenbar.
+
+- **Sample:** `data/benchmark/mmlu_pro_disagreement_v1.json` (committet, 66 Fragen,
+  Seed 20260628, disjunkt zu final/pilot/smoke). Kategorie-gewichtet nach den
+  Uneinigkeitsraten aus `final_v1`: engineering/history/philosophy je 12 (hoch),
+  law/economics/chemistry je 8, health 6; die ~0-%-Kategorien (biology/business/
+  math/physics) bewusst weggelassen. Disagreement ist *a priori* nicht bekannt →
+  Anreicherung über Kategorien, die echte Disagreement-Teilmenge wird **nach** dem
+  Lauf gefiltert (Caveat: bewusst hart-domänenlastig).
+- **Pipeline:** unverändert. Launcher `benchmark/run_experiment.py` ruft die
+  bestehende `BenchmarkRunner.run()` (V0 = Produktiv-Consensus) + `write_results()`,
+  **ohne** E4-Audits. Dry-Run-Default; `--live` verlangt `--budget`.
+- **Kosten:** 528 Zellen (396 model + 66 consensus + 66 synth); real **~$4**,
+  Worst-Case-Projektion $166 (Consensus-Überschätzung, ignorieren). Budget-Cap
+  **≥ $30** (das Phantom-Consensus-Accounting trackt ~$14–18 → ein $15-Cap würde
+  fälschlich vorzeitig stoppen).
+- **Auswertung:** primär die Disagreement-Teilmenge + `Consensus − Synth-allein`
+  und `Consensus − bestes Modell`; hält das Majority-Muster?
+
+**NÄCHSTER SCHRITT (neue Session):**
+```
+venv/Scripts/python.exe -m benchmark.run_experiment --dry-run          # Vorschau
+venv/Scripts/python.exe -m benchmark.run_experiment --live --budget 30 # Lauf (Hintergrund-Job)
+```
+Danach `--publish-run experiment_v1` für `/admin/benchmark` und Auswertung wie oben.
+Die V1-Prompt-Variante (reasoning-/Logik-Check als Zusatzklausel) wurde diskutiert,
+**bewusst wieder verworfen/gelöscht** — erst die Charakterisierung abwarten. Falls
+sie später kommt: nur die **gespeicherten** Kandidatenantworten neu durch einen
+zweiten Consensus-Arm schicken (~$1, kein Kandidaten-Rerun).

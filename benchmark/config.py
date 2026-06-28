@@ -25,6 +25,10 @@ DATA_DIR = REPO_ROOT / "data" / "benchmark"
 SMOKE_MANIFEST = DATA_DIR / "mmlu_pro_smoke_v1.json"
 PILOT_MANIFEST = DATA_DIR / "mmlu_pro_pilot_v1.json"
 SAMPLE_MANIFEST = DATA_DIR / "mmlu_pro_sample_v1.json"
+# Disagreement-angereichertes Experiment-Sample (66 Fragen, Kategorie-gewichtet
+# nach den Uneinigkeitsraten aus final_v1). Genutzt vom V0-Charakterisierungs-
+# Launcher ``benchmark.run_experiment`` – NICHT vom regulaeren CLI.
+EXPERIMENT_MANIFEST = DATA_DIR / "mmlu_pro_disagreement_v1.json"
 RUNS_DIR = DATA_DIR / "runs"
 
 # --- MMLU-Pro Quelle -------------------------------------------------------
