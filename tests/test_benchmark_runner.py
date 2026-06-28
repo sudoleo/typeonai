@@ -103,14 +103,14 @@ class ManifestModelConfigTests(unittest.TestCase):
 
         self.assertEqual(models["anthropic"]["internal_id"], config.cfg.ANTHROPIC_PRO_MODEL)
         self.assertIsNone(models["anthropic"]["reasoning_settings"])
-        self.assertEqual(models["gemini"]["internal_id"], config.cfg.GEMINI_PRO_MODEL)
+        self.assertEqual(models["gemini"]["internal_id"], config.BENCHMARK_GEMINI_MODEL)
         self.assertIsNone(models["gemini"]["reasoning_settings"])
-        self.assertTrue(models["gemini"]["alias_status"]["preview"])
+        self.assertFalse(models["gemini"]["alias_status"]["preview"])
         self.assertEqual(models["grok"]["internal_id"], "grok-4.3")
         self.assertIsNone(models["grok"]["reasoning_settings"])
 
         self.assertEqual(manifest["sample_role"], "smoke")
-        self.assertEqual(manifest["consensus"]["internal_id"], config.cfg.GEMINI_PRO_MODEL)
+        self.assertEqual(manifest["consensus"]["internal_id"], config.BENCHMARK_GEMINI_MODEL)
         self.assertEqual(manifest["consensus"]["output_token_limit"], manifest["consensus_output_token_limit"])
         self.assertIsNone(manifest["consensus"]["temperature"])
         self.assertEqual(manifest["synth_alone"]["internal_id"], manifest["consensus"]["internal_id"])

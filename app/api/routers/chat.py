@@ -33,6 +33,7 @@ from app.services.llm.consensus_engine import (
     normalize_model_name,
     query_consensus,
     query_differences,
+    resolve_consensus_engine_model,
     stream_consensus,
     stream_differences,
 )
@@ -866,8 +867,11 @@ def consensus(request: Request, data: dict = Body(...)):
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+    if consensus_model not in cfg.ALLOWED_CONSENSUS_MODELS:
+        raise HTTPException(status_code=400, detail="Invalid consensus model selected.")
+
     if not use_own_keys:
-        if isinstance(consensus_model, str) and consensus_model.endswith("-Pro") and not is_pro:
+        if cfg.is_premium_consensus_model(consensus_model) and not is_pro:
             raise HTTPException(status_code=403, detail="Premium consensus engines are reserved for Pro users.")
 
         # Limits basierend auf Status festlegen
@@ -930,7 +934,7 @@ def consensus(request: Request, data: dict = Body(...)):
 
     # API Keys setzen: Bei useOwnKeys werden die vom Nutzer übermittelten Keys genutzt,
     # andernfalls wird für fehlende Keys auf die Developer Keys zurückgegriffen.
-    if isinstance(consensus_model, str) and consensus_model.endswith("-Pro"):
+    if cfg.is_premium_consensus_model(consensus_model):
         if not id_token:
             raise HTTPException(status_code=403, detail="Premium consensus engines require a Pro account.")
         if uid is None:
@@ -1011,9 +1015,20 @@ def consensus(request: Request, data: dict = Body(...)):
     }
     
     need_key_for = engine_key_map.get(engine)
+    if not need_key_for:
+        engine_config = resolve_consensus_engine_model(engine)
+        provider_key_map = {
+            "openai": "OpenAI",
+            "mistral": "Mistral",
+            "anthropic": "Anthropic",
+            "gemini": "Gemini",
+            "deepseek": "DeepSeek",
+            "grok": "Grok",
+        }
+        need_key_for = provider_key_map.get(engine_config.provider if engine_config else "")
     if need_key_for:
         # ÄNDERUNG: Prüfe auf "Gemini" ODER "Gemini-Pro"
-        if engine in ["Gemini", "Gemini-Pro", cfg.GEMINI_FRONTIER_LOW_MODEL]:
+        if need_key_for == "Gemini":
             # Erlaube drei Varianten:
             # 1) expliziter Key (User- oder Dev-Key),
             # 2) Dev-Key aus ENV,

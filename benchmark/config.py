@@ -76,6 +76,8 @@ CONSENSUS_OUTPUT_TOKEN_LIMIT = 32768
 INCLUDE_SYNTH_ALONE = True  # vierte Vergleichsgroesse "Synthesizer allein" (Plan §10)
 DEFAULT_LABEL_MODE = "names"  # Hauptpfad mit Modellnamen (E5)
 
+BENCHMARK_GEMINI_MODEL = cfg.GEMINI_35_FLASH_MODEL
+
 
 @dataclass(frozen=True)
 class BenchmarkModel:
@@ -93,14 +95,14 @@ MODELS: tuple[BenchmarkModel, ...] = (
     BenchmarkModel("openai", "gpt-5.5", "gpt-5.5", "provider_default"),
     BenchmarkModel("mistral", cfg.MISTRAL_PRO_MODEL, cfg.MISTRAL_PRO_MODEL, "provider_default"),
     BenchmarkModel("anthropic", cfg.ANTHROPIC_PRO_MODEL, cfg.ANTHROPIC_PRO_MODEL, "provider_default"),
-    BenchmarkModel("gemini", cfg.GEMINI_PRO_MODEL, cfg.GEMINI_PRO_MODEL, "provider_default"),
+    BenchmarkModel("gemini", BENCHMARK_GEMINI_MODEL, BENCHMARK_GEMINI_MODEL, "provider_default"),
     BenchmarkModel("deepseek", cfg.DEEPSEEK_PRO_MODEL, cfg.DEEPSEEK_PRO_MODEL, "provider_default"),
     BenchmarkModel("grok", "grok-4.3", "grok-4.3", "provider_default"),
 )
 
-# Consensus-Synthese-Modell (Pin): regulaerer Gemini-3.1-Pro-Preview-Pfad.
+# Consensus-Synthese-Modell (Pin): regulaerer Gemini-3.5-Flash-Pfad.
 # Synthesizer-alone nutzt exakt denselben Pin.
-CONSENSUS_MODEL = cfg.GEMINI_PRO_MODEL
+CONSENSUS_MODEL = BENCHMARK_GEMINI_MODEL
 
 # Provider-Name -> API-Key-Schluessel, wie query_consensus ihn erwartet.
 PROVIDER_API_KEY_NAME = {
@@ -117,12 +119,12 @@ PROVIDER_API_KEY_NAME = {
 # existiert keine Pricing-Quelle; Kosten sind daher Naeherungen.
 
 PRICING_USD_PER_1M: dict[str, dict[str, float]] = {
-    "gpt-5.5": {"input": 1.25, "output": 10.0},
+    "gpt-5.5": {"input": 5.0, "output": 30.0},
     cfg.MISTRAL_PRO_MODEL: {"input": 0.40, "output": 2.0},
     cfg.ANTHROPIC_PRO_MODEL: {"input": 5.0, "output": 25.0},
-    cfg.GEMINI_PRO_MODEL: {"input": 1.25, "output": 10.0},
-    cfg.DEEPSEEK_PRO_MODEL: {"input": 0.28, "output": 0.42},
-    "grok-4.3": {"input": 3.0, "output": 15.0},
+    BENCHMARK_GEMINI_MODEL: {"input": 1.50, "output": 9.0},
+    cfg.DEEPSEEK_PRO_MODEL: {"input": 0.435, "output": 0.87},
+    "grok-4.3": {"input": 1.25, "output": 2.5},
 }
 
 

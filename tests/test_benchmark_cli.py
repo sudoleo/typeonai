@@ -5,8 +5,10 @@ lassen."""
 import pytest
 
 from app.services.llm import credentials
+from app.services import benchmark_reports
 from benchmark import __main__ as cli
 from benchmark import config
+from benchmark import report_reader
 from benchmark import runner as runner_mod
 
 RECORDS = [
@@ -61,6 +63,56 @@ def test_dry_run_creates_run_dir_and_manifest_without_http(patched, capsys):
 def test_run_id_flag_controls_directory(patched):
     cli.main(["--pilot", "--run-id", "custom_run", "--dry-run"])
     assert (config.RUNS_DIR / "custom_run" / "manifest.json").exists()
+
+
+def test_publish_run_publishes_existing_directory_without_pin_check(patched, monkeypatch, capsys):
+    run_dir = config.RUNS_DIR / "pilot_v1"
+    run_dir.mkdir(parents=True)
+    published = {}
+
+    def fake_publish(path):
+        published["path"] = path
+        return {"run_id": path.name, "n_questions": 5}
+
+    def boom():
+        raise AssertionError("pin check should not run for publish-only mode")
+
+    monkeypatch.setattr(config, "assert_pins_match_config", boom)
+    monkeypatch.setattr(benchmark_reports, "publish_run_dir", fake_publish)
+
+    rc = cli.main(["--publish-run", "pilot_v1"])
+
+    assert rc == 0
+    assert published["path"] == run_dir
+    assert "Published pilot_v1" in capsys.readouterr().out
+
+
+def test_publish_all_uses_finished_runs_only(patched, monkeypatch, capsys):
+    old_runs_dir = report_reader.RUNS_DIR
+    report_reader.RUNS_DIR = config.RUNS_DIR
+    try:
+        finished = config.RUNS_DIR / "finished"
+        unfinished = config.RUNS_DIR / "unfinished"
+        finished.mkdir(parents=True)
+        unfinished.mkdir(parents=True)
+        (finished / "manifest.json").write_text('{"created":"2026-06-28T10:00:00+00:00"}')
+        (finished / "results.json").write_text('{"n_questions":1}')
+        (unfinished / "manifest.json").write_text('{"created":"2026-06-28T11:00:00+00:00"}')
+        seen = []
+
+        def fake_publish(path):
+            seen.append(path.name)
+            return {"run_id": path.name, "n_questions": 1}
+
+        monkeypatch.setattr(benchmark_reports, "publish_run_dir", fake_publish)
+
+        rc = cli.main(["--publish-all"])
+
+        assert rc == 0
+        assert seen == ["finished"]
+        assert "Published runs: 1" in capsys.readouterr().out
+    finally:
+        report_reader.RUNS_DIR = old_runs_dir
 
 
 def test_smoke_dry_run_uses_own_directory_and_manifest(patched, capsys):

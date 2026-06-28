@@ -24,7 +24,12 @@ from app.services.llm.engines import build_provider_payload
 
 from benchmark import audit, config, cost, transport
 from benchmark.parse import extract_letter, grade
-from benchmark.prompt import LETTERS, build_consensus_question, build_mc_question
+from benchmark.prompt import (
+    LETTERS,
+    build_anonymized_consensus_question,
+    build_consensus_question,
+    build_mc_question,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -703,6 +708,89 @@ class BenchmarkRunner:
             "total": len(questions),
         }
 
+    def audit_anonymized_consensus(
+        self,
+        records: list[dict],
+        run_dir: Path,
+        *,
+        transport_execute=transport.execute,
+        api_keys: dict | None = None,
+        rng: random.Random | None = None,
+    ) -> dict:
+        """Modellnamen-Bias-Audit (E5): berechnet den Consensus auf denselben
+        gespeicherten Kandidatenantworten erneut mit anonymen ``Response A-F``-
+        Labels. Es gibt keine erneuten Kandidaten-Calls und ``audits.json``
+        enthaelt keine Rohantworten."""
+        run_dir = Path(run_dir)
+        api_keys = api_keys or {}
+        rng = rng or random.Random(config.FINAL_SEED)
+        index = index_existing(load_existing_records(run_dir / "calls.jsonl"))
+        consensus_api_model = _consensus_api_model(self.consensus_model)
+        model_config = cfg.get_model_config(self.consensus_model)
+        if not model_config or not model_config.provider:
+            raise ValueError(f"Consensus model is not resolvable: {self.consensus_model}")
+
+        questions: list[dict] = []
+        for record in records:
+            qid = record["question_id"]
+            answers = self._stored_answers(index, qid)
+            if len(answers) < 2:
+                continue
+            providers = [m.provider for m in self.models if m.provider in answers]
+            rng.shuffle(providers)
+            anon_map = {
+                provider: f"Response {LETTERS[idx]}"
+                for idx, provider in enumerate(providers)
+            }
+            anonymous_answers = [
+                (anon_map[provider], answers[provider])
+                for provider in providers
+            ]
+            user_prompt = build_anonymized_consensus_question(
+                record["question"], record["options"], anonymous_answers
+            )
+            request_data = build_provider_payload(
+                model_config.provider,
+                question=user_prompt,
+                system_prompt=self.system_prompt,
+                model_override=self.consensus_model,
+                max_output_tokens=CONSENSUS_MAX_TOKENS,
+                benchmark_mode=True,
+            )
+            if model_config.provider == "gemini":
+                request_data["payload"].get("generationConfig", {}).pop("temperature", None)
+            audit.assert_no_web_tools(request_data["payload"], context=f"anon_consensus:{qid}")
+            api_key = api_keys.get(config.PROVIDER_API_KEY_NAME[request_data["provider"]])
+            outcome = transport_execute(request_data, api_key)
+            anon_letter = (
+                None if outcome.get("error") else extract_letter(outcome.get("text"), options=record["options"])
+            )
+            named = index.get(cell_key(qid, "consensus", self.consensus_model), {}).get("success")
+            named_letter = named.get("extracted_letter") if named else None
+            questions.append({
+                "question_id": qid,
+                "anon_map": anon_map,
+                "named_letter": named_letter,
+                "anonymous_letter": anon_letter,
+                "stable": named_letter is not None and anon_letter == named_letter,
+                "error": outcome.get("error"),
+                "est_cost_usd": round(float(cost.est_cost_usd(
+                    consensus_api_model,
+                    (outcome.get("usage") or {}).get("prompt", 0),
+                    (outcome.get("usage") or {}).get("completion", 0),
+                )), 8),
+            })
+
+        comparable = [q for q in questions if q["named_letter"] is not None and not q["error"]]
+        return {
+            "label_mode": "anon",
+            "questions": questions,
+            "stable": sum(1 for q in comparable if q["stable"]),
+            "comparable": len(comparable),
+            "total": len(questions),
+            "cost_usd": round(sum(float(q.get("est_cost_usd") or 0.0) for q in questions), 6),
+        }
+
     # --- Pilot-Orchestrierung (run + Audits + Auswertung) ------------------
 
     def run_pilot(
@@ -746,6 +834,10 @@ class BenchmarkRunner:
                 ),
                 "consensus_order": self.audit_consensus_order(
                     records, run_dir, consensus_fn=consensus_fn, api_keys=api_keys, rng=rng,
+                ),
+                "consensus_anonymized": self.audit_anonymized_consensus(
+                    records, run_dir, transport_execute=transport_execute,
+                    api_keys=api_keys, rng=rng,
                 ),
             }
             (run_dir / "audits.json").write_text(
@@ -791,6 +883,10 @@ class BenchmarkRunner:
                     "reason": "disabled_for_smoke",
                 },
                 "consensus_order": {
+                    "enabled": False,
+                    "reason": "disabled_for_smoke",
+                },
+                "consensus_anonymized": {
                     "enabled": False,
                     "reason": "disabled_for_smoke",
                 },

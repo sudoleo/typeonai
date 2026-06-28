@@ -49,7 +49,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `users.py` | `/user_status`, `/usage`, `/delete_account`, `/track-interest`. |
 | `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus`. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
-| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest `benchmark/report_reader.py` – stdlib-only, **kein** LLM-Importgraph). Alle hinter `is_user_admin`. |
+| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 **Zentrale Templates** (`templates/`, gerendert mit `Jinja2Templates`):
 `landing.html` (Marketing), `index.html` (die App — Haupt-Markup + Script-Tags),
@@ -224,11 +224,18 @@ Wichtige Verträge im Backend:
 **Firestore-Collections** (verifiziert über Code):
 - `users/{uid}` — `tier`, `role`; Subcollections `bookmarks`, `counters`.
 - `app_config/models` — von `load_models_from_db()` gelesen/erzeugt: erlaubte
-  Modelle pro Provider, `premium`, `limits`. **Single Source of Truth für Limits/
-  Modelle in Produktion** (überschreibt die `config.py`-Defaults beim Startup).
+  Modelle pro Provider, `premium`, `consensus`, `limits`. **Single Source of
+  Truth für Limits/Modelle in Produktion** (überschreibt die `config.py`-Defaults
+  beim Startup). `consensus` steuert den App-Consensus-Picker; Werte können
+  historische Engine-Aliase (`Gemini-Pro`) oder direkte Modell-IDs aus den
+  Provider-Listen sein. In `/admin` können Provider-Modelle per `Consensus`-
+  Checkbox in diese Liste aufgenommen werden.
 - `pending_results` — kurzlebige Consensus-Ergebnisse fürs Sharing (TTL/Cleanup).
 - `shares` — veröffentlichte Snapshots (Slug, `indexed`, `status`, `owner_uid`,
   `question_hash`, …).
+- `benchmark_runs` — admin-only Benchmark-Dashboard-Snapshots aus lokalen Runs:
+  `manifest`, `results`, `audits`, abgeleitete Fragenmatrix; **keine**
+  `calls.jsonl`-Rohantworten, Prompts oder Request-Payloads.
 - `feedback`, `pro_waitlist`, `leaderboard`.
 
 **Service-Account-JSONs** im Root (gitignored): `consensai-firebase-adminsdk-*.json`
@@ -262,7 +269,10 @@ Modell-IDs/Tier-Zuordnung/Labels: ausschließlich in `app/core/config.py` pflege
 - **Frontend hat keine automatisierten Tests.** Nach JS-Änderungen die manuelle
   **`docs/smoke-checklist.md`** durchgehen.
 - **Benchmark-Runner** (`benchmark/`, kein GUI-Pfad): `python -m benchmark
-  --smoke|--pilot|--final`. `--smoke` ist ein dedizierter 1-Frage-MMLU-Pro-Pfad
+  --smoke|--pilot|--final`; fertige lokale Runs werden mit
+  `python -m benchmark --publish-run <run_id>` oder `--publish-all` als kompakte
+  Admin-Dashboard-Snapshots nach Firestore publiziert. `--smoke` ist ein
+  dedizierter 1-Frage-MMLU-Pro-Pfad
   mit eigenem Manifest/Run-Kontext; Smoke und Pilot haben separate Live-Gates,
   der finale Run bleibt durch `LIVE_EXECUTION_ENABLED` hart gegatet. Die MC-
   Auswertung akzeptiert nur die letzte `FINAL_ANSWER: X`-Zeile.
@@ -306,8 +316,9 @@ Modell-IDs/Tier-Zuordnung/Labels: ausschließlich in `app/core/config.py` pflege
   Markup — der State-Refactor ist bewusst noch nicht passiert.
 - **Jinja↔JS-Brücke**: Config geht nur über den `<head>`-`window.*`-Block
   (`FIREBASE_CONFIG`, `APP_LIMITS`, `FREE_DEFAULT_MODELS`, `PRO_DEFAULT_MODELS`,
-  `FREE_LIMIT`). `app-init.js` kann kein Jinja rendern — neue Server-Werte müssen
-  hier gebridged werden.
+  `FREE_LIMIT`) oder serverseitig gerenderte Template-Optionen wie
+  `consensus_models` für den Consensus-Picker. `app-init.js` kann kein Jinja
+  rendern — neue Server-Werte müssen hier gebridged werden.
 - **CSP** (`CustomSecurityMiddleware` in `security.py`): neue externe Hosts (Skripte,
   `connect-src`-Ziele, Frames) müssen explizit in die Policy. Sonst blockt der
   Browser still.

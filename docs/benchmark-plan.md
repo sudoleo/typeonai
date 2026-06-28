@@ -187,7 +187,7 @@ der Consensus aktuell die Modellnamen (`_format_expert_opinion("OpenAI", …)`).
 **Hauptpfad im Runner verwendet deshalb die bestehende Consensus-Logik unverändert
 mit Modellnamen** — keine verpflichtende produktive Änderung an der Anonymisierung.
 
-Für den **5-Fragen-Pilot** unterstützt der Runner **zusätzlich** einen *optionalen*
+Für den **Pilot/Final-Preview-Flow** unterstützt der Runner **zusätzlich** einen
 anonymisierten **Audit-Modus** zum Vergleich:
 - nutzt **dieselben bereits gespeicherten** sechs Kandidatenantworten,
 - berechnet den Consensus **einmal mit Modellnamen** und **einmal als
@@ -381,9 +381,10 @@ text+usage), parsed_text, extracted_letter, ground_truth, correct, abstain,
 usage{prompt,completion,total}, est_cost_usd, latency_ms, http_status, error,
 error_code`.
 
-Der Hauptpfad schreibt `label_mode = names`. Nur die optionalen Pilot-Audit-Zeilen
-schreiben `label_mode = anon` und zusätzlich `anon_map` (Provider→Buchstabe,
-deterministisch). Rolle `differences` entfällt (E7).
+Der Hauptpfad schreibt `label_mode = names`. Der anonymisierte Audit schreibt
+keine Rohantworten in `calls.jsonl`, sondern nur kompakte Audit-Metadaten in
+`audits.json`: `anon_map` (Provider→Response-Label, deterministisch),
+named/anonymous Letter, Stabilität und Kosten. Rolle `differences` entfällt (E7).
 
 ---
 
@@ -533,7 +534,8 @@ abstain/unparseable, Fehler-/Parse-Quote, Kosten und Latenzen; Resume-Retry-Zeil
 werden dedupliziert (Erfolg gewinnt). `majority_vote`/`NO_MAJORITY` sind damit
 nicht mehr tot (genutzt in `results.py`; aus `runner.py`-Import entfernt). Die
 beiden E4-Audits sind im Pilot-Flow verdrahtet (`runner.run_pilot` →
-`audit_option_permutation` + `audit_consensus_order`, gespeichert in `audits.json`)
+`audit_option_permutation` + `audit_consensus_order` + anonymisierter
+Consensus-Audit, gespeichert in `audits.json`)
 und ohne erneute Kandidaten-Calls. Hinweis: Der Consensus-Reihenfolge-Audit misst
 mit dem produktiven (festen Label-Order-)Prompt zunächst Synthese-Stabilität; echte
 Label-Permutation hängt am aufgeschobenen geordneten/anonymisierten Builder (E5).
@@ -544,8 +546,8 @@ Alles mit Fake-Transport/-Consensus getestet. Gesamt-Suite 225 passed
 Stand 2026-06-28.)* Die Benchmark-Zielmatrix nutzt jetzt die regulären
 hochwertigen Produkt-IDs statt `frontier-low`: OpenAI `gpt-5.5`, Mistral
 `mistral-medium-3-5`, Anthropic `claude-opus-4-8`, Gemini
-`gemini-3.1-pro-preview`, DeepSeek `deepseek-v4-pro`, Grok `grok-4.3`.
-Consensus und Synthesizer-alone pinnen beide `gemini-3.1-pro-preview`; das
+`gemini-3.5-flash`, DeepSeek `deepseek-v4-pro`, Grok `grok-4.3`.
+Consensus und Synthesizer-alone pinnen beide `gemini-3.5-flash`; das
 Manifest dokumentiert Provider, `internal_id`, aufgelöstes `api_model`,
 effektive Reasoning-/Thinking-Settings, Temperatur, Output-Limits sowie
 Alias-/Preview-Status. Neuer CLI-Modus `--smoke` nutzt
@@ -560,7 +562,7 @@ ausführbar.
 --budget <klein>` über das dedizierte Smoke-Sample; danach `--pilot --budget <klein>` über
 das eigenständige Pilot-Sample; Hauptpfad (Modellnamen) plus **optionaler
 anonymisierter Audit-Modus** (E5: gleiche gespeicherte Antworten, einmal Namen /
-einmal `Response A–F`, ohne erneuten Kandidaten-Call) sowie alle drei Audits aus E4.
+einmal `Response A–F`, ohne erneuten Kandidaten-Call) sowie die E4/E5-Audits.
 Roh-Antworten, Usage, Kosten, Parsing-Trefferquote prüfen; ggf.
 Parser/Prompt/Settings nachschärfen. **Danach zwei Entscheidungen:** (a) finaler
 Label-Modus (E5/§10), (b) Einfrieren der Run-Config (E6) — danach keine Änderungen

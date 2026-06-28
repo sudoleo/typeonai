@@ -287,20 +287,9 @@
             <span class="consensus-label">Consensus</span>
             <div class="select-wrapper">
               <select id="consensusModelDropdown" aria-label="Consensus model">
-                <option value="{{ default_models['gemini'] }}" class="early-option" data-model-label="{{ model_labels.get(default_models['gemini'], default_models['gemini']) }}" data-model-badge="{{ model_badges.get(default_models['gemini'], '') }}" selected>{{ model_labels.get(default_models['gemini'], default_models['gemini']) }}{% if model_badges.get(default_models['gemini'], '') %} · {{ model_badges.get(default_models['gemini'], '') }}{% endif %}</option>
-                <option value="Grok">{{ model_labels.get(consensus_default_models['grok'], consensus_default_models['grok']) }}</option>
-                <option value="OpenAI">{{ model_labels.get(consensus_default_models['openai'], consensus_default_models['openai']) }}</option>
-                <option value="Anthropic">{{ model_labels.get(consensus_default_models['anthropic'], consensus_default_models['anthropic']) }}</option>
-                <option value="Mistral">{{ model_labels.get(consensus_default_models['mistral'], consensus_default_models['mistral']) }}</option>
-                <option value="Gemini">{{ model_labels.get(consensus_default_models['gemini'], consensus_default_models['gemini']) }}</option>
-                <option value="DeepSeek">{{ model_labels.get(consensus_default_models['deepseek'], consensus_default_models['deepseek']) }}</option>
-
-                <option value="Grok-Pro" class="premium-option">Grok-4.3 · Pro</option>
-                <option value="OpenAI-Pro" class="premium-option">GPT-5.5 · Pro</option>
-                <option value="Anthropic-Pro" class="premium-option">Claude Opus 4.8 · Pro</option>
-                <option value="Mistral-Pro" class="premium-option">Mistral Medium 3.5 · Pro</option>
-                <option value="Gemini-Pro" class="premium-option">Gemini 3.1 · Pro</option>
-                <option value="DeepSeek-Pro" class="premium-option">DeepSeek V4 Pro · Pro</option>
+                {% for model in consensus_models %}
+                <option value="{{ model.value }}" data-model-label="{{ model.label }}" data-model-badge="{{ model.badge }}" {% if loop.first %}selected{% endif %} {% if model.is_premium %}disabled class="premium-option"{% elif model.is_frontier %}class="early-option"{% endif %}>{{ model.label }}{% if model.badge %} · {{ model.badge }}{% endif %}</option>
+                {% endfor %}
               </select>
             </div>
           </div>

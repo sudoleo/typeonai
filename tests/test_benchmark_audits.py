@@ -98,10 +98,13 @@ class RunPilotTests(unittest.TestCase):
             # Audits wurden ausgefuehrt + gespeichert.
             self.assertIn("option_permutation", audits)
             self.assertIn("consensus_order", audits)
+            self.assertIn("consensus_anonymized", audits)
             saved = json.loads((run_dir / "audits.json").read_text(encoding="utf-8"))
-            self.assertEqual(set(saved), {"option_permutation", "consensus_order"})
+            self.assertEqual(set(saved), {"option_permutation", "consensus_order", "consensus_anonymized"})
             # Permutation lief ueber subset(2) x 6 Modelle.
             self.assertEqual(audits["option_permutation"]["total"], 12)
+            self.assertEqual(audits["consensus_anonymized"]["total"], 2)
+            self.assertEqual(audits["consensus_anonymized"]["stable"], 2)
 
             # Auswertung vorhanden.
             self.assertEqual(summary["n_questions"], 2)
@@ -149,6 +152,8 @@ class RunSmokeTests(unittest.TestCase):
             self.assertEqual(saved["option_permutation"]["reason"], "disabled_for_smoke")
             self.assertFalse(saved["consensus_order"]["enabled"])
             self.assertEqual(saved["consensus_order"]["reason"], "disabled_for_smoke")
+            self.assertFalse(saved["consensus_anonymized"]["enabled"])
+            self.assertEqual(saved["consensus_anonymized"]["reason"], "disabled_for_smoke")
             self.assertEqual(audits, saved)
             self.assertEqual(summary["n_questions"], 1)
 

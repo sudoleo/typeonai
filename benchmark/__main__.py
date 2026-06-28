@@ -18,6 +18,8 @@ Aufrufe:
   python -m benchmark --pilot --live --budget 5
   python -m benchmark --final --limit 10 --live --budget 8  # begrenzter Preview
   python -m benchmark --resume pilot_v1 --live --budget 5  # Resume-Preflight
+  python -m benchmark --publish-run pilot_v1                 # Dashboard-Snapshot
+  python -m benchmark --publish-all                          # alle fertigen Runs
 
 Der volle ``--final``-Lauf (ohne --limit) bleibt durch ``LIVE_EXECUTION_ENABLED``
 gesperrt; ein begrenzter Final-Sample-Preview laeuft ueber den separaten
@@ -63,6 +65,18 @@ def _parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--budget", type=float, default=None, help="Budget-Cap in USD")
     parser.add_argument("--run-id", dest="run_id", default=None, help="explizite Run-ID")
     parser.add_argument("--resume", metavar="RUN_ID", default=None, help="Run fortsetzen")
+    publish = parser.add_mutually_exclusive_group()
+    publish.add_argument(
+        "--publish-run",
+        metavar="RUN_ID",
+        default=None,
+        help="bestehenden Run als kompakten Firestore-Dashboard-Snapshot publizieren",
+    )
+    publish.add_argument(
+        "--publish-all",
+        action="store_true",
+        help="alle fertigen lokalen Runs als kompakte Firestore-Dashboard-Snapshots publizieren",
+    )
     parser.add_argument(
         "--live",
         action="store_true",
@@ -150,6 +164,9 @@ def _print_dry_run(runner: BenchmarkRunner, records, args, header: str) -> None:
 
 def main(argv=None) -> int:
     args = _parse_args(argv)
+    if args.publish_run or args.publish_all:
+        return _publish_existing_runs(args)
+
     config.assert_pins_match_config()
     try:
         _validate_args(args)
@@ -227,6 +244,40 @@ def main(argv=None) -> int:
     if summary:
         print(f"Results: {run_dir / 'results.json'} (n={summary['n_questions']}, "
               f"disagreement={summary['n_disagreement']})")
+    return 0
+
+
+def _publish_existing_runs(args: argparse.Namespace) -> int:
+    """Publiziert fertige lokale Runs ohne Provider-Calls und ohne Rohartefakte."""
+    from app.services import benchmark_reports
+    from benchmark import report_reader
+
+    if args.publish_run:
+        run_ids = [args.publish_run]
+    else:
+        run_ids = [
+            run["run_id"]
+            for run in report_reader.list_runs()
+            if run.get("has_results")
+        ]
+    if not run_ids:
+        print("No finished benchmark runs found to publish.", file=sys.stderr)
+        return 2
+
+    published = 0
+    for run_id in run_ids:
+        run_dir = config.RUNS_DIR / run_id
+        try:
+            summary = benchmark_reports.publish_run_dir(run_dir)
+        except Exception as exc:  # noqa: BLE001
+            print(f"ERROR: failed to publish {run_id}: {exc}", file=sys.stderr)
+            return 2
+        published += 1
+        print(
+            f"Published {summary['run_id']}: {summary.get('n_questions')}Q, "
+            f"source=Firestore compact report"
+        )
+    print(f"Published runs: {published}")
     return 0
 
 

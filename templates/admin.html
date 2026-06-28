@@ -74,6 +74,15 @@
             cursor: pointer; 
             font-weight: bold;
         }
+        .order-btn {
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-color);
+            border-radius: 4px;
+            padding: 8px 10px;
+            cursor: pointer;
+            font-weight: bold;
+        }
         .add-btn { 
             background: #4caf50; 
             color: white; 
@@ -220,11 +229,13 @@
 
         function renderUI() {
             renderLimits();
+            renderConsensusModels();
 
             const container = document.getElementById('providersContainer');
             container.innerHTML = '';
             
             const premiumSet = new Set(globalModelsData.premium || []);
+            const consensusSet = new Set(globalModelsData.consensus || []);
             
             providers.forEach(p => {
                 const section = document.createElement('div');
@@ -239,7 +250,7 @@
                 
                 const models = globalModelsData[p] || [];
                 models.forEach((m, idx) => {
-                    const row = createModelRow(p, m, premiumSet.has(m));
+                    const row = createModelRow(p, m, premiumSet.has(m), consensusSet.has(m));
                     listContainer.appendChild(row);
                 });
                 
@@ -249,12 +260,69 @@
                 addBtn.className = 'add-btn';
                 addBtn.textContent = '+ Add Model';
                 addBtn.onclick = () => {
-                    listContainer.appendChild(createModelRow(p, '', false));
+                    listContainer.appendChild(createModelRow(p, '', false, false));
                 };
                 section.appendChild(addBtn);
                 
                 container.appendChild(section);
             });
+        }
+
+        function renderConsensusModels() {
+            const listContainer = document.getElementById('consensusModelsList');
+            listContainer.innerHTML = '';
+            const models = globalModelsData.consensus || [];
+            models.forEach(model => {
+                listContainer.appendChild(createConsensusModelRow(model));
+            });
+        }
+
+        function consensusListValues() {
+            return Array.from(document.querySelectorAll('#consensusModelsList .model-row input[type="text"]'))
+                .map(input => input.value.trim())
+                .filter(Boolean);
+        }
+
+        function findProviderConsensusCheckbox(modelName) {
+            if (!modelName) return null;
+            for (const row of document.querySelectorAll('#providersContainer .model-row')) {
+                const input = row.querySelector('input[type="text"]');
+                if (input && input.value.trim() === modelName) {
+                    return row.querySelector('.consensus-checkbox');
+                }
+            }
+            return null;
+        }
+
+        function setProviderConsensusChecked(modelName, checked) {
+            const checkbox = findProviderConsensusCheckbox(modelName);
+            if (checkbox) checkbox.checked = checked;
+        }
+
+        function addConsensusListValue(modelName) {
+            const value = (modelName || '').trim();
+            if (!value || consensusListValues().includes(value)) return;
+            document.getElementById('consensusModelsList').appendChild(createConsensusModelRow(value));
+            setProviderConsensusChecked(value, true);
+        }
+
+        function removeConsensusListValue(modelName) {
+            const value = (modelName || '').trim();
+            if (!value) return;
+            document.querySelectorAll('#consensusModelsList .model-row').forEach(row => {
+                const input = row.querySelector('input[type="text"]');
+                if (input && input.value.trim() === value) row.remove();
+            });
+            setProviderConsensusChecked(value, false);
+        }
+
+        function moveConsensusRow(row, direction) {
+            if (!row) return;
+            if (direction < 0 && row.previousElementSibling) {
+                row.parentNode.insertBefore(row, row.previousElementSibling);
+            } else if (direction > 0 && row.nextElementSibling) {
+                row.parentNode.insertBefore(row.nextElementSibling, row);
+            }
         }
 
         function renderLimits() {
@@ -295,7 +363,7 @@
             });
         }
         
-        function createModelRow(provider, modelName, isPremium) {
+        function createModelRow(provider, modelName, isPremium, isConsensus) {
             const row = document.createElement('div');
             row.className = 'model-row';
             
@@ -303,23 +371,105 @@
             input.type = 'text';
             input.value = modelName;
             input.placeholder = 'Model identifier (e.g. gpt-4o)';
+            input.addEventListener('focus', () => {
+                row.dataset.previousModelName = input.value.trim();
+            });
+            input.addEventListener('change', () => {
+                if (!consensusCheckbox.checked) return;
+                const previous = row.dataset.previousModelName || '';
+                if (previous && previous !== input.value.trim()) {
+                    removeConsensusListValue(previous);
+                }
+                addConsensusListValue(input.value.trim());
+                row.dataset.previousModelName = input.value.trim();
+            });
             
-            const label = document.createElement('label');
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.checked = isPremium;
-            label.appendChild(checkbox);
-            label.appendChild(document.createTextNode(' Premium'));
+            const premiumLabel = document.createElement('label');
+            const premiumCheckbox = document.createElement('input');
+            premiumCheckbox.type = 'checkbox';
+            premiumCheckbox.className = 'premium-checkbox';
+            premiumCheckbox.checked = isPremium;
+            premiumLabel.appendChild(premiumCheckbox);
+            premiumLabel.appendChild(document.createTextNode(' Premium'));
+
+            const consensusLabel = document.createElement('label');
+            const consensusCheckbox = document.createElement('input');
+            consensusCheckbox.type = 'checkbox';
+            consensusCheckbox.className = 'consensus-checkbox';
+            consensusCheckbox.checked = isConsensus;
+            consensusCheckbox.addEventListener('change', () => {
+                if (consensusCheckbox.checked) {
+                    addConsensusListValue(input.value.trim());
+                } else {
+                    removeConsensusListValue(input.value.trim());
+                }
+            });
+            consensusLabel.appendChild(consensusCheckbox);
+            consensusLabel.appendChild(document.createTextNode(' Consensus'));
             
             const removeBtn = document.createElement('button');
             removeBtn.className = 'remove-btn';
             removeBtn.textContent = 'X';
-            removeBtn.onclick = () => row.remove();
+            removeBtn.onclick = () => {
+                if (consensusCheckbox.checked) removeConsensusListValue(input.value.trim());
+                row.remove();
+            };
             
             row.appendChild(input);
-            row.appendChild(label);
+            row.appendChild(premiumLabel);
+            row.appendChild(consensusLabel);
             row.appendChild(removeBtn);
             
+            return row;
+        }
+
+        function createConsensusModelRow(modelName) {
+            const row = document.createElement('div');
+            row.className = 'model-row';
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = modelName;
+            input.placeholder = 'Consensus value (e.g. Gemini-Pro or gemini-3.1-pro-preview)';
+            input.addEventListener('focus', () => {
+                row.dataset.previousConsensusValue = input.value.trim();
+            });
+            input.addEventListener('change', () => {
+                const previous = row.dataset.previousConsensusValue || '';
+                if (previous && previous !== input.value.trim()) {
+                    setProviderConsensusChecked(previous, false);
+                }
+                setProviderConsensusChecked(input.value.trim(), true);
+                row.dataset.previousConsensusValue = input.value.trim();
+            });
+
+            const upBtn = document.createElement('button');
+            upBtn.type = 'button';
+            upBtn.className = 'order-btn';
+            upBtn.textContent = '^';
+            upBtn.title = 'Move up';
+            upBtn.onclick = () => moveConsensusRow(row, -1);
+
+            const downBtn = document.createElement('button');
+            downBtn.type = 'button';
+            downBtn.className = 'order-btn';
+            downBtn.textContent = 'v';
+            downBtn.title = 'Move down';
+            downBtn.onclick = () => moveConsensusRow(row, 1);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-btn';
+            removeBtn.textContent = 'X';
+            removeBtn.onclick = () => {
+                setProviderConsensusChecked(input.value.trim(), false);
+                row.remove();
+            };
+
+            row.appendChild(input);
+            row.appendChild(upBtn);
+            row.appendChild(downBtn);
+            row.appendChild(removeBtn);
+
             return row;
         }
 
@@ -344,7 +494,12 @@
             if (!user) return;
             const idToken = await user.getIdToken();
             
-            const data = { premium: [], limits: {} };
+            const data = { premium: [], consensus: consensusListValues(), limits: {} };
+            function addConsensusValue(modelName) {
+                if (modelName && !data.consensus.includes(modelName)) {
+                    data.consensus.push(modelName);
+                }
+            }
             document.querySelectorAll('[data-limit-key]').forEach(input => {
                 const value = parseInt(input.value, 10);
                 data.limits[input.dataset.limitKey] = Number.isFinite(value) && value >= 0 ? value : 0;
@@ -356,13 +511,17 @@
                 const rows = listContainer.querySelectorAll('.model-row');
                 rows.forEach(row => {
                     const input = row.querySelector('input[type="text"]');
-                    const checkbox = row.querySelector('input[type="checkbox"]');
+                    const premiumCheckbox = row.querySelector('.premium-checkbox');
+                    const consensusCheckbox = row.querySelector('.consensus-checkbox');
                     const modelName = input.value.trim();
                     
                     if (modelName) {
                         data[p].push(modelName);
-                        if (checkbox.checked) {
+                        if (premiumCheckbox.checked) {
                             data.premium.push(modelName);
+                        }
+                        if (consensusCheckbox.checked) {
+                            addConsensusValue(modelName);
                         }
                     }
                 });
@@ -393,6 +552,9 @@
         }
 
         document.getElementById('saveBtn').addEventListener('click', saveModels);
+        document.getElementById('addConsensusModelBtn').addEventListener('click', () => {
+            document.getElementById('consensusModelsList').appendChild(createConsensusModelRow(''));
+        });
 
         // === Shared Pages Moderation ===
         let currentSharesFilter = 'reported';
@@ -571,6 +733,19 @@
         </div>
 
         <p style="margin-bottom: 20px; font-size: 0.9em; color: var(--text-color);">Add models to each provider and toggle the <strong>Premium</strong> checkbox to mark them as Pro-only.</p>
+
+        <div class="provider-section">
+            <h3>Consensus</h3>
+            <p style="margin-bottom: 12px; font-size: 0.9em; color: var(--text-color);">
+                Ordered values shown in the app's Consensus picker. Use existing aliases like
+                <strong>Gemini-Pro</strong> here; direct provider model IDs can also be toggled with
+                the <strong>Consensus</strong> checkbox below and reordered here.
+            </p>
+            <div id="consensusModelsList">
+                <!-- Populated by JavaScript -->
+            </div>
+            <button id="addConsensusModelBtn" type="button" class="add-btn">+ Add Consensus Model</button>
+        </div>
         
         <div id="providersContainer" class="providers-grid">
             <!-- Populated by JavaScript -->

@@ -124,16 +124,17 @@
             const sel = document.getElementById('runSelect');
             sel.innerHTML = '';
             if (!runs.length) {
-                setStatus('No benchmark runs found on disk.', true);
+                setStatus('No benchmark runs found.', true);
                 document.getElementById('runDetail').innerHTML = '';
                 return;
             }
             runs.forEach(r => {
                 const cost = r.total_cost_usd != null ? ` · ${fmtUsd(r.total_cost_usd)}` : '';
                 const n = r.n_questions != null ? ` · ${r.n_questions}Q` : '';
+                const source = r.source ? ` · ${r.source}` : '';
                 sel.appendChild(el('option', {
                     value: r.run_id,
-                    textContent: `${r.run_id} (${r.sample_role || '?'}${n}${cost})`
+                    textContent: `${r.run_id} (${r.sample_role || '?'}${n}${cost}${source})`
                 }));
             });
             setStatus('');

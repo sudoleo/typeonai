@@ -140,6 +140,16 @@ async def read_root(request: Request):
     model_metadata = cfg.get_model_picker_metadata()
     model_labels = {model_id: meta["label"] for model_id, meta in model_metadata.items()}
     model_badges = {model_id: meta["badge"] for model_id, meta in model_metadata.items() if meta["badge"]}
+    consensus_models = [
+        {
+            "value": model,
+            "label": cfg.get_consensus_model_label(model),
+            "badge": cfg.get_consensus_model_badge(model),
+            "is_premium": cfg.is_premium_consensus_model(model),
+            "is_frontier": model in cfg.EARLY_FREE_MODELS,
+        }
+        for model in cfg.ALLOWED_CONSENSUS_MODELS
+    ]
 
     response = templates.TemplateResponse("index.html", {
         "request": request, 
@@ -149,6 +159,7 @@ async def read_root(request: Request):
         "default_models": cfg.FREE_DEFAULT_MODEL_BY_PROVIDER,
         "pro_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
         "consensus_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
+        "consensus_models": consensus_models,
         "model_labels": model_labels,
         "model_badges": model_badges,
         "frontier_models": list(cfg.EARLY_FREE_MODELS),

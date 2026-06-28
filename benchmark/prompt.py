@@ -44,3 +44,30 @@ def build_consensus_question(question: str, options: list[str]) -> str:
         "why the selected option is best supported. Your last non-empty line must "
         "be exactly FINAL_ANSWER: X, where X is the option letter."
     )
+
+
+def build_anonymized_consensus_question(
+    question: str,
+    options: list[str],
+    anonymous_answers: list[tuple[str, str]],
+) -> str:
+    """Consensus-Audit-Prompt mit anonymen Response-Labels.
+
+    ``anonymous_answers`` enthaelt Paare wie ``("Response A", answer_text)``.
+    Diese Labels sind Antwort-IDs, nicht die MC-Optionsbuchstaben.
+    """
+    lines = [
+        build_consensus_question(question, options),
+        "",
+        "Anonymous candidate answers follow. Response labels identify candidate "
+        "answers only; they are not option letters.",
+    ]
+    for label, answer in anonymous_answers:
+        lines.extend(["", f"{label}:", str(answer or "").strip()])
+    lines.extend([
+        "",
+        "Compare the anonymous candidate answers. Do not infer model identity from "
+        "the labels. Your last non-empty line must be exactly FINAL_ANSWER: X, "
+        "where X is the option letter.",
+    ])
+    return "\n".join(lines)

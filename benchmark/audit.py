@@ -9,6 +9,9 @@
    Consensus-Reihenfolge-Audit (Stabilitaet der Synthese ueber normal / umgekehrt
    / deterministisch gemischt; nur Consensus wird neu berechnet, keine erneuten
    Kandidaten-Calls).
+4. Der anonymisierte Consensus-Audit wird im Runner gebaut: gespeicherte
+   Kandidatenantworten werden als ``Response A-F`` neu synthetisiert, ohne
+   erneute Kandidaten-Calls.
 """
 
 from __future__ import annotations

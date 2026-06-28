@@ -167,6 +167,22 @@ class FrontierModelPayloadTests(unittest.TestCase):
         self.assertIn(cfg.ANTHROPIC_PRO_MODEL, normalized["anthropic"])
         self.assertIn(cfg.ANTHROPIC_PRO_MODEL, normalized["premium"])
 
+    def test_admin_models_normalizes_consensus_models_from_posted_provider_lists(self):
+        normalized = normalize_models_document({
+            "openai": ["gpt-test-consensus"],
+            "mistral": [cfg.DEFAULT_MISTRAL_MODEL],
+            "anthropic": [cfg.DEFAULT_ANTHROPIC_MODEL],
+            "gemini": [cfg.GEMINI_FRONTIER_LOW_MODEL],
+            "deepseek": [cfg.DEEPSEEK_PRO_MODEL],
+            "grok": [cfg.DEFAULT_GROK_MODEL],
+            "premium": [],
+            "consensus": ["Gemini-Pro", "gpt-test-consensus", "not-in-provider-list"],
+        })
+        self.assertIn(cfg.GEMINI_FRONTIER_LOW_MODEL, normalized["consensus"])
+        self.assertIn("Gemini-Pro", normalized["consensus"])
+        self.assertIn("gpt-test-consensus", normalized["consensus"])
+        self.assertNotIn("not-in-provider-list", normalized["consensus"])
+
     def test_server_side_access_control(self):
         validate_model(cfg.OPENAI_FRONTIER_LOW_MODEL, cfg.ALLOWED_OPENAI_MODELS, "OpenAI", is_pro=False)
         validate_model(cfg.ANTHROPIC_FRONTIER_LOW_MODEL, cfg.ALLOWED_ANTHROPIC_MODELS, "Anthropic", is_pro=False)
@@ -231,8 +247,18 @@ class FrontierModelPayloadTests(unittest.TestCase):
     def test_consensus_picker_defaults_to_gemini_frontier_low(self):
         template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
         self.assertIn('id="consensusModelDropdown"', template)
-        self.assertIn('value="{{ default_models[\'gemini\'] }}" class="early-option"', template)
-        self.assertIn("selected>{{ model_labels.get(default_models['gemini']", template)
+        self.assertIn("{% for model in consensus_models %}", template)
+        self.assertIn('value="{{ model.value }}"', template)
+        self.assertIn("{% if loop.first %}selected{% endif %}", template)
+
+    def test_admin_model_rows_have_separate_premium_and_consensus_toggles(self):
+        template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
+        self.assertIn("premium-checkbox", template)
+        self.assertIn("consensus-checkbox", template)
+        self.assertIn("addConsensusValue(modelName)", template)
+        self.assertIn("moveConsensusRow", template)
+        self.assertIn("consensusListValues()", template)
+        self.assertIn("globalModelsData.consensus", template)
 
     def test_gemini_frontier_low_consensus_payload_uses_api_model(self):
         request = build_provider_payload(

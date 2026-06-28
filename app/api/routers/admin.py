@@ -72,10 +72,9 @@ def admin_moderate_share(request: Request, share_id: str, data: dict = Body(...)
 @router.get("/api/admin/benchmark/runs")
 def admin_list_benchmark_runs(request: Request):
     _require_admin(request, {})
-    # Lazy-Import: stdlib-only Reader, zieht NICHT den LLM-Importgraphen.
-    from benchmark import report_reader
+    from app.services import benchmark_reports
     try:
-        runs = report_reader.list_runs()
+        runs = benchmark_reports.list_runs_with_disk_fallback()
     except Exception:
         logging.exception("admin_list_benchmark_runs failed")
         raise HTTPException(status_code=500, detail="Failed to load benchmark runs")
@@ -85,9 +84,9 @@ def admin_list_benchmark_runs(request: Request):
 @router.get("/api/admin/benchmark/runs/{run_id}")
 def admin_get_benchmark_run(request: Request, run_id: str):
     _require_admin(request, {})
-    from benchmark import report_reader
+    from app.services import benchmark_reports
     try:
-        run = report_reader.get_run(run_id)
+        run = benchmark_reports.get_run_with_disk_fallback(run_id)
     except Exception:
         logging.exception("admin_get_benchmark_run failed")
         raise HTTPException(status_code=500, detail="Failed to load benchmark run")
@@ -130,6 +129,24 @@ def normalize_models_document(data: dict) -> dict:
     premium.update(cfg.EARLY_AND_PRO_MODELS)
     premium.update(cfg.REQUIRED_PRO_MODELS)
     normalized["premium"] = sorted(premium)
+
+    allowed_direct_consensus = set()
+    for provider in ("openai", "mistral", "anthropic", "gemini", "deepseek", "grok"):
+        allowed_direct_consensus.update(normalized.get(provider) or [])
+    consensus = [
+        str(model).strip()
+        for model in (normalized.get("consensus") or cfg.DEFAULT_CONSENSUS_MODELS)
+        if str(model or "").strip()
+    ]
+    normalized_consensus = []
+    for model in consensus:
+        if model in normalized_consensus:
+            continue
+        if model in cfg.CONSENSUS_ENGINE_ALIASES or model in allowed_direct_consensus:
+            normalized_consensus.append(model)
+    if cfg.GEMINI_FRONTIER_LOW_MODEL not in normalized_consensus:
+        normalized_consensus.insert(0, cfg.GEMINI_FRONTIER_LOW_MODEL)
+    normalized["consensus"] = normalized_consensus
     return normalized
 
 @router.get("/api/admin/models")
@@ -166,6 +183,7 @@ def get_models(request: Request):
                 "deepseek": list(ALLOWED_DEEPSEEK_MODELS),
                 "grok": list(ALLOWED_GROK_MODELS),
                 "premium": list(PREMIUM_MODELS),
+                "consensus": list(cfg.ALLOWED_CONSENSUS_MODELS),
                 "limits": get_limits_config()
             }
     except Exception as e:
@@ -204,6 +222,7 @@ def update_models(request: Request, data: dict = Body(...)):
             "deepseek": normalized["deepseek"],
             "grok": normalized["grok"],
             "premium": normalized["premium"],
+            "consensus": normalized["consensus"],
             "limits": get_limits_config()
         })
         

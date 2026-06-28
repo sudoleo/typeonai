@@ -83,6 +83,7 @@ DEFAULT_MODEL_BY_PROVIDER = {
 
 GEMINI_FLASH_MODEL = DEFAULT_GEMINI_MODEL
 GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
+GEMINI_35_FLASH_MODEL = "gemini-3.5-flash"
 FREE_DEFAULT_MODEL_BY_PROVIDER = {
     "openai": OPENAI_FRONTIER_LOW_MODEL,
     "mistral": DEFAULT_MISTRAL_MODEL,
@@ -91,6 +92,24 @@ FREE_DEFAULT_MODEL_BY_PROVIDER = {
     "deepseek": DEFAULT_DEEPSEEK_MODEL,
     "grok": GROK_FRONTIER_LOW_MODEL,
 }
+
+DEFAULT_CONSENSUS_MODELS = [
+    GEMINI_FRONTIER_LOW_MODEL,
+    "Grok",
+    "OpenAI",
+    "Anthropic",
+    "Mistral",
+    "Gemini",
+    "DeepSeek",
+    "Grok-Pro",
+    "OpenAI-Pro",
+    "Anthropic-Pro",
+    "Mistral-Pro",
+    "Gemini-Pro",
+    "DeepSeek-Pro",
+]
+
+ALLOWED_CONSENSUS_MODELS = list(DEFAULT_CONSENSUS_MODELS)
 UNSUPPORTED_GEMINI_MODELS = {
     "gemini-3.1-flash-preview",
     "gemini-3-pro-preview",
@@ -102,6 +121,21 @@ PRO_DEEP_SEARCH_LIMIT = LIMITS["pro_deep_search_limit"]
 VALID_LEADERBOARD_MODELS = {
     "OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok",
     "OpenAI-Pro", "Mistral-Pro", "Anthropic-Pro", "Gemini-Pro", "DeepSeek-Pro", "Grok-Pro",
+}
+
+CONSENSUS_ENGINE_ALIASES = {
+    "OpenAI": ("openai", DEFAULT_OPENAI_MODEL),
+    "OpenAI-Pro": ("openai", "gpt-5.5"),
+    "Mistral": ("mistral", DEFAULT_MISTRAL_MODEL),
+    "Mistral-Pro": ("mistral", MISTRAL_PRO_MODEL),
+    "Anthropic": ("anthropic", DEFAULT_ANTHROPIC_MODEL),
+    "Anthropic-Pro": ("anthropic", ANTHROPIC_PRO_MODEL),
+    "Gemini": ("gemini", GEMINI_FLASH_MODEL),
+    "Gemini-Pro": ("gemini", GEMINI_PRO_MODEL),
+    "DeepSeek": ("deepseek", DEFAULT_DEEPSEEK_MODEL),
+    "DeepSeek-Pro": ("deepseek", DEEPSEEK_PRO_MODEL),
+    "Grok": ("grok", DEFAULT_GROK_MODEL),
+    "Grok-Pro": ("grok", "grok-4.3"),
 }
 LEADERBOARD_MODEL_ALIASES = {
     "Claude": "Anthropic",
@@ -131,7 +165,7 @@ ALLOWED_ANTHROPIC_MODELS = {
 
 ALLOWED_GEMINI_MODELS = {
     GEMINI_FLASH_MODEL, "gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview",
-    "gemini-2.5-flash", "gemini-2.0-flash",
+    "gemini-2.5-flash", "gemini-2.0-flash", GEMINI_35_FLASH_MODEL,
     GEMINI_PRO_MODEL, "gemini-2.5-pro", GEMINI_FRONTIER_LOW_MODEL,
 }
 
@@ -206,6 +240,7 @@ MODEL_LABEL_OVERRIDES = {
     "claude-opus-4-7": "Claude Opus 4.7",
     ANTHROPIC_PRO_MODEL: "Claude Opus 4.8",
     ANTHROPIC_FRONTIER_LOW_MODEL: "Claude Opus 4.8",
+    GEMINI_35_FLASH_MODEL: "Gemini 3.5 Flash",
     GEMINI_PRO_MODEL: "Gemini 3.1",
     GEMINI_FRONTIER_LOW_MODEL: "Gemini 3.1",
     "grok-4.3": "Grok 4.3",
@@ -347,6 +382,61 @@ def get_model_badge(model_id: str) -> str:
     return " · ".join(dict.fromkeys(badges))
 
 
+def get_consensus_model_config(model_id: str | None) -> ModelConfig | None:
+    if not model_id:
+        return None
+    alias = CONSENSUS_ENGINE_ALIASES.get(model_id)
+    if alias:
+        provider, api_model = alias
+        return ModelConfig(
+            internal_id=model_id,
+            provider=provider,
+            api_model=api_model,
+            label=_fallback_label(api_model),
+            is_free=not str(model_id).endswith("-Pro"),
+            is_pro=str(model_id).endswith("-Pro"),
+        )
+    return get_model_config(model_id)
+
+
+def is_premium_consensus_model(model_id: str | None) -> bool:
+    config = get_consensus_model_config(model_id)
+    return bool(config and config.is_pro and config.internal_id not in EARLY_FREE_MODELS)
+
+
+def get_consensus_model_label(model_id: str) -> str:
+    config = get_consensus_model_config(model_id)
+    return config.label if config else _fallback_label(model_id)
+
+
+def get_consensus_model_badge(model_id: str) -> str:
+    if str(model_id or "").endswith("-Pro"):
+        return "Pro"
+    config = get_consensus_model_config(model_id)
+    badges = []
+    if config and config.is_frontier:
+        badges.append("Early")
+    if config and config.is_pro and config.internal_id not in EARLY_FREE_MODELS:
+        badges.append("Pro")
+    return " · ".join(dict.fromkeys(badges))
+
+
+def normalize_consensus_models(models) -> list[str]:
+    incoming = [str(model).strip() for model in (models or []) if str(model or "").strip()]
+    if not incoming:
+        incoming = list(DEFAULT_CONSENSUS_MODELS)
+    allowed = []
+    for model in incoming:
+        if model in allowed:
+            continue
+        config = get_consensus_model_config(model)
+        if config and config.provider:
+            allowed.append(model)
+    if GEMINI_FRONTIER_LOW_MODEL not in allowed:
+        allowed.insert(0, GEMINI_FRONTIER_LOW_MODEL)
+    return allowed
+
+
 def get_model_picker_metadata() -> dict[str, dict[str, str]]:
     return {
         model_id: {
@@ -437,6 +527,7 @@ def get_output_token_limit(is_pro: bool, deep_search: bool = False) -> int:
 
 
 def load_models_from_db():
+    global ALL_ALLOWED_MODELS
     import logging
     from app.core.security import db_firestore
     try:
@@ -496,11 +587,24 @@ def load_models_from_db():
                 PREMIUM_MODELS.update(EARLY_AND_PRO_MODELS)
                 PREMIUM_MODELS.update(REQUIRED_PRO_MODELS)
 
+            ensure_default_models_allowed()
+            ALL_ALLOWED_MODELS = (
+                ALLOWED_OPENAI_MODELS | ALLOWED_MISTRAL_MODELS | ALLOWED_ANTHROPIC_MODELS |
+                ALLOWED_GEMINI_MODELS | ALLOWED_DEEPSEEK_MODELS | ALLOWED_GROK_MODELS
+            )
+            rebuild_model_configs()
+
+            if "consensus" in data:
+                ALLOWED_CONSENSUS_MODELS.clear()
+                ALLOWED_CONSENSUS_MODELS.extend(normalize_consensus_models(data["consensus"]))
+            else:
+                ALLOWED_CONSENSUS_MODELS.clear()
+                ALLOWED_CONSENSUS_MODELS.extend(normalize_consensus_models(DEFAULT_CONSENSUS_MODELS))
+
             apply_limits(data.get("limits"))
             ensure_default_models_allowed()
             
             # Update ALL_ALLOWED_MODELS
-            global ALL_ALLOWED_MODELS
             ALL_ALLOWED_MODELS = (
                 ALLOWED_OPENAI_MODELS | ALLOWED_MISTRAL_MODELS | ALLOWED_ANTHROPIC_MODELS |
                 ALLOWED_GEMINI_MODELS | ALLOWED_DEEPSEEK_MODELS | ALLOWED_GROK_MODELS
@@ -517,6 +621,7 @@ def load_models_from_db():
                 "deepseek": list(ALLOWED_DEEPSEEK_MODELS),
                 "grok": list(ALLOWED_GROK_MODELS),
                 "premium": list(PREMIUM_MODELS),
+                "consensus": list(ALLOWED_CONSENSUS_MODELS),
                 "limits": get_limits_config()
             })
             rebuild_model_configs()

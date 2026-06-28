@@ -68,6 +68,25 @@ def list_runs() -> list[dict]:
     return runs
 
 
+def summarize_run_dir(run_dir: Path) -> dict:
+    """Kompakte Listenansicht fuer ein Run-Verzeichnis."""
+    run_dir = Path(run_dir)
+    manifest = _read_json(run_dir / "manifest.json") or {}
+    results = _read_json(run_dir / "results.json") or {}
+    return {
+        "run_id": run_dir.name,
+        "sample_role": manifest.get("sample_role"),
+        "label_mode": manifest.get("label_mode"),
+        "consensus_model": manifest.get("consensus_model"),
+        "created": manifest.get("created"),
+        "n_questions": results.get("n_questions"),
+        "n_disagreement": results.get("n_disagreement"),
+        "total_cost_usd": (results.get("totals") or {}).get("cost_usd"),
+        "has_results": bool(results),
+        "has_audits": (run_dir / "audits.json").exists(),
+    }
+
+
 def _dedupe_calls(calls_path: Path) -> list[dict]:
     """Je Zellen-Key (question_id, role, provider) genau ein Record – Erfolg
     gewinnt vor Fehlversuch (gleiche Semantik wie ``results.dedupe_records``)."""
@@ -153,6 +172,16 @@ def get_run(run_id: str) -> dict | None:
     run_dir = _safe_run_dir(run_id)
     if run_dir is None:
         return None
+    return build_run_report(run_dir)
+
+
+def build_run_report(run_dir: Path) -> dict:
+    """Vollstaendige, aber kompakte Dashboard-Daten fuer ein Run-Verzeichnis.
+
+    Enthalten sind keine Rohantworten, Prompts oder Request-Payloads aus
+    ``calls.jsonl``; daraus wird nur die kleine Fragenmatrix abgeleitet.
+    """
+    run_dir = Path(run_dir)
     return {
         "run_id": run_dir.name,
         "manifest": _read_json(run_dir / "manifest.json"),
