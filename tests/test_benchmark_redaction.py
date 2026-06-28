@@ -44,7 +44,7 @@ class RedactionTests(unittest.TestCase):
         runner = BenchmarkRunner()
         payload = {"model": "gpt-5.5", "Authorization": "Bearer sk-LEAK", "input": "q"}
         outcome = {
-            "text": "The answer is (B).",
+            "text": "Short reason.\nFINAL_ANSWER: B",
             "usage": {"prompt": 1, "completion": 1, "total": 2},
             "latency_ms": 1.0, "status": 200, "error": None, "error_code": None,
         }

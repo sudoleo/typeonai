@@ -263,7 +263,8 @@ Modell-IDs/Tier-Zuordnung/Labels: ausschließlich in `app/core/config.py` pflege
 - **Benchmark-Runner** (`benchmark/`, kein GUI-Pfad): `python -m benchmark
   --smoke|--pilot|--final`. `--smoke` ist ein dedizierter 1-Frage-MMLU-Pro-Pfad
   mit eigenem Manifest/Run-Kontext; Smoke und Pilot haben separate Live-Gates,
-  der finale Run bleibt durch `LIVE_EXECUTION_ENABLED` hart gegatet.
+  der finale Run bleibt durch `LIVE_EXECUTION_ENABLED` hart gegatet. Die MC-
+  Auswertung akzeptiert nur die letzte `FINAL_ANSWER: X`-Zeile.
 - JS-Syntaxcheck einzelner Module:
   ```powershell
   node --check static\js\<modul>.js

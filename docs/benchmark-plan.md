@@ -276,7 +276,7 @@ benchmark/
                    #   pricing-Tabelle, Pfade
   dataset.py       # hf_hub_download(TIGER-Lab/MMLU-Pro) + disjunktes,
                    #   reproduzierbares Pilot- und Final-Sampling + Manifeste
-  prompt.py        # MC-Template: Optionen A–J + Instruktion "The answer is (X)"
+  prompt.py        # MC-Template: Optionen A-J + finale "FINAL_ANSWER: X"-Instruktion
   transport.py     # execute(request_data, api_key)
                    #   -> {text, sources, usage, raw, status, latency}
   parse.py         # extract_letter(), majority_vote() (mit no_majority), grade()
@@ -409,8 +409,9 @@ Alle **ohne** echte API-Calls (Mocks/Fixtures); bestehende Pytest-Baseline
 
 1. `test_benchmark_mode.py`: `benchmark_mode=True` entfernt Web-Tools für **alle 6**
    Provider; `False` ⇒ Payload identisch zum Status quo (Regression).
-2. `test_benchmark_parse.py`: `extract_letter` auf Fixtures („The answer is (C).",
-   „C)", „**C**", deutsch, Müll→None); `majority_vote` inkl. Ties → `no_majority`;
+2. `test_benchmark_parse.py`: `extract_letter` wertet nur die letzte
+   `FINAL_ANSWER: X`-Zeile aus; Fließtext, Optionsinhalt und ältere
+   Antwortphrasen bleiben unparseable; `majority_vote` inkl. Ties → `no_majority`;
    `grade`.
 3. `test_benchmark_dataset.py`: Sampling deterministisch (gleiche Seeds → gleiche
    IDs) gegen committete Mini-Fixture (`tests/fixtures/mmlu_pro_mini.parquet`),

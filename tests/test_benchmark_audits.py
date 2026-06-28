@@ -20,7 +20,7 @@ QUESTIONS = [
 
 def fake_transport_fixed(letter="B"):
     def _execute(request_data, api_key, **kwargs):
-        return {"text": f"The answer is ({letter}).", "sources": [],
+        return {"text": f"Short reason for option {letter}.\nFINAL_ANSWER: {letter}", "sources": [],
                 "usage": {"prompt": 5, "completion": 2, "total": 7},
                 "raw": {}, "status": 200, "latency_ms": 1.0,
                 "error": None, "error_code": None}
@@ -28,7 +28,7 @@ def fake_transport_fixed(letter="B"):
 
 
 def fake_consensus_fixed(question, answers, model_sources=None):
-    return "The answer is (B)."
+    return "The candidate answers mostly support B.\nFINAL_ANSWER: B"
 
 
 class PermutationConsistencyUnitTests(unittest.TestCase):
@@ -68,7 +68,7 @@ class ConsensusOrderAuditTests(unittest.TestCase):
         def order_sensitive(question, answers, model_sources=None):
             first = next(iter(answers))
             letter = LETTERS[hash(first) % 4]
-            return f"The answer is ({letter})."
+            return f"The first provider drives this synthetic answer.\nFINAL_ANSWER: {letter}"
 
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "run"

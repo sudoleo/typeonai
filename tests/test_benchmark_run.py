@@ -37,7 +37,7 @@ def fake_transport(*, fail_providers=(), prompt_tokens=10, completion_tokens=5):
                 "error": "boom", "error_code": "provider_http_error",
             }
         return {
-            "text": "The answer is (B).", "sources": [],
+            "text": "Paris is the only listed capital of France.\nFINAL_ANSWER: B", "sources": [],
             "usage": {"prompt": prompt_tokens, "completion": completion_tokens,
                       "total": prompt_tokens + completion_tokens},
             "raw": {}, "status": 200, "latency_ms": 1.0,
@@ -48,7 +48,7 @@ def fake_transport(*, fail_providers=(), prompt_tokens=10, completion_tokens=5):
 
 
 def fake_consensus(question, answers, model_sources=None):
-    return "After weighing the responses, the answer is (B)."
+    return "Most candidate answers support Paris.\nFINAL_ANSWER: B"
 
 
 def read_cells(run_dir):
@@ -90,6 +90,24 @@ class RunEndToEndTests(unittest.TestCase):
             self.assertIn("est_cost_usd", model_cell)
             # manifest.json wird mitgeschrieben
             self.assertTrue((run_dir / "manifest.json").exists())
+
+    def test_consensus_receives_benchmark_final_answer_contract(self):
+        seen = {}
+
+        def capturing_consensus(question, answers, model_sources=None):
+            seen["question"] = question
+            return fake_consensus(question, answers, model_sources)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run_contract"
+            self._runner().run(
+                [QUESTION], run_dir=run_dir, api_keys={},
+                transport_execute=fake_transport(), consensus_fn=capturing_consensus,
+            )
+
+        self.assertIn("Compare the candidate answers", seen["question"])
+        self.assertIn("FINAL_ANSWER: X", seen["question"])
+        self.assertIn("(B) Paris", seen["question"])
 
     def test_resume_skips_successful_cells_without_duplicates(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,4 +1,4 @@
-"""MC-Frage-Template (Optionen A-J + "The answer is (X)"-Instruktion).
+"""MC-Frage-Template (Optionen A-J + FINAL_ANSWER-Instruktion).
 
 Der closed-book System-Prompt liegt in ``config.SYSTEM_PROMPT``; dieses Modul baut
 nur den User-Prompt (die eigentliche Frage mit Optionen).
@@ -29,5 +29,18 @@ def build_mc_question(question: str, options: list[str]) -> str:
     for idx, option in enumerate(opts):
         lines.append(f"({LETTERS[idx]}) {str(option).strip()}")
     lines.append("")
-    lines.append("Choose the single correct option. End with: The answer is (X).")
+    lines.append(
+        "Choose the single correct option. Give a brief visible explanation first. "
+        "Then end with a final line exactly in this format: FINAL_ANSWER: X"
+    )
     return "\n".join(lines)
+
+
+def build_consensus_question(question: str, options: list[str]) -> str:
+    """Baut den Benchmark-Consensus-Auftrag ohne die Produktlogik umzubauen."""
+    return (
+        build_mc_question(question, options)
+        + "\n\nCompare the candidate answers and their reasoning. Briefly explain "
+        "why the selected option is best supported. Your last non-empty line must "
+        "be exactly FINAL_ANSWER: X, where X is the option letter."
+    )

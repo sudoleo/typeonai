@@ -24,7 +24,7 @@ from app.services.llm.engines import build_provider_payload
 
 from benchmark import audit, config, cost, transport
 from benchmark.parse import extract_letter, grade
-from benchmark.prompt import LETTERS, build_mc_question
+from benchmark.prompt import LETTERS, build_consensus_question, build_mc_question
 
 logger = logging.getLogger(__name__)
 
@@ -462,7 +462,11 @@ class BenchmarkRunner:
         Transport-Outcome. query_consensus liefert nur Text (keine Usage) und
         signalisiert Fehler als Text-Prefix – beides wird hier erkannt."""
         try:
-            text = consensus_fn(question=record["question"], answers=answers, model_sources=None)
+            text = consensus_fn(
+                question=build_consensus_question(record["question"], record["options"]),
+                answers=answers,
+                model_sources=None,
+            )
         except Exception as exc:  # noqa: BLE001
             return {"text": "", "usage": None, "latency_ms": None, "status": None,
                     "error": str(exc), "error_code": "consensus_failed"}
@@ -678,7 +682,11 @@ class BenchmarkRunner:
 
             def recompute(order, _answers=answers, _record=record):
                 ordered = {provider: _answers[provider] for provider in order}
-                text = consensus_fn(question=_record["question"], answers=ordered, model_sources=None)
+                text = consensus_fn(
+                    question=build_consensus_question(_record["question"], _record["options"]),
+                    answers=ordered,
+                    model_sources=None,
+                )
                 return extract_letter(text, options=_record["options"])
 
             outcome = audit.run_consensus_order_audit(providers, recompute, rng)

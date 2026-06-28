@@ -50,9 +50,9 @@ FINAL_SEED = 98140314
 SYSTEM_PROMPT = (
     "You are answering a single multiple-choice question from a closed-book exam. "
     "Rely only on your own knowledge. Do not use web search, external tools, or any "
-    "outside sources. Reason as briefly as possible, then finish your reply with a "
+    "outside sources. Give a brief visible explanation, then finish your reply with a "
     "final line in exactly this format:\n"
-    "The answer is (X).\n"
+    "FINAL_ANSWER: X\n"
     "where X is the single letter of the option you choose."
 )
 
