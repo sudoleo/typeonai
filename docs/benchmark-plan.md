@@ -655,3 +655,105 @@ Die V1-Prompt-Variante (reasoning-/Logik-Check als Zusatzklausel) wurde diskutie
 **bewusst wieder verworfen/gelöscht** — erst die Charakterisierung abwarten. Falls
 sie später kommt: nur die **gespeicherten** Kandidatenantworten neu durch einen
 zweiten Consensus-Arm schicken (~$1, kein Kandidaten-Rerun).
+
+### experiment_v1 (66 Fragen, disagreement-angereichert) — gelaufen, publiziert (2026-06-29)
+Voller Lauf live (nach einem Prozess-Teardown bei Zelle 207 per `--resume`
+fortgesetzt), 528 Zellen, **0 Fehler**, parse_rate 1,0 (Mistral/DeepSeek je 0,97,
+2 Abstains) → Parse-Gate (M3) erfüllt. Realer Spend ~$4–5 (getrackte $18,17 sind
+zu ~80 % das cap-basierte Consensus-Input-Phantom). Auf `/admin/benchmark`
+publiziert. Uneinigkeits-Teilmenge real = **19/66** (Anreicherung wirkte: final_v1
+~18 % → hier ~29 %). Einmaliger Eingriff: q1062 hatte einen transienten
+DeepSeek-Reconnect → die Frage wurde **komplett entfernt und frisch neu gerechnet**
+(Backup `calls.jsonl.bak_pre_resume`), damit ihr Consensus nicht mit 5/6 Antworten
+läuft.
+
+**Ergebnis (Accuracy, Wilson-CI):**
+
+| System | gesamt (n=66) | Uneinigkeit (n=19) |
+|---|---|---|
+| **Consensus** | **89,4 %** (59) | **78,9 %** (15) |
+| OpenAI / Gemini / Synth-allein | 87,9 % (58) | 73,7 % (14) |
+| Anthropic / Majority Vote | 86,4 % (57) | 68,4 % (13) |
+| Grok | 84,8 % (56) | 63,2 % (12) |
+| DeepSeek | 78,8 % (52) | 42,1 % (8) |
+| Mistral | 74,2 % (49) | 26,3 % (5) |
+
+**Kernbefund — das final_v1-Muster kehrt sich um, und zwar strukturell sauber:**
+1. **Consensus schlägt Majority Vote** (+2 auf der Uneinigkeit): **2 Rescues, 0
+   Harms**. Keine Frage verloren, die Majority richtig hatte; u. a. q7631 gerettet,
+   wo Majority gar keine Mehrheit hatte. Gegenteil des final_v1-Nullsummen-Befunds.
+2. **Consensus − Synth-allein = +1** (2 Rescues / 1 Harm) — die saubere Metrik
+   (kontrolliert fürs Eigenwissen des Synthesizers) ist schwach positiv. Der eine
+   Harm ist q1062.
+3. **Kein dominierendes Einzelmodell:** Consensus (15/19) liegt über *jedem*
+   Einzelmodell auf der Teilmenge — anders als final_v1 (dort war Anthropic-korrekt
+   eine Obermenge von Consensus). Lehrbuchfall q7082 (nur 1/6 Modelle richtig):
+   Consensus zieht korrekt J gegen Synth-allein (E) und Majority (B).
+
+**Statistik-Vorbehalt (unverändert hart):** Effekte sind 1–2 Fragen auf n=19; die
+Wilson-CIs überlappen massiv (Consensus-Uneinigkeit [56,7 %, 91,5 %] vs. Majority
+[46,0 %, 84,6 %]). **Kein signifikanter** Sieg — belastbar ist *Richtung + Struktur*
+(harm-freie Rescues gegen Majority, kein dominierendes Einzelmodell), konsistent
+gegenläufig zu final_v1.
+
+### Entscheidung — Prompt-Politik: V0 bleibt eingefroren (kein V1-Eingriff)
+Der **Consensus-Prompt bleibt unverändert (V0)**. Es wird **kein** V1-Prompt-Arm
+gebaut. Begründung (User): über mehrere Runs **unverzerrte V0-Daten** auf gleicher
+Pipeline sammeln, bis die kumulierte Uneinigkeits-Teilmenge groß genug für eine
+echte **Signifikanz**-Aussage ist. Ein Prompt-Wechsel jetzt würde Sample und Prompt
+gleichzeitig verändern und die runübergreifende Vergleichbarkeit zerstören. Die V1-
+Idee (reasoning-/Logik-Check-Klausel) bleibt zurückgestellt und ist später billig
+auf den gespeicherten Kandidatenantworten nachholbar (~$1, kein Kandidaten-Rerun).
+
+### Prompt-Transparenz (ab 2026-06-29 verdrahtet)
+Beide Prompts werden jetzt **erfasst, angezeigt und dokumentiert**:
+- **Manifest:** `runner.build_manifest()` schreibt `consensus_prompt_template`
+  (produktiver V0-Synthese-Prompt, pro Frage variable Teile als Platzhalter); der
+  closed-book `system_prompt` stand bereits drin. Beide sind in
+  `_MANIFEST_FROZEN_FIELDS` (Drift-geschützt). Bei `final_v1` und `experiment_v1`
+  nachgetragen und neu publiziert.
+- **Admin-Seite:** `/admin/benchmark` zeigt beide Prompts pro Run (aufklappbar).
+- **Hier dokumentiert** (Stand 2026-06-29):
+
+**Closed-book System-Prompt (an alle 6 Modelle):**
+```
+You are answering a single multiple-choice question from a closed-book exam. Rely
+only on your own knowledge. Do not use web search, external tools, or any outside
+sources. Give a brief visible explanation, then finish your reply with a final line
+in exactly this format:
+FINAL_ANSWER: X
+where X is the single letter of the option you choose.
+```
+
+**Consensus-Synthese-Prompt V0 (Template; `{…}` pro Frage gefüllt):**
+```
+Please provide your answer in the same language as the user's question. The question is: {QUESTION}
+
+Below are independent expert opinions from different models. Each source list belongs only to the immediately preceding expert opinion. Use sources as compact provenance, not as additional opinions. Do not restate raw source lists in the final answer.
+
+Expert opinion from OpenAI:
+Answer:
+{ANSWER_OPENAI}
+
+Expert opinion from Mistral:
+Answer:
+{ANSWER_MISTRAL}
+
+Expert opinion from Anthropic:
+Answer:
+{ANSWER_ANTHROPIC}
+
+Expert opinion from Gemini:
+Answer:
+{ANSWER_GEMINI}
+
+Expert opinion from DeepSeek:
+Answer:
+{ANSWER_DEEPSEEK}
+
+Expert opinion from Grok:
+Answer:
+{ANSWER_GROK}
+
+You receive multiple expert opinions on a specific question. Treat all expert opinions equally. Do not focus on the answer of one model. Your task is to combine these responses into a comprehensive, correct, and coherent answer. Note: Experts can also make mistakes. Therefore, try to identify and exclude possible errors by comparing the answers. Structure the answer clearly and coherently. Use the expert-opinion framing only for your internal synthesis. The final answer is for an end user, so do not mention experts, expert opinions, models, model responses, consensus mechanics, or that sources disagree. Resolve disagreements silently where possible. If uncertainty remains important, state it as ordinary factual uncertainty without referring to the underlying experts or models. When a central factual claim is directly supported by a cited source in the provided opinions, include the existing source tag such as [S1] next to that claim. Use only source tags that were provided in the opinions or their compact source lists; never invent new source IDs. Use citations sparingly and only where they add verifiability. Provide only the final, balanced answer. Do not ask the user any follow-up or clarifying questions; answer directly with the information available.
+```

@@ -65,6 +65,14 @@
         .bm-legend span { display: inline-flex; align-items: center; gap: 5px; }
         .bm-swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 1px solid var(--border-color); }
         .bm-empty { opacity: 0.7; font-style: italic; }
+        .bm-prompt { margin-top: 14px; }
+        .bm-prompt summary { cursor: pointer; font-weight: 700; font-size: 0.85em; opacity: 0.85; }
+        .bm-prompt pre {
+            margin: 8px 0 0; padding: 12px 14px; border-radius: 6px;
+            background: rgba(127,127,127,0.10); border: 1px solid var(--border-color);
+            font-size: 0.8em; line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+            max-height: 360px; overflow: auto;
+        }
         @media (max-width: 700px) { .bm-bar-label { flex-basis: 110px; } }
     </style>
     <script type="module">
@@ -203,7 +211,16 @@
                 t.appendChild(tb);
                 card.appendChild(el('div', { style: 'margin-top:14px' }, t));
             }
+            if (m.system_prompt) card.appendChild(promptBlock('Closed-book system prompt (sent to all 6 models)', m.system_prompt));
+            if (m.consensus_prompt_template) card.appendChild(promptBlock('Consensus synthesis prompt — V0 (template; {…} filled per question)', m.consensus_prompt_template));
             return card;
+        }
+
+        function promptBlock(label, text) {
+            return el('details', { className: 'bm-prompt' }, [
+                el('summary', { textContent: label }),
+                el('pre', { textContent: text }),
+            ]);
         }
 
         function orderedSystemKeys(systems) {

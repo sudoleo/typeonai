@@ -511,6 +511,7 @@ class BenchmarkRunner:
             "output_token_limit": self.output_tokens,
             "consensus_output_token_limit": CONSENSUS_MAX_TOKENS,
             "system_prompt": self.system_prompt,
+            "consensus_prompt_template": _consensus_prompt_template(),
             "models": self._model_manifest_rows(),
             "consensus": self._consensus_manifest_row(),
             "synth_alone": self._synth_manifest_row(),
@@ -522,8 +523,8 @@ class BenchmarkRunner:
     _MANIFEST_FROZEN_FIELDS = (
         "sample_role", "sample_manifest", "label_mode", "include_synth_alone",
         "consensus_model", "temperature", "output_token_limit",
-        "consensus_output_token_limit", "system_prompt", "models", "consensus",
-        "synth_alone",
+        "consensus_output_token_limit", "system_prompt", "consensus_prompt_template",
+        "models", "consensus", "synth_alone",
     )
 
     def _model_manifest_rows(self) -> list[dict]:
@@ -1078,3 +1079,23 @@ def _consensus_api_model(consensus_model: str) -> str:
     """Loest das Consensus-Modell auf seinen api_model auf (fuer Pricing)."""
     model_config = cfg.get_model_config(consensus_model)
     return model_config.api_model if model_config else consensus_model
+
+
+# Platzhalter fuer die pro Frage eingesetzten, dynamischen Teile des
+# Consensus-Prompts (Frage + sechs Kandidatenantworten). Das uebrige Geruest
+# (Synthese-Anweisungen) ist ueber alle Fragen/Runs konstant = der V0-Prompt.
+_CONSENSUS_TEMPLATE_PLACEHOLDERS = (
+    "{QUESTION}", "{ANSWER_OPENAI}", "{ANSWER_MISTRAL}", "{ANSWER_ANTHROPIC}",
+    "{ANSWER_GEMINI}", "{ANSWER_DEEPSEEK}", "{ANSWER_GROK}",
+)
+
+
+def _consensus_prompt_template() -> str:
+    """Der produktive (V0-)Consensus-Synthese-Prompt als Template – die pro Frage
+    variablen Teile (Frage, sechs Kandidatenantworten) sind durch Platzhalter
+    ersetzt. So wird der exakt verwendete Synthese-Prompt im Manifest fuer
+    Transparenz/Reproduzierbarkeit festgehalten, ohne Rohantworten zu speichern.
+    """
+    from app.services.llm.consensus_engine import _build_consensus_prompt
+
+    return _build_consensus_prompt(*_CONSENSUS_TEMPLATE_PLACEHOLDERS, [], model_sources=None)
