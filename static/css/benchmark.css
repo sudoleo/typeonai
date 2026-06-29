@@ -1,9 +1,9 @@
 /* ==========================================================================
-   consens.io — Benchmark snapshot subpage (/benchmark)
+   consens.io Benchmark snapshot subpage (/benchmark)
    Loaded AFTER landing.css, which provides the design tokens, the nav/footer
    chrome, the scroll-reveal system and the button + section primitives.
    This file only adds the benchmark-specific bits: the stat strip, the bar
-   charts (screenshot style — value on top, blue gradient fill, confidence
+   charts (screenshot style: value on top, blue gradient fill, confidence
    whiskers) and the takeaway cards.
    ========================================================================== */
 
@@ -153,14 +153,14 @@
 
 .bench-chart.is-visible .bench-bar { height: calc(var(--val) * var(--scale)); }
 
-/* consens.io — the subject of the page: deep brand blue. */
+/* consens.io: the subject of the page, deep brand blue. */
 .bench-col.is-consensus .bench-bar {
   border-color: color-mix(in srgb, var(--accent) 80%, #06324a);
   background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 72%, #2aa3da));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 6px 18px color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
-/* Majority vote — an aggregation baseline, mid steel-blue. */
+/* Majority vote: an aggregation baseline, mid steel-blue. */
 .bench-col.is-majority .bench-bar {
   border-color: color-mix(in srgb, #5a7bb5 70%, transparent);
   background: linear-gradient(180deg, #9fb6e0, #c2d2ef);

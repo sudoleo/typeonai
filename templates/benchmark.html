@@ -9,7 +9,7 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="consens.io">
   <meta property="og:title" content="Consensus Benchmark (MMLU-Pro) | consens.io">
-  <meta property="og:description" content="One consensus answer vs. six leading models on 314 closed-book MMLU-Pro questions. The consensus edges ahead — and pulls clear when the models disagree.">
+  <meta property="og:description" content="One consensus answer vs. six leading models on 314 closed-book MMLU-Pro questions. The consensus edges ahead, and pulls clear when the models disagree.">
   <meta property="og:url" content="https://www.consens.io/benchmark">
   <meta property="og:image" content="https://www.consens.io/static/favicon-square.png">
   <meta name="twitter:card" content="summary">
@@ -36,7 +36,7 @@
       {
         "@type": "Dataset",
         "@id": "https://www.consens.io/benchmark#dataset",
-        "name": "consens.io consensus benchmark — MMLU-Pro pooled snapshot",
+        "name": "consens.io consensus benchmark: MMLU-Pro pooled snapshot",
         "description": "314 MMLU-Pro multiple-choice questions answered closed-book by six models plus a fused consensus; graded against ground truth.",
         "license": "https://creativecommons.org/licenses/by/4.0/",
         "creator": { "@type": "Organization", "name": "consens.io" },
@@ -80,7 +80,7 @@
             <p class="lp-lead">
               consens.io sends one question to six leading models and fuses their answers into a single
               consensus. So we asked the obvious question back: does that consensus actually beat the
-              models it's built from? Here's the run — graded against known-correct answers, nothing hidden.
+              models it's built from? Here's the run, graded against known-correct answers, nothing hidden.
             </p>
           </div>
           <div class="bench-meta lp-reveal">
@@ -112,7 +112,7 @@
               <span><img src="/static/icons/chat_icons/deepseek.png" alt="DeepSeek"></span>
               <span><img src="/static/icons/chat_icons/mistral.png" alt="Mistral"></span>
             </div>
-            <p class="bench-mini-foot">The blue bar is the <b>consens.io consensus</b> — first on the questions where the models can't agree.</p>
+            <p class="bench-mini-foot">The blue bar is the <b>consens.io consensus</b>, first on the questions where the models can't agree.</p>
           </div>
         </div>
       </div>
@@ -126,7 +126,7 @@
           <h2 class="lp-h2">One question, six answers, one consensus.</h2>
           <p class="lp-lead">
             MMLU-Pro is a hard, expert-level multiple-choice exam. Every question runs closed-book:
-            no web search, no tools, no outside sources — just what each model knows.
+            no web search, no tools, no outside sources, just what each model knows.
           </p>
         </div>
         <div class="lp-card-grid lp-reveal">
@@ -138,12 +138,12 @@
           <article class="lp-card">
             <p class="lp-eyebrow">02 · Fuse</p>
             <h3>The consensus is built</h3>
-            <p>The exact same consensus logic the app uses combines the six answers into one final answer — the same path a real prompt takes.</p>
+            <p>The exact same consensus logic the app uses combines the six answers into one final answer, the same path a real prompt takes.</p>
           </article>
           <article class="lp-card">
             <p class="lp-eyebrow">03 · Grade</p>
             <h3>Checked against the truth</h3>
-            <p>Every answer — each model, a plain majority vote, and the consensus — is scored against the dataset's known-correct option.</p>
+            <p>Every answer (each model, a plain majority vote, and the consensus) is scored against the dataset's known-correct option.</p>
           </article>
         </div>
       </div>
@@ -156,9 +156,9 @@
           <p class="lp-eyebrow">The headline number</p>
           <h2 class="lp-h2">Accuracy across all 314 questions.</h2>
           <p class="bench-note">
-            The consensus comes out on top — but only just. At the top of the field the gaps are tiny,
+            The consensus comes out on top, but only just. At the top of the field the gaps are tiny,
             and the 95% confidence intervals (the whiskers) overlap heavily. Read honestly, the leading
-            systems are in a statistical tie. The takeaway isn't "we win every question" — it's that the
+            systems are in a statistical tie. The takeaway isn't "we win every question." It's that the
             consensus reliably tracks the best models instead of dragging toward the average.
           </p>
         </div>
@@ -237,7 +237,7 @@
           <h2 class="lp-h2">When the models disagree, the consensus pulls clear.</h2>
           <p class="bench-note">
             On most questions the models already agree, so combining them changes little. The real test is
-            the <b>68 questions where they split</b>. Here picking the wrong model costs you — and the gap
+            the <b>68 questions where they split</b>. Here picking the wrong model costs you, and the gap
             opens up. The consensus lands on top again, and well above a naive majority vote. The whiskers
             are wide (only 68 questions), so treat this as a strong signal, not a settled fact.
           </p>
@@ -317,9 +317,9 @@
           <h2 class="lp-h2">Three honest reads.</h2>
         </div>
         <div class="bench-stat-row lp-reveal">
-          <div class="bench-stat"><b>#1</b><small>The consensus ranks first overall and on the hard questions — though the top of the field is within the margin of error.</small></div>
+          <div class="bench-stat"><b>#1</b><small>The consensus ranks first overall and on the hard questions, though the top of the field is within the margin of error.</small></div>
           <div class="bench-stat"><b>+32pts</b><small>On disagreement questions the consensus (72.1%) sits far above the weakest model (39.7%): picking wrong is expensive.</small></div>
-          <div class="bench-stat"><b>0</b><small>Errors and abstentions for the consensus — it produced a clean, parsable answer on every single question.</small></div>
+          <div class="bench-stat"><b>0</b><small>Errors and abstentions for the consensus: it produced a clean, parsable answer on every single question.</small></div>
         </div>
         <div class="lp-card-grid lp-reveal" style="margin-top: clamp(28px, 4vw, 44px);">
           <article class="lp-card">
@@ -330,12 +330,12 @@
           <article class="lp-card">
             <p class="lp-eyebrow">Better than a vote</p>
             <h3>Reading answers beats counting them</h3>
-            <p>The consensus reasons over the six answers and beats a plain majority vote — clearest exactly when the models split.</p>
+            <p>The consensus reasons over the six answers and beats a plain majority vote, clearest exactly when the models split.</p>
           </article>
           <article class="lp-card">
             <p class="lp-eyebrow">No overclaiming</p>
             <h3>The gaps at the top aren't significant</h3>
-            <p>With 314 questions the confidence intervals overlap. We're not claiming a knockout — just that combining beats betting on one model.</p>
+            <p>With 314 questions the confidence intervals overlap. We're not claiming a knockout, just that combining beats betting on one model.</p>
           </article>
         </div>
       </div>
@@ -353,13 +353,13 @@
           <ul>
             <li><b>Dataset:</b> 314 questions from MMLU-Pro, an expert-level multiple-choice benchmark, pooled across three runs from different sampling strategies (disagreement-enriched, category-balanced, and random).</li>
             <li><b>Closed-book:</b> web search, retrieval and tools were disabled for every model. Each answered from its own knowledge only.</li>
-            <li><b>Models:</b> GPT-5.5, Claude Opus 4.8, Gemini 3.5 Flash, Mistral Medium 3.5, DeepSeek V4 Pro and Grok 4.3 — the same six the app uses.</li>
+            <li><b>Models:</b> GPT-5.5, Claude Opus 4.8, Gemini 3.5 Flash, Mistral Medium 3.5, DeepSeek V4 Pro and Grok 4.3, the same six the app uses.</li>
             <li><b>Consensus:</b> built with the app's production consensus logic; the synthesizing model for this run was Gemini 3.5 Flash.</li>
             <li><b>Grading:</b> one attempt per question, scored against the dataset's ground-truth option. Majority vote is a simple plurality of the six model answers.</li>
           </ul>
           <h3 style="margin-top: 18px;">Reading the numbers</h3>
           <ul>
-            <li>Whiskers are 95% confidence intervals. Where they overlap, the difference is <b>not statistically significant</b> — and at the top of the overall chart, they overlap a lot.</li>
+            <li>Whiskers are 95% confidence intervals. Where they overlap, the difference is <b>not statistically significant</b>, and at the top of the overall chart, they overlap a lot.</li>
             <li>The disagreement subset is only 68 questions, so its intervals are wide. The ordering is a strong, consistent signal rather than a proven result.</li>
             <li>This is a snapshot of one frozen prompt and model line-up. We're keeping the prompt fixed so the run keeps collecting comparable, unbiased data over time.</li>
           </ul>
