@@ -107,6 +107,34 @@ def sample_final(
     return sorted(selected)
 
 
+def sample_random(
+    records: list[dict], exclude_ids: set[int], seed: int, size: int
+) -> list[int]:
+    """Zieht ``size`` Fragen **zufaellig und flach** (kategorie-proportional zum
+    Datensatz, also repraesentativ) aus dem um ``exclude_ids`` bereinigten Pool.
+    Deterministisch ueber ``seed`` und **sortierte** IDs (versionsunabhaengig).
+    Fuer repraesentative V0-Snapshots, die ueber Runs gepoolt werden – KEINE
+    Disagreement-Anreicherung (siehe Plan: nur so bleibt die Gesamt-Accuracy eine
+    unverzerrte MMLU-Pro-Aussage)."""
+    pool = sorted(
+        rec["question_id"] for rec in records if rec["question_id"] not in exclude_ids
+    )
+    if len(pool) < size:
+        raise ValueError(f"Not enough unused questions: need {size}, have {len(pool)}")
+    rng = random.Random(seed)
+    return sorted(rng.sample(pool, size))
+
+
+def used_question_ids(manifest_paths: list[Path]) -> set[int]:
+    """Sammelt alle ``question_ids`` aus bestehenden Sample-Manifesten (zur
+    disjunkten Ziehung neuer Samples)."""
+    used: set[int] = set()
+    for path in manifest_paths:
+        if Path(path).exists():
+            used.update(int(q) for q in load_sample_manifest(path).get("question_ids", []))
+    return used
+
+
 def build_samples(
     records: list[dict],
     pilot_seed: int = config.PILOT_SEED,
