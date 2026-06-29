@@ -1,0 +1,479 @@
+/* ==========================================================================
+   consens.io — Benchmark snapshot subpage (/benchmark)
+   Loaded AFTER landing.css, which provides the design tokens, the nav/footer
+   chrome, the scroll-reveal system and the button + section primitives.
+   This file only adds the benchmark-specific bits: the stat strip, the bar
+   charts (screenshot style — value on top, blue gradient fill, confidence
+   whiskers) and the takeaway cards.
+   ========================================================================== */
+
+/* --- Hero stat strip ----------------------------------------------------- */
+.bench-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 30px;
+}
+
+.bench-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--glass-border) 64%, var(--glass-edge));
+  background: color-mix(in srgb, var(--glass-bg-strong) 70%, transparent);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  color: var(--text-primary);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.bench-pill b { color: var(--accent); font-weight: 700; }
+
+/* --- Section headers reuse .lp-head; add a soft eyebrow note ------------- */
+.bench-note {
+  margin: 14px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  max-width: 60ch;
+}
+
+/* --- Chart card ---------------------------------------------------------- */
+.bench-chart {
+  --scale: 3.2px;          /* px per accuracy point (plot height = 320px) */
+  --bench-halo: rgba(255, 255, 255, 0.96);   /* punches the CI line out from behind the value */
+  margin-top: clamp(30px, 4vw, 48px);
+  padding: clamp(20px, 3vw, 34px);
+  border-radius: var(--card-radius);
+  border: 1px solid color-mix(in srgb, var(--glass-border) 60%, var(--glass-edge));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 28%, transparent), transparent 40%),
+    color-mix(in srgb, var(--glass-bg-strong) 72%, transparent);
+  box-shadow: var(--liquid-shadow);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(1.12);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(1.12);
+}
+
+.bench-chart-title {
+  margin: 0 0 4px;
+  font-size: 1.18rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.bench-chart-sub {
+  margin: 0 0 20px;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+}
+
+/* --- Plot area: y-axis title + gridlines + bars ------------------------- */
+.bench-plot {
+  display: grid;
+  grid-template-columns: 20px 34px 1fr;
+  gap: 0;
+}
+
+.bench-ytitle {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  align-self: center;
+  justify-self: center;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.bench-yaxis {
+  position: relative;
+  height: calc(100 * var(--scale));
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.bench-yaxis span {
+  position: absolute;
+  right: 8px;
+  transform: translateY(-50%);
+  line-height: 1;
+}
+
+/* Bars track sits in the third column and hosts the gridlines behind bars. */
+.bench-track {
+  position: relative;
+  height: calc(100 * var(--scale));
+}
+
+.bench-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--sidebar-border) 60%, transparent);
+}
+.bench-grid.is-base { border-top-style: solid; border-top-color: color-mix(in srgb, var(--sidebar-border) 90%, transparent); }
+
+.bench-bars {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  gap: clamp(6px, 1.4vw, 16px);
+}
+
+.bench-col {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+/* The bar itself grows from 0 to its value height on scroll-in. */
+.bench-bar {
+  position: relative;
+  width: 100%;
+  max-width: 72px;
+  height: 0;
+  border-radius: 6px 6px 0 0;
+  border: 1px solid color-mix(in srgb, #4f7fd0 60%, transparent);
+  border-bottom: 0;
+  background: linear-gradient(180deg, #cfe0fb, #e8f0fd);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transition: height 0.95s cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition-delay: calc(var(--i, 0) * 65ms);
+}
+
+.bench-chart.is-visible .bench-bar { height: calc(var(--val) * var(--scale)); }
+
+/* consens.io — the subject of the page: deep brand blue. */
+.bench-col.is-consensus .bench-bar {
+  border-color: color-mix(in srgb, var(--accent) 80%, #06324a);
+  background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 72%, #2aa3da));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 6px 18px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+/* Majority vote — an aggregation baseline, mid steel-blue. */
+.bench-col.is-majority .bench-bar {
+  border-color: color-mix(in srgb, #5a7bb5 70%, transparent);
+  background: linear-gradient(180deg, #9fb6e0, #c2d2ef);
+}
+
+.dark-mode .bench-chart { --bench-halo: rgba(16, 21, 28, 0.96); }
+.dark-mode .bench-bar {
+  background: linear-gradient(180deg, #324a6e, #25364f);
+  border-color: color-mix(in srgb, #6f9bd8 50%, transparent);
+}
+.dark-mode .bench-col.is-majority .bench-bar { background: linear-gradient(180deg, #45597f, #33445f); }
+.dark-mode .bench-swatch.is-model { background: linear-gradient(180deg, #324a6e, #25364f); }
+.dark-mode .bench-swatch.is-majority { background: linear-gradient(180deg, #45597f, #33445f); }
+
+/* Value label rides just above the bar top and rises with it. */
+.bench-val {
+  position: absolute;
+  top: -26px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--bench-halo);   /* card-coloured chip cleanly covers the CI stem behind the number */
+  color: var(--text-primary);
+  font-size: 0.84rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  transition-delay: calc(var(--i, 0) * 65ms + 0.5s);
+}
+.bench-chart.is-visible .bench-val { opacity: 1; }
+.bench-col.is-consensus .bench-val { color: var(--accent); }
+
+/* Confidence whisker (95% CI) overlaid on the bar. */
+.bench-ci {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1.5px;
+  bottom: calc(var(--lo) * var(--scale));
+  height: calc((var(--hi) - var(--lo)) * var(--scale));
+  background: color-mix(in srgb, var(--text-primary) 48%, transparent);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  transition-delay: calc(var(--i, 0) * 65ms + 0.7s);
+}
+.bench-chart.is-visible .bench-ci { opacity: 1; }
+.bench-ci::before,
+.bench-ci::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 9px;
+  height: 1.5px;
+  background: inherit;
+}
+.bench-ci::before { top: 0; }
+.bench-ci::after { bottom: 0; }
+.bench-col.is-consensus .bench-ci { background: color-mix(in srgb, var(--accent) 80%, var(--text-primary)); }
+
+/* X-axis labels: provider logo + two-line name, centered under each bar. */
+.bench-xrow {
+  display: flex;
+  justify-content: space-around;
+  gap: clamp(6px, 1.4vw, 16px);
+  margin: 12px 0 0;
+  margin-left: 54px;            /* align with the bars (ytitle + yaxis cols) */
+}
+
+.bench-xlabel {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.bench-xlabel img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.bench-xlabel .bench-vote {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-size: 1rem;
+  color: var(--text-secondary);
+}
+
+.bench-xlabel span {
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-secondary);
+}
+.bench-xlabel.is-consensus span { color: var(--accent); font-weight: 700; }
+
+/* --- Icon theming (mirrors the /app + public-pages convention) ----------
+   The consens.io mark (favicon.png) is white → invert it to dark on light
+   backgrounds, leave it white in dark mode. The OpenAI + Grok glyphs are
+   black → invert them to white in dark mode only. Coloured marks (Claude,
+   Gemini, DeepSeek, Mistral) work on both themes untouched. */
+.bench-xlabel img[src*="favicon"],
+.bench-mini-icons img[src*="favicon"] { filter: invert(1); }
+.dark-mode .bench-xlabel img[src*="favicon"],
+.dark-mode .bench-mini-icons img[src*="favicon"] { filter: none; }
+
+.dark-mode .bench-xlabel img[src*="chatgpt"],
+.dark-mode .bench-xlabel img[src*="grok"],
+.dark-mode .bench-mini-icons img[src*="chatgpt"],
+.dark-mode .bench-mini-icons img[src*="grok"] { filter: invert(1); }
+
+/* --- Legend -------------------------------------------------------------- */
+.bench-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+.bench-legend span { display: inline-flex; align-items: center; gap: 8px; }
+.bench-swatch { width: 14px; height: 14px; border-radius: 4px; flex: 0 0 auto; }
+.bench-swatch.is-consensus { background: var(--accent); }
+.bench-swatch.is-model { background: linear-gradient(180deg, #cfe0fb, #e8f0fd); border: 1px solid color-mix(in srgb, #4f7fd0 50%, transparent); }
+.bench-swatch.is-majority { background: linear-gradient(180deg, #9fb6e0, #c2d2ef); }
+.bench-ci-key {
+  width: 1.5px; height: 14px; flex: 0 0 auto;
+  background: color-mix(in srgb, var(--text-primary) 48%, transparent);
+  position: relative;
+}
+.bench-ci-key::before, .bench-ci-key::after {
+  content: ""; position: absolute; left: 50%; transform: translateX(-50%);
+  width: 8px; height: 1.5px; background: inherit;
+}
+.bench-ci-key::before { top: 0; } .bench-ci-key::after { bottom: 0; }
+
+/* --- Inline highlight numbers in prose ----------------------------------- */
+.bench-stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(16px, 4vw, 48px);
+  margin-top: clamp(28px, 4vw, 44px);
+}
+.bench-stat { min-width: 120px; }
+.bench-stat b {
+  display: block;
+  font-size: clamp(2rem, 5vw, 2.8rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.bench-stat small {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+/* --- Fine print ---------------------------------------------------------- */
+.bench-fineprint {
+  margin-top: clamp(30px, 4vw, 48px);
+  padding: clamp(18px, 2.5vw, 26px);
+  border-radius: var(--card-radius);
+  border: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--bg-grey) 60%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+.bench-fineprint h3 {
+  margin: 0 0 10px;
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.bench-fineprint ul { margin: 0; padding-left: 18px; }
+.bench-fineprint li { margin: 5px 0; }
+.bench-fineprint b { color: var(--text-primary); }
+
+/* --- Hero: copy + chart teaser side by side ------------------------------ */
+.bench-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
+  align-items: center;
+  gap: clamp(32px, 5vw, 64px);
+}
+.bench-hero-copy .bench-meta { margin-top: 28px; }
+
+/* Aside used in the landing-page benchmark teaser (stats + CTA next to chart). */
+.lp-bench-aside { display: flex; flex-direction: column; justify-content: center; }
+.lp-bench-aside .bench-stat-row { gap: clamp(16px, 3vw, 32px); }
+
+/* --- Mini chart teaser (reused on the landing page) ---------------------- */
+.bench-mini {
+  --mscale: 1.7px;             /* px per accuracy point */
+  position: relative;
+  padding: clamp(18px, 2.4vw, 26px);
+  border-radius: var(--card-radius);
+  border: 1px solid color-mix(in srgb, var(--glass-border) 64%, var(--glass-edge));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 32%, transparent), transparent 42%),
+    color-mix(in srgb, var(--glass-bg-strong) 74%, transparent);
+  box-shadow: var(--liquid-shadow);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(1.14);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(1.14);
+}
+
+.bench-mini-title {
+  margin: 0 0 3px;
+  font-size: 1.02rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+.bench-mini-sub { margin: 0 0 20px; color: var(--text-secondary); font-size: 0.84rem; }
+
+.bench-mini-plot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: clamp(5px, 1.4vw, 12px);
+  height: calc(80 * var(--mscale));
+}
+
+.bench-mini-col {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.bench-mini-val {
+  margin-bottom: 6px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  transition-delay: calc(var(--i, 0) * 70ms + 0.45s);
+}
+.bench-mini-col.is-consensus .bench-mini-val { color: var(--accent); }
+
+.bench-mini-bar {
+  width: 100%;
+  max-width: 44px;
+  height: 0;
+  border-radius: 5px 5px 0 0;
+  border: 1px solid color-mix(in srgb, #4f7fd0 60%, transparent);
+  border-bottom: 0;
+  background: linear-gradient(180deg, #cfe0fb, #e8f0fd);
+  transition: height 0.9s cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition-delay: calc(var(--i, 0) * 70ms);
+}
+.is-visible .bench-mini-bar,
+.bench-mini.is-visible .bench-mini-bar { height: calc(var(--v) * var(--mscale)); }
+.is-visible .bench-mini-val,
+.bench-mini.is-visible .bench-mini-val { opacity: 1; }
+
+.bench-mini-col.is-consensus .bench-mini-bar {
+  border-color: color-mix(in srgb, var(--accent) 80%, #06324a);
+  background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 72%, #2aa3da));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+.dark-mode .bench-mini-bar { background: linear-gradient(180deg, #324a6e, #25364f); border-color: color-mix(in srgb, #6f9bd8 50%, transparent); }
+
+.bench-mini-icons {
+  display: flex;
+  justify-content: space-between;
+  gap: clamp(5px, 1.4vw, 12px);
+  margin-top: 12px;
+}
+.bench-mini-icons span { flex: 1 1 0; min-width: 0; display: flex; justify-content: center; }
+.bench-mini-icons img { width: 20px; height: 20px; object-fit: contain; }
+
+.bench-mini-foot {
+  margin: 18px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+.bench-mini-foot b { color: var(--text-primary); }
+
+/* --- Responsive ---------------------------------------------------------- */
+@media (max-width: 960px) {
+  .bench-hero { grid-template-columns: 1fr; gap: 36px; }
+  .bench-hero-visual { max-width: 560px; }
+}
+
+@media (max-width: 760px) {
+  .bench-chart { --scale: 2.4px; overflow-x: auto; }
+  .bench-plot, .bench-xrow { min-width: 560px; }
+  .bench-bar { border-radius: 5px 5px 0 0; }
+}

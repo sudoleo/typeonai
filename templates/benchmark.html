@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A reproducible MMLU-Pro snapshot: consens.io's consensus answer compared against six leading AI models on 314 expert-level, closed-book questions.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://www.consens.io/benchmark">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="consens.io">
+  <meta property="og:title" content="Consensus Benchmark (MMLU-Pro) | consens.io">
+  <meta property="og:description" content="One consensus answer vs. six leading models on 314 closed-book MMLU-Pro questions. The consensus edges ahead — and pulls clear when the models disagree.">
+  <meta property="og:url" content="https://www.consens.io/benchmark">
+  <meta property="og:image" content="https://www.consens.io/static/favicon-square.png">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Consensus Benchmark (MMLU-Pro) | consens.io">
+  <meta name="twitter:description" content="How a fused consensus answer compares to six leading AI models on expert-level questions.">
+  <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
+  <title>Consensus Benchmark (MMLU-Pro) | consens.io</title>
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260626-mobile-mockup1">
+  <link rel="stylesheet" href="/static/css/benchmark.css?v=20260630-bench5">
+  <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
+  <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
+  <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": "https://www.consens.io/benchmark#webpage",
+        "url": "https://www.consens.io/benchmark",
+        "name": "Consensus Benchmark (MMLU-Pro)",
+        "description": "A reproducible MMLU-Pro snapshot comparing consens.io's consensus answer against six leading AI models on 314 expert-level, closed-book questions."
+      },
+      {
+        "@type": "Dataset",
+        "@id": "https://www.consens.io/benchmark#dataset",
+        "name": "consens.io consensus benchmark — MMLU-Pro pooled snapshot",
+        "description": "314 MMLU-Pro multiple-choice questions answered closed-book by six models plus a fused consensus; graded against ground truth.",
+        "license": "https://creativecommons.org/licenses/by/4.0/",
+        "creator": { "@type": "Organization", "name": "consens.io" },
+        "measurementTechnique": "Multiple-choice accuracy vs. ground truth"
+      }
+    ]
+  }
+  </script>
+  <script>
+    (function () {
+      const savedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
+        document.documentElement.classList.add("dark-mode");
+      }
+    })();
+  </script>
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
+</head>
+<body>
+  <nav class="lp-nav" aria-label="Primary">
+    <a href="/" class="lp-brand" aria-label="consens.io home">
+      <img src="/static/favicon.png" alt="">
+      <span>consens.io</span>
+    </a>
+    <div class="lp-nav-links">
+      <a href="/ai-model-comparison">AI comparison</a>
+      <a href="/about">About</a>
+      <a href="/app" class="lp-nav-cta">Open app</a>
+    </div>
+  </nav>
+
+  <main>
+    <!-- ====================================================== HERO -->
+    <section class="lp-section lp-section--white">
+      <div class="lp-shell bench-hero">
+        <div class="bench-hero-copy">
+          <div class="lp-head lp-reveal" style="max-width:none;">
+            <p class="lp-eyebrow">Benchmark · MMLU-Pro</p>
+            <h1 class="lp-display">We put the consensus to the test.</h1>
+            <p class="lp-lead">
+              consens.io sends one question to six leading models and fuses their answers into a single
+              consensus. So we asked the obvious question back: does that consensus actually beat the
+              models it's built from? Here's the run — graded against known-correct answers, nothing hidden.
+            </p>
+          </div>
+          <div class="bench-meta lp-reveal">
+            <span class="bench-pill"><b>314</b>&nbsp;questions</span>
+            <span class="bench-pill"><b>6</b>&nbsp;models + consensus</span>
+            <span class="bench-pill">MMLU-Pro</span>
+            <span class="bench-pill">Closed-book · no tools</span>
+          </div>
+        </div>
+        <div class="bench-hero-visual lp-reveal">
+          <div class="bench-mini">
+            <p class="bench-mini-title">When the models disagree</p>
+            <p class="bench-mini-sub">Accuracy on the questions where they split · MMLU-Pro</p>
+            <div class="bench-mini-plot">
+              <div class="bench-mini-col is-consensus" style="--i:0; --v:72.1"><span class="bench-mini-val">72.1%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:1; --v:70.6"><span class="bench-mini-val">70.6%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:2; --v:69.1"><span class="bench-mini-val">69.1%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:3; --v:64.7"><span class="bench-mini-val">64.7%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:4; --v:58.8"><span class="bench-mini-val">58.8%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:5; --v:44.1"><span class="bench-mini-val">44.1%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:6; --v:39.7"><span class="bench-mini-val">39.7%</span><div class="bench-mini-bar"></div></div>
+            </div>
+            <div class="bench-mini-icons">
+              <span><img src="/static/favicon.png" alt="consens.io"></span>
+              <span><img src="/static/icons/chat_icons/claude.png" alt="Claude"></span>
+              <span><img src="/static/icons/chat_icons/chatgpt.png" alt="GPT-5.5"></span>
+              <span><img src="/static/icons/chat_icons/gemini-icon.png" alt="Gemini"></span>
+              <span><img src="/static/icons/chat_icons/grok.png" alt="Grok"></span>
+              <span><img src="/static/icons/chat_icons/deepseek.png" alt="DeepSeek"></span>
+              <span><img src="/static/icons/chat_icons/mistral.png" alt="Mistral"></span>
+            </div>
+            <p class="bench-mini-foot">The blue bar is the <b>consens.io consensus</b> — first on the questions where the models can't agree.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================== METHOD -->
+    <section class="lp-section lp-section--grey">
+      <div class="lp-shell">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">How it ran</p>
+          <h2 class="lp-h2">One question, six answers, one consensus.</h2>
+          <p class="lp-lead">
+            MMLU-Pro is a hard, expert-level multiple-choice exam. Every question runs closed-book:
+            no web search, no tools, no outside sources — just what each model knows.
+          </p>
+        </div>
+        <div class="lp-card-grid lp-reveal">
+          <article class="lp-card">
+            <p class="lp-eyebrow">01 · Ask</p>
+            <h3>Six models, independently</h3>
+            <p>The same question goes to all six consensus models in parallel. Each answers on its own, with tools and web access switched off.</p>
+          </article>
+          <article class="lp-card">
+            <p class="lp-eyebrow">02 · Fuse</p>
+            <h3>The consensus is built</h3>
+            <p>The exact same consensus logic the app uses combines the six answers into one final answer — the same path a real prompt takes.</p>
+          </article>
+          <article class="lp-card">
+            <p class="lp-eyebrow">03 · Grade</p>
+            <h3>Checked against the truth</h3>
+            <p>Every answer — each model, a plain majority vote, and the consensus — is scored against the dataset's known-correct option.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================== OVERALL CHART -->
+    <section class="lp-section lp-section--white">
+      <div class="lp-shell">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">The headline number</p>
+          <h2 class="lp-h2">Accuracy across all 314 questions.</h2>
+          <p class="bench-note">
+            The consensus comes out on top — but only just. At the top of the field the gaps are tiny,
+            and the 95% confidence intervals (the whiskers) overlap heavily. Read honestly, the leading
+            systems are in a statistical tie. The takeaway isn't "we win every question" — it's that the
+            consensus reliably tracks the best models instead of dragging toward the average.
+          </p>
+        </div>
+
+        <div class="bench-chart lp-reveal">
+          <p class="bench-chart-title">Overall accuracy on MMLU-Pro</p>
+          <p class="bench-chart-sub">Share of 314 questions answered correctly · whiskers show the 95% confidence interval</p>
+          <div class="bench-plot">
+            <div class="bench-ytitle">Accuracy (%)</div>
+            <div class="bench-yaxis">
+              <span style="top: 0%">100</span>
+              <span style="top: 25%">75</span>
+              <span style="top: 50%">50</span>
+              <span style="top: 75%">25</span>
+              <span style="top: 100%">0</span>
+            </div>
+            <div class="bench-track">
+              <div class="bench-grid" style="top: 0%"></div>
+              <div class="bench-grid" style="top: 25%"></div>
+              <div class="bench-grid" style="top: 50%"></div>
+              <div class="bench-grid" style="top: 75%"></div>
+              <div class="bench-grid is-base" style="top: 100%"></div>
+              <div class="bench-bars">
+                <div class="bench-col is-consensus" style="--i:0; --val:91.1; --lo:87.4; --hi:93.8">
+                  <div class="bench-bar"><span class="bench-val">91.1%</span></div><span class="bench-ci"></span>
+                </div>
+                <div class="bench-col" style="--i:1; --val:90.8; --lo:87.1; --hi:93.5">
+                  <div class="bench-bar"><span class="bench-val">90.8%</span></div><span class="bench-ci"></span>
+                </div>
+                <div class="bench-col" style="--i:2; --val:90.5; --lo:86.7; --hi:93.2">
+                  <div class="bench-bar"><span class="bench-val">90.5%</span></div><span class="bench-ci"></span>
+                </div>
+                <div class="bench-col is-majority" style="--i:3; --val:89.8; --lo:86.0; --hi:92.7">
+                  <div class="bench-bar"><span class="bench-val">89.8%</span></div><span class="bench-ci"></span>
+                </div>
+                <div class="bench-col" style="--i:4; --val:89.5; --lo:85.6; --hi:92.4">
+                  <div class="bench-bar"><span class="bench-val">89.5%</span></div><span class="bench-ci"></span>
+                </div>
+                <div class="bench-col" style="--i:5; --val:88.2; --lo:84.2; --hi:91.3">
+                  <div class="bench-bar"><span class="bench-val">88.2%</span></div><span class="bench-ci"></span>
+                </div>
+                <div class="bench-col" style="--i:6; --val:85.0; --lo:80.7; --hi:88.6">
+                  <div class="bench-bar"><span class="bench-val">85.0%</span></div><span class="bench-ci"></span>
+                </div>
+                <div class="bench-col" style="--i:7; --val:84.1; --lo:79.6; --hi:87.7">
+                  <div class="bench-bar"><span class="bench-val">84.1%</span></div><span class="bench-ci"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="bench-xrow">
+            <div class="bench-xlabel is-consensus"><img src="/static/favicon.png" alt=""><span>consens.io<br>consensus</span></div>
+            <div class="bench-xlabel"><img src="/static/icons/chat_icons/claude.png" alt=""><span>Claude<br>Opus 4.8</span></div>
+            <div class="bench-xlabel"><img src="/static/icons/chat_icons/chatgpt.png" alt=""><span>GPT-5.5</span></div>
+            <div class="bench-xlabel"><span class="bench-vote">&#931;</span><span>Majority<br>vote</span></div>
+            <div class="bench-xlabel"><img src="/static/icons/chat_icons/gemini-icon.png" alt=""><span>Gemini<br>3.5 Flash</span></div>
+            <div class="bench-xlabel"><img src="/static/icons/chat_icons/grok.png" alt=""><span>Grok 4.3</span></div>
+            <div class="bench-xlabel"><img src="/static/icons/chat_icons/deepseek.png" alt=""><span>DeepSeek<br>V4 Pro</span></div>
+            <div class="bench-xlabel"><img src="/static/icons/chat_icons/mistral.png" alt=""><span>Mistral<br>Medium 3.5</span></div>
+          </div>
+          <div class="bench-legend">
+            <span><i class="bench-swatch is-consensus"></i>consens.io consensus</span>
+            <span><i class="bench-swatch is-model"></i>Single model</span>
+            <span><i class="bench-swatch is-majority"></i>Majority vote (baseline)</span>
+            <span><i class="bench-ci-key"></i>95% confidence interval</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================== DISAGREEMENT CHART -->
+    <section class="lp-section lp-section--grey">
+      <div class="lp-shell">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">Where it gets interesting</p>
+          <h2 class="lp-h2">When the models disagree, the consensus pulls clear.</h2>
+          <p class="bench-note">
+            On most questions the models already agree, so combining them changes little. The real test is
+            the <b>68 questions where they split</b>. Here picking the wrong model costs you — and the gap
+            opens up. The consensus lands on top again, and well above a naive majority vote. The whiskers
+            are wide (only 68 questions), so treat this as a strong signal, not a settled fact.
+          </p>
+        </div>
+
+        <div class="bench-chart lp-reveal">
+          <p class="bench-chart-title">Accuracy on the 68 disagreement questions</p>
+          <p class="bench-chart-sub">Only questions where the six models did not unanimously agree · whiskers show the 95% confidence interval</p>
+          <div class="bench-plot">
+            <div class="bench-ytitle">Accuracy (%)</div>
+            <div class="bench-yaxis">
+              <span style="top: 0%">100</span>
+              <span style="top: 25%">75</span>
+              <span style="top: 50%">50</span>
+              <span style="top: 75%">25</span>
+              <span style="top: 100%">0</span>
+            </div>
+            <div class="bench-track">
+              <div class="bench-grid" style="top: 0%"></div>
+              <div class="bench-grid" style="top: 25%"></div>
+              <div class="bench-grid" style="top: 50%"></div>
+              <div class="bench-grid" style="top: 75%"></div>
+              <div class="bench-grid is-base" style="top: 100%"></div>
+              <div class="bench-bars">
+                <div class="bench-col is-consensus" style="--i:0; --val:72.1; --lo:60.4; --hi:81.3">
+                  <div class="bench-bar"><span class="bench-val">72.1%</span></div><span class="bench-ci"></span>
+                </div>
+                <div class="bench-col" style="--i:1; --val:70.6; --lo:58.9; --hi:80.1">
+                  <div class="bench-bar"><span class="bench-val">70.6%</span></div><span class="bench-ci"></span>
+                </div>
+                <div class="bench-col" style="--i:2; --val:69.1; --lo:57.4; --hi:78.8">
+                  <div class="bench-bar"><span class="bench-val">69.1%</span></div><span class="bench-ci"></span>
+                </div>
+                <div class="bench-col is-majority" style="--i:3; --val:66.2; --lo:54.3; --hi:76.3">
+                  <div class="bench-bar"><span class="bench-val">66.2%</span></div><span class="bench-ci"></span>
+                </div>
+                <div class="bench-col" style="--i:4; --val:64.7; --lo:52.8; --hi:75.0">
+                  <div class="bench-bar"><span class="bench-val">64.7%</span></div><span class="bench-ci"></span>
+                </div>
+                <div class="bench-col" style="--i:5; --val:58.8; --lo:47.0; --hi:69.7">
+                  <div class="bench-bar"><span class="bench-val">58.8%</span></div><span class="bench-ci"></span>
+                </div>
+                <div class="bench-col" style="--i:6; --val:44.1; --lo:33.0; --hi:55.9">
+                  <div class="bench-bar"><span class="bench-val">44.1%</span></div><span class="bench-ci"></span>
+                </div>
+                <div class="bench-col" style="--i:7; --val:39.7; --lo:28.9; --hi:51.6">
+                  <div class="bench-bar"><span class="bench-val">39.7%</span></div><span class="bench-ci"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="bench-xrow">
+            <div class="bench-xlabel is-consensus"><img src="/static/favicon.png" alt=""><span>consens.io<br>consensus</span></div>
+            <div class="bench-xlabel"><img src="/static/icons/chat_icons/claude.png" alt=""><span>Claude<br>Opus 4.8</span></div>
+            <div class="bench-xlabel"><img src="/static/icons/chat_icons/chatgpt.png" alt=""><span>GPT-5.5</span></div>
+            <div class="bench-xlabel"><span class="bench-vote">&#931;</span><span>Majority<br>vote</span></div>
+            <div class="bench-xlabel"><img src="/static/icons/chat_icons/gemini-icon.png" alt=""><span>Gemini<br>3.5 Flash</span></div>
+            <div class="bench-xlabel"><img src="/static/icons/chat_icons/grok.png" alt=""><span>Grok 4.3</span></div>
+            <div class="bench-xlabel"><img src="/static/icons/chat_icons/deepseek.png" alt=""><span>DeepSeek<br>V4 Pro</span></div>
+            <div class="bench-xlabel"><img src="/static/icons/chat_icons/mistral.png" alt=""><span>Mistral<br>Medium 3.5</span></div>
+          </div>
+          <div class="bench-legend">
+            <span><i class="bench-swatch is-consensus"></i>consens.io consensus</span>
+            <span><i class="bench-swatch is-model"></i>Single model</span>
+            <span><i class="bench-swatch is-majority"></i>Majority vote (baseline)</span>
+            <span><i class="bench-ci-key"></i>95% confidence interval</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================== TAKEAWAYS -->
+    <section class="lp-section lp-section--white">
+      <div class="lp-shell">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">What it means</p>
+          <h2 class="lp-h2">Three honest reads.</h2>
+        </div>
+        <div class="bench-stat-row lp-reveal">
+          <div class="bench-stat"><b>#1</b><small>The consensus ranks first overall and on the hard questions — though the top of the field is within the margin of error.</small></div>
+          <div class="bench-stat"><b>+32pts</b><small>On disagreement questions the consensus (72.1%) sits far above the weakest model (39.7%): picking wrong is expensive.</small></div>
+          <div class="bench-stat"><b>0</b><small>Errors and abstentions for the consensus — it produced a clean, parsable answer on every single question.</small></div>
+        </div>
+        <div class="lp-card-grid lp-reveal" style="margin-top: clamp(28px, 4vw, 44px);">
+          <article class="lp-card">
+            <p class="lp-eyebrow">Never the weak link</p>
+            <h3>It tracks the best, not the average</h3>
+            <p>Fusing six answers doesn't regress to the mean. The consensus stays at the top of the pack instead of being pulled down by weaker models.</p>
+          </article>
+          <article class="lp-card">
+            <p class="lp-eyebrow">Better than a vote</p>
+            <h3>Reading answers beats counting them</h3>
+            <p>The consensus reasons over the six answers and beats a plain majority vote — clearest exactly when the models split.</p>
+          </article>
+          <article class="lp-card">
+            <p class="lp-eyebrow">No overclaiming</p>
+            <h3>The gaps at the top aren't significant</h3>
+            <p>With 314 questions the confidence intervals overlap. We're not claiming a knockout — just that combining beats betting on one model.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================== FINE PRINT -->
+    <section class="lp-section lp-section--grey">
+      <div class="lp-shell">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">The fine print</p>
+          <h2 class="lp-h2">Exactly how this was measured.</h2>
+        </div>
+        <div class="bench-fineprint lp-reveal">
+          <h3>Setup</h3>
+          <ul>
+            <li><b>Dataset:</b> 314 questions from MMLU-Pro, an expert-level multiple-choice benchmark, pooled across three runs from different sampling strategies (disagreement-enriched, category-balanced, and random).</li>
+            <li><b>Closed-book:</b> web search, retrieval and tools were disabled for every model. Each answered from its own knowledge only.</li>
+            <li><b>Models:</b> GPT-5.5, Claude Opus 4.8, Gemini 3.5 Flash, Mistral Medium 3.5, DeepSeek V4 Pro and Grok 4.3 — the same six the app uses.</li>
+            <li><b>Consensus:</b> built with the app's production consensus logic; the synthesizing model for this run was Gemini 3.5 Flash.</li>
+            <li><b>Grading:</b> one attempt per question, scored against the dataset's ground-truth option. Majority vote is a simple plurality of the six model answers.</li>
+          </ul>
+          <h3 style="margin-top: 18px;">Reading the numbers</h3>
+          <ul>
+            <li>Whiskers are 95% confidence intervals. Where they overlap, the difference is <b>not statistically significant</b> — and at the top of the overall chart, they overlap a lot.</li>
+            <li>The disagreement subset is only 68 questions, so its intervals are wide. The ordering is a strong, consistent signal rather than a proven result.</li>
+            <li>This is a snapshot of one frozen prompt and model line-up. We're keeping the prompt fixed so the run keeps collecting comparable, unbiased data over time.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================== CTA -->
+    <section class="lp-section lp-section--white">
+      <div class="lp-shell lp-final">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">Try it yourself</p>
+          <h2 class="lp-h2">Ask once. Compare every answer. Keep the consensus.</h2>
+        </div>
+        <a href="/app" class="lp-btn lp-btn--primary lp-reveal" data-umami-event="benchmark_open_app">Open app</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="lp-footer">
+    <div class="lp-footer-inner">
+      <span>&copy; 2026 consens.io</span>
+      <div class="lp-footer-links">
+        <a href="/app">App</a>
+        <a href="/ai-model-comparison">AI comparison</a>
+        <a href="/benchmark">Benchmark</a>
+        <a href="/about">About</a>
+        <a href="/terms">Terms</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/imprint">Imprint</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const revealItems = Array.from(document.querySelectorAll(".lp-reveal"));
+      const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      if (reducedMotion || !("IntersectionObserver" in window)) {
+        revealItems.forEach(el => el.classList.add("is-visible"));
+      } else {
+        const observer = new IntersectionObserver((entries, obs) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("is-visible");
+              obs.unobserve(entry.target);
+            }
+          });
+        }, { threshold: 0.14, rootMargin: "0px 0px -8% 0px" });
+        revealItems.forEach(el => observer.observe(el));
+      }
+    });
+  </script>
+</body>
+</html>

@@ -18,6 +18,7 @@
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>consens.io - compare before you trust</title>
   <link rel="stylesheet" href="/static/css/landing.css?v=20260626-mobile-mockup1">
+  <link rel="stylesheet" href="/static/css/benchmark.css?v=20260630-bench5">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -74,6 +75,7 @@
       <a href="#product">Product</a>
       <a href="#agent-mode">Agent Mode</a>
       <a href="#models">Models</a>
+      <a href="/benchmark">Benchmark</a>
       <a href="/ai-model-comparison">AI comparison</a>
       <a id="navCtaButton" href="/app" class="lp-nav-cta">Open app</a>
     </div>
@@ -334,8 +336,50 @@
       </div>
     </section>
 
+    <!-- ====================================================== BENCHMARK PROOF -->
+    <section id="benchmark" class="lp-section lp-section--white">
+      <div class="lp-shell">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">Proof, not promises</p>
+          <h2 class="lp-h2">We benchmarked the consensus.</h2>
+          <p class="lp-lead">On 314 closed-book MMLU-Pro questions, the consensus ranks first overall — and pulls clear exactly where the models disagree.</p>
+        </div>
+        <div class="bench-hero lp-reveal" style="margin-top: clamp(36px, 5vw, 56px);">
+          <div class="bench-mini">
+            <p class="bench-mini-title">When the models disagree</p>
+            <p class="bench-mini-sub">Accuracy on the questions where they split · MMLU-Pro</p>
+            <div class="bench-mini-plot">
+              <div class="bench-mini-col is-consensus" style="--i:0; --v:72.1"><span class="bench-mini-val">72.1%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:1; --v:70.6"><span class="bench-mini-val">70.6%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:2; --v:69.1"><span class="bench-mini-val">69.1%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:3; --v:64.7"><span class="bench-mini-val">64.7%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:4; --v:58.8"><span class="bench-mini-val">58.8%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:5; --v:44.1"><span class="bench-mini-val">44.1%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:6; --v:39.7"><span class="bench-mini-val">39.7%</span><div class="bench-mini-bar"></div></div>
+            </div>
+            <div class="bench-mini-icons">
+              <span><img src="/static/favicon.png" alt="consens.io"></span>
+              <span><img src="/static/icons/chat_icons/claude.png" alt="Claude"></span>
+              <span><img src="/static/icons/chat_icons/chatgpt.png" alt="GPT-5.5"></span>
+              <span><img src="/static/icons/chat_icons/gemini-icon.png" alt="Gemini"></span>
+              <span><img src="/static/icons/chat_icons/grok.png" alt="Grok"></span>
+              <span><img src="/static/icons/chat_icons/deepseek.png" alt="DeepSeek"></span>
+              <span><img src="/static/icons/chat_icons/mistral.png" alt="Mistral"></span>
+            </div>
+          </div>
+          <div class="lp-bench-aside">
+            <div class="bench-stat-row" style="margin-top:0;">
+              <div class="bench-stat"><b>#1</b><small>Highest accuracy overall and on the hard questions — the top of the field is a statistical tie.</small></div>
+              <div class="bench-stat"><b>+32pts</b><small>Lead over the weakest model on questions where the answers split.</small></div>
+            </div>
+            <a href="/benchmark" class="lp-btn lp-btn--primary" style="margin-top: 30px;" data-umami-event="landing_see_benchmark">See the full benchmark</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ====================================================== WHY -->
-    <section class="lp-section lp-section--white">
+    <section class="lp-section lp-section--grey">
       <div class="lp-shell">
         <div class="lp-head lp-reveal">
           <p class="lp-eyebrow">Why consens.io</p>
@@ -362,7 +406,7 @@
     </section>
 
     <!-- ====================================================== MODELS -->
-    <section id="models" class="lp-section lp-section--grey">
+    <section id="models" class="lp-section lp-section--white">
       <div class="lp-shell">
         <div class="lp-head lp-reveal">
           <p class="lp-eyebrow">Model coverage</p>
@@ -381,7 +425,7 @@
     </section>
 
     <!-- ====================================================== FINAL CTA -->
-    <section class="lp-section lp-section--white">
+    <section class="lp-section lp-section--grey">
       <div class="lp-shell lp-final">
         <div class="lp-head lp-reveal">
           <p class="lp-eyebrow">Get the product view</p>
@@ -397,6 +441,7 @@
       <span>&copy; 2026 consens.io</span>
       <div class="lp-footer-links">
         <a href="/app">App</a>
+        <a href="/benchmark">Benchmark</a>
         <a href="/ai-model-comparison">AI comparison</a>
         <a href="/about">About</a>
         <a href="/terms">Terms</a>
