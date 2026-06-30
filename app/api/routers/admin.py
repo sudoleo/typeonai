@@ -95,8 +95,31 @@ def admin_get_benchmark_run(request: Request, run_id: str):
     return {"status": "success", "run": run}
 
 
+PROVIDER_KEYS = ("openai", "mistral", "anthropic", "gemini", "deepseek", "grok")
+
+
+def _ordered_unique(items, drop=None, ensure=None) -> list:
+    """Dedupliziert unter Erhalt der Reihenfolge, entfernt `drop` und haengt
+    fehlende Pflichtmodelle aus `ensure` (in dieser Reihenfolge) hinten an."""
+    drop = set(drop or ())
+    seen = set()
+    out = []
+    for item in items or []:
+        value = str(item).strip()
+        if value and value not in drop and value not in seen:
+            seen.add(value)
+            out.append(value)
+    for value in (ensure or ()):
+        if value not in seen:
+            seen.add(value)
+            out.append(value)
+    return out
+
+
 def normalize_models_document(data: dict) -> dict:
     normalized = dict(data or {})
+    # Provider-Listen behalten ihre (Admin-)Reihenfolge bei, damit die normalen
+    # Picker exakt diese Anordnung anzeigen. Pflichtmodelle werden hinten ergaenzt.
     provider_frontier = {
         "openai": cfg.OPENAI_FRONTIER_LOW_MODEL,
         "anthropic": cfg.ANTHROPIC_FRONTIER_LOW_MODEL,
@@ -104,24 +127,19 @@ def normalize_models_document(data: dict) -> dict:
         "grok": cfg.GROK_FRONTIER_LOW_MODEL,
     }
     for provider, frontier_model in provider_frontier.items():
-        models = set(normalized.get(provider) or [])
-        models.add(frontier_model)
-        normalized[provider] = sorted(models)
+        normalized[provider] = _ordered_unique(normalized.get(provider), ensure=(frontier_model,))
 
-    anthropic_models = set(normalized.get("anthropic") or [])
-    anthropic_models.update({cfg.DEFAULT_ANTHROPIC_MODEL, cfg.ANTHROPIC_PRO_MODEL})
-    normalized["anthropic"] = sorted(anthropic_models)
-
-    mistral_models = set(normalized.get("mistral") or [])
-    mistral_models.difference_update(cfg.DEPRECATED_MISTRAL_MODELS)
-    mistral_models.add(cfg.DEFAULT_MISTRAL_MODEL)
-    mistral_models.add(cfg.MISTRAL_PRO_MODEL)
-    normalized["mistral"] = sorted(mistral_models)
-
-    deepseek_models = set(normalized.get("deepseek") or [])
-    deepseek_models.difference_update(cfg.DEPRECATED_DEEPSEEK_MODELS)
-    deepseek_models.update(cfg.REQUIRED_DEEPSEEK_MODELS)
-    normalized["deepseek"] = sorted(deepseek_models)
+    normalized["anthropic"] = _ordered_unique(
+        normalized.get("anthropic"), ensure=(cfg.DEFAULT_ANTHROPIC_MODEL, cfg.ANTHROPIC_PRO_MODEL)
+    )
+    normalized["mistral"] = _ordered_unique(
+        normalized.get("mistral"), drop=cfg.DEPRECATED_MISTRAL_MODELS,
+        ensure=(cfg.DEFAULT_MISTRAL_MODEL, cfg.MISTRAL_PRO_MODEL),
+    )
+    normalized["deepseek"] = _ordered_unique(
+        normalized.get("deepseek"), drop=cfg.DEPRECATED_DEEPSEEK_MODELS,
+        ensure=tuple(cfg.REQUIRED_DEEPSEEK_MODELS),
+    )
 
     premium = set(normalized.get("premium") or [])
     premium.difference_update(cfg.FRONTIER_LOW_MODELS)
@@ -130,8 +148,19 @@ def normalize_models_document(data: dict) -> dict:
     premium.update(cfg.REQUIRED_PRO_MODELS)
     normalized["premium"] = sorted(premium)
 
+    # Free-Default je Provider: nur gueltig, wenn das Modell im Provider gelistet
+    # und weder Premium noch Early ist (sonst saehe ein Free-Nutzer einen Sperr-Default).
+    incoming_defaults = normalized.get("defaults") or {}
+    clean_defaults = {}
+    for provider in PROVIDER_KEYS:
+        chosen = str(incoming_defaults.get(provider) or "").strip()
+        allowed = set(normalized.get(provider) or [])
+        if chosen and chosen in allowed and chosen not in premium and chosen not in cfg.EARLY_MODELS:
+            clean_defaults[provider] = chosen
+    normalized["defaults"] = clean_defaults
+
     allowed_direct_consensus = set()
-    for provider in ("openai", "mistral", "anthropic", "gemini", "deepseek", "grok"):
+    for provider in PROVIDER_KEYS:
         allowed_direct_consensus.update(normalized.get(provider) or [])
     consensus = [
         str(model).strip()
@@ -184,6 +213,7 @@ def get_models(request: Request):
                 "grok": list(ALLOWED_GROK_MODELS),
                 "premium": list(PREMIUM_MODELS),
                 "consensus": list(cfg.ALLOWED_CONSENSUS_MODELS),
+                "defaults": dict(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER),
                 "limits": get_limits_config()
             }
     except Exception as e:
@@ -223,6 +253,7 @@ def update_models(request: Request, data: dict = Body(...)):
             "grok": normalized["grok"],
             "premium": normalized["premium"],
             "consensus": normalized["consensus"],
+            "defaults": normalized["defaults"],
             "limits": get_limits_config()
         })
         

@@ -128,19 +128,18 @@ async def read_root(request: Request):
         "firebase_messaging_sender_id": os.environ.get("FIREBASE_MESSAGING_SENDER_ID"),
         "firebase_app_id": os.environ.get("FIREBASE_APP_ID")
     }
-    from app.core.config import ALLOWED_OPENAI_MODELS, ALLOWED_MISTRAL_MODELS, ALLOWED_ANTHROPIC_MODELS, ALLOWED_GEMINI_MODELS, ALLOWED_DEEPSEEK_MODELS, ALLOWED_GROK_MODELS, PREMIUM_MODELS
-    
-    def model_picker_sort(model_name: str):
-        return cfg.model_picker_sort_key(model_name)
+    from app.core.config import PREMIUM_MODELS
 
+    # Reihenfolge je Provider kommt aus der Admin-Konfiguration (get_ordered_models);
+    # ohne Override deterministischer Auto-Sort.
     models = {
-        "openai": sorted(list(ALLOWED_OPENAI_MODELS), key=model_picker_sort),
-        "mistral": sorted(list(ALLOWED_MISTRAL_MODELS), key=model_picker_sort),
-        "anthropic": sorted(list(ALLOWED_ANTHROPIC_MODELS), key=model_picker_sort),
-        "gemini": sorted(list(ALLOWED_GEMINI_MODELS), key=model_picker_sort),
-        "deepseek": sorted(list(ALLOWED_DEEPSEEK_MODELS), key=model_picker_sort),
-        "grok": sorted(list(ALLOWED_GROK_MODELS), key=model_picker_sort),
-        "premium": list(PREMIUM_MODELS - cfg.EARLY_FREE_MODELS)
+        "openai": cfg.get_ordered_models("openai"),
+        "mistral": cfg.get_ordered_models("mistral"),
+        "anthropic": cfg.get_ordered_models("anthropic"),
+        "gemini": cfg.get_ordered_models("gemini"),
+        "deepseek": cfg.get_ordered_models("deepseek"),
+        "grok": cfg.get_ordered_models("grok"),
+        "premium": list(PREMIUM_MODELS - cfg.EARLY_MODELS)
     }
     model_metadata = cfg.get_model_picker_metadata()
     model_labels = {model_id: meta["label"] for model_id, meta in model_metadata.items()}
@@ -151,7 +150,7 @@ async def read_root(request: Request):
             "label": cfg.get_consensus_model_label(model),
             "badge": cfg.get_consensus_model_badge(model),
             "is_premium": cfg.is_premium_consensus_model(model),
-            "is_frontier": model in cfg.EARLY_FREE_MODELS,
+            "is_frontier": model in cfg.EARLY_MODELS,
         }
         for model in cfg.ALLOWED_CONSENSUS_MODELS
     ]
@@ -163,11 +162,12 @@ async def read_root(request: Request):
         "models": models,
         "default_models": cfg.FREE_DEFAULT_MODEL_BY_PROVIDER,
         "pro_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
+        "early_default_models": cfg.EARLY_DEFAULT_MODEL_BY_PROVIDER,
         "consensus_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
         "consensus_models": consensus_models,
         "model_labels": model_labels,
         "model_badges": model_badges,
-        "frontier_models": list(cfg.EARLY_FREE_MODELS),
+        "frontier_models": list(cfg.EARLY_MODELS),
         **firebase_config
     })
     response.headers["X-Robots-Tag"] = "noindex, follow"

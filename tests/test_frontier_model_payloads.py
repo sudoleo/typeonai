@@ -119,12 +119,35 @@ class FrontierModelPayloadTests(unittest.TestCase):
                 self.assertNotIn("reasoning", request["payload"])
                 self.assertNotIn("reasoning_effort", request["payload"])
 
-    def test_free_defaults_use_frontier_variants(self):
-        self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["openai"], cfg.OPENAI_FRONTIER_LOW_MODEL)
+    def test_free_defaults_use_cheap_base_models(self):
+        # Nicht-Early-Nutzer fallen auf die guenstigen Basis-Modelle zurueck;
+        # keines davon ist ein tag-gated Early-Modell.
+        self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["openai"], cfg.DEFAULT_OPENAI_MODEL)
         self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["mistral"], cfg.DEFAULT_MISTRAL_MODEL)
-        self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["anthropic"], cfg.ANTHROPIC_FRONTIER_LOW_MODEL)
-        self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["gemini"], cfg.GEMINI_FRONTIER_LOW_MODEL)
-        self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["grok"], cfg.GROK_FRONTIER_LOW_MODEL)
+        self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["anthropic"], cfg.DEFAULT_ANTHROPIC_MODEL)
+        self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["gemini"], cfg.DEFAULT_GEMINI_MODEL)
+        self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["deepseek"], cfg.DEEPSEEK_FLASH_MODEL)
+        self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["grok"], cfg.DEFAULT_GROK_MODEL)
+        for model_id in cfg.FREE_DEFAULT_MODEL_BY_PROVIDER.values():
+            self.assertNotIn(model_id, cfg.EARLY_MODELS)
+
+    def test_early_defaults_use_frontier_variants(self):
+        # Early-Nutzer behalten die Frontier-Low-Varianten als Default.
+        self.assertEqual(cfg.EARLY_DEFAULT_MODEL_BY_PROVIDER["openai"], cfg.OPENAI_FRONTIER_LOW_MODEL)
+        self.assertEqual(cfg.EARLY_DEFAULT_MODEL_BY_PROVIDER["anthropic"], cfg.ANTHROPIC_FRONTIER_LOW_MODEL)
+        self.assertEqual(cfg.EARLY_DEFAULT_MODEL_BY_PROVIDER["gemini"], cfg.GEMINI_FRONTIER_LOW_MODEL)
+        self.assertEqual(cfg.EARLY_DEFAULT_MODEL_BY_PROVIDER["grok"], cfg.GROK_FRONTIER_LOW_MODEL)
+        self.assertEqual(cfg.EARLY_DEFAULT_MODEL_BY_PROVIDER["deepseek"], cfg.DEEPSEEK_PRO_MODEL)
+
+    def test_mistral_small_is_a_normal_free_model(self):
+        # Mistral Small ist guenstig -> kein Early-/Pro-Gate.
+        self.assertNotIn(cfg.DEFAULT_MISTRAL_MODEL, cfg.EARLY_MODELS)
+        self.assertNotIn(cfg.DEFAULT_MISTRAL_MODEL, cfg.PREMIUM_MODELS)
+        config = cfg.get_model_config(cfg.DEFAULT_MISTRAL_MODEL)
+        self.assertTrue(config.is_free)
+        self.assertFalse(config.is_frontier)
+        # Ohne Early-/Pro-Tag waehlbar.
+        validate_model(cfg.DEFAULT_MISTRAL_MODEL, cfg.ALLOWED_MISTRAL_MODELS, "Mistral", is_pro=False, is_early=False)
 
     def test_mistral_defaults_use_supported_reasoning_models(self):
         default_request = build_provider_payload(
@@ -156,7 +179,7 @@ class FrontierModelPayloadTests(unittest.TestCase):
     def test_required_pro_models_include_normal_opus_48(self):
         self.assertIn(cfg.ANTHROPIC_PRO_MODEL, cfg.REQUIRED_PRO_MODELS)
         self.assertIn(cfg.ANTHROPIC_PRO_MODEL, cfg.PREMIUM_MODELS)
-        self.assertNotIn(cfg.ANTHROPIC_PRO_MODEL, cfg.EARLY_FREE_MODELS)
+        self.assertNotIn(cfg.ANTHROPIC_PRO_MODEL, cfg.EARLY_MODELS)
 
         normalized = normalize_models_document({
             "anthropic": [cfg.ANTHROPIC_FRONTIER_LOW_MODEL],
@@ -184,10 +207,24 @@ class FrontierModelPayloadTests(unittest.TestCase):
         self.assertNotIn("not-in-provider-list", normalized["consensus"])
 
     def test_server_side_access_control(self):
-        validate_model(cfg.OPENAI_FRONTIER_LOW_MODEL, cfg.ALLOWED_OPENAI_MODELS, "OpenAI", is_pro=False)
-        validate_model(cfg.ANTHROPIC_FRONTIER_LOW_MODEL, cfg.ALLOWED_ANTHROPIC_MODELS, "Anthropic", is_pro=False)
-        validate_model(cfg.GEMINI_FRONTIER_LOW_MODEL, cfg.ALLOWED_GEMINI_MODELS, "Gemini", is_pro=False)
-        validate_model(cfg.GROK_FRONTIER_LOW_MODEL, cfg.ALLOWED_GROK_MODELS, "Grok", is_pro=False)
+        # Early-Modelle sind tag-gated: ohne Early-Zugang -> 403.
+        early_cases = [
+            (cfg.OPENAI_FRONTIER_LOW_MODEL, cfg.ALLOWED_OPENAI_MODELS, "OpenAI"),
+            (cfg.ANTHROPIC_FRONTIER_LOW_MODEL, cfg.ALLOWED_ANTHROPIC_MODELS, "Anthropic"),
+            (cfg.GEMINI_FRONTIER_LOW_MODEL, cfg.ALLOWED_GEMINI_MODELS, "Gemini"),
+            (cfg.GROK_FRONTIER_LOW_MODEL, cfg.ALLOWED_GROK_MODELS, "Grok"),
+            (cfg.DEEPSEEK_PRO_MODEL, cfg.ALLOWED_DEEPSEEK_MODELS, "DeepSeek"),
+        ]
+        for model_id, allowed, provider in early_cases:
+            with self.subTest(model=model_id):
+                # Mit Early-Zugang erlaubt.
+                validate_model(model_id, allowed, provider, is_pro=False, is_early=True)
+                # Pro schliesst Early ein (is_early wird an der Aufrufstelle so gesetzt).
+                validate_model(model_id, allowed, provider, is_pro=True, is_early=True)
+                # Ohne Early-Zugang gesperrt.
+                with self.assertRaises(HTTPException) as denied:
+                    validate_model(model_id, allowed, provider, is_pro=False, is_early=False)
+                self.assertEqual(denied.exception.status_code, 403)
 
         with self.assertRaises(HTTPException) as free_pro:
             validate_model("gpt-5.5", cfg.ALLOWED_OPENAI_MODELS, "OpenAI", is_pro=False)
@@ -198,6 +235,11 @@ class FrontierModelPayloadTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as invalid:
             validate_model("not-a-real-model", cfg.ALLOWED_OPENAI_MODELS, "OpenAI", is_pro=True)
         self.assertEqual(invalid.exception.status_code, 400)
+
+    def test_early_consensus_engine_is_tag_gated(self):
+        self.assertTrue(cfg.is_early_consensus_model(cfg.GEMINI_FRONTIER_LOW_MODEL))
+        self.assertFalse(cfg.is_early_consensus_model("Gemini"))
+        self.assertFalse(cfg.is_early_consensus_model("OpenAI-Pro"))
 
     def test_firestore_sync_keeps_frontier_models_allowed_and_not_premium(self):
         snapshots = {
@@ -250,6 +292,59 @@ class FrontierModelPayloadTests(unittest.TestCase):
         self.assertIn("{% for model in consensus_models %}", template)
         self.assertIn('value="{{ model.value }}"', template)
         self.assertIn("{% if loop.first %}selected{% endif %}", template)
+
+    def test_normalize_preserves_provider_order_and_validates_defaults(self):
+        normalized = normalize_models_document({
+            "openai": ["gpt-5.5", "gpt-5.4-mini"],
+            "mistral": [cfg.DEFAULT_MISTRAL_MODEL],
+            "anthropic": [cfg.DEFAULT_ANTHROPIC_MODEL],
+            "gemini": [cfg.GEMINI_FRONTIER_LOW_MODEL, cfg.DEFAULT_GEMINI_MODEL],
+            "deepseek": [cfg.DEEPSEEK_FLASH_MODEL],
+            "grok": [cfg.DEFAULT_GROK_MODEL],
+            "premium": ["gpt-5.5"],
+            "defaults": {
+                "openai": "gpt-5.4-mini",          # gueltiger Free-Default
+                "mistral": "gpt-5.5",              # premium -> verworfen
+                "gemini": cfg.GEMINI_FRONTIER_LOW_MODEL,  # early -> verworfen
+            },
+        })
+        # Reihenfolge der eingegebenen Modelle bleibt erhalten (Pflichtmodelle hinten).
+        self.assertEqual(normalized["openai"][:2], ["gpt-5.5", "gpt-5.4-mini"])
+        self.assertIn(cfg.OPENAI_FRONTIER_LOW_MODEL, normalized["openai"])
+        # Free-Default: nur das gueltige bleibt, Premium/Early werden verworfen.
+        self.assertEqual(normalized["defaults"].get("openai"), "gpt-5.4-mini")
+        self.assertNotIn("mistral", normalized["defaults"])
+        self.assertNotIn("gemini", normalized["defaults"])
+
+    def test_model_order_and_default_overrides_apply(self):
+        order_snapshot = {p: list(v) for p, v in cfg.MODEL_ORDER_BY_PROVIDER.items()}
+        free_snapshot = dict(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER)
+        try:
+            # get_ordered_models: Admin-Reihenfolge gewinnt, Rest wird angehaengt.
+            cfg.apply_model_order({"openai": ["gpt-5.5"]})
+            ordered = cfg.get_ordered_models("openai")
+            self.assertEqual(ordered[0], "gpt-5.5")
+            self.assertEqual(set(ordered), set(cfg.ALLOWED_OPENAI_MODELS))
+
+            # Gueltiger Free-Default greift.
+            cfg.apply_default_models({"openai": "gpt-4o"})
+            self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["openai"], "gpt-4o")
+
+            # Premium/Early als Free-Default -> Fallback auf Basis.
+            cfg.apply_default_models({"openai": "gpt-5.5", "gemini": cfg.GEMINI_FRONTIER_LOW_MODEL})
+            self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["openai"], cfg._BASE_FREE_DEFAULTS["openai"])
+            self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["gemini"], cfg._BASE_FREE_DEFAULTS["gemini"])
+        finally:
+            cfg.MODEL_ORDER_BY_PROVIDER.clear()
+            cfg.MODEL_ORDER_BY_PROVIDER.update(order_snapshot)
+            cfg.FREE_DEFAULT_MODEL_BY_PROVIDER.clear()
+            cfg.FREE_DEFAULT_MODEL_BY_PROVIDER.update(free_snapshot)
+
+    def test_admin_model_rows_have_order_and_default_controls(self):
+        template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
+        self.assertIn("default-radio", template)
+        self.assertIn("moveRow(row", template)
+        self.assertIn("data.defaults[p] = modelName", template)
 
     def test_admin_model_rows_have_separate_premium_and_consensus_toggles(self):
         template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")

@@ -20,6 +20,7 @@
     window.APP_LIMITS = JSON.parse('{{ limits | tojson | safe }}');
     window.FREE_DEFAULT_MODELS = JSON.parse('{{ default_models | tojson | safe }}');
     window.PRO_DEFAULT_MODELS = JSON.parse('{{ pro_default_models | tojson | safe }}');
+    window.EARLY_DEFAULT_MODELS = JSON.parse('{{ early_default_models | tojson | safe }}');
     // Fallback-Limit für app-init.js (ausgelagertes initApp kann kein Jinja rendern).
     window.FREE_LIMIT = Number('{{ free_limit }}');
 
@@ -53,7 +54,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260627-split1">
+  <link rel="stylesheet" href="/static/style.css?v=20260701-skeleton2">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -66,13 +67,13 @@
   <!-- DOMPurify (HTML Sanitizer) -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260625-bookmark-consensus1"></script>
+  <script type="module" src="/static/firebase.js?v=20260701-skeleton2"></script>
   <script type="module" src="/static/demo.js?v=20260621-demo-stream-diff3"></script>
   <script src="/static/app-ui.js?v=20260628-prompt-default2" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
   <script src="/static/js/app-core.js?v=20260626-extract1" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
-  <script src="/static/js/model-picker.js?v=20260626-remove-best-star1" defer></script>
+  <script src="/static/js/model-picker.js?v=20260630-early1" defer></script>
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
   <script src="/static/js/markdown-stream.js?v=20260626-extract1" defer></script>
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
@@ -88,7 +89,7 @@
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-actions.js?v=20260626-extract1" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
-  <script src="/static/js/user-tier.js?v=20260626-extract1" defer></script>
+  <script src="/static/js/user-tier.js?v=20260630-early1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-insights.js?v=20260627-diff-open1" defer></script>
   <script src="/static/js/consensus-run.js?v=20260627-auth-keys1" defer></script>
@@ -120,6 +121,20 @@
       </div>
       <!-- Neuer About-Link -->
       <div id="loginContainer" class="login-text">Log in</div>
+      <script>
+        // Skeleton-Avatar anzeigen, solange der Firebase-Auth-Status noch nicht
+        // aufgeloest ist. Liegt ein id_token vor, war der Nutzer eingeloggt:
+        // statt "Log in" einen grauen Platzhalter-Kreis zeigen, bis
+        // onIdTokenChanged (firebase.js) das echte Avatar-Icon rendert.
+        (function () {
+          try {
+            if (localStorage.getItem("id_token")) {
+              var c = document.getElementById("loginContainer");
+              if (c) c.innerHTML = '<span class="skeleton login-skeleton" aria-hidden="true" role="status" aria-label="Loading account"></span>';
+            }
+          } catch (e) {}
+        })();
+      </script>
       <!-- Dünner vertikaler Strich -->
       <span class="top-bar-divider" aria-hidden="true"></span>
       <!-- Bisheriger Login-Text -->
@@ -218,13 +233,36 @@
         <div id="bookmarksContainer"></div>
       </div>
     </div>
+    <script>
+      // Skeleton-Platzhalter fuer Usage-Zahlen und Bookmarks, solange die
+      // Nutzerdaten nach dem Login noch geladen werden. Nur wenn ein id_token
+      // vorliegt (Nutzer war eingeloggt). fetchUsageData / loadBookmarks
+      // (firebase.js) ersetzen den Inhalt, sobald die Daten da sind.
+      (function () {
+        try {
+          if (!localStorage.getItem("id_token")) return;
+          // <i> statt <span>: die Usage-Spalte blendet leere <span> aus
+          // (#usageDisplay span:empty { display:none }).
+          var line = '<i class="skeleton skeleton-line" style="width:54px"></i>';
+          var fu = document.getElementById("freeUsageDisplay");
+          var du = document.getElementById("deepUsageDisplay");
+          if (fu) fu.innerHTML = "Requests: " + line;
+          if (du) du.innerHTML = "Deep Think: " + line;
+          var bc = document.getElementById("bookmarksContainer");
+          if (bc) {
+            bc.innerHTML =
+              '<div class="skeleton skeleton-bookmark" aria-hidden="true"></div>'.repeat(4);
+          }
+        } catch (e) {}
+      })();
+    </script>
     <!-- Neuer Abschnitt in der Sidebar für Einstellungen -->
     <div class="sidebar-settings">
       <button id="editSystemPromptBtn" title="Settings">
         <span class="settings-icon">⚙️</span>
         <span class="settings-label">Settings</span>
       </button>
-      <span id="version-number">v1.8.2</span>
+      <span id="version-number">v1.8.3</span>
     </div>
   </div>
   <div class="container">
@@ -288,7 +326,7 @@
             <div class="select-wrapper">
               <select id="consensusModelDropdown" aria-label="Consensus model">
                 {% for model in consensus_models %}
-                <option value="{{ model.value }}" data-model-label="{{ model.label }}" data-model-badge="{{ model.badge }}" {% if loop.first %}selected{% endif %} {% if model.is_premium %}disabled class="premium-option"{% elif model.is_frontier %}class="early-option"{% endif %}>{{ model.label }}{% if model.badge %} · {{ model.badge }}{% endif %}</option>
+                <option value="{{ model.value }}" data-model-label="{{ model.label }}" data-model-badge="{{ model.badge }}" {% if loop.first %}selected{% endif %} {% if model.is_premium %}disabled class="premium-option"{% elif model.is_frontier %}disabled class="early-option"{% endif %}>{{ model.label }}{% if model.badge %} · {{ model.badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </div>
@@ -378,7 +416,7 @@
               <select id="openaiModelSelect" class="model-picker">
                 {% for model in models['openai'] %}
                 {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['openai'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['openai'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}disabled class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -399,7 +437,7 @@
               <select id="mistralModelSelect" class="model-picker">
                 {% for model in models['mistral'] %}
                 {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['mistral'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['mistral'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}disabled class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -420,7 +458,7 @@
               <select id="claudeModelSelect" class="model-picker">
                 {% for model in models['anthropic'] %}
                 {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['anthropic'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['anthropic'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}disabled class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -441,7 +479,7 @@
               <select id="geminiModelSelect" class="model-picker">
                 {% for model in models['gemini'] %}
                 {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['gemini'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['gemini'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}disabled class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -471,7 +509,7 @@
               <select id="deepseekModelSelect" class="model-picker">
                 {% for model in models['deepseek'] %}
                 {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['deepseek'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['deepseek'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}disabled class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -494,7 +532,7 @@
               <select id="grokModelSelect" class="model-picker">
                 {% for model in models['grok'] %}
                 {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['grok'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['grok'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}disabled class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -554,7 +592,7 @@
       </div>
     </div>
 
-    <script src="/static/js/app-init.js?v=20260628-prompt-default2" defer></script>
+    <script src="/static/js/app-init.js?v=20260630-early1" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing
@@ -945,7 +983,7 @@
           </div>
 
           <div style="text-align: center; margin-top: 20px; opacity: 0.5; font-size: 0.8em;">
-            v1.8.2
+            v1.8.3
           </div>
         </div>
       </div>

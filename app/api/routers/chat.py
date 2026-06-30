@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 
 from app.core.rate_limit import limiter
 from app.core.state import usage_counter, deep_search_usage
-from app.core.security import verify_user_token, extract_id_token, is_user_pro
+from app.core.security import verify_user_token, extract_id_token, is_user_pro, is_user_early
 import app.core.config as cfg
 from app.core.config import (
     ALLOWED_OPENAI_MODELS, ALLOWED_MISTRAL_MODELS, ALLOWED_ANTHROPIC_MODELS,
@@ -104,12 +104,14 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
     model = data.get("model")
 
     is_pro_user = False
+    is_early_user = False
     uid = None
 
     if id_token:
         try:
             uid = verify_user_token(id_token)
             is_pro_user = is_user_pro(uid)
+            is_early_user = is_pro_user or is_user_early(uid)
         except Exception:
             raise HTTPException(status_code=401, detail="Authentication failed")
 
@@ -121,7 +123,7 @@ def ask_openai_post(request: Request, data: dict = Body(...)):
         )
 
     validate_question_word_limit(question, is_pro_user, deep_search)
-    validate_model(model, ALLOWED_OPENAI_MODELS, "OpenAI", is_pro=is_pro_user)
+    validate_model(model, ALLOWED_OPENAI_MODELS, "OpenAI", is_pro=is_pro_user, is_early=is_early_user)
     attachments = parse_attachments(data, is_pro_user)
 
     active_count = get_valid_active_count(data)
@@ -252,12 +254,14 @@ def ask_mistral_post(request: Request, data: dict = Body(...)):
     model = data.get("model")
 
     is_pro_user = False
+    is_early_user = False
     uid = None
 
     if id_token:
         try:
             uid = verify_user_token(id_token)
             is_pro_user = is_user_pro(uid)
+            is_early_user = is_pro_user or is_user_early(uid)
         except Exception:
             raise HTTPException(status_code=401, detail="Authentication failed")
 
@@ -265,7 +269,7 @@ def ask_mistral_post(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
 
     validate_question_word_limit(question, is_pro_user, deep_search)
-    validate_model(model, ALLOWED_MISTRAL_MODELS, "Mistral", is_pro=is_pro_user)
+    validate_model(model, ALLOWED_MISTRAL_MODELS, "Mistral", is_pro=is_pro_user, is_early=is_early_user)
     attachments = parse_attachments(data, is_pro_user)
 
     active_count = get_valid_active_count(data)
@@ -359,12 +363,14 @@ def ask_claude_post(request: Request, data: dict = Body(...)):
     model = data.get("model")
 
     is_pro_user = False
+    is_early_user = False
     uid = None
 
     if id_token:
         try:
             uid = verify_user_token(id_token)
             is_pro_user = is_user_pro(uid)
+            is_early_user = is_pro_user or is_user_early(uid)
         except Exception:
             raise HTTPException(status_code=401, detail="Authentication failed")
 
@@ -372,7 +378,7 @@ def ask_claude_post(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
 
     validate_question_word_limit(question, is_pro_user, deep_search)
-    validate_model(model, ALLOWED_ANTHROPIC_MODELS, "Anthropic", is_pro=is_pro_user)
+    validate_model(model, ALLOWED_ANTHROPIC_MODELS, "Anthropic", is_pro=is_pro_user, is_early=is_early_user)
     attachments = parse_attachments(data, is_pro_user)
 
     active_count = get_valid_active_count(data)
@@ -467,12 +473,14 @@ def ask_gemini_post(request: Request, data: dict = Body(...)):
     model = data.get("model")
 
     is_pro_user = False
+    is_early_user = False
     uid = None
 
     if id_token:
         try:
             uid = verify_user_token(id_token)
             is_pro_user = is_user_pro(uid)
+            is_early_user = is_pro_user or is_user_early(uid)
         except Exception:
             raise HTTPException(status_code=401, detail="Authentication failed")
 
@@ -481,7 +489,7 @@ def ask_gemini_post(request: Request, data: dict = Body(...)):
 
     validate_question_word_limit(question, is_pro_user, deep_search)
     max_tokens = cfg.get_output_token_limit(is_pro_user, deep_search)
-    validate_model(model, ALLOWED_GEMINI_MODELS, "Gemini", is_pro=is_pro_user)
+    validate_model(model, ALLOWED_GEMINI_MODELS, "Gemini", is_pro=is_pro_user, is_early=is_early_user)
     attachments = parse_attachments(data, is_pro_user)
 
     active_count = get_valid_active_count(data)
@@ -579,12 +587,14 @@ def ask_deepseek_post(request: Request, data: dict = Body(...)):
     model = data.get("model")
 
     is_pro_user = False
+    is_early_user = False
     uid = None
 
     if id_token:
         try:
             uid = verify_user_token(id_token)
             is_pro_user = is_user_pro(uid)
+            is_early_user = is_pro_user or is_user_early(uid)
         except Exception:
             raise HTTPException(status_code=401, detail="Authentication failed")
 
@@ -592,7 +602,7 @@ def ask_deepseek_post(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
 
     validate_question_word_limit(question, is_pro_user, deep_search)
-    validate_model(model, ALLOWED_DEEPSEEK_MODELS, "DeepSeek", is_pro=is_pro_user)
+    validate_model(model, ALLOWED_DEEPSEEK_MODELS, "DeepSeek", is_pro=is_pro_user, is_early=is_early_user)
     attachments = parse_attachments(data, is_pro_user)
 
     active_count = get_valid_active_count(data)
@@ -686,12 +696,14 @@ def ask_grok_post(request: Request, data: dict = Body(...)):
     model = data.get("model")
 
     is_pro_user = False
+    is_early_user = False
     uid = None
 
     if id_token:
         try:
             uid = verify_user_token(id_token)
             is_pro_user = is_user_pro(uid)
+            is_early_user = is_pro_user or is_user_early(uid)
         except Exception:
             raise HTTPException(status_code=401, detail="Authentication failed")
 
@@ -699,7 +711,7 @@ def ask_grok_post(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
 
     validate_question_word_limit(question, is_pro_user, deep_search)
-    validate_model(model, ALLOWED_GROK_MODELS, "Grok", is_pro=is_pro_user)
+    validate_model(model, ALLOWED_GROK_MODELS, "Grok", is_pro=is_pro_user, is_early=is_early_user)
     attachments = parse_attachments(data, is_pro_user)
 
     active_count = get_valid_active_count(data)
@@ -869,6 +881,12 @@ def consensus(request: Request, data: dict = Body(...)):
 
     if consensus_model not in cfg.ALLOWED_CONSENSUS_MODELS:
         raise HTTPException(status_code=400, detail="Invalid consensus model selected.")
+
+    # Early-Engine (z.B. Gemini Frontier-Low) ist tag-gated. Pro schliesst Early
+    # ein; gilt auch bei eigenen Keys, analog zum Premium-Gating weiter unten.
+    early_access = is_pro or (uid is not None and is_user_early(uid))
+    if cfg.is_early_consensus_model(consensus_model) and not early_access:
+        raise HTTPException(status_code=403, detail="Early access consensus engines are reserved for Early or Pro users.")
 
     if not use_own_keys:
         if cfg.is_premium_consensus_model(consensus_model) and not is_pro:

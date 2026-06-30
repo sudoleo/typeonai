@@ -236,21 +236,22 @@
             
             const premiumSet = new Set(globalModelsData.premium || []);
             const consensusSet = new Set(globalModelsData.consensus || []);
-            
+            const defaults = globalModelsData.defaults || {};
+
             providers.forEach(p => {
                 const section = document.createElement('div');
                 section.className = 'provider-section';
-                
+
                 const title = document.createElement('h3');
                 title.textContent = p;
                 section.appendChild(title);
-                
+
                 const listContainer = document.createElement('div');
                 listContainer.id = `list-${p}`;
-                
+
                 const models = globalModelsData[p] || [];
                 models.forEach((m, idx) => {
-                    const row = createModelRow(p, m, premiumSet.has(m), consensusSet.has(m));
+                    const row = createModelRow(p, m, premiumSet.has(m), consensusSet.has(m), defaults[p] === m);
                     listContainer.appendChild(row);
                 });
                 
@@ -316,13 +317,17 @@
             setProviderConsensusChecked(value, false);
         }
 
-        function moveConsensusRow(row, direction) {
+        function moveRow(row, direction) {
             if (!row) return;
             if (direction < 0 && row.previousElementSibling) {
                 row.parentNode.insertBefore(row, row.previousElementSibling);
             } else if (direction > 0 && row.nextElementSibling) {
                 row.parentNode.insertBefore(row.nextElementSibling, row);
             }
+        }
+
+        function moveConsensusRow(row, direction) {
+            moveRow(row, direction);
         }
 
         function renderLimits() {
@@ -363,10 +368,10 @@
             });
         }
         
-        function createModelRow(provider, modelName, isPremium, isConsensus) {
+        function createModelRow(provider, modelName, isPremium, isConsensus, isDefault) {
             const row = document.createElement('div');
             row.className = 'model-row';
-            
+
             const input = document.createElement('input');
             input.type = 'text';
             input.value = modelName;
@@ -383,7 +388,31 @@
                 addConsensusListValue(input.value.trim());
                 row.dataset.previousModelName = input.value.trim();
             });
-            
+
+            const upBtn = document.createElement('button');
+            upBtn.type = 'button';
+            upBtn.className = 'order-btn';
+            upBtn.textContent = '^';
+            upBtn.title = 'Move up';
+            upBtn.onclick = () => moveRow(row, -1);
+
+            const downBtn = document.createElement('button');
+            downBtn.type = 'button';
+            downBtn.className = 'order-btn';
+            downBtn.textContent = 'v';
+            downBtn.title = 'Move down';
+            downBtn.onclick = () => moveRow(row, 1);
+
+            const defaultLabel = document.createElement('label');
+            defaultLabel.title = 'Free default for this provider (shown before a manual pick). Must not be a Premium/Early model.';
+            const defaultRadio = document.createElement('input');
+            defaultRadio.type = 'radio';
+            defaultRadio.className = 'default-radio';
+            defaultRadio.name = `default-${provider}`;
+            defaultRadio.checked = !!isDefault;
+            defaultLabel.appendChild(defaultRadio);
+            defaultLabel.appendChild(document.createTextNode(' Default'));
+
             const premiumLabel = document.createElement('label');
             const premiumCheckbox = document.createElement('input');
             premiumCheckbox.type = 'checkbox';
@@ -406,7 +435,7 @@
             });
             consensusLabel.appendChild(consensusCheckbox);
             consensusLabel.appendChild(document.createTextNode(' Consensus'));
-            
+
             const removeBtn = document.createElement('button');
             removeBtn.className = 'remove-btn';
             removeBtn.textContent = 'X';
@@ -414,12 +443,15 @@
                 if (consensusCheckbox.checked) removeConsensusListValue(input.value.trim());
                 row.remove();
             };
-            
+
             row.appendChild(input);
+            row.appendChild(upBtn);
+            row.appendChild(downBtn);
+            row.appendChild(defaultLabel);
             row.appendChild(premiumLabel);
             row.appendChild(consensusLabel);
             row.appendChild(removeBtn);
-            
+
             return row;
         }
 
@@ -494,7 +526,7 @@
             if (!user) return;
             const idToken = await user.getIdToken();
             
-            const data = { premium: [], consensus: consensusListValues(), limits: {} };
+            const data = { premium: [], consensus: consensusListValues(), defaults: {}, limits: {} };
             function addConsensusValue(modelName) {
                 if (modelName && !data.consensus.includes(modelName)) {
                     data.consensus.push(modelName);
@@ -513,15 +545,20 @@
                     const input = row.querySelector('input[type="text"]');
                     const premiumCheckbox = row.querySelector('.premium-checkbox');
                     const consensusCheckbox = row.querySelector('.consensus-checkbox');
+                    const defaultRadio = row.querySelector('.default-radio');
                     const modelName = input.value.trim();
-                    
+
                     if (modelName) {
+                        // Reihenfolge = DOM-Reihenfolge der Zeilen (per ^/v sortierbar).
                         data[p].push(modelName);
                         if (premiumCheckbox.checked) {
                             data.premium.push(modelName);
                         }
                         if (consensusCheckbox.checked) {
                             addConsensusValue(modelName);
+                        }
+                        if (defaultRadio && defaultRadio.checked) {
+                            data.defaults[p] = modelName;
                         }
                     }
                 });

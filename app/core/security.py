@@ -109,6 +109,28 @@ def is_user_pro(uid: str) -> bool:
         logging.error(f"Pro-Check Fehler für {uid}: {e}")
         return False
 
+def is_user_early(uid: str) -> bool:
+    """
+    Liest aus Firestore, ob der Nutzer Early-Access hat: Feld 'early' == True
+    (oder tier == 'early'). Wird manuell vergeben, analog zum Pro-Tag.
+    Hinweis: Pro schliesst Early ein - das wird an den Aufrufstellen kombiniert
+    (is_user_pro(uid) or is_user_early(uid)), nicht hier.
+    """
+    try:
+        doc_ref = db_firestore.collection("users").document(uid)
+        doc = doc_ref.get()
+
+        if doc.exists:
+            data = doc.to_dict()
+            if data.get("early") in (True, "true", "True"):
+                return True
+            tier = str(data.get("tier", "")).lower()
+            return tier == "early"
+        return False
+    except Exception as e:
+        logging.error(f"Early-Check Fehler für {uid}: {e}")
+        return False
+
 def is_user_admin(uid: str) -> bool:
     """
     Liest aus Firestore, ob das Feld 'role' auf 'admin' steht.

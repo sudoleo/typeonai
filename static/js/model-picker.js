@@ -36,8 +36,18 @@
     return true;
   }
 
-  function applyTierDefaultModels(isPro) {
-    const defaults = isPro ? (window.PRO_DEFAULT_MODELS || {}) : (window.FREE_DEFAULT_MODELS || {});
+  function applyTierDefaultModels(isPro, isEarly) {
+    // Pro -> Pro-Defaults; nur Early-Tag -> Early-Defaults (Frontier-Low);
+    // sonst die guenstigen Free-Defaults. Pro schliesst Early-Zugang ein, hat
+    // aber eigene Defaults, daher die Pro-Abfrage zuerst.
+    let defaults;
+    if (isPro) {
+      defaults = window.PRO_DEFAULT_MODELS || {};
+    } else if (isEarly) {
+      defaults = window.EARLY_DEFAULT_MODELS || {};
+    } else {
+      defaults = window.FREE_DEFAULT_MODELS || {};
+    }
     window.App.modelPrefs.forEach(pref => {
       if (localStorage.getItem("pref_select_" + pref.key) !== null) return;
       const select = document.getElementById(pref.selectId);

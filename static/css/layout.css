@@ -196,12 +196,79 @@ body:has(.sidebar.collapsed) .main-wrapper {
 /* Eingeloggt zeigt der Container nur das runde Initial-Symbol –
    die Pill-Optik (Padding/Rahmen) entfaellt, sonst entsteht ein breites Oval. */
 .login-text:has(.email-container),
-.login-text:has(.email-container):hover {
+.login-text:has(.email-container):hover,
+.login-text:has(.login-skeleton),
+.login-text:has(.login-skeleton):hover {
   min-height: 0;
   padding: 0;
   border: 0;
   background: none;
   box-shadow: none;
+}
+
+.login-text:has(.login-skeleton) {
+  cursor: default;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   Skeleton-Loader: graue Platzhalter-Flaechen mit Shimmer, solange Auth-/
+   Nutzerdaten (Header-Avatar, Usage-Zahlen, Bookmarks) noch geladen werden.
+   Verhindern das Aufblitzen von Platzhaltertext, bis onIdTokenChanged /
+   fetchUsageData / loadBookmarks den echten Inhalt rendern.
+   -------------------------------------------------------------------------- */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--sidebar-border) 70%, transparent);
+  border-radius: 6px;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--glass-highlight) 65%, transparent),
+    transparent
+  );
+  transform: translateX(-100%);
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
+}
+
+/* Header-Avatar (runder Platzhalter). */
+.login-skeleton {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+/* Textzeile, z. B. die Usage-Zahlen in der Sidebar. */
+.skeleton-line {
+  display: inline-block;
+  height: 0.72rem;
+  vertical-align: middle;
+  border-radius: 5px;
+}
+
+/* Bookmark-Platzhalter in der Sidebar. */
+.skeleton-bookmark {
+  height: 34px;
+  margin-bottom: 8px;
+  border-radius: 8px;
 }
 
 /* --------------------------------------------------------------------------

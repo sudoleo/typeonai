@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request, Body, HTTPException
 
 from app.core.rate_limit import limiter
 import app.core.config as cfg
-from app.core.security import verify_user_token, extract_id_token, is_user_pro, db_firestore
+from app.core.security import verify_user_token, extract_id_token, is_user_pro, is_user_early, db_firestore
 from app.core.state import usage_counter, deep_search_usage, registered_ips, last_feedback_time
 
 router = APIRouter()
@@ -26,8 +26,9 @@ async def get_user_status(request: Request):
         # 1. UID verifizieren
         uid = verify_user_token(token)
         
-        # 2. Status aus Firestore holen
+        # 2. Status aus Firestore holen (Pro schliesst Early-Zugang ein)
         pro_status = is_user_pro(uid)
+        early_status = pro_status or is_user_early(uid)
 
         # 3. Limits basierend auf Status setzen
         limit_regular = cfg.get_usage_limit(pro_status)
@@ -36,6 +37,7 @@ async def get_user_status(request: Request):
         return {
             "uid": uid,
             "is_pro": pro_status,
+            "is_early": early_status,
             "limit": limit_regular,
             "deep_limit": limit_deep
         }

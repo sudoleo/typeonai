@@ -84,13 +84,37 @@ DEFAULT_MODEL_BY_PROVIDER = {
 GEMINI_FLASH_MODEL = DEFAULT_GEMINI_MODEL
 GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 GEMINI_35_FLASH_MODEL = "gemini-3.5-flash"
+# Defaults fuer Nutzer OHNE Early-Tag (und ohne Pro): durchweg die guenstigen
+# Basis-Modelle. Die teuren Early-Modelle (Frontier-Low + DeepSeek V4 Pro) sind
+# nur noch ueber den Early-Tag erreichbar (siehe EARLY_MODELS / is_user_early).
 FREE_DEFAULT_MODEL_BY_PROVIDER = {
+    "openai": DEFAULT_OPENAI_MODEL,
+    "mistral": DEFAULT_MISTRAL_MODEL,
+    "anthropic": DEFAULT_ANTHROPIC_MODEL,
+    "gemini": DEFAULT_GEMINI_MODEL,
+    "deepseek": DEEPSEEK_FLASH_MODEL,
+    "grok": DEFAULT_GROK_MODEL,
+}
+
+# Defaults fuer Early-Nutzer: die Frontier-Low-Varianten (frueheres Free-Default).
+EARLY_DEFAULT_MODEL_BY_PROVIDER = {
     "openai": OPENAI_FRONTIER_LOW_MODEL,
     "mistral": DEFAULT_MISTRAL_MODEL,
     "anthropic": ANTHROPIC_FRONTIER_LOW_MODEL,
     "gemini": GEMINI_FRONTIER_LOW_MODEL,
-    "deepseek": DEFAULT_DEEPSEEK_MODEL,
+    "deepseek": DEEPSEEK_PRO_MODEL,
     "grok": GROK_FRONTIER_LOW_MODEL,
+}
+
+# Unveraenderliche Basis fuer den Free-Default je Provider. Der Admin kann den
+# Free-Default pro Provider in Firestore (Feld "defaults") ueberschreiben; ohne
+# Override gilt diese Basis (siehe apply_default_models).
+_BASE_FREE_DEFAULTS = dict(FREE_DEFAULT_MODEL_BY_PROVIDER)
+
+# Vom Admin gepflegte Anzeige-Reihenfolge der Modelle je Provider in den normalen
+# Pickern. Leere Liste => deterministischer Auto-Sort (model_picker_sort_key).
+MODEL_ORDER_BY_PROVIDER: dict[str, list[str]] = {
+    provider: [] for provider in DEFAULT_MODEL_BY_PROVIDER
 }
 
 DEFAULT_CONSENSUS_MODELS = [
@@ -186,8 +210,13 @@ FRONTIER_LOW_MODEL_IDS_BY_PROVIDER = {
     "grok": GROK_FRONTIER_LOW_MODEL,
 }
 FRONTIER_LOW_MODELS = set(FRONTIER_LOW_MODEL_IDS_BY_PROVIDER.values())
-EARLY_AND_PRO_MODELS = {DEFAULT_MISTRAL_MODEL, DEEPSEEK_PRO_MODEL}
-EARLY_FREE_MODELS = FRONTIER_LOW_MODELS | EARLY_AND_PRO_MODELS
+# Modelle, die sowohl Early- als auch Pro-Charakter haben (teuer, aber kein
+# eigenes Frontier-Low-Mapping). Mistral Small ist hier bewusst NICHT mehr
+# enthalten: es ist guenstig und bleibt ein normales Free-Modell.
+EARLY_AND_PRO_MODELS = {DEEPSEEK_PRO_MODEL}
+# Early-Modelle sind ab sofort tag-gated (nicht mehr gratis fuer alle): nur mit
+# Early-Tag (oder Pro, das Early einschliesst) auswaehlbar.
+EARLY_MODELS = FRONTIER_LOW_MODELS | EARLY_AND_PRO_MODELS
 REQUIRED_PRO_MODELS = {MISTRAL_PRO_MODEL, ANTHROPIC_PRO_MODEL}
 DEPRECATED_DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner"}
 REQUIRED_DEEPSEEK_MODELS = {DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL}
@@ -235,6 +264,10 @@ ALL_ALLOWED_MODELS = (
 MODEL_LABEL_OVERRIDES = {
     "gpt-5.5": "GPT-5.5",
     OPENAI_FRONTIER_LOW_MODEL: "GPT-5.5",
+    DEFAULT_OPENAI_MODEL: "GPT-5.4 mini",
+    DEFAULT_ANTHROPIC_MODEL: "Claude Haiku 4.5",
+    DEFAULT_GEMINI_MODEL: "Gemini 3.1 Flash-Lite",
+    DEFAULT_GROK_MODEL: "Grok 4.20",
     "mistral-small-latest": "Mistral Small 4",
     MISTRAL_PRO_MODEL: "Mistral Medium 3.5",
     "claude-opus-4-7": "Claude Opus 4.7",
@@ -324,15 +357,6 @@ def rebuild_model_configs():
             is_low_reasoning=True,
             low_config={"reasoning": {"effort": "low"}},
         ),
-        DEFAULT_MISTRAL_MODEL: ModelConfig(
-            internal_id=DEFAULT_MISTRAL_MODEL,
-            provider="mistral",
-            api_model=DEFAULT_MISTRAL_MODEL,
-            label=_fallback_label(DEFAULT_MISTRAL_MODEL),
-            is_free=True,
-            is_pro=True,
-            is_frontier=True,
-        ),
         DEEPSEEK_PRO_MODEL: ModelConfig(
             internal_id=DEEPSEEK_PRO_MODEL,
             provider="deepseek",
@@ -401,7 +425,13 @@ def get_consensus_model_config(model_id: str | None) -> ModelConfig | None:
 
 def is_premium_consensus_model(model_id: str | None) -> bool:
     config = get_consensus_model_config(model_id)
-    return bool(config and config.is_pro and config.internal_id not in EARLY_FREE_MODELS)
+    return bool(config and config.is_pro and config.internal_id not in EARLY_MODELS)
+
+
+def is_early_consensus_model(model_id: str | None) -> bool:
+    """True, wenn die gewaehlte Consensus-Engine ein tag-gated Early-Modell ist
+    (aktuell nur das Gemini-Frontier-Low). Erfordert Early- oder Pro-Zugang."""
+    return bool(model_id) and model_id in EARLY_MODELS
 
 
 def get_consensus_model_label(model_id: str) -> str:
@@ -416,7 +446,7 @@ def get_consensus_model_badge(model_id: str) -> str:
     badges = []
     if config and config.is_frontier:
         badges.append("Early")
-    if config and config.is_pro and config.internal_id not in EARLY_FREE_MODELS:
+    if config and config.is_pro and config.internal_id not in EARLY_MODELS:
         badges.append("Pro")
     return " · ".join(dict.fromkeys(badges))
 
@@ -450,9 +480,56 @@ def get_model_picker_metadata() -> dict[str, dict[str, str]]:
 def model_picker_sort_key(model_id: str):
     config = get_model_config(model_id)
     label = config.label if config else model_id
-    is_premium = model_id in PREMIUM_MODELS and model_id not in EARLY_FREE_MODELS
+    is_premium = model_id in PREMIUM_MODELS and model_id not in EARLY_MODELS
     is_frontier = bool(config and config.is_frontier)
     return (is_premium, label.lower(), not is_frontier, model_id.lower())
+
+
+def get_ordered_models(provider: str) -> list[str]:
+    """Modelle eines Providers in Anzeige-Reihenfolge fuer die normalen Picker.
+    Die vom Admin gepflegte Reihenfolge (MODEL_ORDER_BY_PROVIDER) gewinnt; alle
+    erlaubten Modelle ohne explizite Position werden deterministisch angehaengt,
+    damit neu hinzugefuegte Modelle nie verschwinden."""
+    allowed = _provider_allowed_sets().get(provider, set())
+    ordered = [model for model in MODEL_ORDER_BY_PROVIDER.get(provider, []) if model in allowed]
+    seen = set(ordered)
+    rest = sorted((model for model in allowed if model not in seen), key=model_picker_sort_key)
+    return ordered + rest
+
+
+def apply_model_order(order_by_provider: dict | None) -> None:
+    """Uebernimmt die Admin-Reihenfolge je Provider (auf erlaubte Modelle gefiltert)."""
+    data = order_by_provider or {}
+    allowed_sets = _provider_allowed_sets()
+    for provider in MODEL_ORDER_BY_PROVIDER:
+        incoming = data.get(provider)
+        allowed = allowed_sets.get(provider, set())
+        if isinstance(incoming, list):
+            seen = set()
+            ordered = []
+            for model in incoming:
+                model = str(model)
+                if model in allowed and model not in seen:
+                    seen.add(model)
+                    ordered.append(model)
+            MODEL_ORDER_BY_PROVIDER[provider] = ordered
+        else:
+            MODEL_ORDER_BY_PROVIDER[provider] = []
+
+
+def apply_default_models(defaults: dict | None) -> None:
+    """Setzt den Free-Default je Provider. Ein Override gilt nur, wenn das Modell
+    erlaubt und weder Premium noch Early ist (sonst saehe ein eingeloggter
+    Free-Nutzer einen gesperrten Default). Sonst greift die Basis."""
+    overrides = defaults or {}
+    allowed_sets = _provider_allowed_sets()
+    for provider, base in _BASE_FREE_DEFAULTS.items():
+        chosen = str(overrides.get(provider) or "").strip()
+        allowed = allowed_sets.get(provider, set())
+        if chosen and chosen in allowed and chosen not in PREMIUM_MODELS and chosen not in EARLY_MODELS:
+            FREE_DEFAULT_MODEL_BY_PROVIDER[provider] = chosen
+        else:
+            FREE_DEFAULT_MODEL_BY_PROVIDER[provider] = base
 
 
 rebuild_model_configs()
@@ -600,6 +677,11 @@ def load_models_from_db():
             else:
                 ALLOWED_CONSENSUS_MODELS.clear()
                 ALLOWED_CONSENSUS_MODELS.extend(normalize_consensus_models(DEFAULT_CONSENSUS_MODELS))
+
+            # Admin-gepflegte Picker-Reihenfolge (aus den geordneten Provider-Listen)
+            # und Free-Default je Provider uebernehmen.
+            apply_model_order({provider: data.get(provider) for provider in MODEL_ORDER_BY_PROVIDER})
+            apply_default_models(data.get("defaults"))
 
             apply_limits(data.get("limits"))
             ensure_default_models_allowed()

@@ -253,7 +253,20 @@ Wichtige Verträge im Backend:
 
 Modell-IDs/Tier-Zuordnung/Labels: ausschließlich in `app/core/config.py` pflegen
 (`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
-`FREE_DEFAULT_MODEL_BY_PROVIDER`, Frontier-Low-Mappings, `MODEL_LABEL_OVERRIDES`).
+`FREE_DEFAULT_MODEL_BY_PROVIDER`, `EARLY_DEFAULT_MODEL_BY_PROVIDER`,
+Frontier-Low-Mappings, `MODEL_LABEL_OVERRIDES`).
+
+Early-Gating: `EARLY_MODELS` (Frontier-Low + DeepSeek V4 Pro) sind tag-gated, nicht
+mehr gratis. Zugang via `is_user_early(uid)` (Firestore-Feld `early`/`tier=='early'`);
+Pro schließt Early ein (Kombination `is_user_pro or is_user_early` an den Aufrufstellen,
+`validate_model(..., is_early=...)`, `is_early_consensus_model`). Nicht-Early-Nutzer
+defaulten auf die günstigen Basis-Modelle. Mistral Small ist bewusst KEIN Early-Modell.
+
+Admin-Modellkonfig (`/admin`, `app_config/models` in Firestore): Provider-Listen sind
+geordnet (Picker-Reihenfolge via `MODEL_ORDER_BY_PROVIDER`/`get_ordered_models`, im Admin
+per ^/v sortierbar); Feld `defaults` setzt den Free-Default je Provider (`apply_default_models`,
+nur Nicht-Premium/Nicht-Early erlaubt, sonst `_BASE_FREE_DEFAULTS`). `normalize_models_document`
+erhält die Reihenfolge (kein `sorted` mehr) und validiert `defaults`.
 
 ---
 
