@@ -387,6 +387,7 @@
         delete box.dataset.consensusAnswer;
         delete box.dataset.consensusSources;
         delete box.dataset.responseError;
+        box.dataset.responseState = "pending";
         window.setSpinnerEl(box);
       });
       window.currentEvidenceSources = [];
@@ -448,13 +449,25 @@
 
       function markModelSuccess(outputEl) {
         const box = outputEl?.closest?.(".response-box");
-        if (box) delete box.dataset.responseError;
+        if (box) {
+          delete box.dataset.responseError;
+          box.dataset.responseState = "complete";
+        }
+        if (isAgentModeEnabled()) {
+          window.updateAgentModeUI?.();
+        }
       }
 
       function markModelError(outputEl, message, data = {}) {
         const box = outputEl?.closest?.(".response-box");
-        if (box) box.dataset.responseError = "true";
+        if (box) {
+          box.dataset.responseError = "true";
+          box.dataset.responseState = "error";
+        }
         outputEl.innerText = message;
+        if (isAgentModeEnabled()) {
+          window.updateAgentModeUI?.();
+        }
         if (isUsageLimitError(data, message)) {
           markQueryBlockingError(message, data);
         }

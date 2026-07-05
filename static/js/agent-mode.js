@@ -75,6 +75,7 @@
       .filter(pref => document.getElementById(pref.checkId)?.checked)
       .map(pref => {
         const select = document.getElementById(pref.selectId);
+        const responseBox = document.getElementById(pref.responseId);
         const displayedText = document.getElementById(pref.textId)?.textContent || "";
         const selectedText = deepSearchActive
           ? (window.App.deepThinkModelLabels[pref.key] || displayedText)
@@ -84,6 +85,7 @@
           pref,
           label: pref.label,
           model: modelText,
+          responseState: responseBox?.dataset?.responseState || "",
           usesDeepThinkModel: deepSearchActive
         };
       });
@@ -184,6 +186,9 @@
         chip.setAttribute("role", "group");
         chip.setAttribute("aria-label", `Choose ${modelInfo.label} model`);
         chip.textContent = "";
+        if (modelInfo.responseState) {
+          chip.dataset.responseState = modelInfo.responseState;
+        }
 
         const chipLabel = document.createElement("span");
         chipLabel.className = "agent-mode-chip-label";
@@ -209,6 +214,15 @@
           chipModel.className = "agent-mode-chip-model";
           chipModel.textContent = modelInfo.model;
           chip.appendChild(chipModel);
+        }
+
+        if (modelInfo.responseState === "complete") {
+          const done = document.createElement("span");
+          done.className = "agent-mode-chip-done";
+          done.setAttribute("aria-hidden", "true");
+          done.title = `${modelInfo.label} response complete`;
+          chip.appendChild(done);
+          chip.setAttribute("aria-label", `${modelInfo.label} response complete`);
         }
         modelsEl.appendChild(chip);
       });

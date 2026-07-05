@@ -80,7 +80,8 @@ deferred am `</body>` — `app-init.js`.
   `dataset.consensusAnswer` / `dataset.consensusSources`; `window.currentEvidenceSources`.
 - **`attachments.js`** — Attachment-UI/Payload (Pro); `window.pendingAttachments`,
   `getAttachmentsPayload`.
-- **`agent-mode.js`** — Agent-Mode-UI/Status/Timer; einzige Stelle, die den
+- **`agent-mode.js`** — Agent-Mode-UI/Status/Timer; zeigt pro Modell den
+  Query-Abschluss aus `dataset.responseState`; einzige Stelle, die den
   Auto-Consensus-Toggle erzwingt/sperrt.
 - **`consensus-lifecycle.js`** — Consensus-Sichtbarkeit, Gate/Availability,
   Run-State, Abort/Cancel, Run-ID-Gating, Auto-Consensus-Persistenz. Exponiert die
@@ -368,7 +369,8 @@ erhält die Reihenfolge (kein `sorted` mehr) und validiert `defaults`.
   markPendingCanceled/initAutoConsensusToggle`). Run-ID-Gating nicht umgehen, sonst
   rendern alte Läufe in neue.
 - **DOM-als-State**: `dataset.consensusAnswer`, `dataset.consensusSources`,
-  `.excluded`-Klassen u. a. sind echte State-Quellen. Vorsicht beim Umbauen von
+  `dataset.responseState`, `.excluded`-Klassen u. a. sind echte State-Quellen.
+  Vorsicht beim Umbauen von
   Markup — der State-Refactor ist bewusst noch nicht passiert.
 - **Jinja↔JS-Brücke**: Config geht nur über den `<head>`-`window.*`-Block
   (`FIREBASE_CONFIG`, `APP_LIMITS`, `FREE_DEFAULT_MODELS`, `PRO_DEFAULT_MODELS`,

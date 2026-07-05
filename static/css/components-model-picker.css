@@ -445,10 +445,12 @@
 
   .consensus-switch-container {
     left: 10px !important;
+    right: auto !important;
     bottom: 10px !important;
     gap: 8px !important;
     max-width: calc(100% - 224px);
     flex-wrap: nowrap;
+    overflow: visible;
   }
 
   /* Konsens-Picker auf schmalen Screens kompakter, Label entfällt */
@@ -564,8 +566,11 @@
   }
 
   .agent-mode-control label.switch::before {
-    -webkit-mask-image: url("../favicon.png");
-    mask-image: url("../favicon.png");
+    width: 21px;
+    height: 18px;
+    background: currentColor;
+    -webkit-mask: url("../favicon.png") center / contain no-repeat;
+    mask: url("../favicon.png") center / contain no-repeat;
   }
 
 }
@@ -573,7 +578,7 @@
 @media (max-width: 420px) {
   .consensus-switch-container {
     gap: 5px !important;
-    max-width: calc(100% - 118px);
+    max-width: calc(100% - 154px);
   }
 
   .consensus-switch-container label.switch {
@@ -593,6 +598,47 @@
 
   .input-actions-container {
     gap: 6px;
+  }
+
+  .input-actions-container .consensus-model-inline {
+    flex: 0 0 auto;
+    margin-right: 0;
+  }
+
+  .input-actions-container .consensus-model-inline .select-wrapper select,
+  .input-actions-container .consensus-model-inline .select-wrapper .model-picker-display {
+    width: 58px;
+    max-width: 58px;
+    min-width: 58px;
+    padding-inline: 8px 20px;
+    color: transparent;
+  }
+
+  .input-actions-container .consensus-model-inline .select-wrapper .model-picker-display-text {
+    max-width: 0;
+    overflow: hidden;
+  }
+
+  .input-actions-container .consensus-model-inline .select-wrapper::before {
+    content: "AI";
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    z-index: 2;
+    color: var(--text-color);
+    font-size: 0.72rem;
+    font-weight: 750;
+    line-height: 1;
+    letter-spacing: 0.01em;
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+
+  .input-actions-container .consensus-model-inline .select-wrapper::after {
+    right: 8px;
+    border-left-width: 3px;
+    border-right-width: 3px;
+    border-top-width: 4px;
   }
 
   .input-actions-container .input-action-btn-primary {
