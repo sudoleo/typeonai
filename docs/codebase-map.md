@@ -44,7 +44,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, redirect→`/app` bei Session), `/app` (Haupt-App), `/admin`, `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
-| `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`. Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
+| `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
 | `auth.py` | `/register`, `/confirm-registration`. |
 | `users.py` | `/user_status`, `/usage`, `/delete_account`, `/track-interest`. |
 | `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus`. |
@@ -90,7 +90,8 @@ deferred am `</body>` — `app-init.js`.
 - **`user-tier.js`** — Free/Pro-UI, Premium-Modellstatus (`updateUserTierUI`,
   `updatePremiumModelsState`).
 - **`consensus-insights.js`** — strukturierte Auswertung: Claim-Badges,
-  Difference-Karten, Credibility-Frame-Farben, Jump-to-answer, Spalten-Balancer.
+  Difference-Karten, Credibility-Frame-Farben, Jump-to-answer, Spalten-Balancer,
+  Resolve-Runde (Button an Widerspruchs-Karten → `POST /resolve`).
 - **`consensus-run.js`** — `window.getConsensus`: baut `/consensus`-Payload, fährt
   den SSE-Stream, rendert Ergebnis + Citation/Share-Meta. `parseBestModel`.
 - **`query-send.js`** — `window.sendQuestion`: `/prepare` + `/ask_*`-Fan-out,
@@ -170,6 +171,21 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
 - Bei erfolgreichem Lauf eines verifizierten Nutzers wird das Ergebnis als
   `pending_result` für das Share-Feature persistiert (→ `result_id`).
 
+### Resolve-Runde
+`POST /resolve` (`chat.py` → `resolve_engine.py`) konfrontiert die
+dissentierenden Modelle eines Widerspruchs (Karte aus `differences_data`)
+gezielt mit der Gegenposition: pro beteiligtem Modell ein paralleler Call auf
+dem günstigen Judge-Modell seines Providers
+(`DIFFERENCES_JUDGE_MODEL_BY_PROVIDER`), Structured Output
+`{decision: maintain|revise, position, reason}`. Aggregiertes Outcome:
+`resolved` (≥1 revidiert, ≥1 bleibt) / `standoff` (alle bleiben) /
+`mutual_revision` (alle revidieren) / `error`. Verifizierter Login nötig,
+kostet 1 regulären Usage-Punkt (außer `useOwnKeys`), Eingaben werden wie bei
+`/consensus` serverseitig gekappt (`normalize_resolve_positions`), Ergebnis
+wird **nicht** persistiert. Frontend: „Resolve with the models"-Button an
+Contradiction-Karten in `consensus-insights.js` (nur bei ≥2 beteiligten
+Modellen).
+
 ### Agent Mode
 `agent-mode.js` koppelt Auto-Consensus: nach Abschluss aller Modellantworten löst
 `query-send.js` automatisch `getConsensus` aus. Run-State/Gating läuft über
@@ -229,6 +245,7 @@ app/services/llm/
   engines.py                 Provider-Requests (build_provider_payload, query_*)
   streaming.py               SSE-Helfer, stream_*_query, streaming_model_response
   consensus_engine.py        query/stream_consensus + query/stream_differences, normalize_model_name
+  resolve_engine.py          Resolve-Runde (run_resolve_round, normalize_resolve_positions)
   citations.py               Antwort-Parsing + Quellen (source_response, make_llm_result)
   attachments.py             Attachment-Validierung/Aufbereitung
 app/services/

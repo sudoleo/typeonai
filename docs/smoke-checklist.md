@@ -21,6 +21,10 @@ abgesichert (Baseline: 145 passed).
 - [ ] Credibility-Frame-Farbe (cred-very … cred-not) wird gesetzt.
 - [ ] Consensus-Insights: Claim-Badges, Difference-Karten, Klick öffnet Popover,
       „Jump to model answer" highlightet die Originalantwort.
+- [ ] Resolve-Runde: „Resolve with the models"-Button an Widerspruchs-Karten
+      (nur Contradictions mit ≥2 beteiligten Modellen), Klick zeigt Outcome-Badge
+      + Modell-Zeilen, Usage-Counter aktualisiert sich, Fehlerfall reaktiviert
+      den Button.
 - [ ] Spalten-Balancer: Differences-Spalte passt Breite an.
 - [ ] Share-Dialog: Link erstellen, Liste anzeigen, Link kopieren.
 

@@ -511,6 +511,159 @@
             }
           }
 
+          // --- Resolve-Runde ---------------------------------------------------
+          // Konfrontiert die dissentierenden Modelle eines Widerspruchs gezielt
+          // mit der Gegenposition (POST /resolve). Ergebnis wird in der Karte
+          // gerendert; kostet einen regulären Request.
+          function resolveOutcomeSummary(outcome, results) {
+            const revised = results.filter(r => r.decision === "revise").map(r => modelDisplayName(r.model));
+            const maintained = results.filter(r => r.decision === "maintain").map(r => modelDisplayName(r.model));
+            switch (outcome) {
+              case "resolved":
+                return {
+                  cls: "is-resolved",
+                  text: "Resolved: " + revised.join(", ") + " revised after seeing the counter-position; "
+                    + maintained.join(", ") + " confirmed."
+                };
+              case "standoff":
+                return { cls: "is-standoff", text: "Confirmed dissent: every model maintains its position after re-examination." };
+              case "mutual_revision":
+                return { cls: "is-mixed", text: "All models revised their position. The point stays unclear; verify independently." };
+              default:
+                return { cls: "is-error", text: "The resolve round did not return a usable result. Please try again." };
+            }
+          }
+
+          function renderResolveResult(resultBox, data) {
+            resultBox.innerHTML = "";
+            const summary = resolveOutcomeSummary(data.outcome, Array.isArray(data.results) ? data.results : []);
+            const badge = document.createElement("div");
+            badge.className = "resolve-outcome " + summary.cls;
+            badge.textContent = summary.text;
+            resultBox.appendChild(badge);
+
+            (Array.isArray(data.results) ? data.results : []).forEach(function (r) {
+              const row = document.createElement("div");
+              row.className = "resolve-model-row";
+              const head = document.createElement("div");
+              head.className = "resolve-model-head";
+              const name = document.createElement("span");
+              name.className = "resolve-model-name";
+              name.textContent = modelDisplayName(r.model);
+              const decision = document.createElement("span");
+              decision.className = "resolve-decision is-" + (r.decision || "error");
+              decision.textContent = r.decision === "maintain" ? "maintains"
+                : (r.decision === "revise" ? "revised" : "no result");
+              head.append(name, decision);
+              row.appendChild(head);
+              if (r.position) {
+                const pos = document.createElement("div");
+                pos.className = "resolve-position";
+                pos.textContent = r.position;
+                row.appendChild(pos);
+              }
+              resultBox.appendChild(row);
+            });
+            resultBox.hidden = false;
+          }
+
+          async function runResolveRound(diff, button, resultBox) {
+            if (!window.auth?.currentUser) {
+              window.App?.showPopup?.("Please log in to resolve contradictions.");
+              return;
+            }
+            let idToken = null;
+            try {
+              idToken = await window.auth.currentUser.getIdToken();
+            } catch (e) {
+              console.error("Token refresh error in resolve:", e);
+            }
+            if (!idToken) {
+              window.App?.showPopup?.("Please log in to resolve contradictions.");
+              return;
+            }
+
+            const question = (window.lastQuestion || $("questionInput")?.value || "").trim();
+            const useOwnKeys = !!$("useOwnKeysSwitch")?.checked;
+            const originalLabel = button.textContent;
+            button.disabled = true;
+            button.classList.add("is-loading");
+            button.textContent = "Asking the models…";
+            window.trackUmamiEvent?.("app_resolve_started", { positions: diff.positions.length });
+
+            try {
+              const response = await fetch("/resolve", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  id_token: idToken,
+                  useOwnKeys: useOwnKeys,
+                  question: question,
+                  claim: diff.claim,
+                  positions: diff.positions,
+                  openai_key: localStorage.getItem("openaiKey") || "",
+                  mistral_key: localStorage.getItem("mistralKey") || "",
+                  anthropic_key: localStorage.getItem("anthropicKey") || "",
+                  gemini_key: localStorage.getItem("geminiKey") || "",
+                  deepseek_key: localStorage.getItem("deepseekKey") || "",
+                  grok_key: localStorage.getItem("grokKey") || ""
+                })
+              });
+              const data = await response.json().catch(() => ({}));
+              if (!response.ok) {
+                const detail = data?.detail && typeof data.detail === "object" ? data.detail : null;
+                const message = detail?.error || data?.error
+                  || (typeof data?.detail === "string" ? data.detail : "")
+                  || ("Resolve HTTP " + response.status);
+                throw new Error(message);
+              }
+
+              if (data.free_usage_remaining !== undefined) {
+                const usageEl = $("freeUsageDisplay");
+                if (usageEl) usageEl.innerText = "Requests: " + data.free_usage_remaining + " / " + window.currentMaxLimit;
+              }
+
+              renderResolveResult(resultBox, data);
+              button.hidden = true;
+              window.trackUmamiEvent?.("app_resolve_completed", { outcome: data.outcome });
+            } catch (error) {
+              console.error("Resolve round failed:", error);
+              resultBox.innerHTML = "";
+              const note = document.createElement("div");
+              note.className = "resolve-outcome is-error";
+              note.textContent = error?.message || "The resolve round failed. Please try again.";
+              resultBox.appendChild(note);
+              resultBox.hidden = false;
+              button.disabled = false;
+              button.classList.remove("is-loading");
+              button.textContent = originalLabel;
+              window.trackUmamiEvent?.("app_resolve_completed", { outcome: "request_error" });
+            }
+          }
+
+          function buildResolveSection(diff) {
+            if (diff.type !== "contradiction") return null;
+            const involved = new Set();
+            diff.positions.forEach(function (pos) {
+              (pos.models || []).forEach(function (m) { if (MODEL_BOX_IDS[m]) involved.add(m); });
+            });
+            if (involved.size < 2 || diff.positions.length < 2) return null;
+
+            const wrap = document.createElement("div");
+            wrap.className = "diff-resolve";
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "diff-resolve-btn";
+            btn.textContent = "Resolve with the models";
+            btn.title = "Ask the disagreeing models to re-examine this point against each other's position (uses 1 request)";
+            const resultBox = document.createElement("div");
+            resultBox.className = "diff-resolve-result";
+            resultBox.hidden = true;
+            btn.addEventListener("click", function () { runResolveRound(diff, btn, resultBox); });
+            wrap.append(btn, resultBox);
+            return wrap;
+          }
+
           // --- Differences-Karten --------------------------------------------
           function renderDifferenceCards(differences, modelCount) {
             const cards = $("differencesCards");
@@ -603,6 +756,8 @@
                   verify.textContent = "Worth verifying: " + diff.verify;
                   body.appendChild(verify);
                 }
+                const resolveSection = buildResolveSection(diff);
+                if (resolveSection) body.appendChild(resolveSection);
                 card.appendChild(body);
                 cards.appendChild(card);
               });

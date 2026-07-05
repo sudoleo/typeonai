@@ -414,6 +414,133 @@
   overflow-wrap: anywhere;
 }
 
+/* --- Resolve-Runde: Button + Ergebnis in der Widerspruchs-Karte ----------- */
+.diff-resolve {
+  margin-top: 9px;
+}
+
+.diff-resolve-btn {
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--sidebar-border));
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: color-mix(in srgb, var(--accent) 72%, var(--text-color));
+  font-size: 0.76rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.diff-resolve-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.diff-resolve-btn:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.resolve-outcome {
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-xs);
+  font-size: 0.79rem;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.resolve-outcome.is-resolved {
+  background: color-mix(in srgb, #2c7a2c 9%, var(--response-bg));
+  border: 1px solid color-mix(in srgb, #2c7a2c 26%, var(--sidebar-border));
+  color: color-mix(in srgb, #196a35 70%, var(--text-color));
+}
+
+.dark-mode .resolve-outcome.is-resolved {
+  color: color-mix(in srgb, #8ee6c8 72%, var(--text-color));
+}
+
+.resolve-outcome.is-standoff {
+  background: color-mix(in srgb, #cf5a4a 9%, var(--response-bg));
+  border: 1px solid color-mix(in srgb, #b23b2e 30%, var(--sidebar-border));
+  color: color-mix(in srgb, #8a251a 74%, var(--text-color));
+}
+
+.dark-mode .resolve-outcome.is-standoff {
+  color: color-mix(in srgb, #f3a08f 78%, var(--text-color));
+}
+
+.resolve-outcome.is-mixed {
+  background: color-mix(in srgb, #d99b46 10%, var(--response-bg));
+  border: 1px solid color-mix(in srgb, #d99b46 30%, var(--sidebar-border));
+  color: color-mix(in srgb, #8a5a10 76%, var(--text-color));
+}
+
+.dark-mode .resolve-outcome.is-mixed {
+  color: color-mix(in srgb, #f3c66f 78%, var(--text-color));
+}
+
+.resolve-outcome.is-error {
+  background: color-mix(in srgb, var(--sidebar-hover) 60%, transparent);
+  border: 1px solid var(--sidebar-border);
+  color: var(--sidebar-text-muted);
+}
+
+.resolve-model-row {
+  padding: 6px 0;
+}
+
+.resolve-model-row + .resolve-model-row {
+  border-top: 1px dashed color-mix(in srgb, var(--sidebar-border) 65%, transparent);
+}
+
+.resolve-model-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.resolve-model-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--text-color) 82%, var(--sidebar-text-muted));
+}
+
+.resolve-decision {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.resolve-decision.is-maintain {
+  color: color-mix(in srgb, #8a5a10 78%, var(--text-color));
+}
+
+.dark-mode .resolve-decision.is-maintain {
+  color: color-mix(in srgb, #f3c66f 80%, var(--text-color));
+}
+
+.resolve-decision.is-revise {
+  color: color-mix(in srgb, #196a35 72%, var(--text-color));
+}
+
+.dark-mode .resolve-decision.is-revise {
+  color: color-mix(in srgb, #8ee6c8 74%, var(--text-color));
+}
+
+.resolve-decision.is-error {
+  color: var(--sidebar-text-muted);
+}
+
+.resolve-position {
+  margin-top: 2px;
+  font-size: 0.81rem;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--text-color) 86%, var(--sidebar-text-muted));
+  overflow-wrap: anywhere;
+}
+
 /* Empty State: explizit "nichts gefunden" statt leerer Fläche */
 .diff-empty-state {
   padding: 12px;

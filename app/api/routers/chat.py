@@ -38,6 +38,11 @@ from app.services.llm.consensus_engine import (
     stream_consensus,
     stream_differences,
 )
+from app.services.llm.resolve_engine import (
+    InvalidResolvePayload,
+    normalize_resolve_positions,
+    run_resolve_round,
+)
 from app.services.share_snapshots import persist_pending_result
 from tool_heuristics import get_realtime_context, get_intent_from_llm
 
@@ -80,6 +85,28 @@ def get_valid_active_count(data: dict) -> int:
         raise HTTPException(status_code=400, detail="active_count must be between 1 and 6.")
 
     return active_count
+
+
+ENGINE_KEY_FIELDS = {
+    "OpenAI": ("openai_key", "DEVELOPER_OPENAI_API_KEY"),
+    "Mistral": ("mistral_key", "DEVELOPER_MISTRAL_API_KEY"),
+    "Anthropic": ("anthropic_key", "DEVELOPER_ANTHROPIC_API_KEY"),
+    "Gemini": ("gemini_key", "DEVELOPER_GEMINI_API_KEY"),
+    "DeepSeek": ("deepseek_key", "DEVELOPER_DEEPSEEK_API_KEY"),
+    "Grok": ("grok_key", "DEVELOPER_GROK_API_KEY"),
+}
+
+
+def build_engine_api_keys(data: dict, use_own_keys: bool) -> dict:
+    """Keys fuer Consensus-/Differences-/Resolve-Engines: bei useOwnKeys nur
+    die vom Nutzer uebermittelten Keys, sonst Fallback auf die Developer-Keys."""
+    api_keys = {}
+    for label, (field, env_name) in ENGINE_KEY_FIELDS.items():
+        key = data.get(field)
+        if not use_own_keys:
+            key = key or os.environ.get(env_name)
+        api_keys[label] = key
+    return api_keys
 
 
 def cap_engine_text(value, limit: int):
@@ -532,22 +559,7 @@ def consensus(request: Request, data: dict = Body(...)):
         if not is_pro:
             raise HTTPException(status_code=403, detail="Premium consensus engines are reserved for Pro users.")
 
-    api_keys = {}
-    if use_own_keys:
-        api_keys["OpenAI"] = data.get("openai_key")
-        api_keys["Mistral"] = data.get("mistral_key")
-        api_keys["Anthropic"] = data.get("anthropic_key")
-        api_keys["Gemini"] = data.get("gemini_key")
-        api_keys["DeepSeek"] = data.get("deepseek_key")
-        api_keys["Grok"] = data.get("grok_key")
-
-    else:
-        api_keys["OpenAI"] = data.get("openai_key") or os.environ.get("DEVELOPER_OPENAI_API_KEY")
-        api_keys["Mistral"] = data.get("mistral_key") or os.environ.get("DEVELOPER_MISTRAL_API_KEY")
-        api_keys["Anthropic"] = data.get("anthropic_key") or os.environ.get("DEVELOPER_ANTHROPIC_API_KEY")
-        api_keys["Gemini"] = data.get("gemini_key") or os.environ.get("DEVELOPER_GEMINI_API_KEY")
-        api_keys["DeepSeek"] = data.get("deepseek_key") or os.environ.get("DEVELOPER_DEEPSEEK_API_KEY")
-        api_keys["Grok"] = data.get("grok_key") or os.environ.get("DEVELOPER_GROK_API_KEY")
+    api_keys = build_engine_api_keys(data, use_own_keys)
 
     # Validierung der erforderlichen Parameter (nur für Modelle, die nicht ausgeschlossen wurden)
     missing = []
@@ -790,3 +802,64 @@ def consensus(request: Request, data: dict = Body(...)):
             "is_pro_user": is_pro,
         })
     return response
+
+
+@router.post("/resolve")
+@limiter.limit("3/minute")
+def resolve(request: Request, data: dict = Body(...)):
+    """Resolve-Runde: konfrontiert die dissentierenden Modelle eines
+    Widerspruchs (aus differences_data) gezielt mit der Gegenposition.
+    Kostet einen regulaeren Usage-Punkt; Ergebnis wird nicht persistiert."""
+    id_token = extract_id_token(request, data)
+    use_own_keys = parse_boolean_flag(data.get("useOwnKeys", False))
+
+    if not id_token:
+        raise HTTPException(
+            status_code=401,
+            detail=OWN_KEYS_LOGIN_REQUIRED if use_own_keys else "Authentication required",
+        )
+    try:
+        uid = verify_user_token(id_token)
+        is_pro = is_user_pro(uid)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    question = cap_engine_text(data.get("question"), cfg.get_consensus_question_char_limit())
+    if not isinstance(question, str) or not question.strip():
+        raise HTTPException(status_code=400, detail="Missing 'question' in request body.")
+
+    try:
+        claim, positions = normalize_resolve_positions(data.get("claim"), data.get("positions"))
+    except InvalidResolvePayload as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    limit_regular = cfg.get_usage_limit(is_pro)
+    limit_deep = cfg.get_deep_search_limit(is_pro)
+
+    if not use_own_keys:
+        current_usage = usage_counter.get(uid, 0)
+        current_deep_usage = deep_search_usage.get(uid, 0)
+        if current_usage >= limit_regular:
+            msg = "Pro usage limit reached." if is_pro else "Your free quota has been used up. Please store your own API keys or upgrade to Pro."
+            raise HTTPException(
+                status_code=403,
+                detail=build_usage_limit_detail(
+                    msg,
+                    "usage_limit_exceeded",
+                    limit_regular,
+                    current_usage,
+                    limit_deep,
+                    current_deep_usage,
+                ),
+            )
+        usage_counter[uid] = current_usage + 1
+
+    api_keys = build_engine_api_keys(data, use_own_keys)
+
+    result = run_resolve_round(question, claim, positions, api_keys)
+    result.update({
+        "free_usage_remaining": max(0, int(limit_regular - usage_counter.get(uid, 0))),
+        "deep_remaining": max(0, int(limit_deep - deep_search_usage.get(uid, 0))),
+        "is_pro_user": is_pro,
+    })
+    return result
