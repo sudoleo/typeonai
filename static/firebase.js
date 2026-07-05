@@ -975,6 +975,15 @@ function loadSingleBookmarkUI(bookmark) {
             structuredRendered = window.renderConsensusInsights(differencesData, includedCount);
         }
 
+        // Resolve-Persistenz: Payload setzen, damit eine Resolve-Runde aus dem
+        // geladenen Bookmark heraus ihr Ergebnis in dasselbe Bookmark schreibt.
+        window.lastConsensusBookmarkPayload = (consensusText.trim() && bookmark.query) ? {
+            question: bookmark.query,
+            consensusText: consensusText,
+            differencesText: bookmark.responses["differences"] || "",
+            differencesData: (differencesData && typeof differencesData === "object") ? differencesData : null
+        } : null;
+
         if (!structuredRendered) {
             // Freitext-Fallback (ältere Bookmarks ohne differences_data),
             // inkl. optionaler Credibility-Badges (Farben).

@@ -291,6 +291,9 @@
     // Share-Feature: result_id des letzten Laufs zurücksetzen; Modell-
     // Labels (Option-Text) für die serverseitige Snapshot-Zitation.
     window.lastShareResultId = null;
+    // Resolve-Persistenz: Payload des letzten erfolgreichen Laufs invalidieren,
+    // damit eine Resolve-Runde nie in ein fremdes Bookmark schreibt.
+    window.lastConsensusBookmarkPayload = null;
     const shareModelLabels = {};
     [["OpenAI", "openaiModelSelect"], ["Mistral", "mistralModelSelect"],
      ["Anthropic", "claudeModelSelect"], ["Gemini", "geminiModelSelect"],
@@ -406,6 +409,14 @@
           }
         }
 
+        // Payload merken: eine spätere Resolve-Runde hängt ihr Ergebnis an
+        // differences_data und speichert das Bookmark damit erneut.
+        window.lastConsensusBookmarkPayload = {
+          question: question,
+          consensusText: data.consensus_response,
+          differencesText: data.differences,
+          differencesData: data.differences_data || null
+        };
         if (window.auth?.currentUser) {
           window.saveBookmarkConsensus(question, data.consensus_response, data.differences, data.differences_data);
         }

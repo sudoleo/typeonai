@@ -346,6 +346,38 @@ def _coerce_bounded_int(value, lo, hi):
     return max(lo, min(hi, parsed))
 
 
+_RESOLVE_OUTCOMES = {"resolved", "standoff", "mutual_revision"}
+_RESOLVE_DECISIONS = {"maintain", "revise", "error"}
+
+
+def _sanitize_resolution(raw):
+    """Whitelist der persistierten Resolve-Runde eines Widerspruchs.
+
+    Übernimmt nur bekannte Outcomes/Decisions mit gekappten Texten; ohne
+    verwertbares Ergebnis wird nichts persistiert (None)."""
+    if not isinstance(raw, dict):
+        return None
+    outcome = str(raw.get("outcome") or "").strip()
+    if outcome not in _RESOLVE_OUTCOMES:
+        return None
+    results = []
+    for entry in (raw.get("results") or [])[:6]:
+        if not isinstance(entry, dict) or not entry.get("model"):
+            continue
+        decision = str(entry.get("decision") or "").strip()
+        if decision not in _RESOLVE_DECISIONS:
+            decision = "error"
+        results.append({
+            "model": _clip(entry.get("model"), 40),
+            "decision": decision,
+            "position": _clip(entry.get("position"), 500),
+            "reason": _clip(entry.get("reason"), 500),
+        })
+    if not results:
+        return None
+    return {"outcome": outcome, "results": results}
+
+
 def sanitize_differences_data(data):
     """Whitelist-Validierung des strukturierten Differences-JSON.
 
@@ -391,13 +423,19 @@ def sanitize_differences_data(data):
             })
         if not claim_text or not positions:
             continue
-        differences.append({
+        entry = {
             "claim": claim_text,
             "type": _clip(diff.get("type"), 40),
             "severity": _clip(diff.get("severity"), 20),
             "positions": positions,
             "verify": _clip(diff.get("verify"), 500),
-        })
+        }
+        # Ergebnis einer Resolve-Runde (Pro): bleibt am Widerspruch hängen,
+        # damit Bookmarks den gelösten Zustand wieder anzeigen können.
+        resolution = _sanitize_resolution(diff.get("resolution"))
+        if resolution:
+            entry["resolution"] = resolution
+        differences.append(entry)
 
     result = {
         "claims": claims,

@@ -351,6 +351,58 @@
   color: color-mix(in srgb, #f3a08f 82%, var(--text-color));
 }
 
+/* Tag-Zeile im Kartenkopf: Typ-Tag + (nach Resolve) Status-Chip */
+.diff-card-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.diff-resolved-tag {
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.diff-resolved-tag.is-resolved {
+  background: color-mix(in srgb, #2c7a2c 14%, var(--response-bg));
+  color: color-mix(in srgb, #196a35 74%, var(--text-color));
+}
+
+.dark-mode .diff-resolved-tag.is-resolved {
+  color: color-mix(in srgb, #8ee6c8 76%, var(--text-color));
+}
+
+.diff-resolved-tag.is-standoff {
+  background: color-mix(in srgb, #cf5a4a 14%, var(--response-bg));
+  color: color-mix(in srgb, #8a251a 76%, var(--text-color));
+}
+
+.dark-mode .diff-resolved-tag.is-standoff {
+  color: color-mix(in srgb, #f3a08f 78%, var(--text-color));
+}
+
+.diff-resolved-tag.is-mixed {
+  background: color-mix(in srgb, #d99b46 16%, var(--response-bg));
+  color: color-mix(in srgb, #8a5a10 78%, var(--text-color));
+}
+
+.dark-mode .diff-resolved-tag.is-mixed {
+  color: color-mix(in srgb, #f3c66f 78%, var(--text-color));
+}
+
+/* Gelöster Widerspruch: Karte kippt vom Bernstein-/Rot-Akzent auf Grün,
+   damit der gelöste Zustand auf einen Blick erkennbar ist. */
+.diff-card.is-contradiction.resolution-resolved,
+.diff-card.is-contradiction.is-major.resolution-resolved {
+  border-color: color-mix(in srgb, #2c7a2c 34%, var(--sidebar-border));
+  box-shadow: inset 3px 0 0 #4d9e5f;
+}
+
 .diff-card-claim {
   font-size: 0.86rem;
   font-weight: 650;
@@ -416,28 +468,119 @@
 
 /* --- Resolve-Runde: Button + Ergebnis in der Widerspruchs-Karte ----------- */
 .diff-resolve {
-  margin-top: 9px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px dashed color-mix(in srgb, var(--sidebar-border) 65%, transparent);
 }
 
 .diff-resolve-btn {
-  padding: 5px 12px;
-  border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--sidebar-border));
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  color: color-mix(in srgb, var(--accent) 72%, var(--text-color));
-  font-size: 0.76rem;
+  /* Vollbreiter Karten-Action-Button: bricht in schmalen Differences-Spalten
+     an Wortgrenzen um, statt zu ueberlaufen oder auf Min-Content zu schrumpfen
+     (der Balancer geht bis ~18 % Spaltenbreite). */
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: flex-start;
+  /* Bei sehr schmalen Spalten darf das Label unter das Icon rutschen, statt
+     die erste Zeile (Icon + erstes Wort) horizontal ueberlaufen zu lassen. */
+  flex-wrap: wrap;
+  gap: 7px;
+  min-height: 30px;
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--sidebar-border));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: color-mix(in srgb, var(--accent) 76%, var(--text-color));
+  font-size: 0.78rem;
   font-weight: 650;
+  font-family: inherit;
+  line-height: 1.25;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease;
+  white-space: normal;
+  transition: box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
 
-.diff-resolve-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+/* Der Button wird nach dem Resolve per [hidden] entfernt. Ohne diese Regel
+   uebersteuert das display:flex oben das UA-[hidden] (display:none), und der
+   Ladezustand des Buttons bliebe sichtbar. */
+.diff-resolve-btn[hidden] {
+  display: none;
+}
+
+.diff-resolve-btn svg {
+  flex-shrink: 0;
+}
+
+.diff-resolve-btn-label {
+  overflow-wrap: anywhere;
+}
+
+.diff-resolve-btn:hover:not(:disabled),
+.diff-resolve-btn:focus-visible {
+  background: color-mix(in srgb, var(--accent) 17%, transparent);
+  box-shadow: var(--liquid-focus-ring);
+  outline: none;
 }
 
 .diff-resolve-btn:disabled {
-  opacity: 0.65;
+  opacity: 0.7;
   cursor: default;
+}
+
+/* Ladezustand: Icon weicht einem dezenten Spinner */
+.diff-resolve-btn.is-loading svg {
+  display: none;
+}
+
+.diff-resolve-btn.is-loading::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-top-color: color-mix(in srgb, var(--accent) 85%, var(--text-color));
+  animation: resolveBtnSpin 0.8s linear infinite;
+}
+
+@keyframes resolveBtnSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Pro-Teaser: gedämpfter Button mit Pro-Chip für Free-Nutzer.
+   Bewusst kein --sidebar-hover: das ist im Dark Mode fast weiß und
+   würde den Button grell machen. */
+.diff-resolve-btn.is-pro-locked {
+  border-color: color-mix(in srgb, var(--sidebar-border) 85%, transparent);
+  background: color-mix(in srgb, var(--text-color) 5%, transparent);
+  color: color-mix(in srgb, var(--text-color) 68%, var(--sidebar-text-muted));
+}
+
+.diff-resolve-btn.is-pro-locked:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-color) 10%, transparent);
+}
+
+.diff-resolve-pro-chip {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(120deg, #6d5df6, #9b62f5);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Kurzer Erklärtext unter dem Button: führt durch das Feature, ohne zu nerven */
+.diff-resolve-hint {
+  margin-top: 5px;
+  font-size: 0.73rem;
+  line-height: 1.4;
+  color: var(--sidebar-text-muted);
 }
 
 .resolve-outcome {
@@ -496,8 +639,59 @@
 
 .resolve-model-head {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+
+/* Aufklappbarer Kopf (Toggle-Button): der ganze Kopf schaltet das Detail um.
+   Kein natives <details> — Collapse laeuft ueber die Klasse .is-open (JS). */
+.resolve-model-toggle {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.resolve-model-toggle:hover .resolve-disclosure,
+.resolve-model-toggle:focus-visible .resolve-disclosure {
+  color: color-mix(in srgb, var(--text-color) 70%, var(--sidebar-text-muted));
+}
+
+.resolve-model-toggle:focus-visible {
+  outline: none;
+}
+
+.resolve-model-toggle:focus-visible .resolve-model-name {
+  text-decoration: underline;
+}
+
+/* Aufklapp-Pfeil rechts neben dem Status; rotiert beim Oeffnen. */
+.resolve-disclosure {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--sidebar-text-muted);
+  transition: transform 0.18s ease;
+}
+
+.resolve-model-row.is-open .resolve-disclosure {
+  transform: rotate(180deg);
+}
+
+.resolve-model-detail {
+  display: none;
+  padding-top: 5px;
+}
+
+.resolve-model-row.is-open .resolve-model-detail {
+  display: block;
 }
 
 .resolve-model-name {
@@ -538,6 +732,15 @@
   font-size: 0.81rem;
   line-height: 1.45;
   color: color-mix(in srgb, var(--text-color) 86%, var(--sidebar-text-muted));
+  overflow-wrap: anywhere;
+}
+
+/* Begruendung des Modells fuer maintain/revise – sekundaer unter der Antwort. */
+.resolve-reason {
+  margin-top: 3px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--sidebar-text-muted);
   overflow-wrap: anywhere;
 }
 
@@ -621,7 +824,8 @@ mark.quote-flash {
 
 @media (prefers-reduced-motion: reduce) {
   mark.quote-flash,
-  .quote-flash-block {
+  .quote-flash-block,
+  .diff-resolve-btn.is-loading::before {
     animation: none;
   }
 }

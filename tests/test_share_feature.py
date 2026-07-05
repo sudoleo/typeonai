@@ -219,6 +219,47 @@ class SanitizerTests(unittest.TestCase):
         })
         self.assertIsNone(snapshots.sanitize_differences_data("not a dict"))
 
+    def test_resolution_is_whitelisted(self):
+        diff = {
+            "claim": "c", "type": "contradiction", "severity": "major",
+            "positions": [{"stance": "s", "models": ["Grok"], "quote": "q"}],
+            "resolution": {
+                "outcome": "resolved",
+                "results": [
+                    {"model": "Grok", "decision": "revise", "position": "p" * 900,
+                     "reason": "r", "internal": "drop"},
+                    {"model": "OpenAI", "decision": "shrug", "position": "p", "reason": "r"},
+                    "not a dict",
+                ],
+                "extra": "drop",
+            },
+        }
+        result = snapshots.sanitize_differences_data(
+            {"claims": [], "differences": [diff], "best_model": "", "models_compared": []}
+        )
+        resolution = result["differences"][0]["resolution"]
+        self.assertEqual(resolution["outcome"], "resolved")
+        self.assertNotIn("extra", resolution)
+        self.assertEqual(len(resolution["results"]), 2)
+        self.assertEqual(len(resolution["results"][0]["position"]), 500)
+        self.assertNotIn("internal", resolution["results"][0])
+        # Unbekannte Decision wird konservativ zu "error".
+        self.assertEqual(resolution["results"][1]["decision"], "error")
+
+    def test_invalid_resolution_is_dropped(self):
+        base = {
+            "claim": "c", "type": "contradiction", "severity": "major",
+            "positions": [{"stance": "s", "models": ["Grok"], "quote": "q"}],
+        }
+        for bad in ({"outcome": "nonsense", "results": [{"model": "Grok", "decision": "revise"}]},
+                    {"outcome": "resolved", "results": []},
+                    "not a dict", None):
+            diff = dict(base, resolution=bad)
+            result = snapshots.sanitize_differences_data(
+                {"claims": [], "differences": [diff], "best_model": "", "models_compared": []}
+            )
+            self.assertNotIn("resolution", result["differences"][0])
+
     def test_agreement_score_is_clamped(self):
         result = snapshots.sanitize_differences_data({
             "claims": [], "differences": [], "best_model": "",

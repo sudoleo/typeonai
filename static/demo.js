@@ -429,6 +429,9 @@ async function renderDemoConsensus(mainP, diffP) {
   // Differences exakt wie bei echten Queries: strukturierte Auswertung mit
   // Verdict-Header, Agreement-Badges und Contradiction-Karten. Nur wenn die
   // strukturierten Daten fehlen, greift der Legacy-Freitext.
+  // Demo-Daten gehören zu keinem Bookmark: Resolve-Persistenz-Payload leeren,
+  // damit eine Resolve-Runde hier nie ein altes Bookmark überschreibt.
+  window.lastConsensusBookmarkPayload = null;
   const includedCount = (DEMO_DATA.differencesData?.models_compared || []).length || 6;
   const structuredRendered = window.renderConsensusInsights
     ? window.renderConsensusInsights(DEMO_DATA.differencesData, includedCount)

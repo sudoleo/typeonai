@@ -167,12 +167,22 @@ def test_resolve_requires_auth():
     assert response.status_code == 401
 
 
+def test_resolve_requires_pro():
+    client = make_client()
+    with patch.object(chat_router, "verify_user_token", return_value="uid-free"), \
+         patch.object(chat_router, "is_user_pro", return_value=False):
+        response = client.post("/resolve", headers=AUTH_HEADER, json=resolve_payload())
+    assert response.status_code == 403
+    # Bare-App ohne main.py-Exception-Handler: detail bleibt verschachtelt.
+    assert response.json()["detail"]["error_code"] == "pro_required"
+
+
 def test_resolve_rejects_invalid_positions():
     client = make_client()
     payload = resolve_payload()
     payload["positions"] = payload["positions"][:1]
     with patch.object(chat_router, "verify_user_token", return_value="uid-r"), \
-         patch.object(chat_router, "is_user_pro", return_value=False):
+         patch.object(chat_router, "is_user_pro", return_value=True):
         response = client.post("/resolve", headers=AUTH_HEADER, json=payload)
     assert response.status_code == 400
     assert "two positions" in response.json()["detail"]
@@ -185,13 +195,13 @@ def test_resolve_counts_usage_and_returns_result():
     fake_result = {"claim": "Opening year", "outcome": "standoff", "results": []}
     try:
         with patch.object(chat_router, "verify_user_token", return_value=uid), \
-             patch.object(chat_router, "is_user_pro", return_value=False), \
+             patch.object(chat_router, "is_user_pro", return_value=True), \
              patch.object(chat_router, "run_resolve_round", return_value=dict(fake_result)) as round_mock:
             response = client.post("/resolve", headers=AUTH_HEADER, json=resolve_payload())
         assert response.status_code == 200
         body = response.json()
         assert body["outcome"] == "standoff"
-        assert body["is_pro_user"] is False
+        assert body["is_pro_user"] is True
         assert usage_counter[uid] == 1
         # Positionen kommen normalisiert bei der Engine an.
         _, kwargs_or_args = round_mock.call_args
@@ -204,10 +214,10 @@ def test_resolve_counts_usage_and_returns_result():
 def test_resolve_blocks_when_usage_limit_reached():
     client = make_client()
     uid = "uid-resolve-limit"
-    usage_counter[uid] = cfg.get_usage_limit(False)
+    usage_counter[uid] = cfg.get_usage_limit(True)
     try:
         with patch.object(chat_router, "verify_user_token", return_value=uid), \
-             patch.object(chat_router, "is_user_pro", return_value=False):
+             patch.object(chat_router, "is_user_pro", return_value=True):
             response = client.post("/resolve", headers=AUTH_HEADER, json=resolve_payload())
         assert response.status_code == 403
         # Bare-App ohne main.py-Exception-Handler: detail bleibt verschachtelt.

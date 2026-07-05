@@ -824,6 +824,17 @@ def resolve(request: Request, data: dict = Body(...)):
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+    # Resolve ist ein Pro-Feature; Free-Nutzer sehen den Button nur als Teaser.
+    # Serverseitig gilt das Gate auch mit eigenen Keys (wie bei Deep Think).
+    if not is_pro:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "Resolve rounds are a Pro feature.",
+                "error_code": "pro_required",
+            },
+        )
+
     question = cap_engine_text(data.get("question"), cfg.get_consensus_question_char_limit())
     if not isinstance(question, str) or not question.strip():
         raise HTTPException(status_code=400, detail="Missing 'question' in request body.")

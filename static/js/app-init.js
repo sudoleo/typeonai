@@ -349,6 +349,17 @@
         if (closeProBtn) closeProBtn.addEventListener("click", closeProModal);
         if (keepFreeBtn) keepFreeBtn.addEventListener("click", closeProModal);
 
+        // Pro-Modal mit Feature-Name öffnen ("Unlock Deep Think" / "Unlock
+        // Resolve"). Gibt zurück, ob das Modal gezeigt werden konnte, damit
+        // Aufrufer sonst auf ein Popup ausweichen können.
+        window.App.showProFeatureModal = function (featureName) {
+          const nameEl = document.getElementById("proModalFeatureName");
+          if (nameEl && featureName) nameEl.textContent = featureName;
+          if (!proModal) return false;
+          proModal.style.display = "block";
+          return true;
+        };
+
         // Klick außerhalb schließt Modal
         window.addEventListener("click", (event) => {
           if (event.target === proModal) {
@@ -406,10 +417,8 @@
             event.preventDefault(); // Verhindert das Umschalten des Toggles
             trackAppEvent("app_deep_think_locked_click");
 
-            // Modal anzeigen
-            if (proModal) {
-              proModal.style.display = "block";
-            } else {
+            // Modal anzeigen (mit passendem Feature-Namen im Header)
+            if (!window.App.showProFeatureModal("Deep Think")) {
               alert("Deep Think is a Pro feature.");
             }
           }

@@ -54,7 +54,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260705-agent-mode1">
+  <link rel="stylesheet" href="/static/style.css?v=20260705-resolve9">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -67,8 +67,8 @@
   <!-- DOMPurify (HTML Sanitizer) -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260701-skeleton2"></script>
-  <script type="module" src="/static/demo.js?v=20260621-demo-stream-diff3"></script>
+  <script type="module" src="/static/firebase.js?v=20260705-resolve2"></script>
+  <script type="module" src="/static/demo.js?v=20260705-resolve2"></script>
   <script src="/static/app-ui.js?v=20260628-prompt-default2" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
   <script src="/static/js/app-core.js?v=20260626-extract1" defer></script>
@@ -91,8 +91,8 @@
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260630-early1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-insights.js?v=20260705-resolve1" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260627-auth-keys1" defer></script>
+  <script src="/static/js/consensus-insights.js?v=20260705-resolve9" defer></script>
+  <script src="/static/js/consensus-run.js?v=20260705-resolve2" defer></script>
   <script src="/static/js/query-send.js?v=20260705-agent-check1" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
@@ -592,7 +592,7 @@
       </div>
     </div>
 
-    <script src="/static/js/app-init.js?v=20260630-early1" defer></script>
+    <script src="/static/js/app-init.js?v=20260705-resolve2" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing
@@ -772,7 +772,7 @@
       <span class="close" id="closeProModal">&times;</span>
 
       <div class="pro-header">
-        <h2>Unlock <span class="highlight-tech">Deep Think</span></h2>
+        <h2>Unlock <span class="highlight-tech" id="proModalFeatureName">Deep Think</span></h2>
         <p>Complex reasoning requires advanced compute power. <br>Upgrade to access the smartest AI models.</p>
       </div>
 
@@ -800,6 +800,12 @@
           <div class="col-feature">Deep Think</div>
           <div class="col-plan">none</div>
           <div class="col-plan bold">25 / day</div>
+        </div>
+
+        <div class="pricing-row">
+          <div class="col-feature">Resolve contradictions</div>
+          <div class="col-plan">none</div>
+          <div class="col-plan bold">included</div>
         </div>
 
         <div class="pricing-row">

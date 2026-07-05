@@ -513,8 +513,16 @@
 
           // --- Resolve-Runde ---------------------------------------------------
           // Konfrontiert die dissentierenden Modelle eines Widerspruchs gezielt
-          // mit der Gegenposition (POST /resolve). Ergebnis wird in der Karte
-          // gerendert; kostet einen regulären Request.
+          // mit der Gegenposition (POST /resolve). Pro-Feature: Free-Nutzer
+          // sehen den Button als Teaser (öffnet das Pro-Modal). Ergebnis wird
+          // in der Karte gerendert, am diff-Objekt gemerkt und über das
+          // Consensus-Bookmark persistiert.
+          const RESOLVE_STATUS = {
+            resolved: { cls: "is-resolved", label: "Resolved" },
+            standoff: { cls: "is-standoff", label: "Dissent confirmed" },
+            mutual_revision: { cls: "is-mixed", label: "Still unclear" }
+          };
+
           function resolveOutcomeSummary(outcome, results) {
             const revised = results.filter(r => r.decision === "revise").map(r => modelDisplayName(r.model));
             const maintained = results.filter(r => r.decision === "maintain").map(r => modelDisplayName(r.model));
@@ -534,6 +542,17 @@
             }
           }
 
+          // Down-Chevron fuer den Aufklapp-Pfeil (rotiert per CSS bei [open]).
+          const RESOLVE_CHEVRON =
+            '<svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true" fill="none" '
+            + 'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'
+            + '<path d="M2.5 4.5 6 8l3.5-3.5"/></svg>';
+
+          function decisionLabel(decision) {
+            return decision === "maintain" ? "maintains"
+              : (decision === "revise" ? "revised" : "no result");
+          }
+
           function renderResolveResult(resultBox, data) {
             resultBox.innerHTML = "";
             const summary = resolveOutcomeSummary(data.outcome, Array.isArray(data.results) ? data.results : []);
@@ -543,28 +562,104 @@
             resultBox.appendChild(badge);
 
             (Array.isArray(data.results) ? data.results : []).forEach(function (r) {
+              // Die im Resolve neu gegebene Antwort (position + reason) steckt
+              // platzsparend hinter einem Aufklapp-Pfeil. Ohne Antwort (Fehler/
+              // kein Ergebnis) bleibt die Zeile eine einfache, nicht klappbare Box.
+              // Bewusst kein <details>/<summary>: das native Collapse ist auf
+              // dieser Seite global ausgehebelt; wir klappen per Klasse selbst.
+              const hasDetail = !!(r.position || r.reason);
               const row = document.createElement("div");
-              row.className = "resolve-model-row";
-              const head = document.createElement("div");
-              head.className = "resolve-model-head";
+              row.className = "resolve-model-row" + (hasDetail ? " is-collapsible" : "");
+
+              const head = document.createElement(hasDetail ? "button" : "div");
+              head.className = "resolve-model-head" + (hasDetail ? " resolve-model-toggle" : "");
+              if (hasDetail) {
+                head.type = "button";
+                head.setAttribute("aria-expanded", "false");
+                head.title = "Show this model's revised answer";
+              }
+
               const name = document.createElement("span");
               name.className = "resolve-model-name";
               name.textContent = modelDisplayName(r.model);
               const decision = document.createElement("span");
               decision.className = "resolve-decision is-" + (r.decision || "error");
-              decision.textContent = r.decision === "maintain" ? "maintains"
-                : (r.decision === "revise" ? "revised" : "no result");
+              decision.textContent = decisionLabel(r.decision);
               head.append(name, decision);
-              row.appendChild(head);
+
+              if (!hasDetail) {
+                row.appendChild(head);
+                resultBox.appendChild(row);
+                return;
+              }
+
+              const disclosure = document.createElement("span");
+              disclosure.className = "resolve-disclosure";
+              disclosure.setAttribute("aria-hidden", "true");
+              disclosure.innerHTML = RESOLVE_CHEVRON;
+              head.appendChild(disclosure);
+
+              const detail = document.createElement("div");
+              detail.className = "resolve-model-detail";
               if (r.position) {
                 const pos = document.createElement("div");
                 pos.className = "resolve-position";
                 pos.textContent = r.position;
-                row.appendChild(pos);
+                detail.appendChild(pos);
               }
+              if (r.reason) {
+                const reason = document.createElement("div");
+                reason.className = "resolve-reason";
+                reason.textContent = r.reason;
+                detail.appendChild(reason);
+              }
+
+              head.addEventListener("click", function () {
+                const open = row.classList.toggle("is-open");
+                head.setAttribute("aria-expanded", open ? "true" : "false");
+              });
+
+              row.append(head, detail);
               resultBox.appendChild(row);
             });
             resultBox.hidden = false;
+          }
+
+          // Karte sichtbar als "gelöst/bestätigt/unklar" kennzeichnen: Status-
+          // Chip neben dem Typ-Tag plus Karten-Klasse für den Farbakzent.
+          function markCardResolved(card, outcome) {
+            const status = RESOLVE_STATUS[outcome];
+            if (!card || !status) return;
+            card.classList.add("has-resolution", "resolution-" + status.cls.slice(3));
+            const tagRow = card.querySelector(".diff-card-tags");
+            if (!tagRow || tagRow.querySelector(".diff-resolved-tag")) return;
+            const chip = document.createElement("span");
+            chip.className = "diff-resolved-tag " + status.cls;
+            chip.textContent = status.label;
+            tagRow.appendChild(chip);
+          }
+
+          // Nach einer Resolve-Runde das aktualisierte differences_data erneut
+          // ins Consensus-Bookmark schreiben, damit der gelöste Zustand beim
+          // Wiederöffnen erhalten bleibt.
+          function persistResolutionToBookmark() {
+            const payload = window.lastConsensusBookmarkPayload;
+            if (!payload || !payload.question || !window.auth?.currentUser) return;
+            if (typeof window.saveBookmarkConsensus !== "function") return;
+            window.saveBookmarkConsensus(
+              payload.question,
+              payload.consensusText,
+              payload.differencesText,
+              payload.differencesData
+            );
+          }
+
+          function showResolveProTeaser() {
+            window.trackUmamiEvent?.("app_resolve_pro_teaser_click");
+            const shown = window.App?.showProFeatureModal?.("Resolve");
+            if (!shown) {
+              window.App?.showPopup?.("Resolve rounds are a Pro feature.");
+            }
           }
 
           async function runResolveRound(diff, button, resultBox) {
@@ -585,10 +680,17 @@
 
             const question = (window.lastQuestion || $("questionInput")?.value || "").trim();
             const useOwnKeys = !!$("useOwnKeysSwitch")?.checked;
-            const originalLabel = button.textContent;
+            // Der Button trägt Icon + Label-Span: nur das Label austauschen,
+            // damit das Icon den Ladezustand überlebt.
+            const labelEl = button.querySelector(".diff-resolve-btn-label");
+            const setLabel = function (text) {
+              if (labelEl) labelEl.textContent = text;
+              else button.textContent = text;
+            };
+            const originalLabel = labelEl ? labelEl.textContent : button.textContent;
             button.disabled = true;
             button.classList.add("is-loading");
-            button.textContent = "Asking the models…";
+            setLabel("Asking the models…");
             window.trackUmamiEvent?.("app_resolve_started", { positions: diff.positions.length });
 
             try {
@@ -612,6 +714,15 @@
               const data = await response.json().catch(() => ({}));
               if (!response.ok) {
                 const detail = data?.detail && typeof data.detail === "object" ? data.detail : null;
+                if (detail?.error_code === "pro_required") {
+                  // Tier-Status war veraltet: Button in den Teaser-Zustand
+                  // zurücksetzen und das Pro-Modal zeigen.
+                  button.disabled = false;
+                  button.classList.remove("is-loading");
+                  setLabel(originalLabel);
+                  showResolveProTeaser();
+                  return;
+                }
                 const message = detail?.error || data?.error
                   || (typeof data?.detail === "string" ? data.detail : "")
                   || ("Resolve HTTP " + response.status);
@@ -624,7 +735,21 @@
               }
 
               renderResolveResult(resultBox, data);
+              const wrap = button.closest(".diff-resolve");
+              const hint = wrap ? wrap.querySelector(".diff-resolve-hint") : null;
+              // Ladezustand beenden und Button entfernen (das [hidden] greift
+              // erst durch die zugehoerige CSS-Regel, siehe Stylesheet).
+              button.classList.remove("is-loading");
               button.hidden = true;
+              if (hint) hint.hidden = true;
+              // Ergebnis am Widerspruch merken und Karte kennzeichnen; über
+              // das Bookmark persistieren, damit es beim Wiederöffnen bleibt.
+              diff.resolution = {
+                outcome: data.outcome,
+                results: Array.isArray(data.results) ? data.results : []
+              };
+              markCardResolved(resultBox.closest(".diff-card"), data.outcome);
+              persistResolutionToBookmark();
               window.trackUmamiEvent?.("app_resolve_completed", { outcome: data.outcome });
             } catch (error) {
               console.error("Resolve round failed:", error);
@@ -636,31 +761,70 @@
               resultBox.hidden = false;
               button.disabled = false;
               button.classList.remove("is-loading");
-              button.textContent = originalLabel;
+              setLabel(originalLabel);
               window.trackUmamiEvent?.("app_resolve_completed", { outcome: "request_error" });
             }
           }
 
+          const RESOLVE_BTN_ICON =
+            '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" '
+            + 'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'
+            + '<path d="M2 5h9M11 5 8.8 2.8M11 5 8.8 7.2"/>'
+            + '<path d="M14 11H5M5 11l2.2-2.2M5 11l2.2 2.2"/></svg>';
+
           function buildResolveSection(diff) {
             if (diff.type !== "contradiction") return null;
+
+            const wrap = document.createElement("div");
+            wrap.className = "diff-resolve";
+            const resultBox = document.createElement("div");
+            resultBox.className = "diff-resolve-result";
+            resultBox.hidden = true;
+
+            // Bereits gelöster Widerspruch (persistiert im Bookmark): Ergebnis
+            // direkt zeigen, kein Button. Die Karten-Kennzeichnung übernimmt
+            // renderDifferenceCards nach dem Einhängen der Karte.
+            if (diff.resolution && RESOLVE_STATUS[diff.resolution.outcome]) {
+              renderResolveResult(resultBox, diff.resolution);
+              wrap.appendChild(resultBox);
+              return wrap;
+            }
+
             const involved = new Set();
             diff.positions.forEach(function (pos) {
               (pos.models || []).forEach(function (m) { if (MODEL_BOX_IDS[m]) involved.add(m); });
             });
             if (involved.size < 2 || diff.positions.length < 2) return null;
 
-            const wrap = document.createElement("div");
-            wrap.className = "diff-resolve";
             const btn = document.createElement("button");
             btn.type = "button";
             btn.className = "diff-resolve-btn";
-            btn.textContent = "Resolve with the models";
+            btn.innerHTML = RESOLVE_BTN_ICON
+              + '<span class="diff-resolve-btn-label">Resolve with the models</span>';
             btn.title = "Ask the disagreeing models to re-examine this point against each other's position (uses 1 request)";
-            const resultBox = document.createElement("div");
-            resultBox.className = "diff-resolve-result";
-            resultBox.hidden = true;
-            btn.addEventListener("click", function () { runResolveRound(diff, btn, resultBox); });
-            wrap.append(btn, resultBox);
+            // Pro-Teaser: Free-Nutzer sehen den Button mit Pro-Chip; der Klick
+            // öffnet das Upgrade-Modal statt der Resolve-Runde.
+            if (!window.isUserPro) {
+              btn.classList.add("is-pro-locked");
+              const chip = document.createElement("span");
+              chip.className = "diff-resolve-pro-chip";
+              chip.textContent = "Pro";
+              btn.appendChild(chip);
+              btn.title = "Resolve rounds are a Pro feature";
+            }
+
+            const hint = document.createElement("div");
+            hint.className = "diff-resolve-hint";
+            hint.textContent = "The disagreeing models re-examine this point against each other's answer.";
+
+            btn.addEventListener("click", function () {
+              if (!window.isUserPro) {
+                showResolveProTeaser();
+                return;
+              }
+              runResolveRound(diff, btn, resultBox);
+            });
+            wrap.append(btn, hint, resultBox);
             return wrap;
           }
 
@@ -703,10 +867,14 @@
                   else if (diff.severity === "minor") tagLabel = "Contradiction · minor detail";
                 }
                 typeTag.textContent = tagLabel;
+                // Tag-Zeile: nimmt neben dem Typ-Tag auch den Resolved-Chip auf.
+                const tagRow = document.createElement("span");
+                tagRow.className = "diff-card-tags";
+                tagRow.appendChild(typeTag);
                 const claimEl = document.createElement("span");
                 claimEl.className = "diff-card-claim";
                 claimEl.textContent = diff.claim;
-                summary.append(typeTag, claimEl);
+                summary.append(tagRow, claimEl);
                 card.appendChild(summary);
 
                 const body = document.createElement("div");
@@ -760,6 +928,9 @@
                 if (resolveSection) body.appendChild(resolveSection);
                 card.appendChild(body);
                 cards.appendChild(card);
+                // Persistierte Resolve-Runde (z. B. aus einem Bookmark): Karte
+                // direkt als gelöst/bestätigt kennzeichnen.
+                if (diff.resolution) markCardResolved(card, diff.resolution.outcome);
               });
             }
 
@@ -842,12 +1013,14 @@
           const MIN_DIFF = 0.18; // Differences nie schmaler als ~18 %
           const MAX_DIFF = 0.5;  // ...und nie breiter als die Antwortspalte
           let appliedFrac = null;
+          let prevAppliedFrac = null;
           let scheduled = false;
 
           const resetColumns = () => {
             main.style.flex = "";
             diff.style.flex = "";
             appliedFrac = null;
+            prevAppliedFrac = null;
           };
 
           // Natürliche Inhaltshöhe messen: align-items:stretch zwingt beide
@@ -884,7 +1057,14 @@
 
             // Rückkopplungsschleife vermeiden: nur bei spürbarer Änderung neu
             // schreiben (Breitenänderung triggert den ResizeObserver erneut).
-            if (appliedFrac !== null && Math.abs(frac - appliedFrac) < 0.02) return;
+            // Hysterese bewusst größer als das Reflow-Rauschen: Umbrüche nach
+            // einer Breitenänderung verschieben die gemessene Inhaltsfläche
+            // leicht, was sonst zwischen zwei Breiten oszilliert (Flackern).
+            if (appliedFrac !== null && Math.abs(frac - appliedFrac) < 0.05) return;
+            // Bounce-Guard: springt der Wert zurück auf die vorletzte Breite
+            // (A -> B -> A ...), liegt eine Mess-Oszillation vor - einfrieren.
+            if (prevAppliedFrac !== null && Math.abs(frac - prevAppliedFrac) < 0.01) return;
+            prevAppliedFrac = appliedFrac;
             appliedFrac = frac;
             main.style.flex = (1 - frac).toFixed(4);
             diff.style.flex = frac.toFixed(4);

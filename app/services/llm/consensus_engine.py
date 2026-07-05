@@ -164,7 +164,8 @@ def _mistral_chat_complete(
     if response.status_code >= 400:
         raise RuntimeError(f"{response.status_code} - {response.text}")
     data = response.json()
-    return (data.get("choices") or [{}])[0].get("message", {}).get("content", "").strip()
+    message = (data.get("choices") or [{}])[0].get("message") or {}
+    return _coerce_message_text(message.get("content"))
 
 
 def normalize_model_name(model_name: str) -> str:
