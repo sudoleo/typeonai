@@ -335,6 +335,22 @@
   color: color-mix(in srgb, #f3c66f 82%, var(--text-color));
 }
 
+/* Kritische Widersprüche (severity=major): rote Stufe statt Bernstein.
+   Karten ohne Severity (alte Bookmarks/Snapshots) behalten den Bernstein-Look. */
+.diff-card.is-contradiction.is-major {
+  border-color: color-mix(in srgb, #b23b2e 44%, var(--sidebar-border));
+  box-shadow: inset 3px 0 0 #cf5a4a;
+}
+
+.diff-card.is-contradiction.is-major .diff-type-tag {
+  background: color-mix(in srgb, #cf5a4a 20%, var(--response-bg));
+  color: color-mix(in srgb, #8a251a 80%, var(--text-color));
+}
+
+.dark-mode .diff-card.is-contradiction.is-major .diff-type-tag {
+  color: color-mix(in srgb, #f3a08f 82%, var(--text-color));
+}
+
 .diff-card-claim {
   font-size: 0.86rem;
   font-weight: 650;

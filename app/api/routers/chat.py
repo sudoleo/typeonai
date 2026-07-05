@@ -30,6 +30,8 @@ from app.services.llm.streaming import (
     stream_openai_query,
 )
 from app.services.llm.consensus_engine import (
+    DIFFERENCES_SKIPPED_TEXT,
+    is_consensus_error_text,
     normalize_model_name,
     query_consensus,
     query_differences,
@@ -1098,6 +1100,7 @@ def consensus(request: Request, data: dict = Body(...)):
 
         def consensus_event_source():
             consensus_text = ""
+            consensus_failed = False
             differences_text = ""
             differences_data = None
             stream_failed = False
@@ -1119,26 +1122,34 @@ def consensus(request: Request, data: dict = Body(...)):
                         yield sse_pack("consensus.delta", {"text": item.get("text") or ""})
                     else:
                         consensus_text = item.get("text") or ""
+                        consensus_failed = bool(item.get("error")) or is_consensus_error_text(consensus_text)
 
-                for item in stream_differences(
-                    answer_openai,
-                    answer_mistral,
-                    answer_claude,
-                    answer_gemini,
-                    answer_deepseek,
-                    answer_grok,
-                    consensus_text,
-                    api_keys,
-                    differences_model=consensus_model,
-                    excluded_models=excluded_models,
-                ):
-                    if item.get("type") == "delta":
-                        # Das Frontend rendert diese Deltas nicht mehr (die Engine
-                        # liefert JSON); sie halten nur die SSE-Verbindung aktiv.
-                        yield sse_pack("differences.delta", {"text": item.get("text") or ""})
-                    else:
-                        differences_text = item.get("text") or ""
-                        differences_data = item.get("data")
+                if consensus_failed:
+                    # Ohne Konsensantwort ist der Vergleich sinnlos: der Judge
+                    # würde sonst den Fehlertext "analysieren" und das Ergebnis
+                    # würde als Share-Snapshot persistiert.
+                    differences_text = DIFFERENCES_SKIPPED_TEXT
+                    differences_data = None
+                else:
+                    for item in stream_differences(
+                        answer_openai,
+                        answer_mistral,
+                        answer_claude,
+                        answer_gemini,
+                        answer_deepseek,
+                        answer_grok,
+                        consensus_text,
+                        api_keys,
+                        differences_model=consensus_model,
+                        excluded_models=excluded_models,
+                    ):
+                        if item.get("type") == "delta":
+                            # Das Frontend rendert diese Deltas nicht mehr (die Engine
+                            # liefert JSON); sie halten nur die SSE-Verbindung aktiv.
+                            yield sse_pack("differences.delta", {"text": item.get("text") or ""})
+                        else:
+                            differences_text = item.get("text") or ""
+                            differences_data = item.get("data")
             except Exception as exc:
                 logging.exception("Consensus streaming failed")
                 stream_failed = True
@@ -1152,7 +1163,7 @@ def consensus(request: Request, data: dict = Body(...)):
                 "differences": differences_text,
                 "differences_data": differences_data,
             }
-            if not stream_failed:
+            if not stream_failed and not consensus_failed:
                 result_id = persist_share_result(consensus_text, differences_data, differences_text)
                 if result_id:
                     payload["result_id"] = result_id
@@ -1179,27 +1190,33 @@ def consensus(request: Request, data: dict = Body(...)):
         model_sources=model_sources,
     )
 
-    differences, differences_data = query_differences(
-        answer_openai,
-        answer_mistral,
-        answer_claude,
-        answer_gemini,
-        answer_deepseek,
-        answer_grok,
-        consensus_answer,
-        api_keys,
-        differences_model=consensus_model,
-        excluded_models=excluded_models,
-    )
+    consensus_failed = is_consensus_error_text(consensus_answer)
+    if consensus_failed:
+        # Kein Vergleich gegen einen Fehlertext (siehe Streaming-Pfad).
+        differences, differences_data = DIFFERENCES_SKIPPED_TEXT, None
+    else:
+        differences, differences_data = query_differences(
+            answer_openai,
+            answer_mistral,
+            answer_claude,
+            answer_gemini,
+            answer_deepseek,
+            answer_grok,
+            consensus_answer,
+            api_keys,
+            differences_model=consensus_model,
+            excluded_models=excluded_models,
+        )
 
     response = {
         "consensus_response": consensus_answer,
         "differences": differences,
         "differences_data": differences_data,
     }
-    result_id = persist_share_result(consensus_answer, differences_data, differences)
-    if result_id:
-        response["result_id"] = result_id
+    if not consensus_failed:
+        result_id = persist_share_result(consensus_answer, differences_data, differences)
+        if result_id:
+            response["result_id"] = result_id
     if uid:
         response.update({
             "free_usage_remaining": max(0, int(limit_regular - usage_counter.get(uid, 0))),

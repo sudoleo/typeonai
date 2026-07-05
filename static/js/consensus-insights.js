@@ -403,12 +403,18 @@
           }
 
           // --- Verdict-Header ------------------------------------------------
-          function renderVerdictHeader(differences, modelCount) {
+          function renderVerdictHeader(differences, modelCount, agreement) {
             const verdict = $("consensusVerdict");
             if (!verdict) return;
             const contradictions = differences.filter(d => d.type === "contradiction").length;
+            const critical = differences.filter(d => d.type === "contradiction" && d.severity === "major").length;
+            // Alte Bookmarks/Snapshots kennen keine Severity: dann keine
+            // "critical"-Aussage machen statt fälschlich "none critical".
+            const hasSeverity = differences.some(d => d.severity === "major" || d.severity === "minor");
             const emphases = differences.length - contradictions;
             const modelsLabel = modelCount + " model" + (modelCount === 1 ? "" : "s");
+            const hasScore = agreement && typeof agreement.score === "number";
+            const scoreSuffix = hasScore ? " (" + agreement.score + "/100)" : "";
 
             let cls, text;
             if (contradictions === 0) {
@@ -416,12 +422,19 @@
               const detail = emphases > 0
                 ? emphases + " difference" + (emphases === 1 ? "" : "s") + " in emphasis, no contradictions"
                 : "no contradictions found";
-              text = "High agreement — " + modelsLabel + ", " + detail;
+              text = "High agreement" + scoreSuffix + " — " + modelsLabel + ", " + detail;
             } else {
               cls = "is-warn";
-              text = "Caution: the models contradict each other on "
+              let severityNote = "";
+              if (hasSeverity) {
+                severityNote = critical > 0
+                  ? " (" + critical + " critical)"
+                  : " (minor details)";
+              }
+              text = "Caution" + (hasScore ? " (score " + agreement.score + "/100)" : "")
+                + ": the models contradict each other on "
                 + contradictions + " point" + (contradictions === 1 ? "" : "s")
-                + " — " + modelsLabel;
+                + severityNote + " — " + modelsLabel;
             }
 
             verdict.classList.remove("is-calm", "is-warn");
@@ -520,14 +533,23 @@
             } else {
               differences.forEach(function (diff) {
                 const card = document.createElement("details");
-                card.className = "diff-card " + (diff.type === "contradiction" ? "is-contradiction" : "is-emphasis");
+                let cardClass = "diff-card " + (diff.type === "contradiction" ? "is-contradiction" : "is-emphasis");
+                if (diff.type === "contradiction" && diff.severity === "major") cardClass += " is-major";
+                card.className = cardClass;
                 card.open = true;
 
                 const summary = document.createElement("summary");
                 summary.className = "diff-card-summary";
                 const typeTag = document.createElement("span");
                 typeTag.className = "diff-type-tag";
-                typeTag.textContent = diff.type === "contradiction" ? "Contradiction" : "Different emphasis";
+                // Ohne Severity (alte Bookmarks/Snapshots) bleibt das neutrale Label.
+                let tagLabel = "Different emphasis";
+                if (diff.type === "contradiction") {
+                  tagLabel = "Contradiction";
+                  if (diff.severity === "major") tagLabel = "Contradiction · critical";
+                  else if (diff.severity === "minor") tagLabel = "Contradiction · minor detail";
+                }
+                typeTag.textContent = tagLabel;
                 const claimEl = document.createElement("span");
                 claimEl.className = "diff-card-claim";
                 claimEl.textContent = diff.claim;
@@ -627,14 +649,17 @@
               .filter(d => d && d.claim && Array.isArray(d.positions) && d.positions.length);
             const modelCount = (Array.isArray(data.models_compared) && data.models_compared.length)
               || includedCount || 0;
+            const agreement = (data.agreement && typeof data.agreement === "object") ? data.agreement : null;
 
-            renderVerdictHeader(differences, modelCount);
+            renderVerdictHeader(differences, modelCount, agreement);
             renderClaimBadges(claims);
             renderDifferenceCards(differences, modelCount);
             window.trackUmamiEvent?.("app_consensus_insights_rendered", {
               claims: claims.length,
               differences: differences.length,
-              contradictions: differences.filter(d => d.type === "contradiction").length
+              contradictions: differences.filter(d => d.type === "contradiction").length,
+              major_contradictions: differences.filter(d => d.type === "contradiction" && d.severity === "major").length,
+              agreement_score: agreement ? agreement.score : null
             });
             return true;
           }

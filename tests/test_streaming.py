@@ -1,5 +1,6 @@
 import json
 import unittest
+from unittest import mock
 
 import anyio
 
@@ -9,7 +10,11 @@ from app.services.llm.streaming import (
     sse_pack,
     streaming_model_response,
 )
-from app.services.llm.consensus_engine import stream_consensus, stream_differences
+from app.services.llm.consensus_engine import (
+    is_consensus_error_text,
+    stream_consensus,
+    stream_differences,
+)
 
 
 class FakeSSEResponse:
@@ -143,6 +148,78 @@ class ConsensusStreamTests(unittest.TestCase):
         ))
         self.assertEqual(events[-1]["type"], "final")
         self.assertEqual(events[-1]["text"], "Invalid model selected for difference comparison.")
+
+    def test_invalid_engine_final_is_flagged_as_error(self):
+        events = list(stream_consensus(
+            "Q?", "a", "b", None, None, None, None,
+            excluded_models=[],
+            consensus_model="DoesNotExist",
+            api_keys={},
+        ))
+        self.assertTrue(events[-1].get("error"))
+
+
+class ConsensusRetryTests(unittest.TestCase):
+    def _run(self, fake_engine):
+        with mock.patch(
+            "app.services.llm.consensus_engine._stream_consensus_engine",
+            side_effect=fake_engine,
+        ) as patched:
+            events = list(stream_consensus(
+                "Q?", "a", "b", None, None, None, None,
+                excluded_models=[],
+                consensus_model="OpenAI",
+                api_keys={"OpenAI": "sk-test"},
+            ))
+        return events, patched.call_count
+
+    def test_transient_failure_is_retried(self):
+        calls = []
+
+        def fake_engine(consensus_model, api_keys, prompt):
+            calls.append(1)
+            if len(calls) == 1:
+                yield "partial "
+                raise RuntimeError("503 - UNAVAILABLE")
+            yield "Recovered "
+            yield "answer."
+
+        events, call_count = self._run(fake_engine)
+        self.assertEqual(call_count, 2)
+        self.assertEqual(events[-1], {"type": "final", "text": "Recovered answer."})
+
+    def test_persistent_failure_yields_error_final(self):
+        def fake_engine(consensus_model, api_keys, prompt):
+            raise RuntimeError("503 - UNAVAILABLE")
+            yield  # pragma: no cover - macht die Funktion zum Generator
+
+        events, call_count = self._run(fake_engine)
+        self.assertEqual(call_count, 2)
+        self.assertEqual(events[-1]["text"], "Consensus error: 503 - UNAVAILABLE")
+        self.assertTrue(events[-1]["error"])
+
+    def test_empty_stream_counts_as_failure(self):
+        def fake_engine(consensus_model, api_keys, prompt):
+            return iter(())
+
+        events, call_count = self._run(fake_engine)
+        self.assertEqual(call_count, 2)
+        self.assertEqual(events[-1]["text"], "Consensus error: empty response from consensus engine.")
+        self.assertTrue(events[-1]["error"])
+
+
+class ConsensusErrorTextTests(unittest.TestCase):
+    def test_error_and_empty_texts_are_detected(self):
+        self.assertTrue(is_consensus_error_text("Consensus error: 503 - UNAVAILABLE"))
+        self.assertTrue(is_consensus_error_text("Invalid consensus model selected: X"))
+        self.assertTrue(is_consensus_error_text(""))
+        self.assertTrue(is_consensus_error_text("   "))
+        self.assertTrue(is_consensus_error_text(None))
+
+    def test_normal_answers_are_not_errors(self):
+        self.assertFalse(is_consensus_error_text("The capital of France is Paris."))
+        # Ein Konsens, der das Wort "error" nur enthält, ist kein Fehler
+        self.assertFalse(is_consensus_error_text("Common error sources include ..."))
 
 
 if __name__ == "__main__":

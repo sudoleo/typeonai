@@ -141,6 +141,29 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
   (nur Keep-Alive, Frontend rendert sie nicht), dann `final {consensus_response,
   differences, differences_data, result_id?, …usage}`. `differences_data` ist
   strukturiertes JSON (Verdict, Karten, `best_model`, `models_compared`).
+- Robustheit Differences (`consensus_engine.py`): einheitlicher Engine-Dispatch
+  (`_resolve_engine`/`_call_engine_text`/`_stream_engine_text`), Structured
+  Output je Provider (json_object / responseMimeType / Anthropic-Prefill),
+  Judge läuft immer auf dem günstigen Default-Modell des gewählten Providers
+  (`DIFFERENCES_JUDGE_MODEL_BY_PROVIDER`), JSON-Truncation-Repair, 1 Retry +
+  Fallback-Judge auf anderem Provider mit Key, serverseitige Anchor-/Quote-
+  Verifikation gegen Konsens- bzw. Modellantworten (nicht belegbare Zitate
+  werden geleert). Unparsbares JSON erreicht den Nutzer nie als Rohtext.
+- Agreement-Score (`compute_agreement_score`): 0-100 aus Claim-Zustimmungsquoten
+  minus severity-gewichteter Widerspruchs-Penalty (major 0.25 / minor 0.10 /
+  emphasis 0.05), mit Caps ("very" nur ohne Differenzen; 1 Major → max
+  "partially", 2+ Major → max "hardly"; 2 Modelle → max 75). Liegt als
+  `differences_data.agreement` im Payload/Snapshot; der Legacy-Credibility-Satz
+  wird daraus abgeleitet (nie divergierende Verdicts). Widersprüche tragen
+  `severity` ("major"/"minor", Default major); Frontend zeigt Score im
+  Verdict-Header und "critical"/"minor detail"-Tags (rote bzw. Bernstein-Stufe),
+  alte Bookmarks/Snapshots ohne die Felder degradieren aufs bisherige Rendering.
+- Consensus-Fehlerpfad: `query/stream_consensus` versuchen es bei Provider-
+  Fehlern (503, Timeout, ...) ein zweites Mal (`CONSENSUS_MAX_ATTEMPTS`);
+  gescheiterte Finals tragen `error: true`. `chat.py` erkennt Fehlertexte über
+  `is_consensus_error_text` und überspringt dann Differences (Judge darf nie
+  den Fehlertext "analysieren") sowie die Share-Persistenz; die Differences-
+  Spalte zeigt `DIFFERENCES_SKIPPED_TEXT`.
 - Bei erfolgreichem Lauf eines verifizierten Nutzers wird das Ergebnis als
   `pending_result` für das Share-Feature persistiert (→ `result_id`).
 

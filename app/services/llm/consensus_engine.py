@@ -3,11 +3,11 @@ from __future__ import annotations
 import os
 import re
 import json
+import difflib
 import logging
 import random
 import requests
 import openai
-import google.generativeai as genai
 import google.auth
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from urllib.parse import quote
@@ -15,16 +15,13 @@ from urllib.parse import quote
 import app.core.config as cfg
 from app.core.config import (
     GEMINI_FLASH_MODEL,
-    GEMINI_PRO_MODEL,
     DEFAULT_OPENAI_MODEL,
     DEFAULT_MISTRAL_MODEL,
-    MISTRAL_PRO_MODEL,
     DEFAULT_ANTHROPIC_MODEL,
-    ANTHROPIC_PRO_MODEL,
     DEFAULT_DEEPSEEK_MODEL,
     DEFAULT_GROK_MODEL,
 )
-from app.services.llm.engines import build_provider_payload
+from app.services.llm.engines import _merge_nested_config
 
 CANONICAL_MODEL_NAMES = {
     "openai": "OpenAI",
@@ -51,16 +48,62 @@ def _google_adc_headers() -> dict:
     }
 
 
-def _gemini_generate_content_rest(prompt: str, api_key: str | None, model_override: str, max_tokens: int) -> str:
-    request_data = build_provider_payload(
-        "gemini",
-        question=prompt,
-        system_prompt="",
-        model_override=model_override,
-        max_output_tokens=max_tokens,
-    )
-    payload = request_data["payload"]
-    payload.pop("tools", None)
+ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages"
+
+_PROVIDER_KEY_NAMES = {
+    "openai": "OpenAI",
+    "mistral": "Mistral",
+    "anthropic": "Anthropic",
+    "gemini": "Gemini",
+    "deepseek": "DeepSeek",
+    "grok": "Grok",
+}
+
+_OPENAI_COMPAT_BASE_URLS = {
+    "deepseek": "https://api.deepseek.com",
+    "grok": "https://api.x.ai/v1",
+}
+
+
+def _gemini_engine_key(api_keys: dict) -> str | None:
+    return api_keys.get("Gemini") or os.environ.get("DEVELOPER_GEMINI_API_KEY")
+
+
+def _gemini_engine_payload(
+    model_ref: str,
+    system: str,
+    prompt: str,
+    max_tokens: int,
+    temperature: float | None = None,
+    json_mode: bool = False,
+) -> tuple[str, dict]:
+    """Baut den generateContent-Payload für Consensus-/Differences-Calls.
+
+    Bewusst NICHT über build_provider_payload: dessen Gemini-Pfad kappt die
+    Frage bei 12k Zeichen und hängt Chat-Instruktionen an — beides falsch für
+    die langen Engine-Prompts. Frontier-Low-Mapping (interne ID -> api_model
+    + low_config) läuft über resolve_api_model."""
+    api_model, model_config = cfg.resolve_api_model(model_ref, GEMINI_FLASH_MODEL, "gemini")
+    payload: dict = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"maxOutputTokens": int(max_tokens)},
+        "safetySettings": [{
+            "category": "HARM_CATEGORY_HARASSMENT",
+            "threshold": "BLOCK_ONLY_HIGH",
+        }],
+    }
+    if system:
+        payload["systemInstruction"] = {"parts": [{"text": system}]}
+    if temperature is not None:
+        payload["generationConfig"]["temperature"] = temperature
+    if json_mode:
+        payload["generationConfig"]["responseMimeType"] = "application/json"
+    if model_config and model_config.is_low_reasoning:
+        _merge_nested_config(payload, model_config.low_config)
+    return api_model, payload
+
+
+def _gemini_generate_content(api_model: str, payload: dict, api_key: str | None) -> str:
     request_kwargs = {"json": payload, "timeout": 120}
     if api_key and api_key.strip():
         request_kwargs["params"] = {"key": api_key.strip()}
@@ -68,27 +111,44 @@ def _gemini_generate_content_rest(prompt: str, api_key: str | None, model_overri
         request_kwargs["headers"] = _google_adc_headers()
 
     response = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{quote(request_data['api_model'], safe='')}:generateContent",
+        f"https://generativelanguage.googleapis.com/v1beta/models/{quote(api_model, safe='')}:generateContent",
         **request_kwargs,
     )
     if response.status_code >= 400:
-        raise RuntimeError(f"{response.status_code} - {response.text}")
+        raise RuntimeError(f"Gemini: {response.status_code} - {response.text}")
     data = response.json()
     text_parts = []
+    finish_reason = None
     for candidate in data.get("candidates", []) or []:
+        if candidate.get("finishReason"):
+            finish_reason = candidate["finishReason"]
         content = candidate.get("content") or {}
         for part in content.get("parts", []) or []:
             if part.get("text"):
                 text_parts.append(part["text"])
-    return "\n".join(text_parts).strip() or "Error: Empty response payload."
+    text = "\n".join(text_parts).strip()
+    if not text:
+        raise RuntimeError(f"Gemini: empty response payload (finish_reason={finish_reason}).")
+    return text
 
 
-def _mistral_chat_complete(api_key: str, model: str, messages: list[dict], max_tokens: int) -> str:
+def _mistral_chat_complete(
+    api_key: str,
+    model: str,
+    messages: list[dict],
+    max_tokens: int,
+    temperature: float | None = None,
+    json_mode: bool = False,
+) -> str:
     payload = {
         "model": model,
         "messages": messages,
         "max_tokens": max_tokens,
     }
+    if temperature is not None:
+        payload["temperature"] = temperature
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
     if model in cfg.MISTRAL_REASONING_MODELS:
         payload["reasoning_effort"] = "high"
 
@@ -128,6 +188,207 @@ def resolve_consensus_engine_model(consensus_model: str):
 
 def _openai_token_param(model_to_use: str) -> str:
     return "max_completion_tokens" if "gpt-5" in model_to_use or "o" in model_to_use else "max_tokens"
+
+
+# ---------------------------------------------------------------------------
+# Einheitlicher Engine-Dispatch: eine Stelle, die für alle sechs Provider den
+# Consensus-/Differences-Call ausführt (nicht-streamend und streamend).
+# Fehler schlagen als Exception nach außen; die Aufrufer entscheiden über
+# Fehlertexte bzw. Retries.
+# ---------------------------------------------------------------------------
+
+class _InvalidEngineError(Exception):
+    pass
+
+
+def _effective_temperature(provider: str, api_model: str, temperature: float | None) -> float | None:
+    if temperature is None:
+        return None
+    # Reasoning-Modelle akzeptieren keine (oder ignorieren die) Temperatur.
+    if provider == "openai" and _openai_token_param(api_model) == "max_completion_tokens":
+        return None
+    if provider == "mistral" and api_model in cfg.MISTRAL_REASONING_MODELS:
+        return None
+    return temperature
+
+
+def _resolve_engine(engine_model: str) -> tuple[str, str, str] | None:
+    """Löst einen Engine-Wert (Alias wie "OpenAI-Pro" oder interne Modell-ID)
+    zu (provider, api_model, gemini_model_ref) auf.
+
+    gemini_model_ref ist der Wert für resolve_api_model: bei internen IDs die
+    ID selbst (Frontier-Low mappt dort auf api_model + low_config), bei
+    Aliassen direkt das API-Modell."""
+    config = resolve_consensus_engine_model(engine_model)
+    if not config or not config.provider:
+        return None
+    if engine_model in cfg.CONSENSUS_ENGINE_ALIASES:
+        model_ref = config.api_model
+    else:
+        model_ref = config.internal_id
+    return config.provider, config.api_model, model_ref
+
+
+def _call_engine_text(
+    provider: str,
+    api_model: str,
+    model_ref: str,
+    api_keys: dict,
+    *,
+    system: str,
+    prompt: str,
+    max_tokens: int,
+    temperature: float | None = None,
+    json_mode: bool = False,
+) -> str:
+    max_tokens = int(max_tokens)
+    temperature = _effective_temperature(provider, api_model, temperature)
+
+    if provider in ("openai", "deepseek", "grok"):
+        base_url = _OPENAI_COMPAT_BASE_URLS.get(provider)
+        api_key = api_keys.get(_PROVIDER_KEY_NAMES[provider])
+        client = openai.OpenAI(api_key=api_key, base_url=base_url) if base_url else openai.OpenAI(api_key=api_key)
+        token_param = _openai_token_param(api_model) if provider == "openai" else "max_tokens"
+        kwargs = {
+            "model": api_model,
+            "messages": [
+                {"role": "system", "content": system or " "},
+                {"role": "user", "content": prompt},
+            ],
+            token_param: max_tokens,
+        }
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        response = client.chat.completions.create(**kwargs)
+        return (response.choices[0].message.content or "").strip()
+
+    if provider == "mistral":
+        return _mistral_chat_complete(
+            api_keys.get("Mistral"),
+            api_model,
+            messages=[
+                {"role": "system", "content": system or ""},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=max_tokens,
+            temperature=temperature,
+            json_mode=json_mode,
+        )
+
+    if provider == "anthropic":
+        payload = {
+            "model": api_model,
+            "max_tokens": max_tokens,
+            "system": system or "",
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if temperature is not None:
+            payload["temperature"] = temperature
+        prefix = ""
+        if json_mode:
+            # Prefill erzwingt den JSON-Anfang; das "{" gehört zum Ergebnis.
+            payload["messages"].append({"role": "assistant", "content": "{"})
+            prefix = "{"
+        response = requests.post(
+            ANTHROPIC_MESSAGES_URL,
+            json=payload,
+            headers={
+                "x-api-key": api_keys.get("Anthropic"),
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01",
+            },
+            timeout=120,
+        )
+        if response.status_code >= 400:
+            raise RuntimeError(f"Anthropic: {response.status_code} - {response.text}")
+        data = response.json()
+        if not (data.get("content") and isinstance(data["content"], list)):
+            raise RuntimeError("Anthropic: empty response payload.")
+        return (prefix + (data["content"][0].get("text") or "")).strip()
+
+    if provider == "gemini":
+        gemini_model, payload = _gemini_engine_payload(
+            model_ref, system, prompt, max_tokens,
+            temperature=temperature, json_mode=json_mode,
+        )
+        return _gemini_generate_content(gemini_model, payload, _gemini_engine_key(api_keys))
+
+    raise _InvalidEngineError(f"Unsupported engine provider: {provider}")
+
+
+def _stream_engine_text(
+    provider: str,
+    api_model: str,
+    model_ref: str,
+    api_keys: dict,
+    *,
+    system: str,
+    prompt: str,
+    max_tokens: int,
+    temperature: float | None = None,
+    json_mode: bool = False,
+):
+    from app.services.llm.streaming import (
+        stream_anthropic_text,
+        stream_chat_completion_text,
+        stream_gemini_payload_text,
+        stream_mistral_chat_text,
+    )
+
+    max_tokens = int(max_tokens)
+    temperature = _effective_temperature(provider, api_model, temperature)
+    response_format = {"type": "json_object"} if json_mode else None
+
+    if provider in ("openai", "deepseek", "grok"):
+        yield from stream_chat_completion_text(
+            api_key=api_keys.get(_PROVIDER_KEY_NAMES[provider]),
+            base_url=_OPENAI_COMPAT_BASE_URLS.get(provider),
+            model=api_model,
+            messages=[
+                {"role": "system", "content": system or " "},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=max_tokens,
+            token_param=_openai_token_param(api_model) if provider == "openai" else "max_tokens",
+            temperature=temperature,
+            response_format=response_format,
+        )
+    elif provider == "mistral":
+        yield from stream_mistral_chat_text(
+            api_key=api_keys.get("Mistral"),
+            model=api_model,
+            messages=[
+                {"role": "system", "content": system or ""},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=max_tokens,
+            temperature=temperature,
+            response_format=response_format,
+        )
+    elif provider == "anthropic":
+        yield from stream_anthropic_text(
+            api_key=api_keys.get("Anthropic"),
+            model=api_model,
+            system=system or "",
+            prompt=prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            assistant_prefill="{" if json_mode else None,
+        )
+    elif provider == "gemini":
+        gemini_model, payload = _gemini_engine_payload(
+            model_ref, system, prompt, max_tokens,
+            temperature=temperature, json_mode=json_mode,
+        )
+        yield from stream_gemini_payload_text(
+            api_model=gemini_model,
+            payload=payload,
+            api_key=_gemini_engine_key(api_keys),
+        )
+    else:
+        raise _InvalidEngineError(f"Unsupported engine provider: {provider}")
 
 
 def normalize_excluded_models(excluded_models) -> set:
@@ -262,6 +523,25 @@ def _build_consensus_prompt(
     return "".join(prompt_parts)
 
 
+# Konsens-Fehlertexte, an denen Aufrufer (chat.py) einen gescheiterten Lauf
+# erkennen: Differences und Share-Persistenz werden dann übersprungen.
+CONSENSUS_ERROR_PREFIXES = ("Consensus error:", "Invalid consensus model selected:")
+CONSENSUS_MAX_ATTEMPTS = 2
+
+# Freitext für die Differences-Spalte, wenn der Vergleich mangels
+# Konsensantwort gar nicht erst gestartet wird.
+DIFFERENCES_SKIPPED_TEXT = (
+    "The model comparison was skipped because no consensus answer "
+    "could be generated. Please try again."
+)
+
+
+def is_consensus_error_text(text) -> bool:
+    """True, wenn der Konsens-Text ein Fehler (oder leer) ist."""
+    stripped = str(text or "").strip()
+    return not stripped or stripped.startswith(CONSENSUS_ERROR_PREFIXES)
+
+
 def query_consensus(
     question: str,
     answer_openai: str,
@@ -277,7 +557,7 @@ def query_consensus(
 ) -> str:
     """
     Konsolidiert die Antworten der 6 Haupt-LLMs zu einer Konsensantwort.
-    Unterscheidet jetzt zwischen Standard- und Pro-Modellen.
+    Engine-Auswahl (inkl. Pro-Aliasse) läuft über _resolve_engine.
     """
     consensus_prompt = _build_consensus_prompt(
         question,
@@ -291,210 +571,34 @@ def query_consensus(
         model_sources=model_sources,
     )
 
-    try:
-        # --- OPENAI ---
-        # Prüft auf "OpenAI" (Standard) oder "OpenAI-Pro" (Premium)
-        if consensus_model in ["OpenAI", "OpenAI-Pro"]:
-            client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
-            # WICHTIG: Hier wird das Modell gewählt
-            model_to_use = "gpt-5.5" if consensus_model == "OpenAI-Pro" else DEFAULT_OPENAI_MODEL
-            
-            kwargs = {
-                "model": model_to_use,
-                "messages": [
-                    {"role": "system", "content": " "},
-                    {"role": "user", "content": consensus_prompt}
-                ]
-            }
-            if "gpt-5" in model_to_use or "o" in model_to_use:
-                kwargs["max_completion_tokens"] = cfg.CONSENSUS_MAX_TOKENS
-            else:
-                kwargs["max_tokens"] = cfg.CONSENSUS_MAX_TOKENS
-                
-            response = client.chat.completions.create(**kwargs)
-            return response.choices[0].message.content.strip()
+    resolved = _resolve_engine(consensus_model)
+    if resolved is None:
+        return f"Invalid consensus model selected: {consensus_model}"
+    provider, api_model, model_ref = resolved
 
-        # --- MISTRAL ---
-        elif consensus_model in ["Mistral", "Mistral-Pro"]:
-            model_to_use = MISTRAL_PRO_MODEL if consensus_model == "Mistral-Pro" else DEFAULT_MISTRAL_MODEL
-
-            return _mistral_chat_complete(
-                api_keys.get("Mistral"),
-                model_to_use,
-                messages=[
-                    {"role": "system", "content": ""},
-                    {"role": "user", "content": consensus_prompt}
-                ],
+    # Zwei Versuche: Provider-Fehler (503, Timeouts, ...) sind oft transient,
+    # und ein gescheiterter Konsens macht den gesamten Lauf wertlos.
+    last_error = "empty response from consensus engine."
+    for attempt in range(CONSENSUS_MAX_ATTEMPTS):
+        try:
+            result = _call_engine_text(
+                provider, api_model, model_ref, api_keys,
+                system="",
+                prompt=consensus_prompt,
                 max_tokens=cfg.CONSENSUS_MAX_TOKENS,
             )
+        except Exception as e:
+            last_error = str(e)
+            logging.warning(f"Consensus attempt {attempt + 1} failed on {provider}/{api_model}: {e}")
+            continue
+        if result:
+            return result
+        last_error = "empty response from consensus engine."
+    return f"Consensus error: {last_error}"
 
-        # --- ANTHROPIC ---
-        elif consensus_model in ["Anthropic", "Anthropic-Pro"]:
-            url = "https://api.anthropic.com/v1/messages"
-            headers = {
-                "x-api-key": api_keys.get("Anthropic"),
-                "Content-Type": "application/json",
-                "anthropic-version": "2023-06-01"
-            }
-            model_to_use = ANTHROPIC_PRO_MODEL if consensus_model == "Anthropic-Pro" else DEFAULT_ANTHROPIC_MODEL
-            
-            payload = {
-                "model": model_to_use,
-                "max_tokens": cfg.CONSENSUS_MAX_TOKENS,
-                "system": "",
-                "messages": [{"role": "user", "content": consensus_prompt}]
-            }
-            response = requests.post(url, json=payload, headers=headers)
-            if response.status_code == 200:
-                data = response.json()
-                if "content" in data and isinstance(data["content"], list) and len(data["content"]) > 0:
-                    return data["content"][0]["text"]
-                else:
-                    return "Error: No response found in the API response."
-            else:
-                return f"Error with Anthropic: {response.status_code} - {response.text}"
 
-        # --- GEMINI ---
-        elif consensus_model in ["Gemini", "Gemini-Pro", cfg.GEMINI_FRONTIER_LOW_MODEL, cfg.GEMINI_PRO_MODEL]:
-            gemini_key = api_keys.get("Gemini")
-            if consensus_model == cfg.GEMINI_FRONTIER_LOW_MODEL:
-                return _gemini_generate_content_rest(
-                    consensus_prompt,
-                    gemini_key,
-                    cfg.GEMINI_FRONTIER_LOW_MODEL,
-                    int(cfg.CONSENSUS_MAX_TOKENS),
-                )
+MAX_DIFF_ANSWER_CHARS = 6000
 
-            if gemini_key and gemini_key.strip() != "":
-                genai.configure(api_key=gemini_key)
-            else:
-                genai.configure()
-
-            # Flash vs Pro
-            model_name = GEMINI_PRO_MODEL if consensus_model in ["Gemini-Pro", cfg.GEMINI_PRO_MODEL] else GEMINI_FLASH_MODEL
-            
-            model = genai.GenerativeModel(model_name)
-            generation_config = {"max_output_tokens": int(cfg.CONSENSUS_MAX_TOKENS)}
-
-            response = model.generate_content(
-                consensus_prompt,
-                generation_config=generation_config
-            )
-            return (response.text or "").strip() or "Error: Empty response payload."
-
-        # --- DEEPSEEK ---
-        elif consensus_model in ["DeepSeek", "DeepSeek-Pro"]:
-            client = openai.OpenAI(api_key=api_keys.get("DeepSeek"), base_url="https://api.deepseek.com")
-            # Chat vs Reasoner
-            model_to_use = "deepseek-v4-pro" if consensus_model == "DeepSeek-Pro" else DEFAULT_DEEPSEEK_MODEL
-            
-            response = client.chat.completions.create(
-                model=model_to_use,
-                messages=[
-                    {"role": "system", "content": " "},
-                    {"role": "user", "content": consensus_prompt}
-                ],
-                max_tokens=cfg.CONSENSUS_MAX_TOKENS
-            )
-            return response.choices[0].message.content.strip()
-
-        # --- GROK ---
-        elif consensus_model in ["Grok", "Grok-Pro"]:
-            client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
-            # Fast vs Latest (Strong)
-            model_to_use = "grok-4.3" if consensus_model == "Grok-Pro" else DEFAULT_GROK_MODEL
-            
-            response = client.chat.completions.create(
-                model=model_to_use,
-                messages=[
-                    {"role": "system", "content": " "},
-                    {"role": "user", "content": consensus_prompt}
-                ],
-                max_tokens=cfg.CONSENSUS_MAX_TOKENS
-            )
-            return response.choices[0].message.content.strip()
-
-        else:
-            engine_config = resolve_consensus_engine_model(consensus_model)
-            if not engine_config:
-                return f"Invalid consensus model selected: {consensus_model}"
-            model_to_use = engine_config.api_model
-            provider = engine_config.provider
-            if provider == "openai":
-                client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
-                kwargs = {
-                    "model": model_to_use,
-                    "messages": [
-                        {"role": "system", "content": " "},
-                        {"role": "user", "content": consensus_prompt},
-                    ],
-                    _openai_token_param(model_to_use): cfg.CONSENSUS_MAX_TOKENS,
-                }
-                response = client.chat.completions.create(**kwargs)
-                return response.choices[0].message.content.strip()
-            if provider == "mistral":
-                return _mistral_chat_complete(
-                    api_keys.get("Mistral"),
-                    model_to_use,
-                    messages=[
-                        {"role": "system", "content": ""},
-                        {"role": "user", "content": consensus_prompt},
-                    ],
-                    max_tokens=cfg.CONSENSUS_MAX_TOKENS,
-                )
-            if provider == "anthropic":
-                payload = {
-                    "model": model_to_use,
-                    "max_tokens": cfg.CONSENSUS_MAX_TOKENS,
-                    "system": "",
-                    "messages": [{"role": "user", "content": consensus_prompt}],
-                }
-                response = requests.post(
-                    "https://api.anthropic.com/v1/messages",
-                    json=payload,
-                    headers={
-                        "x-api-key": api_keys.get("Anthropic"),
-                        "Content-Type": "application/json",
-                        "anthropic-version": "2023-06-01",
-                    },
-                )
-                if response.status_code >= 400:
-                    return f"Error with Anthropic: {response.status_code} - {response.text}"
-                data = response.json()
-                return data["content"][0]["text"] if data.get("content") else "Error: No response found in the API response."
-            if provider == "gemini":
-                return _gemini_generate_content_rest(
-                    consensus_prompt,
-                    api_keys.get("Gemini"),
-                    consensus_model,
-                    int(cfg.CONSENSUS_MAX_TOKENS),
-                )
-            if provider == "deepseek":
-                client = openai.OpenAI(api_key=api_keys.get("DeepSeek"), base_url="https://api.deepseek.com")
-                response = client.chat.completions.create(
-                    model=model_to_use,
-                    messages=[
-                        {"role": "system", "content": " "},
-                        {"role": "user", "content": consensus_prompt},
-                    ],
-                    max_tokens=cfg.CONSENSUS_MAX_TOKENS,
-                )
-                return response.choices[0].message.content.strip()
-            if provider == "grok":
-                client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
-                response = client.chat.completions.create(
-                    model=model_to_use,
-                    messages=[
-                        {"role": "system", "content": " "},
-                        {"role": "user", "content": consensus_prompt},
-                    ],
-                    max_tokens=cfg.CONSENSUS_MAX_TOKENS,
-                )
-                return response.choices[0].message.content.strip()
-            return f"Invalid consensus model selected: {consensus_model}"
-    except Exception as e:
-        return f"Consensus error: {str(e)}"
-    
 
 def _build_differences_prompt(
     answer_openai: str,
@@ -506,8 +610,10 @@ def _build_differences_prompt(
     consensus_answer: str,
     excluded_models: list = None,
 ):
-    """Baut den Differences-Prompt. Gibt (prompt, anon_map) zurück oder None,
-    wenn keine Modellantworten vorliegen."""
+    """Baut den Differences-Prompt. Gibt (prompt, anon_map, answers_by_model)
+    zurück oder None, wenn keine Modellantworten vorliegen. answers_by_model
+    enthält die (gekappten) Antworttexte je echtem Modellnamen für die
+    serverseitige Zitat-Verifikation."""
 
     excluded = normalize_excluded_models(excluded_models or [])
 
@@ -532,14 +638,16 @@ def _build_differences_prompt(
     random.shuffle(model_answers)
 
     anon_map = {}
+    answers_by_model = {}
     lines = []
     labels = []
     for idx, (name, text) in enumerate(model_answers):
         label = chr(ord("A") + idx)      # A, B, C, ...
         anon_label = f"Model {label}"
         anon_map[anon_label] = name
+        answers_by_model[name] = (text or "")[:MAX_DIFF_ANSWER_CHARS]
         labels.append(anon_label)
-        lines.append(f"- {anon_label}: {(text or '')[:4000]}")
+        lines.append(f"- {anon_label}: {answers_by_model[name]}")
 
     responses_text = "\n".join(lines)
 
@@ -564,6 +672,7 @@ def _build_differences_prompt(
         "    {\n"
         '      "claim": "the disputed point in one short sentence",\n'
         '      "type": "contradiction",\n'
+        '      "severity": "major",\n'
         '      "positions": [\n'
         '        {"stance": "one short sentence", "models": ["Model A"], "quote": "verbatim short quote"}\n'
         "      ],\n"
@@ -580,6 +689,9 @@ def _build_differences_prompt(
         "\"type\" is \"contradiction\" when facts or conclusions are incompatible, and \"emphasis\" when models merely "
         "set different focus, omit something, or weight things differently. Be conservative: only incompatible "
         "statements count as a contradiction. \"verify\" is optional.\n"
+        "- \"severity\" (only for type \"contradiction\"): \"major\" when the disagreement changes the overall "
+        "conclusion, recommendation, or a central fact of the answer; \"minor\" when it concerns a side detail "
+        "that leaves the conclusion intact. Omit it for \"emphasis\" differences.\n"
         "- Quotes and anchors must be copied verbatim from the given texts. You may shorten them at the start or end, "
         "but never paraphrase. Keep each quote under 200 characters.\n"
         f"- Use only these model labels: {allowed_list}. Never invent other labels.\n"
@@ -591,7 +703,7 @@ def _build_differences_prompt(
         "Model responses:\n" + responses_text + "\n"
     )
 
-    return differences_prompt, anon_map
+    return differences_prompt, anon_map, answers_by_model
 
 
 MAX_DIFF_CLAIMS = 8
@@ -622,6 +734,72 @@ def _extract_json_object(raw: str):
             continue
         if isinstance(parsed, dict):
             return parsed
+
+    # Abgeschnittene Ausgaben (max_tokens mitten im JSON) reparieren: offene
+    # Strings/Arrays/Objekte schließen, halbe Werte am Ende verwerfen.
+    if start != -1:
+        repaired = _repair_truncated_json(text[start:])
+        if repaired is not None:
+            return repaired
+    return None
+
+
+def _close_open_json(text: str):
+    """Schließt offene Strings/Klammern am Ende eines JSON-Fragments.
+    Liefert None, wenn das Fragment so nicht schließbar ist (der Aufrufer
+    kürzt dann weiter)."""
+    stack = []
+    in_string = False
+    escaped = False
+    for ch in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch in "{[":
+            stack.append(ch)
+        elif ch in "}]":
+            if not stack:
+                return None
+            open_ch = stack.pop()
+            if (open_ch == "{") != (ch == "}"):
+                return None
+    repaired = text
+    if escaped:
+        repaired = repaired[:-1]
+    if in_string:
+        repaired += '"'
+    stripped = repaired.rstrip()
+    if stripped.endswith(","):
+        stripped = stripped[:-1].rstrip()
+    if stripped.endswith(":"):
+        # Schlüssel ohne Wert: hier nicht reparierbar.
+        return None
+    return stripped + "".join("}" if ch == "{" else "]" for ch in reversed(stack))
+
+
+def _repair_truncated_json(fragment: str):
+    text = fragment
+    for _ in range(40):
+        repaired = _close_open_json(text)
+        if repaired is not None:
+            try:
+                parsed = json.loads(repaired)
+            except ValueError:
+                parsed = None
+            if isinstance(parsed, dict):
+                logging.info("Differences engine output was truncated; repaired JSON tail.")
+                return parsed
+        cut = max(text.rfind(","), text.rfind("{"), text.rfind("["))
+        if cut <= 0:
+            return None
+        text = text[:cut]
     return None
 
 
@@ -701,9 +879,18 @@ def _normalize_differences(raw_differences, anon_map: dict) -> list:
         if diff_type != "contradiction":
             diff_type = "emphasis"
 
+        severity = ""
+        if diff_type == "contradiction":
+            severity = str(entry.get("severity") or "").strip().lower()
+            if severity != "minor":
+                # Konservativer Default: unklare Schwere zählt als gewichtiger
+                # Widerspruch, damit fehlende Severity nichts beschönigt.
+                severity = "major"
+
         differences.append({
             "claim": claim,
             "type": diff_type,
+            "severity": severity,
             "positions": positions,
             "verify": _clip(entry.get("verify"), MAX_DIFF_TEXT_CHARS),
         })
@@ -712,21 +899,96 @@ def _normalize_differences(raw_differences, anon_map: dict) -> list:
     return differences
 
 
+# ---------------------------------------------------------------------------
+# Agreement-Score: eine transparente 0-100-Zahl aus Claims und Differences.
+# Ersetzt die alte "Anzahl Widersprüche"-Heuristik als einzige Quelle für die
+# Credibility-Stufe (Freitext-Satz UND Frontend-Verdict speisen sich daraus).
+# ---------------------------------------------------------------------------
+
+AGREEMENT_LEVEL_THRESHOLDS = [
+    (85, "very"),
+    (65, "largely"),
+    (40, "partially"),
+    (20, "hardly"),
+]
+
+_CREDIBILITY_SENTENCES = {
+    "very": "The consensus answer is **very** credible.",
+    "largely": "The consensus answer is **largely** credible.",
+    "partially": "The consensus answer is **partially** credible.",
+    "hardly": "The consensus answer is **hardly** credible.",
+    "not": "The consensus answer is **not** credible.",
+}
+
+
+def compute_agreement_score(data: dict) -> dict:
+    """Berechnet den Agreement-Score (0-100) samt Level.
+
+    Basis ist die mittlere Zustimmungsquote über die Claims; Widersprüche
+    ziehen nach Schwere ab (major > minor > emphasis). Caps erhalten die
+    etablierte Stufen-Semantik: "very" gibt es nur ohne jede Differenz,
+    Major-Widersprüche deckeln auf "partially"/"hardly", und wenige
+    verglichene Modelle deckeln das erreichbare Vertrauen."""
+    claims = data.get("claims") or []
+    differences = data.get("differences") or []
+    model_count = len(data.get("models_compared") or [])
+
+    ratios = []
+    for claim in claims:
+        agree = len(claim.get("agree") or [])
+        dissent = len(claim.get("dissent") or [])
+        if agree + dissent:
+            ratios.append(agree / (agree + dissent))
+    base = sum(ratios) / len(ratios) if ratios else 1.0
+
+    contradictions = [d for d in differences if d.get("type") == "contradiction"]
+    major = sum(1 for d in contradictions if d.get("severity") != "minor")
+    minor = len(contradictions) - major
+    emphases = len(differences) - len(contradictions)
+
+    score = base - 0.25 * major - 0.10 * minor - 0.05 * emphases
+
+    caps = [1.0]
+    if differences:
+        caps.append(0.84)   # "very" nur bei völlig differenzfreiem Vergleich
+    if major >= 2:
+        caps.append(0.39)   # mehrere Major-Widersprüche: höchstens "hardly"
+    elif major == 1:
+        caps.append(0.64)   # ein Major-Widerspruch: höchstens "partially"
+    if model_count == 3:
+        caps.append(0.90)
+    elif model_count == 2:
+        caps.append(0.75)   # 2 Modelle können kein "very" belegen
+    elif model_count <= 1:
+        caps.append(0.50)
+    score = max(0.0, min(score, *caps))
+
+    score_pct = int(round(score * 100))
+    level = "not"
+    for threshold, name in AGREEMENT_LEVEL_THRESHOLDS:
+        if score_pct >= threshold:
+            level = name
+            break
+
+    return {
+        "score": score_pct,
+        "level": level,
+        "model_count": model_count,
+        "major_contradictions": major,
+        "minor_contradictions": minor,
+        "emphases": emphases,
+    }
+
+
 def _legacy_differences_text(data: dict) -> str:
     """Synthetisiert aus den strukturierten Daten den bisherigen Freitext
     (Credibility-Satz, Bullets, BestModel-Zeile), damit Bookmarks,
-    Credibility-Frame und Leaderboard-Vote unverändert funktionieren."""
+    Credibility-Frame und Leaderboard-Vote unverändert funktionieren.
+    Der Credibility-Satz leitet sich aus dem Agreement-Score ab, damit
+    Freitext und strukturierte Auswertung nie divergieren."""
     differences = data.get("differences") or []
-    contradictions = [d for d in differences if d.get("type") == "contradiction"]
-
-    if not differences:
-        credibility = "The consensus answer is **very** credible."
-    elif not contradictions:
-        credibility = "The consensus answer is **largely** credible."
-    elif len(contradictions) == 1:
-        credibility = "The consensus answer is **partially** credible."
-    else:
-        credibility = "The consensus answer is **hardly** credible."
+    agreement = data.get("agreement") or compute_agreement_score(data)
+    credibility = _CREDIBILITY_SENTENCES.get(agreement.get("level"), _CREDIBILITY_SENTENCES["partially"])
 
     lines = [credibility, "", "_____________", ""]
     if differences:
@@ -742,14 +1004,139 @@ def _legacy_differences_text(data: dict) -> str:
     return "\n".join(lines)
 
 
-def parse_differences_payload(raw: str, anon_map: dict):
+def _looks_like_json(raw: str) -> bool:
+    text = str(raw or "").lstrip()
+    return text.startswith("{") or text.startswith("```")
+
+
+# ---------------------------------------------------------------------------
+# Serverseitige Zitat-Verifikation: Anchors gegen die Konsensantwort, Quotes
+# gegen die jeweilige Modellantwort. Spiegelbildlich zur Suche im Frontend
+# (consensus-insights.js): Whitespace kollabieren, Anführungszeichen
+# vereinheitlichen, Ellipsen an den Rändern ignorieren.
+# ---------------------------------------------------------------------------
+
+_QUOTE_CHARS = set("“”„‘’«»\"")
+_ELLIPSIS_EDGE_RE = re.compile(r"^(?:\.{3}|…)\s*|\s*(?:\.{3}|…)$")
+FUZZY_MATCH_MIN_CHARS = 15
+FUZZY_MATCH_MIN_RATIO = 0.6
+
+
+def _normalize_with_offsets(text: str):
+    """Normalisiert einen Text und liefert je normalisiertem Zeichen den
+    Original-Offset, damit Treffer auf den Originaltext abgebildet werden."""
+    norm_chars = []
+    offsets = []
+    for i, ch in enumerate(str(text or "")):
+        c = ch.lower()
+        if c in _QUOTE_CHARS:
+            c = '"'
+        if c.isspace():
+            if not norm_chars or norm_chars[-1] == " ":
+                continue
+            c = " "
+        norm_chars.append(c)
+        offsets.append(i)
+    while norm_chars and norm_chars[-1] == " ":
+        norm_chars.pop()
+        offsets.pop()
+    return "".join(norm_chars), offsets
+
+
+def _normalize_needle(text: str) -> str:
+    norm, _ = _normalize_with_offsets(_ELLIPSIS_EDGE_RE.sub("", str(text or "")))
+    return norm
+
+
+def _locate_span(haystack: str, hay_norm: str, hay_offsets: list, needle: str):
+    """Sucht ein (LLM-)Zitat im Originaltext: erst exakt auf normalisierter
+    Basis, dann fuzzy über difflib. Liefert den Original-Ausschnitt oder None."""
+    needle_norm = _normalize_needle(needle)
+    if not needle_norm:
+        return None
+    idx = hay_norm.find(needle_norm)
+    if idx != -1:
+        start = hay_offsets[idx]
+        end = hay_offsets[idx + len(needle_norm) - 1] + 1
+        return haystack[start:end]
+    if len(needle_norm) >= FUZZY_MATCH_MIN_CHARS:
+        matcher = difflib.SequenceMatcher(None, hay_norm, needle_norm, autojunk=False)
+        match = matcher.find_longest_match(0, len(hay_norm), 0, len(needle_norm))
+        if match.size >= max(FUZZY_MATCH_MIN_CHARS, int(len(needle_norm) * FUZZY_MATCH_MIN_RATIO)):
+            start = hay_offsets[match.a]
+            end = hay_offsets[match.a + match.size - 1] + 1
+            return haystack[start:end].strip()
+    return None
+
+
+def _verify_differences_data(data: dict, consensus_answer: str, model_answers: dict) -> None:
+    """Ersetzt gefundene Anchors/Quotes durch den Originaltext (hilft dem
+    Frontend-Matching) und leert Quotes, die in der jeweiligen Modellantwort
+    nicht auffindbar sind - halluzinierte Zitate werden so nie angezeigt."""
+    prepared = {}
+
+    def _find(key: str, text: str, needle: str):
+        if not text:
+            return None
+        if key not in prepared:
+            norm, offsets = _normalize_with_offsets(text)
+            prepared[key] = (norm, offsets)
+        norm, offsets = prepared[key]
+        return _locate_span(text, norm, offsets, needle)
+
+    consensus_text = str(consensus_answer or "")
+    for claim in data.get("claims") or []:
+        span = _find("__consensus__", consensus_text, claim.get("anchor"))
+        if span:
+            claim["anchor"] = _clip(span, MAX_DIFF_TEXT_CHARS)
+        else:
+            logging.info(f"Differences anchor not found in consensus answer: {claim.get('anchor')!r}")
+        for item in claim.get("dissent") or []:
+            if not item.get("quote"):
+                continue
+            span = _find(item["model"], model_answers.get(item["model"]) or "", item["quote"])
+            if span:
+                item["quote"] = _clip(span, MAX_DIFF_QUOTE_CHARS)
+            else:
+                logging.info(f"Dropping unverifiable dissent quote for {item['model']}: {item['quote']!r}")
+                item["quote"] = ""
+
+    for diff in data.get("differences") or []:
+        for position in diff.get("positions") or []:
+            if not position.get("quote"):
+                continue
+            span = None
+            for model in position.get("models") or []:
+                span = _find(model, model_answers.get(model) or "", position["quote"])
+                if span:
+                    break
+            if span:
+                position["quote"] = _clip(span, MAX_DIFF_QUOTE_CHARS)
+            else:
+                logging.info(f"Dropping unverifiable position quote for {position.get('models')}: {position['quote']!r}")
+                position["quote"] = ""
+
+
+def parse_differences_payload(raw: str, anon_map: dict, consensus_answer: str = None, model_answers: dict = None):
     """Parst die JSON-Ausgabe des Differences-Calls und übersetzt die
-    anonymisierten Labels zurück. Gibt (data | None, legacy_text) zurück;
-    bei unparsbarer Ausgabe ist data None und legacy_text der Rohtext
-    (mit rückübersetzter BestModel-Zeile, falls vorhanden)."""
+    anonymisierten Labels zurück. Gibt (data | None, legacy_text) zurück.
+
+    Bei unparsbarer Ausgabe ist data None; sieht die Rohausgabe nach JSON aus,
+    ist legacy_text leer (kein Roh-JSON an den Nutzer), sonst der Rohtext mit
+    rückübersetzter BestModel-Zeile (Alt-Verhalten für Prosa-Ausgaben).
+    Mit consensus_answer/model_answers werden Anchors und Quotes serverseitig
+    verifiziert."""
     parsed = _extract_json_object(raw)
-    if parsed is None:
-        return None, _translate_best_model(str(raw or "").strip(), anon_map)
+    if parsed is None or not (
+        isinstance(parsed.get("claims"), list) and isinstance(parsed.get("differences"), list)
+    ):
+        # Auch reparierte, aber strukturell unvollständige Objekte (z. B. ohne
+        # "differences"-Liste) gelten als unparsbar: fehlende Widersprüche
+        # dürfen nicht als "keine Widersprüche" durchgehen.
+        text = str(raw or "").strip()
+        if _looks_like_json(text):
+            return None, ""
+        return None, _translate_best_model(text, anon_map)
 
     best_label = str(parsed.get("best_model") or "").strip()
     best_model = anon_map.get(best_label, "")
@@ -762,6 +1149,9 @@ def parse_differences_payload(raw: str, anon_map: dict):
         "best_model": best_model,
         "models_compared": sorted(anon_map.values()),
     }
+    if consensus_answer or model_answers:
+        _verify_differences_data(data, consensus_answer or "", model_answers or {})
+    data["agreement"] = compute_agreement_score(data)
     return data, _legacy_differences_text(data)
 
 
@@ -784,6 +1174,72 @@ def _translate_best_model(result: str, anon_map: dict) -> str:
     return result
 
 
+# ---------------------------------------------------------------------------
+# Differences-Engine: Judge-Policy, Attempt-Plan und die beiden Einstiege
+# (query_differences / stream_differences).
+# ---------------------------------------------------------------------------
+
+# Differences laufen bewusst immer auf dem günstigen Standard-Judge des
+# jeweiligen Providers: strukturierte Extraktion braucht kein Pro-Modell,
+# und der Judge-Call fällt bei jedem Lauf an.
+DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = {
+    "openai": DEFAULT_OPENAI_MODEL,
+    "mistral": DEFAULT_MISTRAL_MODEL,
+    "anthropic": DEFAULT_ANTHROPIC_MODEL,
+    "gemini": GEMINI_FLASH_MODEL,
+    "deepseek": DEFAULT_DEEPSEEK_MODEL,
+    "grok": DEFAULT_GROK_MODEL,
+}
+
+# Reihenfolge für den Fallback-Judge, wenn der primäre Judge zweimal scheitert.
+_FALLBACK_JUDGE_PRIORITY = ["gemini", "openai", "mistral", "deepseek", "grok", "anthropic"]
+
+DIFFERENCES_SYSTEM_PROMPT = "Answer in the exact same language as the Model responses."
+DIFFERENCES_TEMPERATURE = 0.2
+DIFFERENCES_RETRY_SUFFIX = (
+    "\n\nIMPORTANT: Return exactly ONE complete, syntactically valid JSON object "
+    "matching the schema above. No prose, no markdown fences, no trailing text."
+)
+
+
+def _resolve_differences_engine(differences_model: str):
+    resolved = _resolve_engine(differences_model)
+    if resolved is None:
+        return None
+    provider = resolved[0]
+    judge = DIFFERENCES_JUDGE_MODEL_BY_PROVIDER.get(provider)
+    if judge:
+        return provider, judge, judge
+    return resolved
+
+
+def _fallback_judge_engine(exclude_provider: str, api_keys: dict):
+    for provider in _FALLBACK_JUDGE_PRIORITY:
+        if provider == exclude_provider:
+            continue
+        if provider == "gemini":
+            if not _gemini_engine_key(api_keys):
+                continue
+        elif not api_keys.get(_PROVIDER_KEY_NAMES[provider]):
+            continue
+        judge = DIFFERENCES_JUDGE_MODEL_BY_PROVIDER[provider]
+        return provider, judge, judge
+    return None
+
+
+def _differences_attempts(differences_model: str, api_keys: dict):
+    """Attempt-Plan: primärer Judge, dann Retry, dann Fallback-Provider mit
+    verfügbarem Key. None bei ungültiger Engine."""
+    primary = _resolve_differences_engine(differences_model)
+    if primary is None:
+        return None
+    attempts = [(primary, False), (primary, True)]
+    fallback = _fallback_judge_engine(primary[0], api_keys)
+    if fallback:
+        attempts.append((fallback, True))
+    return attempts
+
+
 def query_differences(
     answer_openai: str,
     answer_mistral: str,
@@ -799,6 +1255,7 @@ def query_differences(
     """
     Extrahiert die Unterschiede zwischen den Antworten der 6 Hauptmodelle,
     anonymisiert die Modellnamen und ordnet das bestbewertete Modell anschließend wieder zu.
+    Läuft mit Structured Output, JSON-Repair, einem Retry und Fallback-Judge.
     Gibt (legacy_text, structured_data | None) zurück.
     """
     built = _build_differences_prompt(
@@ -814,383 +1271,67 @@ def query_differences(
     if built is None:
         return "Error in comparison: no model responses available.", None
 
-    differences_prompt, anon_map = built
+    differences_prompt, anon_map, answers_by_model = built
 
-    try:
-        # OPENAI
-        if differences_model in ["OpenAI", "OpenAI-Pro"]:
-            client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
-            model_to_use = "gpt-5.5" if differences_model == "OpenAI-Pro" else DEFAULT_OPENAI_MODEL
-            
-            kwargs = {
-                "model": model_to_use,
-                "messages": [
-                    {"role": "system", "content": "Answer in the exact same language as the Model responses."},
-                    {"role": "user", "content": differences_prompt}
-                ]
-            }
-            if "gpt-5" in model_to_use or "o" in model_to_use:
-                kwargs["max_completion_tokens"] = cfg.DIFFERENCES_MAX_TOKENS
-            else:
-                kwargs["max_tokens"] = cfg.DIFFERENCES_MAX_TOKENS
-                
-            response = client.chat.completions.create(**kwargs)
-            result = response.choices[0].message.content.strip()
+    attempts = _differences_attempts(differences_model, api_keys)
+    if attempts is None:
+        return "Invalid model selected for difference comparison.", None
 
-        # MISTRAL
-        elif differences_model in ["Mistral", "Mistral-Pro"]:
-            model_to_use = MISTRAL_PRO_MODEL if differences_model == "Mistral-Pro" else DEFAULT_MISTRAL_MODEL
-            result = _mistral_chat_complete(
-                api_keys.get("Mistral"),
-                model_to_use,
-                messages=[
-                    {"role": "system", "content": "Answer in the exact same language as the Model responses."},
-                    {"role": "user", "content": differences_prompt}
-                ],
+    prose_fallback = None
+    last_error = "empty result from differences engine."
+    for (provider, api_model, model_ref), is_retry in attempts:
+        attempt_prompt = differences_prompt + (DIFFERENCES_RETRY_SUFFIX if is_retry else "")
+        try:
+            raw = _call_engine_text(
+                provider, api_model, model_ref, api_keys,
+                system=DIFFERENCES_SYSTEM_PROMPT,
+                prompt=attempt_prompt,
                 max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
+                temperature=DIFFERENCES_TEMPERATURE,
+                json_mode=True,
             )
+        except Exception as e:
+            last_error = str(e)
+            logging.warning(f"Differences attempt failed on {provider}/{api_model}: {e}")
+            continue
+        if not raw:
+            last_error = "empty result from differences engine."
+            continue
 
-        elif differences_model in ["Anthropic", "Anthropic-Pro"]:
-            url = "https://api.anthropic.com/v1/messages"
-            headers = {
-                "x-api-key": api_keys.get("Anthropic"),
-                "Content-Type": "application/json",
-                "anthropic-version": "2023-06-01"
-            }
-            model_to_use = ANTHROPIC_PRO_MODEL if differences_model == "Anthropic-Pro" else DEFAULT_ANTHROPIC_MODEL
-            payload = {
-                "model": model_to_use,
-                "max_tokens": cfg.DIFFERENCES_MAX_TOKENS,
-                "system": "Answer in the exact same language as the Model responses.",
-                "messages": [{"role": "user", "content": differences_prompt}]
-            }
-            resp = requests.post(url, json=payload, headers=headers)
-            if resp.status_code == 200:
-                data = resp.json()
-                result = data["content"][0]["text"] if data.get("content") else ""
-            else:
-                return f"Error with Anthropic: {resp.status_code} - {resp.text}", None
+        data, legacy_text = parse_differences_payload(
+            raw, anon_map,
+            consensus_answer=consensus_answer,
+            model_answers=answers_by_model,
+        )
+        if data is not None:
+            return legacy_text, data
+        if prose_fallback is None and legacy_text and not _looks_like_json(raw):
+            prose_fallback = legacy_text
+        last_error = "unparsable output from differences engine."
+        logging.warning(f"Differences output unparsable on {provider}/{api_model}")
 
-        elif differences_model in ["Gemini", "Gemini-Pro", cfg.GEMINI_FRONTIER_LOW_MODEL]:
-            try:
-                if differences_model == cfg.GEMINI_FRONTIER_LOW_MODEL:
-                    result = _gemini_generate_content_rest(
-                        differences_prompt,
-                        api_keys.get("Gemini"),
-                        cfg.GEMINI_FRONTIER_LOW_MODEL,
-                        int(cfg.DIFFERENCES_MAX_TOKENS),
-                    )
-                else:
-                    if api_keys.get("Gemini"):
-                        genai.configure(api_key=api_keys["Gemini"])
-                    elif os.environ.get("DEVELOPER_GEMINI_API_KEY"):
-                        genai.configure(api_key=os.environ["DEVELOPER_GEMINI_API_KEY"])
-                    else:
-                        genai.configure()
-
-                    model = genai.GenerativeModel(
-                        model_name=GEMINI_FLASH_MODEL,
-                        system_instruction="Answer in the exact same language as the Model responses.",
-                        safety_settings=[{"category":"HARM_CATEGORY_HARASSMENT","threshold":"BLOCK_ONLY_HIGH"}],
-                        generation_config={"max_output_tokens": int(cfg.DIFFERENCES_MAX_TOKENS), "temperature": 0.2}
-                    )
-
-                    resp = model.generate_content(differences_prompt)
-                    result = (getattr(resp, "text", None) or "").strip()
-                    if not result:
-                        cand = (getattr(resp, "candidates", []) or [None])[0]
-                        fr = getattr(cand, "finish_reason", None)
-                        frs = str(fr)
-                        if frs in ("2","FinishReason.SAFETY","SAFETY"):
-                            return "Error with Gemini (differences): response was blocked by safety filters.", None
-                        if frs in ("3","FinishReason.MAX_TOKENS","MAX_TOKENS"):
-                            return "Error with Gemini (differences): hit max tokens before returning text.", None
-                        return f"Error with Gemini (differences): empty candidate (finish_reason={frs}).", None
-
-            except Exception as e:
-                return f"Error with Gemini (differences): {e}", None
-
-        elif differences_model in ["DeepSeek", "DeepSeek-Pro"]:
-            client = openai.OpenAI(api_key=api_keys.get("DeepSeek"), base_url="https://api.deepseek.com")
-            response = client.chat.completions.create(
-                model=DEFAULT_DEEPSEEK_MODEL,
-                messages=[
-                    {"role": "system", "content": "Answer in the exact same language as the Model responses."},
-                    {"role": "user", "content": differences_prompt}
-                ],
-                max_tokens=cfg.DIFFERENCES_MAX_TOKENS
-            )
-            result = response.choices[0].message.content.strip()
-
-        elif differences_model in ["Grok", "Grok-Pro"]:
-            client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
-            response = client.chat.completions.create(
-                model=DEFAULT_GROK_MODEL,
-                messages=[
-                    {"role": "system", "content": "Answer in the exact same language as the Model responses."},
-                    {"role": "user", "content": differences_prompt}
-                ],
-                max_tokens=cfg.DIFFERENCES_MAX_TOKENS
-            )
-            result = response.choices[0].message.content.strip()
-
-        else:
-            engine_config = resolve_consensus_engine_model(differences_model)
-            if not engine_config:
-                return "Invalid model selected for difference comparison.", None
-            model_to_use = engine_config.api_model
-            provider = engine_config.provider
-            if provider == "openai":
-                client = openai.OpenAI(api_key=api_keys.get("OpenAI"))
-                kwargs = {
-                    "model": model_to_use,
-                    "messages": [
-                        {"role": "system", "content": "Answer in the exact same language as the Model responses."},
-                        {"role": "user", "content": differences_prompt},
-                    ],
-                    _openai_token_param(model_to_use): cfg.DIFFERENCES_MAX_TOKENS,
-                }
-                response = client.chat.completions.create(**kwargs)
-                result = response.choices[0].message.content.strip()
-            elif provider == "mistral":
-                result = _mistral_chat_complete(
-                    api_keys.get("Mistral"),
-                    model_to_use,
-                    messages=[
-                        {"role": "system", "content": "Answer in the exact same language as the Model responses."},
-                        {"role": "user", "content": differences_prompt},
-                    ],
-                    max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
-                )
-            elif provider == "anthropic":
-                resp = requests.post(
-                    "https://api.anthropic.com/v1/messages",
-                    json={
-                        "model": model_to_use,
-                        "max_tokens": cfg.DIFFERENCES_MAX_TOKENS,
-                        "system": "Answer in the exact same language as the Model responses.",
-                        "messages": [{"role": "user", "content": differences_prompt}],
-                    },
-                    headers={
-                        "x-api-key": api_keys.get("Anthropic"),
-                        "Content-Type": "application/json",
-                        "anthropic-version": "2023-06-01",
-                    },
-                )
-                if resp.status_code >= 400:
-                    return f"Error with Anthropic: {resp.status_code} - {resp.text}", None
-                data = resp.json()
-                result = data["content"][0]["text"] if data.get("content") else ""
-            elif provider == "gemini":
-                result = _gemini_generate_content_rest(
-                    differences_prompt,
-                    api_keys.get("Gemini") or os.environ.get("DEVELOPER_GEMINI_API_KEY"),
-                    differences_model,
-                    int(cfg.DIFFERENCES_MAX_TOKENS),
-                )
-            elif provider == "deepseek":
-                client = openai.OpenAI(api_key=api_keys.get("DeepSeek"), base_url="https://api.deepseek.com")
-                response = client.chat.completions.create(
-                    model=model_to_use,
-                    messages=[
-                        {"role": "system", "content": "Answer in the exact same language as the Model responses."},
-                        {"role": "user", "content": differences_prompt},
-                    ],
-                    max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
-                )
-                result = response.choices[0].message.content.strip()
-            elif provider == "grok":
-                client = openai.OpenAI(api_key=api_keys.get("Grok"), base_url="https://api.x.ai/v1")
-                response = client.chat.completions.create(
-                    model=model_to_use,
-                    messages=[
-                        {"role": "system", "content": "Answer in the exact same language as the Model responses."},
-                        {"role": "user", "content": differences_prompt},
-                    ],
-                    max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
-                )
-                result = response.choices[0].message.content.strip()
-            else:
-                return "Invalid model selected for difference comparison.", None
-
-    except Exception as e:
-        return f"Error in comparison: {e}", None
-
-    if not result:
-        return "Error in comparison: empty result from differences engine.", None
-
-    # JSON parsen, Labels rückübersetzen, Legacy-Text synthetisieren
-    data, legacy_text = parse_differences_payload(result, anon_map)
-    return legacy_text, data
+    if prose_fallback:
+        return prose_fallback, None
+    return f"Error in comparison: {last_error}", None
 
 
 # ---------------------------------------------------------------------------
 # Streaming-Varianten: liefern {"type": "delta", "text": ...} Events und am
-# Ende {"type": "final", "text": <Gesamttext>}. Fehler werden – wie bei den
-# nicht-streamenden Varianten – als Fehlertext im final-Event transportiert.
+# Ende {"type": "final", "text": <Gesamttext>}. Fehler werden - wie bei den
+# nicht-streamenden Varianten - als Fehlertext im final-Event transportiert.
 # ---------------------------------------------------------------------------
 
-class _InvalidEngineError(Exception):
-    pass
-
-
 def _stream_consensus_engine(consensus_model: str, api_keys: dict, consensus_prompt: str):
-    from app.services.llm.streaming import (
-        stream_anthropic_text,
-        stream_chat_completion_text,
-        stream_gemini_prompt_text,
-        stream_gemini_text,
-        stream_mistral_chat_text,
+    resolved = _resolve_engine(consensus_model)
+    if resolved is None:
+        raise _InvalidEngineError(f"Invalid consensus model selected: {consensus_model}")
+    provider, api_model, model_ref = resolved
+    yield from _stream_engine_text(
+        provider, api_model, model_ref, api_keys,
+        system="",
+        prompt=consensus_prompt,
+        max_tokens=cfg.CONSENSUS_MAX_TOKENS,
     )
-
-    max_tokens = int(cfg.CONSENSUS_MAX_TOKENS)
-
-    if consensus_model in ["OpenAI", "OpenAI-Pro"]:
-        model_to_use = "gpt-5.5" if consensus_model == "OpenAI-Pro" else DEFAULT_OPENAI_MODEL
-        token_param = "max_completion_tokens" if ("gpt-5" in model_to_use or "o" in model_to_use) else "max_tokens"
-        yield from stream_chat_completion_text(
-            api_key=api_keys.get("OpenAI"),
-            model=model_to_use,
-            messages=[
-                {"role": "system", "content": " "},
-                {"role": "user", "content": consensus_prompt}
-            ],
-            max_tokens=max_tokens,
-            token_param=token_param,
-        )
-
-    elif consensus_model in ["Mistral", "Mistral-Pro"]:
-        model_to_use = MISTRAL_PRO_MODEL if consensus_model == "Mistral-Pro" else DEFAULT_MISTRAL_MODEL
-        yield from stream_mistral_chat_text(
-            api_key=api_keys.get("Mistral"),
-            model=model_to_use,
-            messages=[
-                {"role": "system", "content": ""},
-                {"role": "user", "content": consensus_prompt}
-            ],
-            max_tokens=max_tokens,
-        )
-
-    elif consensus_model in ["Anthropic", "Anthropic-Pro"]:
-        model_to_use = ANTHROPIC_PRO_MODEL if consensus_model == "Anthropic-Pro" else DEFAULT_ANTHROPIC_MODEL
-        yield from stream_anthropic_text(
-            api_key=api_keys.get("Anthropic"),
-            model=model_to_use,
-            system="",
-            prompt=consensus_prompt,
-            max_tokens=max_tokens,
-        )
-
-    elif consensus_model in ["Gemini", "Gemini-Pro", cfg.GEMINI_FRONTIER_LOW_MODEL, cfg.GEMINI_PRO_MODEL]:
-        gemini_key = api_keys.get("Gemini")
-        if consensus_model == cfg.GEMINI_FRONTIER_LOW_MODEL:
-            yield from stream_gemini_prompt_text(
-                api_key=gemini_key,
-                model_override=cfg.GEMINI_FRONTIER_LOW_MODEL,
-                prompt=consensus_prompt,
-                max_tokens=max_tokens,
-            )
-        else:
-            model_name = GEMINI_PRO_MODEL if consensus_model in ["Gemini-Pro", cfg.GEMINI_PRO_MODEL] else GEMINI_FLASH_MODEL
-            yield from stream_gemini_text(
-                api_key=gemini_key,
-                model=model_name,
-                prompt=consensus_prompt,
-                max_tokens=max_tokens,
-            )
-
-    elif consensus_model in ["DeepSeek", "DeepSeek-Pro"]:
-        model_to_use = "deepseek-v4-pro" if consensus_model == "DeepSeek-Pro" else DEFAULT_DEEPSEEK_MODEL
-        yield from stream_chat_completion_text(
-            api_key=api_keys.get("DeepSeek"),
-            base_url="https://api.deepseek.com",
-            model=model_to_use,
-            messages=[
-                {"role": "system", "content": " "},
-                {"role": "user", "content": consensus_prompt}
-            ],
-            max_tokens=max_tokens,
-        )
-
-    elif consensus_model in ["Grok", "Grok-Pro"]:
-        model_to_use = "grok-4.3" if consensus_model == "Grok-Pro" else DEFAULT_GROK_MODEL
-        yield from stream_chat_completion_text(
-            api_key=api_keys.get("Grok"),
-            base_url="https://api.x.ai/v1",
-            model=model_to_use,
-            messages=[
-                {"role": "system", "content": " "},
-                {"role": "user", "content": consensus_prompt}
-            ],
-            max_tokens=max_tokens,
-        )
-
-    else:
-        engine_config = resolve_consensus_engine_model(consensus_model)
-        if not engine_config:
-            raise _InvalidEngineError(f"Invalid consensus model selected: {consensus_model}")
-        model_to_use = engine_config.api_model
-        provider = engine_config.provider
-        if provider == "openai":
-            yield from stream_chat_completion_text(
-                api_key=api_keys.get("OpenAI"),
-                model=model_to_use,
-                messages=[
-                    {"role": "system", "content": " "},
-                    {"role": "user", "content": consensus_prompt},
-                ],
-                max_tokens=max_tokens,
-                token_param=_openai_token_param(model_to_use),
-            )
-        elif provider == "mistral":
-            yield from stream_mistral_chat_text(
-                api_key=api_keys.get("Mistral"),
-                model=model_to_use,
-                messages=[
-                    {"role": "system", "content": ""},
-                    {"role": "user", "content": consensus_prompt},
-                ],
-                max_tokens=max_tokens,
-            )
-        elif provider == "anthropic":
-            yield from stream_anthropic_text(
-                api_key=api_keys.get("Anthropic"),
-                model=model_to_use,
-                system="",
-                prompt=consensus_prompt,
-                max_tokens=max_tokens,
-            )
-        elif provider == "gemini":
-            yield from stream_gemini_prompt_text(
-                api_key=api_keys.get("Gemini"),
-                model_override=consensus_model,
-                prompt=consensus_prompt,
-                max_tokens=max_tokens,
-            )
-        elif provider == "deepseek":
-            yield from stream_chat_completion_text(
-                api_key=api_keys.get("DeepSeek"),
-                base_url="https://api.deepseek.com",
-                model=model_to_use,
-                messages=[
-                    {"role": "system", "content": " "},
-                    {"role": "user", "content": consensus_prompt},
-                ],
-                max_tokens=max_tokens,
-            )
-        elif provider == "grok":
-            yield from stream_chat_completion_text(
-                api_key=api_keys.get("Grok"),
-                base_url="https://api.x.ai/v1",
-                model=model_to_use,
-                messages=[
-                    {"role": "system", "content": " "},
-                    {"role": "user", "content": consensus_prompt},
-                ],
-                max_tokens=max_tokens,
-            )
-        else:
-            raise _InvalidEngineError(f"Invalid consensus model selected: {consensus_model}")
 
 
 def stream_consensus(
@@ -1218,181 +1359,31 @@ def stream_consensus(
         model_sources=model_sources,
     )
 
-    parts = []
-    try:
-        for text in _stream_consensus_engine(consensus_model, api_keys, consensus_prompt):
-            parts.append(text)
-            yield {"type": "delta", "text": text}
-    except _InvalidEngineError as e:
-        yield {"type": "final", "text": str(e)}
-        return
-    except Exception as e:
-        yield {"type": "final", "text": f"Consensus error: {str(e)}"}
-        return
+    # Zwei Versuche wie im nicht-streamenden Pfad. Deltas eines gescheiterten
+    # Versuchs sind unkritisch: das final-Event ersetzt den gerenderten
+    # Konsens-Inhalt im Frontend vollständig (injectMarkdown).
+    last_error = "empty response from consensus engine."
+    for attempt in range(CONSENSUS_MAX_ATTEMPTS):
+        parts = []
+        try:
+            for text in _stream_consensus_engine(consensus_model, api_keys, consensus_prompt):
+                parts.append(text)
+                yield {"type": "delta", "text": text}
+        except _InvalidEngineError as e:
+            yield {"type": "final", "text": str(e), "error": True}
+            return
+        except Exception as e:
+            last_error = str(e)
+            logging.warning(f"Consensus stream attempt {attempt + 1} failed: {e}")
+            continue
 
-    final_text = "".join(parts).strip()
-    if not final_text:
-        final_text = "Consensus error: empty response from consensus engine."
-    yield {"type": "final", "text": final_text}
+        final_text = "".join(parts).strip()
+        if final_text:
+            yield {"type": "final", "text": final_text}
+            return
+        last_error = "empty response from consensus engine."
 
-
-def _stream_differences_engine(differences_model: str, api_keys: dict, differences_prompt: str):
-    from app.services.llm.streaming import (
-        stream_anthropic_text,
-        stream_chat_completion_text,
-        stream_gemini_prompt_text,
-        stream_gemini_text,
-        stream_mistral_chat_text,
-    )
-
-    max_tokens = int(cfg.DIFFERENCES_MAX_TOKENS)
-    system_text = "Answer in the exact same language as the Model responses."
-
-    if differences_model in ["OpenAI", "OpenAI-Pro"]:
-        model_to_use = "gpt-5.5" if differences_model == "OpenAI-Pro" else DEFAULT_OPENAI_MODEL
-        token_param = "max_completion_tokens" if ("gpt-5" in model_to_use or "o" in model_to_use) else "max_tokens"
-        yield from stream_chat_completion_text(
-            api_key=api_keys.get("OpenAI"),
-            model=model_to_use,
-            messages=[
-                {"role": "system", "content": system_text},
-                {"role": "user", "content": differences_prompt}
-            ],
-            max_tokens=max_tokens,
-            token_param=token_param,
-        )
-
-    elif differences_model in ["Mistral", "Mistral-Pro"]:
-        model_to_use = MISTRAL_PRO_MODEL if differences_model == "Mistral-Pro" else DEFAULT_MISTRAL_MODEL
-        yield from stream_mistral_chat_text(
-            api_key=api_keys.get("Mistral"),
-            model=model_to_use,
-            messages=[
-                {"role": "system", "content": system_text},
-                {"role": "user", "content": differences_prompt}
-            ],
-            max_tokens=max_tokens,
-        )
-
-    elif differences_model in ["Anthropic", "Anthropic-Pro"]:
-        model_to_use = ANTHROPIC_PRO_MODEL if differences_model == "Anthropic-Pro" else DEFAULT_ANTHROPIC_MODEL
-        yield from stream_anthropic_text(
-            api_key=api_keys.get("Anthropic"),
-            model=model_to_use,
-            system=system_text,
-            prompt=differences_prompt,
-            max_tokens=max_tokens,
-        )
-
-    elif differences_model in ["Gemini", "Gemini-Pro", cfg.GEMINI_FRONTIER_LOW_MODEL]:
-        gemini_key = api_keys.get("Gemini") or os.environ.get("DEVELOPER_GEMINI_API_KEY")
-        if differences_model == cfg.GEMINI_FRONTIER_LOW_MODEL:
-            yield from stream_gemini_prompt_text(
-                api_key=gemini_key,
-                model_override=cfg.GEMINI_FRONTIER_LOW_MODEL,
-                prompt=differences_prompt,
-                max_tokens=max_tokens,
-            )
-        else:
-            yield from stream_gemini_text(
-                api_key=gemini_key,
-                model=GEMINI_FLASH_MODEL,
-                prompt=differences_prompt,
-                max_tokens=max_tokens,
-                system=system_text,
-                temperature=0.2,
-            )
-
-    elif differences_model in ["DeepSeek", "DeepSeek-Pro"]:
-        yield from stream_chat_completion_text(
-            api_key=api_keys.get("DeepSeek"),
-            base_url="https://api.deepseek.com",
-            model=DEFAULT_DEEPSEEK_MODEL,
-            messages=[
-                {"role": "system", "content": system_text},
-                {"role": "user", "content": differences_prompt}
-            ],
-            max_tokens=max_tokens,
-        )
-
-    elif differences_model in ["Grok", "Grok-Pro"]:
-        yield from stream_chat_completion_text(
-            api_key=api_keys.get("Grok"),
-            base_url="https://api.x.ai/v1",
-            model=DEFAULT_GROK_MODEL,
-            messages=[
-                {"role": "system", "content": system_text},
-                {"role": "user", "content": differences_prompt}
-            ],
-            max_tokens=max_tokens,
-        )
-
-    else:
-        engine_config = resolve_consensus_engine_model(differences_model)
-        if not engine_config:
-            raise _InvalidEngineError("Invalid model selected for difference comparison.")
-        model_to_use = engine_config.api_model
-        provider = engine_config.provider
-        if provider == "openai":
-            yield from stream_chat_completion_text(
-                api_key=api_keys.get("OpenAI"),
-                model=model_to_use,
-                messages=[
-                    {"role": "system", "content": system_text},
-                    {"role": "user", "content": differences_prompt},
-                ],
-                max_tokens=max_tokens,
-                token_param=_openai_token_param(model_to_use),
-            )
-        elif provider == "mistral":
-            yield from stream_mistral_chat_text(
-                api_key=api_keys.get("Mistral"),
-                model=model_to_use,
-                messages=[
-                    {"role": "system", "content": system_text},
-                    {"role": "user", "content": differences_prompt},
-                ],
-                max_tokens=max_tokens,
-            )
-        elif provider == "anthropic":
-            yield from stream_anthropic_text(
-                api_key=api_keys.get("Anthropic"),
-                model=model_to_use,
-                system=system_text,
-                prompt=differences_prompt,
-                max_tokens=max_tokens,
-            )
-        elif provider == "gemini":
-            yield from stream_gemini_prompt_text(
-                api_key=api_keys.get("Gemini") or os.environ.get("DEVELOPER_GEMINI_API_KEY"),
-                model_override=differences_model,
-                prompt=differences_prompt,
-                max_tokens=max_tokens,
-            )
-        elif provider == "deepseek":
-            yield from stream_chat_completion_text(
-                api_key=api_keys.get("DeepSeek"),
-                base_url="https://api.deepseek.com",
-                model=model_to_use,
-                messages=[
-                    {"role": "system", "content": system_text},
-                    {"role": "user", "content": differences_prompt},
-                ],
-                max_tokens=max_tokens,
-            )
-        elif provider == "grok":
-            yield from stream_chat_completion_text(
-                api_key=api_keys.get("Grok"),
-                base_url="https://api.x.ai/v1",
-                model=model_to_use,
-                messages=[
-                    {"role": "system", "content": system_text},
-                    {"role": "user", "content": differences_prompt},
-                ],
-                max_tokens=max_tokens,
-            )
-        else:
-            raise _InvalidEngineError("Invalid model selected for difference comparison.")
+    yield {"type": "final", "text": f"Consensus error: {last_error}", "error": True}
 
 
 def stream_differences(
@@ -1421,26 +1412,55 @@ def stream_differences(
         yield {"type": "final", "text": "Error in comparison: no model responses available.", "data": None}
         return
 
-    differences_prompt, anon_map = built
+    differences_prompt, anon_map, answers_by_model = built
 
-    parts = []
-    try:
-        for text in _stream_differences_engine(differences_model, api_keys, differences_prompt):
-            parts.append(text)
-            # Roh-JSON wird im Frontend nicht gerendert; die Deltas halten nur
-            # die SSE-Verbindung aktiv.
-            yield {"type": "delta", "text": text}
-    except _InvalidEngineError as e:
-        yield {"type": "final", "text": str(e), "data": None}
-        return
-    except Exception as e:
-        yield {"type": "final", "text": f"Error in comparison: {str(e)}", "data": None}
+    attempts = _differences_attempts(differences_model, api_keys)
+    if attempts is None:
+        yield {"type": "final", "text": "Invalid model selected for difference comparison.", "data": None}
         return
 
-    result = "".join(parts).strip()
-    if not result:
-        yield {"type": "final", "text": "Error in comparison: empty result from differences engine.", "data": None}
-        return
+    prose_fallback = None
+    last_error = "empty result from differences engine."
+    for (provider, api_model, model_ref), is_retry in attempts:
+        attempt_prompt = differences_prompt + (DIFFERENCES_RETRY_SUFFIX if is_retry else "")
+        parts = []
+        try:
+            for text in _stream_engine_text(
+                provider, api_model, model_ref, api_keys,
+                system=DIFFERENCES_SYSTEM_PROMPT,
+                prompt=attempt_prompt,
+                max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
+                temperature=DIFFERENCES_TEMPERATURE,
+                json_mode=True,
+            ):
+                parts.append(text)
+                # Roh-JSON wird im Frontend nicht gerendert; die Deltas halten
+                # nur die SSE-Verbindung aktiv (auch während der Retries).
+                yield {"type": "delta", "text": text}
+        except Exception as e:
+            last_error = str(e)
+            logging.warning(f"Differences stream attempt failed on {provider}/{api_model}: {e}")
+            continue
 
-    data, legacy_text = parse_differences_payload(result, anon_map)
-    yield {"type": "final", "text": legacy_text, "data": data}
+        raw = "".join(parts).strip()
+        if not raw:
+            last_error = "empty result from differences engine."
+            continue
+
+        data, legacy_text = parse_differences_payload(
+            raw, anon_map,
+            consensus_answer=consensus_answer,
+            model_answers=answers_by_model,
+        )
+        if data is not None:
+            yield {"type": "final", "text": legacy_text, "data": data}
+            return
+        if prose_fallback is None and legacy_text and not _looks_like_json(raw):
+            prose_fallback = legacy_text
+        last_error = "unparsable output from differences engine."
+        logging.warning(f"Differences stream output unparsable on {provider}/{api_model}")
+
+    if prose_fallback:
+        yield {"type": "final", "text": prose_fallback, "data": None}
+        return
+    yield {"type": "final", "text": f"Error in comparison: {last_error}", "data": None}

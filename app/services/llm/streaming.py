@@ -536,9 +536,15 @@ def stream_chat_completion_text(
     max_tokens: int,
     base_url: Optional[str] = None,
     token_param: str = "max_tokens",
+    temperature: Optional[float] = None,
+    response_format: Optional[dict] = None,
 ) -> Iterator[str]:
     client = openai.OpenAI(api_key=api_key, base_url=base_url) if base_url else openai.OpenAI(api_key=api_key)
     kwargs = {"model": model, "messages": messages, "stream": True, token_param: max_tokens}
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+    if response_format is not None:
+        kwargs["response_format"] = response_format
     for chunk in client.chat.completions.create(**kwargs):
         choices = getattr(chunk, "choices", None) or []
         if not choices:
@@ -549,8 +555,20 @@ def stream_chat_completion_text(
             yield text
 
 
-def stream_mistral_chat_text(*, api_key: str, model: str, messages: list, max_tokens: int) -> Iterator[str]:
+def stream_mistral_chat_text(
+    *,
+    api_key: str,
+    model: str,
+    messages: list,
+    max_tokens: int,
+    temperature: Optional[float] = None,
+    response_format: Optional[dict] = None,
+) -> Iterator[str]:
     payload = {"model": model, "messages": messages, "max_tokens": max_tokens, "stream": True}
+    if temperature is not None:
+        payload["temperature"] = temperature
+    if response_format is not None:
+        payload["response_format"] = response_format
     if model in cfg.MISTRAL_REASONING_MODELS:
         payload["reasoning_effort"] = "high"
     resp = requests.post(
@@ -583,60 +601,52 @@ def stream_mistral_chat_text(*, api_key: str, model: str, messages: list, max_to
                     yield chunk["text"]
 
 
-def stream_anthropic_text(*, api_key: str, model: str, system: str, prompt: str, max_tokens: int) -> Iterator[str]:
+def stream_anthropic_text(
+    *,
+    api_key: str,
+    model: str,
+    system: str,
+    prompt: str,
+    max_tokens: int,
+    temperature: Optional[float] = None,
+    assistant_prefill: Optional[str] = None,
+) -> Iterator[str]:
     payload = {
         "model": model,
         "max_tokens": max_tokens,
         "system": system,
         "messages": [{"role": "user", "content": prompt}],
     }
+    if temperature is not None:
+        payload["temperature"] = temperature
+    if assistant_prefill:
+        # Prefill erzwingt den Antwortanfang (z. B. "{" für JSON-Ausgaben);
+        # der Prefill gehört zum Ergebnistext und wird daher mit ausgegeben.
+        payload["messages"].append({"role": "assistant", "content": assistant_prefill})
+        yield assistant_prefill
     for item in _stream_anthropic_messages(api_key=api_key, payload=payload):
         if item.get("type") == "delta":
             yield item["text"]
 
 
-def stream_gemini_text(
-    *,
-    api_key: Optional[str],
-    model: str,
-    prompt: str,
-    max_tokens: int,
-    system: Optional[str] = None,
-    temperature: Optional[float] = None,
-) -> Iterator[str]:
-    payload: Dict[str, Any] = {
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"maxOutputTokens": int(max_tokens)},
-        "safetySettings": [{
-            "category": "HARM_CATEGORY_HARASSMENT",
-            "threshold": "BLOCK_ONLY_HIGH",
-        }],
-    }
-    if temperature is not None:
-        payload["generationConfig"]["temperature"] = temperature
-    if system:
-        payload["systemInstruction"] = {"parts": [{"text": system}]}
-    key = (api_key or "").strip() or None
-    for item in _stream_gemini_generate(model_name=model, payload=payload, api_key=key):
-        if item.get("type") == "delta":
-            yield item["text"]
+def stream_gemini_payload_text(*, api_model: str, payload: dict, api_key: Optional[str]) -> Iterator[str]:
+    """Streamt einen fertig gebauten Gemini-Payload (Consensus-/Differences-Engine).
 
-
-def stream_gemini_prompt_text(*, api_key: Optional[str], model_override: str, prompt: str, max_tokens: int) -> Iterator[str]:
-    """Streaming-Gegenstück zu _gemini_generate_content_rest (Frontier-Low-Pfad)."""
-    request_data = build_provider_payload(
-        "gemini",
-        question=prompt,
-        system_prompt="",
-        model_override=model_override,
-        max_output_tokens=max_tokens,
-    )
-    payload = request_data["payload"]
-    payload.pop("tools", None)
+    Liefert nur Text-Deltas; ein leerer Stream mit Fehler-Result (Safety-Block,
+    max_tokens ohne Text) schlägt als RuntimeError nach außen, damit die
+    Retry-Logik der Aufrufer greift."""
     key = (api_key or "").strip() or None
-    for item in _stream_gemini_generate(model_name=request_data["api_model"], payload=payload, api_key=key):
+    got_delta = False
+    final_result = None
+    for item in _stream_gemini_generate(model_name=api_model, payload=payload, api_key=key):
         if item.get("type") == "delta":
+            got_delta = True
             yield item["text"]
+        else:
+            final_result = item.get("result")
+    if not got_delta:
+        message = result_text(final_result) if final_result else ""
+        raise RuntimeError(message or "Gemini: empty response payload.")
 
 
 # ---------------------------------------------------------------------------

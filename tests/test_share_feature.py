@@ -196,11 +196,14 @@ class SanitizerTests(unittest.TestCase):
         data = {
             "claims": [{"anchor": "x" * 800, "agree": ["OpenAI", 42], "dissent": [{"model": "Grok", "quote": "q", "secret": "drop"}]}],
             "differences": [
-                {"claim": "c", "type": "contradiction", "positions": [{"stance": "s", "models": ["Grok"], "quote": "q"}], "verify": "v"},
+                {"claim": "c", "type": "contradiction", "severity": "major", "positions": [{"stance": "s", "models": ["Grok"], "quote": "q"}], "verify": "v"},
                 {"claim": "no positions", "positions": []},
             ],
             "best_model": "OpenAI",
             "models_compared": ["OpenAI", "Grok"],
+            "agreement": {"score": 64, "level": "partially", "model_count": 2,
+                          "major_contradictions": 1, "minor_contradictions": 0,
+                          "emphases": 0, "internal_debug": "drop"},
             "internal_cost": 1.23,
         }
         result = snapshots.sanitize_differences_data(data)
@@ -209,7 +212,24 @@ class SanitizerTests(unittest.TestCase):
         self.assertEqual(result["claims"][0]["agree"], ["OpenAI"])
         self.assertNotIn("secret", result["claims"][0]["dissent"][0])
         self.assertEqual(len(result["differences"]), 1)
+        self.assertEqual(result["differences"][0]["severity"], "major")
+        self.assertEqual(result["agreement"], {
+            "score": 64, "level": "partially", "model_count": 2,
+            "major_contradictions": 1, "minor_contradictions": 0, "emphases": 0,
+        })
         self.assertIsNone(snapshots.sanitize_differences_data("not a dict"))
+
+    def test_agreement_score_is_clamped(self):
+        result = snapshots.sanitize_differences_data({
+            "claims": [], "differences": [], "best_model": "",
+            "models_compared": [],
+            "agreement": {"score": 999, "level": "x" * 80, "model_count": -3,
+                          "major_contradictions": "NaN"},
+        })
+        self.assertEqual(result["agreement"]["score"], 100)
+        self.assertEqual(result["agreement"]["model_count"], 0)
+        self.assertEqual(result["agreement"]["major_contradictions"], 0)
+        self.assertEqual(len(result["agreement"]["level"]), 20)
 
     def test_included_models_order_and_labels(self):
         result = snapshots.build_included_models(

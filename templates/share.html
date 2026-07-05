@@ -90,7 +90,7 @@
 
     {% macro difference_card(diff) %}
     <article class="diff-card">
-      <span class="diff-type{% if diff.type == 'contradiction' %} diff-type-contradiction{% endif %}">{{ diff.type or "difference" }}</span>
+      <span class="diff-type{% if diff.type == 'contradiction' %} diff-type-contradiction{% endif %}">{{ diff.type or "difference" }}{% if diff.severity == 'major' %} &middot; critical{% elif diff.severity == 'minor' %} &middot; minor detail{% endif %}</span>
       <h3>{{ diff.claim }}</h3>
       {% for position in diff.positions %}
       <div class="diff-position">

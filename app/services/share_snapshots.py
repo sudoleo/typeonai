@@ -336,6 +336,16 @@ def _sanitize_str_list(value, item_limit, max_items):
     return [_clip(item, item_limit) for item in value[:max_items] if isinstance(item, str) and item.strip()]
 
 
+def _coerce_bounded_int(value, lo, hi):
+    if isinstance(value, bool):
+        return lo
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return lo
+    return max(lo, min(hi, parsed))
+
+
 def sanitize_differences_data(data):
     """Whitelist-Validierung des strukturierten Differences-JSON.
 
@@ -384,16 +394,30 @@ def sanitize_differences_data(data):
         differences.append({
             "claim": claim_text,
             "type": _clip(diff.get("type"), 40),
+            "severity": _clip(diff.get("severity"), 20),
             "positions": positions,
             "verify": _clip(diff.get("verify"), 500),
         })
 
-    return {
+    result = {
         "claims": claims,
         "differences": differences,
         "best_model": _clip(data.get("best_model"), 40),
         "models_compared": _sanitize_str_list(data.get("models_compared"), 40, 12),
     }
+
+    agreement = data.get("agreement")
+    if isinstance(agreement, dict):
+        result["agreement"] = {
+            "score": _coerce_bounded_int(agreement.get("score"), 0, 100),
+            "level": _clip(agreement.get("level"), 20),
+            "model_count": _coerce_bounded_int(agreement.get("model_count"), 0, 12),
+            "major_contradictions": _coerce_bounded_int(agreement.get("major_contradictions"), 0, 50),
+            "minor_contradictions": _coerce_bounded_int(agreement.get("minor_contradictions"), 0, 50),
+            "emphases": _coerce_bounded_int(agreement.get("emphases"), 0, 50),
+        }
+
+    return result
 
 
 def _quality_limit(key, fallback):
