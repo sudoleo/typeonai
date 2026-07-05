@@ -136,7 +136,10 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
   `excluded_models` + `consensus_model` und ruft **`POST /consensus`**
   (`stream:true`).
 - Backend (`chat.py::consensus` → `consensus_engine.py`): validiert (mind. **2**
-  eingeschlossene Antworten), prüft Engine-Keys, dann `stream_consensus` gefolgt von
+  eingeschlossene Antworten), kappt Frage/Antworten serverseitig
+  (`cap_engine_text`, Limits `consensus_max_answer_chars` /
+  `consensus_max_question_chars` — Kosten-/Abuse-Schutz, da die Texte vom
+  Client kommen), prüft Engine-Keys, dann `stream_consensus` gefolgt von
   `stream_differences`. **SSE-Events**: `consensus.delta`, `differences.delta`
   (nur Keep-Alive, Frontend rendert sie nicht), dann `final {consensus_response,
   differences, differences_data, result_id?, …usage}`. `differences_data` ist

@@ -83,6 +83,15 @@ def get_valid_active_count(data: dict) -> int:
     return active_count
 
 
+def cap_engine_text(value, limit: int):
+    """Kappt clientseitig gelieferte Texte (Frage/Modellantworten), bevor sie
+    in Consensus-/Differences-Prompts fliessen. Stilles Truncate statt 400:
+    legitime Antworten liegen weit unter dem Limit, nur Abuse-Payloads nicht."""
+    if not isinstance(value, str) or len(value) <= limit:
+        return value
+    return value[:limit].rstrip()
+
+
 def validate_question_word_limit(question: str, is_pro: bool, deep_search: bool):
     if not isinstance(question, str) or not question.strip():
         raise HTTPException(status_code=400, detail="Question must not be empty.")
@@ -923,14 +932,17 @@ def consensus(request: Request, data: dict = Body(...)):
         limit_regular = cfg.get_usage_limit(is_pro)
         limit_deep = cfg.get_deep_search_limit(is_pro)
 
-    # Parameter extrahieren
-    question        = data.get("question")
-    answer_openai   = data.get("answer_openai")
-    answer_mistral  = data.get("answer_mistral")
-    answer_claude   = data.get("answer_claude")
-    answer_gemini   = data.get("answer_gemini")
-    answer_deepseek = data.get("answer_deepseek")
-    answer_grok     = data.get("answer_grok")
+    # Parameter extrahieren. Frage und Antworten kommen als freier Text vom
+    # Client und werden serverseitig gekappt: der Consensus-Prompt enthaelt
+    # sonst unbegrenzte Eingaben gegen den Developer-Key (Kostenleck).
+    answer_char_limit = cfg.get_consensus_answer_char_limit()
+    question        = cap_engine_text(data.get("question"), cfg.get_consensus_question_char_limit())
+    answer_openai   = cap_engine_text(data.get("answer_openai"), answer_char_limit)
+    answer_mistral  = cap_engine_text(data.get("answer_mistral"), answer_char_limit)
+    answer_claude   = cap_engine_text(data.get("answer_claude"), answer_char_limit)
+    answer_gemini   = cap_engine_text(data.get("answer_gemini"), answer_char_limit)
+    answer_deepseek = cap_engine_text(data.get("answer_deepseek"), answer_char_limit)
+    answer_grok     = cap_engine_text(data.get("answer_grok"), answer_char_limit)
     excluded_models = data.get("excluded_models", [])
     model_sources   = data.get("model_sources", {})
     if not isinstance(excluded_models, list):

@@ -35,6 +35,12 @@ DEFAULT_LIMITS = {
     "pro_deep_search_max_tokens": 8192,
     "consensus_max_tokens": 8192,
     "differences_max_tokens": 8192,
+    # Serverseitige Eingabe-Caps fuer /consensus: Antworten/Frage kommen vom
+    # Client und muessen begrenzt werden, bevor sie in den Engine-Prompt
+    # fliessen (Kosten-/Abuse-Schutz). Grosszuegig gewaehlt, damit legitime
+    # Deep-Search-Antworten (8192 Output-Tokens) nie gekappt werden.
+    "consensus_max_answer_chars": 40_000,
+    "consensus_max_question_chars": 8_000,
     # Qualitätsfilter für index_eligible von Share-Snapshots (Etappe 3):
     # steuert nur die Eligibility-Anzeige, indexed setzt weiterhin der Admin.
     "share_min_consensus_chars": 600,
@@ -593,6 +599,14 @@ def get_word_limit(is_pro: bool, deep_search: bool = False) -> int:
     else:
         key = "pro_max_words" if is_pro else "free_max_words"
     return LIMITS[key]
+
+
+def get_consensus_answer_char_limit() -> int:
+    return LIMITS["consensus_max_answer_chars"]
+
+
+def get_consensus_question_char_limit() -> int:
+    return LIMITS["consensus_max_question_chars"]
 
 
 def get_output_token_limit(is_pro: bool, deep_search: bool = False) -> int:
