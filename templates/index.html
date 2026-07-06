@@ -54,7 +54,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260706-quickwins">
+  <link rel="stylesheet" href="/static/style.css?v=20260706-followup2">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -85,11 +85,11 @@
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-actions.js?v=20260706-fixes2" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
-  <script src="/static/js/user-tier.js?v=20260630-early1" defer></script>
+  <script src="/static/js/user-tier.js?v=20260706-followup1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-insights.js?v=20260706-fixes1" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260705-resolve2" defer></script>
-  <script src="/static/js/query-send.js?v=20260706-fixes1" defer></script>
+  <script src="/static/js/consensus-run.js?v=20260706-followup2" defer></script>
+  <script src="/static/js/query-send.js?v=20260706-followup2" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
@@ -265,6 +265,9 @@
     <div class="input-section">
       <div class="chat-input-container" style="position: relative;">
         <div id="attachmentBar" class="attachment-bar" hidden></div>
+        <!-- Follow-up-Fragen (Pro): Affordance/Kontext-Chip, gefüllt von
+             window.App.followup (consensus-run.js) nach jedem Konsens. -->
+        <div id="followupBar" class="followup-bar" hidden></div>
         <textarea class="input-field" id="questionInput" placeholder="Enter your question"></textarea>
         <!-- Attachment-Menü (öffnet über dem Plus-Button) -->
         <div id="attachMenu" class="attach-menu" hidden>
@@ -593,7 +596,7 @@
       </div>
     </div>
 
-    <script src="/static/js/app-init.js?v=20260706-quickwins" defer></script>
+    <script src="/static/js/app-init.js?v=20260706-followup1" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing

@@ -12,7 +12,12 @@ from app.core.state import usage_counter, deep_search_usage
 from app.core.security import verify_user_token, extract_id_token, is_user_pro, is_user_early
 import app.core.config as cfg
 from app.services.llm.attachments import parse_attachments
-from app.services.llm.base import validate_model, count_words, get_system_prompt
+from app.services.llm.base import (
+    build_followup_system_prompt,
+    count_words,
+    get_system_prompt,
+    validate_model,
+)
 from app.services.llm.engines import (
     query_openai, query_mistral, query_claude, query_gemini, query_deepseek, query_grok
 )
@@ -116,6 +121,44 @@ def cap_engine_text(value, limit: int):
     if not isinstance(value, str) or len(value) <= limit:
         return value
     return value[:limit].rstrip()
+
+
+def normalize_followup_context(raw):
+    """Validiert das optionale context-Feld einer Follow-up-Frage
+    ({previous_question, previous_consensus}) und kappt beide Texte
+    serverseitig, analog zu cap_engine_text bei /consensus. Genau eine
+    Kontext-Ebene: ein einzelnes Frage/Konsens-Paar, kein Verlauf.
+    Unbrauchbare Payloads werden still ignoriert (kein 400: das Feld ist
+    optional und ein kaputter Kontext soll die Frage nicht blockieren)."""
+    if not isinstance(raw, dict):
+        return None
+    previous_question = raw.get("previous_question")
+    previous_consensus = raw.get("previous_consensus")
+    if not isinstance(previous_question, str) or not previous_question.strip():
+        return None
+    if not isinstance(previous_consensus, str) or not previous_consensus.strip():
+        return None
+    return {
+        "previous_question": cap_engine_text(
+            previous_question.strip(), cfg.get_followup_question_char_limit()
+        ),
+        "previous_consensus": cap_engine_text(
+            previous_consensus.strip(), cfg.get_followup_consensus_char_limit()
+        ),
+    }
+
+
+def require_pro_for_followup(followup_context, is_pro: bool):
+    """Follow-up-Fragen sind Pro-only; das Gate gilt auch mit eigenen Keys
+    (wie Deep Think und Resolve)."""
+    if followup_context and not is_pro:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "Follow-up questions are a Pro feature.",
+                "error_code": "pro_required",
+            },
+        )
 
 
 def validate_question_word_limit(question: str, is_pro: bool, deep_search: bool):
@@ -262,6 +305,24 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     attachments = parse_attachments(data, is_pro_user)
     active_count = get_valid_active_count(data)
     max_tokens = cfg.get_output_token_limit(is_pro_user, deep_search)
+
+    # Follow-up-Kontext (Pro): genau eine vorherige Frage/Konsens-Ebene,
+    # serverseitig gekappt und hier in den System-Prompt injiziert — nicht in
+    # /prepare, damit der Kontext auch dann ankommt, wenn das Frontend nach
+    # einem /prepare-Fehler mit dem Basis-Prompt weitermacht.
+    followup_context = normalize_followup_context(data.get("context"))
+    require_pro_for_followup(followup_context, is_pro_user)
+    if followup_context:
+        base_prompt = (
+            system_prompt.strip()
+            if isinstance(system_prompt, str) and system_prompt.strip()
+            else get_system_prompt()
+        )
+        system_prompt = build_followup_system_prompt(
+            base_prompt,
+            followup_context["previous_question"],
+            followup_context["previous_consensus"],
+        )
 
     own_keys_requested = bool(api_key) or (
         provider.honors_own_keys_flag and parse_boolean_flag(data.get("useOwnKeys", False))
@@ -419,6 +480,11 @@ async def prepare(request: Request, data: dict = Body(...)):
     except Exception as e:
         logging.error(f"Auth failed in /prepare: {e}")
         raise HTTPException(status_code=401, detail="Authentication failed.")
+
+    # Follow-up-Kontext frueh gaten: Free-Nutzer bekommen den Pro-Fehler schon
+    # vor dem Fan-out. Injiziert wird der Kontext erst in den /ask_*-Endpoints
+    # (handle_ask), sonst stuende er doppelt im System-Prompt.
+    require_pro_for_followup(normalize_followup_context(data.get("context")), is_pro)
 
     raw_system_prompt = data.get("system_prompt")
     if not raw_system_prompt or not str(raw_system_prompt).strip():

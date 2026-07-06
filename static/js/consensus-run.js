@@ -49,6 +49,158 @@
     return match ? match[1].trim() : null;
   }
 
+  // --------- Follow-up-Fragen (Pro): Kontext-State + Input-Affordance ---------
+  // Genau eine Kontext-Ebene: das Frage/Konsens-Paar des letzten erfolgreichen
+  // Laufs. offer() merkt sich das Paar und zeigt den "Ask a follow-up"-Button
+  // im Input-Bereich, arm() aktiviert den Kontext-Chip (Free: Pro-Teaser),
+  // consume() liefert den context-Payload für query-send.js und räumt auf.
+  const FOLLOWUP_ICON =
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<polyline points="9 14 4 9 9 4"></polyline>' +
+    '<path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>';
+
+  const DEFAULT_INPUT_PLACEHOLDER = "Enter your question";
+  const FOLLOWUP_INPUT_PLACEHOLDER = "Ask a follow-up question";
+
+  function truncateLabel(text, max) {
+    const t = (text || "").trim().replace(/\s+/g, " ");
+    return t.length > max ? t.slice(0, max - 1).trimEnd() + "…" : t;
+  }
+
+  const followup = {
+    lastExchange: null, // {question, consensus} des letzten Konsens-Laufs
+    armed: false,
+    // True, solange der gerade laufende Query selbst eine Follow-up-Frage ist.
+    // Follow-ups duerfen sich nicht verketten (Kostenkontrolle): der Konsens
+    // einer Follow-up-Frage bietet keine weitere Follow-up-Affordance an.
+    followupInFlight: false,
+
+    offer(question, consensusText) {
+      // Der aktuelle Konsens ist selbst die Antwort auf eine Follow-up-Frage:
+      // keine weitere Ebene anbieten. Erst eine frische Frage schaltet die
+      // Affordance wieder frei.
+      if (this.followupInFlight) {
+        this.followupInFlight = false;
+        this.lastExchange = null;
+        this.armed = false;
+        this.render();
+        return;
+      }
+      if (!question || !consensusText) return;
+      this.lastExchange = { question: question, consensus: consensusText };
+      this.armed = false;
+      this.render();
+    },
+
+    arm() {
+      if (!this.lastExchange) return;
+      if (!window.isUserPro) {
+        trackAppEvent("app_followup_pro_teaser_click");
+        const shown = window.App.showProFeatureModal?.("Follow-up questions");
+        if (!shown) window.App.showPopup?.("Follow-up questions are a Pro feature.");
+        return;
+      }
+      this.armed = true;
+      trackAppEvent("app_followup_armed");
+      this.render();
+      document.getElementById("questionInput")?.focus();
+    },
+
+    discard() {
+      this.armed = false;
+      this.render();
+    },
+
+    // Neuer Lauf ohne Kontext bzw. Clear: Affordance und Chip verschwinden.
+    // Loescht auch das In-Flight-Flag (frische Frage darf wieder anbieten).
+    reset() {
+      this.lastExchange = null;
+      this.armed = false;
+      this.followupInFlight = false;
+      this.render();
+    },
+
+    // context-Payload für /prepare + /ask_*; danach ist der Chip weg und der
+    // laufende Query als Follow-up markiert, damit sein Konsens keine weitere
+    // Follow-up-Ebene anbietet (nur einmalig, Kostenkontrolle).
+    consume() {
+      if (!this.armed || !this.lastExchange) return null;
+      const ctx = {
+        previous_question: this.lastExchange.question,
+        previous_consensus: this.lastExchange.consensus
+      };
+      this.reset();
+      this.followupInFlight = true;
+      return ctx;
+    },
+
+    render() {
+      const bar = document.getElementById("followupBar");
+      if (!bar) return;
+      bar.innerHTML = "";
+
+      const input = document.getElementById("questionInput");
+      if (input) {
+        input.placeholder = (this.armed && this.lastExchange)
+          ? FOLLOWUP_INPUT_PLACEHOLDER
+          : DEFAULT_INPUT_PLACEHOLDER;
+      }
+
+      if (this.armed && this.lastExchange) {
+        const chip = document.createElement("div");
+        chip.className = "followup-chip";
+        chip.title = "Your next question is sent with the previous question and its consensus answer as context.";
+
+        const icon = document.createElement("span");
+        icon.className = "followup-chip-icon";
+        icon.innerHTML = FOLLOWUP_ICON;
+
+        const text = document.createElement("span");
+        text.className = "followup-chip-text";
+        text.textContent = "Follow-up to: “" + truncateLabel(this.lastExchange.question, 90) + "”";
+
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "followup-chip-remove";
+        remove.title = "Discard follow-up context";
+        remove.setAttribute("aria-label", "Discard follow-up context");
+        remove.textContent = "✕";
+        remove.addEventListener("click", () => this.discard());
+
+        chip.append(icon, text, remove);
+        bar.appendChild(chip);
+        bar.hidden = false;
+      } else if (this.lastExchange) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "followup-offer-btn";
+        btn.innerHTML = FOLLOWUP_ICON + '<span class="followup-offer-label">Ask a follow-up</span>';
+
+        // Pro-Chip immer zeigen: Free-Nutzer sehen den Teaser (Klick öffnet
+        // das Upgrade-Modal), Pro-Nutzer eine dezente Kennzeichnung.
+        const badge = document.createElement("span");
+        badge.className = "followup-pro-badge";
+        badge.textContent = "Pro";
+        btn.appendChild(badge);
+
+        if (window.isUserPro) {
+          btn.title = "Ask a follow-up question — the previous question and its consensus answer go along as context.";
+          badge.classList.add("is-subtle");
+        } else {
+          btn.classList.add("is-pro-locked");
+          btn.title = "Follow-up questions are a Pro feature";
+        }
+        btn.addEventListener("click", () => this.arm());
+        bar.appendChild(btn);
+        bar.hidden = false;
+      } else {
+        bar.hidden = true;
+      }
+    }
+  };
+  window.App.followup = followup;
+
   window.getConsensus = async function (trigger = "manual") {
     if (consensusLifecycle.isRunning()) {
       window.cancelCurrentConsensus();
@@ -407,6 +559,13 @@
             // Differences auch über injectMarkdown → [S1]-Links inkl.
             injectMarkdown(diffEl, cleaned);
           }
+        }
+
+        // Follow-up-Affordance im Input-Bereich anbieten (Pro-Feature, Free
+        // sieht den Teaser) — nicht bei Fehlertexten aus dem Consensus-Stream.
+        if (data.consensus_response
+            && !/^(Consensus error:|Invalid consensus model selected:)/i.test(data.consensus_response.trim())) {
+          followup.offer(question, data.consensus_response);
         }
 
         // Payload merken: eine spätere Resolve-Runde hängt ihr Ergebnis an

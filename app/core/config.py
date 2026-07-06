@@ -41,6 +41,12 @@ DEFAULT_LIMITS = {
     # Deep-Search-Antworten (8192 Output-Tokens) nie gekappt werden.
     "consensus_max_answer_chars": 40_000,
     "consensus_max_question_chars": 8_000,
+    # Serverseitige Caps fuer den Follow-up-Kontext (previous_question +
+    # previous_consensus kommen vom Client). Bewusst enger als die
+    # /consensus-Caps: der Kontext geht bei jeder Follow-up-Frage in alle
+    # /ask_*-Prompts gleichzeitig ein (Kostenkontrolle).
+    "followup_max_question_chars": 4_000,
+    "followup_max_consensus_chars": 12_000,
     # Qualitätsfilter für index_eligible von Share-Snapshots (Etappe 3):
     # steuert nur die Eligibility-Anzeige, indexed setzt weiterhin der Admin.
     "share_min_consensus_chars": 600,
@@ -607,6 +613,14 @@ def get_consensus_answer_char_limit() -> int:
 
 def get_consensus_question_char_limit() -> int:
     return LIMITS["consensus_max_question_chars"]
+
+
+def get_followup_question_char_limit() -> int:
+    return LIMITS["followup_max_question_chars"]
+
+
+def get_followup_consensus_char_limit() -> int:
+    return LIMITS["followup_max_consensus_chars"]
 
 
 def get_output_token_limit(is_pro: bool, deep_search: bool = False) -> int:

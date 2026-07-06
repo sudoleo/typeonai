@@ -44,7 +44,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, redirect→`/app` bei Session), `/app` (Haupt-App), `/admin`, `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
-| `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
+| `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (Pro, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
 | `auth.py` | `/register`, `/confirm-registration`. |
 | `users.py` | `/user_status`, `/usage`, `/delete_account`, `/track-interest`. |
 | `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus`. |
@@ -132,6 +132,27 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
    `event: delta {text}` … dann `event: final {response, sources,
    free_usage_remaining, deep_remaining, is_pro_user, key_used}`. Bei Fehler kommt
    ein `final` mit `error`. Frontend rendert deltas und wertet `final` aus.
+
+### Follow-up-Fragen (Pro)
+Nach einem erfolgreichen Consensus kann eine Anschlussfrage mit Kontext
+gestellt werden. Kontext ist **genau eine Ebene**: das letzte Frage/Konsens-
+Paar (`{previous_question, previous_consensus}`) — bewusst NICHT die sechs
+Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
+- Frontend: `window.App.followup` (in `consensus-run.js`) zeigt nach dem
+  Consensus-Render eine „Ask a follow-up"-Affordance im Input-Bereich
+  (`#followupBar`), Pro-gebadged; Free-Klick öffnet das Pro-Modal. Aktivieren
+  erzeugt einen Kontext-Chip mit X; `query-send.js` konsumiert den State beim
+  Senden und legt `context` in den `/prepare`- und alle `/ask_*`-Payloads.
+  **Follow-ups verketten sich nicht** (Kostenkontrolle): `consume()` markiert
+  den Lauf via `followupInFlight`, der Konsens einer Follow-up-Frage bietet
+  keine weitere Affordance an — erst eine frische Frage schaltet sie wieder frei.
+- Backend: `normalize_followup_context` (`chat.py`) validiert und kappt beide
+  Texte serverseitig (`followup_max_question_chars` /
+  `followup_max_consensus_chars` in `LIMITS`). `/prepare` gated nur
+  (403 `pro_required` für Nicht-Pro, auch mit eigenen Keys); die **Injektion
+  passiert ausschließlich in `handle_ask`** via `build_followup_system_prompt`
+  (`base.py`), damit der Kontextblock nie doppelt im Prompt steht und auch den
+  `/prepare`-Fallback-Pfad des Frontends überlebt.
 
 ### Consensus & Differences
 - `getConsensus` (`consensus-run.js`) sammelt die vorhandenen Modellantworten +
@@ -364,6 +385,11 @@ erhält die Reihenfolge (kein `sorted` mehr) und validiert `defaults`.
   `hideConsensusOutput`, `window.cancelCurrentConsensus`, `window.openShareDialog`,
   `window.currentEvidenceSources`, `window.consensusCitationMeta`,
   `window.lastShareResultId`, `window.isUserPro`, `window.pendingAttachments`.
+- **`window.App.followup`** (definiert in `consensus-run.js`) ist der
+  Follow-up-Kontext-State (`offer/arm/discard/consume/reset/render`).
+  `query-send.js` (consume beim Senden), `app-init.js` (reset in
+  `clearResponseBoxes`) und `user-tier.js` (render bei Tier-Wechsel) hängen
+  daran; DOM-Ziel ist `#followupBar` in `index.html`.
 - **`window.App.consensusLifecycle.*`** ist die gezielte Run-State-Brücke
   (`startRun/isActiveRun/finishRun/setSynthesizing/isRunning/setGate/
   markPendingCanceled/initAutoConsensusToggle`). Run-ID-Gating nicht umgehen, sonst

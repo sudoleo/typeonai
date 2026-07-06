@@ -22,6 +22,9 @@
     const hasEarlyAccess = Boolean(isPro || isEarly);
     window.isUserEarly = hasEarlyAccess;
 
+    // Follow-up-Affordance neu rendern: Pro-Badge/Teaser hängen am Tier.
+    window.App?.followup?.render?.();
+
     // 2. Elemente referenzieren
     const badge = document.getElementById("proBadge");
     const upgradeLink = document.getElementById("upgradeLink");

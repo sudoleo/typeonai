@@ -473,6 +473,21 @@
         }
       }
 
+      // Follow-up-Kontext (Pro): genau eine Ebene — vorherige Frage + Konsens-
+      // Text. consume() liefert den Payload nur bei aktiviertem Chip und räumt
+      // den State auf; reset() lässt auch die Affordance verschwinden, weil
+      // dieser Lauf den alten Konsens ersetzt. Erst hier (nach den frühen
+      // Abbruch-Pfaden), damit ein abgebrochener Send den Chip nicht frisst.
+      const followupContext = window.App.followup?.consume?.() || null;
+      if (followupContext) {
+        // consume() hat den Lauf schon als Follow-up markiert (kein reset,
+        // sonst ginge das In-Flight-Flag verloren).
+        trackAppEvent("app_followup_sent");
+      } else {
+        // Frische Frage ersetzt den alten Konsens: Affordance/Flag verwerfen.
+        window.App.followup?.reset?.();
+      }
+
       // Wir rufen /prepare IMMER auf, damit Wetter-Infos etc. injiziert werden können.
       try {
         // 🔹 Firebase-ID-Token holen (falls eingeloggt)
@@ -496,6 +511,9 @@
         // Nur anhängen, wenn wirklich vorhanden
         if (idToken) {
           preparePayload.id_token = idToken;
+        }
+        if (followupContext) {
+          preparePayload.context = followupContext;
         }
 
         const prepareResp = await fetch("/prepare", {
@@ -734,6 +752,7 @@
           useOwnKeys: useOwnKeys
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
+        if (followupContext) payload.context = followupContext;
 
 
         if (!useOwnKeys) {
@@ -842,6 +861,7 @@
           useOwnKeys: useOwnKeys
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
+        if (followupContext) payload.context = followupContext;
 
         if (!useOwnKeys) {
           if (validIdToken) {
@@ -930,6 +950,7 @@
           useOwnKeys: useOwnKeys
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
+        if (followupContext) payload.context = followupContext;
 
         if (!useOwnKeys) {
           if (validIdToken) {
@@ -1017,6 +1038,7 @@
           useOwnKeys: useOwnKeys
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
+        if (followupContext) payload.context = followupContext;
 
         if (!useOwnKeys) {
           if (validIdToken) {
@@ -1104,6 +1126,7 @@
           useOwnKeys: useOwnKeys
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
+        if (followupContext) payload.context = followupContext;
 
         if (!useOwnKeys) {
           if (validIdToken) {
@@ -1191,6 +1214,7 @@
           useOwnKeys: useOwnKeys
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
+        if (followupContext) payload.context = followupContext;
 
         if (!useOwnKeys) {
           if (validIdToken) {

@@ -1367,6 +1367,8 @@
           // Konsens unterbinden und den rahmenlosen Bereich wieder ausblenden.
           setConsensusGate(true);
           window.hideConsensusOutput?.();
+          // Follow-up-Affordance/Chip gehören zum gelöschten Konsens.
+          window.App.followup?.reset?.();
 
           // Lösche den Inhalt aller Modell-Antwortboxen.
           boxIds.forEach(id => {
