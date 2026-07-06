@@ -1194,12 +1194,29 @@
         // (window.App.consensusLifecycle), das die Bruecke bereitstellt.
         window.updateConsensusButtonAvailability();
 
+        // Inline-Status statt Browser-alert() fuer den API-Key-Test.
+        function setApiKeysStatus(message, tone) {
+          const el = document.getElementById("apiKeysStatus");
+          if (!el) return;
+          if (!message) {
+            el.hidden = true;
+            el.textContent = "";
+            el.classList.remove("is-error", "is-success");
+            return;
+          }
+          el.hidden = false;
+          el.textContent = message;
+          el.classList.toggle("is-error", tone === "error");
+          el.classList.toggle("is-success", tone === "success");
+        }
+
         // Testet die API Keys und aktualisiert das Feedback
         window.testAllKeys = async function () {
           trackAppEvent("app_api_keys_test_started");
+          setApiKeysStatus("");
           const currentUser = window.auth?.currentUser;
           if (!currentUser || !currentUser.emailVerified) {
-            alert("Please log in with a verified account before saving or testing your own API keys.");
+            setApiKeysStatus("Please log in with a verified account before saving or testing your own API keys.", "error");
             trackAppEvent("app_api_keys_test_result", { status: "auth_required" });
             return;
           }
@@ -1213,7 +1230,7 @@
           const enteredKeys = [openaiKey, mistralKey, anthropicKey, geminiKey, deepseekKey, grokKey]
             .filter(key => (key || "").trim() !== "");
           if (!enteredKeys.length) {
-            alert("Enter at least one API key to test.");
+            setApiKeysStatus("Enter at least one API key to test.", "error");
             trackAppEvent("app_api_keys_test_result", { status: "no_keys" });
             return;
           }
@@ -1222,7 +1239,7 @@
           try {
             idToken = await currentUser.getIdToken();
           } catch (error) {
-            alert("Your login session could not be verified. Please log in again.");
+            setApiKeysStatus("Your login session could not be verified. Please log in again.", "error");
             trackAppEvent("app_api_keys_test_result", { status: "auth_error" });
             return;
           }
@@ -1294,10 +1311,16 @@
             grokFeedback.innerHTML = grokResult === "valid" ? "&#9734;" : "&#10007;";
             grokFeedback.style.color = grokResult === "valid" ? "green" : "red";
             trackAppEvent("app_api_keys_test_result", { status: "success", valid_count: validCount });
+            setApiKeysStatus(
+              validCount > 0
+                ? "Keys saved. " + validCount + " of 6 verified successfully."
+                : "Keys saved, but none could be verified. Please check them.",
+              validCount > 0 ? "success" : "error"
+            );
           } catch (error) {
-            console.error("Fehler beim Testen der API Keys:", error);
+            console.error("Error while testing API keys:", error);
             trackAppEvent("app_api_keys_test_result", { status: "error" });
-            alert("Fehler beim Testen der API Keys: " + error.message);
+            setApiKeysStatus("Could not test the API keys: " + error.message, "error");
           } finally {
             spinner.style.display = "none";
           }
@@ -1316,16 +1339,16 @@
                 if (data.status === "success") {
                   this.reset();
                   trackAppEvent("app_feedback_result", { status: "success" });
-                  alert("Feedback gesendet!");
+                  alert("Feedback sent!");
                 } else {
                   trackAppEvent("app_feedback_result", { status: "error" });
-                  alert("Fehler: " + data.detail);
+                  alert("Error: " + data.detail);
                 }
               })
               .catch(error => {
-                console.error("Fehler beim Speichern des Feedbacks:", error);
+                console.error("Error while saving feedback:", error);
                 trackAppEvent("app_feedback_result", { status: "error" });
-                alert("Fehler beim Speichern des Feedbacks: " + error.message);
+                alert("Could not save your feedback: " + error.message);
               });
           });
         }

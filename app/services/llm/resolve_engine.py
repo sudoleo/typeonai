@@ -138,6 +138,10 @@ def _query_resolve_model(model_label: str, question: str, claim: str,
         return result
 
     prompt = _build_resolve_prompt(question, claim, own_position, opposing)
+    # Transparenz: der tatsaechlich gestellte Prompt geht mit ins Ergebnis,
+    # damit das Frontend zeigen kann, was die Modelle gefragt wurden. Wird
+    # bewusst NICHT persistiert (Bookmark/Share strippen das Feld).
+    result["prompt"] = prompt
     try:
         raw = _call_engine_text(
             provider, judge_model, judge_model, api_keys,

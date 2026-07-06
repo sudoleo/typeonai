@@ -661,15 +661,31 @@
         return key && key.trim() !== "";
       }
 
+      // Copy-Button in Codeblöcken: dezenter Icon-Button oben rechts im <pre>,
+      // passend zu den übrigen Icon-Buttons der App (statt Emoji + globalem
+      // Button-Gradient). Icons als SVG, damit der Button nichts in den
+      // kopierten Text einschleppt.
+      var CODE_COPY_ICON =
+        '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" ' +
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<rect x="9" y="9" width="11" height="11" rx="2.5"></rect>' +
+        '<path d="M5 15H4.5A2.5 2.5 0 0 1 2 12.5v-8A2.5 2.5 0 0 1 4.5 2h8A2.5 2.5 0 0 1 15 4.5V5"></path></svg>';
+      var CODE_COPIED_ICON =
+        '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" ' +
+        'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M4.5 12.5 10 18 19.5 7"></path></svg>';
+
       function addCopyButtons(container) {
         container.querySelectorAll('pre').forEach(function (pre) {
           // Falls bereits ein Copy-Button existiert, überspringen
-          if (pre.querySelector('.copy-btn')) return;
+          if (pre.querySelector('.response-code-copy, .copy-btn')) return;
 
           var btn = document.createElement('button');
-          // Verwende ein dezentes Clipboard-Symbol
-          btn.textContent = '📋';
-          btn.className = 'copy-btn';
+          btn.type = 'button';
+          btn.className = 'response-code-copy';
+          btn.title = 'Copy code';
+          btn.setAttribute('aria-label', 'Copy code');
+          btn.innerHTML = CODE_COPY_ICON;
           pre.appendChild(btn);
 
           btn.addEventListener('click', function () {
@@ -677,9 +693,11 @@
             var codeElement = pre.querySelector('code');
             var codeText = codeElement ? codeElement.innerText : pre.innerText;
             navigator.clipboard.writeText(codeText).then(function () {
-              btn.textContent = '✓';
+              btn.innerHTML = CODE_COPIED_ICON;
+              btn.classList.add('is-copied');
               setTimeout(function () {
-                btn.textContent = '📋';
+                btn.innerHTML = CODE_COPY_ICON;
+                btn.classList.remove('is-copied');
               }, 2000);
             });
           });

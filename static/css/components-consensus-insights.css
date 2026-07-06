@@ -575,6 +575,14 @@
   text-transform: uppercase;
 }
 
+/* Dezente Chip-Variante für Pro-Nutzer: kennzeichnet das Pro-Feature, ohne
+   wie ein Upsell-Teaser zu wirken (kein Farbverlauf, nur Akzent-Umriss). */
+.diff-resolve-pro-chip.is-subtle {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  color: color-mix(in srgb, var(--accent) 72%, var(--text-color));
+}
+
 /* Kurzer Erklärtext unter dem Button: führt durch das Feature, ohne zu nerven */
 .diff-resolve-hint {
   margin-top: 5px;
@@ -741,6 +749,69 @@
   font-size: 0.75rem;
   line-height: 1.4;
   color: var(--sidebar-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Transparenz-Block: zeigt den tatsaechlich gestellten Resolve-Prompt.
+   Gleiches Collapse-Muster wie .resolve-model-toggle (Klasse statt <details>). */
+.resolve-prompt {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed color-mix(in srgb, var(--sidebar-border) 65%, transparent);
+}
+
+.resolve-prompt-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  color: var(--sidebar-text-muted);
+  font-size: 0.73rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.resolve-prompt-toggle:hover,
+.resolve-prompt-toggle:focus-visible {
+  color: color-mix(in srgb, var(--text-color) 70%, var(--sidebar-text-muted));
+  outline: none;
+}
+
+.resolve-prompt-toggle svg {
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+
+.resolve-prompt.is-open .resolve-prompt-toggle svg {
+  transform: rotate(180deg);
+}
+
+.resolve-prompt-item + .resolve-prompt-item {
+  margin-top: 8px;
+}
+
+.resolve-prompt-model {
+  margin: 6px 0 3px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--text-color) 75%, var(--sidebar-text-muted));
+}
+
+.resolve-prompt-text {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 260px;
+  overflow: auto;
+  border-radius: var(--radius-xs);
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 80%, transparent);
+  background: color-mix(in srgb, var(--text-color) 4%, transparent);
+  color: var(--sidebar-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 

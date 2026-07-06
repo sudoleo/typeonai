@@ -55,6 +55,20 @@ function createStreamRenderer(outputEl, isActiveFn) {
         renderTimer = setTimeout(render, RENDER_INTERVAL_MS - elapsed);
       }
     },
+    // Reasoning-Modelle: solange noch kein Antworttext eintrifft, den
+    // "Typing"-Indikator auf "Reasoning" umstellen, damit sichtbar ist,
+    // dass das Modell arbeitet (statt scheinbar zu haengen).
+    markReasoning() {
+      if (started) return;
+      if (isActiveFn && !isActiveFn()) return;
+      const label = outputEl.querySelector(".thinking.typing-indicator");
+      if (!label || label.dataset.text === "Reasoning") return;
+      label.dataset.text = "Reasoning";
+      label.setAttribute("aria-label", "Reasoning");
+      if (label.firstChild && label.firstChild.nodeType === Node.TEXT_NODE) {
+        label.firstChild.nodeValue = "Reasoning";
+      }
+    },
     stop() {
       if (renderTimer) {
         clearTimeout(renderTimer);
@@ -133,6 +147,10 @@ async function streamSSERequest(url, payload, signal, deltaRenderers) {
     await readSSEStream(response, (eventName, data) => {
       if (eventName === "final" || eventName === "error") {
         finalData = data;
+        return;
+      }
+      if (eventName === "reasoning") {
+        Object.values(renderers).forEach(renderer => renderer && renderer.markReasoning && renderer.markReasoning());
         return;
       }
       const renderer = renderers[eventName];

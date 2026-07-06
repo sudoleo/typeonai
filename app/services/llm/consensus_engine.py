@@ -132,6 +132,25 @@ def _gemini_generate_content(api_model: str, payload: dict, api_key: str | None)
     return text
 
 
+def _coerce_message_text(content) -> str:
+    """Mistral liefert message.content je nach Modell als String oder als
+    Liste von Chunks (z.B. thinking- und text-Chunks bei Magistral bzw.
+    json_mode). Beides zu reinem Text zusammenfuehren."""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = []
+        for chunk in content:
+            if isinstance(chunk, str):
+                parts.append(chunk)
+            elif isinstance(chunk, dict):
+                text = chunk.get("text")
+                if isinstance(text, str) and chunk.get("type") in (None, "text"):
+                    parts.append(text)
+        return "".join(parts).strip()
+    return str(content or "").strip()
+
+
 def _mistral_chat_complete(
     api_key: str,
     model: str,

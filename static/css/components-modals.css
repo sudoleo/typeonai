@@ -752,6 +752,29 @@
   font-weight: 700;
 }
 
+.api-keys-status {
+  margin-top: 10px;
+  padding: 8px 11px;
+  border-radius: var(--radius-xs);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  border: 1px solid var(--sidebar-border);
+  color: var(--text-color);
+  background: color-mix(in srgb, var(--sidebar-border) 20%, transparent);
+}
+
+.api-keys-status.is-error {
+  border-color: color-mix(in srgb, #c0392b 55%, var(--sidebar-border));
+  color: #c0392b;
+  background: color-mix(in srgb, #c0392b 10%, transparent);
+}
+
+.api-keys-status.is-success {
+  border-color: color-mix(in srgb, #1e874b 55%, var(--sidebar-border));
+  color: #1e874b;
+  background: color-mix(in srgb, #1e874b 10%, transparent);
+}
+
 .help-button {
   flex: 0 0 auto;
   padding: 0 !important;

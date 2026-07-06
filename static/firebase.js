@@ -270,8 +270,13 @@ onIdTokenChanged(auth, async (user) => {
       });
     }
 
-    logoutButton.addEventListener("click", () => {
+    logoutButton.addEventListener("click", e => {
+      // stopPropagation: Klick soll weder das Icon-Toggle noch den
+      // loginContainer-Handler treffen.
+      e.stopPropagation();
+      if (!window.confirm("Log out of consens.io?")) return;
       trackAppEvent("auth_logout_click");
+      emailPopup.style.display = "none";
       signOut(auth).catch(err => console.error("Logout-Fehler", err));
     });
 
@@ -612,14 +617,12 @@ document.getElementById("forgotPasswordButton").addEventListener("click", () => 
     });
 });
 
-// Klick auf den Login-Bereich: Öffne das Modal, wenn nicht angemeldet, oder melde ab, wenn schon eingeloggt
+// Klick auf den Login-Bereich: Öffne das Modal, wenn nicht angemeldet.
+// Eingeloggt passiert hier bewusst NICHTS - das User-Icon öffnet sein eigenes
+// Popup (stopPropagation), Logout läuft ausschließlich über den bestätigten
+// Logout-Button im Popup. Vorher loggte ein Klick knapp neben das Icon aus.
 document.getElementById("loginContainer").addEventListener("click", () => {
-  if (auth.currentUser) {
-    trackAppEvent("auth_logout_click");
-    signOut(auth).catch((error) => {
-      console.error("Fehler beim Logout:", error);
-    });
-  } else {
+  if (!auth.currentUser) {
     document.getElementById("loginModal").style.display = "block";
     trackAppEvent("auth_modal_open");
   }

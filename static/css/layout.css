@@ -55,6 +55,11 @@ body:has(.sidebar.collapsed) .main-wrapper {
   -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.78)) saturate(1.22);
 }
 
+/* Spacer statt <br><br><br>: schiebt Inhalt unter die fixierte 45px-Topbar. */
+.top-bar-spacer {
+  height: 60px;
+}
+
 .top-bar-right {
   display: flex;
   align-items: center;

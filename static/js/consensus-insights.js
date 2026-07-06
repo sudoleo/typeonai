@@ -622,6 +622,43 @@
               row.append(head, detail);
               resultBox.appendChild(row);
             });
+
+            // Transparenz: den tatsaechlich gestellten Prompt hinter einem
+            // Toggle zeigen. Nur in der Live-Session verfuegbar (das Feld wird
+            // nicht ins Bookmark/Share persistiert, s. runResolveRound).
+            const withPrompt = (Array.isArray(data.results) ? data.results : []).filter(function (r) { return r.prompt; });
+            if (withPrompt.length) {
+              const promptWrap = document.createElement("div");
+              promptWrap.className = "resolve-prompt";
+              const toggle = document.createElement("button");
+              toggle.type = "button";
+              toggle.className = "resolve-prompt-toggle";
+              toggle.setAttribute("aria-expanded", "false");
+              toggle.innerHTML = RESOLVE_CHEVRON + "<span>What the models were asked</span>";
+              const body = document.createElement("div");
+              body.className = "resolve-prompt-body";
+              body.hidden = true;
+              withPrompt.forEach(function (r) {
+                const item = document.createElement("div");
+                item.className = "resolve-prompt-item";
+                const modelHead = document.createElement("div");
+                modelHead.className = "resolve-prompt-model";
+                modelHead.textContent = modelDisplayName(r.model);
+                const text = document.createElement("pre");
+                text.className = "resolve-prompt-text";
+                text.textContent = r.prompt;
+                item.append(modelHead, text);
+                body.appendChild(item);
+              });
+              toggle.addEventListener("click", function () {
+                const open = body.hidden;
+                body.hidden = !open;
+                promptWrap.classList.toggle("is-open", open);
+                toggle.setAttribute("aria-expanded", open ? "true" : "false");
+              });
+              promptWrap.append(toggle, body);
+              resultBox.appendChild(promptWrap);
+            }
             resultBox.hidden = false;
           }
 
@@ -744,9 +781,15 @@
               if (hint) hint.hidden = true;
               // Ergebnis am Widerspruch merken und Karte kennzeichnen; über
               // das Bookmark persistieren, damit es beim Wiederöffnen bleibt.
+              // Prompt-Feld vor der Persistenz strippen: Bookmarks/Shares
+              // bleiben schlank, die Prompt-Ansicht gibt es nur live.
               diff.resolution = {
                 outcome: data.outcome,
-                results: Array.isArray(data.results) ? data.results : []
+                results: (Array.isArray(data.results) ? data.results : []).map(function (r) {
+                  const copy = Object.assign({}, r);
+                  delete copy.prompt;
+                  return copy;
+                })
               };
               markCardResolved(resultBox.closest(".diff-card"), data.outcome);
               persistResolutionToBookmark();
@@ -802,15 +845,17 @@
             btn.innerHTML = RESOLVE_BTN_ICON
               + '<span class="diff-resolve-btn-label">Resolve with the models</span>';
             btn.title = "Ask the disagreeing models to re-examine this point against each other's position (uses 1 request)";
-            // Pro-Teaser: Free-Nutzer sehen den Button mit Pro-Chip; der Klick
-            // öffnet das Upgrade-Modal statt der Resolve-Runde.
+            // Pro-Chip immer zeigen: Free-Nutzer sehen den Teaser (Klick öffnet
+            // das Upgrade-Modal), Pro-Nutzer eine dezente Kennzeichnung.
+            const chip = document.createElement("span");
+            chip.className = "diff-resolve-pro-chip";
+            chip.textContent = "Pro";
+            btn.appendChild(chip);
             if (!window.isUserPro) {
               btn.classList.add("is-pro-locked");
-              const chip = document.createElement("span");
-              chip.className = "diff-resolve-pro-chip";
-              chip.textContent = "Pro";
-              btn.appendChild(chip);
               btn.title = "Resolve rounds are a Pro feature";
+            } else {
+              chip.classList.add("is-subtle");
             }
 
             const hint = document.createElement("div");

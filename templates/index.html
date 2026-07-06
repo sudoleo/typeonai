@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 
 <head>
   <meta charset="UTF-8">
@@ -54,20 +54,16 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260705-resolve9">
+  <link rel="stylesheet" href="/static/style.css?v=20260706-quickwins">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
-  <!-- Füge dies im <head> hinzu -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <!-- Optional für Sicherheit: -->
-  <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
   <!-- Marked (Markdown -> HTML) -->
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <!-- DOMPurify (HTML Sanitizer) -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260705-resolve2"></script>
+  <script type="module" src="/static/firebase.js?v=20260706-fixes1"></script>
   <script type="module" src="/static/demo.js?v=20260705-resolve2"></script>
   <script src="/static/app-ui.js?v=20260628-prompt-default2" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
@@ -75,25 +71,25 @@
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
   <script src="/static/js/model-picker.js?v=20260630-early1" defer></script>
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
-  <script src="/static/js/markdown-stream.js?v=20260626-extract1" defer></script>
+  <script src="/static/js/markdown-stream.js?v=20260706-reasoning1" defer></script>
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
   <script src="/static/js/sources.js?v=20260626-extract1" defer></script>
   <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
   <script src="/static/js/attachments.js?v=20260626-extract1" defer></script>
   <!-- Agent Mode (aus index.html ausgelagert) -->
-  <script src="/static/js/agent-mode.js?v=20260705-agent-check1" defer></script>
+  <script src="/static/js/agent-mode.js?v=20260706-fixes1" defer></script>
   <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
   <script src="/static/js/consensus-lifecycle.js?v=20260626-extract1" defer></script>
   <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
   <script src="/static/js/share-dialog.js?v=20260626-extract1" defer></script>
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-actions.js?v=20260626-extract1" defer></script>
+  <script src="/static/js/consensus-actions.js?v=20260706-fixes2" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260630-early1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-insights.js?v=20260705-resolve9" defer></script>
+  <script src="/static/js/consensus-insights.js?v=20260706-fixes1" defer></script>
   <script src="/static/js/consensus-run.js?v=20260705-resolve2" defer></script>
-  <script src="/static/js/query-send.js?v=20260705-agent-check1" defer></script>
+  <script src="/static/js/query-send.js?v=20260706-fixes1" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
@@ -153,7 +149,7 @@
       </div>
     </div>
   </header>
-  <br><br><br>
+  <div class="top-bar-spacer" aria-hidden="true"></div>
   <div class="sidebar">
     <!-- Pinned: Usage, Models, Leaderboard — does not scroll with bookmarks -->
     <div class="sidebar-pinned">
@@ -228,7 +224,7 @@
           </button>
         </h2>
         <div class="sidebar-search-box">
-          <input type="search" id="chatSearch" placeholder="Chats durchsuchen…" autocomplete="off" aria-label="Chats durchsuchen">
+          <input type="search" id="chatSearch" placeholder="Search chats…" autocomplete="off" aria-label="Search chats">
         </div>
         <div id="bookmarksContainer"></div>
       </div>
@@ -386,13 +382,18 @@
     <div class="response-section" style="position: relative;">
       <div id="agentModePanel" class="agent-mode-panel" aria-live="polite" aria-hidden="true">
         <div class="agent-mode-header">
-          <div>
+          <div class="agent-mode-heading">
             <span class="agent-mode-kicker">Agent Mode</span>
             <h2 id="agentModeTitle">Selected models</h2>
+            <span id="agentModeCollapsedHint" class="agent-mode-collapsed-hint" hidden>expand to configure</span>
           </div>
           <div class="agent-mode-metrics">
             <div id="agentModeTimer" class="agent-mode-timer" aria-live="polite">Elapsed 00:00</div>
+            <span id="agentModeAnswered" class="agent-mode-answered" hidden>0/0 answered</span>
             <span id="agentModeCount" class="agent-mode-count">0 models</span>
+            <button type="button" id="agentModeCollapseBtn" class="agent-mode-collapse-btn" aria-expanded="true" title="Collapse Agent Mode panel" aria-label="Collapse Agent Mode panel">
+              <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 7.5 6 4l3.5 3.5"/></svg>
+            </button>
           </div>
         </div>
         <div id="agentModeModels" class="agent-mode-models"></div>
@@ -422,7 +423,7 @@
             </span>
           </span>
           <div class="control-icons">
-            <span class="exclude-btn" onclick="toggleExclude('openaiResponse')" title="Exclude answer">&#10005;</span>
+            <button type="button" class="exclude-btn" onclick="toggleExclude('openaiResponse')" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -443,7 +444,7 @@
             </span>
           </span>
           <div class="control-icons">
-            <span class="exclude-btn" onclick="toggleExclude('mistralResponse')" title="Exclude answer">&#10005;</span>
+            <button type="button" class="exclude-btn" onclick="toggleExclude('mistralResponse')" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -464,7 +465,7 @@
             </span>
           </span>
           <div class="control-icons">
-            <span class="exclude-btn" onclick="toggleExclude('claudeResponse')" title="Exclude answer">&#10005;</span>
+            <button type="button" class="exclude-btn" onclick="toggleExclude('claudeResponse')" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -485,7 +486,7 @@
             </span>
           </span>
           <div class="control-icons">
-            <span class="exclude-btn" onclick="toggleExclude('geminiResponse')" title="Exclude answer">&#10005;</span>
+            <button type="button" class="exclude-btn" onclick="toggleExclude('geminiResponse')" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -515,7 +516,7 @@
             </span>
           </span>
           <div class="control-icons">
-            <span class="exclude-btn" onclick="toggleExclude('deepseekResponse')" title="Exclude answer">&#10005;</span>
+            <button type="button" class="exclude-btn" onclick="toggleExclude('deepseekResponse')" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -538,7 +539,7 @@
             </span>
           </span>
           <div class="control-icons">
-            <span class="exclude-btn" onclick="toggleExclude('grokResponse')" title="Exclude answer">&#10005;</span>
+            <button type="button" class="exclude-btn" onclick="toggleExclude('grokResponse')" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -578,7 +579,7 @@
           <span class="feedback-note">
             Please avoid personal or sensitive data. AI models can make mistakes.
           </span>
-          <button id="feedbackButton" class="feedback-button" title="Feedback senden">Feedback</button>
+          <button id="feedbackButton" class="feedback-button" title="Send feedback">Feedback</button>
           <a href="/terms" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Terms of Use"
             aria-label="Terms of Use">Terms</a>
           <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Privacy Policy"
@@ -592,7 +593,7 @@
       </div>
     </div>
 
-    <script src="/static/js/app-init.js?v=20260705-resolve2" defer></script>
+    <script src="/static/js/app-init.js?v=20260706-quickwins" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing
@@ -648,7 +649,7 @@
             <div id="registerError" class="error-message"></div>
 
             <div id="singleMailNote" class="auth-note">
-              Important: Only one e-mail can be registered
+              Note: each e-mail address can be used for one account only.
             </div>
 
             <!-- Secondary row (links only) -->
@@ -847,8 +848,8 @@
         <div class="settings-header">
           <h2>Settings</h2>
           <div class="settings-header-actions">
-            <button id="helpButton" class="help-button" type="button" title="Hilfe & Erklärung"
-              aria-label="Hilfe und Erklärung">
+            <button id="helpButton" class="help-button" type="button" title="Help &amp; explanation"
+              aria-label="Help and explanation">
               &#63;
             </button>
             <span id="closeSystemPromptModal" class="close">&times;</span>
@@ -959,6 +960,7 @@
                 Save & Test Keys
                 <span id="apiSpinner" class="spinner" style="display: none;"></span>
               </button>
+              <div id="apiKeysStatus" class="api-keys-status" role="status" aria-live="polite" hidden></div>
             </div>
           </div>
 
@@ -1135,8 +1137,9 @@
                 <span class="faq-toggle-icon">＋</span>
               </h3>
               <p>
-                Logged-in users can bookmark specific queries and revisit them later. Leaderboards present frequently
-                used or particularly interesting queries by other users, enabling comparison of prompts and outcomes.
+                Logged-in users can bookmark specific queries and revisit them later. The Leaderboard ranks the models
+                by how often the consensus engine picks their answer as the best one for a query. This tally is fully
+                anonymized and never tied to individual users or prompts.
               </p>
             </div>
 
@@ -1147,8 +1150,9 @@
                 <span class="faq-toggle-icon">＋</span>
               </h3>
               <p>
-                Users without their own subscription or external keys can run up to 25 standard AI-powered queries and
-                an additional 12 queries in Deep Think Mode. The remaining quota is displayed in the sidebar.
+                Users without their own subscription or external keys can run up to 25 standard AI-powered queries per
+                day. Deep Think Mode is part of Pro; on the free tier it is not included. The remaining quota is
+                displayed in the sidebar.
               </p>
             </div>
 

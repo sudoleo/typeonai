@@ -176,7 +176,21 @@
     copyAnswerBtn.addEventListener("click", () => {
       const consensusBox = document.getElementById("consensusResponse");
       const mainPara = consensusBox?.querySelector(".consensus-main p");
-      const mainText = mainPara ? mainPara.innerText.trim() : "";
+      // Agreement-Badges (z. B. "6/6") sind UI-Elemente und gehören nicht in
+      // den kopierten Text. Klon ohne Badges kurz unsichtbar einhängen:
+      // innerText braucht ein gerendertes Element, um Zeilenumbrüche zu
+      // erhalten (und ignoriert display:none-Kinder nur dann zuverlässig).
+      let mainText = "";
+      if (mainPara) {
+        const clone = mainPara.cloneNode(true);
+        clone.querySelectorAll(".claim-badge, .copy-btn, .response-code-copy").forEach(el => el.remove());
+        clone.style.position = "absolute";
+        clone.style.left = "-99999px";
+        clone.style.top = "0";
+        document.body.appendChild(clone);
+        mainText = clone.innerText.trim();
+        clone.remove();
+      }
 
       if (!mainText) {
         closeConsensusActionsMenu();

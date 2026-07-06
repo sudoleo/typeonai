@@ -14,6 +14,7 @@
 
 (function () {
   const AGENT_MODE_STORAGE_KEY = "agentMode";
+  const AGENT_PANEL_COLLAPSED_KEY = "agentModePanelCollapsed";
   let agentModeStatus = "idle";
   let agentModeStatusMessage = "";
   let agentModeTimerStartedAt = null;
@@ -22,6 +23,10 @@
 
   function isAgentModeEnabled() {
     return localStorage.getItem(AGENT_MODE_STORAGE_KEY) === "true";
+  }
+
+  function isAgentPanelCollapsed() {
+    return localStorage.getItem(AGENT_PANEL_COLLAPSED_KEY) === "true";
   }
 
   function formatAgentElapsed(ms) {
@@ -166,6 +171,25 @@
     setAutoConsensusForAgentMode(enabled);
     if (panel) panel.setAttribute("aria-hidden", String(!enabled));
 
+    // Eingeklappter Zustand: Panel wird zur Kompaktzeile (Titel, beantwortete
+    // Modelle, Laufzeit); Chips/Status sind per CSS ausgeblendet.
+    const collapsed = isAgentPanelCollapsed();
+    if (panel) panel.classList.toggle("is-collapsed", collapsed);
+    const collapseBtn = document.getElementById("agentModeCollapseBtn");
+    if (collapseBtn) {
+      collapseBtn.setAttribute("aria-expanded", String(!collapsed));
+      collapseBtn.title = collapsed ? "Expand to configure models" : "Collapse Agent Mode panel";
+      collapseBtn.setAttribute("aria-label", collapseBtn.title);
+    }
+    const answeredEl = document.getElementById("agentModeAnswered");
+    if (answeredEl) {
+      const answeredCount = activeModels.filter(m => m.responseState === "complete").length;
+      answeredEl.textContent = `${answeredCount}/${activeModels.length} answered`;
+      answeredEl.hidden = !collapsed;
+    }
+    const collapsedHintEl = document.getElementById("agentModeCollapsedHint");
+    if (collapsedHintEl) collapsedHintEl.hidden = !collapsed;
+
     if (titleEl) {
       titleEl.textContent = agentModeStatus === "running" ? "Models are working" : "Selected models";
     }
@@ -271,6 +295,19 @@
     if (typeof window.updateConsensusButtonAvailability === "function") {
       window.updateConsensusButtonAvailability();
     }
+  }
+
+  // Einklapp-Pfeil oben rechts im Panel (Zustand wird gemerkt).
+  const agentCollapseBtn = document.getElementById("agentModeCollapseBtn");
+  if (agentCollapseBtn) {
+    agentCollapseBtn.addEventListener("click", function () {
+      const next = !isAgentPanelCollapsed();
+      localStorage.setItem(AGENT_PANEL_COLLAPSED_KEY, String(next));
+      if (window.App && typeof window.App.trackAppEvent === "function") {
+        window.App.trackAppEvent("app_agent_mode_panel_toggled", { collapsed: next });
+      }
+      updateAgentModeUI();
+    });
   }
 
   window.setAgentModeStatus = setAgentModeStatus;

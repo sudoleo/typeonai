@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from typing import Any, Dict, Generator, Iterator, Optional, Tuple
 from urllib.parse import quote
 
@@ -79,6 +80,8 @@ def _parse_json(data_str: str) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 # Provider-Primitive: liefern {"type": "delta", "text": ...} Events und am Ende
 # {"type": "final", "result": LLMResult} mit der nachbearbeiteten Gesamtantwort.
+# Reasoning-Modelle liefern vor dem ersten Text-Delta {"type": "reasoning"}
+# Marker-Events, damit das Frontend "Reasoning" statt "Typing" anzeigen kann.
 # ---------------------------------------------------------------------------
 
 def _stream_openai_responses(*, api_key: str, base_url: str, payload: dict, provider: str) -> Generator[StreamEvent, None, None]:
@@ -107,6 +110,11 @@ def _stream_openai_responses(*, api_key: str, base_url: str, payload: dict, prov
             delta = data.get("delta")
             if delta:
                 yield {"type": "delta", "text": delta}
+        elif event_type in {"response.reasoning_text.delta", "response.reasoning_summary_text.delta"}:
+            yield {"type": "reasoning"}
+        elif event_type == "response.output_item.added":
+            if (data.get("item") or {}).get("type") == "reasoning":
+                yield {"type": "reasoning"}
         elif event_type in {"response.completed", "response.incomplete"}:
             final_response = data.get("response") or {}
         elif event_type == "response.failed":
@@ -155,6 +163,8 @@ def _stream_anthropic_messages(*, api_key: str, payload: dict) -> Generator[Stre
             order.append(index)
             if blocks[index]["type"] == "text" and blocks[index]["text"]:
                 yield {"type": "delta", "text": blocks[index]["text"]}
+            elif blocks[index]["type"] == "thinking":
+                yield {"type": "reasoning"}
         elif event_type == "content_block_delta":
             index = data.get("index")
             if index not in blocks:
@@ -167,6 +177,8 @@ def _stream_anthropic_messages(*, api_key: str, payload: dict) -> Generator[Stre
                 if text and block["type"] == "text":
                     block["text"] += text
                     yield {"type": "delta", "text": text}
+            elif delta.get("type") == "thinking_delta":
+                yield {"type": "reasoning"}
             elif delta.get("type") == "citations_delta":
                 citation = delta.get("citation")
                 if citation:
@@ -226,6 +238,7 @@ def _stream_gemini_generate(*, model_name: str, payload: dict, api_key: Optional
             grounding_metadata = metadata
         for part in ((candidate.get("content") or {}).get("parts")) or []:
             if part.get("thought"):
+                yield {"type": "reasoning"}
                 continue
             text = part.get("text")
             if text:
@@ -266,6 +279,9 @@ def _extract_mistral_delta_items(content: Any) -> list:
         if chunk_type == "text":
             if content.get("text"):
                 items.append({"type": "text", "text": content["text"]})
+        elif chunk_type == "thinking":
+            # Marker fuer Reasoning-Fortschritt; wird nicht Teil des Inhalts.
+            items.append({"type": "thinking"})
         elif chunk_type in {"tool_reference", "reference"}:
             items.append(content)
     elif isinstance(content, list):
@@ -302,6 +318,9 @@ def _stream_mistral_conversations(*, api_key: str, payload: dict) -> Generator[S
         event_type = data.get("type") or event_name or ""
         if event_type == "message.output.delta":
             for item in _extract_mistral_delta_items(data.get("content")):
+                if item.get("type") == "thinking":
+                    yield {"type": "reasoning"}
+                    continue
                 content_items.append(item)
                 if item.get("type") == "text" and item.get("text"):
                     yield {"type": "delta", "text": item["text"]}
@@ -325,6 +344,8 @@ def _stream_chat_completions(*, client: openai.OpenAI, payload: dict) -> Generat
         if text:
             parts.append(text)
             yield {"type": "delta", "text": text}
+        elif delta is not None and getattr(delta, "reasoning_content", None):
+            yield {"type": "reasoning"}
     yield {"type": "final", "result": make_llm_result("".join(parts).strip(), [])}
 
 
@@ -508,6 +529,8 @@ def stream_mistral_query(
             if item.get("type") == "delta":
                 yielded_text = True
                 yield item
+            elif item.get("type") == "reasoning":
+                yield item
             else:
                 final_result = item.get("result")
 
@@ -663,10 +686,18 @@ def streaming_model_response(stream_gen: Generator[StreamEvent, None, None], pro
     extras = dict(extra_fields or {})
 
     def event_source():
+        # Reasoning-Marker gedrosselt weiterreichen: das Frontend braucht nur
+        # ein Lebenszeichen, keine hochfrequenten Events.
+        last_reasoning_at = None
         try:
             for item in stream_gen:
                 if item.get("type") == "delta":
                     yield sse_pack("delta", {"text": item.get("text") or ""})
+                elif item.get("type") == "reasoning":
+                    now = time.monotonic()
+                    if last_reasoning_at is None or now - last_reasoning_at >= 2.0:
+                        last_reasoning_at = now
+                        yield sse_pack("reasoning", {"text": ""})
                 elif item.get("type") == "final":
                     yield sse_pack("final", source_response(item.get("result"), **extras))
                     return
