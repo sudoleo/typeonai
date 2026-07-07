@@ -273,6 +273,7 @@ app/services/llm/
 app/services/
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   public_markdown.py         Server-Markdown-Rendering für Share-Seiten
+  differences_stats.py       Anonyme Differences-Telemetrie (differences_stats-Collection, §6)
 tool_heuristics.py           Intent-Erkennung + Realtime-Kontext (weather/stock/crypto)
 ```
 
@@ -301,6 +302,13 @@ Wichtige Verträge im Backend:
 - `benchmark_runs` — admin-only Benchmark-Dashboard-Snapshots aus lokalen Runs:
   `manifest`, `results`, `audits`, abgeleitete Fragenmatrix; **keine**
   `calls.jsonl`-Rohantworten, Prompts oder Request-Payloads.
+- `differences_stats` — anonyme Differences-Telemetrie: pro erfolgreichem
+  Consensus-Lauf ein Dokument mit Zähl-/Strukturdaten (Agreement-Score,
+  Widersprüche mit Severity und beteiligten Providern, Modell-Metadaten,
+  `schema_version`) — **niemals** Frage-/Antwort-/Claim-Texte, Zitate, UID
+  oder IP (anonym i. S. v. ErwGr. 26 DSGVO). Schema + Datenschutz-Regeln in
+  `app/services/differences_stats.py`; geschrieben aus `chat.py::consensus`
+  (fire-and-forget, Mock-Läufe schreiben nicht).
 - `feedback`, `pro_waitlist`, `leaderboard`.
 
 **Service-Account-JSONs** im Root (gitignored): `consensai-firebase-adminsdk-*.json`
@@ -452,6 +460,13 @@ Commit/PR**, wenn sich Folgendes ändert:
   DOM-Dataset-als-State, neue Jinja↔JS-Brücke, CSP-Erweiterung (§8).
 - **Daten/Config**: neue Firestore-Collection/-Feld, neue Umgebungsvariable,
   geänderte Limit-/Modell-Quelle (§6).
+- **Cache-Busting (immer, auch bei Kleinständerungen)**: Nach **jeder** Änderung
+  an Dateien unter `static/` — egal ob großer Umbau oder Einzeiler — muss der
+  `?v=`-Query-String der betroffenen Datei gebumpt werden: für CSS-Module in
+  `static/style.css` (@import-Zeilen) **und** den `style.css`-Link in
+  `templates/index.html`, für JS die `<script>`-Tags in `templates/index.html`.
+  Konvention: `?v=YYYYMMDD-kurzlabel`. Ohne Bump liefern Browser/CDN die alte
+  Datei aus und die Änderung ist in Produktion unsichtbar (§8).
 
 Faustregel: Wenn ein neuer Agent durch deine Änderung an einer der obigen Stellen
 **überrascht** würde, gehört es hier rein. Kurz halten — verifizierte Fakten statt

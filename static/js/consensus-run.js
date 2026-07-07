@@ -308,13 +308,19 @@
       Grok: getIncludedSources(grokBox)
     };
 
-    // Überprüfe nur die Modelle, die nicht als "ausgeschlossen" markiert sind.
-    const needOpenAI = isIncludedBox(openaiBox);
-    const needGemini = isIncludedBox(geminiBox);
-    const needMistral = isIncludedBox(mistralBox);
-    const needClaude = isIncludedBox(claudeBox);
-    const needDeepseek = isIncludedBox(deepseekBox);
-    const needGrok = isIncludedBox(grokBox);
+    // Überprüfe nur die Modelle, die nicht als "ausgeschlossen" markiert sind
+    // UND nicht mit einem Fehler zurückkamen. Ein einzelner ausgefallener
+    // Provider (z. B. Gemini 503) darf den Konsens nicht blockieren, solange
+    // genug andere Antworten vorliegen – er wird einfach ausgelassen.
+    function isAnswerableBox(box) {
+      return isIncludedBox(box) && box.dataset.responseError !== "true";
+    }
+    const needOpenAI = isAnswerableBox(openaiBox);
+    const needGemini = isAnswerableBox(geminiBox);
+    const needMistral = isAnswerableBox(mistralBox);
+    const needClaude = isAnswerableBox(claudeBox);
+    const needDeepseek = isAnswerableBox(deepseekBox);
+    const needGrok = isAnswerableBox(grokBox);
     const includedAnswerCount = [answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok]
       .filter(Boolean).length;
     const excludedModelCount = [openaiBox, mistralBox, claudeBox, geminiBox, deepseekBox, grokBox]

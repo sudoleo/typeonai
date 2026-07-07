@@ -760,7 +760,7 @@
   }
 
   .consensus-copy-inline {
-    right: 8px;
+    right: -8px;
     gap: 6px;
   }
 

@@ -953,7 +953,10 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 
 .consensus-copy-inline {
   position: absolute;
-  right: 8px;
+  /* Negativ: die Icons ragen in das 16px-Padding von .consensus-main hinein
+     und sitzen damit nah am rechten Rand des Konsens-Bereichs statt weit
+     innerhalb der Überschrift. */
+  right: -8px;
   top: 50%;
   transform: translateY(-50%);
   display: inline-flex;

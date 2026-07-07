@@ -50,6 +50,7 @@ from app.services.llm.resolve_engine import (
     run_resolve_round,
 )
 from app.services.share_snapshots import persist_pending_result
+from app.services.differences_stats import record_differences_stats
 from tool_heuristics import get_realtime_context, get_intent_from_llm
 
 router = APIRouter()
@@ -728,6 +729,21 @@ def consensus(request: Request, data: dict = Body(...)):
     share_uid = uid
     model_labels = data.get("model_labels")
 
+    def record_run_stats(differences_data):
+        # Anonyme Differences-Telemetrie (keine Texte, keine UID — siehe
+        # app/services/differences_stats.py). Mock-Läufe (E2E) schreiben nicht.
+        if differences_data is None or mock_llm_enabled():
+            return
+        record_differences_stats(
+            differences_data,
+            consensus_model=consensus_model,
+            model_labels=model_labels,
+            excluded_count=len(excluded_models),
+            is_pro_user=bool(is_pro),
+            used_own_keys=bool(use_own_keys),
+            question_word_count=count_words(question),
+        )
+
     def persist_share_result(consensus_text, differences_data, differences_text):
         # Mock-Modus (E2E-Tests) darf keine pending_results in das echte
         # Firestore schreiben.
@@ -820,6 +836,7 @@ def consensus(request: Request, data: dict = Body(...)):
                 "differences_data": differences_data,
             }
             if not stream_failed and not consensus_failed:
+                record_run_stats(differences_data)
                 result_id = persist_share_result(consensus_text, differences_data, differences_text)
                 if result_id:
                     payload["result_id"] = result_id
@@ -870,6 +887,7 @@ def consensus(request: Request, data: dict = Body(...)):
         "differences_data": differences_data,
     }
     if not consensus_failed:
+        record_run_stats(differences_data)
         result_id = persist_share_result(consensus_answer, differences_data, differences)
         if result_id:
             response["result_id"] = result_id

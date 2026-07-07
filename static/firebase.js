@@ -37,6 +37,45 @@ function trackAppEvent(eventName, eventData = {}) {
   }
 }
 
+// Logout-Bestätigung als In-App-Modal (#logoutConfirmModal in index.html)
+// statt Browser-window.confirm. Buttons werden einmalig beim Modul-Load
+// verdrahtet; der Logout-Button im Account-Popup ruft nur openLogoutConfirm().
+function closeLogoutConfirm() {
+  const modal = document.getElementById("logoutConfirmModal");
+  if (modal) modal.style.display = "none";
+}
+
+function performLogout() {
+  trackAppEvent("auth_logout_click");
+  closeLogoutConfirm();
+  signOut(auth).catch(err => console.error("Logout-Fehler", err));
+}
+
+function openLogoutConfirm() {
+  const modal = document.getElementById("logoutConfirmModal");
+  if (!modal) {
+    // Fallback (Seite ohne Modal-Markup): Browser-Dialog wie früher.
+    if (window.confirm("Log out of consens.io?")) performLogout();
+    return;
+  }
+  modal.style.display = "block";
+  document.getElementById("logoutCancelBtn")?.focus();
+}
+
+(function initLogoutConfirmModal() {
+  const modal = document.getElementById("logoutConfirmModal");
+  if (!modal) return;
+  document.getElementById("logoutConfirmBtn")?.addEventListener("click", performLogout);
+  document.getElementById("logoutCancelBtn")?.addEventListener("click", closeLogoutConfirm);
+  // Klick auf den Backdrop oder Escape schließt ohne Logout.
+  modal.addEventListener("click", e => {
+    if (e.target === modal) closeLogoutConfirm();
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && modal.style.display === "block") closeLogoutConfirm();
+  });
+})();
+
 // Standard-Persistenz global setzen (beim Laden, nicht im Click-Handler)
 setPersistence(auth, browserLocalPersistence)
   .catch(() => setPersistence(auth, browserSessionPersistence))
@@ -274,10 +313,8 @@ onIdTokenChanged(auth, async (user) => {
       // stopPropagation: Klick soll weder das Icon-Toggle noch den
       // loginContainer-Handler treffen.
       e.stopPropagation();
-      if (!window.confirm("Log out of consens.io?")) return;
-      trackAppEvent("auth_logout_click");
       emailPopup.style.display = "none";
-      signOut(auth).catch(err => console.error("Logout-Fehler", err));
+      openLogoutConfirm();
     });
 
     document.addEventListener("click", e => {

@@ -351,10 +351,21 @@
 
         // Pro-Modal mit Feature-Name öffnen ("Unlock Deep Think" / "Unlock
         // Resolve"). Gibt zurück, ob das Modal gezeigt werden konnte, damit
-        // Aufrufer sonst auf ein Popup ausweichen können.
+        // Aufrufer sonst auf ein Popup ausweichen können. Der Untertitel
+        // passt sich dem geklickten Feature an (Fallback: generischer Text).
+        const PRO_FEATURE_DESCRIPTIONS = {
+          "Deep Think": "Complex reasoning requires advanced compute power. Upgrade to access the smartest AI models.",
+          "Resolve": "Let the disagreeing models confront each other's position and see whether they revise or hold their ground.",
+          "Follow-up questions": "Keep the conversation going — your previous question and its consensus answer travel along as context.",
+        };
+        const PRO_FEATURE_DESCRIPTION_FALLBACK = "Upgrade to unlock the full consens.io toolkit, including the smartest AI models.";
         window.App.showProFeatureModal = function (featureName) {
           const nameEl = document.getElementById("proModalFeatureName");
           if (nameEl && featureName) nameEl.textContent = featureName;
+          const descEl = document.getElementById("proModalDescription");
+          if (descEl) {
+            descEl.textContent = PRO_FEATURE_DESCRIPTIONS[featureName] || PRO_FEATURE_DESCRIPTION_FALLBACK;
+          }
           if (!proModal) return false;
           proModal.style.display = "block";
           return true;

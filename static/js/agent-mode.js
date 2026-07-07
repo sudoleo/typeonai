@@ -15,6 +15,22 @@
 (function () {
   const AGENT_MODE_STORAGE_KEY = "agentMode";
   const AGENT_PANEL_COLLAPSED_KEY = "agentModePanelCollapsed";
+
+  // Mobile-Default: Agent Mode aktiv und Panel eingeklappt — aber nur, wenn
+  // der Nutzer noch nie selbst gewählt hat (localStorage-Keys fehlen). Eine
+  // explizite Entscheidung (an/aus, auf/zu) bleibt auf allen Geräten erhalten.
+  try {
+    const isMobileViewport = window.matchMedia("(max-width: 640px)").matches;
+    if (isMobileViewport) {
+      if (localStorage.getItem(AGENT_MODE_STORAGE_KEY) === null) {
+        localStorage.setItem(AGENT_MODE_STORAGE_KEY, "true");
+      }
+      if (localStorage.getItem(AGENT_PANEL_COLLAPSED_KEY) === null) {
+        localStorage.setItem(AGENT_PANEL_COLLAPSED_KEY, "true");
+      }
+    }
+  } catch (e) { /* localStorage gesperrt: Default bleibt aus */ }
+
   let agentModeStatus = "idle";
   let agentModeStatusMessage = "";
   let agentModeTimerStartedAt = null;

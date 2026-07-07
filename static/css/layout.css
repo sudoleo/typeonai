@@ -323,19 +323,22 @@ body:has(.sidebar.collapsed) .main-wrapper {
   overflow-x: hidden;
 }
 
+/* Bündig mit der Bookmarks-Liste: kein Extra-Margin (die Section bringt
+   bereits 4px Padding mit), Input-Padding = Bookmark-Padding (8px), damit
+   Placeholder-Text und Bookmark-Text auf einer Linie liegen. */
 .sidebar-search-box {
-  margin: 0 4px 10px;
+  margin: 0 0 8px;
 }
 
 .sidebar-search-box input {
   width: 100%;
   box-sizing: border-box;
-  padding: 8px 12px;
+  padding: 7px 8px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--sidebar-hover) 80%, transparent);
   color: var(--text-color);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   outline: none;
   transition: background-color .15s ease;
 }
@@ -450,33 +453,46 @@ body:has(.sidebar.collapsed) .main-wrapper {
   align-items: center;
 }
 
-.sidebar-settings button {
+/* Settings als ruhiges Sidebar-Item: SVG-Zahnrad + Label, linksbündig wie
+   die Bookmark-Zeilen, dezenter Hover statt Card-Schatten. Als ID-Selektor,
+   damit der globale button-Selektor (components-input.css) nicht gewinnt. */
+#editSystemPromptBtn {
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: var(--text-color);
+  justify-content: flex-start;
+  gap: 9px;
+  background: transparent;
+  border: 0;
+  color: var(--sidebar-text-muted);
   cursor: pointer;
-  font-size: 0.9em;
-  padding: 8px 12px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  padding: 8px 10px;
   width: 100%;
-  border-radius: var(--radius-sm);
-  transition: all 0.2s ease;
+  margin: 0;
+  border-radius: var(--radius-xs);
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .sidebar-settings .settings-icon {
-  font-size: 16px;
-  margin-right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: transform 0.3s ease;
 }
 
-.sidebar-settings button:hover {
-  background-color: color-mix(in srgb, var(--glass-bg-strong) 70%, var(--sidebar-hover));
-  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 8px 24px rgba(37, 52, 67, 0.08);
+.sidebar-settings .settings-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 
-.sidebar-settings button:hover .settings-icon {
+#editSystemPromptBtn:hover {
+  background-color: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
+  color: var(--text-color);
+}
+
+#editSystemPromptBtn:hover .settings-icon {
   transform: rotate(20deg);
 }
 
@@ -742,20 +758,6 @@ body:has(.sidebar.collapsed) .main-wrapper {
   color: var(--clear-button-text);
   outline: none;
 }
-#editSystemPromptBtn {
-  background-color: transparent !important;
-  color: var(--text-color) !important;
-  border: 0 !important;
-  padding: 8px 16px;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  cursor: pointer;
-  width: 100%;
-  margin: 0;
-  transition: background-color 0.15s ease;
-}
-#editSystemPromptBtn:hover { background-color: var(--sidebar-hover) !important; }
-#editSystemPromptBtn .settings-icon { margin-right: 8px; font-size: 14px; display: inline-block; }
 
 @media (max-width: 1549px) {
   .sidebar {
