@@ -1,8 +1,25 @@
 import logging
+import os
 from typing import Optional
 from fastapi import Request
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
+
+# --- E2E-Test-Hook (MOCK_AUTH=1) ------------------------------------------
+# Die Playwright-Suite laeuft ohne echten Firebase-Login: verify_user_token
+# akzeptiert dann genau das Sentinel-Token und die Tier-Checks antworten fuer
+# den Mock-UID ohne Firestore-Roundtrip. In Produktion ist MOCK_AUTH nie
+# gesetzt; alle Hooks sind dann No-ops.
+E2E_MOCK_TOKEN = "e2e-mock-token"
+E2E_MOCK_UID = "e2e-mock-user"
+
+
+def _mock_auth_enabled() -> bool:
+    return os.environ.get("MOCK_AUTH") == "1"
+
+
+if _mock_auth_enabled():
+    logging.warning("MOCK_AUTH=1 aktiv - Firebase-Auth ist fuer das E2E-Sentinel-Token gemockt. NIE in Produktion setzen.")
 
 class CustomSecurityMiddleware:
     def __init__(self, app):
@@ -66,6 +83,8 @@ def verify_user_token(token: str, allow_unverified: bool = False) -> str:
     Verifiziert das Firebase-ID-Token. Standardmäßig NUR verifizierte E-Mails zulassen.
     Mit allow_unverified=True kann man Endpoints wie /confirm-registration erlauben.
     """
+    if _mock_auth_enabled() and token == E2E_MOCK_TOKEN:
+        return E2E_MOCK_UID
     try:
         decoded_token = auth.verify_id_token(token, clock_skew_seconds=5)
         if not allow_unverified and not decoded_token.get("email_verified", False):
@@ -96,6 +115,8 @@ def is_user_pro(uid: str) -> bool:
     """
     Liest aus Firestore, ob das Feld 'tier' auf 'premium' (oder 'pro') steht.
     """
+    if _mock_auth_enabled() and uid == E2E_MOCK_UID:
+        return False
     try:
         doc_ref = db_firestore.collection("users").document(uid)
         doc = doc_ref.get()
@@ -116,6 +137,8 @@ def is_user_early(uid: str) -> bool:
     Hinweis: Pro schliesst Early ein - das wird an den Aufrufstellen kombiniert
     (is_user_pro(uid) or is_user_early(uid)), nicht hier.
     """
+    if _mock_auth_enabled() and uid == E2E_MOCK_UID:
+        return False
     try:
         doc_ref = db_firestore.collection("users").document(uid)
         doc = doc_ref.get()
@@ -135,6 +158,8 @@ def is_user_admin(uid: str) -> bool:
     """
     Liest aus Firestore, ob das Feld 'role' auf 'admin' steht.
     """
+    if _mock_auth_enabled() and uid == E2E_MOCK_UID:
+        return False
     try:
         doc_ref = db_firestore.collection("users").document(uid)
         doc = doc_ref.get()

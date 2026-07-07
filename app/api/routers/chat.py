@@ -22,6 +22,7 @@ from app.services.llm.engines import (
     query_openai, query_mistral, query_claude, query_gemini, query_deepseek, query_grok
 )
 from app.services.llm.citations import source_response
+from app.services.llm.mock_llm import mock_ask_result, mock_ask_stream, mock_llm_enabled
 from app.services.llm.streaming import (
     SSE_HEADERS,
     sse_pack,
@@ -250,6 +251,15 @@ def _run_ask(provider: AskProvider, *, stream_requested, question, key,
              system_prompt, deep_search, model, max_tokens, attachments, extras):
     """Fuehrt den Provider-Call aus (streamend oder nicht) und verpackt das
     Ergebnis im bisherigen Response-Format."""
+    if mock_llm_enabled():
+        # E2E-Suite: deterministischer Fixture-Stream statt Provider-Call.
+        # Auth/Limits/Validierung sind zu diesem Zeitpunkt bereits gelaufen.
+        if stream_requested:
+            return streaming_model_response(
+                mock_ask_stream(provider.label, question), provider.label, extras
+            )
+        return source_response(mock_ask_result(provider.label, question), **extras)
+
     kwargs = {
         "system_prompt": system_prompt,
         "deep_search": deep_search,
@@ -719,7 +729,9 @@ def consensus(request: Request, data: dict = Body(...)):
     model_labels = data.get("model_labels")
 
     def persist_share_result(consensus_text, differences_data, differences_text):
-        if not share_uid:
+        # Mock-Modus (E2E-Tests) darf keine pending_results in das echte
+        # Firestore schreiben.
+        if not share_uid or mock_llm_enabled():
             return None
         return persist_pending_result(
             uid=share_uid,

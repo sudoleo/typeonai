@@ -22,6 +22,7 @@ from app.core.config import (
     DEFAULT_GROK_MODEL,
 )
 from app.services.llm.engines import _merge_nested_config
+from app.services.llm.mock_llm import mock_engine_stream, mock_engine_text, mock_llm_enabled
 
 CANONICAL_MODEL_NAMES = {
     "openai": "OpenAI",
@@ -261,6 +262,11 @@ def _call_engine_text(
     temperature: float | None = None,
     json_mode: bool = False,
 ) -> str:
+    if mock_llm_enabled():
+        # E2E-Suite: deterministische Engine-Antwort; Prompt-Bau, Parsing,
+        # Verifikation und Agreement-Score laufen weiterhin echt.
+        return mock_engine_text(prompt=prompt, json_mode=json_mode)
+
     max_tokens = int(max_tokens)
     temperature = _effective_temperature(provider, api_model, temperature)
 
@@ -350,6 +356,11 @@ def _stream_engine_text(
     temperature: float | None = None,
     json_mode: bool = False,
 ):
+    if mock_llm_enabled():
+        # E2E-Suite: siehe _call_engine_text.
+        yield from mock_engine_stream(prompt=prompt, json_mode=json_mode)
+        return
+
     from app.services.llm.streaming import (
         stream_anthropic_text,
         stream_chat_completion_text,

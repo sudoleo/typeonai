@@ -343,8 +343,25 @@ erhält die Reihenfolge (kein `sorted` mehr) und validiert `defaults`.
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **145 passed**.
-- **Frontend hat keine automatisierten Tests.** Nach JS-Änderungen die manuelle
+  Letzte bekannte Baseline: **326 passed** (2026-07-06).
+- **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
+  automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
+  (Laden ohne Konsolen-Fehler, Send→Streaming, Consensus→Differences+Score,
+  Exclude, Theme, Picker-Persistenz). Startet einen eigenen uvicorn auf Port
+  8031 mit `MOCK_LLM=1` (deterministische Fixtures in
+  `app/services/llm/mock_llm.py`, Seams: `_run_ask`,
+  `_call_engine_text`/`_stream_engine_text`, `get_intent_from_llm`),
+  `MOCK_AUTH=1` (Sentinel-Token statt Firebase, Browser-Stub ersetzt
+  `firebase.js` per Playwright-Route) und `DISABLE_RATE_LIMIT=1`. Lauf:
+  ```powershell
+  $env:RUN_E2E = "1"; .\venv\Scripts\python.exe -m pytest tests\e2e -v
+  ```
+  Ohne `RUN_E2E=1` wird `tests/e2e` nicht eingesammelt (Baseline bleibt).
+  Nur lokal (braucht Service-Account-JSON + Netz für CDN); Details/Setup in
+  `tests/e2e/README.md`.
+- **Frontend darüber hinaus ohne automatisierte Tests.** Nach JS-Änderungen
+  an nicht abgedeckten Flows (Resolve, Share, Attachments, Follow-up,
+  Bookmarks, Agent Mode, Demo, Mobile) die manuelle
   **`docs/smoke-checklist.md`** durchgehen.
 - **Benchmark-Runner** (`benchmark/`, kein GUI-Pfad): `python -m benchmark
   --smoke|--pilot|--final`; fertige lokale Runs werden mit

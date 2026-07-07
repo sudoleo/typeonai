@@ -136,6 +136,11 @@ def get_intent_from_llm(question: str) -> dict:
     Calls the LLM to decide tool usage.
     Robust against 'Deep Think' output (Chain-of-Thought text before JSON).
     """
+    # E2E-Suite (MOCK_LLM=1): /prepare macht sonst hier einen echten
+    # LLM-Call. Deterministisch "kein Tool" => kein Realtime-Kontext.
+    if os.environ.get("MOCK_LLM") == "1":
+        return {"tool": None, "query": None}
+
     normalized_q = (question or "").strip().lower()
     if not normalized_q:
         return {"tool": None, "query": None}

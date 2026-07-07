@@ -1,9 +1,12 @@
 # Smoke-Checkliste — Frontend (index.html Refactor)
 
-Es gibt keine automatisierten Frontend-Tests. Nach **jedem** extrahierten Cluster
-diese Liste manuell durchgehen (oder zumindest die vom Cluster betroffenen Punkte),
-bevor committet wird. Backend bleibt durch `venv/Scripts/python -m pytest tests/`
-abgesichert (Baseline: 145 passed).
+Teilweise automatisiert: die Playwright-Suite `tests/e2e/` deckt Konsolen-
+Fehler beim Laden, Send→Streaming, Consensus→Differences+Agreement-Score,
+Modell-Ausschluss, Theme-Toggle und Picker-Persistenz ab (Lauf: siehe
+`tests/e2e/README.md`). Die übrigen Punkte weiterhin manuell durchgehen
+(oder zumindest die vom Cluster betroffenen), bevor committet wird. Backend
+bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
+(Baseline: 326 passed, Stand 2026-07-06).
 
 ## Browser-Konsole
 - [ ] Beim Laden **keine** JS-Fehler in der Konsole (besonders: keine

@@ -1,3 +1,5 @@
+import os
+
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -23,4 +25,7 @@ def client_ip_key(request):
     return get_remote_address(request)
 
 
-limiter = Limiter(key_func=client_ip_key)
+# DISABLE_RATE_LIMIT=1 nur fuer die lokale E2E-Suite: die Tests feuern
+# mehrere /ask_*- und /consensus-Requests pro Minute von derselben IP und
+# wuerden sonst in 429er laufen. In Produktion nie setzen.
+limiter = Limiter(key_func=client_ip_key, enabled=os.environ.get("DISABLE_RATE_LIMIT") != "1")
