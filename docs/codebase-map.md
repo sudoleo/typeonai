@@ -119,9 +119,9 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
 
 ### Anfrage an Modelle (Streaming)
 1. Frontend `sendQuestion` (`query-send.js`) ruft zuerst **`POST /prepare`**:
-   Auth + Usage-Pre-Check; `get_intent_from_llm` (aus `tool_heuristics.py`) erkennt
-   Intent; bei `weather/stock/crypto` wird via `get_realtime_context` Echtzeitdaten
-   in den System-Prompt injiziert. Antwort: finaler `system_prompt`.
+   Auth + Usage-Pre-Check und Follow-up-Gate; Antwort: finaler `system_prompt`.
+   Echtzeitdaten holen sich die Modelle selbst über die native Web-Suche in jedem
+   Provider-Call (`engines.py`), daher kein Intent-Router/Realtime-Injektion mehr.
 2. Fan-out an die ausgewählten **`/ask_<provider>`**-Endpoints (parallel), je mit
    `stream:true`. Backend prüft Auth, Pro-Status, Deep-Search-Berechtigung,
    Wortlimit (`validate_question_word_limit`) und Modell (`validate_model`),
@@ -231,9 +231,17 @@ Metadaten (Name/Typ/Größe) — siehe `bookmarks.py::sanitize_attachment_meta`.
   User-Key und `/consensus` mit `useOwnKeys` verlangen ein verifiziertes Token.
 - Pro-Status: `is_user_pro` liest Firestore `users/{uid}.tier ∈ {premium, pro}`.
   Admin: `users/{uid}.role == admin`.
+- **Tier-Flags sind gecacht**: `is_user_pro`/`is_user_early`/`is_user_admin`
+  teilen sich einen TTL-Cache (60s, `security.py::_tier_cache`) über das
+  `users/{uid}`-Dokument — ein Firestore-Read statt drei pro Aufrufstelle.
+  Fehler werden nicht gecacht; `/delete_account` invalidiert via
+  `invalidate_tier_cache(uid)`. Manuell vergebene Pro/Early-Tags greifen
+  dadurch erst nach ≤60s.
 - **Usage-Zähler liegen In-Memory** (`app/core/state.py`: `usage_counter`,
-  `deep_search_usage`, `registered_ips`, `last_feedback_time`) — kein Persistieren,
-  Reset beim täglichen Render-Restart ist gewollt.
+  `deep_search_usage`, `last_feedback_time`) — kein Persistieren,
+  Reset beim täglichen Render-Restart ist gewollt. Check + Increment laufen
+  atomar unter einem Lock (`state.py::check_and_increment_usage`), weil die
+  sync-def `/ask_*`-Endpoints beim Fan-out parallel in Threadpool-Workern laufen.
 - Limits/Defaults kommen aus `app/core/config.py` (`get_usage_limit`,
   `get_word_limit`, `get_output_token_limit`, …) und können per Firestore
   (`app_config/models.limits`) überschrieben werden.
@@ -274,7 +282,6 @@ app/services/
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   public_markdown.py         Server-Markdown-Rendering für Share-Seiten
   differences_stats.py       Anonyme Differences-Telemetrie (differences_stats-Collection, §6)
-tool_heuristics.py           Intent-Erkennung + Realtime-Kontext (weather/stock/crypto)
 ```
 
 Wichtige Verträge im Backend:
@@ -358,7 +365,7 @@ erhält die Reihenfolge (kein `sorted` mehr) und validiert `defaults`.
   Exclude, Theme, Picker-Persistenz). Startet einen eigenen uvicorn auf Port
   8031 mit `MOCK_LLM=1` (deterministische Fixtures in
   `app/services/llm/mock_llm.py`, Seams: `_run_ask`,
-  `_call_engine_text`/`_stream_engine_text`, `get_intent_from_llm`),
+  `_call_engine_text`/`_stream_engine_text`),
   `MOCK_AUTH=1` (Sentinel-Token statt Firebase, Browser-Stub ersetzt
   `firebase.js` per Playwright-Route) und `DISABLE_RATE_LIMIT=1`. Lauf:
   ```powershell
@@ -437,9 +444,12 @@ erhält die Reihenfolge (kein `sorted` mehr) und validiert `defaults`.
 - **Provider-Label-Konvention**: Frontend nutzt teils `Claude`, Backend kanonisch
   `Anthropic`. Beim Verdrahten neuer Modelle Mapping in `app-core.js::modelPrefs`
   und Backend-`normalize_model_name` synchron halten.
-- **Usage ist In-Memory & nicht atomar** (`active_count`-Increment `1/n`).
-  Beim Ändern der Limit-/Zähl-Logik alle `/ask_*` + `/consensus` + `/usage` +
-  `/user_status` konsistent halten.
+- **Usage ist In-Memory, aber atomar** (`active_count`-Increment `1/n`).
+  Limit-Check + Increment laufen unter einem Lock in
+  `state.py::check_and_increment_usage`; Reads über `get_usage_snapshot`.
+  Die Dicts nie mehr direkt per read-modify-write ändern — beim Ändern der
+  Limit-/Zähl-Logik alle `/ask_*` + `/consensus` + `/resolve` + `/usage` +
+  `/user_status` + `/prepare` konsistent halten.
 - **Datenminimierung ist Designentscheidung**: keine IP-/User-Agent-Speicherung,
   keine Datei-Bytes in Firestore. Nicht „aus Versehen" mitloggen.
 

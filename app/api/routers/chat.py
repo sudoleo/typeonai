@@ -4,11 +4,10 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from fastapi import APIRouter, Request, Body, HTTPException
-from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 
 from app.core.rate_limit import limiter
-from app.core.state import usage_counter, deep_search_usage
+from app.core.state import check_and_increment_usage, get_usage_snapshot
 from app.core.security import verify_user_token, extract_id_token, is_user_pro, is_user_early
 import app.core.config as cfg
 from app.services.llm.attachments import parse_attachments
@@ -51,7 +50,6 @@ from app.services.llm.resolve_engine import (
 )
 from app.services.share_snapshots import persist_pending_result
 from app.services.differences_stats import record_differences_stats
-from tool_heuristics import get_realtime_context, get_intent_from_llm
 
 router = APIRouter()
 
@@ -368,10 +366,15 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
         limit_regular = cfg.get_usage_limit(is_pro_user)
         limit_deep = cfg.get_deep_search_limit(is_pro_user)
 
-        current_usage = usage_counter.get(uid, 0)
-        current_deep_usage = deep_search_usage.get(uid, 0)
+        status, current_usage, current_deep_usage = check_and_increment_usage(
+            uid,
+            limit_regular=limit_regular,
+            limit_deep=limit_deep,
+            increment=increment,
+            deep_search=deep_search,
+        )
 
-        if current_usage + increment > limit_regular:
+        if status == "limit_regular":
             msg = "Pro usage limit reached." if is_pro_user else "Free usage limit reached. Upgrade to Pro."
             return {
                 "error": msg,
@@ -379,16 +382,12 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
                 "deep_remaining": int(limit_deep - current_deep_usage),
             }
 
-        if deep_search and (current_deep_usage + increment > limit_deep):
+        if status == "limit_deep":
             return {
                 "error": "Your Deep Think quota is exhausted for this period.",
                 "free_usage_remaining": int(limit_regular - current_usage),
                 "deep_remaining": 0,
             }
-
-        usage_counter[uid] = current_usage + increment
-        if deep_search:
-            deep_search_usage[uid] = current_deep_usage + increment
 
         developer_key = os.environ.get(provider.developer_key_env) if provider.developer_key_env else None
         if provider.developer_key_env and not developer_key:
@@ -405,8 +404,8 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
             max_tokens=max_tokens,
             attachments=attachments,
             extras={
-                "free_usage_remaining": int(limit_regular - usage_counter[uid]),
-                "deep_remaining": int(limit_deep - deep_search_usage.get(uid, 0)),
+                "free_usage_remaining": int(limit_regular - current_usage),
+                "deep_remaining": int(limit_deep - current_deep_usage),
                 "is_pro_user": is_pro_user,
                 "key_used": provider.developer_key_label,
             },
@@ -471,9 +470,8 @@ async def prepare(request: Request, data: dict = Body(...)):
         is_pro = is_user_pro(uid)
         limit = cfg.get_usage_limit(is_pro)
         deep_limit = cfg.get_deep_search_limit(is_pro)
-        current_usage = usage_counter.get(uid, 0)
+        current_usage, current_deep_usage = get_usage_snapshot(uid)
         if not use_own_keys and current_usage >= limit:
-            current_deep_usage = deep_search_usage.get(uid, 0)
             msg = "Pro usage limit reached." if is_pro else "Free usage limit reached. Upgrade to Pro or use your own API keys."
             raise HTTPException(
                 status_code=403,
@@ -503,22 +501,9 @@ async def prepare(request: Request, data: dict = Body(...)):
     else:
         base_system_prompt = str(raw_system_prompt).strip()
 
-    decision = await run_in_threadpool(get_intent_from_llm, question)
-    tool = decision.get("tool")
-
-    realtime_data = None
-    if tool in {"weather", "stock", "crypto"}:
-        realtime_data = await run_in_threadpool(get_realtime_context, question, decision=decision)
-
-    if realtime_data:
-        logging.info("Injecting realtime context.")
-        base_system_prompt = (
-            f"REAL-TIME DATA:\n{realtime_data}\n\n"
-            "INSTRUCTIONS:\n"
-            "You can use the real-time data provided above to answer the user's question.\n\n"
-            f"{base_system_prompt}"
-        )
-
+    # Echtzeitdaten holen sich die Modelle selbst ueber die native Web-Suche,
+    # die in jedem Provider-Call aktiv ist (siehe engines.py). Ein vorgeschalteter
+    # Intent-Router mit Realtime-Injektion waere nur redundante, serielle Latenz.
     return {
         "system_prompt": base_system_prompt,
         "sources": []
@@ -565,12 +550,14 @@ def consensus(request: Request, data: dict = Body(...)):
         limit_regular = cfg.get_usage_limit(is_pro)
         limit_deep = cfg.get_deep_search_limit(is_pro)
 
-        # Aktuellen Verbrauch abrufen
-        current_usage = usage_counter.get(uid, 0)
-        current_deep_usage = deep_search_usage.get(uid, 0)
-
-        # Reguläre Usage Prüfung (gilt immer für Consensus Request)
-        if current_usage >= limit_regular:
+        # Regulaere Usage atomar pruefen + erhoehen (gilt immer fuer Consensus Request)
+        status, current_usage, current_deep_usage = check_and_increment_usage(
+            uid,
+            limit_regular=limit_regular,
+            limit_deep=limit_deep,
+            increment=1,
+        )
+        if status != "ok":
             msg = "Pro usage limit reached." if is_pro else "Your free quota has been used up. Please store your own API keys or upgrade to Pro."
             raise HTTPException(
                 status_code=403,
@@ -583,9 +570,6 @@ def consensus(request: Request, data: dict = Body(...)):
                     current_deep_usage,
                 )
             )
-        
-        # Reguläre Usage erhöhen
-        usage_counter[uid] = current_usage + 1
     else:
         limit_regular = cfg.get_usage_limit(is_pro)
         limit_deep = cfg.get_deep_search_limit(is_pro)
@@ -764,9 +748,10 @@ def consensus(request: Request, data: dict = Body(...)):
     if stream_requested:
         extra_fields = {}
         if uid:
+            usage_now, deep_usage_now = get_usage_snapshot(uid)
             extra_fields = {
-                "free_usage_remaining": max(0, int(cfg.get_usage_limit(is_pro) - usage_counter.get(uid, 0))),
-                "deep_remaining": max(0, int(cfg.get_deep_search_limit(is_pro) - deep_search_usage.get(uid, 0))),
+                "free_usage_remaining": max(0, int(cfg.get_usage_limit(is_pro) - usage_now)),
+                "deep_remaining": max(0, int(cfg.get_deep_search_limit(is_pro) - deep_usage_now)),
                 "is_pro_user": is_pro,
             }
 
@@ -892,9 +877,10 @@ def consensus(request: Request, data: dict = Body(...)):
         if result_id:
             response["result_id"] = result_id
     if uid:
+        usage_now, deep_usage_now = get_usage_snapshot(uid)
         response.update({
-            "free_usage_remaining": max(0, int(limit_regular - usage_counter.get(uid, 0))),
-            "deep_remaining": max(0, int(limit_deep - deep_search_usage.get(uid, 0))),
+            "free_usage_remaining": max(0, int(limit_regular - usage_now)),
+            "deep_remaining": max(0, int(limit_deep - deep_usage_now)),
             "is_pro_user": is_pro,
         })
     return response
@@ -944,9 +930,13 @@ def resolve(request: Request, data: dict = Body(...)):
     limit_deep = cfg.get_deep_search_limit(is_pro)
 
     if not use_own_keys:
-        current_usage = usage_counter.get(uid, 0)
-        current_deep_usage = deep_search_usage.get(uid, 0)
-        if current_usage >= limit_regular:
+        status, current_usage, current_deep_usage = check_and_increment_usage(
+            uid,
+            limit_regular=limit_regular,
+            limit_deep=limit_deep,
+            increment=1,
+        )
+        if status != "ok":
             msg = "Pro usage limit reached." if is_pro else "Your free quota has been used up. Please store your own API keys or upgrade to Pro."
             raise HTTPException(
                 status_code=403,
@@ -959,14 +949,14 @@ def resolve(request: Request, data: dict = Body(...)):
                     current_deep_usage,
                 ),
             )
-        usage_counter[uid] = current_usage + 1
 
     api_keys = build_engine_api_keys(data, use_own_keys)
 
     result = run_resolve_round(question, claim, positions, api_keys)
+    usage_now, deep_usage_now = get_usage_snapshot(uid)
     result.update({
-        "free_usage_remaining": max(0, int(limit_regular - usage_counter.get(uid, 0))),
-        "deep_remaining": max(0, int(limit_deep - deep_search_usage.get(uid, 0))),
+        "free_usage_remaining": max(0, int(limit_regular - usage_now)),
+        "deep_remaining": max(0, int(limit_deep - deep_usage_now)),
         "is_pro_user": is_pro,
     })
     return result

@@ -4,7 +4,6 @@ from firebase_admin import auth
 from fastapi import APIRouter, Request, Body, HTTPException
 
 from app.core.rate_limit import limiter
-from app.core.state import registered_ips
 from app.core.security import verify_user_token
 
 router = APIRouter()
@@ -59,10 +58,4 @@ async def confirm_registration(request: Request, data: dict = Body(...)):
         # Diese Info ist okay, weil sie nichts über Passwort / Existenz aussagt
         raise HTTPException(status_code=400, detail="E-mail address not yet verified.")
 
-    ip_address = request.client.host
-
-    if ip_address in registered_ips and registered_ips[ip_address] != uid:
-        raise HTTPException(status_code=400, detail="Only one confirmed account per user/IP is allowed.")
-
-    registered_ips[ip_address] = uid
-    return {"status": "registered", "ip": ip_address}
+    return {"status": "registered"}

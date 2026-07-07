@@ -255,9 +255,7 @@ def test_prepare_validates_but_does_not_inject_context():
     # an /ask_*).
     client = make_client()
     p1, p2, p3 = auth_patches(uid="uid-followup-prepare", is_pro=True)
-    with p1, p2, p3, patch.object(
-        chat_router, "get_intent_from_llm", return_value={"tool": None}
-    ):
+    with p1, p2, p3:
         response = client.post(
             "/prepare",
             headers=AUTH_HEADER,

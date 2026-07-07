@@ -246,17 +246,10 @@
   white-space: nowrap;
 }
 
+/* Optik kommt zentral von .pro-badge (layout.css) — hier nur Flex/Abstand. */
 .model-picker-pro-badge {
   flex: 0 0 auto;
   margin-right: 0;
-  padding: 2px 6px;
-  border: 1px solid color-mix(in srgb, #d97706 42%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, #f59e0b 16%, transparent);
-  color: color-mix(in srgb, #92400e 86%, var(--text-color) 14%);
-  font-size: 0.66rem;
-  font-weight: 700;
-  line-height: 1;
 }
 
 .model-picker-option.is-selected .model-picker-pro-badge:last-child {
@@ -297,12 +290,6 @@
 
 .dark-mode .model-picker-option.is-selected {
   background: #30343d;
-}
-
-.dark-mode .model-picker-pro-badge {
-  border-color: color-mix(in srgb, #fbbf24 40%, transparent);
-  background: color-mix(in srgb, #f59e0b 18%, transparent);
-  color: color-mix(in srgb, #fde68a 84%, var(--text-color) 16%);
 }
 
 .dark-mode .model-picker-early-badge {

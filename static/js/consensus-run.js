@@ -180,7 +180,7 @@
         // Pro-Chip immer zeigen: Free-Nutzer sehen den Teaser (Klick öffnet
         // das Upgrade-Modal), Pro-Nutzer eine dezente Kennzeichnung.
         const badge = document.createElement("span");
-        badge.className = "followup-pro-badge";
+        badge.className = "pro-badge followup-pro-badge";
         badge.textContent = "Pro";
         btn.appendChild(badge);
 

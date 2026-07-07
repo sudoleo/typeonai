@@ -1,6 +1,8 @@
 import logging
 import os
+import threading
 from typing import Optional
+from cachetools import TTLCache
 from fastapi import Request
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
@@ -111,67 +113,79 @@ def extract_id_token(request: Request, data: dict) -> Optional[str]:
         return cookie_token
     return None
 
+# --- Tier-Flag-Cache -------------------------------------------------------
+# is_user_pro/is_user_early/is_user_admin wurden pro Aufruf je ein Firestore-Get;
+# ein Frage-Fan-out summierte sich auf 15+ Reads. Ein gemeinsamer Fetch des
+# users/{uid}-Dokuments liefert alle drei Flags, der TTL-Cache haelt sie kurz
+# (60s), damit manuell vergebene Pro/Early-Tags schnell greifen. Fehler werden
+# NICHT gecacht (naechster Aufruf versucht Firestore erneut).
+TIER_CACHE_TTL_SECONDS = 60
+_tier_cache = TTLCache(maxsize=4096, ttl=TIER_CACHE_TTL_SECONDS)
+_tier_cache_lock = threading.Lock()
+
+_TIER_FLAGS_DEFAULT = {"pro": False, "early": False, "admin": False}
+
+
+def _compute_tier_flags(data: dict) -> dict:
+    tier = str(data.get("tier", "")).lower()
+    early = data.get("early") in (True, "true", "True") or tier == "early"
+    role = str(data.get("role", "")).lower()
+    return {
+        "pro": tier in ("premium", "pro"),
+        "early": early,
+        "admin": role == "admin",
+    }
+
+
+def _get_tier_flags(uid: str) -> dict:
+    with _tier_cache_lock:
+        flags = _tier_cache.get(uid)
+    if flags is not None:
+        return flags
+    try:
+        doc = db_firestore.collection("users").document(uid).get()
+        data = doc.to_dict() if doc.exists else {}
+    except Exception as e:
+        logging.error(f"Tier-Lookup Fehler für {uid}: {e}")
+        return _TIER_FLAGS_DEFAULT
+    flags = _compute_tier_flags(data or {})
+    with _tier_cache_lock:
+        _tier_cache[uid] = flags
+    return flags
+
+
+def invalidate_tier_cache(uid: str) -> None:
+    """Cache-Eintrag verwerfen, z.B. nach /delete_account."""
+    with _tier_cache_lock:
+        _tier_cache.pop(uid, None)
+
+
 def is_user_pro(uid: str) -> bool:
     """
-    Liest aus Firestore, ob das Feld 'tier' auf 'premium' (oder 'pro') steht.
+    Liest (gecacht) aus Firestore, ob das Feld 'tier' auf 'premium' (oder 'pro') steht.
     """
     if _mock_auth_enabled() and uid == E2E_MOCK_UID:
         return False
-    try:
-        doc_ref = db_firestore.collection("users").document(uid)
-        doc = doc_ref.get()
-        
-        if doc.exists:
-            data = doc.to_dict()
-            tier = data.get("tier", "").lower()
-            return tier in ["premium", "pro"]
-        return False
-    except Exception as e:
-        logging.error(f"Pro-Check Fehler für {uid}: {e}")
-        return False
+    return _get_tier_flags(uid)["pro"]
 
 def is_user_early(uid: str) -> bool:
     """
-    Liest aus Firestore, ob der Nutzer Early-Access hat: Feld 'early' == True
+    Liest (gecacht) aus Firestore, ob der Nutzer Early-Access hat: Feld 'early' == True
     (oder tier == 'early'). Wird manuell vergeben, analog zum Pro-Tag.
     Hinweis: Pro schliesst Early ein - das wird an den Aufrufstellen kombiniert
     (is_user_pro(uid) or is_user_early(uid)), nicht hier.
     """
     if _mock_auth_enabled() and uid == E2E_MOCK_UID:
         return False
-    try:
-        doc_ref = db_firestore.collection("users").document(uid)
-        doc = doc_ref.get()
-
-        if doc.exists:
-            data = doc.to_dict()
-            if data.get("early") in (True, "true", "True"):
-                return True
-            tier = str(data.get("tier", "")).lower()
-            return tier == "early"
-        return False
-    except Exception as e:
-        logging.error(f"Early-Check Fehler für {uid}: {e}")
-        return False
+    return _get_tier_flags(uid)["early"]
 
 def is_user_admin(uid: str) -> bool:
     """
-    Liest aus Firestore, ob das Feld 'role' auf 'admin' steht.
+    Liest (gecacht) aus Firestore, ob das Feld 'role' auf 'admin' steht.
     """
     if _mock_auth_enabled() and uid == E2E_MOCK_UID:
         return False
-    try:
-        doc_ref = db_firestore.collection("users").document(uid)
-        doc = doc_ref.get()
-        
-        if doc.exists:
-            data = doc.to_dict()
-            role = data.get("role", "").lower()
-            return role == "admin"
-        return False
-    except Exception as e:
-        logging.error(f"Admin-Check Fehler für {uid}: {e}")
-        return False
+    return _get_tier_flags(uid)["admin"]
 
 def is_valid_session(token: str) -> bool:
     """

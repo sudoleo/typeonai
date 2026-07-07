@@ -717,17 +717,25 @@
 
             const question = (window.lastQuestion || $("questionInput")?.value || "").trim();
             const useOwnKeys = !!$("useOwnKeysSwitch")?.checked;
-            // Der Button trägt Icon + Label-Span: nur das Label austauschen,
-            // damit das Icon den Ladezustand überlebt.
+            // Der Button trägt Icon + Label-Span (mit Lang-/Kurzvariante für
+            // schmale Spalten): nur die Label-Texte austauschen, damit Icon
+            // und Container-Query-Umschaltung den Ladezustand überleben.
             const labelEl = button.querySelector(".diff-resolve-btn-label");
-            const setLabel = function (text) {
-              if (labelEl) labelEl.textContent = text;
+            const longEl = button.querySelector(".diff-resolve-label-long");
+            const shortEl = button.querySelector(".diff-resolve-label-short");
+            const setLabel = function (text, shortText) {
+              if (longEl && shortEl) {
+                longEl.textContent = text;
+                shortEl.textContent = shortText || text;
+              } else if (labelEl) labelEl.textContent = text;
               else button.textContent = text;
             };
-            const originalLabel = labelEl ? labelEl.textContent : button.textContent;
+            const originalLabel = longEl ? longEl.textContent
+              : (labelEl ? labelEl.textContent : button.textContent);
+            const originalShort = shortEl ? shortEl.textContent : "";
             button.disabled = true;
             button.classList.add("is-loading");
-            setLabel("Asking the models…");
+            setLabel("Asking the models…", "Asking…");
             window.trackUmamiEvent?.("app_resolve_started", { positions: diff.positions.length });
 
             try {
@@ -756,7 +764,7 @@
                   // zurücksetzen und das Pro-Modal zeigen.
                   button.disabled = false;
                   button.classList.remove("is-loading");
-                  setLabel(originalLabel);
+                  setLabel(originalLabel, originalShort);
                   showResolveProTeaser();
                   return;
                 }
@@ -804,7 +812,7 @@
               resultBox.hidden = false;
               button.disabled = false;
               button.classList.remove("is-loading");
-              setLabel(originalLabel);
+              setLabel(originalLabel, originalShort);
               window.trackUmamiEvent?.("app_resolve_completed", { outcome: "request_error" });
             }
           }
@@ -842,13 +850,19 @@
             const btn = document.createElement("button");
             btn.type = "button";
             btn.className = "diff-resolve-btn";
+            // Lang- und Kurz-Label: in schmalen Differences-Spalten blendet
+            // eine Container-Query (components-consensus-insights.css) auf die
+            // Kurzform um, damit der Button einzeilig bleibt.
             btn.innerHTML = RESOLVE_BTN_ICON
-              + '<span class="diff-resolve-btn-label">Resolve with the models</span>';
+              + '<span class="diff-resolve-btn-label">'
+              + '<span class="diff-resolve-label-long">Resolve with the models</span>'
+              + '<span class="diff-resolve-label-short">Resolve</span>'
+              + '</span>';
             btn.title = "Ask the disagreeing models to re-examine this point against each other's position (uses 1 request)";
             // Pro-Chip immer zeigen: Free-Nutzer sehen den Teaser (Klick öffnet
             // das Upgrade-Modal), Pro-Nutzer eine dezente Kennzeichnung.
             const chip = document.createElement("span");
-            chip.className = "diff-resolve-pro-chip";
+            chip.className = "pro-badge diff-resolve-pro-chip";
             chip.textContent = "Pro";
             btn.appendChild(chip);
             if (!window.isUserPro) {

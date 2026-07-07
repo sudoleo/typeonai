@@ -54,7 +54,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260707-fixes1">
+  <link rel="stylesheet" href="/static/style.css?v=20260707-fixes2">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -69,7 +69,7 @@
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
   <script src="/static/js/app-core.js?v=20260626-extract1" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
-  <script src="/static/js/model-picker.js?v=20260630-early1" defer></script>
+  <script src="/static/js/model-picker.js?v=20260707-fixes1" defer></script>
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
   <script src="/static/js/markdown-stream.js?v=20260706-reasoning1" defer></script>
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
@@ -87,8 +87,8 @@
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260706-followup1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-insights.js?v=20260706-fixes1" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260707-errorbox" defer></script>
+  <script src="/static/js/consensus-insights.js?v=20260707-fixes1" defer></script>
+  <script src="/static/js/consensus-run.js?v=20260707-fixes1" defer></script>
   <script src="/static/js/query-send.js?v=20260706-followup2" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
@@ -112,7 +112,7 @@
     <!-- Rechte Seite -->
     <div class="top-bar-right">
       <div class="top-bar-plan">
-        <span id="proBadge" style="display: none;">PRO</span>
+        <span id="proBadge" class="pro-badge" style="display: none;">PRO</span>
         <a id="upgradeLink" href="#" style="display: none;">Upgrade</a>
       </div>
       <!-- Neuer About-Link -->
@@ -282,7 +282,7 @@
               <polyline points="14 2 14 8 20 8"></polyline>
             </svg>
             <span>Upload document</span>
-            <span class="attach-pro-badge model-picker-pro-badge">Pro</span>
+            <span class="pro-badge attach-pro-badge model-picker-pro-badge">Pro</span>
           </button>
           <div class="attach-menu-hint">PDF, PNG, JPG, WebP &middot; max 5 MB &middot; up to 2 files</div>
           <div class="attach-menu-divider"></div>

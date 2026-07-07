@@ -241,7 +241,7 @@
       badges.forEach(badgeText => {
         const badge = document.createElement("span");
         badge.className = badgeText.toLowerCase() === "pro"
-          ? "model-picker-pro-badge"
+          ? "pro-badge model-picker-pro-badge"
           : "model-picker-early-badge";
         badge.textContent = badgeText;
         item.appendChild(badge);

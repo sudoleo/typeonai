@@ -112,18 +112,44 @@ body:has(.sidebar.collapsed) .main-wrapper {
   line-height: 1;
 }
 
-#proBadge {
-  display: none;
-  padding: 3px 8px;
+/* Einheitliches Pro-Badge im App-Gold — die eine Quelle für alle
+   Pro-Kennzeichnungen (Top-Bar #proBadge, .followup-pro-badge,
+   .diff-resolve-pro-chip, .model-picker-pro-badge). Die Kontext-Klassen
+   steuern nur noch Layout (flex/margin), nicht mehr die Optik. */
+.pro-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
   border: 1px solid color-mix(in srgb, #d4af37 55%, transparent);
   border-radius: var(--radius-pill);
   background: linear-gradient(180deg, color-mix(in srgb, #ffffff 24%, transparent), transparent 60%), #c9a232;
   color: #ffffff;
   font-size: 0.62rem;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   line-height: 1;
   text-transform: uppercase;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 2px 6px rgba(201, 162, 50, 0.22);
+}
+
+/* Dezente Gold-Variante für Pro-Nutzer: Kennzeichnung statt Upsell-Teaser
+   (goldener Umriss ohne Vollfarbe). */
+.pro-badge.is-subtle {
+  border-color: color-mix(in srgb, #d4af37 46%, transparent);
+  background: color-mix(in srgb, #c9a232 14%, transparent);
+  color: color-mix(in srgb, #8a6b1a 88%, var(--text-color));
+  box-shadow: none;
+}
+
+.dark-mode .pro-badge.is-subtle {
+  color: color-mix(in srgb, #e8c76a 86%, var(--text-color) 14%);
+}
+
+/* Top-Bar-Variante: minimal größer, JS blendet sie für Pro-Nutzer ein. */
+#proBadge {
+  display: none;
+  padding: 3px 8px;
+  letter-spacing: 0.08em;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 4px 12px rgba(201, 162, 50, 0.24);
 }
 
@@ -328,6 +354,11 @@ body:has(.sidebar.collapsed) .main-wrapper {
    Placeholder-Text und Bookmark-Text auf einer Linie liegen. */
 .sidebar-search-box {
   margin: 0 0 8px;
+}
+
+/* Eingeklappte Bookmarks: das Suchfeld gehört zur Liste und verschwindet mit. */
+.bookmarks-section.is-collapsed .sidebar-search-box {
+  display: none;
 }
 
 .sidebar-search-box input {

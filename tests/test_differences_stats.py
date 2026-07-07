@@ -91,11 +91,31 @@ class BuildDifferencesStatsDocTests(unittest.TestCase):
         self.assertEqual(doc["differences"][0]["type"], "contradiction")
         self.assertEqual(doc["differences"][0]["severity"], "major")
         self.assertEqual(doc["differences"][0]["position_count"], 2)
-        self.assertEqual(doc["differences"][0]["models"], [["Gemini", "OpenAI"], ["Mistral"]])
+        self.assertEqual(doc["differences"][0]["positions"], [
+            {"models": ["Gemini", "OpenAI"]},
+            {"models": ["Mistral"]},
+        ])
         self.assertEqual(doc["differences"][1]["type"], "emphasis")
 
         # Modell-Labels laufen durch sanitize_model_labels (nur beteiligte Provider)
         self.assertEqual(doc["model_ids"], {"OpenAI": "GPT-5.4 mini", "Gemini": "Gemini 3.1 Flash"})
+
+    def test_firestore_compatible_no_nested_arrays(self):
+        """Firestore lehnt Arrays direkt in Arrays ab (400 invalid nested
+        entity) — das Dokument darf nirgends list-in-list enthalten."""
+        def assert_no_nested_arrays(value, path="doc"):
+            if isinstance(value, dict):
+                for k, v in value.items():
+                    assert_no_nested_arrays(v, f"{path}.{k}")
+            elif isinstance(value, (list, tuple)):
+                for i, item in enumerate(value):
+                    self.assertNotIsInstance(
+                        item, (list, tuple),
+                        f"Verschachteltes Array bei {path}[{i}] — Firestore-Write würde fehlschlagen",
+                    )
+                    assert_no_nested_arrays(item, f"{path}[{i}]")
+
+        assert_no_nested_arrays(build_differences_stats_doc(make_differences_data()))
 
     def test_no_content_leaks_into_doc(self):
         """Kein Text aus Frage/Claims/Stances/Quotes darf im Dokument landen."""

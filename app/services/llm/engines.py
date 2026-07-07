@@ -550,7 +550,7 @@ def query_claude(
 
         _log_model_selection("Claude", payload["model"], deep_search, model_override)
 
-        response = requests.post(url, json=payload, headers=headers)
+        response = requests.post(url, json=payload, headers=headers, timeout=120)
         if response.status_code == 200:
             data = response.json()
             parsed = parse_anthropic_response(data)

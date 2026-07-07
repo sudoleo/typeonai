@@ -4,8 +4,8 @@ from fastapi import APIRouter, Request, Body, HTTPException
 
 from app.core.rate_limit import limiter
 import app.core.config as cfg
-from app.core.security import verify_user_token, extract_id_token, is_user_pro, is_user_early, db_firestore
-from app.core.state import usage_counter, deep_search_usage, registered_ips, last_feedback_time
+from app.core.security import verify_user_token, extract_id_token, is_user_pro, is_user_early, invalidate_tier_cache, db_firestore
+from app.core.state import get_usage_snapshot, reset_usage, last_feedback_time
 
 router = APIRouter()
 
@@ -69,8 +69,7 @@ async def get_usage_post(request: Request):
     limit_deep = cfg.get_deep_search_limit(pro_status)
 
     # 3. Verbrauch abrufen
-    current_usage = usage_counter.get(uid, 0)
-    current_deep_usage = deep_search_usage.get(uid, 0)
+    current_usage, current_deep_usage = get_usage_snapshot(uid)
 
     # 4. Verbleibend berechnen (verhindert negative Zahlen in der UI, falls mal überzogen wurde)
     remaining = int(limit_regular - current_usage)
@@ -141,13 +140,11 @@ async def delete_account(request: Request, data: dict = Body(default={})):
             logging.error(f"delete_account: {collection_name} cleanup failed for {uid}: {e}")
             errors.append(collection_name)
 
-    # 4. In-Memory-Zustand bereinigen
-    usage_counter.pop(uid, None)
-    deep_search_usage.pop(uid, None)
+    # 4. In-Memory-Zustand bereinigen (inkl. Tier-Flag-Cache, sonst wuerde ein
+    #    geloeschter Pro-Account bis zu 60s weiter als Pro gecacht)
+    reset_usage(uid)
     last_feedback_time.pop(uid, None)
-    for ip, mapped_uid in list(registered_ips.items()):
-        if mapped_uid == uid:
-            registered_ips.pop(ip, None)
+    invalidate_tier_cache(uid)
 
     # 5. Auth-Account zuletzt löschen, damit der Nutzer bei Teilfehlern
     #    erneut authentifiziert löschen kann

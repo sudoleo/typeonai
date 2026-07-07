@@ -670,38 +670,9 @@ textarea:focus {
   opacity: 0.85;
 }
 
-/* Pro-Badge im App-Gold (wie #proBadge im Header), damit die Kennzeichnung
-   in beiden Themes konsistent goldfarben ist. Eigenstaendig gestylt (nicht via
-   .model-picker-pro-badge), sonst uebersteuert die spaeter importierte
-   components-model-picker.css das Amber-Schema. */
+/* Optik kommt zentral von .pro-badge (layout.css) — hier nur Flex-Verhalten. */
 .followup-pro-badge {
   flex: 0 0 auto;
-  padding: 2px 7px;
-  border: 1px solid color-mix(in srgb, #d4af37 55%, transparent);
-  border-radius: var(--radius-pill);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, #ffffff 24%, transparent), transparent 60%),
-    #c9a232;
-  color: #ffffff;
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  line-height: 1;
-  text-transform: uppercase;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 2px 6px rgba(201, 162, 50, 0.22);
-}
-
-/* Dezente Gold-Variante für Pro-Nutzer: Kennzeichnung statt Upsell-Teaser —
-   goldener Umriss ohne Vollfarbe, damit es kein Upgrade-Call-to-action wirkt. */
-.followup-pro-badge.is-subtle {
-  border-color: color-mix(in srgb, #d4af37 46%, transparent);
-  background: color-mix(in srgb, #c9a232 14%, transparent);
-  color: color-mix(in srgb, #8a6b1a 88%, var(--text-color));
-  box-shadow: none;
-}
-
-.dark-mode .followup-pro-badge.is-subtle {
-  color: color-mix(in srgb, #e8c76a 86%, var(--text-color) 14%);
 }
 
 .followup-chip {

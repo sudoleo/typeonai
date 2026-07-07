@@ -34,8 +34,10 @@ Schema v1 (ein Dokument pro Consensus-Lauf mit Differences-Ergebnis):
                          minor_contradictions, emphases}
   claims                [{agree: int, dissent: int}]  nur Zähler, keine Texte
   differences           [{type, severity, position_count,
-                          models: [[provider, ...], ...]}]  Positionen als
-                          Provider-Gruppen, keine Stance-/Quote-Texte
+                          positions: [{models: [provider, ...]}, ...]}]
+                          Positionen als Provider-Gruppen (Array von Maps —
+                          Firestore verbietet direkt verschachtelte Arrays),
+                          keine Stance-/Quote-Texte
   question_word_count   int    Länge der Frage (Zahl, nicht der Text)
   is_pro_user           bool
   used_own_keys         bool
@@ -94,8 +96,10 @@ def build_differences_stats_doc(
             "type": str(diff.get("type") or ""),
             "severity": str(diff.get("severity") or ""),
             "position_count": len(positions),
-            "models": [
-                sorted(str(m) for m in (p.get("models") or []) if m)
+            # Array von Maps statt Array von Arrays: Firestore lehnt direkt
+            # verschachtelte Arrays ab (400 "invalid nested entity").
+            "positions": [
+                {"models": sorted(str(m) for m in (p.get("models") or []) if m)}
                 for p in positions
             ],
         })

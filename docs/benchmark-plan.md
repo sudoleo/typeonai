@@ -75,10 +75,9 @@ Die Consensus-Synthese selbst (`app/services/llm/consensus_engine.py`) ist
 | Grok | `:357` (via `_openai_responses_payload`) | `web_search` |
 | DeepSeek | `:336‑344` | **kein Tool** → bereits closed-book |
 
-Zusätzlich injiziert `/prepare` (`app/api/routers/chat.py:781`) Echtzeitkontext
-via `get_intent_from_llm` + `get_realtime_context` (`tool_heuristics.py`). Der
-Runner **umgeht `/prepare` komplett** und baut den System-Prompt selbst → diese
-Quelle ist damit automatisch aus.
+Hinweis: Der frühere `/prepare`-Intent-Router (`tool_heuristics.py`) wurde
+entfernt — Echtzeitdaten kommen ausschließlich aus der nativen Web-Suche oben.
+Der Runner umgeht ohnehin `/prepare` und baut den System-Prompt selbst.
 
 ---
 

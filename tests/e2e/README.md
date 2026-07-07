@@ -33,8 +33,8 @@ Backend-Baseline (`python -m pytest tests`) bleibt unverändert.
 - Der Testserver läuft mit:
   - `MOCK_LLM=1` — alle Provider-/Engine-Calls liefern deterministische
     Fixtures (`app/services/llm/mock_llm.py`). Gemockt wird am untersten
-    Seam (`_run_ask`, `_call_engine_text`/`_stream_engine_text`,
-    `get_intent_from_llm`), d. h. SSE-Protokoll, Differences-Parsing,
+    Seam (`_run_ask`, `_call_engine_text`/`_stream_engine_text`),
+    d. h. SSE-Protokoll, Differences-Parsing,
     Anchor-/Quote-Verifikation und Agreement-Score laufen **echt**.
     Zusätzlich wird die `pending_results`-Share-Persistenz übersprungen
     (kein Firestore-Schreiben aus Tests).

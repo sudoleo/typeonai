@@ -261,6 +261,31 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   font-weight: 700;
   background: color-mix(in srgb, var(--glass-bg-strong) 78%, transparent);
   box-shadow: inset 0 1px 0 var(--glass-highlight);
+  white-space: nowrap;
+}
+
+.agent-mode-count {
+  white-space: nowrap;
+}
+
+/* Schmale Handydisplays: die eingeklappte Zeile ist sonst zu breit und
+   "6/6 answered" wird abgeschnitten. Redundantes entfällt: der Hint
+   ("expand to configure" — der Pfeil-Button sagt dasselbe) und der
+   Modell-Zähler ("6 models" steckt schon in "6/6 answered"). */
+@media (max-width: 600px) {
+  .agent-mode-panel.is-collapsed {
+    padding: 10px 12px;
+  }
+  .agent-mode-header {
+    gap: 10px;
+  }
+  .agent-mode-metrics {
+    gap: 6px;
+  }
+  .agent-mode-panel.is-collapsed .agent-mode-collapsed-hint,
+  .agent-mode-panel.is-collapsed .agent-mode-count {
+    display: none;
+  }
 }
 
 .agent-mode-models {
