@@ -3,8 +3,10 @@
 Eine "Zelle" = ein API-Call. Rollen: ``model`` (6 Provider), ``consensus`` und
 optional ``synth_alone``. ``query_differences`` wird in v1 nicht aufgerufen (E7).
 
-Der Hauptpfad nutzt die produktive Consensus-Logik **unveraendert mit
-Modellnamen** (E5). Transport und Consensus sind injizierbar, damit der gesamte
+Der Hauptpfad nutzt die produktive Consensus-Logik unveraendert; seit dem
+anonymisierten Prompt-Builder (E5, umgesetzt 2026-07) sieht die Synthese nur
+noch gemischte "Expert A/B/..."-Labels statt Modellnamen. Transport und
+Consensus sind injizierbar, damit der gesamte
 ``run()``-Loop (JSONL-Append, Resume, Budget-Stopp) ohne HTTP und ohne echte
 API-Keys end-to-end testbar ist. In Phase 2 wird kein echter Call gefahren –
 weder ueber ``--dry-run`` noch ueber ``run()``; der reale Pilot ist Phase 3.
@@ -20,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import app.core.config as cfg
+from app.services.llm.consensus_engine import CONSENSUS_TEMPERATURE
 from app.services.llm.engines import build_provider_payload
 
 from benchmark import audit, config, cost, transport
@@ -328,7 +331,7 @@ class BenchmarkRunner:
             if stopped:
                 return result
 
-            # --- Consensus-Zelle (Produktionslogik, mit Modellnamen) ---
+            # --- Consensus-Zelle (Produktionslogik; anonymisierte Labels, E5) ---
             ckey = cell_key(qid, "consensus", self.consensus_model)
             if ckey in skip:
                 result.cells_skipped += 1
@@ -403,10 +406,10 @@ class BenchmarkRunner:
             max_output_tokens=CONSENSUS_MAX_TOKENS,
             benchmark_mode=True,
         )
-        # query_consensus nutzt Gemini Pro ohne explizite Temperatur; Synth-alone
-        # muss fuer den Benchmark dieselben effektiven Settings dokumentieren/nutzen.
+        # query_consensus laeuft mit CONSENSUS_TEMPERATURE; Synth-alone muss
+        # fuer den Benchmark dieselben effektiven Settings dokumentieren/nutzen.
         if model_config.provider == "gemini":
-            request_data["payload"].get("generationConfig", {}).pop("temperature", None)
+            request_data["payload"].setdefault("generationConfig", {})["temperature"] = CONSENSUS_TEMPERATURE
         return request_data
 
     # --- run()-Helfer ------------------------------------------------------
@@ -667,11 +670,11 @@ class BenchmarkRunner:
         Kandidaten-Calls – und protokolliert die Stabilitaet des extrahierten
         Buchstabens.
 
-        Hinweis: Der produktive Consensus-Prompt listet die Experten in fester
-        Label-Reihenfolge; bei reiner Reihenfolge-Variation der Antworten misst
-        dieser Audit daher zunaechst die Synthese-Stabilitaet/Nichtdeterminismus.
-        Echte Label-Reihenfolge-Permutation haengt am aufgeschobenen
-        geordneten/anonymisierten Prompt-Builder (E5).
+        Hinweis: Der produktive Consensus-Prompt anonymisiert und mischt die
+        Expertenantworten inzwischen bei jedem Aufruf selbst (E5, umgesetzt
+        2026-07); die uebergebene Reihenfolge erreicht den Prompt also gar
+        nicht mehr. Dieser Audit misst damit die reine
+        Synthese-Stabilitaet/Nichtdeterminismus.
         """
         run_dir = Path(run_dir)
         api_keys = api_keys or {}
@@ -759,7 +762,8 @@ class BenchmarkRunner:
                 benchmark_mode=True,
             )
             if model_config.provider == "gemini":
-                request_data["payload"].get("generationConfig", {}).pop("temperature", None)
+                # Gleiche effektive Temperatur wie query_consensus.
+                request_data["payload"].setdefault("generationConfig", {})["temperature"] = CONSENSUS_TEMPERATURE
             audit.assert_no_web_tools(request_data["payload"], context=f"anon_consensus:{qid}")
             api_key = api_keys.get(config.PROVIDER_API_KEY_NAME[request_data["provider"]])
             outcome = transport_execute(request_data, api_key)
@@ -1045,7 +1049,9 @@ def _redact_payload(value):
 
 
 def _default_consensus_fn(api_keys: dict, consensus_model: str):
-    """Standard-Consensus: produktive query_consensus-Logik (mit Modellnamen, E5).
+    """Standard-Consensus: produktive query_consensus-Logik. Seit E5
+    (2026-07) anonymisiert der produktive Prompt-Builder die Antworten
+    selbst ("Expert A/B/...", pro Aufruf gemischt).
 
     ``query_consensus`` liest sein Output-Limit aus dem Modul-Global
     ``cfg.CONSENSUS_MAX_TOKENS`` (Default 8192) und nimmt keinen Parameter. Da der
@@ -1091,11 +1097,19 @@ _CONSENSUS_TEMPLATE_PLACEHOLDERS = (
 
 
 def _consensus_prompt_template() -> str:
-    """Der produktive (V0-)Consensus-Synthese-Prompt als Template – die pro Frage
+    """Der produktive Consensus-Synthese-Prompt als Template – die pro Frage
     variablen Teile (Frage, sechs Kandidatenantworten) sind durch Platzhalter
     ersetzt. So wird der exakt verwendete Synthese-Prompt im Manifest fuer
     Transparenz/Reproduzierbarkeit festgehalten, ohne Rohantworten zu speichern.
+
+    shuffle=False haelt das Template deterministisch (feste Reihenfolge
+    OpenAI..Grok hinter den "Expert A/B/..."-Labels); im Live-Call mischt der
+    Builder die Antworten pro Aufruf. Ohne den Schalter wuerde jede
+    Manifest-Erstellung eine andere Reihenfolge festschreiben und der
+    Resume-Abgleich der eingefrorenen Felder (E6) immer abbrechen.
     """
     from app.services.llm.consensus_engine import _build_consensus_prompt
 
-    return _build_consensus_prompt(*_CONSENSUS_TEMPLATE_PLACEHOLDERS, [], model_sources=None)
+    return _build_consensus_prompt(
+        *_CONSENSUS_TEMPLATE_PLACEHOLDERS, [], model_sources=None, shuffle=False
+    )

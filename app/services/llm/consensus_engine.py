@@ -207,8 +207,17 @@ def resolve_consensus_engine_model(consensus_model: str):
     return config
 
 
+# OpenAI-Reasoning-Modelle: gpt-5-Familie und o-Serie (o1/o3/o4) als Wortanfang.
+# Bewusst kein Substring-Match - das frühere '"o" in model' traf fast jedes
+# Modell (z. B. "gpt-4o") und unterdrückte darüber die Temperatur für alle
+# OpenAI-Engines (siehe _effective_temperature).
+_OPENAI_REASONING_MODEL_RE = re.compile(r"^(gpt-5|o[134])([.\-]|$)")
+
+
 def _openai_token_param(model_to_use: str) -> str:
-    return "max_completion_tokens" if "gpt-5" in model_to_use or "o" in model_to_use else "max_tokens"
+    if _OPENAI_REASONING_MODEL_RE.match(str(model_to_use or "")):
+        return "max_completion_tokens"
+    return "max_tokens"
 
 
 # ---------------------------------------------------------------------------
@@ -480,8 +489,10 @@ def _format_sources_for_prompt(model_name, model_sources):
     return "Sources for this expert (compact, provenance only):\n" + "\n".join(lines) + "\n"
 
 
-def _format_expert_opinion(label, answer, model_sources):
-    source_section = _format_sources_for_prompt(label, model_sources)
+def _format_expert_opinion(label, model_name, answer, model_sources):
+    # model_name ist der echte Modellname (nur für den model_sources-Lookup);
+    # im Prompt erscheint ausschließlich das anonyme Label.
+    source_section = _format_sources_for_prompt(model_name, model_sources)
     return (
         f"Expert opinion from {label}:\n"
         f"Answer:\n{answer}\n"
@@ -499,8 +510,31 @@ def _build_consensus_prompt(
     answer_grok: str,
     excluded_models: list,
     model_sources=None,
+    shuffle: bool = True,
 ) -> str:
+    """Baut den Consensus-Prompt. Die Expertenantworten werden wie im
+    Differences-Prompt anonymisiert ("Expert A/B/...") und gemischt, damit
+    weder Markenname noch Position die Synthese verzerren. Die [S1]-Source-IDs
+    in den Antworten bleiben unverändert. shuffle=False liefert die feste
+    Reihenfolge OpenAI..Grok (nur für das deterministische
+    Benchmark-Prompt-Template, nicht für Live-Calls)."""
     excluded = normalize_excluded_models(excluded_models)
+
+    model_answers = [
+        ("OpenAI",    answer_openai),
+        ("Mistral",   answer_mistral),
+        ("Anthropic", answer_claude),
+        ("Gemini",    answer_gemini),
+        ("DeepSeek",  answer_deepseek),
+        ("Grok",      answer_grok),
+    ]
+    model_answers = [
+        (name, answer) for (name, answer) in model_answers
+        if answer and normalize_model_name(name) not in excluded
+    ]
+    if shuffle:
+        random.shuffle(model_answers)
+
     prompt_parts = []
 
     prompt_parts.append(
@@ -515,18 +549,9 @@ def _build_consensus_prompt(
         "Do not restate raw source lists in the final answer.\n\n"
     )
 
-    if "OpenAI" not in excluded and answer_openai:
-        prompt_parts.append(_format_expert_opinion("OpenAI", answer_openai, model_sources))
-    if "Mistral" not in excluded and answer_mistral:
-        prompt_parts.append(_format_expert_opinion("Mistral", answer_mistral, model_sources))
-    if "Anthropic" not in excluded and answer_claude:
-        prompt_parts.append(_format_expert_opinion("Anthropic", answer_claude, model_sources))
-    if "Gemini" not in excluded and answer_gemini:
-        prompt_parts.append(_format_expert_opinion("Gemini", answer_gemini, model_sources))
-    if "DeepSeek" not in excluded and answer_deepseek:
-        prompt_parts.append(_format_expert_opinion("DeepSeek", answer_deepseek, model_sources))
-    if "Grok" not in excluded and answer_grok:
-        prompt_parts.append(_format_expert_opinion("Grok", answer_grok, model_sources))
+    for idx, (name, answer) in enumerate(model_answers):
+        label = f"Expert {chr(ord('A') + idx)}"
+        prompt_parts.append(_format_expert_opinion(label, name, answer, model_sources))
 
     user_facing_instruction = (
         "Use the expert-opinion framing only for your internal synthesis. "
@@ -558,6 +583,10 @@ def _build_consensus_prompt(
 # erkennen: Differences und Share-Persistenz werden dann übersprungen.
 CONSENSUS_ERROR_PREFIXES = ("Consensus error:", "Invalid consensus model selected:")
 CONSENSUS_MAX_ATTEMPTS = 2
+# Niedrige Temperatur für die Synthese (wie DIFFERENCES_TEMPERATURE eine
+# bewusste Engine-Einstellung); _effective_temperature filtert sie für
+# Reasoning-Modelle, die keine Temperatur akzeptieren, wieder heraus.
+CONSENSUS_TEMPERATURE = 0.3
 
 # Freitext für die Differences-Spalte, wenn der Vergleich mangels
 # Konsensantwort gar nicht erst gestartet wird.
@@ -605,22 +634,30 @@ def query_consensus(
     resolved = _resolve_engine(consensus_model)
     if resolved is None:
         return f"Invalid consensus model selected: {consensus_model}"
-    provider, api_model, model_ref = resolved
 
-    # Zwei Versuche: Provider-Fehler (503, Timeouts, ...) sind oft transient,
-    # und ein gescheiterter Konsens macht den gesamten Lauf wertlos.
+    # Zwei Versuche auf der gewählten Engine: Provider-Fehler (503, Timeouts,
+    # ...) sind oft transient, und ein gescheiterter Konsens macht den
+    # gesamten Lauf wertlos. Scheitern beide, folgt ein dritter Versuch auf
+    # einem anderen Provider mit verfügbarem Key (wie der Fallback-Judge der
+    # Differences-Engine); "Consensus error:" bleibt die letzte Stufe.
+    attempts = [resolved] * CONSENSUS_MAX_ATTEMPTS
+    fallback = _fallback_judge_engine(resolved[0], api_keys)
+    if fallback:
+        attempts.append(fallback)
+
     last_error = "empty response from consensus engine."
-    for attempt in range(CONSENSUS_MAX_ATTEMPTS):
+    for provider, api_model, model_ref in attempts:
         try:
             result = _call_engine_text(
                 provider, api_model, model_ref, api_keys,
                 system="",
                 prompt=consensus_prompt,
                 max_tokens=cfg.CONSENSUS_MAX_TOKENS,
+                temperature=CONSENSUS_TEMPERATURE,
             )
         except Exception as e:
             last_error = str(e)
-            logging.warning(f"Consensus attempt {attempt + 1} failed on {provider}/{api_model}: {e}")
+            logging.warning(f"Consensus attempt failed on {provider}/{api_model}: {e}")
             continue
         if result:
             return result
@@ -1222,7 +1259,9 @@ DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = {
     "grok": DEFAULT_GROK_MODEL,
 }
 
-# Reihenfolge für den Fallback-Judge, wenn der primäre Judge zweimal scheitert.
+# Reihenfolge für den Fallback-Judge, wenn die primäre Engine zweimal
+# scheitert. Wird von Differences UND Consensus als letzter Versuch auf einem
+# anderen Provider genutzt.
 _FALLBACK_JUDGE_PRIORITY = ["gemini", "openai", "mistral", "deepseek", "grok", "anthropic"]
 
 DIFFERENCES_SYSTEM_PROMPT = "Answer in the exact same language as the Model responses."
@@ -1362,6 +1401,7 @@ def _stream_consensus_engine(consensus_model: str, api_keys: dict, consensus_pro
         system="",
         prompt=consensus_prompt,
         max_tokens=cfg.CONSENSUS_MAX_TOKENS,
+        temperature=CONSENSUS_TEMPERATURE,
     )
 
 
@@ -1390,14 +1430,27 @@ def stream_consensus(
         model_sources=model_sources,
     )
 
-    # Zwei Versuche wie im nicht-streamenden Pfad. Deltas eines gescheiterten
-    # Versuchs sind unkritisch: das final-Event ersetzt den gerenderten
-    # Konsens-Inhalt im Frontend vollständig (injectMarkdown).
+    resolved = _resolve_engine(consensus_model)
+    if resolved is None:
+        yield {"type": "final", "text": f"Invalid consensus model selected: {consensus_model}", "error": True}
+        return
+
+    # Versuchsplan wie im nicht-streamenden Pfad: zweimal die gewählte Engine,
+    # danach einmal ein Fallback-Provider mit verfügbarem Key. Deltas eines
+    # gescheiterten Versuchs sind unkritisch: das final-Event ersetzt den
+    # gerenderten Konsens-Inhalt im Frontend vollständig (injectMarkdown).
+    engine_models = [consensus_model] * CONSENSUS_MAX_ATTEMPTS
+    fallback = _fallback_judge_engine(resolved[0], api_keys)
+    if fallback:
+        # Fallback-Judge ist eine interne Modell-ID und damit selbst ein
+        # gültiger Engine-Wert für _stream_consensus_engine.
+        engine_models.append(fallback[2])
+
     last_error = "empty response from consensus engine."
-    for attempt in range(CONSENSUS_MAX_ATTEMPTS):
+    for engine_model in engine_models:
         parts = []
         try:
-            for text in _stream_consensus_engine(consensus_model, api_keys, consensus_prompt):
+            for text in _stream_consensus_engine(engine_model, api_keys, consensus_prompt):
                 parts.append(text)
                 yield {"type": "delta", "text": text}
         except _InvalidEngineError as e:
@@ -1405,7 +1458,7 @@ def stream_consensus(
             return
         except Exception as e:
             last_error = str(e)
-            logging.warning(f"Consensus stream attempt {attempt + 1} failed: {e}")
+            logging.warning(f"Consensus stream attempt failed on {engine_model}: {e}")
             continue
 
         final_text = "".join(parts).strip()

@@ -112,7 +112,8 @@ class ManifestModelConfigTests(unittest.TestCase):
         self.assertEqual(manifest["sample_role"], "smoke")
         self.assertEqual(manifest["consensus"]["internal_id"], config.BENCHMARK_GEMINI_MODEL)
         self.assertEqual(manifest["consensus"]["output_token_limit"], manifest["consensus_output_token_limit"])
-        self.assertIsNone(manifest["consensus"]["temperature"])
+        # Synth-alone spiegelt die Consensus-Temperatur (CONSENSUS_TEMPERATURE).
+        self.assertEqual(manifest["consensus"]["temperature"], 0.3)
         self.assertEqual(manifest["synth_alone"]["internal_id"], manifest["consensus"]["internal_id"])
         self.assertEqual(manifest["synth_alone"]["reasoning_settings"], manifest["consensus"]["reasoning_settings"])
         self.assertEqual(manifest["synth_alone"]["temperature"], manifest["consensus"]["temperature"])

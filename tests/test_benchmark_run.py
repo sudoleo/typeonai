@@ -85,7 +85,7 @@ class RunEndToEndTests(unittest.TestCase):
             self.assertTrue(model_cell["correct"])
             self.assertEqual(model_cell["ground_truth"], "B")
             self.assertTrue(model_cell["benchmark_mode"])
-            self.assertEqual(model_cell["label_mode"], "names")
+            self.assertEqual(model_cell["label_mode"], "anon_shuffled")
             self.assertIn("usage", model_cell)
             self.assertIn("est_cost_usd", model_cell)
             # manifest.json wird mitgeschrieben

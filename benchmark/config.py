@@ -78,7 +78,10 @@ OUTPUT_TOKEN_LIMIT = 24576  # Reasoning-Modelle (DeepSeek/Mistral/Gemini) duerfe
 # da der Benchmark ein separater Prozess ist.
 CONSENSUS_OUTPUT_TOKEN_LIMIT = 32768
 INCLUDE_SYNTH_ALONE = True  # vierte Vergleichsgroesse "Synthesizer allein" (Plan §10)
-DEFAULT_LABEL_MODE = "names"  # Hauptpfad mit Modellnamen (E5)
+# Hauptpfad: der produktive Prompt-Builder anonymisiert die Antworten seit
+# E5 (2026-07) selbst ("Expert A/B/...", pro Aufruf gemischt). Runs bis
+# einschliesslich pooled_v1 liefen mit label_mode "names" (V0-Prompt).
+DEFAULT_LABEL_MODE = "anon_shuffled"
 
 BENCHMARK_GEMINI_MODEL = cfg.GEMINI_35_FLASH_MODEL
 

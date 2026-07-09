@@ -221,7 +221,9 @@ class ConsensusStreamTests(unittest.TestCase):
 
 class ConsensusRetryTests(unittest.TestCase):
     def _run(self, fake_engine):
-        with mock.patch(
+        # DEVELOPER_GEMINI_API_KEY leeren: mit nur einem OpenAI-Key darf kein
+        # Fallback-Provider verfuegbar sein (sonst gaebe es einen 3. Versuch).
+        with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}), mock.patch(
             "app.services.llm.consensus_engine._stream_consensus_engine",
             side_effect=fake_engine,
         ) as patched:
