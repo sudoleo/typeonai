@@ -110,8 +110,10 @@ textarea:focus {
 }
 
 .chat-input-container:focus-within {
-  box-shadow: var(--card-shadow-hover), var(--liquid-focus-ring);
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  /* Kein blauer Fokus-Ring: nur eine dezente Anhebung, kein Glow, keine
+     Akzent-Randfarbe. Der zweite (innere) Ring auf dem Textarea wird unten
+     ebenfalls unterdrueckt. */
+  box-shadow: var(--card-shadow-hover);
 }
 
 .chat-input-container .input-field {
@@ -134,6 +136,14 @@ textarea:focus {
 .chat-input-container .input-field:disabled {
   cursor: not-allowed;
   opacity: 0.72;
+}
+
+/* Das generische textarea:focus setzt einen --liquid-focus-ring; im
+   Chat-Input ist das ein doppelter, unnoetiger blauer Rahmen zusaetzlich zum
+   Container. Hier gezielt entfernen (Container traegt die Fokus-Affordanz). */
+.chat-input-container .input-field:focus {
+  box-shadow: none;
+  border-color: transparent;
 }
 
 /* --------------------------------------------------------------------------
