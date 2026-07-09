@@ -642,21 +642,15 @@ def consensus(request: Request, data: dict = Body(...)):
         if model not in excluded_models and answer
     }
 
+    # Ein einzelner ausgefallener Provider (Timeout, 503, leere Reasoning-
+    # Antwort) darf den Konsens NICHT blockieren. Fehlt die Antwort eines
+    # aktiven Modells, wird es einfach ausgelassen, solange noch mindestens
+    # zwei Modelle geantwortet haben – der Consensus-/Differences-Prompt
+    # filtert leere Antworten ohnehin heraus. Deshalb hier bewusst KEINE
+    # Per-Modell-Pflichtprüfung mehr (die früher den ganzen Lauf mit 400
+    # abbrach, sobald ein einzelnes Modell nicht lieferte).
     if len(included_answers) < 2:
         missing.append("at least two selected model answers")
-
-    if "OpenAI" not in excluded_models and not answer_openai:
-        missing.append("OpenAI")
-    if "Mistral" not in excluded_models and not answer_mistral:
-        missing.append("Mistral")
-    if "Anthropic" not in excluded_models and not answer_claude:
-        missing.append("Anthropic")
-    if "Gemini" not in excluded_models and not answer_gemini:
-        missing.append("Gemini")
-    if "DeepSeek" not in excluded_models and not answer_deepseek:
-        missing.append("DeepSeek")
-    if "Grok" not in excluded_models and not answer_grok:
-        missing.append("Grok")
 
     if missing:
         raise HTTPException(status_code=400, detail="Missing parameters: " + ", ".join(missing))

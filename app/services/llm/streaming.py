@@ -335,10 +335,13 @@ def _stream_chat_completions(*, client: openai.OpenAI, payload: dict) -> Generat
     request_payload["stream"] = True
     stream = client.chat.completions.create(**request_payload)
     parts: list = []
+    finish_reason = None
     for chunk in stream:
         choices = getattr(chunk, "choices", None) or []
         if not choices:
             continue
+        if getattr(choices[0], "finish_reason", None):
+            finish_reason = choices[0].finish_reason
         delta = getattr(choices[0], "delta", None)
         text = getattr(delta, "content", None) if delta else None
         if text:
@@ -346,7 +349,26 @@ def _stream_chat_completions(*, client: openai.OpenAI, payload: dict) -> Generat
             yield {"type": "delta", "text": text}
         elif delta is not None and getattr(delta, "reasoning_content", None):
             yield {"type": "reasoning"}
-    yield {"type": "final", "result": make_llm_result("".join(parts).strip(), [])}
+
+    answer = "".join(parts).strip()
+    if not answer:
+        # Reasoning-Modelle (z. B. DeepSeek) können ihr Token-Budget komplett im
+        # Reasoning verbrauchen und nie eine Antwort ausgeben. Das als echten
+        # Fehler kennzeichnen, damit das Frontend nicht in den irreführenden
+        # "Please log in"-Fallback fällt.
+        if finish_reason == "length":
+            message = ("The model ran out of output tokens while reasoning and never "
+                       "produced an answer. Please try again or simplify the question.")
+        else:
+            message = "The model returned no answer. Please try again."
+        yield {"type": "final", "result": {
+            "text": "",
+            "sources": [],
+            "error": message,
+            "error_code": "empty_reasoning_response",
+        }}
+        return
+    yield {"type": "final", "result": make_llm_result(answer, [])}
 
 
 # ---------------------------------------------------------------------------

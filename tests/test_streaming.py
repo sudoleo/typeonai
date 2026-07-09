@@ -4,8 +4,11 @@ from unittest import mock
 
 import anyio
 
+from types import SimpleNamespace
+
 from app.services.llm.citations import make_llm_result
 from app.services.llm.streaming import (
+    _stream_chat_completions,
     iter_sse_events,
     sse_pack,
     streaming_model_response,
@@ -115,6 +118,63 @@ class StreamingModelResponseTests(unittest.TestCase):
         self.assertEqual(final["error_code"], "provider_stream_failed")
         self.assertNotIn("error_detail", final)
         self.assertEqual(final["key_used"], "User API Key")
+
+
+def _chunk(*, content=None, reasoning_content=None, finish_reason=None):
+    delta = SimpleNamespace(content=content, reasoning_content=reasoning_content)
+    choice = SimpleNamespace(delta=delta, finish_reason=finish_reason)
+    return SimpleNamespace(choices=[choice])
+
+
+class FakeChatCompletions:
+    def __init__(self, chunks):
+        self._chunks = chunks
+
+    def create(self, **kwargs):
+        return iter(self._chunks)
+
+
+class FakeOpenAIClient:
+    def __init__(self, chunks):
+        self.chat = SimpleNamespace(completions=FakeChatCompletions(chunks))
+
+
+class ChatCompletionsStreamTests(unittest.TestCase):
+    """Deckt den DeepSeek-/OpenAI-kompatiblen Chat-Completions-Stream ab –
+    speziell den Fall, dass ein Reasoning-Modell nur Reasoning liefert und
+    nie eine Antwort ausgibt (früher: leerer String -> irreführender
+    'Please log in'-Fallback im Frontend)."""
+
+    def test_normal_answer_produces_deltas_and_text(self):
+        client = FakeOpenAIClient([
+            _chunk(content="Hel"),
+            _chunk(content="lo"),
+            _chunk(finish_reason="stop"),
+        ])
+        events = list(_stream_chat_completions(client=client, payload={"model": "x"}))
+        self.assertEqual([e["type"] for e in events], ["delta", "delta", "final"])
+        self.assertEqual(events[-1]["result"]["text"], "Hello")
+        self.assertNotIn("error", events[-1]["result"])
+
+    def test_reasoning_only_length_cutoff_yields_error_result(self):
+        client = FakeOpenAIClient([
+            _chunk(reasoning_content="thinking..."),
+            _chunk(reasoning_content="still thinking..."),
+            _chunk(finish_reason="length"),
+        ])
+        events = list(_stream_chat_completions(client=client, payload={"model": "x"}))
+        self.assertEqual([e["type"] for e in events], ["reasoning", "reasoning", "final"])
+        result = events[-1]["result"]
+        self.assertEqual(result["text"], "")
+        self.assertEqual(result["error_code"], "empty_reasoning_response")
+        self.assertIn("ran out of output tokens", result["error"])
+
+    def test_empty_response_without_length_yields_generic_error(self):
+        client = FakeOpenAIClient([_chunk(finish_reason="stop")])
+        events = list(_stream_chat_completions(client=client, payload={"model": "x"}))
+        result = events[-1]["result"]
+        self.assertEqual(result["error_code"], "empty_reasoning_response")
+        self.assertIn("no answer", result["error"])
 
 
 class ConsensusStreamTests(unittest.TestCase):

@@ -906,7 +906,7 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "Please log in and enter your own API key.", data);
+              markModelError(outputEl, "No response received. The model may have timed out — please try again.", data);
             }
             // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -994,7 +994,7 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "Please log in and enter your own API key.", data);
+              markModelError(outputEl, "No response received. The model may have timed out — please try again.", data);
             }
             // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -1082,7 +1082,7 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "Please log in and enter your own API key.", data);
+              markModelError(outputEl, "No response received. The model may have timed out — please try again.", data);
             }
             // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -1170,7 +1170,7 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "Please log in and enter your own API key.", data);
+              markModelError(outputEl, "No response received. The model may have timed out — please try again.", data);
             }
             // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -1257,7 +1257,7 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "Please log in and enter your own API key.", data);
+              markModelError(outputEl, "No response received. The model may have timed out — please try again.", data);
             }
             // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
