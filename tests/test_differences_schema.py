@@ -203,34 +203,162 @@ class QuoteVerificationTests(unittest.TestCase):
 
 
 class JudgePolicyTests(unittest.TestCase):
-    def test_pro_engines_use_default_judge(self):
-        provider, api_model, _model_ref = _resolve_differences_engine("OpenAI-Pro")
+    """Judge-Familie ist immer eine andere als die der Consensus-Engine;
+    die Judge-Stufe (standard/pro) folgt der gewählten Engine."""
+
+    ALL_KEYS = {
+        "OpenAI": "sk", "Mistral": "sk", "Anthropic": "sk",
+        "Gemini": "sk", "DeepSeek": "sk", "Grok": "sk",
+    }
+
+    def test_judge_family_differs_from_consensus_family(self):
+        # Gemini ist die erste Familie der Priorität; für eine Gemini-Engine
+        # muss der Judge trotzdem auf eine andere Familie ausweichen.
+        (provider, api_model, _), tier = _resolve_differences_engine("Gemini", self.ALL_KEYS)
         self.assertEqual(provider, "openai")
         self.assertEqual(api_model, cfg.DEFAULT_OPENAI_MODEL)
+        self.assertEqual(tier, "standard")
 
-        provider, api_model, _model_ref = _resolve_differences_engine("Anthropic-Pro")
-        self.assertEqual(provider, "anthropic")
-        self.assertEqual(api_model, cfg.DEFAULT_ANTHROPIC_MODEL)
+        (provider, api_model, _), tier = _resolve_differences_engine("OpenAI", self.ALL_KEYS)
+        self.assertEqual(provider, "gemini")
+        self.assertEqual(api_model, cfg.GEMINI_FLASH_MODEL)
+        self.assertEqual(tier, "standard")
+
+    def test_pro_engine_gets_pro_judge_of_other_family(self):
+        (provider, api_model, _), tier = _resolve_differences_engine("OpenAI-Pro", self.ALL_KEYS)
+        self.assertEqual(provider, "gemini")
+        self.assertEqual(api_model, cfg.GEMINI_PRO_MODEL)
+        self.assertEqual(tier, "pro")
+
+        (provider, api_model, _), tier = _resolve_differences_engine("Gemini-Pro", self.ALL_KEYS)
+        self.assertEqual(provider, "openai")
+        self.assertEqual(api_model, "gpt-5.5")
+        self.assertEqual(tier, "pro")
+
+    def test_no_cross_family_key_fails_open_to_own_standard_judge(self):
+        with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
+            (provider, api_model, _), tier = _resolve_differences_engine(
+                "OpenAI-Pro", {"OpenAI": "sk-1"}
+            )
+        self.assertEqual(provider, "openai")
+        self.assertEqual(api_model, cfg.DEFAULT_OPENAI_MODEL)
+        self.assertEqual(tier, "standard")
 
     def test_invalid_engine_returns_none(self):
-        self.assertIsNone(_resolve_differences_engine("DoesNotExist"))
+        self.assertIsNone(_resolve_differences_engine("DoesNotExist", {}))
         self.assertIsNone(_differences_attempts("DoesNotExist", {}))
 
     def test_attempts_are_primary_retry_fallback(self):
         with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
+            attempts = _differences_attempts(
+                "OpenAI", {"OpenAI": "sk-1", "Mistral": "sk-2", "Anthropic": "sk-3"}
+            )
+        self.assertEqual(len(attempts), 3)
+        (p1, _, _), retry1, tier1 = attempts[0]
+        (p2, _, _), retry2, tier2 = attempts[1]
+        (p3, _, _), retry3, tier3 = attempts[2]
+        # Judge nie auf der Engine-Familie (openai): Mistral primär, dann Anthropic.
+        self.assertEqual((p1, retry1, tier1), ("mistral", False, "standard"))
+        self.assertEqual((p2, retry2, tier2), ("mistral", True, "standard"))
+        self.assertEqual((p3, retry3, tier3), ("anthropic", True, "standard"))
+
+    def test_pro_attempts_fail_open_to_standard_judge(self):
+        with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
+            attempts = _differences_attempts(
+                "OpenAI-Pro", {"OpenAI": "sk-1", "Mistral": "sk-2", "Anthropic": "sk-3"}
+            )
+        self.assertEqual(len(attempts), 4)
+        (p1, m1, _), _, tier1 = attempts[0]
+        (p3, m3, _), _, tier3 = attempts[2]
+        (p4, m4, _), _, tier4 = attempts[3]
+        self.assertEqual((p1, m1, tier1), ("mistral", cfg.MISTRAL_PRO_MODEL, "pro"))
+        self.assertEqual((p3, m3, tier3), ("anthropic", cfg.ANTHROPIC_PRO_MODEL, "pro"))
+        # Letzte Stufe: Standard-Judge der Fallback-Familie
+        self.assertEqual((p4, m4, tier4), ("anthropic", cfg.DEFAULT_ANTHROPIC_MODEL, "standard"))
+
+    def test_single_cross_family_appends_own_standard_judge(self):
+        with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
             attempts = _differences_attempts("OpenAI", {"OpenAI": "sk-1", "Mistral": "sk-2"})
         self.assertEqual(len(attempts), 3)
-        (p1, _, _), retry1 = attempts[0]
-        (p2, _, _), retry2 = attempts[1]
-        (p3, _, _), retry3 = attempts[2]
-        self.assertEqual((p1, retry1), ("openai", False))
-        self.assertEqual((p2, retry2), ("openai", True))
-        self.assertEqual((p3, retry3), ("mistral", True))
+        (p3, m3, _), retry3, tier3 = attempts[2]
+        # Ohne zweite Fremd-Familie ist der eigene Standard-Judge die letzte
+        # Stufe: ein fehlender Fremd-Key darf den Lauf nicht brechen.
+        self.assertEqual((p3, m3, retry3, tier3), ("openai", cfg.DEFAULT_OPENAI_MODEL, True, "standard"))
 
-    def test_attempts_without_other_keys_have_no_fallback(self):
+    def test_attempts_without_any_cross_family_key(self):
         with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
             attempts = _differences_attempts("OpenAI", {"OpenAI": "sk-1"})
         self.assertEqual(len(attempts), 2)
+        for (provider, api_model, _), _, tier in attempts:
+            self.assertEqual((provider, api_model, tier), ("openai", cfg.DEFAULT_OPENAI_MODEL, "standard"))
+
+
+class JudgeMetadataTests(unittest.TestCase):
+    """data['judges'] weist den Judge aus, der das Ergebnis TATSÄCHLICH
+    geliefert hat (auch nach Fallbacks)."""
+
+    def _run_query(self, api_keys, side_effect):
+        from app.services.llm.consensus_engine import query_differences
+        with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
+            with mock.patch(
+                "app.services.llm.consensus_engine._call_engine_text",
+                side_effect=side_effect,
+            ):
+                return query_differences(
+                    "answer one", "answer two", None, None, None, None,
+                    "the consensus", api_keys,
+                    differences_model="OpenAI",
+                    excluded_models=[],
+                )
+
+    def test_query_differences_reports_actual_judge(self):
+        payload = json.dumps({"claims": [], "differences": [], "best_model": ""})
+        _, data = self._run_query(
+            {"OpenAI": "sk-1", "Mistral": "sk-2"},
+            lambda provider, *a, **kw: payload,
+        )
+        self.assertIsNotNone(data)
+        self.assertEqual(data["judges"]["differences"], {
+            "provider": "Mistral",
+            "model": cfg.DEFAULT_MISTRAL_MODEL,
+            "tier": "standard",
+        })
+
+    def test_fallback_judge_is_reported(self):
+        payload = json.dumps({"claims": [], "differences": [], "best_model": ""})
+
+        def flaky(provider, *args, **kwargs):
+            if provider == "mistral":
+                raise RuntimeError("503")
+            return payload
+
+        _, data = self._run_query(
+            {"OpenAI": "sk-1", "Mistral": "sk-2", "Anthropic": "sk-3"}, flaky,
+        )
+        self.assertIsNotNone(data)
+        self.assertEqual(data["judges"]["differences"]["provider"], "Anthropic")
+
+    def test_stream_differences_reports_judge(self):
+        from app.services.llm.consensus_engine import stream_differences
+        payload = json.dumps({"claims": [], "differences": [], "best_model": ""})
+
+        def fake_stream(provider, *args, **kwargs):
+            yield payload
+
+        with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
+            with mock.patch(
+                "app.services.llm.consensus_engine._stream_engine_text",
+                side_effect=fake_stream,
+            ):
+                events = list(stream_differences(
+                    "answer one", "answer two", None, None, None, None,
+                    "the consensus", {"OpenAI": "sk-1", "Mistral": "sk-2"},
+                    differences_model="OpenAI",
+                    excluded_models=[],
+                ))
+        final = events[-1]
+        self.assertEqual(final["type"], "final")
+        self.assertEqual(final["data"]["judges"]["differences"]["provider"], "Mistral")
 
 
 FOUR_MODELS = ["OpenAI", "Gemini", "Grok", "Mistral"]

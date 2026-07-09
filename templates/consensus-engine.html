@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A clear, technical explanation of how the consens.io Consensus Engine and Differences Engine compare AI model answers, find agreement, and surface disagreement.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://www.consens.io/consensus-engine">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="consens.io">
+  <meta property="og:title" content="How the Consensus Engine Works | consens.io">
+  <meta property="og:description" content="See how consens.io turns several AI model answers into one transparent consensus and a structured differences analysis.">
+  <meta property="og:url" content="https://www.consens.io/consensus-engine">
+  <meta property="og:image" content="https://www.consens.io/static/favicon-square.png">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="How the Consensus Engine Works | consens.io">
+  <meta name="twitter:description" content="A technical but readable explanation of how consens.io builds consensus and differences analysis.">
+  <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
+  <title>How the Consensus Engine Works | consens.io</title>
+  <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260709-consensus-engine4">
+  <link rel="stylesheet" href="/static/css/consensus-engine.css?v=20260709-consensus-engine-flow">
+  <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
+  <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
+  <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": "https://www.consens.io/consensus-engine#webpage",
+        "url": "https://www.consens.io/consensus-engine",
+        "name": "How the Consensus Engine Works",
+        "description": "A user-friendly but technical explanation of how consens.io compares model answers, builds a consensus, and shows differences."
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://www.consens.io/consensus-engine#faq",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What does the Consensus Engine do?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "It reads the selected model answers, writes one combined answer from their overlap, and separately highlights important disagreements."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does the Consensus Engine hide disagreements?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. The consensus answer and the differences view are shown separately, so common ground stays readable while conflicts remain visible."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Why is there a separate judge model?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "A separate judge model checks the consensus for claims and differences. consens.io prefers a different model family than the one that wrote the consensus to reduce self-judging bias."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What does the Differences Engine produce?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "It produces structured data: central claims, which models agree or dissent, substantive differences, severity, verification hints, best matching model, agreement score, and judge metadata."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+  <script>
+    (function () {
+      const savedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
+        document.documentElement.classList.add("dark-mode");
+      }
+    })();
+  </script>
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
+</head>
+<body class="ce-page">
+  <nav class="lp-nav" aria-label="Primary">
+    <a href="/" class="lp-brand" aria-label="consens.io home">
+      <img src="/static/favicon.png" alt="">
+      <span>consens.io</span>
+    </a>
+    <div class="lp-nav-links">
+      <a href="/ai-model-comparison">AI comparison</a>
+      <a href="/consensus-engine" aria-current="page">Consensus Engine</a>
+      <a href="/benchmark">Benchmark</a>
+      <a id="navCtaButton" href="/app" class="lp-nav-cta">Open app</a>
+    </div>
+  </nav>
+
+  <main>
+    <section class="lp-section lp-section--white ce-hero-section">
+      <div class="lp-shell ce-hero">
+        <div class="ce-hero-copy">
+          <p class="lp-eyebrow">Consensus & Differences Engine</p>
+          <h1 class="lp-display">Consensus and Difference Engines explained.</h1>
+          <p class="lp-lead">
+            A clear look at how consens.io combines model answers, checks disagreements,
+            and keeps the judging layer independent.
+          </p>
+          <div class="lp-hero-actions">
+            <a id="ctaButton" href="/app" class="lp-btn lp-btn--primary">Try it in the app</a>
+            <a href="#walkthrough" class="lp-link">See the engines</a>
+          </div>
+        </div>
+
+        <div class="lp-window ce-engine-window" aria-label="Consensus Engine app preview">
+          <div class="lp-window-bar">
+            <span class="lp-mocklogo"><img src="/static/favicon.png" alt=""> consens.io</span>
+            <span class="lp-mock-login">Consensus</span>
+          </div>
+          <div class="ce-engine-stage">
+            <div class="ce-model-strip" aria-label="Model responses ready">
+              <span><img src="/static/icons/chat_icons/chatgpt.png" alt="">OpenAI</span>
+              <span><img src="/static/icons/chat_icons/claude.png" alt="">Claude</span>
+              <span><img src="/static/icons/chat_icons/gemini-icon.png" alt="">Gemini</span>
+              <span><img src="/static/icons/chat_icons/mistral.png" alt="">Mistral</span>
+              <span><img src="/static/icons/chat_icons/deepseek.png" alt="">DeepSeek</span>
+              <span><img src="/static/icons/chat_icons/grok.png" alt="">Grok</span>
+            </div>
+            <div class="consensus-box ce-loading-box is-synthesizing" aria-label="Consensus generation preview">
+              <section class="consensus-main">
+                <h2>Consensus Answer</h2>
+                <div class="ce-loader-row">
+                  <span class="thinking-wrap consensus-thinking-wrap" role="status" aria-live="polite" aria-busy="true">
+                    <span class="consensus-loader" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+                    <span class="thinking consensus-thinking">Synthesizing consensus</span>
+                  </span>
+                </div>
+                <div class="ce-skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
+              </section>
+              <aside class="consensus-differences">
+                <h2>Differences</h2>
+                <div class="ce-loader-row">
+                  <span class="thinking-wrap consensus-thinking-wrap" role="status" aria-live="polite" aria-busy="true">
+                    <span class="consensus-loader" aria-hidden="true"><span></span><span></span><span></span></span>
+                    <span class="thinking consensus-thinking">Comparing responses</span>
+                  </span>
+                </div>
+                <div class="ce-mini-diff" aria-hidden="true">
+                  <span></span>
+                  <strong></strong>
+                  <p></p>
+                </div>
+              </aside>
+            </div>
+            <div class="ce-judge">
+              <span class="ce-judge-dot"></span>
+              <span>Independent analysis checks claims and differences</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="walkthrough" class="lp-section lp-section--grey ce-flow-section">
+      <div class="lp-shell">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">How it works</p>
+          <h2 class="lp-h2">The engine runs in four readable steps.</h2>
+          <p class="lp-lead">
+            Technically, three roles are involved: the answer models produce independent raw responses,
+            your selected Consensus Engine writes the synthesis, and a separate judge extracts agreement
+            and conflict from the result.
+          </p>
+        </div>
+
+        <div class="ce-flow-diagram lp-reveal" aria-label="Technical flow diagram for the Consensus Engine and Differences Engine">
+          <div class="ce-flow-entry">
+            <span class="ce-flow-kicker">POST /consensus</span>
+            <strong>Question, included model answers, excluded models, sources, and selected engine</strong>
+            <p>The backend authenticates the user, checks tier and usage rules, caps client-sent text, and requires at least two included model answers.</p>
+          </div>
+
+          <div class="ce-flow-lanes">
+            <section class="ce-flow-lane" aria-labelledby="consensus-flow-title">
+              <div class="ce-flow-lane-title">
+                <span>1</span>
+                <div>
+                  <h3 id="consensus-flow-title">Consensus Engine</h3>
+                  <p><code>stream_consensus()</code></p>
+                </div>
+              </div>
+              <ol class="ce-flow-nodes">
+                <li>
+                  <b>Build synthesis prompt</b>
+                  <span>Drop empty or excluded answers, shuffle the remaining responses, anonymize them as Expert A/B/C, and attach compact source provenance.</span>
+                </li>
+                <li>
+                  <b>Resolve selected engine</b>
+                  <span>The dropdown value maps to a provider model, including standard, early, direct model IDs, or Pro aliases.</span>
+                </li>
+                <li>
+                  <b>Stream the synthesis</b>
+                  <span>The selected engine writes the user-facing answer. Provider failures are retried twice, then a fallback family is tried when a key is available.</span>
+                </li>
+                <li>
+                  <b>Gate the second pass</b>
+                  <span>If the final consensus is empty or an error text, the comparison is skipped so the judge never analyzes an error message.</span>
+                </li>
+              </ol>
+            </section>
+
+            <section class="ce-flow-lane ce-flow-lane--differences" aria-labelledby="differences-flow-title">
+              <div class="ce-flow-lane-title">
+                <span>2</span>
+                <div>
+                  <h3 id="differences-flow-title">Differences Engine</h3>
+                  <p><code>stream_differences()</code></p>
+                </div>
+              </div>
+              <ol class="ce-flow-nodes">
+                <li>
+                  <b>Build judge prompt</b>
+                  <span>Use the consensus answer plus included source answers, cap each answer for the judge pass, shuffle, and anonymize as Model A/B/C.</span>
+                </li>
+                <li>
+                  <b>Pick an independent judge</b>
+                  <span>The judge tier follows the selected Consensus Engine, but the family is preferably different to reduce self-judging bias.</span>
+                </li>
+                <li>
+                  <b>Request strict JSON</b>
+                  <span>The judge returns claims, agreement and dissent, difference cards, severity, verification hints, and the closest source model.</span>
+                </li>
+                <li>
+                  <b>Verify and score</b>
+                  <span>The server repairs JSON if safe, maps labels back, verifies quotes and anchors, computes the agreement score, and records judge metadata.</span>
+                </li>
+              </ol>
+            </section>
+          </div>
+
+          <div class="ce-flow-output">
+            <span class="ce-flow-kicker">SSE final payload</span>
+            <strong><code>consensus_response</code> + <code>differences_data</code> + usage/share metadata</strong>
+            <p>The UI renders the readable consensus, claim badges, agreement score, contradiction cards, and the judge note from the same final payload.</p>
+          </div>
+        </div>
+
+        <div class="ce-steps lp-reveal">
+          <article class="ce-step">
+            <span class="ce-step-number">01</span>
+            <h3>Six model families answer independently.</h3>
+            <p>OpenAI, Claude, Gemini, Mistral, DeepSeek, and Grok receive the same prompt. Their original answers stay separate, so the synthesis never replaces the raw evidence.</p>
+          </article>
+          <article class="ce-step">
+            <span class="ce-step-number">02</span>
+            <h3>The selected Consensus Engine writes the synthesis.</h3>
+            <p>The engine you choose in the dropdown reads only the included answers, ignores excluded ones, and writes one response that preserves common ground plus necessary caveats.</p>
+          </article>
+          <article class="ce-step">
+            <span class="ce-step-number">03</span>
+            <h3>A separate judge checks the consensus.</h3>
+            <p>The Differences Judge extracts key claims, maps which models support or dissent, and preferably runs on a different model family than the synthesis engine.</p>
+          </article>
+          <article class="ce-step">
+            <span class="ce-step-number">04</span>
+            <h3>The UI renders structured evidence.</h3>
+            <p>The final payload contains the consensus text, agreement score, claim badges, contradiction cards, and judge metadata, so the interface can show what happened.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-section lp-section--white">
+      <div class="lp-shell">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">Model roles</p>
+          <h2 class="lp-h2">Different models do different jobs.</h2>
+          <p class="lp-lead">
+            The process is intentionally split. The model that writes the consensus is not treated as the
+            only authority on whether the consensus is reliable.
+          </p>
+        </div>
+        <div class="lp-card-grid ce-role-grid lp-reveal">
+          <article class="lp-card ce-role-card">
+            <p class="lp-eyebrow">Answer layer</p>
+            <h3>OpenAI, Claude, Gemini, Mistral, DeepSeek, and Grok</h3>
+            <p>These are the source answers. They are queried in parallel, shown to you directly, and then passed into the consensus step if they are not excluded.</p>
+          </article>
+          <article class="lp-card ce-role-card">
+            <p class="lp-eyebrow">Synthesis layer</p>
+            <h3>The model selected in the Consensus dropdown</h3>
+            <p>This model reads the included source answers and writes the combined response. Standard and Pro engines can both be used, depending on your selection.</p>
+          </article>
+          <article class="lp-card ce-role-card">
+            <p class="lp-eyebrow">Analysis layer</p>
+            <h3>An independent Differences Judge</h3>
+            <p>This judge extracts claims and contradictions from the synthesis. For independence, consens.io prefers a different model family from the Consensus Engine.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-section lp-section--grey ce-differences-engine-section">
+      <div class="lp-shell ce-diff-engine">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">Differences Engine</p>
+          <h2 class="lp-h2">The second pass turns disagreement into structured evidence.</h2>
+          <p class="lp-lead">
+            After the consensus text is written, consens.io runs a separate analysis pass. Its job is not
+            to rewrite the answer, but to explain how the source models support, qualify, or contradict it.
+          </p>
+        </div>
+
+        <div class="ce-diff-engine-grid lp-reveal">
+          <article class="ce-diff-stage">
+            <span class="ce-step-number">01</span>
+            <h3>Inputs are filtered and anonymized.</h3>
+            <p>Only non-empty, non-excluded model answers are used. Each answer is capped before analysis and then renamed to neutral labels like Model A, Model B, and Model C.</p>
+            <p class="ce-tech-note">Why: anonymization and shuffled order reduce provider-name and position bias in the judge pass.</p>
+          </article>
+          <article class="ce-diff-stage">
+            <span class="ce-step-number">02</span>
+            <h3>The judge must return strict JSON.</h3>
+            <p>The prompt asks for central claims, agreeing models, dissenting quotes, difference cards, contradiction severity, verification hints, and the model closest to the consensus.</p>
+            <p class="ce-tech-note">Types: <code>contradiction</code> for incompatible facts or conclusions, <code>emphasis</code> for different focus or missing context.</p>
+          </article>
+          <article class="ce-diff-stage">
+            <span class="ce-step-number">03</span>
+            <h3>The judge is chosen independently.</h3>
+            <p>The judge tier follows the selected Consensus Engine. Standard consensus uses a standard judge; Pro consensus tries a Pro judge from another model family.</p>
+            <p class="ce-tech-note">Fallback: primary judge, retry, then the next available family; Pro attempts can fail open to a standard judge.</p>
+          </article>
+          <article class="ce-diff-stage">
+            <span class="ce-step-number">04</span>
+            <h3>The server verifies and scores the result.</h3>
+            <p>JSON is repaired if safely possible, model labels are mapped back, quotes are checked against the original answers, and unverifiable quotes are removed.</p>
+            <p class="ce-tech-note">Output: agreement score, level, major/minor contradiction counts, emphasis counts, and judge metadata.</p>
+          </article>
+        </div>
+
+        <div class="ce-diff-payload lp-reveal" aria-label="Differences Engine output example">
+          <section class="ce-schema-panel">
+            <p class="lp-eyebrow">Structured payload</p>
+            <h3>What comes out of the Differences Engine</h3>
+            <div class="ce-schema-list">
+              <div><b>claims</b><span>Consensus anchors, agreeing models, dissenting model quotes.</span></div>
+              <div><b>differences</b><span>Contradiction or emphasis cards with positions and verification hints.</span></div>
+              <div><b>agreement</b><span>A 0-100 score computed from claim support and weighted disagreement penalties.</span></div>
+              <div><b>judges</b><span>The provider, model, and tier that actually delivered the analysis.</span></div>
+            </div>
+          </section>
+          <section class="ce-render-panel">
+            <div class="consensus-verdict is-warn">
+              <span class="verdict-icon" aria-hidden="true"></span>
+              <span class="verdict-text">Caution (score 64/100): 1 critical contradiction</span>
+              <span class="verdict-judge">Analysis by Gemini (Pro), independent of the consensus engine</span>
+            </div>
+            <div class="ce-diff-card">
+              <span>Contradiction · major</span>
+              <strong>Does the caveat change the recommendation?</strong>
+              <p>Position A supports the recommendation directly. Position B says the recommendation only holds under a specific condition.</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-section lp-section--white">
+      <div class="lp-shell ce-split">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">What you see</p>
+          <h2 class="lp-h2">A useful answer without pretending everything is settled.</h2>
+          <p class="lp-lead">
+            The interface separates the parts you can read directly from the parts you should inspect.
+          </p>
+        </div>
+
+        <div class="ce-result-demo lp-reveal" aria-label="Example consensus result">
+          <div class="consensus-verdict is-warn">
+            <span class="verdict-icon" aria-hidden="true"></span>
+            <span class="verdict-text">Caution (score 82/100): the models disagree on one important caveat</span>
+          </div>
+          <div class="ce-result-grid">
+            <section class="ce-answer">
+              <h3>Consensus Answer</h3>
+              <p><strong>Most models agree on the main recommendation.</strong></p>
+              <p>The answer combines the repeated points, removes duplicated wording, and keeps caveats where the source answers were not fully aligned.</p>
+              <div class="ce-claim-row"><span>Main recommendation appears in most answers</span><b>5/6</b></div>
+              <div class="ce-claim-row"><span>Important caveat needs context</span><b>3/6</b></div>
+            </section>
+            <aside class="ce-differences">
+              <h3>Differences</h3>
+              <div class="ce-diff-card">
+                <span>Contradiction</span>
+                <strong>How strong is the evidence?</strong>
+                <p>Three models treat the evidence as settled; three add a caveat about measurement or source quality.</p>
+              </div>
+              <div class="ce-footnote">Analysis by a judge model, independent of the consensus engine where keys allow it.</div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-section lp-section--grey">
+      <div class="lp-shell">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">Why this helps</p>
+          <h2 class="lp-h2">Consensus is a reading aid, not a magic truth label.</h2>
+        </div>
+        <div class="lp-card-grid ce-use-grid lp-reveal">
+          <article class="lp-card">
+            <p class="lp-eyebrow">Less blind trust</p>
+            <h3>One confident answer is not enough</h3>
+            <p>Seeing several model families makes weak spots easier to notice before you act on an answer.</p>
+          </article>
+          <article class="lp-card">
+            <p class="lp-eyebrow">More signal</p>
+            <h3>Agreement becomes visible</h3>
+            <p>Repeated claims are separated from one-off claims, so you can scan the strongest common ground first.</p>
+          </article>
+          <article class="lp-card">
+            <p class="lp-eyebrow">Clear caveats</p>
+            <h3>Disagreement stays in view</h3>
+            <p>Contradictions are not averaged away. They are shown as specific points to inspect or verify.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq" class="lp-section lp-section--white">
+      <div class="lp-shell ce-faq lp-reveal">
+        <div class="lp-head">
+          <p class="lp-eyebrow">FAQ</p>
+          <h2 class="lp-h2">Common questions.</h2>
+        </div>
+        <div class="ce-faq-list">
+          <article>
+            <h3>Is the consensus just the majority answer?</h3>
+            <p>No. The engine writes a synthesis from the included model responses. Agreement matters, but the output is written as a readable answer with caveats, not as a simple vote.</p>
+          </article>
+          <article>
+            <h3>Can I choose the Consensus Engine?</h3>
+            <p>Yes. In the app you choose which consensus model should synthesize the answer. If you choose a Pro consensus engine, the differences analysis tries to use a Pro judge from another family.</p>
+          </article>
+          <article>
+            <h3>Why use a different judge family?</h3>
+            <p>If the same model family writes and judges the answer, it may be less likely to challenge its own framing. consens.io therefore prefers an independent family when available.</p>
+          </article>
+          <article>
+            <h3>What happens if the Differences JSON is malformed?</h3>
+            <p>The backend extracts or repairs a complete JSON object when it can do so safely. If the output still cannot be parsed, raw JSON is not shown to the user.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-section lp-section--grey">
+      <div class="lp-shell lp-final">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">Try the flow</p>
+          <h2 class="lp-h2">Ask once, compare the answers, then read the consensus with its caveats.</h2>
+        </div>
+        <a href="/app" class="lp-btn lp-btn--primary lp-reveal" data-umami-event="consensus_engine_open_app">Open app</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="lp-footer">
+    <div class="lp-footer-inner">
+      <span>&copy; 2026 consens.io</span>
+      <div class="lp-footer-links">
+        <a href="/app">App</a>
+        <a href="/ai-model-comparison">AI comparison</a>
+        <a href="/consensus-engine">Consensus Engine</a>
+        <a href="/benchmark">Benchmark</a>
+        <a href="/about">About</a>
+        <a href="/terms">Terms</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/imprint">Imprint</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const revealItems = Array.from(document.querySelectorAll(".lp-reveal"));
+
+      if (reducedMotion || !("IntersectionObserver" in window)) {
+        revealItems.forEach(el => el.classList.add("is-visible"));
+      } else {
+        const observer = new IntersectionObserver((entries, obs) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("is-visible");
+              obs.unobserve(entry.target);
+            }
+          });
+        }, { threshold: 0.14, rootMargin: "0px 0px -8% 0px" });
+        revealItems.forEach(el => observer.observe(el));
+      }
+
+      ["ctaButton", "navCtaButton"].forEach(id => {
+        const button = document.getElementById(id);
+        if (!button) return;
+        button.addEventListener("click", () => {
+          sessionStorage.setItem("skipLandingRedirect", "1");
+          if (window.umami && typeof window.umami.track === "function") {
+            window.umami.track(id === "navCtaButton" ? "consensus_engine_nav_open_app" : "consensus_engine_hero_open_app");
+          }
+        });
+      });
+    });
+  </script>
+</body>
+</html>

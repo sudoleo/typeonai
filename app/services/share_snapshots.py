@@ -455,6 +455,22 @@ def sanitize_differences_data(data):
             "emphases": _coerce_bounded_int(agreement.get("emphases"), 0, 50),
         }
 
+    # Judge-Metadaten (Provider/Modell/Stufe, keine Texte): bleiben im
+    # Snapshot, damit Bookmarks/Shares die Judge-Fußnote anzeigen können.
+    judges = data.get("judges")
+    if isinstance(judges, dict):
+        sanitized_judges = {}
+        for role in ("differences", "adjudicator"):
+            entry = judges.get(role)
+            if isinstance(entry, dict) and entry.get("provider"):
+                sanitized_judges[role] = {
+                    "provider": _clip(entry.get("provider"), 40),
+                    "model": _clip(entry.get("model"), 80),
+                    "tier": _clip(entry.get("tier"), 20),
+                }
+        if sanitized_judges:
+            result["judges"] = sanitized_judges
+
     return result
 
 

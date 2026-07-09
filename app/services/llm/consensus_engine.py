@@ -1247,9 +1247,11 @@ def _translate_best_model(result: str, anon_map: dict) -> str:
 # (query_differences / stream_differences).
 # ---------------------------------------------------------------------------
 
-# Differences laufen bewusst immer auf dem günstigen Standard-Judge des
-# jeweiligen Providers: strukturierte Extraktion braucht kein Pro-Modell,
-# und der Judge-Call fällt bei jedem Lauf an.
+# Standard-Judges: das günstige Default-Modell des jeweiligen Providers.
+# Die Judge-Stufe folgt der gewählten Consensus-Engine (Standard-Engine ->
+# Standard-Judge, Pro-Engine -> Pro-Judge über die bestehenden Engine-Aliasse);
+# die Judge-FAMILIE ist dabei immer eine andere als die der Engine, siehe
+# _resolve_differences_engine.
 DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = {
     "openai": DEFAULT_OPENAI_MODEL,
     "mistral": DEFAULT_MISTRAL_MODEL,
@@ -1259,9 +1261,10 @@ DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = {
     "grok": DEFAULT_GROK_MODEL,
 }
 
-# Reihenfolge für den Fallback-Judge, wenn die primäre Engine zweimal
-# scheitert. Wird von Differences UND Consensus als letzter Versuch auf einem
-# anderen Provider genutzt.
+# Familien-Priorität für die Judge-Wahl: primärer Differences-Judge und
+# Fallback-Judge nehmen die erste Familie mit verfügbarem Key, die nicht die
+# der Consensus-Engine ist. Wird auch vom Consensus-Fallback (dritter Versuch
+# auf einem anderen Provider) genutzt.
 _FALLBACK_JUDGE_PRIORITY = ["gemini", "openai", "mistral", "deepseek", "grok", "anthropic"]
 
 DIFFERENCES_SYSTEM_PROMPT = "Answer in the exact same language as the Model responses."
@@ -1272,25 +1275,84 @@ DIFFERENCES_RETRY_SUFFIX = (
 )
 
 
-def _resolve_differences_engine(differences_model: str):
+def _provider_key_available(provider: str, api_keys: dict) -> bool:
+    if provider == "gemini":
+        return bool(_gemini_engine_key(api_keys))
+    return bool(api_keys.get(_PROVIDER_KEY_NAMES[provider]))
+
+
+def _judge_tier(differences_model: str) -> str:
+    """Judge-Stufe der gewählten Consensus-Engine: Pro-Engines bekommen einen
+    Pro-Judge, alles andere (inkl. Early-/Frontier-Low-Engines) den günstigen
+    Standard-Judge."""
+    return "pro" if cfg.is_premium_consensus_model(differences_model) else "standard"
+
+
+def _standard_judge_engine(provider: str):
+    judge = DIFFERENCES_JUDGE_MODEL_BY_PROVIDER[provider]
+    return provider, judge, judge
+
+
+def _judge_engine(provider: str, tier: str):
+    """(provider, api_model, model_ref) für den Judge einer Familie in der
+    gewünschten Stufe. Die Pro-Stufe löst über den bestehenden Engine-Alias
+    "<Familie>-Pro" auf (keine eigenen Modell-Konstanten); scheitert die
+    Auflösung, bleibt der Standard-Judge."""
+    if tier == "pro":
+        resolved = _resolve_engine(_PROVIDER_KEY_NAMES[provider] + "-Pro")
+        if resolved is not None:
+            return resolved
+    return _standard_judge_engine(provider)
+
+
+def _judge_families(consensus_provider: str, api_keys: dict, count: int) -> list:
+    """Die ersten `count` Judge-Familien aus der Priorität, die (a) nicht die
+    Familie der Consensus-Engine sind und (b) einen verfügbaren Key haben."""
+    families = []
+    for provider in _FALLBACK_JUDGE_PRIORITY:
+        if provider == consensus_provider:
+            continue
+        if not _provider_key_available(provider, api_keys):
+            continue
+        families.append(provider)
+        if len(families) >= count:
+            break
+    return families
+
+
+def _resolve_differences_engine(differences_model: str, api_keys: dict):
+    """Primärer Differences-Judge für die gewählte Consensus-Engine.
+
+    Die Judge-Familie ist immer eine ANDERE als die der Consensus-Engine:
+    der Judge bewertet die Konsensantwort und darf nicht das Modell sein,
+    das sie geschrieben hat (Self-Judging-Bias). Die frühere
+    Same-Family-Policy ist damit bewusst aufgegeben. Nur wenn keine fremde
+    Familie einen verfügbaren Key hat, fällt die Wahl fail-open auf den
+    Standard-Judge der eigenen Familie zurück (ein fehlender Fremd-Key darf
+    den Lauf nicht brechen; der Standard-Judge ist dann wenigstens nicht das
+    Pro-Modell, das die Konsensantwort geschrieben haben kann).
+
+    Gibt ((provider, api_model, model_ref), tier) zurück, None bei
+    ungültiger Engine."""
     resolved = _resolve_engine(differences_model)
     if resolved is None:
         return None
-    provider = resolved[0]
-    judge = DIFFERENCES_JUDGE_MODEL_BY_PROVIDER.get(provider)
-    if judge:
-        return provider, judge, judge
-    return resolved
+    tier = _judge_tier(differences_model)
+    families = _judge_families(resolved[0], api_keys, count=1)
+    if families:
+        return _judge_engine(families[0], tier), tier
+    logging.warning(
+        f"No cross-family judge key available for engine {differences_model}; "
+        "falling back to the same-family standard judge."
+    )
+    return _standard_judge_engine(resolved[0]), "standard"
 
 
 def _fallback_judge_engine(exclude_provider: str, api_keys: dict):
     for provider in _FALLBACK_JUDGE_PRIORITY:
         if provider == exclude_provider:
             continue
-        if provider == "gemini":
-            if not _gemini_engine_key(api_keys):
-                continue
-        elif not api_keys.get(_PROVIDER_KEY_NAMES[provider]):
+        if not _provider_key_available(provider, api_keys):
             continue
         judge = DIFFERENCES_JUDGE_MODEL_BY_PROVIDER[provider]
         return provider, judge, judge
@@ -1298,16 +1360,49 @@ def _fallback_judge_engine(exclude_provider: str, api_keys: dict):
 
 
 def _differences_attempts(differences_model: str, api_keys: dict):
-    """Attempt-Plan: primärer Judge, dann Retry, dann Fallback-Provider mit
-    verfügbarem Key. None bei ungültiger Engine."""
-    primary = _resolve_differences_engine(differences_model)
-    if primary is None:
+    """Attempt-Plan für den Differences-Judge. None bei ungültiger Engine.
+
+    Einträge sind ((provider, api_model, model_ref), is_retry, tier):
+    primärer Judge (Fremd-Familie, Stufe der Engine), Retry, dann die nächste
+    Fremd-Familie in derselben Stufe. Die Pro-Stufe fail-opent zuletzt auf
+    einen Standard-Judge; gibt es keine zweite Fremd-Familie, ist der
+    Standard-Judge der eigenen Familie die letzte Stufe — Robustheit geht
+    als letztes Mittel vor Unabhängigkeit."""
+    resolved = _resolve_engine(differences_model)
+    if resolved is None:
         return None
-    attempts = [(primary, False), (primary, True)]
-    fallback = _fallback_judge_engine(primary[0], api_keys)
-    if fallback:
-        attempts.append((fallback, True))
+    consensus_provider = resolved[0]
+    primary, tier = _resolve_differences_engine(differences_model, api_keys)
+    attempts = [(primary, False, tier), (primary, True, tier)]
+
+    families = _judge_families(consensus_provider, api_keys, count=2)
+    if not families:
+        # Primär ist bereits der eigene Standard-Judge (Fail-open ohne
+        # Fremd-Key); mehr Stufen gibt es nicht.
+        return attempts
+
+    if len(families) > 1:
+        attempts.append((_judge_engine(families[1], tier), True, tier))
+        if tier == "pro":
+            attempts.append((_standard_judge_engine(families[1]), True, "standard"))
+    else:
+        if tier == "pro":
+            attempts.append((_standard_judge_engine(families[0]), True, "standard"))
+        attempts.append((_standard_judge_engine(consensus_provider), True, "standard"))
     return attempts
+
+
+def _judge_metadata(provider: str, api_model: str, tier: str) -> dict:
+    """Transparenz-Metadaten des Judges, der das Ergebnis TATSÄCHLICH geliefert
+    hat (nach einem Fallback also nicht der geplante primäre Judge). Landet als
+    differences_data["judges"]["differences"] im Payload, Snapshot und in der
+    anonymen Telemetrie (nur Metadaten, keine Texte). Der Schlüssel
+    "adjudicator" ist für eine spätere Adjudicator-Runde reserviert."""
+    return {
+        "provider": _PROVIDER_KEY_NAMES.get(provider, provider),
+        "model": api_model,
+        "tier": tier,
+    }
 
 
 def query_differences(
@@ -1325,7 +1420,9 @@ def query_differences(
     """
     Extrahiert die Unterschiede zwischen den Antworten der 6 Hauptmodelle,
     anonymisiert die Modellnamen und ordnet das bestbewertete Modell anschließend wieder zu.
-    Läuft mit Structured Output, JSON-Repair, einem Retry und Fallback-Judge.
+    Läuft mit Structured Output, JSON-Repair, einem Retry und Fallback-Judge;
+    der Judge ist immer eine andere Modellfamilie als die Consensus-Engine
+    (siehe _resolve_differences_engine) und wird in data["judges"] ausgewiesen.
     Gibt (legacy_text, structured_data | None) zurück.
     """
     built = _build_differences_prompt(
@@ -1349,7 +1446,7 @@ def query_differences(
 
     prose_fallback = None
     last_error = "empty result from differences engine."
-    for (provider, api_model, model_ref), is_retry in attempts:
+    for (provider, api_model, model_ref), is_retry, judge_tier in attempts:
         attempt_prompt = differences_prompt + (DIFFERENCES_RETRY_SUFFIX if is_retry else "")
         try:
             raw = _call_engine_text(
@@ -1374,6 +1471,7 @@ def query_differences(
             model_answers=answers_by_model,
         )
         if data is not None:
+            data["judges"] = {"differences": _judge_metadata(provider, api_model, judge_tier)}
             return legacy_text, data
         if prose_fallback is None and legacy_text and not _looks_like_json(raw):
             prose_fallback = legacy_text
@@ -1505,7 +1603,7 @@ def stream_differences(
 
     prose_fallback = None
     last_error = "empty result from differences engine."
-    for (provider, api_model, model_ref), is_retry in attempts:
+    for (provider, api_model, model_ref), is_retry, judge_tier in attempts:
         attempt_prompt = differences_prompt + (DIFFERENCES_RETRY_SUFFIX if is_retry else "")
         parts = []
         try:
@@ -1537,6 +1635,7 @@ def stream_differences(
             model_answers=answers_by_model,
         )
         if data is not None:
+            data["judges"] = {"differences": _judge_metadata(provider, api_model, judge_tier)}
             yield {"type": "final", "text": legacy_text, "data": data}
             return
         if prose_fallback is None and legacy_text and not _looks_like_json(raw):

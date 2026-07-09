@@ -219,6 +219,25 @@ class SanitizerTests(unittest.TestCase):
         })
         self.assertIsNone(snapshots.sanitize_differences_data("not a dict"))
 
+    def test_judges_are_whitelisted(self):
+        result = snapshots.sanitize_differences_data({
+            "claims": [], "differences": [], "best_model": "", "models_compared": [],
+            "judges": {
+                "differences": {"provider": "Gemini", "model": "gemini-x", "tier": "pro", "cost": "drop"},
+                "adjudicator": "not a dict",
+                "unknown_role": {"provider": "X"},
+            },
+        })
+        self.assertEqual(result["judges"], {
+            "differences": {"provider": "Gemini", "model": "gemini-x", "tier": "pro"},
+        })
+        # Ohne verwertbare Judge-Einträge fehlt das Feld komplett.
+        result = snapshots.sanitize_differences_data({
+            "claims": [], "differences": [], "best_model": "", "models_compared": [],
+            "judges": {"differences": {"model": "no provider"}},
+        })
+        self.assertNotIn("judges", result)
+
     def test_resolution_is_whitelisted(self):
         diff = {
             "claim": "c", "type": "contradiction", "severity": "major",

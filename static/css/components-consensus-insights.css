@@ -5,6 +5,7 @@
 /* --- Verdict-Header ----------------------------------------------------- */
 .consensus-verdict {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   margin-top: 12px;
@@ -22,6 +23,15 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
+}
+
+/* Judge-Fußnote: welche unabhängige Modellfamilie die Analyse geliefert hat */
+.consensus-verdict .verdict-judge {
+  flex-basis: 100%;
+  margin: -4px 0 0 20px; /* unter den Text, eingerückt hinter das Icon */
+  font-size: 0.76rem;
+  font-weight: 400;
+  opacity: 0.72;
 }
 
 .consensus-verdict.is-calm {

@@ -43,7 +43,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `pages.py` | HTML-Seiten + SEO: `/` (Landing, redirect→`/app` bei Session), `/app` (Haupt-App), `/admin`, `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
+| `pages.py` | HTML-Seiten + SEO: `/` (Landing, redirect→`/app` bei Session), `/app` (Haupt-App), `/admin`, `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (Pro, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
 | `auth.py` | `/register`, `/confirm-registration`. |
 | `users.py` | `/user_status`, `/usage`, `/delete_account`, `/track-interest`. |
@@ -55,7 +55,9 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 `landing.html` (Marketing), `index.html` (die App — Haupt-Markup + Script-Tags),
 `admin.html`, `admin_benchmark.html` (Admin-Benchmark-Visualisierung, eigenes
 Template + Firebase-Auth-Modul wie `admin.html`), `share.html` (öffentliche
-Consensus-Seite), `share_unavailable.html`, plus statische Rechts-/SEO-Seiten. **`index.html` enthält kein App-JS inline mehr**
+Consensus-Seite), `share_unavailable.html`, plus statische Rechts-/SEO-Seiten
+und SEO-Erklärseiten wie `ai-model-comparison.html` / `consensus-engine.html`.
+**`index.html` enthält kein App-JS inline mehr**
 — nur den Jinja-Config-Block im `<head>` und die Modul-`<script>`-Tags.
 
 ---
@@ -169,12 +171,20 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   strukturiertes JSON (Verdict, Karten, `best_model`, `models_compared`).
 - Robustheit Differences (`consensus_engine.py`): einheitlicher Engine-Dispatch
   (`_resolve_engine`/`_call_engine_text`/`_stream_engine_text`), Structured
-  Output je Provider (json_object / responseMimeType / Anthropic-Prefill),
-  Judge läuft immer auf dem günstigen Default-Modell des gewählten Providers
-  (`DIFFERENCES_JUDGE_MODEL_BY_PROVIDER`), JSON-Truncation-Repair, 1 Retry +
-  Fallback-Judge auf anderem Provider mit Key, serverseitige Anchor-/Quote-
-  Verifikation gegen Konsens- bzw. Modellantworten (nicht belegbare Zitate
-  werden geleert). Unparsbares JSON erreicht den Nutzer nie als Rohtext.
+  Output je Provider (json_object / responseMimeType / Anthropic-Prefill).
+  Judge-Policy (`_resolve_differences_engine`): die Judge-Familie ist immer
+  eine ANDERE als die der gewählten Consensus-Engine (Self-Judging-Bias);
+  die Stufe folgt der Engine — Standard-Engine → Standard-Judge
+  (`DIFFERENCES_JUDGE_MODEL_BY_PROVIDER`), Pro-Engine → Pro-Judge über die
+  Engine-Aliasse (`<Familie>-Pro`). Attempt-Plan: primärer Judge, Retry,
+  nächste Fremd-Familie (Pro fail-opent zuletzt auf einen Standard-Judge);
+  ohne Fremd-Key fail-open auf den eigenen Standard-Judge. Der tatsächlich
+  genutzte Judge steht als `differences_data.judges.differences`
+  ({provider, model, tier}) im Payload/Snapshot und in der Telemetrie;
+  das Frontend zeigt ihn als Fußnote im Verdict-Header. Außerdem:
+  JSON-Truncation-Repair, serverseitige Anchor-/Quote-Verifikation gegen
+  Konsens- bzw. Modellantworten (nicht belegbare Zitate werden geleert).
+  Unparsbares JSON erreicht den Nutzer nie als Rohtext.
 - Agreement-Score (`compute_agreement_score`): 0-100 aus Claim-Zustimmungsquoten
   minus severity-gewichteter Widerspruchs-Penalty (major 0.25 / minor 0.10 /
   emphasis 0.05), mit Caps ("very" nur ohne Differenzen; 1 Major → max
@@ -312,6 +322,7 @@ Wichtige Verträge im Backend:
 - `differences_stats` — anonyme Differences-Telemetrie: pro erfolgreichem
   Consensus-Lauf ein Dokument mit Zähl-/Strukturdaten (Agreement-Score,
   Widersprüche mit Severity und beteiligten Providern, Modell-Metadaten,
+  seit v2 `judges`-Metadaten des tatsächlich genutzten Differences-Judges,
   `schema_version`) — **niemals** Frage-/Antwort-/Claim-Texte, Zitate, UID
   oder IP (anonym i. S. v. ErwGr. 26 DSGVO). Schema + Datenschutz-Regeln in
   `app/services/differences_stats.py`; geschrieben aus `chat.py::consensus`

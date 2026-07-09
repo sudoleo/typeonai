@@ -403,7 +403,7 @@
           }
 
           // --- Verdict-Header ------------------------------------------------
-          function renderVerdictHeader(differences, modelCount, agreement) {
+          function renderVerdictHeader(differences, modelCount, agreement, judge) {
             const verdict = $("consensusVerdict");
             if (!verdict) return;
             const contradictions = differences.filter(d => d.type === "contradiction").length;
@@ -447,6 +447,17 @@
             label.className = "verdict-text";
             label.textContent = text;
             verdict.append(icon, label);
+            // Transparenz: welche (unabhängige) Modellfamilie die Analyse
+            // geliefert hat. Alte Bookmarks/Snapshots ohne judges-Feld zeigen
+            // schlicht keine Fußnote.
+            if (judge && judge.provider) {
+              const note = document.createElement("span");
+              note.className = "verdict-judge";
+              note.textContent = "Analysis by " + judge.provider
+                + (judge.tier === "pro" ? " (Pro)" : "")
+                + " — independent of the consensus engine";
+              verdict.appendChild(note);
+            }
             verdict.hidden = false;
           }
 
@@ -1035,8 +1046,11 @@
             const modelCount = (Array.isArray(data.models_compared) && data.models_compared.length)
               || includedCount || 0;
             const agreement = (data.agreement && typeof data.agreement === "object") ? data.agreement : null;
+            const judge = (data.judges && typeof data.judges === "object"
+              && data.judges.differences && typeof data.judges.differences === "object")
+              ? data.judges.differences : null;
 
-            renderVerdictHeader(differences, modelCount, agreement);
+            renderVerdictHeader(differences, modelCount, agreement, judge);
             renderClaimBadges(claims);
             renderDifferenceCards(differences, modelCount);
             window.trackUmamiEvent?.("app_consensus_insights_rendered", {

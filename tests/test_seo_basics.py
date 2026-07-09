@@ -31,6 +31,7 @@ class SeoBasicsTests(unittest.TestCase):
         self.assertEqual(response.media_type, "application/xml")
         self.assertIn(f"<loc>{SITE_URL}/</loc>", content)
         self.assertIn(f"<loc>{SITE_URL}/ai-model-comparison</loc>", content)
+        self.assertIn(f"<loc>{SITE_URL}/consensus-engine</loc>", content)
         self.assertIn(f"<loc>{SITE_URL}/about</loc>", content)
         self.assertNotIn(f"<loc>{SITE_URL}/app</loc>", content)
         self.assertNotIn(f"<loc>{SITE_URL}/privacy</loc>", content)
@@ -50,6 +51,13 @@ class SeoBasicsTests(unittest.TestCase):
 
         self.assertIn('<link rel="canonical" href="https://www.consens.io/ai-model-comparison">', template)
         self.assertIn("Compare AI models", template)
+        self.assertIn('"@type": "FAQPage"', template)
+
+    def test_consensus_engine_page_has_seo_metadata(self):
+        template = (ROOT / "templates" / "consensus-engine.html").read_text(encoding="utf-8")
+
+        self.assertIn('<link rel="canonical" href="https://www.consens.io/consensus-engine">', template)
+        self.assertIn("Consensus Engine", template)
         self.assertIn('"@type": "FAQPage"', template)
 
     def test_app_template_is_noindex(self):

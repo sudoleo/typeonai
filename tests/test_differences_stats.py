@@ -42,6 +42,9 @@ def make_differences_data():
         ],
         "best_model": "OpenAI",
         "models_compared": ["Gemini", "Grok", "Mistral", "OpenAI"],
+        "judges": {
+            "differences": {"provider": "Anthropic", "model": "claude-haiku-4-5", "tier": "standard"},
+        },
         "agreement": {
             "score": 55,
             "level": "partially",
@@ -80,6 +83,11 @@ class BuildDifferencesStatsDocTests(unittest.TestCase):
         self.assertEqual(doc["question_word_count"], 17)
         self.assertEqual(doc["agreement"]["score"], 55)
         self.assertEqual(doc["agreement"]["level"], "partially")
+
+        # Judge-Metadaten (Schema v2): nur Provider/Modell/Stufe
+        self.assertEqual(doc["judges"], {
+            "differences": {"provider": "Anthropic", "model": "claude-haiku-4-5", "tier": "standard"},
+        })
 
         # Claims: nur Zähler
         self.assertEqual(doc["claims"], [

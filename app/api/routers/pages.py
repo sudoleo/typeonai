@@ -26,6 +26,7 @@ SITE_URL = "https://www.consens.io"
 SITEMAP_URLS = (
     {"loc": f"{SITE_URL}/", "lastmod": "2026-06-03", "changefreq": "weekly", "priority": "1.0"},
     {"loc": f"{SITE_URL}/ai-model-comparison", "lastmod": "2026-06-03", "changefreq": "monthly", "priority": "0.8"},
+    {"loc": f"{SITE_URL}/consensus-engine", "lastmod": "2026-07-09", "changefreq": "monthly", "priority": "0.8"},
     {"loc": f"{SITE_URL}/benchmark", "lastmod": "2026-06-30", "changefreq": "monthly", "priority": "0.7"},
     {"loc": f"{SITE_URL}/about", "lastmod": "2026-06-03", "changefreq": "monthly", "priority": "0.6"},
 )
@@ -113,6 +114,10 @@ def about(req: Request):
 @router.get("/ai-model-comparison", response_class=HTMLResponse)
 def ai_model_comparison(req: Request):
     return templates.TemplateResponse("ai-model-comparison.html", {"request": req})
+
+@router.get("/consensus-engine", response_class=HTMLResponse)
+def consensus_engine_page(req: Request):
+    return templates.TemplateResponse("consensus-engine.html", {"request": req})
 
 @router.get("/benchmark", response_class=HTMLResponse)
 def benchmark(req: Request):
