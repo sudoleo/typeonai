@@ -6,7 +6,7 @@
    Buttons & Inputs
    -------------------------------------------------------------------------- */
 .button,
-button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(.sidebar-toggle-btn):not(#clearButton):not(#consensusButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.consensus-share-pill):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle):not(.model-picker-display):not(.model-picker-option):not(.mode-explainer-trigger):not(.mode-explainer-dismiss):not(.attach-trigger):not(.attach-menu-item):not(.attachment-chip-remove):not(.attachment-viewer-close):not(.claim-badge):not(.claim-jump-link):not(.diff-jump-link):not(.claim-popover-close):not(.diff-resolve-btn):not(.resolve-model-toggle):not(.resolve-prompt-toggle):not(.agent-mode-collapse-btn):not(.response-code-copy):not(.followup-offer-btn):not(.followup-chip-remove):not(.exclude-btn):not(.delete-bookmark):not(#editSystemPromptBtn) {
+button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(.sidebar-toggle-btn):not(#clearButton):not(#consensusButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.consensus-share-pill):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle):not(.model-picker-display):not(.model-picker-option):not(.mode-explainer-trigger):not(.mode-explainer-dismiss):not(.attach-trigger):not(.attach-menu-item):not(.attachment-chip-remove):not(.attachment-viewer-close):not(.claim-badge):not(.claim-jump-link):not(.diff-jump-link):not(.claim-popover-close):not(.diff-resolve-btn):not(.resolve-model-toggle):not(.resolve-prompt-toggle):not(.agent-mode-collapse-btn):not(.response-code-copy):not(.followup-offer-btn):not(.followup-chip-remove):not(.post-demo-login-action):not(.exclude-btn):not(.delete-bookmark):not(#editSystemPromptBtn) {
   padding: 10px 16px;
   font-size: 1em;
   background:
@@ -144,6 +144,124 @@ textarea:focus {
 .chat-input-container .input-field:focus {
   box-shadow: none;
   border-color: transparent;
+}
+
+/* Post-demo conversion: guests keep the demonstrated question in view while
+   getting an explicit next step outside the disabled textarea. */
+.post-demo-login-prompt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: -2px 0 14px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--glass-edge));
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 58%),
+    color-mix(in srgb, var(--glass-bg-strong) 84%, var(--container-bg));
+  color: var(--text-color);
+  box-shadow: var(--chip-shadow);
+  text-align: left;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.24s ease, transform 0.24s ease;
+}
+
+.post-demo-login-prompt[hidden] {
+  display: none;
+}
+
+.post-demo-login-prompt.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.post-demo-login-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
+}
+
+.post-demo-login-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.post-demo-login-copy {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.post-demo-login-copy strong {
+  font-size: 0.86rem;
+  line-height: 1.25;
+}
+
+.post-demo-login-copy span {
+  color: var(--sidebar-text-muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.post-demo-login-action {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid color-mix(in srgb, var(--button-bg) 78%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--button-bg);
+  color: var(--button-text);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.post-demo-login-action:hover {
+  opacity: 1;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--button-bg) 18%, transparent);
+}
+
+.post-demo-login-action:focus-visible {
+  outline: none;
+  box-shadow: var(--liquid-focus-ring);
+}
+
+@media (max-width: 600px) {
+  .post-demo-login-prompt {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .post-demo-login-copy {
+    width: calc(100% - 46px);
+  }
+
+  .post-demo-login-action {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .post-demo-login-prompt,
+  .post-demo-login-action {
+    transition: none;
+  }
 }
 
 /* --------------------------------------------------------------------------

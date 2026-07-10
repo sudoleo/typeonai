@@ -54,7 +54,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260711-differences4">
+  <link rel="stylesheet" href="/static/style.css?v=20260711-demo-login1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -64,7 +64,7 @@
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
   <script type="module" src="/static/firebase.js?v=20260707-fixes1"></script>
-  <script type="module" src="/static/demo.js?v=20260705-resolve2"></script>
+  <script type="module" src="/static/demo.js?v=20260711-demo-login1"></script>
   <script src="/static/app-ui.js?v=20260628-prompt-default2" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
   <script src="/static/js/app-core.js?v=20260626-extract1" defer></script>
@@ -356,6 +356,19 @@
           </button>
         </div>
       </div>
+      <div id="postDemoLoginPrompt" class="post-demo-login-prompt" role="status" aria-live="polite" hidden>
+        <span class="post-demo-login-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+            <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+          </svg>
+        </span>
+        <div class="post-demo-login-copy">
+          <strong>Ready to ask your own question?</strong>
+          <span>Log in or create a free account to continue.</span>
+        </div>
+        <button type="button" id="postDemoLoginButton" class="post-demo-login-action">Log in or sign up</button>
+      </div>
       <section id="modeExplainer" class="mode-explainer" aria-label="Mode overview">
         <div class="mode-explainer-copy">
           <p class="mode-explainer-kicker">Mode overview</p>
@@ -608,7 +621,7 @@
       </div>
     </div>
 
-    <script src="/static/js/app-init.js?v=20260711-deepconsensus1" defer></script>
+    <script src="/static/js/app-init.js?v=20260711-demo-login1" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing

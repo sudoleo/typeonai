@@ -54,6 +54,9 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 
 ## Demo & Sonstiges
 - [ ] „Demo"-Query startet den Demo-Flow (demo.js Integration intakt).
+- [ ] Nach Abschluss der Demo sieht ein ausgeloggter Nutzer unter dem gefüllten
+      Eingabefeld eine Login-/Registrierungs-Aufforderung; deren Button öffnet
+      das Login-Modal. Nach erfolgreichem Login verschwindet die Aufforderung.
 - [ ] Dark/Light-Toggle.
 - [ ] Mobile-Layout (< 768px): Overlay-Sidebar, Info-Popups.
 - [ ] System-Prompt-Modal + Help-Modal (app-ui.js) öffnen/speichern.

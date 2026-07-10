@@ -159,6 +159,7 @@
         window.updateQuestionInputAccess = function () {
           const canAsk = window.userCanAskQuestions();
           const sendButton = document.getElementById("sendButton");
+          const postDemoLoginPrompt = document.getElementById("postDemoLoginPrompt");
 
           if (questionInput) {
             questionInput.disabled = !canAsk;
@@ -169,6 +170,11 @@
           if (sendButton && !sendButton.classList.contains("is-cancel-action")) {
             sendButton.disabled = !canAsk;
             sendButton.title = canAsk ? "Send question" : "Sign in to ask questions or use your own API keys";
+          }
+
+          if (canAsk && postDemoLoginPrompt) {
+            postDemoLoginPrompt.hidden = true;
+            postDemoLoginPrompt.classList.remove("is-visible");
           }
 
           return canAsk;

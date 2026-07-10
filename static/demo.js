@@ -352,6 +352,16 @@ function getDemoStorage() {
   }
 }
 
+function showPostDemoLoginPrompt() {
+  const prompt = document.getElementById("postDemoLoginPrompt");
+  if (!prompt || window.auth?.currentUser) return;
+
+  prompt.hidden = false;
+  prompt.classList.remove("is-visible");
+  requestAnimationFrame(() => prompt.classList.add("is-visible"));
+  window.trackAppEvent?.("app_demo_login_prompt_shown");
+}
+
 function shouldAvoidDemoInputFocus() {
   return window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches ||
     window.matchMedia?.("(max-width: 768px)")?.matches;
@@ -449,6 +459,7 @@ async function renderDemoConsensus(mainP, diffP) {
     DEMO_DATA.differencesData?.best_model ||
     (DEMO_DATA.differences.match(/BestModel:\s*(.*)/i)?.[1] || "").trim();
   if (best) window.recordModelVote?.(best, "BestModel");
+  showPostDemoLoginPrompt();
 }
 
 async function runDemoFlow() {
@@ -520,6 +531,8 @@ async function runDemoFlow() {
       () => renderDemoConsensus(mainP, diffP),
       DEMO_CONSENSUS_DELAY_MS + Math.floor(Math.random() * DEMO_CONSENSUS_JITTER_MS)
     );
+  } else {
+    showPostDemoLoginPrompt();
   }
 
   if (sendBtn) sendBtn.disabled = false;
@@ -572,6 +585,15 @@ function createStartDemoChip() {
 window.runDemoFlow = runDemoFlow;
 window.createStartDemoChip = createStartDemoChip;
 createStartDemoChip();
+
+document.getElementById("postDemoLoginButton")?.addEventListener("click", () => {
+  const modal = document.getElementById("loginModal");
+  if (!modal) return;
+
+  modal.style.display = "block";
+  window.trackAppEvent?.("auth_modal_open", { source: "post_demo" });
+  requestAnimationFrame(() => document.getElementById("loginEmail")?.focus());
+});
 
 function toggleSettingsCollapse(contentId, arrowId) {
   const content = document.getElementById(contentId);

@@ -107,7 +107,9 @@ deferred am `</body>` — `app-init.js`.
 **Nicht unter `static/js/`** (älter, eigene Verantwortung):
 - **`static/firebase.js`** (ES-Modul) — Firebase-Init, Login/Logout, Token-Handling,
   `window.auth`, Bookmarks-CRUD-Calls, Feedback, Voting, Tier-Sync.
-- **`static/demo.js`** (ES-Modul) — Demo-Flow (`runDemoFlow`) für die „Demo"-Query.
+- **`static/demo.js`** (ES-Modul) — Demo-Flow (`runDemoFlow`) für die „Demo"-Query;
+  zeigt Gästen nach Abschluss der Demo am Eingabebereich eine Login-/Registrierungs-
+  Aufforderung, ohne die Demo-Frage aus dem deaktivierten Feld zu entfernen.
 - **`static/app-ui.js`** — System-Prompt-/Help-Modal + App-Width-Resizer.
 
 **Abhängigkeitsrichtung**: `app-core.js` → Feature-Module → `app-init.js`. Module
