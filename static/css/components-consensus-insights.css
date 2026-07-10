@@ -2,103 +2,167 @@
    Consensus Insights: Verdict-Header, Claim-Badges, Differences-Karten
    ========================================================================== */
 
-/* --- Verdict-Header ----------------------------------------------------- */
+/* --- Verdict-Balken -------------------------------------------------------
+   Neutraler Glas-Balken statt grün/bernstein gefüllter Box: die Semantik
+   trägt der Score-Ring (plus ein kaum sichtbarer 3–4%-Wash), der Text bleibt
+   in normaler Textfarbe. */
 .consensus-verdict {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   margin-top: 12px;
-  padding: 10px 14px;
+  padding: 9px 16px 9px 11px;
   border-radius: var(--radius-md);
-  font-size: 0.92rem;
-  font-weight: 600;
-  line-height: 1.35;
-  border: 1px solid transparent;
-  box-shadow: var(--card-shadow);
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent);
+  background: var(--glass-bg-strong);
+  box-shadow: 0 2px 10px rgba(40, 56, 76, 0.05), inset 0 1px 0 var(--glass-highlight);
+  font-size: 0.89rem;
+  line-height: 1.3;
+  color: var(--text-color);
 }
 
+.dark-mode .consensus-verdict {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2), inset 0 1px 0 var(--glass-highlight);
+}
+
+.consensus-verdict.is-calm {
+  --verdict-ring: #2c7a2c;
+  background: color-mix(in srgb, #2c7a2c 3%, var(--glass-bg-strong));
+}
+
+.consensus-verdict.is-warn {
+  --verdict-ring: #d99b46;
+  background: color-mix(in srgb, #b97718 4%, var(--glass-bg-strong));
+}
+
+.dark-mode .consensus-verdict.is-calm { --verdict-ring: #6fcf9a; }
+.dark-mode .consensus-verdict.is-warn { --verdict-ring: #e8b968; }
+
+/* Score-Ring: Conic-Gauge, Füllstand kommt als --val (0–100) aus dem JS. */
+.verdict-score {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+}
+
+.verdict-score-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--verdict-ring, var(--accent)) calc(var(--val, 0) * 1%),
+    color-mix(in srgb, var(--sidebar-border) 55%, transparent) 0
+  );
+  -webkit-mask: radial-gradient(closest-side, transparent 77%, #000 78%);
+  mask: radial-gradient(closest-side, transparent 77%, #000 78%);
+}
+
+.verdict-score-num {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Fallback ohne Score (alte Bookmarks/Snapshots): kleiner Status-Punkt. */
 .consensus-verdict .verdict-icon {
   flex-shrink: 0;
   width: 10px;
   height: 10px;
   border-radius: 50%;
+  background: var(--verdict-ring, var(--sidebar-text-muted));
+}
+
+.verdict-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.verdict-headline {
+  font-weight: 600;
+}
+
+.verdict-detail {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--sidebar-text-muted);
+}
+
+.verdict-detail-crit {
+  font-weight: 650;
+  color: color-mix(in srgb, #b23b2e 70%, var(--text-color));
+}
+
+.dark-mode .verdict-detail-crit {
+  color: color-mix(in srgb, #f3a08f 78%, var(--text-color));
 }
 
 /* Judge-Fußnote: welche unabhängige Modellfamilie die Analyse geliefert hat */
 .consensus-verdict .verdict-judge {
-  flex-basis: 100%;
-  margin: -4px 0 0 20px; /* unter den Text, eingerückt hinter das Icon */
-  font-size: 0.76rem;
+  margin-left: auto;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: right;
+  font-size: 0.73rem;
   font-weight: 400;
-  opacity: 0.72;
+  line-height: 1.35;
+  color: var(--sidebar-text-muted);
 }
 
-.consensus-verdict.is-calm {
-  background: color-mix(in srgb, #2c7a2c 9%, var(--response-bg));
-  border-color: color-mix(in srgb, #2c7a2c 28%, var(--sidebar-border));
-  color: color-mix(in srgb, #196a35 72%, var(--text-color));
-}
-
-.consensus-verdict.is-calm .verdict-icon {
-  background: #2c7a2c;
-}
-
-.consensus-verdict.is-warn {
-  background: color-mix(in srgb, #b97718 11%, var(--response-bg));
-  border-color: color-mix(in srgb, #b97718 36%, var(--sidebar-border));
-  color: color-mix(in srgb, #8a5a10 78%, var(--text-color));
-}
-
-.consensus-verdict.is-warn .verdict-icon {
-  background: #d99b46;
-}
-
-.dark-mode .consensus-verdict.is-calm {
-  color: color-mix(in srgb, #8ee6c8 70%, var(--text-color));
-}
-
-.dark-mode .consensus-verdict.is-warn {
-  color: color-mix(in srgb, #f3c66f 76%, var(--text-color));
-}
-
-/* --- Agreement-Badges in der Konsens-Antwort ----------------------------- */
+/* --- Agreement-Badges in der Konsens-Antwort ------------------------------
+   Monochrome Chips mit dezentem Radius; Dissens ist nur noch ein kleiner
+   Amber-Punkt im Chip statt einer gefüllten Pill. */
 .claim-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  vertical-align: baseline;
+  gap: 5px;
+  vertical-align: 2px;
   margin: 0 2px 0 5px;
-  padding: 1px 8px;
-  min-height: 20px;
-  border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 80%, transparent);
-  background: color-mix(in srgb, var(--sidebar-hover) 70%, transparent);
-  color: color-mix(in srgb, var(--text-color) 76%, var(--sidebar-text-muted));
-  font-size: 0.72rem;
-  font-weight: 700;
+  padding: 0 7px;
+  min-height: 18px;
+  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 90%, transparent);
+  background: color-mix(in srgb, var(--glass-bg-strong) 55%, transparent);
+  color: var(--sidebar-text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
   font-family: inherit;
-  line-height: 1.4;
-  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: 0.01em;
   cursor: pointer;
   white-space: nowrap;
-  transition: box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .claim-badge:hover,
 .claim-badge:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
+  color: var(--text-color);
   box-shadow: var(--liquid-focus-ring);
   outline: none;
 }
 
-.claim-badge.has-dissent {
-  background: color-mix(in srgb, #d99b46 16%, var(--response-bg));
-  border-color: color-mix(in srgb, #b97718 44%, var(--sidebar-border));
-  color: color-mix(in srgb, #8a5a10 80%, var(--text-color));
+.claim-badge .claim-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #d99b46;
 }
 
-.dark-mode .claim-badge.has-dissent {
-  color: color-mix(in srgb, #f3c66f 80%, var(--text-color));
+.dark-mode .claim-badge .claim-dot {
+  background: #e8b968;
 }
 
 /* Kernaussagen ohne gefundenen Anker */
@@ -286,100 +350,105 @@
   outline: none;
 }
 
-/* --- Differences-Karten --------------------------------------------------- */
+/* --- Differences: flache Liste ---------------------------------------------
+   Hairline-Trenner statt Karten-Rahmen; Severity steckt im Punkt und im
+   dezenten Text-Label, nicht mehr in Rahmen, Schattenkante und Farbfüllung. */
 .differences-cards {
   position: relative;
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
 .diff-card {
-  border-radius: var(--radius-sm);
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent);
-  background: color-mix(in srgb, var(--response-bg) 90%, var(--glass-bg-strong) 10%);
-  overflow: hidden;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 45%, transparent);
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
 }
 
-.diff-card.is-contradiction {
-  border-color: color-mix(in srgb, #b97718 44%, var(--sidebar-border));
-  box-shadow: inset 3px 0 0 #d99b46;
+.diff-card:first-child {
+  border-top: 0;
 }
 
 .diff-card-summary {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 9px 11px;
+  gap: 5px;
+  padding: 13px 0 5px;
   cursor: pointer;
   list-style: none;
+}
+
+.diff-card:first-child > .diff-card-summary {
+  padding-top: 2px;
 }
 
 .diff-card-summary::-webkit-details-marker {
   display: none;
 }
 
-.diff-card-summary:hover {
-  background: color-mix(in srgb, var(--sidebar-hover) 70%, transparent);
+/* Severity-Punkt: der einzige Farbträger im Kartenkopf. */
+.sev-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
+.sev-dot.is-crit { background: #cf5a4a; }
+.sev-dot.is-warn { background: #d99b46; }
+.sev-dot.is-info { background: color-mix(in srgb, var(--sidebar-text-muted) 55%, transparent); }
+.sev-dot.is-ok { background: #4d9e5f; }
+
+.dark-mode .sev-dot.is-crit { background: #e58a79; }
+.dark-mode .sev-dot.is-warn { background: #e8b968; }
+.dark-mode .sev-dot.is-ok { background: #6fcf9a; }
+
 .diff-type-tag {
-  align-self: flex-start;
-  padding: 1px 8px;
-  border-radius: var(--radius-pill);
-  font-size: 0.66rem;
-  font-weight: 700;
+  font-size: 0.68rem;
+  font-weight: 650;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  background: color-mix(in srgb, var(--sidebar-hover) 80%, transparent);
   color: var(--sidebar-text-muted);
 }
 
 .diff-card.is-contradiction .diff-type-tag {
-  background: color-mix(in srgb, #d99b46 22%, var(--response-bg));
-  color: color-mix(in srgb, #8a5a10 80%, var(--text-color));
+  color: color-mix(in srgb, #8a5a10 70%, var(--text-color));
 }
 
 .dark-mode .diff-card.is-contradiction .diff-type-tag {
-  color: color-mix(in srgb, #f3c66f 82%, var(--text-color));
+  color: color-mix(in srgb, #f3c66f 78%, var(--text-color));
 }
 
-/* Kritische Widersprüche (severity=major): rote Stufe statt Bernstein.
-   Karten ohne Severity (alte Bookmarks/Snapshots) behalten den Bernstein-Look. */
-.diff-card.is-contradiction.is-major {
-  border-color: color-mix(in srgb, #b23b2e 44%, var(--sidebar-border));
-  box-shadow: inset 3px 0 0 #cf5a4a;
-}
-
+/* Kritische Widersprüche (severity=major): rotes Label statt Bernstein.
+   Karten ohne Severity (alte Bookmarks/Snapshots) behalten den Bernstein-Ton. */
 .diff-card.is-contradiction.is-major .diff-type-tag {
-  background: color-mix(in srgb, #cf5a4a 20%, var(--response-bg));
-  color: color-mix(in srgb, #8a251a 80%, var(--text-color));
+  color: color-mix(in srgb, #96352a 72%, var(--text-color));
 }
 
 .dark-mode .diff-card.is-contradiction.is-major .diff-type-tag {
-  color: color-mix(in srgb, #f3a08f 82%, var(--text-color));
+  color: color-mix(in srgb, #f3a08f 80%, var(--text-color));
 }
 
-/* Tag-Zeile im Kartenkopf: Typ-Tag + (nach Resolve) Status-Chip */
+/* Kopfzeile: Punkt + Typ-Label + (nach Resolve) rechtsbündiger Status-Text */
 .diff-card-tags {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 7px;
 }
 
 .diff-resolved-tag {
-  padding: 1px 8px;
-  border-radius: var(--radius-pill);
-  font-size: 0.66rem;
-  font-weight: 700;
+  margin-left: auto;
+  font-size: 0.68rem;
+  font-weight: 650;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .diff-resolved-tag.is-resolved {
-  background: color-mix(in srgb, #2c7a2c 14%, var(--response-bg));
   color: color-mix(in srgb, #196a35 74%, var(--text-color));
 }
 
@@ -388,7 +457,6 @@
 }
 
 .diff-resolved-tag.is-standoff {
-  background: color-mix(in srgb, #cf5a4a 14%, var(--response-bg));
   color: color-mix(in srgb, #8a251a 76%, var(--text-color));
 }
 
@@ -397,7 +465,6 @@
 }
 
 .diff-resolved-tag.is-mixed {
-  background: color-mix(in srgb, #d99b46 16%, var(--response-bg));
   color: color-mix(in srgb, #8a5a10 78%, var(--text-color));
 }
 
@@ -405,153 +472,160 @@
   color: color-mix(in srgb, #f3c66f 78%, var(--text-color));
 }
 
-/* Gelöster Widerspruch: Karte kippt vom Bernstein-/Rot-Akzent auf Grün,
-   damit der gelöste Zustand auf einen Blick erkennbar ist. */
-.diff-card.is-contradiction.resolution-resolved,
-.diff-card.is-contradiction.is-major.resolution-resolved {
-  border-color: color-mix(in srgb, #2c7a2c 34%, var(--sidebar-border));
-  box-shadow: inset 3px 0 0 #4d9e5f;
-}
-
 .diff-card-claim {
-  font-size: 0.86rem;
-  font-weight: 650;
-  line-height: 1.4;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.45;
   color: color-mix(in srgb, var(--text-color) 92%, var(--sidebar-text-muted));
   overflow-wrap: anywhere;
 }
 
 .diff-card-body {
-  padding: 2px 11px 11px;
+  padding: 0 0 13px;
 }
 
 .diff-position {
-  padding: 7px 0;
-}
-
-.diff-position + .diff-position {
-  border-top: 1px dashed color-mix(in srgb, var(--sidebar-border) 65%, transparent);
+  padding: 6px 0;
 }
 
 .diff-position-label {
-  font-size: 0.74rem;
-  font-weight: 700;
-  color: color-mix(in srgb, var(--text-color) 80%, var(--sidebar-text-muted));
-  margin-bottom: 2px;
+  font-size: 0.76rem;
+  font-weight: 650;
+  color: color-mix(in srgb, var(--text-color) 84%, var(--sidebar-text-muted));
+  margin-bottom: 1px;
 }
 
 .diff-position-stance {
-  font-size: 0.83rem;
-  line-height: 1.45;
+  font-size: 0.8rem;
+  line-height: 1.5;
   color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
   overflow-wrap: anywhere;
 }
 
 .diff-position-quote {
-  margin: 4px 0 0;
-  padding: 2px 0 2px 10px;
-  border-left: 2px solid color-mix(in srgb, var(--accent) 36%, var(--sidebar-border));
-  color: color-mix(in srgb, var(--text-color) 76%, var(--sidebar-text-muted));
-  font-size: 0.8rem;
+  margin: 5px 0 0;
+  padding: 1px 0 1px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--sidebar-text-muted) 38%, transparent);
+  color: var(--sidebar-text-muted);
+  font-size: 0.76rem;
   font-style: italic;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
 .diff-position-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
+  gap: 4px 14px;
+  margin-top: 4px;
 }
 
+/* Kompakte Sprung-Buttons: neutral im Ruhezustand, Akzent erst bei Interaktion.
+   Der Pfeil macht klar, dass die zugehörige Modellantwort weiter oben liegt. */
+.diff-jump-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-color) 4%, transparent);
+  color: color-mix(in srgb, var(--text-color) 82%, var(--sidebar-text-muted));
+  font-size: 0.73rem;
+  font-weight: 600;
+  font-family: inherit;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 55%, transparent);
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.diff-jump-link::after {
+  content: "\2191";
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--sidebar-text-muted);
+  opacity: 0.75;
+}
+
+.diff-jump-link:hover,
+.diff-jump-link:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: color-mix(in srgb, var(--accent) 72%, var(--text-color));
+  box-shadow: var(--liquid-focus-ring);
+  outline: none;
+}
+
+/* Rail-Notiz statt gefüllter Hinweis-Box. */
 .diff-verify {
   margin-top: 9px;
-  padding: 7px 10px;
-  border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--sidebar-border));
-  font-size: 0.79rem;
-  line-height: 1.45;
-  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  padding: 1px 0 1px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--sidebar-text-muted);
   overflow-wrap: anywhere;
+}
+
+.diff-verify b {
+  font-weight: 600;
+  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
 }
 
 /* --- Resolve-Runde: Button + Ergebnis in der Widerspruchs-Karte ----------- */
 .diff-resolve {
-  margin-top: 10px;
-  padding-top: 9px;
-  border-top: 1px dashed color-mix(in srgb, var(--sidebar-border) 65%, transparent);
-  /* Container für die Button-Breakpoints unten: in schmalen Differences-
-     Spalten schaltet der Resolve-Button auf Kurz-Label ohne Icon um. */
-  container-type: inline-size;
+  margin-top: 8px;
 }
 
 .diff-resolve-btn {
-  /* Vollbreiter Karten-Action-Button. Kein flex-wrap: Icon und Pro-Chip
-     bleiben in der Zeile verankert, nur der Label-Text bricht um — sonst
-     stapeln sich die Flex-Items in schmalen Spalten zu einem hohen,
-     unförmigen Button. */
-  display: flex;
-  width: 100%;
+  /* Kompakter Ghost-Button wie im Mockup: ein ruhiger Einzeiler mit dem
+     kleinen Pro-Chip am rechten Rand. */
+  display: inline-flex;
+  max-width: 100%;
   box-sizing: border-box;
   align-items: center;
   justify-content: flex-start;
-  gap: 7px;
-  min-height: 30px;
-  padding: 6px 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--sidebar-border));
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: color-mix(in srgb, var(--accent) 76%, var(--text-color));
-  font-size: 0.78rem;
-  font-weight: 650;
+  gap: 10px;
+  min-height: 28px;
+  padding: 5px 8px 5px 12px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 90%, transparent);
+  background: transparent;
+  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  font-size: 0.75rem;
+  font-weight: 600;
   font-family: inherit;
   line-height: 1.25;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
-  white-space: normal;
-  transition: box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+  white-space: nowrap;
+  transition: box-shadow 0.2s ease, color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
 }
 
 /* Der Button wird nach dem Resolve per [hidden] entfernt. Ohne diese Regel
-   uebersteuert das display:flex oben das UA-[hidden] (display:none), und der
-   Ladezustand des Buttons bliebe sichtbar. */
+   uebersteuert das display:inline-flex oben das UA-[hidden] (display:none),
+   und der Ladezustand des Buttons bliebe sichtbar. */
 .diff-resolve-btn[hidden] {
   display: none;
 }
 
-.diff-resolve-btn svg {
-  flex-shrink: 0;
-}
-
 .diff-resolve-btn-label {
-  flex: 1 1 auto;
   min-width: 0;
-  overflow-wrap: anywhere;
 }
 
-/* Kurz-Label ("Resolve") nur in schmalen Spalten, siehe Container-Query. */
-.diff-resolve-label-short {
-  display: none;
-}
-
-/* Schmale Differences-Spalte: Icon weg, Kurz-Label statt "Resolve with the
-   models" — der Button bleibt einzeilig statt hoch und unförmig zu werden. */
-@container (max-width: 230px) {
-  .diff-resolve-btn > svg {
-    display: none;
-  }
-  .diff-resolve-label-long {
-    display: none;
-  }
-  .diff-resolve-label-short {
-    display: inline;
-  }
+.diff-resolve-icon {
+  flex-shrink: 0;
 }
 
 .diff-resolve-btn:hover:not(:disabled),
 .diff-resolve-btn:focus-visible {
-  background: color-mix(in srgb, var(--accent) 17%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
+  color: color-mix(in srgb, var(--accent) 80%, var(--text-color));
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
   box-shadow: var(--liquid-focus-ring);
   outline: none;
 }
@@ -559,11 +633,6 @@
 .diff-resolve-btn:disabled {
   opacity: 0.7;
   cursor: default;
-}
-
-/* Ladezustand: Icon weicht einem dezenten Spinner */
-.diff-resolve-btn.is-loading svg {
-  display: none;
 }
 
 .diff-resolve-btn.is-loading::before {
@@ -594,64 +663,50 @@
   background: color-mix(in srgb, var(--text-color) 10%, transparent);
 }
 
-/* Optik kommt zentral von .pro-badge (layout.css) — hier nur die Position
-   am rechten Button-Rand. */
+/* Mockup-Variante des zentralen Pro-Badges: kompakt und leicht eckig. */
 .diff-resolve-pro-chip {
   flex-shrink: 0;
   margin-left: auto;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  box-shadow: none;
 }
 
-/* Kurzer Erklärtext unter dem Button: führt durch das Feature, ohne zu nerven */
-.diff-resolve-hint {
-  margin-top: 5px;
-  font-size: 0.73rem;
-  line-height: 1.4;
-  color: var(--sidebar-text-muted);
+.diff-resolve-btn.is-loading .diff-resolve-icon {
+  display: none;
 }
 
+/* Rail-Notiz statt gefüllter Box: 2px-Linie links trägt die Semantik. */
 .resolve-outcome {
-  margin-top: 8px;
-  padding: 7px 10px;
-  border-radius: var(--radius-xs);
-  font-size: 0.79rem;
-  font-weight: 600;
-  line-height: 1.45;
+  margin-top: 9px;
+  padding: 1px 0 1px 10px;
+  border-left: 2px solid var(--sidebar-border);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--text-color) 84%, var(--sidebar-text-muted));
   overflow-wrap: anywhere;
 }
 
 .resolve-outcome.is-resolved {
-  background: color-mix(in srgb, #2c7a2c 9%, var(--response-bg));
-  border: 1px solid color-mix(in srgb, #2c7a2c 26%, var(--sidebar-border));
-  color: color-mix(in srgb, #196a35 70%, var(--text-color));
-}
-
-.dark-mode .resolve-outcome.is-resolved {
-  color: color-mix(in srgb, #8ee6c8 72%, var(--text-color));
+  border-left-color: #4d9e5f;
 }
 
 .resolve-outcome.is-standoff {
-  background: color-mix(in srgb, #cf5a4a 9%, var(--response-bg));
-  border: 1px solid color-mix(in srgb, #b23b2e 30%, var(--sidebar-border));
-  color: color-mix(in srgb, #8a251a 74%, var(--text-color));
-}
-
-.dark-mode .resolve-outcome.is-standoff {
-  color: color-mix(in srgb, #f3a08f 78%, var(--text-color));
+  border-left-color: #cf5a4a;
 }
 
 .resolve-outcome.is-mixed {
-  background: color-mix(in srgb, #d99b46 10%, var(--response-bg));
-  border: 1px solid color-mix(in srgb, #d99b46 30%, var(--sidebar-border));
-  color: color-mix(in srgb, #8a5a10 76%, var(--text-color));
+  border-left-color: #d99b46;
 }
 
-.dark-mode .resolve-outcome.is-mixed {
-  color: color-mix(in srgb, #f3c66f 78%, var(--text-color));
-}
+.dark-mode .resolve-outcome.is-resolved { border-left-color: #6fcf9a; }
+.dark-mode .resolve-outcome.is-standoff { border-left-color: #e58a79; }
+.dark-mode .resolve-outcome.is-mixed { border-left-color: #e8b968; }
 
 .resolve-outcome.is-error {
-  background: color-mix(in srgb, var(--sidebar-hover) 60%, transparent);
-  border: 1px solid var(--sidebar-border);
   color: var(--sidebar-text-muted);
 }
 
@@ -833,29 +888,30 @@
   overflow-wrap: anywhere;
 }
 
-/* Empty State: explizit "nichts gefunden" statt leerer Fläche */
+/* Empty State: explizit "nichts gefunden" — grüner Punkt + Textzeilen
+   statt grün gefüllter Box. */
 .diff-empty-state {
-  padding: 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid color-mix(in srgb, #2c7a2c 24%, var(--sidebar-border));
-  background: color-mix(in srgb, #2c7a2c 7%, var(--response-bg));
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 2px 0 0;
+}
+
+.diff-empty-state > .sev-dot {
+  margin-top: 6px;
 }
 
 .diff-empty-headline {
-  font-size: 0.85rem;
-  font-weight: 650;
-  line-height: 1.45;
-  color: color-mix(in srgb, #196a35 70%, var(--text-color));
-}
-
-.dark-mode .diff-empty-headline {
-  color: color-mix(in srgb, #8ee6c8 72%, var(--text-color));
+  font-size: 0.83rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-color);
 }
 
 .diff-empty-note {
-  margin-top: 5px;
-  font-size: 0.78rem;
-  line-height: 1.45;
+  margin-top: 2px;
+  font-size: 0.76rem;
+  line-height: 1.5;
   color: var(--sidebar-text-muted);
 }
 
@@ -891,19 +947,32 @@ mark.quote-flash {
 /* --- Mobile -------------------------------------------------------------- */
 @media (max-width: 640px) {
   .consensus-verdict {
+    flex-wrap: wrap;
     font-size: 0.86rem;
-    padding: 9px 12px;
+    padding: 9px 12px 9px 10px;
+  }
+
+  /* Judge-Fußnote rutscht unter die Headline, eingerückt hinter den Ring
+     (42px Ring + 14px Gap). */
+  .consensus-verdict .verdict-judge {
+    flex-basis: 100%;
+    margin-left: 56px;
+    text-align: left;
   }
 
   .claim-badge {
-    min-height: 26px;
-    padding: 2px 10px;
-    font-size: 0.76rem;
+    min-height: 24px;
+    padding: 2px 9px;
+    font-size: 0.72rem;
   }
 
   .claim-jump-link {
     min-height: 36px;
     padding: 6px 12px;
+  }
+
+  .diff-jump-link {
+    min-height: 30px;
   }
 
   .claims-fallback-row {

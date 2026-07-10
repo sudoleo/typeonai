@@ -318,11 +318,14 @@ class JudgeMetadataTests(unittest.TestCase):
             lambda provider, *a, **kw: payload,
         )
         self.assertIsNotNone(data)
-        self.assertEqual(data["judges"]["differences"], {
-            "provider": "Mistral",
-            "model": cfg.DEFAULT_MISTRAL_MODEL,
-            "tier": "standard",
-        })
+        judge = data["judges"]["differences"]
+        self.assertEqual(judge["provider"], "Mistral")
+        self.assertEqual(judge["model"], cfg.DEFAULT_MISTRAL_MODEL)
+        self.assertEqual(judge["tier"], "standard")
+        # v3-Metadaten: erster Versuch traf, Dauer ist eine nichtnegative Zahl.
+        self.assertEqual(judge["attempts"], 1)
+        self.assertIsInstance(judge["duration_ms"], int)
+        self.assertGreaterEqual(judge["duration_ms"], 0)
 
     def test_fallback_judge_is_reported(self):
         payload = json.dumps({"claims": [], "differences": [], "best_model": ""})
@@ -343,7 +346,10 @@ class JudgeMetadataTests(unittest.TestCase):
         payload = json.dumps({"claims": [], "differences": [], "best_model": ""})
 
         def fake_stream(provider, *args, **kwargs):
-            yield payload
+            # _stream_engine_text liefert Event-Dicts; Reasoning-Marker
+            # dürfen das Parsen des JSON-Ergebnisses nicht stören.
+            yield {"type": "reasoning"}
+            yield {"type": "delta", "text": payload}
 
         with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
             with mock.patch(

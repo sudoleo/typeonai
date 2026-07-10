@@ -1,4 +1,5 @@
 ﻿import os
+import time
 import logging
 from dataclasses import dataclass
 from typing import Callable, Optional
@@ -24,6 +25,7 @@ from app.services.llm.citations import source_response
 from app.services.llm.mock_llm import mock_ask_result, mock_ask_stream, mock_llm_enabled
 from app.services.llm.streaming import (
     SSE_HEADERS,
+    iter_sse_with_keepalive,
     sse_pack,
     streaming_model_response,
     stream_claude_query,
@@ -755,6 +757,19 @@ def consensus(request: Request, data: dict = Body(...)):
             differences_text = ""
             differences_data = None
             stream_failed = False
+            # Reasoning-Marker der Engines gedrosselt weiterleiten (max. alle
+            # 2 s, wie im /ask_*-Streaming): hält die Verbindung aktiv und
+            # lässt das Frontend "Reasoning" statt eines stummen Spinners zeigen.
+            last_reasoning_at = None
+
+            def _reasoning_event(event_name):
+                nonlocal last_reasoning_at
+                now = time.monotonic()
+                if last_reasoning_at is not None and now - last_reasoning_at < 2.0:
+                    return None
+                last_reasoning_at = now
+                return sse_pack(event_name, {"reasoning": True})
+
             try:
                 for item in stream_consensus(
                     question,
@@ -771,6 +786,10 @@ def consensus(request: Request, data: dict = Body(...)):
                 ):
                     if item.get("type") == "delta":
                         yield sse_pack("consensus.delta", {"text": item.get("text") or ""})
+                    elif item.get("type") == "reasoning":
+                        event = _reasoning_event("consensus.delta")
+                        if event:
+                            yield event
                     else:
                         consensus_text = item.get("text") or ""
                         consensus_failed = bool(item.get("error")) or is_consensus_error_text(consensus_text)
@@ -782,6 +801,7 @@ def consensus(request: Request, data: dict = Body(...)):
                     differences_text = DIFFERENCES_SKIPPED_TEXT
                     differences_data = None
                 else:
+                    last_reasoning_at = None
                     for item in stream_differences(
                         answer_openai,
                         answer_mistral,
@@ -798,6 +818,10 @@ def consensus(request: Request, data: dict = Body(...)):
                             # Das Frontend rendert diese Deltas nicht mehr (die Engine
                             # liefert JSON); sie halten nur die SSE-Verbindung aktiv.
                             yield sse_pack("differences.delta", {"text": item.get("text") or ""})
+                        elif item.get("type") == "reasoning":
+                            event = _reasoning_event("differences.delta")
+                            if event:
+                                yield event
                         else:
                             differences_text = item.get("text") or ""
                             differences_data = item.get("data")
@@ -822,8 +846,12 @@ def consensus(request: Request, data: dict = Body(...)):
             payload.update(extra_fields)
             yield sse_pack("final", payload)
 
+        # Keepalive-Wrapper: schiebt SSE-Kommentare ein, wenn die Engines
+        # (z. B. ein denkender Reasoning-Judge) länger keine Bytes liefern —
+        # sonst trennt Cloudflare idle Verbindungen und das final-Event geht
+        # verloren (Spinner bliebe für immer stehen).
         return StreamingResponse(
-            consensus_event_source(),
+            iter_sse_with_keepalive(consensus_event_source()),
             media_type="text/event-stream",
             headers=dict(SSE_HEADERS),
         )

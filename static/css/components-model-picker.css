@@ -445,6 +445,12 @@
     display: none;
   }
 
+  /* Die globale Mobile-Regel versteckt Modus-Labels in der unteren Leiste;
+     im geöffneten (+)-Menü muss "Deep Think" weiterhin lesbar bleiben. */
+  .attach-menu-toggle .search-mode-label {
+    display: inline !important;
+  }
+
   .input-actions-container .consensus-model-inline .select-wrapper select,
   .input-actions-container .consensus-model-inline .select-wrapper .model-picker-display {
     max-width: 116px;
@@ -562,6 +568,20 @@
 
 }
 
+@media (max-width: 640px) {
+  .deep-think-input-indicator {
+    width: auto;
+    min-height: 30px;
+    padding: 0 7px;
+    gap: 5px;
+    font-size: 0.59rem;
+  }
+
+  .deep-think-input-indicator-word {
+    display: none;
+  }
+}
+
 @media (max-width: 420px) {
   .consensus-switch-container {
     gap: 5px !important;
@@ -585,6 +605,11 @@
 
   .input-actions-container {
     gap: 6px;
+  }
+
+  .deep-think-input-indicator {
+    min-height: 28px;
+    padding-inline: 6px;
   }
 
   .input-actions-container .consensus-model-inline {

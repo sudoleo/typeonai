@@ -173,8 +173,8 @@ class StreamConsensusFallbackTests(unittest.TestCase):
             calls.append(engine_model)
             if len(calls) <= 2:
                 raise RuntimeError("503 - UNAVAILABLE")
-            yield "rescued "
-            yield "answer."
+            yield {"type": "delta", "text": "rescued "}
+            yield {"type": "delta", "text": "answer."}
 
         with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}), mock.patch(
             "app.services.llm.consensus_engine._stream_consensus_engine",

@@ -402,7 +402,9 @@
             }, delay);
           }
 
-          // --- Verdict-Header ------------------------------------------------
+          // --- Verdict-Balken --------------------------------------------------
+          // Neutraler Glas-Balken: Score-Ring links (Farbe = Semantik),
+          // Headline + Detailzeile daneben, Judge-Attribution rechts.
           function renderVerdictHeader(differences, modelCount, agreement, judge) {
             const verdict = $("consensusVerdict");
             if (!verdict) return;
@@ -412,50 +414,88 @@
             // "critical"-Aussage machen statt fälschlich "none critical".
             const hasSeverity = differences.some(d => d.severity === "major" || d.severity === "minor");
             const emphases = differences.length - contradictions;
-            const modelsLabel = modelCount + " model" + (modelCount === 1 ? "" : "s");
+            const modelsLabel = modelCount + " model" + (modelCount === 1 ? "" : "s") + " compared";
             const hasScore = agreement && typeof agreement.score === "number";
-            const scoreSuffix = hasScore ? " (" + agreement.score + "/100)" : "";
 
-            let cls, text;
-            if (contradictions === 0) {
-              cls = "is-calm";
-              const detail = emphases > 0
-                ? emphases + " difference" + (emphases === 1 ? "" : "s") + " in emphasis, no contradictions"
-                : "no contradictions found";
-              text = "High agreement" + scoreSuffix + " — " + modelsLabel + ", " + detail;
-            } else {
-              cls = "is-warn";
-              let severityNote = "";
-              if (hasSeverity) {
-                severityNote = critical > 0
-                  ? " (" + critical + " critical)"
-                  : " (minor details)";
-              }
-              text = "Caution" + (hasScore ? " (score " + agreement.score + "/100)" : "")
-                + ": the models contradict each other on "
-                + contradictions + " point" + (contradictions === 1 ? "" : "s")
-                + severityNote + " — " + modelsLabel;
-            }
-
+            const cls = contradictions === 0 ? "is-calm" : "is-warn";
             verdict.classList.remove("is-calm", "is-warn");
             verdict.classList.add(cls);
             verdict.innerHTML = "";
-            const icon = document.createElement("span");
-            icon.className = "verdict-icon";
-            icon.setAttribute("aria-hidden", "true");
-            const label = document.createElement("span");
-            label.className = "verdict-text";
-            label.textContent = text;
-            verdict.append(icon, label);
+
+            // Score-Ring; alte Bookmarks ohne Score behalten den kleinen Punkt.
+            if (hasScore) {
+              const score = Math.max(0, Math.min(100, agreement.score));
+              const ring = document.createElement("span");
+              ring.className = "verdict-score";
+              ring.style.setProperty("--val", String(score));
+              ring.title = "Agreement score " + agreement.score + "/100";
+              const fill = document.createElement("span");
+              fill.className = "verdict-score-ring";
+              fill.setAttribute("aria-hidden", "true");
+              const num = document.createElement("span");
+              num.className = "verdict-score-num";
+              num.textContent = String(agreement.score);
+              // Screenreader (und E2E-Check) lesen den vollen Score.
+              const unit = document.createElement("span");
+              unit.className = "visually-hidden";
+              unit.textContent = "/100 agreement score";
+              num.appendChild(unit);
+              ring.append(fill, num);
+              verdict.appendChild(ring);
+            } else {
+              const icon = document.createElement("span");
+              icon.className = "verdict-icon";
+              icon.setAttribute("aria-hidden", "true");
+              verdict.appendChild(icon);
+            }
+
+            const main = document.createElement("span");
+            main.className = "verdict-main";
+            const headline = document.createElement("span");
+            headline.className = "verdict-headline";
+            headline.textContent = contradictions === 0
+              ? "High agreement"
+              : "The models contradict each other on " + contradictions
+                + " point" + (contradictions === 1 ? "" : "s");
+            main.appendChild(headline);
+
+            const detail = document.createElement("span");
+            detail.className = "verdict-detail";
+            if (contradictions === 0) {
+              const note = emphases > 0
+                ? emphases + " difference" + (emphases === 1 ? "" : "s") + " in emphasis, no contradictions"
+                : "no contradictions found";
+              detail.textContent = note + " — " + modelsLabel;
+            } else if (hasSeverity && critical > 0) {
+              const crit = document.createElement("span");
+              crit.className = "verdict-detail-crit";
+              crit.textContent = critical + " critical";
+              detail.appendChild(crit);
+              const minor = contradictions - critical;
+              detail.appendChild(document.createTextNode(
+                (minor > 0 ? " · " + minor + " minor detail" + (minor === 1 ? "" : "s") : "")
+                + " — " + modelsLabel));
+            } else if (hasSeverity) {
+              detail.textContent = "minor details — " + modelsLabel;
+            } else {
+              detail.textContent = modelsLabel;
+            }
+            main.appendChild(detail);
+            verdict.appendChild(main);
+
             // Transparenz: welche (unabhängige) Modellfamilie die Analyse
             // geliefert hat. Alte Bookmarks/Snapshots ohne judges-Feld zeigen
             // schlicht keine Fußnote.
             if (judge && judge.provider) {
               const note = document.createElement("span");
               note.className = "verdict-judge";
-              note.textContent = "Analysis by " + judge.provider
-                + (judge.tier === "pro" ? " (Pro)" : "")
-                + " — independent of the consensus engine";
+              const provider = document.createElement("span");
+              provider.textContent = "Analysis by " + judge.provider
+                + (judge.tier === "pro" ? " (Pro)" : "");
+              const sub = document.createElement("span");
+              sub.className = "verdict-judge-sub";
+              sub.textContent = "independent of the consensus engine";
+              note.append(provider, sub);
               verdict.appendChild(note);
             }
             verdict.hidden = false;
@@ -468,7 +508,15 @@
             const badge = document.createElement("button");
             badge.type = "button";
             badge.className = "claim-badge" + (claim.dissent.length ? " has-dissent" : "");
-            badge.textContent = agreeCount + "/" + total;
+            // Dissens nur als kleiner Amber-Punkt im monochromen Chip,
+            // nicht mehr als gefüllte Pill.
+            if (claim.dissent.length) {
+              const dot = document.createElement("span");
+              dot.className = "claim-dot";
+              dot.setAttribute("aria-hidden", "true");
+              badge.appendChild(dot);
+            }
+            badge.appendChild(document.createTextNode(agreeCount + "/" + total));
             badge.title = claim.dissent.length
               ? agreeCount + " of " + total + " models support this — tap for details"
               : "All " + total + " models that address this agree — tap for details";
@@ -728,25 +776,17 @@
 
             const question = (window.lastQuestion || $("questionInput")?.value || "").trim();
             const useOwnKeys = !!$("useOwnKeysSwitch")?.checked;
-            // Der Button trägt Icon + Label-Span (mit Lang-/Kurzvariante für
-            // schmale Spalten): nur die Label-Texte austauschen, damit Icon
-            // und Container-Query-Umschaltung den Ladezustand überleben.
+            // Nur den Label-Text austauschen; der Pro-Chip bleibt dabei an
+            // seinem Platz und der CSS-Spinner kann den Ladezustand anzeigen.
             const labelEl = button.querySelector(".diff-resolve-btn-label");
-            const longEl = button.querySelector(".diff-resolve-label-long");
-            const shortEl = button.querySelector(".diff-resolve-label-short");
-            const setLabel = function (text, shortText) {
-              if (longEl && shortEl) {
-                longEl.textContent = text;
-                shortEl.textContent = shortText || text;
-              } else if (labelEl) labelEl.textContent = text;
+            const setLabel = function (text) {
+              if (labelEl) labelEl.textContent = text;
               else button.textContent = text;
             };
-            const originalLabel = longEl ? longEl.textContent
-              : (labelEl ? labelEl.textContent : button.textContent);
-            const originalShort = shortEl ? shortEl.textContent : "";
+            const originalLabel = labelEl ? labelEl.textContent : button.textContent;
             button.disabled = true;
             button.classList.add("is-loading");
-            setLabel("Asking the models…", "Asking…");
+            setLabel("Asking the models…");
             window.trackUmamiEvent?.("app_resolve_started", { positions: diff.positions.length });
 
             try {
@@ -775,7 +815,7 @@
                   // zurücksetzen und das Pro-Modal zeigen.
                   button.disabled = false;
                   button.classList.remove("is-loading");
-                  setLabel(originalLabel, originalShort);
+                  setLabel(originalLabel);
                   showResolveProTeaser();
                   return;
                 }
@@ -791,13 +831,10 @@
               }
 
               renderResolveResult(resultBox, data);
-              const wrap = button.closest(".diff-resolve");
-              const hint = wrap ? wrap.querySelector(".diff-resolve-hint") : null;
               // Ladezustand beenden und Button entfernen (das [hidden] greift
               // erst durch die zugehoerige CSS-Regel, siehe Stylesheet).
               button.classList.remove("is-loading");
               button.hidden = true;
-              if (hint) hint.hidden = true;
               // Ergebnis am Widerspruch merken und Karte kennzeichnen; über
               // das Bookmark persistieren, damit es beim Wiederöffnen bleibt.
               // Prompt-Feld vor der Persistenz strippen: Bookmarks/Shares
@@ -823,13 +860,13 @@
               resultBox.hidden = false;
               button.disabled = false;
               button.classList.remove("is-loading");
-              setLabel(originalLabel, originalShort);
+              setLabel(originalLabel);
               window.trackUmamiEvent?.("app_resolve_completed", { outcome: "request_error" });
             }
           }
 
           const RESOLVE_BTN_ICON =
-            '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" '
+            '<svg class="diff-resolve-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" '
             + 'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'
             + '<path d="M2 5h9M11 5 8.8 2.8M11 5 8.8 7.2"/>'
             + '<path d="M14 11H5M5 11l2.2-2.2M5 11l2.2 2.2"/></svg>';
@@ -861,17 +898,14 @@
             const btn = document.createElement("button");
             btn.type = "button";
             btn.className = "diff-resolve-btn";
-            // Lang- und Kurz-Label: in schmalen Differences-Spalten blendet
-            // eine Container-Query (components-consensus-insights.css) auf die
-            // Kurzform um, damit der Button einzeilig bleibt.
-            btn.innerHTML = RESOLVE_BTN_ICON
-              + '<span class="diff-resolve-btn-label">'
-              + '<span class="diff-resolve-label-long">Resolve with the models</span>'
-              + '<span class="diff-resolve-label-short">Resolve</span>'
-              + '</span>';
+            btn.insertAdjacentHTML("afterbegin", RESOLVE_BTN_ICON);
+            const label = document.createElement("span");
+            label.className = "diff-resolve-btn-label";
+            label.textContent = "Resolve with the models";
+            btn.appendChild(label);
             btn.title = "Ask the disagreeing models to re-examine this point against each other's position (uses 1 request)";
             // Pro-Chip immer zeigen: Free-Nutzer sehen den Teaser (Klick öffnet
-            // das Upgrade-Modal), Pro-Nutzer eine dezente Kennzeichnung.
+            // das Upgrade-Modal), Pro-Nutzer die gleiche klare Kennzeichnung.
             const chip = document.createElement("span");
             chip.className = "pro-badge diff-resolve-pro-chip";
             chip.textContent = "Pro";
@@ -879,13 +913,7 @@
             if (!window.isUserPro) {
               btn.classList.add("is-pro-locked");
               btn.title = "Resolve rounds are a Pro feature";
-            } else {
-              chip.classList.add("is-subtle");
             }
-
-            const hint = document.createElement("div");
-            hint.className = "diff-resolve-hint";
-            hint.textContent = "The disagreeing models re-examine this point against each other's answer.";
 
             btn.addEventListener("click", function () {
               if (!window.isUserPro) {
@@ -894,7 +922,7 @@
               }
               runResolveRound(diff, btn, resultBox);
             });
-            wrap.append(btn, hint, resultBox);
+            wrap.append(btn, resultBox);
             return wrap;
           }
 
@@ -906,8 +934,14 @@
             cards.innerHTML = "";
 
             if (!differences.length) {
+              // Flacher Empty-State: grüner Punkt + zwei Textzeilen statt Box.
               const empty = document.createElement("div");
               empty.className = "diff-empty-state";
+              const dot = document.createElement("span");
+              dot.className = "sev-dot is-ok";
+              dot.setAttribute("aria-hidden", "true");
+              const textWrap = document.createElement("div");
+              textWrap.className = "diff-empty-text";
               const headline = document.createElement("div");
               headline.className = "diff-empty-headline";
               headline.textContent = "No substantive contradictions found across the "
@@ -915,7 +949,8 @@
               const note = document.createElement("div");
               note.className = "diff-empty-note";
               note.textContent = "Agreement is a good signal, but not a guarantee of correctness.";
-              empty.append(headline, note);
+              textWrap.append(headline, note);
+              empty.append(dot, textWrap);
               cards.appendChild(empty);
             } else {
               differences.forEach(function (diff) {
@@ -927,6 +962,14 @@
 
                 const summary = document.createElement("summary");
                 summary.className = "diff-card-summary";
+                // Severity-Punkt: trägt die Farbe, das Label bleibt dezenter Text.
+                const sevDot = document.createElement("span");
+                let dotCls = "is-info";
+                if (diff.type === "contradiction") {
+                  dotCls = diff.severity === "major" ? "is-crit" : "is-warn";
+                }
+                sevDot.className = "sev-dot " + dotCls;
+                sevDot.setAttribute("aria-hidden", "true");
                 const typeTag = document.createElement("span");
                 typeTag.className = "diff-type-tag";
                 // Ohne Severity (alte Bookmarks/Snapshots) bleibt das neutrale Label.
@@ -937,10 +980,11 @@
                   else if (diff.severity === "minor") tagLabel = "Contradiction · minor detail";
                 }
                 typeTag.textContent = tagLabel;
-                // Tag-Zeile: nimmt neben dem Typ-Tag auch den Resolved-Chip auf.
+                // Kopfzeile: Punkt + Label; nimmt nach dem Resolve auch den
+                // rechtsbündigen Status-Text auf.
                 const tagRow = document.createElement("span");
                 tagRow.className = "diff-card-tags";
-                tagRow.appendChild(typeTag);
+                tagRow.append(sevDot, typeTag);
                 const claimEl = document.createElement("span");
                 claimEl.className = "diff-card-claim";
                 claimEl.textContent = diff.claim;
@@ -949,15 +993,15 @@
 
                 const body = document.createElement("div");
                 body.className = "diff-card-body";
-                diff.positions.forEach(function (pos, index) {
+                diff.positions.forEach(function (pos) {
                   const posEl = document.createElement("div");
                   posEl.className = "diff-position";
 
+                  // Modellnamen als kompakte Kopfzeile der Position statt
+                  // "Position A (2 models: …)".
                   const label = document.createElement("div");
                   label.className = "diff-position-label";
-                  const names = pos.models.map(modelDisplayName).join(", ");
-                  label.textContent = "Position " + String.fromCharCode(65 + index) + " ("
-                    + (pos.models.length === 1 ? names : pos.models.length + " models: " + names) + ")";
+                  label.textContent = pos.models.map(modelDisplayName).join(", ");
                   posEl.appendChild(label);
 
                   if (pos.stance) {
@@ -973,14 +1017,16 @@
                     posEl.appendChild(quote);
                   }
 
+                  // Schlichte Textlinks (Modellname) statt Pill-Buttons.
                   const links = document.createElement("div");
                   links.className = "diff-position-links";
                   pos.models.forEach(function (model) {
                     if (!MODEL_BOX_IDS[model]) return;
                     const jump = document.createElement("button");
                     jump.type = "button";
-                    jump.className = "claim-jump-link";
-                    jump.textContent = "Jump to " + modelDisplayName(model);
+                    jump.className = "diff-jump-link";
+                    jump.textContent = modelDisplayName(model);
+                    jump.title = "Jump to the full answer from " + modelDisplayName(model);
                     jump.addEventListener("click", function () { jumpToModelAnswer(model, pos.quote); });
                     links.appendChild(jump);
                   });
@@ -991,7 +1037,9 @@
                 if (diff.verify) {
                   const verify = document.createElement("div");
                   verify.className = "diff-verify";
-                  verify.textContent = "Worth verifying: " + diff.verify;
+                  const lead = document.createElement("b");
+                  lead.textContent = "Worth verifying: ";
+                  verify.append(lead, document.createTextNode(diff.verify));
                   body.appendChild(verify);
                 }
                 const resolveSection = buildResolveSection(diff);
@@ -1083,7 +1131,7 @@
           const diff = box.querySelector(".consensus-differences");
           if (!main || !diff || typeof ResizeObserver === "undefined") return;
 
-          const MIN_DIFF = 0.18; // Differences nie schmaler als ~18 %
+          const MIN_DIFF = 0.24; // Differences nie schmaler als ~24 % (Redesign 2026-07: breitere Spalte)
           const MAX_DIFF = 0.5;  // ...und nie breiter als die Antwortspalte
           let appliedFrac = null;
           let prevAppliedFrac = null;

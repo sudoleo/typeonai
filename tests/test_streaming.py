@@ -241,10 +241,11 @@ class ConsensusRetryTests(unittest.TestCase):
         def fake_engine(consensus_model, api_keys, prompt):
             calls.append(1)
             if len(calls) == 1:
-                yield "partial "
+                yield {"type": "delta", "text": "partial "}
                 raise RuntimeError("503 - UNAVAILABLE")
-            yield "Recovered "
-            yield "answer."
+            yield {"type": "reasoning"}
+            yield {"type": "delta", "text": "Recovered "}
+            yield {"type": "delta", "text": "answer."}
 
         events, call_count = self._run(fake_engine)
         self.assertEqual(call_count, 2)

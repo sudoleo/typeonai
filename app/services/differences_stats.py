@@ -20,16 +20,20 @@ Metadaten-Vollständigkeit: schema_version + engine-/modellbezogene Felder sind
 Pflicht, damit alte Datensätze bei späteren Analysen nicht entwertet werden.
 Schema-Änderungen => schema_version erhöhen und hier dokumentieren.
 
-Schema v2 (ein Dokument pro Consensus-Lauf mit Differences-Ergebnis).
-Änderung gegenüber v1 (2026-07-09): + `judges` — Metadaten des
-Differences-Judges (und künftig Adjudicators), seit die Judge-Familie immer
-eine andere ist als die der Consensus-Engine. Nur Provider-/Modell-Metadaten,
-keine Texte.
-  schema_version        int    (2)
+Schema v3 (ein Dokument pro Consensus-Lauf mit Differences-Ergebnis).
+Änderung gegenüber v2 (2026-07-10): judges-Einträge tragen zusätzlich
+`attempts` (Nummer des erfolgreichen Judge-Versuchs, 1 = kein Retry) und
+`duration_ms` (Dauer nur dieses Versuchs) — Latenz-Transparenz für die
+Judge-Kaskade, weiterhin reine Zahlen/Metadaten.
+v2 (2026-07-09): + `judges` — Metadaten des Differences-Judges (und künftig
+Adjudicators), seit die Judge-Familie immer eine andere ist als die der
+Consensus-Engine. Nur Provider-/Modell-Metadaten, keine Texte.
+  schema_version        int    (3)
   created_at            server timestamp
   consensus_model       str    Engine-Key des Consensus-/Judge-Aufrufs
-  judges                {differences: {provider, model, tier},
-                         adjudicator?: {provider, model, tier}}
+  judges                {differences: {provider, model, tier,
+                                       attempts, duration_ms},
+                         adjudicator?: {provider, model, tier, ...}}
                          tatsächlich genutzter Judge (nach Fallbacks)
   models_compared       [str]  Provider-Labels (OpenAI, Mistral, ...)
   model_count           int
@@ -58,7 +62,7 @@ from firebase_admin import firestore
 from app.core.security import db_firestore
 from app.services.share_snapshots import sanitize_model_labels
 
-DIFFERENCES_STATS_SCHEMA_VERSION = 2
+DIFFERENCES_STATS_SCHEMA_VERSION = 3
 DIFFERENCES_STATS_COLLECTION = "differences_stats"
 
 
@@ -115,19 +119,27 @@ def build_differences_stats_doc(
     if not isinstance(agreement, dict):
         agreement = {}
 
-    # Judge-Metadaten (v2): welcher Provider/welches Modell die Analyse
-    # tatsächlich geliefert hat — nur Metadaten, niemals Texte.
+    # Judge-Metadaten (v2, erweitert in v3 um Attempt-/Latenz-Zahlen):
+    # welcher Provider/welches Modell die Analyse tatsächlich geliefert hat —
+    # nur Metadaten/Zahlen, niemals Texte.
     judges = {}
     raw_judges = differences_data.get("judges")
     if isinstance(raw_judges, dict):
         for role in ("differences", "adjudicator"):
             entry = raw_judges.get(role)
             if isinstance(entry, dict) and entry.get("provider"):
-                judges[role] = {
+                judge_doc = {
                     "provider": str(entry.get("provider") or "")[:40],
                     "model": str(entry.get("model") or "")[:80],
                     "tier": str(entry.get("tier") or "")[:20],
                 }
+                for numeric_key in ("attempts", "duration_ms"):
+                    try:
+                        value = int(entry.get(numeric_key))
+                    except (TypeError, ValueError):
+                        continue
+                    judge_doc[numeric_key] = value
+                judges[role] = judge_doc
 
     return {
         "schema_version": DIFFERENCES_STATS_SCHEMA_VERSION,

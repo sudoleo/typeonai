@@ -466,14 +466,39 @@
     });
 
     try {
+      // Reasoning-Marker ({reasoning:true} auf consensus.delta/differences.delta)
+      // flippen das Spinner-Label, solange noch kein Text streamt: sichtbar
+      // machen, dass die Engine bzw. der Differences-Judge gerade denkt.
+      function flipThinkingLabel(el, text) {
+        const label = el && el.querySelector(".thinking.consensus-thinking");
+        if (!label || label.textContent === text) return;
+        label.textContent = text;
+      }
+      const consensusMainEl = consensusDiv.querySelector(".consensus-main p");
       const consensusMainRenderer = createStreamRenderer(
-        consensusDiv.querySelector(".consensus-main p"),
+        consensusMainEl,
         () => isActiveConsensusRun(consensusRunId)
       );
+      // Der Konsens-Spinner nutzt .consensus-thinking statt .typing-indicator,
+      // daher das generische markReasoning des Renderers ersetzen.
+      consensusMainRenderer.markReasoning = () => {
+        if (!isActiveConsensusRun(consensusRunId)) return;
+        if (consensusMainEl.classList.contains("is-streaming")) return;
+        flipThinkingLabel(consensusMainEl, "Reasoning");
+      };
       // Differences-Deltas werden nicht mehr live gerendert: die Engine
       // liefert JSON, das erst mit dem final-Event als strukturierte UI
       // (Verdict, Badges, Karten) dargestellt wird. Der Spinner bleibt
-      // bis dahin stehen.
+      // bis dahin stehen; Reasoning-Marker flippen nur sein Label.
+      const differencesEl = consensusDiv.querySelector(".consensus-differences p");
+      const differencesPhaseRenderer = {
+        append() {},
+        markReasoning() {
+          if (!isActiveConsensusRun(consensusRunId)) return;
+          flipThinkingLabel(differencesEl, "Reasoning");
+        },
+        stop() {}
+      };
       const consensusRequestResult = await streamSSERequest("/consensus", {
           id_token: id_token,
           useOwnKeys: useOwnKeys,
@@ -496,7 +521,8 @@
           grok_key: grokKey,
           keepalive: true
         }, consensusSignal, {
-          "consensus.delta": consensusMainRenderer
+          "consensus.delta": consensusMainRenderer,
+          "differences.delta": differencesPhaseRenderer
         });
       const data = consensusRequestResult.data;
       const consensusErrorDetail =

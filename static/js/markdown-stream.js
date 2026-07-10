@@ -154,7 +154,14 @@ async function streamSSERequest(url, payload, signal, deltaRenderers) {
         return;
       }
       const renderer = renderers[eventName];
-      if (renderer && data && data.text) renderer.append(data.text);
+      if (!renderer || !data) return;
+      if (data.text) {
+        renderer.append(data.text);
+      } else if (data.reasoning && renderer.markReasoning) {
+        // Reasoning-Marker auf einem benannten Event (z. B. consensus.delta):
+        // nur den zugehörigen Renderer markieren, nicht alle.
+        renderer.markReasoning();
+      }
     });
 
     if (!finalData) {

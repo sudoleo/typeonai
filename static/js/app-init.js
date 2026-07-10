@@ -260,6 +260,14 @@
           const deepSearchActive = !!deepSearchToggle && deepSearchToggle.checked;
 
           const deepthinkDisclaimer = document.getElementById("deepthinkDisclaimer");
+          const inputIndicator = document.getElementById("deepThinkInputIndicator");
+
+          // Keep the active mode visible in the lower action row after the (+)
+          // menu closes. The checkbox remains the single source of truth,
+          // including programmatic tier resets.
+          if (inputIndicator) {
+            inputIndicator.hidden = !deepSearchActive;
+          }
 
           // -------------------------
           // Suppress the inline Deep Think explainer next to the controls.

@@ -761,7 +761,9 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 }
 
 .consensus-main {
-  flex: 4;
+  /* Redesign 2026-07: breitere Differences-Spalte (~1/3) als Ausgangswert;
+     der Spalten-Balancer (consensus-insights.js) feinjustiert zur Laufzeit. */
+  flex: 2.2;
   background: none;
   padding: 10px 16px 12px;
   min-height: 92px;
@@ -779,7 +781,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   flex: 1;
   background: none;
   /* dezenter vertikaler Trenner zwischen Antwort und Unterschieden */
-  padding: 10px 16px 12px 24px;
+  padding: 10px 16px 12px 28px;
   min-height: 92px;
   border-radius: var(--radius-md);
   border: 1px solid transparent;

@@ -6,7 +6,7 @@
    Buttons & Inputs
    -------------------------------------------------------------------------- */
 .button,
-button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(.sidebar-toggle-btn):not(#clearButton):not(#consensusButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.consensus-share-pill):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle):not(.model-picker-display):not(.model-picker-option):not(.mode-explainer-trigger):not(.mode-explainer-dismiss):not(.attach-trigger):not(.attach-menu-item):not(.attachment-chip-remove):not(.attachment-viewer-close):not(.claim-badge):not(.claim-jump-link):not(.claim-popover-close):not(.diff-resolve-btn):not(.resolve-model-toggle):not(.resolve-prompt-toggle):not(.agent-mode-collapse-btn):not(.response-code-copy):not(.followup-offer-btn):not(.followup-chip-remove):not(.exclude-btn):not(.delete-bookmark):not(#editSystemPromptBtn) {
+button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(.sidebar-toggle-btn):not(#clearButton):not(#consensusButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.consensus-share-pill):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle):not(.model-picker-display):not(.model-picker-option):not(.mode-explainer-trigger):not(.mode-explainer-dismiss):not(.attach-trigger):not(.attach-menu-item):not(.attachment-chip-remove):not(.attachment-viewer-close):not(.claim-badge):not(.claim-jump-link):not(.diff-jump-link):not(.claim-popover-close):not(.diff-resolve-btn):not(.resolve-model-toggle):not(.resolve-prompt-toggle):not(.agent-mode-collapse-btn):not(.response-code-copy):not(.followup-offer-btn):not(.followup-chip-remove):not(.exclude-btn):not(.delete-bookmark):not(#editSystemPromptBtn) {
   padding: 10px 16px;
   font-size: 1em;
   background:
@@ -156,6 +156,45 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Aktiver Deep-Think-Modus: ruhiger Status-Chip in der unteren Action-Zeile,
+   direkt neben dem Consensus-Picker. Alle Farben verwenden Theme-Tokens. */
+.deep-think-input-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 9px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 72%, var(--chip-border));
+  border-radius: var(--radius-pill);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 30%, transparent), transparent 65%),
+    color-mix(in srgb, var(--glass-bg-strong) 62%, transparent);
+  color: color-mix(in srgb, var(--sidebar-text-muted) 78%, var(--text-color));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 44%, transparent);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.deep-think-input-indicator[hidden] {
+  display: none;
+}
+
+.deep-think-input-status-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2ebd6f;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #2ebd6f 16%, transparent);
 }
 
 .input-actions-container button {
@@ -416,6 +455,17 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  text-align: left;
+}
+
+.deep-switch-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  align-self: stretch;
+  gap: 6px;
 }
 
 .attach-menu-toggle-text .deep-switch-label {

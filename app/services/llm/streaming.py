@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import queue
+import threading
 import time
 from typing import Any, Dict, Generator, Iterator, Optional, Tuple
 from urllib.parse import quote
@@ -45,6 +47,48 @@ SSE_HEADERS = {
 
 def sse_pack(event: str, data: Dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+SSE_KEEPALIVE_INTERVAL_SECONDS = 15.0
+
+
+def iter_sse_with_keepalive(source, interval_seconds: float = SSE_KEEPALIVE_INTERVAL_SECONDS):
+    """Reicht einen SSE-Event-Generator durch und schiebt einen SSE-Kommentar
+    (": keepalive") ein, wenn `interval_seconds` lang kein Event kam.
+
+    Hintergrund: Während ein Reasoning-Judge denkt, fließen u. U. minutenlang
+    keine Bytes; Proxies wie Cloudflare trennen idle Verbindungen nach
+    ~100 s — das final-Event ginge verloren und der Spinner bliebe für immer
+    stehen. Kommentarzeilen sind laut SSE-Spec zu ignorieren; das Frontend
+    (readSSEStream) überspringt Events ohne data:-Zeilen ohnehin.
+
+    Der Quellgenerator läuft dafür in einem Thread; nach einem
+    Client-Disconnect läuft er als Daemon-Thread leer, statt hart abgebrochen
+    zu werden (unkritisch: ein Lauf endet spätestens mit dem final-Event)."""
+    events: queue.Queue = queue.Queue()
+    _done = object()
+
+    def _pump():
+        try:
+            for item in source:
+                events.put(item)
+            events.put(_done)
+        except BaseException as exc:  # noqa: BLE001 — Fehler im Stream weiterreichen
+            events.put(exc)
+
+    threading.Thread(target=_pump, daemon=True, name="sse-keepalive-pump").start()
+
+    while True:
+        try:
+            item = events.get(timeout=interval_seconds)
+        except queue.Empty:
+            yield ": keepalive\n\n"
+            continue
+        if item is _done:
+            return
+        if isinstance(item, BaseException):
+            raise item
+        yield item
 
 
 def iter_sse_events(response: requests.Response) -> Iterator[Tuple[Optional[str], str]]:
@@ -570,7 +614,11 @@ def stream_mistral_query(
 
 
 # ---------------------------------------------------------------------------
-# Reine Text-Streams für die Consensus-/Differences-Engines.
+# Event-Streams für die Consensus-/Differences-Engines: liefern
+# {"type": "delta", "text": ...} für Antworttext und {"type": "reasoning"}
+# als Fortschrittsmarker, solange ein Reasoning-Modell noch denkt. Die Marker
+# halten die SSE-Verbindung nach außen aktiv (Cloudflare-Idle-Timeout) und
+# speisen den "Reasoning"-Indikator im Frontend.
 # ---------------------------------------------------------------------------
 
 def stream_chat_completion_text(
@@ -583,13 +631,16 @@ def stream_chat_completion_text(
     token_param: str = "max_tokens",
     temperature: Optional[float] = None,
     response_format: Optional[dict] = None,
-) -> Iterator[str]:
+    reasoning_effort: Optional[str] = None,
+) -> Iterator[StreamEvent]:
     client = openai.OpenAI(api_key=api_key, base_url=base_url) if base_url else openai.OpenAI(api_key=api_key)
     kwargs = {"model": model, "messages": messages, "stream": True, token_param: max_tokens}
     if temperature is not None:
         kwargs["temperature"] = temperature
     if response_format is not None:
         kwargs["response_format"] = response_format
+    if reasoning_effort is not None:
+        kwargs["reasoning_effort"] = reasoning_effort
     for chunk in client.chat.completions.create(**kwargs):
         choices = getattr(chunk, "choices", None) or []
         if not choices:
@@ -597,7 +648,10 @@ def stream_chat_completion_text(
         delta = getattr(choices[0], "delta", None)
         text = getattr(delta, "content", None) if delta else None
         if text:
-            yield text
+            yield {"type": "delta", "text": text}
+        elif delta is not None and getattr(delta, "reasoning_content", None):
+            # DeepSeek-Reasoning streamt den Denkprozess als reasoning_content.
+            yield {"type": "reasoning"}
 
 
 def stream_mistral_chat_text(
@@ -608,14 +662,15 @@ def stream_mistral_chat_text(
     max_tokens: int,
     temperature: Optional[float] = None,
     response_format: Optional[dict] = None,
-) -> Iterator[str]:
+    reasoning_effort: Optional[str] = None,
+) -> Iterator[StreamEvent]:
     payload = {"model": model, "messages": messages, "max_tokens": max_tokens, "stream": True}
     if temperature is not None:
         payload["temperature"] = temperature
     if response_format is not None:
         payload["response_format"] = response_format
     if model in cfg.MISTRAL_REASONING_MODELS:
-        payload["reasoning_effort"] = "high"
+        payload["reasoning_effort"] = reasoning_effort or "high"
     resp = requests.post(
         "https://api.mistral.ai/v1/chat/completions",
         json=payload,
@@ -636,14 +691,16 @@ def stream_mistral_chat_text(
         # content kann ein String oder eine Liste von Content-Chunks sein
         if isinstance(content, str):
             if content:
-                yield content
+                yield {"type": "delta", "text": content}
         elif isinstance(content, list):
             for chunk in content:
                 if isinstance(chunk, str):
                     if chunk:
-                        yield chunk
+                        yield {"type": "delta", "text": chunk}
                 elif isinstance(chunk, dict) and chunk.get("type") == "text" and chunk.get("text"):
-                    yield chunk["text"]
+                    yield {"type": "delta", "text": chunk["text"]}
+                elif isinstance(chunk, dict) and chunk.get("type") == "thinking":
+                    yield {"type": "reasoning"}
 
 
 def stream_anthropic_text(
@@ -655,7 +712,7 @@ def stream_anthropic_text(
     max_tokens: int,
     temperature: Optional[float] = None,
     assistant_prefill: Optional[str] = None,
-) -> Iterator[str]:
+) -> Iterator[StreamEvent]:
     payload = {
         "model": model,
         "max_tokens": max_tokens,
@@ -668,25 +725,29 @@ def stream_anthropic_text(
         # Prefill erzwingt den Antwortanfang (z. B. "{" für JSON-Ausgaben);
         # der Prefill gehört zum Ergebnistext und wird daher mit ausgegeben.
         payload["messages"].append({"role": "assistant", "content": assistant_prefill})
-        yield assistant_prefill
+        yield {"type": "delta", "text": assistant_prefill}
     for item in _stream_anthropic_messages(api_key=api_key, payload=payload):
         if item.get("type") == "delta":
-            yield item["text"]
+            yield {"type": "delta", "text": item["text"]}
+        elif item.get("type") == "reasoning":
+            yield {"type": "reasoning"}
 
 
-def stream_gemini_payload_text(*, api_model: str, payload: dict, api_key: Optional[str]) -> Iterator[str]:
+def stream_gemini_payload_text(*, api_model: str, payload: dict, api_key: Optional[str]) -> Iterator[StreamEvent]:
     """Streamt einen fertig gebauten Gemini-Payload (Consensus-/Differences-Engine).
 
-    Liefert nur Text-Deltas; ein leerer Stream mit Fehler-Result (Safety-Block,
-    max_tokens ohne Text) schlägt als RuntimeError nach außen, damit die
-    Retry-Logik der Aufrufer greift."""
+    Thought-Parts werden als Reasoning-Marker gemeldet; ein leerer Stream mit
+    Fehler-Result (Safety-Block, max_tokens ohne Text) schlägt als
+    RuntimeError nach außen, damit die Retry-Logik der Aufrufer greift."""
     key = (api_key or "").strip() or None
     got_delta = False
     final_result = None
     for item in _stream_gemini_generate(model_name=api_model, payload=payload, api_key=key):
         if item.get("type") == "delta":
             got_delta = True
-            yield item["text"]
+            yield {"type": "delta", "text": item["text"]}
+        elif item.get("type") == "reasoning":
+            yield {"type": "reasoning"}
         else:
             final_result = item.get("result")
     if not got_delta:

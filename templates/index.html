@@ -54,7 +54,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260709-judge1">
+  <link rel="stylesheet" href="/static/style.css?v=20260711-differences4">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -71,7 +71,7 @@
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
   <script src="/static/js/model-picker.js?v=20260707-fixes1" defer></script>
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
-  <script src="/static/js/markdown-stream.js?v=20260706-reasoning1" defer></script>
+  <script src="/static/js/markdown-stream.js?v=20260710-judgespeed1" defer></script>
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
   <script src="/static/js/sources.js?v=20260626-extract1" defer></script>
   <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
@@ -87,8 +87,8 @@
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260706-followup1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-insights.js?v=20260709-judge1" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260707-fixes1" defer></script>
+  <script src="/static/js/consensus-insights.js?v=20260711-differences4" defer></script>
+  <script src="/static/js/consensus-run.js?v=20260710-judgespeed1" defer></script>
   <script src="/static/js/query-send.js?v=20260709-deepseek-empty" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
@@ -294,9 +294,12 @@
               <span class="attach-menu-toggle-sub">Stronger reasoning models for harder questions.</span>
               <span id="deepthinkDisclaimer" class="deepthink-disclaimer" style="display: none;"></span>
             </span>
-            <span class="switch deep-switch attach-menu-switch">
-              <input type="checkbox" id="deepSearchToggle">
-              <span class="slider"></span>
+            <span class="deep-switch-actions">
+              <span class="pro-badge attach-pro-badge model-picker-pro-badge">Pro</span>
+              <span class="switch deep-switch attach-menu-switch">
+                <input type="checkbox" id="deepSearchToggle">
+                <span class="slider"></span>
+              </span>
             </span>
           </label>
         </div>
@@ -324,6 +327,10 @@
         </div>
         <!-- Actions bottom right -->
         <div class="input-actions-container">
+          <div id="deepThinkInputIndicator" class="deep-think-input-indicator" role="status" aria-live="polite" aria-label="Deep Think active" title="Deep Think active" hidden>
+            <span class="deep-think-input-status-dot" aria-hidden="true"></span>
+            <span class="deep-think-input-indicator-text">Deep <span class="deep-think-input-indicator-word">Think</span></span>
+          </div>
           <!-- Consensus-Modell-Auswahl direkt links neben den Aktionen -->
           <div class="consensus-model consensus-model-inline" title="Model that synthesises the final consensus">
             <span class="consensus-label">Consensus</span>
@@ -601,7 +608,7 @@
       </div>
     </div>
 
-    <script src="/static/js/app-init.js?v=20260707-fixes1" defer></script>
+    <script src="/static/js/app-init.js?v=20260710-deepthink2" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing

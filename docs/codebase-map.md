@@ -166,8 +166,11 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   `consensus_max_question_chars` — Kosten-/Abuse-Schutz, da die Texte vom
   Client kommen), prüft Engine-Keys, dann `stream_consensus` gefolgt von
   `stream_differences`. **SSE-Events**: `consensus.delta`, `differences.delta`
-  (nur Keep-Alive, Frontend rendert sie nicht), dann `final {consensus_response,
-  differences, differences_data, result_id?, …usage}`. `differences_data` ist
+  (Frontend rendert Differences-Deltas nicht), dann `final {consensus_response,
+  differences, differences_data, result_id?, …usage}`. Während Reasoning-Phasen
+  tragen die Delta-Events gedrosselt `{reasoning: true}`; ein SSE-Wrapper sendet
+  zusätzlich Kommentar-Keepalives, wenn eine Engine länger keine Bytes liefert.
+  `differences_data` ist
   strukturiertes JSON (Verdict, Karten, `best_model`, `models_compared`).
 - Robustheit Differences (`consensus_engine.py`): einheitlicher Engine-Dispatch
   (`_resolve_engine`/`_call_engine_text`/`_stream_engine_text`), Structured
@@ -180,7 +183,9 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   nächste Fremd-Familie (Pro fail-opent zuletzt auf einen Standard-Judge);
   ohne Fremd-Key fail-open auf den eigenen Standard-Judge. Der tatsächlich
   genutzte Judge steht als `differences_data.judges.differences`
-  ({provider, model, tier}) im Payload/Snapshot und in der Telemetrie;
+  ({provider, model, tier, attempts, duration_ms}) im Payload/Snapshot und in
+  der Telemetrie. Pro-Judges laufen mit niedriger Reasoning-Effort-Kappung;
+  die Consensus-Synthese selbst behält die volle Modell-Denktiefe.
   das Frontend zeigt ihn als Fußnote im Verdict-Header. Außerdem:
   JSON-Truncation-Repair, serverseitige Anchor-/Quote-Verifikation gegen
   Konsens- bzw. Modellantworten (nicht belegbare Zitate werden geleert).
@@ -319,10 +324,11 @@ Wichtige Verträge im Backend:
 - `benchmark_runs` — admin-only Benchmark-Dashboard-Snapshots aus lokalen Runs:
   `manifest`, `results`, `audits`, abgeleitete Fragenmatrix; **keine**
   `calls.jsonl`-Rohantworten, Prompts oder Request-Payloads.
-- `differences_stats` — anonyme Differences-Telemetrie: pro erfolgreichem
+- `differences_stats` — anonyme Differences-Telemetrie (Schema v3): pro erfolgreichem
   Consensus-Lauf ein Dokument mit Zähl-/Strukturdaten (Agreement-Score,
   Widersprüche mit Severity und beteiligten Providern, Modell-Metadaten,
   seit v2 `judges`-Metadaten des tatsächlich genutzten Differences-Judges,
+  seit v3 zusätzlich dessen erfolgreiche Attempt-Nummer und Versuchsdauer,
   `schema_version`) — **niemals** Frage-/Antwort-/Claim-Texte, Zitate, UID
   oder IP (anonym i. S. v. ErwGr. 26 DSGVO). Schema + Datenschutz-Regeln in
   `app/services/differences_stats.py`; geschrieben aus `chat.py::consensus`

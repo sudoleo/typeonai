@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import json
+import time
 import difflib
 import logging
 import random
@@ -77,13 +78,16 @@ def _gemini_engine_payload(
     max_tokens: int,
     temperature: float | None = None,
     json_mode: bool = False,
+    effort: str | None = None,
 ) -> tuple[str, dict]:
     """Baut den generateContent-Payload für Consensus-/Differences-Calls.
 
     Bewusst NICHT über build_provider_payload: dessen Gemini-Pfad kappt die
     Frage bei 12k Zeichen und hängt Chat-Instruktionen an — beides falsch für
     die langen Engine-Prompts. Frontier-Low-Mapping (interne ID -> api_model
-    + low_config) läuft über resolve_api_model."""
+    + low_config) läuft über resolve_api_model. effort ("low") kappt das
+    Thinking-Budget (thinkingLevel) — genutzt für Judge-Calls, deren Task
+    kein tiefes Denken braucht."""
     api_model, model_config = cfg.resolve_api_model(model_ref, GEMINI_FLASH_MODEL, "gemini")
     payload: dict = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
@@ -101,6 +105,8 @@ def _gemini_engine_payload(
         payload["generationConfig"]["responseMimeType"] = "application/json"
     if model_config and model_config.is_low_reasoning:
         _merge_nested_config(payload, model_config.low_config)
+    if effort:
+        _merge_nested_config(payload, {"generationConfig": {"thinkingConfig": {"thinkingLevel": effort}}})
     return api_model, payload
 
 
@@ -159,6 +165,7 @@ def _mistral_chat_complete(
     max_tokens: int,
     temperature: float | None = None,
     json_mode: bool = False,
+    reasoning_effort: str | None = None,
 ) -> str:
     payload = {
         "model": model,
@@ -170,7 +177,7 @@ def _mistral_chat_complete(
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
     if model in cfg.MISTRAL_REASONING_MODELS:
-        payload["reasoning_effort"] = "high"
+        payload["reasoning_effort"] = reasoning_effort or "high"
 
     response = requests.post(
         "https://api.mistral.ai/v1/chat/completions",
@@ -270,6 +277,7 @@ def _call_engine_text(
     max_tokens: int,
     temperature: float | None = None,
     json_mode: bool = False,
+    effort: str | None = None,
 ) -> str:
     if mock_llm_enabled():
         # E2E-Suite: deterministische Engine-Antwort; Prompt-Bau, Parsing,
@@ -296,6 +304,10 @@ def _call_engine_text(
             kwargs["temperature"] = temperature
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
+        if effort and provider == "openai" and token_param == "max_completion_tokens":
+            # Nur echte OpenAI-Reasoning-Modelle kennen reasoning_effort;
+            # DeepSeek/Grok (OpenAI-kompatibel) lehnen den Parameter ab.
+            kwargs["reasoning_effort"] = effort
         response = client.chat.completions.create(**kwargs)
         return (response.choices[0].message.content or "").strip()
 
@@ -310,6 +322,7 @@ def _call_engine_text(
             max_tokens=max_tokens,
             temperature=temperature,
             json_mode=json_mode,
+            reasoning_effort=effort,
         )
 
     if provider == "anthropic":
@@ -346,7 +359,7 @@ def _call_engine_text(
     if provider == "gemini":
         gemini_model, payload = _gemini_engine_payload(
             model_ref, system, prompt, max_tokens,
-            temperature=temperature, json_mode=json_mode,
+            temperature=temperature, json_mode=json_mode, effort=effort,
         )
         return _gemini_generate_content(gemini_model, payload, _gemini_engine_key(api_keys))
 
@@ -364,10 +377,16 @@ def _stream_engine_text(
     max_tokens: int,
     temperature: float | None = None,
     json_mode: bool = False,
+    effort: str | None = None,
 ):
+    """Streamt Engine-Events: {"type": "delta", "text": ...} für Antworttext
+    und {"type": "reasoning"} als Fortschrittsmarker, solange ein
+    Reasoning-Modell noch denkt (hält SSE-Verbindungen aktiv und speist den
+    "Reasoning"-Indikator im Frontend)."""
     if mock_llm_enabled():
         # E2E-Suite: siehe _call_engine_text.
-        yield from mock_engine_stream(prompt=prompt, json_mode=json_mode)
+        for text in mock_engine_stream(prompt=prompt, json_mode=json_mode):
+            yield {"type": "delta", "text": text}
         return
 
     from app.services.llm.streaming import (
@@ -382,6 +401,7 @@ def _stream_engine_text(
     response_format = {"type": "json_object"} if json_mode else None
 
     if provider in ("openai", "deepseek", "grok"):
+        token_param = _openai_token_param(api_model) if provider == "openai" else "max_tokens"
         yield from stream_chat_completion_text(
             api_key=api_keys.get(_PROVIDER_KEY_NAMES[provider]),
             base_url=_OPENAI_COMPAT_BASE_URLS.get(provider),
@@ -391,9 +411,11 @@ def _stream_engine_text(
                 {"role": "user", "content": prompt},
             ],
             max_tokens=max_tokens,
-            token_param=_openai_token_param(api_model) if provider == "openai" else "max_tokens",
+            token_param=token_param,
             temperature=temperature,
             response_format=response_format,
+            # Nur echte OpenAI-Reasoning-Modelle kennen reasoning_effort.
+            reasoning_effort=effort if (provider == "openai" and token_param == "max_completion_tokens") else None,
         )
     elif provider == "mistral":
         yield from stream_mistral_chat_text(
@@ -406,6 +428,7 @@ def _stream_engine_text(
             max_tokens=max_tokens,
             temperature=temperature,
             response_format=response_format,
+            reasoning_effort=effort,
         )
     elif provider == "anthropic":
         yield from stream_anthropic_text(
@@ -420,7 +443,7 @@ def _stream_engine_text(
     elif provider == "gemini":
         gemini_model, payload = _gemini_engine_payload(
             model_ref, system, prompt, max_tokens,
-            temperature=temperature, json_mode=json_mode,
+            temperature=temperature, json_mode=json_mode, effort=effort,
         )
         yield from stream_gemini_payload_text(
             api_model=gemini_model,
@@ -1392,17 +1415,31 @@ def _differences_attempts(differences_model: str, api_keys: dict):
     return attempts
 
 
-def _judge_metadata(provider: str, api_model: str, tier: str) -> dict:
+def _judge_metadata(provider: str, api_model: str, tier: str, attempts: int = 0, duration_ms: int = 0) -> dict:
     """Transparenz-Metadaten des Judges, der das Ergebnis TATSÄCHLICH geliefert
     hat (nach einem Fallback also nicht der geplante primäre Judge). Landet als
     differences_data["judges"]["differences"] im Payload, Snapshot und in der
     anonymen Telemetrie (nur Metadaten, keine Texte). Der Schlüssel
-    "adjudicator" ist für eine spätere Adjudicator-Runde reserviert."""
+    "adjudicator" ist für eine spätere Adjudicator-Runde reserviert.
+    attempts = Nummer des erfolgreichen Versuchs (1 = kein Retry nötig),
+    duration_ms = Dauer nur dieses Versuchs."""
     return {
         "provider": _PROVIDER_KEY_NAMES.get(provider, provider),
         "model": api_model,
         "tier": tier,
+        "attempts": int(attempts),
+        "duration_ms": int(duration_ms),
     }
+
+
+def _judge_effort(judge_tier: str) -> str | None:
+    """Thinking-Kappung für Judge-Calls: Der Judge-Task (Zitate verbatim
+    extrahieren und vergleichen) braucht kein tiefes Denken. Pro-Judges sind
+    Reasoning-Modelle, deren unbegrenztes Thinking den Differences-Schritt
+    minutenlang verzögert und das Token-Budget des JSON auffressen kann —
+    daher effort "low" (Gemini thinkingLevel, OpenAI/Mistral reasoning_effort).
+    Standard-Judges sind günstige, schnelle Modelle und bleiben unangetastet."""
+    return "low" if judge_tier == "pro" else None
 
 
 def query_differences(
@@ -1446,8 +1483,9 @@ def query_differences(
 
     prose_fallback = None
     last_error = "empty result from differences engine."
-    for (provider, api_model, model_ref), is_retry, judge_tier in attempts:
+    for attempt_no, ((provider, api_model, model_ref), is_retry, judge_tier) in enumerate(attempts, start=1):
         attempt_prompt = differences_prompt + (DIFFERENCES_RETRY_SUFFIX if is_retry else "")
+        attempt_started = time.monotonic()
         try:
             raw = _call_engine_text(
                 provider, api_model, model_ref, api_keys,
@@ -1456,11 +1494,16 @@ def query_differences(
                 max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
                 temperature=DIFFERENCES_TEMPERATURE,
                 json_mode=True,
+                effort=_judge_effort(judge_tier),
             )
         except Exception as e:
             last_error = str(e)
-            logging.warning(f"Differences attempt failed on {provider}/{api_model}: {e}")
+            logging.warning(
+                f"Differences attempt {attempt_no} failed on {provider}/{api_model} "
+                f"after {time.monotonic() - attempt_started:.1f}s: {e}"
+            )
             continue
+        duration_ms = int((time.monotonic() - attempt_started) * 1000)
         if not raw:
             last_error = "empty result from differences engine."
             continue
@@ -1471,12 +1514,18 @@ def query_differences(
             model_answers=answers_by_model,
         )
         if data is not None:
-            data["judges"] = {"differences": _judge_metadata(provider, api_model, judge_tier)}
+            data["judges"] = {"differences": _judge_metadata(
+                provider, api_model, judge_tier,
+                attempts=attempt_no, duration_ms=duration_ms,
+            )}
             return legacy_text, data
         if prose_fallback is None and legacy_text and not _looks_like_json(raw):
             prose_fallback = legacy_text
         last_error = "unparsable output from differences engine."
-        logging.warning(f"Differences output unparsable on {provider}/{api_model}")
+        logging.warning(
+            f"Differences output unparsable on {provider}/{api_model} "
+            f"(attempt {attempt_no}, {duration_ms} ms)"
+        )
 
     if prose_fallback:
         return prose_fallback, None
@@ -1494,6 +1543,8 @@ def _stream_consensus_engine(consensus_model: str, api_keys: dict, consensus_pro
     if resolved is None:
         raise _InvalidEngineError(f"Invalid consensus model selected: {consensus_model}")
     provider, api_model, model_ref = resolved
+    # Bewusst ohne effort-Kappung: die Consensus-Synthese ist das
+    # Kernprodukt, ein Pro-Modell darf hier voll denken.
     yield from _stream_engine_text(
         provider, api_model, model_ref, api_keys,
         system="",
@@ -1548,7 +1599,11 @@ def stream_consensus(
     for engine_model in engine_models:
         parts = []
         try:
-            for text in _stream_consensus_engine(engine_model, api_keys, consensus_prompt):
+            for event in _stream_consensus_engine(engine_model, api_keys, consensus_prompt):
+                if event.get("type") == "reasoning":
+                    yield {"type": "reasoning"}
+                    continue
+                text = event.get("text") or ""
                 parts.append(text)
                 yield {"type": "delta", "text": text}
         except _InvalidEngineError as e:
@@ -1603,27 +1658,39 @@ def stream_differences(
 
     prose_fallback = None
     last_error = "empty result from differences engine."
-    for (provider, api_model, model_ref), is_retry, judge_tier in attempts:
+    for attempt_no, ((provider, api_model, model_ref), is_retry, judge_tier) in enumerate(attempts, start=1):
         attempt_prompt = differences_prompt + (DIFFERENCES_RETRY_SUFFIX if is_retry else "")
+        attempt_started = time.monotonic()
         parts = []
         try:
-            for text in _stream_engine_text(
+            for event in _stream_engine_text(
                 provider, api_model, model_ref, api_keys,
                 system=DIFFERENCES_SYSTEM_PROMPT,
                 prompt=attempt_prompt,
                 max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
                 temperature=DIFFERENCES_TEMPERATURE,
                 json_mode=True,
+                effort=_judge_effort(judge_tier),
             ):
+                if event.get("type") == "reasoning":
+                    # Marker, solange der Judge noch denkt: hält die
+                    # SSE-Verbindung aktiv und speist den Frontend-Indikator.
+                    yield {"type": "reasoning"}
+                    continue
+                text = event.get("text") or ""
                 parts.append(text)
                 # Roh-JSON wird im Frontend nicht gerendert; die Deltas halten
                 # nur die SSE-Verbindung aktiv (auch während der Retries).
                 yield {"type": "delta", "text": text}
         except Exception as e:
             last_error = str(e)
-            logging.warning(f"Differences stream attempt failed on {provider}/{api_model}: {e}")
+            logging.warning(
+                f"Differences stream attempt {attempt_no} failed on {provider}/{api_model} "
+                f"after {time.monotonic() - attempt_started:.1f}s: {e}"
+            )
             continue
 
+        duration_ms = int((time.monotonic() - attempt_started) * 1000)
         raw = "".join(parts).strip()
         if not raw:
             last_error = "empty result from differences engine."
@@ -1635,13 +1702,19 @@ def stream_differences(
             model_answers=answers_by_model,
         )
         if data is not None:
-            data["judges"] = {"differences": _judge_metadata(provider, api_model, judge_tier)}
+            data["judges"] = {"differences": _judge_metadata(
+                provider, api_model, judge_tier,
+                attempts=attempt_no, duration_ms=duration_ms,
+            )}
             yield {"type": "final", "text": legacy_text, "data": data}
             return
         if prose_fallback is None and legacy_text and not _looks_like_json(raw):
             prose_fallback = legacy_text
         last_error = "unparsable output from differences engine."
-        logging.warning(f"Differences stream output unparsable on {provider}/{api_model}")
+        logging.warning(
+            f"Differences stream output unparsable on {provider}/{api_model} "
+            f"(attempt {attempt_no}, {duration_ms} ms)"
+        )
 
     if prose_fallback:
         yield {"type": "final", "text": prose_fallback, "data": None}
