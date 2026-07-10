@@ -253,11 +253,48 @@
         initModeExplainer();
 
         // deepThinkModelLabels stammt aus app-core.js (window.App), siehe Alias oben.
+        const DEEP_THINK_CONSENSUS_MODEL = "gemini-3.5-flash";
+        let consensusModelBeforeDeepThink = null;
+
+        function syncDeepThinkConsensusModel(isActive) {
+          const select = document.getElementById("consensusModelDropdown");
+          if (!select) return;
+
+          const target = Array.from(select.options).find(option =>
+            option.value === DEEP_THINK_CONSENSUS_MODEL
+            || getModelOptionLabel(option) === "Gemini 3.5 Flash"
+          );
+
+          if (isActive) {
+            if (!target || target.disabled || select.value === target.value) return;
+            if (consensusModelBeforeDeepThink === null) {
+              consensusModelBeforeDeepThink = select.value;
+            }
+            select.value = target.value;
+          } else {
+            const previousValue = consensusModelBeforeDeepThink;
+            consensusModelBeforeDeepThink = null;
+            if (!previousValue || !target || select.value !== target.value) return;
+            const previousOption = Array.from(select.options).find(option =>
+              option.value === previousValue && !option.disabled
+            );
+            if (!previousOption) return;
+            select.value = previousOption.value;
+          }
+
+          // Kein change-Event: die Deep-Think-Auswahl ist temporaer und darf
+          // pref_select_consensus nicht ueberschreiben. Der Custom-Picker muss
+          // den nativen Select-Wert trotzdem sofort spiegeln.
+          if (typeof window.syncCustomModelPickers === "function") {
+            window.syncCustomModelPickers();
+          }
+        }
 
         function updateDeepThinkText() {
           const deepSearchToggle = document.getElementById("deepSearchToggle");
 
           const deepSearchActive = !!deepSearchToggle && deepSearchToggle.checked;
+          syncDeepThinkConsensusModel(deepSearchActive);
 
           const deepthinkDisclaimer = document.getElementById("deepthinkDisclaimer");
           const inputIndicator = document.getElementById("deepThinkInputIndicator");

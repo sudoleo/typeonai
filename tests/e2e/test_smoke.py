@@ -150,6 +150,35 @@ def test_theme_toggle(app_page):
     )
 
 
+def test_deep_think_temporarily_selects_gemini_35_flash(app_page):
+    """Deep Think nutzt Gemini 3.5 Flash fuer die Synthese, ohne die zuvor
+    gespeicherte Consensus-Auswahl des Pro-Nutzers dauerhaft zu ersetzen."""
+    app_page.evaluate(
+        """() => {
+          window.isUserPro = true;
+          window.isUserEarly = true;
+          window.updatePremiumModelsState(true, true);
+          const select = document.getElementById("consensusModelDropdown");
+          select.value = "Grok";
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+        }"""
+    )
+    assert app_page.evaluate("() => localStorage.getItem('pref_select_consensus')") == "Grok"
+
+    app_page.evaluate("() => document.getElementById('deepSearchToggle').click()")
+    app_page.wait_for_function(
+        "() => document.getElementById('consensusModelDropdown').value === 'gemini-3.5-flash'",
+        timeout=5000,
+    )
+    assert app_page.evaluate("() => localStorage.getItem('pref_select_consensus')") == "Grok"
+
+    app_page.evaluate("() => document.getElementById('deepSearchToggle').click()")
+    app_page.wait_for_function(
+        "() => document.getElementById('consensusModelDropdown').value === 'Grok'",
+        timeout=5000,
+    )
+
+
 def test_model_selection_persists_across_reload(app_page):
     """Model-Picker-Persistenz: abgewaehltes Modell bleibt nach Reload
     abgewaehlt (localStorage pref_check_*)."""

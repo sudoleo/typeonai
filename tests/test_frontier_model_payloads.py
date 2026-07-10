@@ -241,6 +241,13 @@ class FrontierModelPayloadTests(unittest.TestCase):
         self.assertFalse(cfg.is_early_consensus_model("Gemini"))
         self.assertFalse(cfg.is_early_consensus_model("OpenAI-Pro"))
 
+    def test_deep_think_consensus_model_is_always_available_and_pro_gated(self):
+        self.assertIn(cfg.GEMINI_35_FLASH_MODEL, cfg.DEFAULT_CONSENSUS_MODELS)
+        self.assertIn(cfg.GEMINI_35_FLASH_MODEL, cfg.REQUIRED_PRO_MODELS)
+        self.assertTrue(cfg.is_premium_consensus_model(cfg.GEMINI_35_FLASH_MODEL))
+        normalized = cfg.normalize_consensus_models(["Grok"])
+        self.assertIn(cfg.GEMINI_35_FLASH_MODEL, normalized)
+
     def test_firestore_sync_keeps_frontier_models_allowed_and_not_premium(self):
         snapshots = {
             "openai": set(cfg.ALLOWED_OPENAI_MODELS),

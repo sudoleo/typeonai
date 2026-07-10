@@ -131,6 +131,7 @@ MODEL_ORDER_BY_PROVIDER: dict[str, list[str]] = {
 
 DEFAULT_CONSENSUS_MODELS = [
     GEMINI_FRONTIER_LOW_MODEL,
+    GEMINI_35_FLASH_MODEL,
     "Grok",
     "OpenAI",
     "Anthropic",
@@ -229,7 +230,7 @@ EARLY_AND_PRO_MODELS = {DEEPSEEK_PRO_MODEL}
 # Early-Modelle sind ab sofort tag-gated (nicht mehr gratis fuer alle): nur mit
 # Early-Tag (oder Pro, das Early einschliesst) auswaehlbar.
 EARLY_MODELS = FRONTIER_LOW_MODELS | EARLY_AND_PRO_MODELS
-REQUIRED_PRO_MODELS = {MISTRAL_PRO_MODEL, ANTHROPIC_PRO_MODEL}
+REQUIRED_PRO_MODELS = {MISTRAL_PRO_MODEL, ANTHROPIC_PRO_MODEL, GEMINI_35_FLASH_MODEL}
 DEPRECATED_DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner"}
 REQUIRED_DEEPSEEK_MODELS = {DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL}
 
@@ -241,6 +242,7 @@ def ensure_default_models_allowed():
     ALLOWED_ANTHROPIC_MODELS.add(DEFAULT_ANTHROPIC_MODEL)
     ALLOWED_ANTHROPIC_MODELS.add(ANTHROPIC_PRO_MODEL)
     ALLOWED_GEMINI_MODELS.add(DEFAULT_GEMINI_MODEL)
+    ALLOWED_GEMINI_MODELS.add(GEMINI_35_FLASH_MODEL)
     ALLOWED_DEEPSEEK_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
     ALLOWED_DEEPSEEK_MODELS.update(REQUIRED_DEEPSEEK_MODELS)
     ALLOWED_GROK_MODELS.add(DEFAULT_GROK_MODEL)
@@ -476,6 +478,11 @@ def normalize_consensus_models(models) -> list[str]:
             allowed.append(model)
     if GEMINI_FRONTIER_LOW_MODEL not in allowed:
         allowed.insert(0, GEMINI_FRONTIER_LOW_MODEL)
+    # Deep Think koppelt die Synthese fest an Gemini 3.5 Flash. Deshalb muss
+    # das Modell auch bei einer Admin-/Firestore-Liste ohne diesen Eintrag als
+    # Pro-Consensus-Option verfuegbar bleiben.
+    if GEMINI_35_FLASH_MODEL not in allowed:
+        allowed.append(GEMINI_35_FLASH_MODEL)
     return allowed
 
 

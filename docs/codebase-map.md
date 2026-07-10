@@ -160,6 +160,10 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
 - `getConsensus` (`consensus-run.js`) sammelt die vorhandenen Modellantworten +
   `excluded_models` + `consensus_model` und ruft **`POST /consensus`**
   (`stream:true`).
+- Deep Think wählt im Frontend temporär `Gemini 3.5 Flash` als Pro-Consensus-
+  Modell. Beim Ausschalten wird die vorherige Consensus-Auswahl wiederhergestellt,
+  ohne die gespeicherte Nutzerpräferenz zu überschreiben. Das Modell bleibt in
+  der serverseitig normalisierten Consensus-Liste verpflichtend verfügbar.
 - Backend (`chat.py::consensus` → `consensus_engine.py`): validiert (mind. **2**
   eingeschlossene Antworten), kappt Frage/Antworten serverseitig
   (`cap_engine_text`, Limits `consensus_max_answer_chars` /

@@ -4,7 +4,7 @@
 // Optionen je nach Pro/Free/ausgeloggt. In eigene IIFE gekapselt.
 // Extrahiert aus templates/index.html (initApp-Closure).
 // Exporte: window.updateUserTierUI, window.updatePremiumModelsState.
-// Abhaengigkeiten: window.setCurrentUsageLimits, window.restoreModelSelections,
+// Abhaengigkeiten: window.setCurrentUsageLimits (optional waehrend Init), window.restoreModelSelections,
 // window.syncCustomModelPickers, window.App.updateDeepThinkText,
 // window.App.applyTierDefaultModels, window.isUserPro / window.isUserEarly (State).
 // =====================================================================
@@ -37,7 +37,7 @@
       if (upgradeLink) upgradeLink.style.display = "none";
 
       // Optional: Standard-Limits (Free) oder ganz sperren
-      window.setCurrentUsageLimits(false);
+      window.setCurrentUsageLimits?.(false);
 
       if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false, false);
 
@@ -56,7 +56,7 @@
       if (upgradeLink) upgradeLink.style.display = "none";
 
       // Limits
-      window.setCurrentUsageLimits(true);
+      window.setCurrentUsageLimits?.(true);
 
       // Dropdowns entsperren (Pro schliesst Early ein)
       if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(true, true);
@@ -75,7 +75,7 @@
       if (upgradeLink) upgradeLink.style.display = "inline-block"; // Hier zeigen wir Upgrade
 
       // Limits
-      window.setCurrentUsageLimits(false);
+      window.setCurrentUsageLimits?.(false);
 
       // Dropdowns sperren (Early-Modelle nur mit Early-Tag)
       if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false, hasEarlyAccess);
