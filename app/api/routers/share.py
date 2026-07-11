@@ -50,12 +50,14 @@ def _build_watch_history_view(points):
     for index, point in enumerate(points):
         x = left + (plot_w * index / (count - 1) if count > 1 else plot_w / 2)
         y = top + plot_h * (100 - point["agreement_score"]) / 100
-        coords.append({**point, "x": round(x, 1), "y": round(y, 1)})
+        previous_score = points[index - 1]["agreement_score"] if index else None
+        score_event = previous_score is not None and abs(point["agreement_score"] - previous_score) >= 15
+        coords.append({**point, "x": round(x, 1), "y": round(y, 1), "score_event": score_event})
     path = " ".join(
         ("M" if index == 0 else "L") + f" {point['x']} {point['y']}"
         for index, point in enumerate(coords)
     )
-    events = [point for point in reversed(coords) if point["changed"] or point["change_summary"]]
+    events = [point for point in reversed(coords) if point["changed"] or point["score_event"]]
     return {
         "width": width,
         "height": height,

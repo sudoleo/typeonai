@@ -1015,7 +1015,8 @@ def list_watch_history(share_id, db=None, max_items=100):
     db = db if db is not None else db_firestore
     ref = db.collection(SHARES_COLLECTION).document(share_id).collection("watch_history")
     points = []
-    for doc in ref.stream():
+    docs = ref.order_by("ts", direction=firestore.Query.DESCENDING).limit(max_items).stream()
+    for doc in docs:
         data = doc.to_dict() or {}
         ts = data.get("ts")
         score = data.get("agreement_score")
@@ -1030,7 +1031,7 @@ def list_watch_history(share_id, db=None, max_items=100):
             "change_summary": _clip(data.get("change_summary"), 400),
         })
     points.sort(key=lambda item: item["ts"])
-    return points[-max_items:]
+    return points
 
 
 def public_share_payload(data):

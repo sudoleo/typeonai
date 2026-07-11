@@ -55,7 +55,12 @@ def _developer_keys() -> dict:
 def _selected_providers(keys: dict) -> list[str]:
     if mock_llm_enabled():
         return list(PROVIDER_ORDER[:3])
-    return [p for p in PROVIDER_ORDER if keys.get(PROVIDER_LABELS[p])][:3]
+    adc_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+    return [
+        provider for provider in PROVIDER_ORDER
+        if keys.get(PROVIDER_LABELS[provider])
+        or (provider == "gemini" and adc_path and os.path.isfile(adc_path))
+    ][:3]
 
 
 def _provider_answer(provider: str, question: str, keys: dict):
@@ -179,8 +184,13 @@ async def run_watch_tick() -> int:
             if not claimed:
                 continue
             try:
+                share = await asyncio.to_thread(share_snapshots.get_share, claimed["share_id"])
+                if not share or share.get("status") != "active":
+                    raise RuntimeError("Watch share is unavailable.")
+                claimed["question"] = share.get("question") or ""
+                claimed["share_slug"] = share.get("slug") or ""
                 result = await asyncio.to_thread(
-                    execute_watch, claimed.get("question") or "", claimed.get("last_consensus_text") or ""
+                    execute_watch, claimed["question"], share.get("consensus_md") or ""
                 )
                 await asyncio.to_thread(watch_service.complete_watch_run, watch_id, claimed, result, now=watch_service.utcnow())
             except Exception:

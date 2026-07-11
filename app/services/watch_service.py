@@ -52,16 +52,18 @@ def validate_interval(interval, is_pro: bool) -> str:
     return normalized
 
 
-def _serialize_watch(watch_id: str, data: dict) -> dict:
+def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> dict:
     def iso(value):
         return value.isoformat() if isinstance(value, datetime) else ""
 
     share_id = str(data.get("share_id") or "")
+    share = share or {}
+    slug = str(share.get("slug") or data.get("share_slug") or "")
     return {
         "id": watch_id,
         "share_id": share_id,
-        "share_path": share_snapshots.share_path(str(data.get("share_slug") or ""), share_id),
-        "question": str(data.get("question") or "")[:200],
+        "share_path": share_snapshots.share_path(slug, share_id),
+        "question": str(share.get("question") or data.get("question") or "")[:200],
         "interval": data.get("interval") or "weekly",
         "status": data.get("status") or "paused",
         "next_run_at": iso(data.get("next_run_at")),
@@ -117,8 +119,6 @@ def create_watch(uid: str, *, interval, is_pro: bool, result_id=None, share_id=N
     doc = {
         "owner_uid": uid,
         "share_id": share_id,
-        "share_slug": share.get("slug") or "",
-        "question": share.get("question") or "",
         "question_hash": share.get("question_hash") or share_snapshots.question_hash(share.get("question")),
         "interval": interval,
         "status": "active",
@@ -128,17 +128,18 @@ def create_watch(uid: str, *, interval, is_pro: bool, result_id=None, share_id=N
         "created_at": now,
         "last_run_at": None,
         "last_agreement_score": score if isinstance(score, (int, float)) else None,
-        # Nur der synthetisierte Konsens (keine Modellantworten) wird fuer den
-        # naechsten Change-Vergleich behalten.
-        "last_consensus_text": str(share.get("consensus_md") or "")[:100_000],
     }
     db.collection(WATCHES_COLLECTION).document(watch_id).set(doc)
-    return _serialize_watch(watch_id, doc)
+    return _serialize_watch(watch_id, doc, share)
 
 
 def list_watches(uid: str, db=None) -> list[dict]:
     db = db if db is not None else db_firestore
-    items = [_serialize_watch(doc.id, doc.to_dict() or {}) for doc in db.collection(WATCHES_COLLECTION).where("owner_uid", "==", uid).stream()]
+    items = []
+    for doc in db.collection(WATCHES_COLLECTION).where("owner_uid", "==", uid).stream():
+        data = doc.to_dict() or {}
+        share = share_snapshots.get_share(str(data.get("share_id") or ""), db=db) or {}
+        items.append(_serialize_watch(doc.id, data, share))
     items.sort(key=lambda item: item["created_at"], reverse=True)
     return items
 
@@ -175,7 +176,8 @@ def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) 
         updates.update(status=status, claimed_until=None)
     ref.update(updates)
     data.update(updates)
-    return _serialize_watch(watch_id, data)
+    share = share_snapshots.get_share(str(data.get("share_id") or ""), db=db) or {}
+    return _serialize_watch(watch_id, data, share)
 
 
 def delete_watch(uid: str, watch_id: str, db=None):
@@ -348,7 +350,6 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None, 
         "consecutive_failures": 0,
         "last_run_at": now,
         "last_agreement_score": history["agreement_score"],
-        "last_consensus_text": str(result.get("consensus") or "")[:100_000],
     }
     # History + Scheduler-Fortschritt atomar: ein Restart kann nie einen
     # sichtbaren Punkt ohne vorgeruecktes next_run_at hinterlassen.

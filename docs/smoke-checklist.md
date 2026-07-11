@@ -6,7 +6,7 @@ Modell-Ausschluss, Theme-Toggle und Picker-Persistenz ab (Lauf: siehe
 `tests/e2e/README.md`). Die übrigen Punkte weiterhin manuell durchgehen
 (oder zumindest die vom Cluster betroffenen), bevor committet wird. Backend
 bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
-(Baseline: 326 passed, Stand 2026-07-06).
+(Baseline: 402 passed, Stand 2026-07-11).
 
 ## Browser-Konsole
 - [ ] Beim Laden **keine** JS-Fehler in der Konsole (besonders: keine
