@@ -184,7 +184,9 @@ def is_user_admin(uid: str) -> bool:
     Liest (gecacht) aus Firestore, ob das Feld 'role' auf 'admin' steht.
     """
     if _mock_auth_enabled() and uid == E2E_MOCK_UID:
-        return False
+        # MOCK_ADMIN=1 (nur zusammen mit MOCK_AUTH wirksam) erlaubt E2E-Tests
+        # des Admin-Dashboards; ohne das Flag bleibt der Mock-User Non-Admin.
+        return os.environ.get("MOCK_ADMIN") == "1"
     return _get_tier_flags(uid)["admin"]
 
 def is_valid_session(token: str) -> bool:

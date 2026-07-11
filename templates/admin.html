@@ -15,160 +15,313 @@
         };
     </script>
     <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=20260711-demo-login1">
     <style>
-        .admin-container {
-            max-width: 1000px;
-            margin: 100px auto;
-            padding: 20px;
-            background: var(--bg-secondary);
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        /* Hinweis: der globale button:not(...)-Selektor in components-input.css
+           uebersteuert page-lokale Buttons; kompakte Admin-Buttons brauchen
+           deshalb !important auf den betroffenen Properties. */
+        .admin-shell {
+            max-width: 1240px;
+            margin: 96px auto 60px;
+            padding: 0 20px;
         }
-        .admin-header {
+        .admin-tabs {
             display: flex;
-            justify-content: space-between;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+        .admin-tabs button {
+            background: transparent !important;
+            color: var(--sidebar-text-muted) !important;
+            border: 1px solid transparent !important;
+            border-radius: var(--radius-pill) !important;
+            padding: 8px 16px !important;
+            font-size: 0.92em !important;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: none !important;
+        }
+        .admin-tabs button:hover { color: var(--text-color) !important; }
+        .admin-tabs button.active {
+            background: var(--chip-bg) !important;
+            color: var(--text-color) !important;
+            border-color: var(--chip-border) !important;
+        }
+        .admin-savebar {
+            position: sticky;
+            top: 66px;
+            z-index: var(--z-sticky);
+            display: flex;
             align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
             margin-bottom: 20px;
+            background: var(--container-bg);
+            backdrop-filter: blur(var(--glass-blur));
+            border: var(--card-border);
+            border-radius: var(--radius-md);
+            box-shadow: var(--card-shadow);
         }
-        .provider-section {
-            background: var(--bg-primary);
-            padding: 15px;
-            border-radius: 6px;
-            margin-bottom: 20px;
+        .admin-savebar h2 { margin: 0; font-size: 1.05em; flex: 1; }
+        .dirty-dot {
+            display: none;
+            width: 9px; height: 9px;
+            border-radius: 50%;
+            background: var(--accent-tertiary);
         }
-        .provider-section h3 { 
-            margin-top: 0; 
-            text-transform: capitalize; 
-            border-bottom: 1px solid var(--border-color); 
-            padding-bottom: 10px;
+        .admin-savebar.is-dirty .dirty-dot { display: inline-block; }
+        .admin-savebar.is-dirty #saveBtn { box-shadow: 0 0 0 2px var(--accent-tertiary); }
+        #statusMessage { font-size: 0.85em; font-weight: 600; }
+        .success { color: var(--accent-secondary); }
+        .error { color: var(--clear-button-text); }
+
+        .admin-section {
+            background: var(--container-bg);
+            border: var(--card-border);
+            border-radius: var(--radius-md);
+            padding: 16px 18px;
+            margin-bottom: 18px;
         }
-        .model-row { 
-            display: flex; 
-            align-items: center; 
-            gap: 15px; 
-            margin-bottom: 10px; 
+        .admin-section h3 {
+            margin: 0 0 4px;
+            font-size: 1em;
+            text-transform: capitalize;
         }
-        .model-row input[type="text"] { 
-            flex: 1; 
-            padding: 8px; 
-            border-radius: 4px; 
-            border: 1px solid var(--border-color); 
-            background: var(--bg-secondary); 
+        .admin-section .section-hint {
+            margin: 0 0 12px;
+            font-size: 0.82em;
+            color: var(--sidebar-text-muted);
+        }
+        /* minmax(0,1fr) statt 1fr: 1fr = minmax(auto,1fr), d.h. der
+           Min-Content der Modell-Zeilen (nowrap-Labels) konnte die Spalten
+           ueber die Shell hinaus aufblasen — das Grid wirkte dann
+           rechtsueberhaengend statt zentriert. */
+        .providers-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+        }
+
+        /* Modell-Zeilen: flache Liste, keine Karten. */
+        .model-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--input-border);
+        }
+        .model-row:last-of-type { border-bottom: none; }
+        .model-row input[type="text"] {
+            flex: 1;
+            min-width: 0;
+            padding: 7px 9px;
+            border-radius: var(--radius-xs);
+            border: 1px solid var(--input-border);
+            background: var(--input-bg);
             color: var(--text-color);
+            font-size: 0.88em;
         }
-        .model-row label { 
-            display: flex; 
-            align-items: center; 
-            gap: 5px; 
-            font-size: 0.9em; 
-            cursor: pointer; 
+        .model-row input[type="text"][readonly] { opacity: 0.75; cursor: default; }
+        .model-row label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.78em;
+            cursor: pointer;
+            white-space: nowrap;
+            color: var(--sidebar-text-muted);
+        }
+        .model-flags { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+        .admin-chip {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: var(--radius-pill);
+            font-size: 0.72em;
+            font-weight: 700;
+            white-space: nowrap;
+            background: var(--chip-bg);
+            border: 1px solid var(--chip-border);
+            color: var(--sidebar-text-muted);
+        }
+        .admin-chip.required { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+        .admin-chip.early { color: var(--accent-secondary); border-color: color-mix(in srgb, var(--accent-secondary) 40%, transparent); }
+        .admin-chip.deepthink { color: var(--accent-tertiary); border-color: color-mix(in srgb, var(--accent-tertiary) 45%, transparent); }
+
+        .icon-btn {
+            background: transparent !important;
+            color: var(--sidebar-text-muted) !important;
+            border: 1px solid var(--input-border) !important;
+            border-radius: var(--radius-xs) !important;
+            padding: 4px 8px !important;
+            font-size: 0.82em !important;
+            line-height: 1 !important;
+            cursor: pointer;
+            box-shadow: none !important;
+            flex-shrink: 0;
+        }
+        .icon-btn:hover:not(:disabled) { color: var(--text-color) !important; border-color: var(--text-color) !important; }
+        .icon-btn.danger:hover:not(:disabled) {
+            color: var(--clear-button-text) !important;
+            border-color: var(--clear-button-border) !important;
+            background: var(--clear-button-bg) !important;
+        }
+        .icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+        .add-btn {
+            background: transparent !important;
+            color: var(--accent) !important;
+            border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent) !important;
+            border-radius: var(--radius-xs) !important;
+            padding: 6px 12px !important;
+            font-size: 0.85em !important;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 10px;
+            box-shadow: none !important;
+        }
+        .add-btn:hover { border-style: solid !important; }
+
+        .admin-btn {
+            background: var(--button-bg) !important;
+            color: var(--button-text) !important;
+            padding: 8px 18px !important;
+            border: none !important;
+            border-radius: var(--radius-sm) !important;
+            font-size: 0.9em !important;
+            cursor: pointer;
+            font-weight: 700;
+        }
+        .admin-btn.secondary {
+            background: transparent !important;
+            color: var(--sidebar-text-muted) !important;
+            border: 1px solid var(--input-border) !important;
+            font-weight: 600;
+        }
+        .admin-btn.secondary:hover { color: var(--text-color) !important; }
+
+        /* Consensus-Tab */
+        .deepthink-card { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+        .judge-row {
+            display: grid;
+            grid-template-columns: 110px minmax(0, 1fr) minmax(0, 1fr);
+            align-items: center;
+            gap: 12px;
+            padding: 5px 0;
+        }
+        .judge-row.judge-head {
+            font-size: 0.78em;
+            font-weight: 700;
+            color: var(--sidebar-text-muted);
+            padding-bottom: 2px;
+        }
+        .judge-fam-row {
+            display: grid;
+            grid-template-columns: 110px minmax(0, 1fr);
+            align-items: center;
+            gap: 12px;
+            padding: 5px 0;
+        }
+        .judge-row label,
+        .judge-fam-row label { font-size: 0.85em; color: var(--sidebar-text-muted); text-transform: capitalize; }
+        .judge-subhead {
+            margin: 18px 0 4px;
+            font-size: 0.9em;
+            font-weight: 700;
+        }
+        .deepthink-card select,
+        .judge-row select,
+        .judge-fam-row select,
+        .consensus-add-row select {
+            padding: 7px 10px;
+            border-radius: var(--radius-xs);
+            border: 1px solid var(--input-border);
+            background: var(--input-bg);
+            color: var(--text-color);
+            font-size: 0.88em;
+            max-width: 100%;
+        }
+        .consensus-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 0;
+            border-bottom: 1px solid var(--input-border);
+        }
+        .consensus-row:last-of-type { border-bottom: none; }
+        .consensus-row .consensus-value {
+            font-family: monospace;
+            font-size: 0.88em;
+            flex-shrink: 0;
+        }
+        .consensus-row .consensus-desc {
+            flex: 1;
+            min-width: 0;
+            font-size: 0.78em;
+            color: var(--sidebar-text-muted);
+            overflow: hidden;
+            text-overflow: ellipsis;
             white-space: nowrap;
         }
-        .remove-btn { 
-            background: #f44336; 
-            color: white; 
-            border: none; 
-            border-radius: 4px; 
-            padding: 8px 12px; 
-            cursor: pointer; 
-            font-weight: bold;
-        }
-        .order-btn {
-            border: 1px solid var(--border-color);
-            background: var(--bg-secondary);
-            color: var(--text-color);
-            border-radius: 4px;
-            padding: 8px 10px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        .add-btn { 
-            background: #4caf50; 
-            color: white; 
-            border: none; 
-            border-radius: 4px; 
-            padding: 8px 12px; 
-            cursor: pointer; 
-            margin-top: 10px; 
-            font-weight: bold;
-        }
-        .admin-btn {
-            background-color: var(--button-bg);
-            color: var(--button-text);
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        .admin-btn:hover {
-            background-color: var(--button-hover);
-        }
-        #statusMessage {
-            margin-top: 10px;
-            font-weight: bold;
-            margin-bottom: 20px;
-        }
-        .success { color: #4caf50; }
-        .error { color: #f44336; }
-        .providers-grid {
-            display: grid; 
-            grid-template-columns: 1fr 1fr; 
-            gap: 20px;
-        }
+        .consensus-add-row { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+        .consensus-add-row select { flex: 1; min-width: 220px; }
+
+        /* Limits */
         .limits-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 16px;
-            margin-bottom: 24px;
-        }
-        .limit-section {
-            background: var(--bg-primary);
-            padding: 15px;
-            border-radius: 6px;
-        }
-        .limit-section h3 {
-            margin-top: 0;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 10px;
         }
         .limit-row {
             display: grid;
-            grid-template-columns: minmax(160px, 1fr) 140px;
+            grid-template-columns: minmax(160px, 1fr) 130px;
             align-items: center;
             gap: 12px;
-            margin-bottom: 10px;
+            padding: 4px 0;
         }
-        .limit-row label {
-            font-size: 0.9em;
-        }
+        .limit-row label { font-size: 0.85em; color: var(--sidebar-text-muted); }
         .limit-row input {
             width: 100%;
             box-sizing: border-box;
-            padding: 8px;
-            border-radius: 4px;
-            border: 1px solid var(--border-color);
-            background: var(--bg-secondary);
+            padding: 7px 9px;
+            border-radius: var(--radius-xs);
+            border: 1px solid var(--input-border);
+            background: var(--input-bg);
             color: var(--text-color);
         }
-        .shares-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; }
+
+        /* Shares */
+        .shares-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
         .share-mod-row {
             display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
-            padding: 10px 0; border-bottom: 1px solid var(--border-color);
+            padding: 10px 0; border-bottom: 1px solid var(--input-border);
         }
         .share-mod-question { flex: 1 1 260px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
         .share-mod-meta { font-size: 0.8em; opacity: 0.75; flex-basis: 100%; }
-        .share-mod-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75em; font-weight: bold; background: rgba(127,127,127,0.25); }
+        .share-mod-badge { display: inline-block; padding: 2px 8px; border-radius: var(--radius-pill); font-size: 0.75em; font-weight: bold; background: rgba(127,127,127,0.25); }
         .share-mod-badge.reported { background: #b71c1c; color: #fff; }
         .share-mod-badge.review { background: #e65100; color: #fff; }
         .share-mod-badge.indexed { background: #1b5e20; color: #fff; }
         .share-mod-actions { display: flex; gap: 6px; flex-shrink: 0; }
-        .share-mod-actions button { border: 1px solid var(--border-color); background: transparent; color: var(--text-color); border-radius: 4px; padding: 6px 10px; cursor: pointer; font-size: 0.85em; }
-        @media (max-width: 768px) {
+        .share-mod-actions button {
+            border: 1px solid var(--input-border) !important;
+            background: transparent !important;
+            color: var(--text-color) !important;
+            border-radius: var(--radius-xs) !important;
+            padding: 6px 10px !important;
+            cursor: pointer;
+            font-size: 0.85em !important;
+            box-shadow: none !important;
+        }
+
+        .admin-tab-panel[hidden] { display: none; }
+
+        @media (max-width: 820px) {
             .providers-grid { grid-template-columns: 1fr; }
             .limits-grid { grid-template-columns: 1fr; }
             .limit-row { grid-template-columns: 1fr; }
+            .admin-savebar { top: 58px; flex-wrap: wrap; }
         }
     </style>
     <script type="module">
@@ -177,7 +330,7 @@
 
         const app = initializeApp(window.FIREBASE_CONFIG);
         const auth = getAuth(app);
-        
+
         const providers = ['openai', 'mistral', 'anthropic', 'gemini', 'deepseek', 'grok'];
         const limitGroups = [
             {
@@ -227,20 +380,94 @@
         ];
         let globalModelsData = {};
 
+        // ==============================
+        // Tabs
+        // ==============================
+        const TAB_IDS = ['models', 'consensus', 'limits', 'shares'];
+        function activateTab(tabId) {
+            if (!TAB_IDS.includes(tabId)) tabId = 'models';
+            TAB_IDS.forEach(id => {
+                document.getElementById(`tab-${id}`).hidden = id !== tabId;
+                const btn = document.querySelector(`.admin-tabs button[data-tab="${id}"]`);
+                btn.classList.toggle('active', id === tabId);
+                btn.setAttribute('aria-selected', id === tabId ? 'true' : 'false');
+            });
+            history.replaceState(null, '', `#${tabId}`);
+        }
+        document.querySelectorAll('.admin-tabs button').forEach(btn => {
+            btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+        });
+        activateTab((location.hash || '').replace('#', ''));
+
+        // ==============================
+        // Dirty-Tracking
+        // ==============================
+        function markDirty() {
+            document.getElementById('adminSavebar').classList.add('is-dirty');
+        }
+        function clearDirty() {
+            document.getElementById('adminSavebar').classList.remove('is-dirty');
+        }
+        // Alle Eingaben in den Konfig-Tabs (nicht Shares) markieren als dirty.
+        ['tab-models', 'tab-consensus', 'tab-limits'].forEach(id => {
+            const el = document.getElementById(id);
+            el.addEventListener('change', markDirty);
+            el.addEventListener('input', markDirty);
+        });
+        window.addEventListener('beforeunload', (event) => {
+            if (!document.getElementById('adminSavebar').classList.contains('is-dirty')) return;
+            event.preventDefault();
+            event.returnValue = '';
+        });
+        // Aenderungen an den Provider-Listen in die abhaengigen Dropdowns
+        // (Judges, Consensus-Add) spiegeln.
+        document.getElementById('tab-models').addEventListener('change', () => {
+            renderJudgeSelects();
+            renderConsensusAddSelect();
+        });
+
+        // ==============================
+        // Meta-Helfer (Alias-Aufloesung, server-erzwungene Modelle)
+        // ==============================
+        function meta() { return globalModelsData.meta || {}; }
+        function isEnforced(provider, model) {
+            return ((meta().enforced || {})[provider] || []).includes(model);
+        }
+        function isEarly(model) { return (meta().early || []).includes(model); }
+        function isPremiumEnforced(model) { return (meta().premium_enforced || []).includes(model); }
+        function labelFor(model) { return (meta().labels || {})[model] || ''; }
+        function consensusDescription(value) {
+            const alias = (meta().aliases || {})[value];
+            if (alias) return `alias → ${alias.provider} · ${alias.label} (${alias.model})`;
+            const provider = providers.find(p => (globalModelsData[p] || []).includes(value));
+            const label = labelFor(value);
+            if (provider) return `${provider}${label && label !== value ? ' · ' + label : ''}`;
+            return label && label !== value ? label : '';
+        }
+        function chip(kind, text, title) {
+            const span = document.createElement('span');
+            span.className = 'admin-chip' + (kind ? ` ${kind}` : '');
+            span.textContent = text;
+            if (title) span.title = title;
+            return span;
+        }
+
+        // ==============================
+        // Rendering
+        // ==============================
         function renderUI() {
             renderLimits();
-            renderConsensusModels();
 
             const container = document.getElementById('providersContainer');
             container.innerHTML = '';
-            
+
             const premiumSet = new Set(globalModelsData.premium || []);
             const consensusSet = new Set(globalModelsData.consensus || []);
             const defaults = globalModelsData.defaults || {};
 
             providers.forEach(p => {
                 const section = document.createElement('div');
-                section.className = 'provider-section';
+                section.className = 'admin-section';
 
                 const title = document.createElement('h3');
                 title.textContent = p;
@@ -250,25 +477,161 @@
                 listContainer.id = `list-${p}`;
 
                 const models = globalModelsData[p] || [];
-                models.forEach((m, idx) => {
+                models.forEach(m => {
                     const row = createModelRow(p, m, premiumSet.has(m), consensusSet.has(m), defaults[p] === m);
                     listContainer.appendChild(row);
                 });
-                
+
                 section.appendChild(listContainer);
-                
+
                 const addBtn = document.createElement('button');
+                addBtn.type = 'button';
                 addBtn.className = 'add-btn';
                 addBtn.textContent = '+ Add Model';
                 addBtn.onclick = () => {
-                    listContainer.appendChild(createModelRow(p, '', false, false));
+                    listContainer.appendChild(createModelRow(p, '', false, false, false));
+                    markDirty();
                 };
                 section.appendChild(addBtn);
-                
+
                 container.appendChild(section);
             });
+
+            // Nach den Provider-Listen rendern, damit Add-Dropdown und
+            // Alias-Aufloesung den aktuellen DOM-Stand sehen.
+            renderConsensusModels();
+            renderDeepThinkSelect();
+            renderJudgeSelects();
         }
 
+        function createModelRow(provider, modelName, isPremium, isConsensus, isDefault) {
+            const row = document.createElement('div');
+            row.className = 'model-row';
+
+            const enforced = !!modelName && isEnforced(provider, modelName);
+
+            const upBtn = document.createElement('button');
+            upBtn.type = 'button';
+            upBtn.className = 'icon-btn';
+            upBtn.textContent = '↑';
+            upBtn.title = 'Move up (picker order)';
+            upBtn.onclick = () => { moveRow(row, -1); markDirty(); };
+
+            const downBtn = document.createElement('button');
+            downBtn.type = 'button';
+            downBtn.className = 'icon-btn';
+            downBtn.textContent = '↓';
+            downBtn.title = 'Move down (picker order)';
+            downBtn.onclick = () => { moveRow(row, 1); markDirty(); };
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = modelName;
+            input.placeholder = 'Model identifier (e.g. gpt-5.5)';
+            if (enforced) {
+                input.readOnly = true;
+                input.title = 'Required by the server — re-added automatically on save.';
+            }
+            const modelLabel = modelName ? labelFor(modelName) : '';
+            if (modelLabel && modelLabel !== modelName) {
+                input.title = (input.title ? input.title + ' · ' : '') + `Shown as “${modelLabel}”`;
+            }
+            input.addEventListener('focus', () => {
+                row.dataset.previousModelName = input.value.trim();
+            });
+            input.addEventListener('change', () => {
+                if (!consensusCheckbox.checked) return;
+                const previous = row.dataset.previousModelName || '';
+                if (previous && previous !== input.value.trim()) {
+                    removeConsensusListValue(previous);
+                }
+                addConsensusListValue(input.value.trim());
+                row.dataset.previousModelName = input.value.trim();
+            });
+
+            const flags = document.createElement('div');
+            flags.className = 'model-flags';
+
+            if (enforced) flags.appendChild(chip('required', 'Required', 'The server always keeps this model in the list (default/Pro/Early mapping). Removing it has no effect.'));
+            if (modelName && isEarly(modelName)) flags.appendChild(chip('early', 'Early', 'Tag-gated Early model (Pro includes Early).'));
+
+            const defaultLabel = document.createElement('label');
+            defaultLabel.title = 'Free default for this provider (shown before a manual pick). Must not be a Premium/Early model.';
+            const defaultRadio = document.createElement('input');
+            defaultRadio.type = 'radio';
+            defaultRadio.className = 'default-radio';
+            defaultRadio.name = `default-${provider}`;
+            defaultRadio.checked = !!isDefault;
+            defaultLabel.appendChild(defaultRadio);
+            defaultLabel.appendChild(document.createTextNode(' Default'));
+
+            const premiumLabel = document.createElement('label');
+            const premiumCheckbox = document.createElement('input');
+            premiumCheckbox.type = 'checkbox';
+            premiumCheckbox.className = 'premium-checkbox';
+            premiumCheckbox.checked = isPremium;
+            if (modelName && isPremiumEnforced(modelName)) {
+                premiumCheckbox.disabled = true;
+                premiumCheckbox.checked = true;
+                premiumLabel.title = 'Server-enforced Pro model — always Premium.';
+            }
+            premiumLabel.appendChild(premiumCheckbox);
+            premiumLabel.appendChild(document.createTextNode(' Premium'));
+
+            const consensusLabel = document.createElement('label');
+            consensusLabel.title = 'Offer this model in the Consensus picker (ordered in the Consensus tab).';
+            const consensusCheckbox = document.createElement('input');
+            consensusCheckbox.type = 'checkbox';
+            consensusCheckbox.className = 'consensus-checkbox';
+            consensusCheckbox.checked = isConsensus;
+            consensusCheckbox.addEventListener('change', () => {
+                if (consensusCheckbox.checked) {
+                    addConsensusListValue(input.value.trim());
+                } else {
+                    removeConsensusListValue(input.value.trim());
+                }
+            });
+            consensusLabel.appendChild(consensusCheckbox);
+            consensusLabel.appendChild(document.createTextNode(' Consensus'));
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'icon-btn danger';
+            removeBtn.textContent = '✕';
+            removeBtn.title = enforced ? 'Required by the server — cannot be removed.' : 'Remove model';
+            removeBtn.disabled = enforced;
+            removeBtn.onclick = () => {
+                if (consensusCheckbox.checked) removeConsensusListValue(input.value.trim());
+                row.remove();
+                renderJudgeSelects();
+                renderConsensusAddSelect();
+                markDirty();
+            };
+
+            row.appendChild(upBtn);
+            row.appendChild(downBtn);
+            row.appendChild(input);
+            row.appendChild(flags);
+            row.appendChild(defaultLabel);
+            row.appendChild(premiumLabel);
+            row.appendChild(consensusLabel);
+            row.appendChild(removeBtn);
+
+            return row;
+        }
+
+        function moveRow(row, direction) {
+            if (!row) return;
+            if (direction < 0 && row.previousElementSibling) {
+                row.parentNode.insertBefore(row, row.previousElementSibling);
+            } else if (direction > 0 && row.nextElementSibling) {
+                row.parentNode.insertBefore(row.nextElementSibling, row);
+            }
+        }
+
+        // ==============================
+        // Consensus & Deep Think
+        // ==============================
         function renderConsensusModels() {
             const listContainer = document.getElementById('consensusModelsList');
             listContainer.innerHTML = '';
@@ -276,12 +639,80 @@
             models.forEach(model => {
                 listContainer.appendChild(createConsensusModelRow(model));
             });
+            renderConsensusAddSelect();
         }
 
         function consensusListValues() {
-            return Array.from(document.querySelectorAll('#consensusModelsList .model-row input[type="text"]'))
-                .map(input => input.value.trim())
+            return Array.from(document.querySelectorAll('#consensusModelsList .consensus-row'))
+                .map(row => (row.dataset.value || '').trim())
                 .filter(Boolean);
+        }
+
+        function createConsensusModelRow(modelName) {
+            const row = document.createElement('div');
+            row.className = 'consensus-row';
+            row.dataset.value = modelName;
+
+            const forcedFirst = modelName === meta().consensus_forced_first;
+            const isDeepThink = modelName === currentDeepThinkModel();
+
+            const upBtn = document.createElement('button');
+            upBtn.type = 'button';
+            upBtn.className = 'icon-btn';
+            upBtn.textContent = '↑';
+            upBtn.title = 'Move up (picker order)';
+            upBtn.onclick = () => { moveConsensusRow(row, -1); markDirty(); };
+
+            const downBtn = document.createElement('button');
+            downBtn.type = 'button';
+            downBtn.className = 'icon-btn';
+            downBtn.textContent = '↓';
+            downBtn.title = 'Move down (picker order)';
+            downBtn.onclick = () => { moveConsensusRow(row, 1); markDirty(); };
+
+            const value = document.createElement('span');
+            value.className = 'consensus-value';
+            value.textContent = modelName;
+
+            const desc = document.createElement('span');
+            desc.className = 'consensus-desc';
+            desc.textContent = consensusDescription(modelName);
+            desc.title = desc.textContent;
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'icon-btn danger';
+            removeBtn.textContent = '✕';
+            if (forcedFirst) {
+                removeBtn.disabled = true;
+                removeBtn.title = 'Server-enforced: this engine is always available (re-inserted on save).';
+            } else if (isDeepThink) {
+                removeBtn.disabled = true;
+                removeBtn.title = 'Currently the Deep Think model — pick a different Deep Think model first.';
+            } else {
+                removeBtn.title = 'Remove from Consensus picker';
+            }
+            removeBtn.onclick = () => {
+                setProviderConsensusChecked(modelName, false);
+                row.remove();
+                renderConsensusAddSelect();
+                renderDeepThinkSelect();
+                markDirty();
+            };
+
+            row.appendChild(upBtn);
+            row.appendChild(downBtn);
+            row.appendChild(value);
+            row.appendChild(desc);
+            if (forcedFirst) row.appendChild(chip('required', 'Required', 'Always kept in the list by the server.'));
+            if (isDeepThink) row.appendChild(chip('deepthink', 'Deep Think', 'Deep Think switches the Consensus engine to this model.'));
+            row.appendChild(removeBtn);
+
+            return row;
+        }
+
+        function moveConsensusRow(row, direction) {
+            moveRow(row, direction);
         }
 
         function findProviderConsensusCheckbox(modelName) {
@@ -305,29 +736,234 @@
             if (!value || consensusListValues().includes(value)) return;
             document.getElementById('consensusModelsList').appendChild(createConsensusModelRow(value));
             setProviderConsensusChecked(value, true);
+            renderConsensusAddSelect();
+            renderDeepThinkSelect();
         }
 
         function removeConsensusListValue(modelName) {
             const value = (modelName || '').trim();
             if (!value) return;
-            document.querySelectorAll('#consensusModelsList .model-row').forEach(row => {
-                const input = row.querySelector('input[type="text"]');
-                if (input && input.value.trim() === value) row.remove();
+            document.querySelectorAll('#consensusModelsList .consensus-row').forEach(row => {
+                if ((row.dataset.value || '').trim() === value) row.remove();
             });
             setProviderConsensusChecked(value, false);
+            renderConsensusAddSelect();
+            renderDeepThinkSelect();
         }
 
-        function moveRow(row, direction) {
-            if (!row) return;
-            if (direction < 0 && row.previousElementSibling) {
-                row.parentNode.insertBefore(row, row.previousElementSibling);
-            } else if (direction > 0 && row.nextElementSibling) {
-                row.parentNode.insertBefore(row.nextElementSibling, row);
-            }
+        // Kandidaten fuer das Add-Dropdown: Aliase + direkte Modell-IDs aus den
+        // Provider-Listen, die noch nicht in der Consensus-Liste stehen.
+        function renderConsensusAddSelect() {
+            const select = document.getElementById('consensusAddSelect');
+            if (!select) return;
+            const existing = new Set(consensusListValues());
+            select.innerHTML = '';
+
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'Add engine…';
+            select.appendChild(placeholder);
+
+            const aliasGroup = document.createElement('optgroup');
+            aliasGroup.label = 'Aliases (auto-track provider defaults)';
+            Object.keys(meta().aliases || {}).forEach(alias => {
+                if (existing.has(alias)) return;
+                const opt = document.createElement('option');
+                opt.value = alias;
+                opt.textContent = `${alias} — ${consensusDescription(alias)}`;
+                aliasGroup.appendChild(opt);
+            });
+            if (aliasGroup.children.length) select.appendChild(aliasGroup);
+
+            providers.forEach(p => {
+                const group = document.createElement('optgroup');
+                group.label = p;
+                (currentProviderModels(p) || []).forEach(model => {
+                    if (!model || existing.has(model)) return;
+                    const opt = document.createElement('option');
+                    opt.value = model;
+                    const label = labelFor(model);
+                    opt.textContent = label && label !== model ? `${model} — ${label}` : model;
+                    group.appendChild(opt);
+                });
+                if (group.children.length) select.appendChild(group);
+            });
         }
 
-        function moveConsensusRow(row, direction) {
-            moveRow(row, direction);
+        // Provider-Modelle aus dem aktuellen DOM (inkl. ungespeicherter Zeilen).
+        function currentProviderModels(provider) {
+            const listContainer = document.getElementById(`list-${provider}`);
+            if (!listContainer) return globalModelsData[provider] || [];
+            return Array.from(listContainer.querySelectorAll('.model-row input[type="text"]'))
+                .map(input => input.value.trim())
+                .filter(Boolean);
+        }
+
+        function currentDeepThinkModel() {
+            const select = document.getElementById('deepThinkModelSelect');
+            if (select && select.value) return select.value;
+            return globalModelsData.deep_think_model || (meta().deep_think_fallback || '');
+        }
+
+        function renderDeepThinkSelect() {
+            const select = document.getElementById('deepThinkModelSelect');
+            if (!select) return;
+            const chosen = currentDeepThinkModel();
+            select.innerHTML = '';
+            consensusListValues().forEach(value => {
+                const opt = document.createElement('option');
+                opt.value = value;
+                const descText = consensusDescription(value);
+                opt.textContent = descText ? `${value} — ${descText}` : value;
+                if (value === chosen) opt.selected = true;
+                select.appendChild(opt);
+            });
+            // Deep-Think-Badges in der Liste aktualisieren, ohne alles neu zu bauen.
+            document.querySelectorAll('#consensusModelsList .consensus-row').forEach(row => {
+                const isDeepThink = (row.dataset.value || '') === select.value;
+                const badge = row.querySelector('.admin-chip.deepthink');
+                if (isDeepThink && !badge) {
+                    row.insertBefore(chip('deepthink', 'Deep Think', 'Deep Think switches the Consensus engine to this model.'), row.lastElementChild);
+                } else if (!isDeepThink && badge) {
+                    badge.remove();
+                }
+                const removeBtn = row.lastElementChild;
+                const forcedFirst = (row.dataset.value || '') === meta().consensus_forced_first;
+                if (!forcedFirst) {
+                    removeBtn.disabled = isDeepThink;
+                    removeBtn.title = isDeepThink
+                        ? 'Currently the Deep Think model — pick a different Deep Think model first.'
+                        : 'Remove from Consensus picker';
+                }
+            });
+        }
+
+        // ==============================
+        // Differences Judges
+        // ==============================
+        function currentJudgeModels() {
+            const result = {};
+            document.querySelectorAll('[data-judge-provider]').forEach(select => {
+                if (select.value) result[select.dataset.judgeProvider] = select.value;
+            });
+            return result;
+        }
+
+        function currentProJudgeModels() {
+            const result = {};
+            document.querySelectorAll('[data-projudge-provider]').forEach(select => {
+                if (select.value) result[select.dataset.projudgeProvider] = select.value;
+            });
+            return result;
+        }
+
+        function currentJudgeFamilies() {
+            const result = {};
+            document.querySelectorAll('[data-judgefam-engine]').forEach(select => {
+                if (select.value) result[select.dataset.judgefamEngine] = select.value;
+            });
+            return result;
+        }
+
+        function buildJudgeModelSelect(provider, chosen, defaultModel, datasetKey, ariaText) {
+            const frontierLow = new Set(meta().frontier_low || []);
+            const select = document.createElement('select');
+            select.dataset[datasetKey] = provider;
+            select.setAttribute('aria-label', ariaText);
+            currentProviderModels(provider).forEach(model => {
+                if (frontierLow.has(model)) return;
+                const opt = document.createElement('option');
+                opt.value = model;
+                const lbl = labelFor(model);
+                opt.textContent = lbl && lbl !== model ? `${model} — ${lbl}` : model;
+                if (model === defaultModel) opt.textContent += ' (server default)';
+                if (model === chosen) opt.selected = true;
+                select.appendChild(opt);
+            });
+            return select;
+        }
+
+        function renderJudgeSelects() {
+            const container = document.getElementById('judgeModelsContainer');
+            if (!container) return;
+            // Ungespeicherte Auswahl bei Re-Renders erhalten.
+            const chosenNow = currentJudgeModels();
+            const chosenProNow = currentProJudgeModels();
+            container.innerHTML = '';
+            const judgeDefaults = meta().judge_defaults || {};
+            const proDefaults = meta().judge_pro_defaults || {};
+            const saved = globalModelsData.judge_models || {};
+            const savedPro = globalModelsData.judge_models_pro || {};
+
+            const head = document.createElement('div');
+            head.className = 'judge-row judge-head';
+            ['Family', 'Standard judge', 'Pro judge (low effort)'].forEach(text => {
+                const cell = document.createElement('span');
+                cell.textContent = text;
+                head.appendChild(cell);
+            });
+            container.appendChild(head);
+
+            providers.forEach(p => {
+                const row = document.createElement('div');
+                row.className = 'judge-row';
+
+                const label = document.createElement('label');
+                label.textContent = p;
+
+                const chosen = chosenNow[p] || saved[p] || judgeDefaults[p] || '';
+                const chosenPro = chosenProNow[p] || savedPro[p] || proDefaults[p] || '';
+
+                row.appendChild(label);
+                row.appendChild(buildJudgeModelSelect(
+                    p, chosen, judgeDefaults[p], 'judgeProvider', `Standard differences judge for ${p}`));
+                row.appendChild(buildJudgeModelSelect(
+                    p, chosenPro, proDefaults[p], 'projudgeProvider', `Pro differences judge for ${p}`));
+                container.appendChild(row);
+            });
+
+            renderJudgeFamilies();
+        }
+
+        function renderJudgeFamilies() {
+            const container = document.getElementById('judgeFamiliesContainer');
+            if (!container) return;
+            const chosenNow = currentJudgeFamilies();
+            container.innerHTML = '';
+            const saved = globalModelsData.judge_families || {};
+            const priority = meta().judge_priority || [];
+
+            providers.forEach(engine => {
+                const row = document.createElement('div');
+                row.className = 'judge-fam-row';
+
+                const label = document.createElement('label');
+                label.textContent = `${engine} engine`;
+
+                const select = document.createElement('select');
+                select.dataset.judgefamEngine = engine;
+                select.setAttribute('aria-label', `Judge family for ${engine} engines`);
+
+                const autoOrder = priority.filter(p => p !== engine).join(' → ');
+                const autoOpt = document.createElement('option');
+                autoOpt.value = '';
+                autoOpt.textContent = `Auto — first available: ${autoOrder}`;
+                select.appendChild(autoOpt);
+
+                const chosen = chosenNow[engine] || saved[engine] || '';
+                providers.forEach(judgeFamily => {
+                    if (judgeFamily === engine) return;
+                    const opt = document.createElement('option');
+                    opt.value = judgeFamily;
+                    opt.textContent = judgeFamily;
+                    if (judgeFamily === chosen) opt.selected = true;
+                    select.appendChild(opt);
+                });
+
+                row.appendChild(label);
+                row.appendChild(select);
+                container.appendChild(row);
+            });
         }
 
         function renderLimits() {
@@ -337,7 +973,7 @@
 
             limitGroups.forEach(group => {
                 const section = document.createElement('div');
-                section.className = 'limit-section';
+                section.className = 'admin-section';
 
                 const title = document.createElement('h3');
                 title.textContent = group.title;
@@ -367,142 +1003,14 @@
                 container.appendChild(section);
             });
         }
-        
-        function createModelRow(provider, modelName, isPremium, isConsensus, isDefault) {
-            const row = document.createElement('div');
-            row.className = 'model-row';
 
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.value = modelName;
-            input.placeholder = 'Model identifier (e.g. gpt-4o)';
-            input.addEventListener('focus', () => {
-                row.dataset.previousModelName = input.value.trim();
-            });
-            input.addEventListener('change', () => {
-                if (!consensusCheckbox.checked) return;
-                const previous = row.dataset.previousModelName || '';
-                if (previous && previous !== input.value.trim()) {
-                    removeConsensusListValue(previous);
-                }
-                addConsensusListValue(input.value.trim());
-                row.dataset.previousModelName = input.value.trim();
-            });
-
-            const upBtn = document.createElement('button');
-            upBtn.type = 'button';
-            upBtn.className = 'order-btn';
-            upBtn.textContent = '^';
-            upBtn.title = 'Move up';
-            upBtn.onclick = () => moveRow(row, -1);
-
-            const downBtn = document.createElement('button');
-            downBtn.type = 'button';
-            downBtn.className = 'order-btn';
-            downBtn.textContent = 'v';
-            downBtn.title = 'Move down';
-            downBtn.onclick = () => moveRow(row, 1);
-
-            const defaultLabel = document.createElement('label');
-            defaultLabel.title = 'Free default for this provider (shown before a manual pick). Must not be a Premium/Early model.';
-            const defaultRadio = document.createElement('input');
-            defaultRadio.type = 'radio';
-            defaultRadio.className = 'default-radio';
-            defaultRadio.name = `default-${provider}`;
-            defaultRadio.checked = !!isDefault;
-            defaultLabel.appendChild(defaultRadio);
-            defaultLabel.appendChild(document.createTextNode(' Default'));
-
-            const premiumLabel = document.createElement('label');
-            const premiumCheckbox = document.createElement('input');
-            premiumCheckbox.type = 'checkbox';
-            premiumCheckbox.className = 'premium-checkbox';
-            premiumCheckbox.checked = isPremium;
-            premiumLabel.appendChild(premiumCheckbox);
-            premiumLabel.appendChild(document.createTextNode(' Premium'));
-
-            const consensusLabel = document.createElement('label');
-            const consensusCheckbox = document.createElement('input');
-            consensusCheckbox.type = 'checkbox';
-            consensusCheckbox.className = 'consensus-checkbox';
-            consensusCheckbox.checked = isConsensus;
-            consensusCheckbox.addEventListener('change', () => {
-                if (consensusCheckbox.checked) {
-                    addConsensusListValue(input.value.trim());
-                } else {
-                    removeConsensusListValue(input.value.trim());
-                }
-            });
-            consensusLabel.appendChild(consensusCheckbox);
-            consensusLabel.appendChild(document.createTextNode(' Consensus'));
-
-            const removeBtn = document.createElement('button');
-            removeBtn.className = 'remove-btn';
-            removeBtn.textContent = 'X';
-            removeBtn.onclick = () => {
-                if (consensusCheckbox.checked) removeConsensusListValue(input.value.trim());
-                row.remove();
-            };
-
-            row.appendChild(input);
-            row.appendChild(upBtn);
-            row.appendChild(downBtn);
-            row.appendChild(defaultLabel);
-            row.appendChild(premiumLabel);
-            row.appendChild(consensusLabel);
-            row.appendChild(removeBtn);
-
-            return row;
-        }
-
-        function createConsensusModelRow(modelName) {
-            const row = document.createElement('div');
-            row.className = 'model-row';
-
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.value = modelName;
-            input.placeholder = 'Consensus value (e.g. Gemini-Pro or gemini-3.1-pro-preview)';
-            input.addEventListener('focus', () => {
-                row.dataset.previousConsensusValue = input.value.trim();
-            });
-            input.addEventListener('change', () => {
-                const previous = row.dataset.previousConsensusValue || '';
-                if (previous && previous !== input.value.trim()) {
-                    setProviderConsensusChecked(previous, false);
-                }
-                setProviderConsensusChecked(input.value.trim(), true);
-                row.dataset.previousConsensusValue = input.value.trim();
-            });
-
-            const upBtn = document.createElement('button');
-            upBtn.type = 'button';
-            upBtn.className = 'order-btn';
-            upBtn.textContent = '^';
-            upBtn.title = 'Move up';
-            upBtn.onclick = () => moveConsensusRow(row, -1);
-
-            const downBtn = document.createElement('button');
-            downBtn.type = 'button';
-            downBtn.className = 'order-btn';
-            downBtn.textContent = 'v';
-            downBtn.title = 'Move down';
-            downBtn.onclick = () => moveConsensusRow(row, 1);
-
-            const removeBtn = document.createElement('button');
-            removeBtn.className = 'remove-btn';
-            removeBtn.textContent = 'X';
-            removeBtn.onclick = () => {
-                setProviderConsensusChecked(input.value.trim(), false);
-                row.remove();
-            };
-
-            row.appendChild(input);
-            row.appendChild(upBtn);
-            row.appendChild(downBtn);
-            row.appendChild(removeBtn);
-
-            return row;
+        // ==============================
+        // Laden & Speichern
+        // ==============================
+        function setStatus(message, isError) {
+            const el = document.getElementById('statusMessage');
+            el.textContent = message || '';
+            el.className = isError ? 'error' : 'success';
         }
 
         async function fetchModels(idToken) {
@@ -515,18 +1023,35 @@
                 }
                 globalModelsData = await response.json();
                 renderUI();
+                clearDirty();
             } catch (err) {
-                document.getElementById('statusMessage').textContent = err.message;
-                document.getElementById('statusMessage').className = 'error';
+                setStatus(err.message, true);
             }
+        }
+
+        async function reloadModels() {
+            const user = auth.currentUser;
+            if (!user) return;
+            setStatus('Reloading…', false);
+            await fetchModels(await user.getIdToken());
+            setStatus('', false);
         }
 
         async function saveModels() {
             const user = auth.currentUser;
             if (!user) return;
             const idToken = await user.getIdToken();
-            
-            const data = { premium: [], consensus: consensusListValues(), defaults: {}, limits: {} };
+
+            const data = {
+                premium: [],
+                consensus: consensusListValues(),
+                deep_think_model: currentDeepThinkModel(),
+                judge_models: currentJudgeModels(),
+                judge_models_pro: currentProJudgeModels(),
+                judge_families: currentJudgeFamilies(),
+                defaults: {},
+                limits: {}
+            };
             function addConsensusValue(modelName) {
                 if (modelName && !data.consensus.includes(modelName)) {
                     data.consensus.push(modelName);
@@ -536,7 +1061,7 @@
                 const value = parseInt(input.value, 10);
                 data.limits[input.dataset.limitKey] = Number.isFinite(value) && value >= 0 ? value : 0;
             });
-            
+
             providers.forEach(p => {
                 data[p] = [];
                 const listContainer = document.getElementById(`list-${p}`);
@@ -549,7 +1074,7 @@
                     const modelName = input.value.trim();
 
                     if (modelName) {
-                        // Reihenfolge = DOM-Reihenfolge der Zeilen (per ^/v sortierbar).
+                        // Reihenfolge = DOM-Reihenfolge der Zeilen (per ↑/↓ sortierbar).
                         data[p].push(modelName);
                         if (premiumCheckbox.checked) {
                             data.premium.push(modelName);
@@ -573,25 +1098,32 @@
                     },
                     body: JSON.stringify(data)
                 });
-                
+
                 if (response.ok) {
-                    document.getElementById('statusMessage').textContent = 'Configuration updated successfully!';
-                    document.getElementById('statusMessage').className = 'success';
-                    setTimeout(() => document.getElementById('statusMessage').textContent = '', 3000);
+                    setStatus('Configuration saved.', false);
+                    clearDirty();
+                    // Normalisierten Server-Stand nachladen (ensures/drops sichtbar machen).
+                    await fetchModels(idToken);
+                    setTimeout(() => setStatus('', false), 4000);
                 } else {
                     const resData = await response.json();
                     throw new Error(resData.detail || 'Failed to update models');
                 }
             } catch (err) {
-                document.getElementById('statusMessage').textContent = err.message;
-                document.getElementById('statusMessage').className = 'error';
+                setStatus(err.message, true);
             }
         }
 
         document.getElementById('saveBtn').addEventListener('click', saveModels);
-        document.getElementById('addConsensusModelBtn').addEventListener('click', () => {
-            document.getElementById('consensusModelsList').appendChild(createConsensusModelRow(''));
+        document.getElementById('reloadBtn').addEventListener('click', reloadModels);
+        document.getElementById('consensusAddBtn').addEventListener('click', () => {
+            const select = document.getElementById('consensusAddSelect');
+            if (select.value) {
+                addConsensusListValue(select.value);
+                markDirty();
+            }
         });
+        document.getElementById('deepThinkModelSelect').addEventListener('change', renderDeepThinkSelect);
 
         // === Shared Pages Moderation ===
         let currentSharesFilter = 'reported';
@@ -734,8 +1266,7 @@
                 fetchModels(idToken);
                 loadShares('reported');
             } else {
-                document.getElementById('statusMessage').textContent = 'Please log in to access the admin panel.';
-                document.getElementById('statusMessage').className = 'error';
+                setStatus('Please log in to access the admin panel.', true);
                 window.location.href = '/';
             }
         });
@@ -757,52 +1288,115 @@
         </div>
     </header>
 
-    <div class="admin-container">
-        <div class="admin-header">
-            <h2>AI Models Configuration</h2>
-            <button id="saveBtn" class="admin-btn">Save Changes</button>
+    <div class="admin-shell">
+        <nav class="admin-tabs" role="tablist" aria-label="Admin sections">
+            <button type="button" data-tab="models" role="tab">Models</button>
+            <button type="button" data-tab="consensus" role="tab">Consensus &amp; Deep Think</button>
+            <button type="button" data-tab="limits" role="tab">Limits</button>
+            <button type="button" data-tab="shares" role="tab">Shared Pages</button>
+        </nav>
+
+        <div id="adminSavebar" class="admin-savebar">
+            <span class="dirty-dot" title="Unsaved changes"></span>
+            <h2>Configuration</h2>
+            <span id="statusMessage" role="status"></span>
+            <button id="reloadBtn" type="button" class="admin-btn secondary" title="Discard unsaved changes and reload the saved configuration">Reload</button>
+            <button id="saveBtn" type="button" class="admin-btn">Save Changes</button>
         </div>
-        <div id="statusMessage"></div>
-        <p style="margin-bottom: 20px; font-size: 0.9em; color: var(--text-color);">Set request, input, context, and token limits for Free and Pro users.</p>
 
-        <div id="limitsContainer" class="limits-grid">
-            <!-- Populated by JavaScript -->
-        </div>
-
-        <p style="margin-bottom: 20px; font-size: 0.9em; color: var(--text-color);">Add models to each provider and toggle the <strong>Premium</strong> checkbox to mark them as Pro-only.</p>
-
-        <div class="provider-section">
-            <h3>Consensus</h3>
-            <p style="margin-bottom: 12px; font-size: 0.9em; color: var(--text-color);">
-                Ordered values shown in the app's Consensus picker. Use existing aliases like
-                <strong>Gemini-Pro</strong> here; direct provider model IDs can also be toggled with
-                the <strong>Consensus</strong> checkbox below and reordered here.
+        <section id="tab-models" class="admin-tab-panel" role="tabpanel" hidden>
+            <p class="section-hint" style="margin: 0 0 14px; font-size: 0.85em; color: var(--sidebar-text-muted);">
+                Per-provider model lists shown in the app's model pickers (row order = picker order).
+                <strong>Default</strong> sets the Free-tier preselection. <strong>Premium</strong> marks Pro-only models.
+                <strong>Consensus</strong> offers the model in the Consensus picker.
+                Models marked <em>Required</em> are enforced server-side and re-added automatically —
+                that is why some entries can't be removed here.
             </p>
-            <div id="consensusModelsList">
+            <div id="providersContainer" class="providers-grid">
                 <!-- Populated by JavaScript -->
             </div>
-            <button id="addConsensusModelBtn" type="button" class="add-btn">+ Add Consensus Model</button>
-        </div>
-        
-        <div id="providersContainer" class="providers-grid">
-            <!-- Populated by JavaScript -->
-        </div>
+        </section>
 
-        <div class="admin-header" style="margin-top: 40px;">
-            <h2>Shared Pages Moderation</h2>
-        </div>
-        <p style="margin-bottom: 12px; font-size: 0.9em; color: var(--text-color);">
-            Reported pages first (review-priority, then report count). <strong>Index</strong> puts a page
-            into sitemap-shares.xml and removes its noindex — only do this for eligible pages.
-        </p>
-        <div class="shares-toolbar">
-            <button id="loadReportedSharesBtn" class="admin-btn">Load reported</button>
-            <button id="loadAllSharesBtn" class="admin-btn">Load all</button>
-            <span id="sharesStatus" style="font-size: 0.85em;"></span>
-        </div>
-        <div id="sharesContainer" class="provider-section">
-            <!-- Populated by JavaScript -->
-        </div>
+        <section id="tab-consensus" class="admin-tab-panel" role="tabpanel" hidden>
+            <div class="admin-section">
+                <h3>Deep Think Model</h3>
+                <p class="section-hint">
+                    Consensus engine Deep Think switches to while active. Invalid values fall back to the
+                    server default. The selected model is always kept in the Consensus list.
+                </p>
+                <div class="deepthink-card">
+                    <select id="deepThinkModelSelect" aria-label="Deep Think consensus model"></select>
+                </div>
+            </div>
+
+            <div class="admin-section">
+                <h3>Differences Judges</h3>
+                <p class="section-hint">
+                    Judge models per provider family for the Differences engine and the Resolve round.
+                    Standard engines get the <strong>Standard</strong> judge, Pro engines the
+                    <strong>Pro</strong> judge (always run at low effort). Frontier-Low IDs are internal
+                    aliases and not selectable.
+                </p>
+                <div id="judgeModelsContainer">
+                    <!-- Populated by JavaScript -->
+                </div>
+
+                <div class="judge-subhead">Judge assignment</div>
+                <p class="section-hint">
+                    Which family judges which Consensus engine. The judge family is always a different one
+                    than the engine's (anti self-judging). <strong>Auto</strong> picks the first family with
+                    an available API key from the priority order; a manual pick is preferred first and falls
+                    back to Auto if its key is unavailable.
+                </p>
+                <div id="judgeFamiliesContainer">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+
+            <div class="admin-section">
+                <h3>Consensus Engines</h3>
+                <p class="section-hint">
+                    Ordered list shown in the app's Consensus picker. <strong>Aliases</strong> (e.g. Gemini-Pro)
+                    resolve to a provider model server-side and follow config updates automatically;
+                    direct model IDs must exist in a provider list on the Models tab.
+                    The first entry is preselected for new users.
+                </p>
+                <div id="consensusModelsList">
+                    <!-- Populated by JavaScript -->
+                </div>
+                <div class="consensus-add-row">
+                    <select id="consensusAddSelect" aria-label="Add consensus engine"></select>
+                    <button id="consensusAddBtn" type="button" class="add-btn" style="margin-top: 0;">+ Add</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="tab-limits" class="admin-tab-panel" role="tabpanel" hidden>
+            <p class="section-hint" style="margin: 0 0 14px; font-size: 0.85em; color: var(--sidebar-text-muted);">
+                Request, input, and token limits for Free and Pro users. Limits apply after the daily reset.
+            </p>
+            <div id="limitsContainer" class="limits-grid">
+                <!-- Populated by JavaScript -->
+            </div>
+        </section>
+
+        <section id="tab-shares" class="admin-tab-panel" role="tabpanel" hidden>
+            <div class="admin-section">
+                <h3>Shared Pages Moderation</h3>
+                <p class="section-hint">
+                    Reported pages first (review-priority, then report count). <strong>Index</strong> puts a page
+                    into sitemap-shares.xml and removes its noindex — only do this for eligible pages.
+                </p>
+                <div class="shares-toolbar">
+                    <button id="loadReportedSharesBtn" type="button" class="admin-btn secondary">Load reported</button>
+                    <button id="loadAllSharesBtn" type="button" class="admin-btn secondary">Load all</button>
+                    <span id="sharesStatus" style="font-size: 0.85em;"></span>
+                </div>
+                <div id="sharesContainer">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+        </section>
     </div>
 </body>
 </html>

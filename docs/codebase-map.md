@@ -318,12 +318,23 @@ Wichtige Verträge im Backend:
 **Firestore-Collections** (verifiziert über Code):
 - `users/{uid}` — `tier`, `role`; Subcollections `bookmarks`, `counters`.
 - `app_config/models` — von `load_models_from_db()` gelesen/erzeugt: erlaubte
-  Modelle pro Provider, `premium`, `consensus`, `limits`. **Single Source of
-  Truth für Limits/Modelle in Produktion** (überschreibt die `config.py`-Defaults
-  beim Startup). `consensus` steuert den App-Consensus-Picker; Werte können
-  historische Engine-Aliase (`Gemini-Pro`) oder direkte Modell-IDs aus den
-  Provider-Listen sein. In `/admin` können Provider-Modelle per `Consensus`-
-  Checkbox in diese Liste aufgenommen werden.
+  Modelle pro Provider, `premium`, `consensus`, `deep_think_model`,
+  `judge_models`, `limits`.
+  **Single Source of Truth für Limits/Modelle in Produktion** (überschreibt die
+  `config.py`-Defaults beim Startup). `consensus` steuert den App-Consensus-Picker;
+  Werte können historische Engine-Aliase (`Gemini-Pro`) oder direkte Modell-IDs aus
+  den Provider-Listen sein. In `/admin` können Provider-Modelle per `Consensus`-
+  Checkbox in diese Liste aufgenommen werden. `deep_think_model` ist die
+  Consensus-Engine, auf die Deep Think umschaltet (`apply_deep_think_model`,
+  Fallback Gemini 3.5 Flash; ans Frontend via `window.DEEP_THINK_CONSENSUS_MODEL`).
+  `judge_models`/`judge_models_pro` setzen Standard- bzw. Pro-Differences-/
+  Resolve-Judge je Provider (`apply_judge_models`/`apply_pro_judge_models` in
+  config.py, in-place — consensus_engine/resolve_engine aliasen dieselben
+  dicts; Frontier-Low-IDs sind ausgeschlossen; Fallbacks: günstiges
+  Provider-Default-Modell bzw. API-Modell des `<Familie>-Pro`-Alias; Pro-Judges
+  laufen unverändert mit effort=low). `judge_families` mappt Engine-Familie →
+  bevorzugte Judge-Familie (`apply_judge_families`; nie die eigene Familie,
+  ohne Eintrag/Key Auto über `JUDGE_FAMILY_PRIORITY`).
 - `pending_results` — kurzlebige Consensus-Ergebnisse fürs Sharing (TTL/Cleanup).
 - `shares` — veröffentlichte Snapshots (Slug, `indexed`, `status`, `owner_uid`,
   `question_hash`, …).
@@ -367,9 +378,14 @@ defaulten auf die günstigen Basis-Modelle. Mistral Small ist bewusst KEIN Early
 
 Admin-Modellkonfig (`/admin`, `app_config/models` in Firestore): Provider-Listen sind
 geordnet (Picker-Reihenfolge via `MODEL_ORDER_BY_PROVIDER`/`get_ordered_models`, im Admin
-per ^/v sortierbar); Feld `defaults` setzt den Free-Default je Provider (`apply_default_models`,
+per ↑/↓ sortierbar); Feld `defaults` setzt den Free-Default je Provider (`apply_default_models`,
 nur Nicht-Premium/Nicht-Early erlaubt, sonst `_BASE_FREE_DEFAULTS`). `normalize_models_document`
-erhält die Reihenfolge (kein `sorted` mehr) und validiert `defaults`.
+erhält die Reihenfolge (kein `sorted` mehr) und validiert `defaults` + `deep_think_model`.
+Das Admin-UI (Tabs: Models / Consensus & Deep Think / Limits / Shared Pages) bekommt via
+`GET /api/admin/models` ein `meta`-Objekt (Alias-Auflösung, server-erzwungene Modelle je
+Provider, Early-Set, Labels), mit dem Required-/Early-Badges gerendert werden — die
+ensure/drop-Logik des Servers ist damit im UI sichtbar statt implizit. E2E-Zugriff auf
+Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
 
 ---
 

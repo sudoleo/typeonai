@@ -129,6 +129,28 @@ MODEL_ORDER_BY_PROVIDER: dict[str, list[str]] = {
     provider: [] for provider in DEFAULT_MODEL_BY_PROVIDER
 }
 
+# Consensus-Engine, auf die Deep Think die Synthese festkoppelt. Vom Admin
+# ueber Firestore (Feld "deep_think_model") umstellbar; ungueltige Werte
+# fallen auf die Basis zurueck (siehe apply_deep_think_model).
+_BASE_DEEP_THINK_CONSENSUS_MODEL = GEMINI_35_FLASH_MODEL
+DEEP_THINK_CONSENSUS_MODEL = _BASE_DEEP_THINK_CONSENSUS_MODEL
+
+# Standard-Judges der Differences-/Resolve-Engine je Provider (Pro-Judges
+# loesen weiterhin ueber die "<Familie>-Pro"-Aliasse auf, siehe
+# consensus_engine._judge_engine). Vom Admin ueber Firestore (Feld
+# "judge_models") umstellbar; ungueltige Werte fallen je Provider auf die
+# Basis zurueck (siehe apply_judge_models). WICHTIG: das dict wird in-place
+# mutiert, damit Modul-Aliasse (consensus_engine, resolve_engine) live bleiben.
+_BASE_DIFFERENCES_JUDGE_BY_PROVIDER = {
+    "openai": DEFAULT_OPENAI_MODEL,
+    "mistral": DEFAULT_MISTRAL_MODEL,
+    "anthropic": DEFAULT_ANTHROPIC_MODEL,
+    "gemini": GEMINI_FLASH_MODEL,
+    "deepseek": DEFAULT_DEEPSEEK_MODEL,
+    "grok": DEFAULT_GROK_MODEL,
+}
+DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
+
 DEFAULT_CONSENSUS_MODELS = [
     GEMINI_FRONTIER_LOW_MODEL,
     GEMINI_35_FLASH_MODEL,
@@ -174,6 +196,29 @@ CONSENSUS_ENGINE_ALIASES = {
     "Grok": ("grok", DEFAULT_GROK_MODEL),
     "Grok-Pro": ("grok", "grok-4.3"),
 }
+
+# Pro-Judges der Differences-/Resolve-Engine je Provider. Basis sind die
+# API-Modelle der "<Familie>-Pro"-Aliasse; vom Admin ueber Firestore (Feld
+# "judge_models_pro") umstellbar. Wie DIFFERENCES_JUDGE_MODEL_BY_PROVIDER
+# in-place mutiert (Modul-Aliasse bleiben live).
+_BASE_PRO_JUDGE_BY_PROVIDER = {
+    "openai": CONSENSUS_ENGINE_ALIASES["OpenAI-Pro"][1],
+    "mistral": CONSENSUS_ENGINE_ALIASES["Mistral-Pro"][1],
+    "anthropic": CONSENSUS_ENGINE_ALIASES["Anthropic-Pro"][1],
+    "gemini": CONSENSUS_ENGINE_ALIASES["Gemini-Pro"][1],
+    "deepseek": CONSENSUS_ENGINE_ALIASES["DeepSeek-Pro"][1],
+    "grok": CONSENSUS_ENGINE_ALIASES["Grok-Pro"][1],
+}
+PRO_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_PRO_JUDGE_BY_PROVIDER)
+
+# Familien-Prioritaet der Judge-Wahl: primaerer und Fallback-Judge nehmen die
+# erste Familie mit verfuegbarem Key, die nicht die der Consensus-Engine ist.
+JUDGE_FAMILY_PRIORITY = ["gemini", "openai", "mistral", "deepseek", "grok", "anthropic"]
+
+# Optionales Admin-Mapping Engine-Familie -> bevorzugte Judge-Familie
+# (Firestore-Feld "judge_families"). Fehlt ein Eintrag oder ist der Key der
+# bevorzugten Familie nicht verfuegbar, greift JUDGE_FAMILY_PRIORITY (Auto).
+JUDGE_FAMILY_BY_ENGINE: dict[str, str] = {}
 LEADERBOARD_MODEL_ALIASES = {
     "Claude": "Anthropic",
 }
@@ -478,12 +523,100 @@ def normalize_consensus_models(models) -> list[str]:
             allowed.append(model)
     if GEMINI_FRONTIER_LOW_MODEL not in allowed:
         allowed.insert(0, GEMINI_FRONTIER_LOW_MODEL)
-    # Deep Think koppelt die Synthese fest an Gemini 3.5 Flash. Deshalb muss
-    # das Modell auch bei einer Admin-/Firestore-Liste ohne diesen Eintrag als
-    # Pro-Consensus-Option verfuegbar bleiben.
-    if GEMINI_35_FLASH_MODEL not in allowed:
-        allowed.append(GEMINI_35_FLASH_MODEL)
+    # Deep Think koppelt die Synthese fest an das konfigurierte Deep-Think-
+    # Modell (Basis: Gemini 3.5 Flash). Deshalb muss das Modell auch bei einer
+    # Admin-/Firestore-Liste ohne diesen Eintrag als Consensus-Option
+    # verfuegbar bleiben.
+    if DEEP_THINK_CONSENSUS_MODEL not in allowed:
+        allowed.append(DEEP_THINK_CONSENSUS_MODEL)
     return allowed
+
+
+def get_deep_think_consensus_model() -> str:
+    return DEEP_THINK_CONSENSUS_MODEL
+
+
+def is_valid_deep_think_model(model_id) -> bool:
+    """Gueltig ist jeder Consensus-Wert (Alias oder direkte Modell-ID), der
+    sich auf einen Provider aufloesen laesst."""
+    chosen = str(model_id or "").strip()
+    if not chosen:
+        return False
+    config = get_consensus_model_config(chosen)
+    return bool(config and config.provider)
+
+
+def apply_deep_think_model(model_id) -> None:
+    """Setzt die Deep-Think-Consensus-Engine. Ungueltige/leere Werte fallen
+    auf die Basis (Gemini 3.5 Flash) zurueck."""
+    global DEEP_THINK_CONSENSUS_MODEL
+    chosen = str(model_id or "").strip()
+    if chosen and is_valid_deep_think_model(chosen):
+        DEEP_THINK_CONSENSUS_MODEL = chosen
+    else:
+        DEEP_THINK_CONSENSUS_MODEL = _BASE_DEEP_THINK_CONSENSUS_MODEL
+
+
+def is_valid_judge_model(provider: str, model_id) -> bool:
+    """Gueltiger Standard-Judge: erlaubtes Modell des Providers, das direkt
+    als API-Modell aufrufbar ist. Frontier-Low-IDs sind interne Aliasse
+    (api_model != internal_id) und deshalb hier ausgeschlossen."""
+    chosen = str(model_id or "").strip()
+    if not chosen or chosen in FRONTIER_LOW_MODELS:
+        return False
+    return chosen in _provider_allowed_sets().get(provider, set())
+
+
+def apply_judge_models(overrides: dict | None) -> None:
+    """Setzt den Standard-Differences-Judge je Provider. Ungueltige/fehlende
+    Werte fallen je Provider auf die Basis zurueck. Mutiert das dict in-place
+    (Modul-Aliasse in consensus_engine/resolve_engine bleiben live)."""
+    data = overrides if isinstance(overrides, dict) else {}
+    for provider, base in _BASE_DIFFERENCES_JUDGE_BY_PROVIDER.items():
+        chosen = str(data.get(provider) or "").strip()
+        if chosen and is_valid_judge_model(provider, chosen):
+            DIFFERENCES_JUDGE_MODEL_BY_PROVIDER[provider] = chosen
+        else:
+            DIFFERENCES_JUDGE_MODEL_BY_PROVIDER[provider] = base
+
+
+def get_judge_models() -> dict:
+    return dict(DIFFERENCES_JUDGE_MODEL_BY_PROVIDER)
+
+
+def apply_pro_judge_models(overrides: dict | None) -> None:
+    """Setzt den Pro-Differences-Judge je Provider. Ungueltige/fehlende Werte
+    fallen je Provider auf die Basis (API-Modell des "<Familie>-Pro"-Alias)
+    zurueck. Mutiert das dict in-place."""
+    data = overrides if isinstance(overrides, dict) else {}
+    for provider, base in _BASE_PRO_JUDGE_BY_PROVIDER.items():
+        chosen = str(data.get(provider) or "").strip()
+        if chosen and is_valid_judge_model(provider, chosen):
+            PRO_JUDGE_MODEL_BY_PROVIDER[provider] = chosen
+        else:
+            PRO_JUDGE_MODEL_BY_PROVIDER[provider] = base
+
+
+def get_pro_judge_models() -> dict:
+    return dict(PRO_JUDGE_MODEL_BY_PROVIDER)
+
+
+def apply_judge_families(overrides: dict | None) -> None:
+    """Setzt das Mapping Engine-Familie -> bevorzugte Judge-Familie. Gueltig
+    sind nur bekannte Provider, die sich von der Engine-Familie unterscheiden
+    (Anti-Self-Judging); alles andere faellt auf Auto (Prioritaetsliste)
+    zurueck. Mutiert das dict in-place."""
+    data = overrides if isinstance(overrides, dict) else {}
+    providers = set(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
+    JUDGE_FAMILY_BY_ENGINE.clear()
+    for engine_provider in providers:
+        chosen = str(data.get(engine_provider) or "").strip()
+        if chosen in providers and chosen != engine_provider:
+            JUDGE_FAMILY_BY_ENGINE[engine_provider] = chosen
+
+
+def get_judge_families() -> dict:
+    return dict(JUDGE_FAMILY_BY_ENGINE)
 
 
 def get_model_picker_metadata() -> dict[str, dict[str, str]]:
@@ -706,6 +839,17 @@ def load_models_from_db():
             )
             rebuild_model_configs()
 
+            # Deep-Think-Modell VOR der Consensus-Normalisierung anwenden,
+            # damit normalize_consensus_models das konfigurierte Modell in der
+            # Liste sicherstellt.
+            apply_deep_think_model(data.get("deep_think_model"))
+
+            # Judges (Differences/Resolve) je Provider; braucht die
+            # aktualisierten Provider-Listen fuer die Validierung.
+            apply_judge_models(data.get("judge_models"))
+            apply_pro_judge_models(data.get("judge_models_pro"))
+            apply_judge_families(data.get("judge_families"))
+
             if "consensus" in data:
                 ALLOWED_CONSENSUS_MODELS.clear()
                 ALLOWED_CONSENSUS_MODELS.extend(normalize_consensus_models(data["consensus"]))
@@ -739,6 +883,10 @@ def load_models_from_db():
                 "grok": list(ALLOWED_GROK_MODELS),
                 "premium": list(PREMIUM_MODELS),
                 "consensus": list(ALLOWED_CONSENSUS_MODELS),
+                "deep_think_model": DEEP_THINK_CONSENSUS_MODEL,
+                "judge_models": get_judge_models(),
+                "judge_models_pro": get_pro_judge_models(),
+                "judge_families": get_judge_families(),
                 "limits": get_limits_config()
             })
             rebuild_model_configs()

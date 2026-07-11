@@ -170,6 +170,7 @@ async def read_root(request: Request):
         "early_default_models": cfg.EARLY_DEFAULT_MODEL_BY_PROVIDER,
         "consensus_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
         "consensus_models": consensus_models,
+        "deep_think_consensus_model": cfg.get_deep_think_consensus_model(),
         "model_labels": model_labels,
         "model_badges": model_badges,
         "frontier_models": list(cfg.EARLY_MODELS),

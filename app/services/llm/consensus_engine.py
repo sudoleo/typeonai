@@ -14,14 +14,7 @@ from google.auth.transport.requests import Request as GoogleAuthRequest
 from urllib.parse import quote
 
 import app.core.config as cfg
-from app.core.config import (
-    GEMINI_FLASH_MODEL,
-    DEFAULT_OPENAI_MODEL,
-    DEFAULT_MISTRAL_MODEL,
-    DEFAULT_ANTHROPIC_MODEL,
-    DEFAULT_DEEPSEEK_MODEL,
-    DEFAULT_GROK_MODEL,
-)
+from app.core.config import GEMINI_FLASH_MODEL
 from app.services.llm.engines import _merge_nested_config
 from app.services.llm.mock_llm import mock_engine_stream, mock_engine_text, mock_llm_enabled
 
@@ -1270,25 +1263,23 @@ def _translate_best_model(result: str, anon_map: dict) -> str:
 # (query_differences / stream_differences).
 # ---------------------------------------------------------------------------
 
-# Standard-Judges: das günstige Default-Modell des jeweiligen Providers.
+# Standard-Judges: admin-konfigurierbar je Provider (Firestore-Feld
+# "judge_models", Basis: das günstige Default-Modell des Providers). Alias auf
+# das live in config.py gepflegte dict — apply_judge_models mutiert in-place,
+# damit dieser Verweis (und der Re-Import in resolve_engine) aktuell bleibt.
 # Die Judge-Stufe folgt der gewählten Consensus-Engine (Standard-Engine ->
 # Standard-Judge, Pro-Engine -> Pro-Judge über die bestehenden Engine-Aliasse);
 # die Judge-FAMILIE ist dabei immer eine andere als die der Engine, siehe
 # _resolve_differences_engine.
-DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = {
-    "openai": DEFAULT_OPENAI_MODEL,
-    "mistral": DEFAULT_MISTRAL_MODEL,
-    "anthropic": DEFAULT_ANTHROPIC_MODEL,
-    "gemini": GEMINI_FLASH_MODEL,
-    "deepseek": DEFAULT_DEEPSEEK_MODEL,
-    "grok": DEFAULT_GROK_MODEL,
-}
+DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = cfg.DIFFERENCES_JUDGE_MODEL_BY_PROVIDER
 
 # Familien-Priorität für die Judge-Wahl: primärer Differences-Judge und
 # Fallback-Judge nehmen die erste Familie mit verfügbarem Key, die nicht die
 # der Consensus-Engine ist. Wird auch vom Consensus-Fallback (dritter Versuch
-# auf einem anderen Provider) genutzt.
-_FALLBACK_JUDGE_PRIORITY = ["gemini", "openai", "mistral", "deepseek", "grok", "anthropic"]
+# auf einem anderen Provider) genutzt. Das Admin-Mapping
+# cfg.JUDGE_FAMILY_BY_ENGINE kann je Engine-Familie eine bevorzugte
+# Judge-Familie VOR diese Priorität setzen (siehe _judge_families).
+_FALLBACK_JUDGE_PRIORITY = cfg.JUDGE_FAMILY_PRIORITY
 
 DIFFERENCES_SYSTEM_PROMPT = "Answer in the exact same language as the Model responses."
 DIFFERENCES_TEMPERATURE = 0.2
@@ -1318,22 +1309,26 @@ def _standard_judge_engine(provider: str):
 
 def _judge_engine(provider: str, tier: str):
     """(provider, api_model, model_ref) für den Judge einer Familie in der
-    gewünschten Stufe. Die Pro-Stufe löst über den bestehenden Engine-Alias
-    "<Familie>-Pro" auf (keine eigenen Modell-Konstanten); scheitert die
-    Auflösung, bleibt der Standard-Judge."""
+    gewünschten Stufe. Die Pro-Stufe nimmt das admin-konfigurierbare
+    Pro-Judge-Modell (Basis: API-Modell des "<Familie>-Pro"-Alias); ohne
+    Eintrag bleibt der Standard-Judge."""
     if tier == "pro":
-        resolved = _resolve_engine(_PROVIDER_KEY_NAMES[provider] + "-Pro")
-        if resolved is not None:
-            return resolved
+        judge = cfg.PRO_JUDGE_MODEL_BY_PROVIDER.get(provider)
+        if judge:
+            return provider, judge, judge
     return _standard_judge_engine(provider)
 
 
 def _judge_families(consensus_provider: str, api_keys: dict, count: int) -> list:
-    """Die ersten `count` Judge-Familien aus der Priorität, die (a) nicht die
-    Familie der Consensus-Engine sind und (b) einen verfügbaren Key haben."""
+    """Die ersten `count` Judge-Familien, die (a) nicht die Familie der
+    Consensus-Engine sind und (b) einen verfügbaren Key haben. Eine vom Admin
+    bevorzugte Judge-Familie (cfg.JUDGE_FAMILY_BY_ENGINE) kommt vor die
+    Prioritätsliste; ist ihr Key nicht verfügbar, greift Auto."""
+    preferred = cfg.JUDGE_FAMILY_BY_ENGINE.get(consensus_provider)
+    order = ([preferred] if preferred else []) + _FALLBACK_JUDGE_PRIORITY
     families = []
-    for provider in _FALLBACK_JUDGE_PRIORITY:
-        if provider == consensus_provider:
+    for provider in order:
+        if provider == consensus_provider or provider in families:
             continue
         if not _provider_key_available(provider, api_keys):
             continue

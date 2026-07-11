@@ -21,6 +21,8 @@
     window.FREE_DEFAULT_MODELS = JSON.parse('{{ default_models | tojson | safe }}');
     window.PRO_DEFAULT_MODELS = JSON.parse('{{ pro_default_models | tojson | safe }}');
     window.EARLY_DEFAULT_MODELS = JSON.parse('{{ early_default_models | tojson | safe }}');
+    // Consensus-Engine, auf die Deep Think umschaltet (Admin-konfigurierbar).
+    window.DEEP_THINK_CONSENSUS_MODEL = JSON.parse('{{ deep_think_consensus_model | tojson | safe }}');
     // Fallback-Limit für app-init.js (ausgelagertes initApp kann kein Jinja rendern).
     window.FREE_LIMIT = Number('{{ free_limit }}');
 
@@ -621,7 +623,7 @@
       </div>
     </div>
 
-    <script src="/static/js/app-init.js?v=20260711-demo-login1" defer></script>
+    <script src="/static/js/app-init.js?v=20260711-deepthink-model1" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing

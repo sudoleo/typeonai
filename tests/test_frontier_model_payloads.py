@@ -248,6 +248,192 @@ class FrontierModelPayloadTests(unittest.TestCase):
         normalized = cfg.normalize_consensus_models(["Grok"])
         self.assertIn(cfg.GEMINI_35_FLASH_MODEL, normalized)
 
+    def test_apply_deep_think_model_validates_and_falls_back(self):
+        snapshot = cfg.get_deep_think_consensus_model()
+        try:
+            # Gueltiger Alias wird uebernommen und in der Consensus-Liste gesichert.
+            cfg.apply_deep_think_model("Gemini-Pro")
+            self.assertEqual(cfg.get_deep_think_consensus_model(), "Gemini-Pro")
+            self.assertIn("Gemini-Pro", cfg.normalize_consensus_models(["Grok"]))
+            # Unbekannte Werte fallen auf die Basis zurueck.
+            cfg.apply_deep_think_model("not-a-model")
+            self.assertEqual(cfg.get_deep_think_consensus_model(), cfg.GEMINI_35_FLASH_MODEL)
+            # Leer/None ebenfalls.
+            cfg.apply_deep_think_model(None)
+            self.assertEqual(cfg.get_deep_think_consensus_model(), cfg.GEMINI_35_FLASH_MODEL)
+        finally:
+            cfg.apply_deep_think_model(snapshot)
+
+    def test_normalize_models_document_validates_deep_think_model(self):
+        base = {
+            "openai": [cfg.DEFAULT_OPENAI_MODEL],
+            "mistral": [cfg.DEFAULT_MISTRAL_MODEL],
+            "anthropic": [cfg.DEFAULT_ANTHROPIC_MODEL],
+            "gemini": [cfg.DEFAULT_GEMINI_MODEL],
+            "deepseek": [],
+            "grok": [cfg.DEFAULT_GROK_MODEL],
+            "premium": [],
+            "consensus": ["Gemini"],
+        }
+        # Alias ist gueltig und bleibt in der Consensus-Liste erhalten.
+        normalized = normalize_models_document({**base, "deep_think_model": "Anthropic-Pro"})
+        self.assertEqual(normalized["deep_think_model"], "Anthropic-Pro")
+        self.assertIn("Anthropic-Pro", normalized["consensus"])
+        # Direkte Modell-ID aus einer Provider-Liste ist gueltig.
+        normalized = normalize_models_document({**base, "deep_think_model": cfg.DEFAULT_OPENAI_MODEL})
+        self.assertEqual(normalized["deep_think_model"], cfg.DEFAULT_OPENAI_MODEL)
+        self.assertIn(cfg.DEFAULT_OPENAI_MODEL, normalized["consensus"])
+        # Unbekannte Werte und fehlendes Feld fallen auf die Basis zurueck.
+        for payload in ({**base, "deep_think_model": "not-a-model"}, dict(base)):
+            normalized = normalize_models_document(payload)
+            self.assertEqual(normalized["deep_think_model"], cfg.GEMINI_35_FLASH_MODEL)
+            self.assertIn(cfg.GEMINI_35_FLASH_MODEL, normalized["consensus"])
+
+    def test_apply_judge_models_validates_and_falls_back(self):
+        snapshot = cfg.get_judge_models()
+        try:
+            # Gueltiges Provider-Modell wird uebernommen; das Modul-Alias in
+            # consensus_engine sieht die Aenderung live (in-place Mutation).
+            from app.services.llm import consensus_engine
+            cfg.apply_judge_models({"openai": "gpt-5.5"})
+            self.assertEqual(cfg.DIFFERENCES_JUDGE_MODEL_BY_PROVIDER["openai"], "gpt-5.5")
+            self.assertEqual(
+                consensus_engine.DIFFERENCES_JUDGE_MODEL_BY_PROVIDER["openai"], "gpt-5.5"
+            )
+            # Andere Provider bleiben auf der Basis.
+            self.assertEqual(
+                cfg.DIFFERENCES_JUDGE_MODEL_BY_PROVIDER["mistral"],
+                cfg._BASE_DIFFERENCES_JUDGE_BY_PROVIDER["mistral"],
+            )
+            # Frontier-Low-IDs (interne Aliasse) und unbekannte Modelle -> Basis.
+            cfg.apply_judge_models({
+                "openai": cfg.OPENAI_FRONTIER_LOW_MODEL,
+                "gemini": "not-a-model",
+            })
+            self.assertEqual(
+                cfg.DIFFERENCES_JUDGE_MODEL_BY_PROVIDER["openai"],
+                cfg._BASE_DIFFERENCES_JUDGE_BY_PROVIDER["openai"],
+            )
+            self.assertEqual(
+                cfg.DIFFERENCES_JUDGE_MODEL_BY_PROVIDER["gemini"],
+                cfg._BASE_DIFFERENCES_JUDGE_BY_PROVIDER["gemini"],
+            )
+        finally:
+            cfg.apply_judge_models(snapshot)
+
+    def test_apply_pro_judge_models_and_judge_engine(self):
+        from app.services.llm import consensus_engine
+        snapshot = cfg.get_pro_judge_models()
+        try:
+            # Basis = API-Modelle der "<Familie>-Pro"-Aliasse.
+            self.assertEqual(cfg._BASE_PRO_JUDGE_BY_PROVIDER["anthropic"], cfg.ANTHROPIC_PRO_MODEL)
+            # Gueltiges Modell wird uebernommen und vom Pro-Judge-Pfad genutzt.
+            cfg.apply_pro_judge_models({"anthropic": "claude-opus-4-7"})
+            self.assertEqual(cfg.PRO_JUDGE_MODEL_BY_PROVIDER["anthropic"], "claude-opus-4-7")
+            provider, api_model, model_ref = consensus_engine._judge_engine("anthropic", "pro")
+            self.assertEqual((provider, api_model, model_ref), ("anthropic", "claude-opus-4-7", "claude-opus-4-7"))
+            # Standard-Stufe bleibt unberuehrt.
+            self.assertEqual(
+                consensus_engine._judge_engine("anthropic", "standard")[1],
+                cfg.DIFFERENCES_JUDGE_MODEL_BY_PROVIDER["anthropic"],
+            )
+            # Frontier-Low/unbekannt -> Basis.
+            cfg.apply_pro_judge_models({"anthropic": cfg.ANTHROPIC_FRONTIER_LOW_MODEL})
+            self.assertEqual(cfg.PRO_JUDGE_MODEL_BY_PROVIDER["anthropic"], cfg.ANTHROPIC_PRO_MODEL)
+        finally:
+            cfg.apply_pro_judge_models(snapshot)
+
+    def test_apply_judge_families_and_family_preference(self):
+        from app.services.llm import consensus_engine
+        snapshot = cfg.get_judge_families()
+        all_keys = {name: "key" for name in
+                    ("OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok")}
+        try:
+            # Ohne Mapping: Prioritaetsliste (gemini zuerst, eigene Familie nie).
+            cfg.apply_judge_families({})
+            self.assertEqual(
+                consensus_engine._judge_families("openai", all_keys, count=2),
+                ["gemini", "mistral"],
+            )
+            # Mapping bevorzugt die gewaehlte Familie vor der Prioritaet.
+            cfg.apply_judge_families({"openai": "anthropic"})
+            self.assertEqual(
+                consensus_engine._judge_families("openai", all_keys, count=2),
+                ["anthropic", "gemini"],
+            )
+            # Kein Key fuer die bevorzugte Familie -> Auto-Fallback.
+            keys_without_anthropic = dict(all_keys)
+            keys_without_anthropic.pop("Anthropic")
+            self.assertEqual(
+                consensus_engine._judge_families("openai", keys_without_anthropic, count=1),
+                ["gemini"],
+            )
+            # Self-Judging und unbekannte Provider werden verworfen.
+            cfg.apply_judge_families({"openai": "openai", "gemini": "nope"})
+            self.assertEqual(cfg.get_judge_families(), {})
+        finally:
+            cfg.apply_judge_families(snapshot)
+
+    def test_normalize_models_document_validates_pro_judges_and_families(self):
+        normalized = normalize_models_document({
+            "openai": ["gpt-5.5"],
+            "mistral": [cfg.DEFAULT_MISTRAL_MODEL],
+            "anthropic": [cfg.DEFAULT_ANTHROPIC_MODEL],
+            "gemini": [cfg.DEFAULT_GEMINI_MODEL],
+            "deepseek": [],
+            "grok": [cfg.DEFAULT_GROK_MODEL],
+            "premium": [],
+            "judge_models_pro": {
+                "openai": "gpt-5.5",                      # gueltig
+                "gemini": cfg.GEMINI_FRONTIER_LOW_MODEL,  # frontier-low -> verworfen
+            },
+            "judge_families": {
+                "openai": "anthropic",   # gueltig
+                "gemini": "gemini",      # Self-Judging -> verworfen
+                "grok": "not-a-provider" # unbekannt -> verworfen
+            },
+        })
+        self.assertEqual(normalized["judge_models_pro"].get("openai"), "gpt-5.5")
+        self.assertNotIn("gemini", normalized["judge_models_pro"])
+        self.assertEqual(normalized["judge_families"], {"openai": "anthropic"})
+
+    def test_normalize_models_document_validates_judge_models(self):
+        normalized = normalize_models_document({
+            "openai": ["gpt-5.5", cfg.DEFAULT_OPENAI_MODEL],
+            "mistral": [cfg.DEFAULT_MISTRAL_MODEL],
+            "anthropic": [cfg.DEFAULT_ANTHROPIC_MODEL],
+            "gemini": [cfg.DEFAULT_GEMINI_MODEL],
+            "deepseek": [],
+            "grok": [cfg.DEFAULT_GROK_MODEL],
+            "premium": [],
+            "judge_models": {
+                "openai": "gpt-5.5",                        # gueltig
+                "gemini": cfg.GEMINI_FRONTIER_LOW_MODEL,    # frontier-low -> verworfen
+                "mistral": "not-in-list",                   # unbekannt -> verworfen
+            },
+        })
+        self.assertEqual(normalized["judge_models"].get("openai"), "gpt-5.5")
+        self.assertNotIn("gemini", normalized["judge_models"])
+        self.assertNotIn("mistral", normalized["judge_models"])
+
+    def test_admin_template_has_tabs_and_deep_think_control(self):
+        template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
+        self.assertIn('deepThinkModelSelect', template)
+        self.assertIn('deep_think_model: currentDeepThinkModel()', template)
+        self.assertIn('judge_models: currentJudgeModels()', template)
+        self.assertIn('judge_models_pro: currentProJudgeModels()', template)
+        self.assertIn('judge_families: currentJudgeFamilies()', template)
+        self.assertIn('judgeModelsContainer', template)
+        self.assertIn('judgeFamiliesContainer', template)
+        self.assertIn('data-tab="consensus"', template)
+        self.assertIn('data-tab="models"', template)
+
+    def test_index_injects_deep_think_consensus_model(self):
+        template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("window.DEEP_THINK_CONSENSUS_MODEL", template)
+        module = (ROOT / "static" / "js" / "app-init.js").read_text(encoding="utf-8")
+        self.assertIn('window.DEEP_THINK_CONSENSUS_MODEL || "gemini-3.5-flash"', module)
+
     def test_firestore_sync_keeps_frontier_models_allowed_and_not_premium(self):
         snapshots = {
             "openai": set(cfg.ALLOWED_OPENAI_MODELS),

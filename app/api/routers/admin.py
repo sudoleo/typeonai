@@ -175,25 +175,103 @@ def normalize_models_document(data: dict) -> dict:
             normalized_consensus.append(model)
     if cfg.GEMINI_FRONTIER_LOW_MODEL not in normalized_consensus:
         normalized_consensus.insert(0, cfg.GEMINI_FRONTIER_LOW_MODEL)
+
+    # Deep-Think-Modell: jeder gueltige Consensus-Wert (Alias oder Modell-ID
+    # aus den Provider-Listen); ungueltige Werte fallen auf die Basis zurueck.
+    # Das gewaehlte Modell muss in der Consensus-Liste bleiben, weil Deep Think
+    # die Synthese fest daran koppelt.
+    chosen_deep = str(normalized.get("deep_think_model") or "").strip()
+    if not chosen_deep or (
+        chosen_deep not in cfg.CONSENSUS_ENGINE_ALIASES
+        and chosen_deep not in allowed_direct_consensus
+    ):
+        chosen_deep = cfg._BASE_DEEP_THINK_CONSENSUS_MODEL
+    if chosen_deep not in normalized_consensus:
+        normalized_consensus.append(chosen_deep)
+    normalized["deep_think_model"] = chosen_deep
+
     normalized["consensus"] = normalized_consensus
+
+    # Differences-Judges je Provider (Standard- und Pro-Stufe): nur gueltig,
+    # wenn das Modell im Provider gelistet und keine interne Frontier-Low-ID
+    # ist. Ungueltige Eintraege werden verworfen (zur Laufzeit greift dann die
+    # Basis, siehe apply_judge_models/apply_pro_judge_models).
+    for field in ("judge_models", "judge_models_pro"):
+        incoming_judges = normalized.get(field) or {}
+        clean_judges = {}
+        for provider in PROVIDER_KEYS:
+            chosen = str(incoming_judges.get(provider) or "").strip()
+            allowed = set(normalized.get(provider) or [])
+            if chosen and chosen in allowed and chosen not in cfg.FRONTIER_LOW_MODELS:
+                clean_judges[provider] = chosen
+        normalized[field] = clean_judges
+
+    # Mapping Engine-Familie -> bevorzugte Judge-Familie: nur bekannte
+    # Provider, nie die eigene Familie (Anti-Self-Judging). Fehlende Eintraege
+    # bedeuten Auto (Prioritaetsliste).
+    incoming_families = normalized.get("judge_families") or {}
+    clean_families = {}
+    for engine_provider in PROVIDER_KEYS:
+        chosen = str(incoming_families.get(engine_provider) or "").strip()
+        if chosen in PROVIDER_KEYS and chosen != engine_provider:
+            clean_families[engine_provider] = chosen
+    normalized["judge_families"] = clean_families
+
     return normalized
+
+
+def _server_enforced_models() -> dict:
+    """Modelle, die der Server je Provider immer wieder ergaenzt — im Admin-UI
+    als 'Required' markiert, damit klar ist, warum sie nicht entfernbar sind."""
+    return {
+        "openai": [cfg.DEFAULT_OPENAI_MODEL, cfg.OPENAI_FRONTIER_LOW_MODEL],
+        "mistral": [cfg.DEFAULT_MISTRAL_MODEL, cfg.MISTRAL_PRO_MODEL],
+        "anthropic": [cfg.DEFAULT_ANTHROPIC_MODEL, cfg.ANTHROPIC_PRO_MODEL, cfg.ANTHROPIC_FRONTIER_LOW_MODEL],
+        "gemini": [cfg.DEFAULT_GEMINI_MODEL, cfg.GEMINI_35_FLASH_MODEL, cfg.GEMINI_FRONTIER_LOW_MODEL],
+        "deepseek": sorted(cfg.REQUIRED_DEEPSEEK_MODELS),
+        "grok": [cfg.DEFAULT_GROK_MODEL, cfg.GROK_FRONTIER_LOW_MODEL],
+    }
+
+
+def _admin_meta() -> dict:
+    """Metadaten fuer das Admin-UI: Alias-Aufloesung, server-erzwungene
+    Modelle, Early-Set und Labels — macht das implizite Server-Verhalten
+    (ensure/drop in normalize_models_document) im UI sichtbar."""
+    aliases = {
+        alias: {
+            "provider": provider,
+            "model": api_model,
+            "label": cfg.get_model_label(api_model),
+        }
+        for alias, (provider, api_model) in cfg.CONSENSUS_ENGINE_ALIASES.items()
+    }
+    enforced = _server_enforced_models()
+    labels = {}
+    for models in enforced.values():
+        for model in models:
+            labels[model] = cfg.get_model_label(model)
+    for model in cfg.ALL_ALLOWED_MODELS:
+        labels.setdefault(model, cfg.get_model_label(model))
+    return {
+        "aliases": aliases,
+        "enforced": enforced,
+        "early": sorted(cfg.EARLY_MODELS),
+        "premium_enforced": sorted(cfg.REQUIRED_PRO_MODELS | cfg.EARLY_AND_PRO_MODELS),
+        "labels": labels,
+        "consensus_forced_first": cfg.GEMINI_FRONTIER_LOW_MODEL,
+        "deep_think_fallback": cfg._BASE_DEEP_THINK_CONSENSUS_MODEL,
+        # Interne Frontier-Low-IDs sind keine direkt aufrufbaren API-Modelle
+        # und deshalb als Judge nicht waehlbar.
+        "frontier_low": sorted(cfg.FRONTIER_LOW_MODELS),
+        "judge_defaults": dict(cfg._BASE_DIFFERENCES_JUDGE_BY_PROVIDER),
+        "judge_pro_defaults": dict(cfg._BASE_PRO_JUDGE_BY_PROVIDER),
+        "judge_priority": list(cfg.JUDGE_FAMILY_PRIORITY),
+    }
 
 @router.get("/api/admin/models")
 def get_models(request: Request):
     # This endpoint can be accessed by the admin frontend to get current models
-    id_token = extract_id_token(request, {})
-    if not id_token:
-        raise HTTPException(status_code=401, detail="Authentication required")
-        
-    try:
-        uid = verify_user_token(id_token)
-        if not is_user_admin(uid):
-            raise HTTPException(status_code=403, detail="Admin privileges required")
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=401, detail="Authentication failed")
-        
+    _require_admin(request, {})
     try:
         doc_ref = db_firestore.collection("app_config").document("models")
         doc = doc_ref.get()
@@ -201,10 +279,9 @@ def get_models(request: Request):
             data = normalize_models_document(doc.to_dict())
             apply_limits(data.get("limits"))
             data["limits"] = get_limits_config()
-            return data
         else:
             from app.core.config import ALLOWED_OPENAI_MODELS, ALLOWED_MISTRAL_MODELS, ALLOWED_ANTHROPIC_MODELS, ALLOWED_GEMINI_MODELS, ALLOWED_DEEPSEEK_MODELS, ALLOWED_GROK_MODELS, PREMIUM_MODELS
-            return {
+            data = {
                 "openai": list(ALLOWED_OPENAI_MODELS),
                 "mistral": list(ALLOWED_MISTRAL_MODELS),
                 "anthropic": list(ALLOWED_ANTHROPIC_MODELS),
@@ -214,32 +291,26 @@ def get_models(request: Request):
                 "premium": list(PREMIUM_MODELS),
                 "consensus": list(cfg.ALLOWED_CONSENSUS_MODELS),
                 "defaults": dict(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER),
+                "deep_think_model": cfg.get_deep_think_consensus_model(),
+                "judge_models": cfg.get_judge_models(),
+                "judge_models_pro": cfg.get_pro_judge_models(),
+                "judge_families": cfg.get_judge_families(),
                 "limits": get_limits_config()
             }
+        data["meta"] = _admin_meta()
+        return data
     except Exception as e:
         logging.error(f"Error fetching models: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch models")
 
 @router.post("/api/admin/models")
 def update_models(request: Request, data: dict = Body(...)):
-    id_token = extract_id_token(request, data)
-    if not id_token:
-        raise HTTPException(status_code=401, detail="Authentication required")
-        
-    try:
-        uid = verify_user_token(id_token)
-        if not is_user_admin(uid):
-            raise HTTPException(status_code=403, detail="Admin privileges required")
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=401, detail="Authentication failed")
-        
+    _require_admin(request, data)
     required_keys = ["openai", "mistral", "anthropic", "gemini", "deepseek", "grok", "premium"]
     for k in required_keys:
         if k not in data or not isinstance(data[k], list):
             raise HTTPException(status_code=400, detail=f"Missing or invalid format for {k}. Must be a list of strings.")
-            
+
     try:
         apply_limits(data.get("limits"))
         normalized = normalize_models_document(data)
@@ -254,12 +325,16 @@ def update_models(request: Request, data: dict = Body(...)):
             "premium": normalized["premium"],
             "consensus": normalized["consensus"],
             "defaults": normalized["defaults"],
+            "deep_think_model": normalized["deep_think_model"],
+            "judge_models": normalized["judge_models"],
+            "judge_models_pro": normalized["judge_models_pro"],
+            "judge_families": normalized["judge_families"],
             "limits": get_limits_config()
         })
-        
+
         # Refresh the cache in config.py
         load_models_from_db()
-        
+
         return {"status": "success", "message": "Configuration updated successfully."}
     except Exception as e:
         logging.error(f"Error updating models: {e}")

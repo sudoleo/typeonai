@@ -259,7 +259,9 @@
         initModeExplainer();
 
         // deepThinkModelLabels stammt aus app-core.js (window.App), siehe Alias oben.
-        const DEEP_THINK_CONSENSUS_MODEL = "gemini-3.5-flash";
+        // Admin-konfigurierbar via /admin (Firestore-Feld deep_think_model),
+        // vom Server ueber window.DEEP_THINK_CONSENSUS_MODEL injiziert.
+        const DEEP_THINK_CONSENSUS_MODEL = window.DEEP_THINK_CONSENSUS_MODEL || "gemini-3.5-flash";
         let consensusModelBeforeDeepThink = null;
 
         function syncDeepThinkConsensusModel(isActive) {
@@ -268,7 +270,6 @@
 
           const target = Array.from(select.options).find(option =>
             option.value === DEEP_THINK_CONSENSUS_MODEL
-            || getModelOptionLabel(option) === "Gemini 3.5 Flash"
           );
 
           if (isActive) {
