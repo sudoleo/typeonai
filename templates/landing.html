@@ -17,7 +17,7 @@
   <meta name="twitter:description" content="Compare model answers side by side and turn them into a structured consensus.">
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>consens.io - compare before you trust</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260626-mobile-mockup1">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260711-hero-consensus2">
   <link rel="stylesheet" href="/static/css/benchmark.css?v=20260707-bench7">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -104,48 +104,48 @@
             <span class="lp-mocklogo"><img src="/static/favicon.png" alt=""> consens.io</span>
             <span class="lp-mock-login">Log in</span>
           </div>
-          <div class="lp-window-body">
-            <div class="lp-prompt">
-              <span class="lp-prompt-text">What is the longest river in the world?</span>
-              <div class="lp-prompt-bar">
-                <button class="lp-attach" type="button" tabindex="-1" aria-label="Add attachment">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                </button>
-                <div class="lp-modes">
-                  <span class="lp-mode is-on lp-mode--agent"><i class="lp-switch"></i>Agent Mode</span>
-                </div>
-              </div>
-              <div class="lp-actions">
-                <div class="lp-consensus-picker" aria-label="Consensus model">
-                  <span>Consensus</span>
-                  <button type="button" tabindex="-1">Gemini 3.1 <i aria-hidden="true"></i></button>
-                </div>
-                <button class="lp-clear" type="button" tabindex="-1" aria-label="Clear all responses">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                </button>
-                <button class="lp-send" type="button" tabindex="-1" aria-label="Send question">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                </button>
-              </div>
+          <div class="lp-window-body lp-hero-result">
+            <p class="lp-hero-q">
+              <span class="lp-hero-q-label">One question · 6 models</span>
+              <span class="lp-hero-q-text">What is the longest river in the world?</span>
+            </p>
+            <div class="consensus-verdict is-warn">
+              <span class="verdict-score" style="--val:68" title="Agreement score 68/100">
+                <span class="verdict-score-ring" aria-hidden="true"></span>
+                <span class="verdict-score-num">68</span>
+              </span>
+              <span class="verdict-main">
+                <span class="verdict-headline">The models contradict each other on 1 point</span>
+                <span class="verdict-detail">minor details — 6 models compared</span>
+              </span>
             </div>
-            <div class="lp-agent">
-              <div class="lp-agent-head">
-                <div>
-                  <span class="lp-agent-eyebrow">Agent Mode</span>
-                  <strong>Models are working</strong>
-                </div>
-                <span class="lp-agent-count">6 models</span>
+            <div class="lp-hero-block">
+              <h3 class="lp-hero-block-title">Consensus Answer</h3>
+              <p class="lp-hero-consensus-text"><strong>The Nile is the conventional longest river, but the Amazon has a credible claim.</strong> By convention the Nile leads at about 6,650 km<button class="claim-badge" type="button" tabindex="-1" aria-label="6 of 6 models support this claim">6/6</button>, while a disputed 2007 survey puts the Amazon ahead<button class="claim-badge has-dissent" type="button" tabindex="-1" aria-label="3 of 6 models support this claim"><span class="claim-dot" aria-hidden="true"></span>3/6</button>.</p>
+            </div>
+            <div class="lp-hero-block">
+              <h3 class="lp-hero-block-title">Differences</h3>
+              <div class="differences-cards">
+                <details class="diff-card is-contradiction" open>
+                  <summary class="diff-card-summary">
+                    <span class="diff-card-tags">
+                      <span class="sev-dot is-warn" aria-hidden="true"></span>
+                      <span class="diff-type-tag">Contradiction · minor detail</span>
+                    </span>
+                    <span class="diff-card-claim">Is the Nile definitively the longest river?</span>
+                  </summary>
+                  <div class="diff-card-body">
+                    <div class="diff-position">
+                      <div class="diff-position-label">ChatGPT, Mistral, DeepSeek</div>
+                      <div class="diff-position-stance">The Nile is the settled answer at ~6,650 km.</div>
+                    </div>
+                    <div class="diff-position">
+                      <div class="diff-position-label">Claude, Gemini, Grok</div>
+                      <div class="diff-position-stance">The 2007 Amazon survey is a credible challenger.</div>
+                    </div>
+                  </div>
+                </details>
               </div>
-              <div class="lp-chips">
-                <span><img src="/static/icons/chat_icons/chatgpt.png" alt="">OpenAI - GPT-5.5</span>
-                <span><img src="/static/icons/chat_icons/mistral.png" alt="">Mistral - mistral-medium-3-5</span>
-                <span><img src="/static/icons/chat_icons/claude.png" alt="">Claude - claude-opus-4-8</span>
-                <span><img src="/static/icons/chat_icons/gemini-icon.png" alt="">Gemini - gemini-3.1-pro-preview</span>
-                <span><img src="/static/icons/chat_icons/deepseek.png" alt="">DeepSeek - deepseek-v4-pro</span>
-                <span><img src="/static/icons/chat_icons/grok.png" alt="">Grok - grok-4.3</span>
-              </div>
-              <div class="lp-pulse" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-              <p class="lp-agent-note">Querying selected models in parallel.</p>
             </div>
           </div>
         </div>
@@ -275,8 +275,18 @@
         </div>
         <div class="lp-scene-visual lp-reveal">
           <div class="consensus-verdict is-warn">
-            <span class="verdict-icon" aria-hidden="true"></span>
-            <span class="verdict-text">Caution: the models contradict each other on 1 point, 6 models compared</span>
+            <span class="verdict-score" style="--val:68" title="Agreement score 68/100">
+              <span class="verdict-score-ring" aria-hidden="true"></span>
+              <span class="verdict-score-num">68</span>
+            </span>
+            <span class="verdict-main">
+              <span class="verdict-headline">The models contradict each other on 1 point</span>
+              <span class="verdict-detail">minor details — 6 models compared</span>
+            </span>
+            <span class="verdict-judge">
+              <span>Analysis by Gemini</span>
+              <span class="verdict-judge-sub">independent of the consensus engine</span>
+            </span>
           </div>
           <div class="consensus-box">
             <div class="consensus-main">
@@ -291,7 +301,7 @@
               <h2>Consensus Answer</h2>
               <div class="consensus-main-text">
                 <p><strong>The Nile is the conventional longest river, but the Amazon has a credible claim.</strong></p>
-                <p>The models converge on the framing: the Nile is the established answer at about 6,650 km, while the Amazon, the largest river by water volume, measures roughly 6,400 km, or up to 6,992 km if a disputed 2007 survey is accepted.</p>
+                <p>The models converge on the framing: the Nile is the established answer at about 6,650 km<button class="claim-badge" type="button" tabindex="-1" aria-label="6 of 6 models support this claim">6/6</button>, while the Amazon, the largest river by water volume, measures roughly 6,400 km, or up to 6,992 km if a disputed 2007 survey is accepted<button class="claim-badge has-dissent" type="button" tabindex="-1" aria-label="3 of 6 models support this claim"><span class="claim-dot" aria-hidden="true"></span>3/6</button>.</p>
                 <ul>
                   <li>By convention and most references, the Nile leads on length.</li>
                   <li>The Amazon is unambiguously the largest river by discharge.</li>
@@ -301,37 +311,230 @@
               </div>
               <div class="consensus-claims-fallback">
                 <div class="claims-fallback-title">Key claims</div>
-                <div class="claims-fallback-row"><span class="claims-fallback-text">The Nile is the conventional longest river (~6,650 km)</span><span class="claim-badge">6/6</span></div>
                 <div class="claims-fallback-row"><span class="claims-fallback-text">The Amazon is the largest river by water volume</span><span class="claim-badge">6/6</span></div>
-                <div class="claims-fallback-row"><span class="claims-fallback-text">A 2007 survey measured the Amazon at 6,992 km</span><span class="claim-badge has-dissent">3/6</span></div>
               </div>
             </div>
-            <div class="consensus-differences credibility-framed cred-partially">
+            <div class="consensus-differences">
               <h2>Differences</h2>
               <div class="differences-cards">
-                <div class="diff-card is-contradiction">
-                  <div class="diff-card-summary">
-                    <span class="diff-type-tag">Contradiction</span>
+                <details class="diff-card is-contradiction" open>
+                  <summary class="diff-card-summary">
+                    <span class="diff-card-tags">
+                      <span class="sev-dot is-warn" aria-hidden="true"></span>
+                      <span class="diff-type-tag">Contradiction · minor detail</span>
+                    </span>
                     <span class="diff-card-claim">Is the Nile definitively the longest river?</span>
-                  </div>
+                  </summary>
                   <div class="diff-card-body">
                     <div class="diff-position">
-                      <div class="diff-position-label">Position A (3 models: ChatGPT, Mistral, DeepSeek)</div>
+                      <div class="diff-position-label">ChatGPT, Mistral, DeepSeek</div>
                       <div class="diff-position-stance">The Nile is the settled answer at ~6,650 km.</div>
                       <blockquote class="diff-position-quote">the Nile is traditionally listed as the longest river at about 6,650 km</blockquote>
-                      <div class="diff-position-links"><a class="claim-jump-link" href="#agent-mode">Jump to ChatGPT</a></div>
+                      <div class="diff-position-links">
+                        <button class="diff-jump-link" type="button" tabindex="-1">ChatGPT</button>
+                        <button class="diff-jump-link" type="button" tabindex="-1">Mistral</button>
+                        <button class="diff-jump-link" type="button" tabindex="-1">DeepSeek</button>
+                      </div>
                     </div>
                     <div class="diff-position">
-                      <div class="diff-position-label">Position B (3 models: Claude, Gemini, Grok)</div>
+                      <div class="diff-position-label">Claude, Gemini, Grok</div>
                       <div class="diff-position-stance">The 2007 Amazon survey is a credible challenger.</div>
                       <blockquote class="diff-position-quote">if the Pará estuary is counted, the Amazon may exceed 7,000 km</blockquote>
-                      <div class="diff-position-links"><a class="claim-jump-link" href="#agent-mode">Jump to Claude</a></div>
+                      <div class="diff-position-links">
+                        <button class="diff-jump-link" type="button" tabindex="-1">Claude</button>
+                        <button class="diff-jump-link" type="button" tabindex="-1">Gemini</button>
+                        <button class="diff-jump-link" type="button" tabindex="-1">Grok</button>
+                      </div>
                     </div>
-                    <div class="diff-verify">Worth verifying: check whether the source counts the Pará estuary as part of the Amazon.</div>
+                    <div class="diff-verify"><b>Worth verifying: </b>check whether the source counts the Pará estuary as part of the Amazon.</div>
+                    <div class="diff-resolve">
+                      <button class="diff-resolve-btn" type="button" tabindex="-1">
+                        <svg class="diff-resolve-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h9M11 5 8.8 2.8M11 5 8.8 7.2"/><path d="M14 11H5M5 11l2.2-2.2M5 11l2.2 2.2"/></svg>
+                        <span class="diff-resolve-btn-label">Resolve with the models</span>
+                        <span class="pro-badge diff-resolve-pro-chip">Pro</span>
+                      </button>
+                    </div>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Slideshow: the same consensus/differences lens on other questions -->
+        <div class="lp-diff-slider lp-reveal" id="diffSlider">
+          <p class="lp-slider-eyebrow">The same lens on other questions</p>
+          <div class="lp-slides">
+
+            <!-- Slide 1: high agreement, no contradictions -->
+            <article class="lp-slide is-active">
+              <p class="lp-slide-q">“Is nuclear power a low-carbon energy source?”</p>
+              <div class="consensus-verdict is-calm">
+                <span class="verdict-score" style="--val:94" title="Agreement score 94/100">
+                  <span class="verdict-score-ring" aria-hidden="true"></span>
+                  <span class="verdict-score-num">94</span>
+                </span>
+                <span class="verdict-main">
+                  <span class="verdict-headline">High agreement</span>
+                  <span class="verdict-detail">no contradictions found — 6 models compared</span>
+                </span>
+                <span class="verdict-judge">
+                  <span>Analysis by Claude</span>
+                  <span class="verdict-judge-sub">independent of the consensus engine</span>
+                </span>
+              </div>
+              <div class="consensus-box lp-mini">
+                <div class="consensus-main">
+                  <h2>Consensus Answer</h2>
+                  <div class="consensus-main-text">
+                    <p><strong>Yes — its lifecycle emissions are on par with wind.</strong></p>
+                    <p>All six models put nuclear power at roughly 10–15 g CO₂-eq per kWh over its full lifecycle<button class="claim-badge" type="button" tabindex="-1" aria-label="6 of 6 models support this claim">6/6</button>, far below coal and gas. The open questions they name are cost and construction time, not carbon.</p>
+                  </div>
+                </div>
+                <div class="consensus-differences">
+                  <h2>Differences</h2>
+                  <div class="differences-cards">
+                    <div class="diff-empty-state">
+                      <span class="sev-dot is-ok" aria-hidden="true"></span>
+                      <div class="diff-empty-text">
+                        <div class="diff-empty-headline">No substantive contradictions found across the 6 answers.</div>
+                        <div class="diff-empty-note">Agreement is a good signal, but not a guarantee of correctness.</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
+            </article>
+
+            <!-- Slide 2: difference in emphasis -->
+            <article class="lp-slide">
+              <p class="lp-slide-q">“Which programming language should I learn first?”</p>
+              <div class="consensus-verdict is-calm">
+                <span class="verdict-score" style="--val:84" title="Agreement score 84/100">
+                  <span class="verdict-score-ring" aria-hidden="true"></span>
+                  <span class="verdict-score-num">84</span>
+                </span>
+                <span class="verdict-main">
+                  <span class="verdict-headline">High agreement</span>
+                  <span class="verdict-detail">1 difference in emphasis, no contradictions — 6 models compared</span>
+                </span>
+                <span class="verdict-judge">
+                  <span>Analysis by OpenAI</span>
+                  <span class="verdict-judge-sub">independent of the consensus engine</span>
+                </span>
+              </div>
+              <div class="consensus-box lp-mini">
+                <div class="consensus-main">
+                  <h2>Consensus Answer</h2>
+                  <div class="consensus-main-text">
+                    <p><strong>Python is the default first language.</strong></p>
+                    <p>Every model recommends Python for its readable syntax and broad use in data, automation and scripting<button class="claim-badge" type="button" tabindex="-1" aria-label="6 of 6 models support this claim">6/6</button>. Several add that the choice should follow your goal — if you want to build for the web, JavaScript is the pragmatic start<button class="claim-badge has-dissent" type="button" tabindex="-1" aria-label="4 of 6 models support this claim"><span class="claim-dot" aria-hidden="true"></span>4/6</button>.</p>
+                  </div>
+                </div>
+                <div class="consensus-differences">
+                  <h2>Differences</h2>
+                  <div class="differences-cards">
+                    <details class="diff-card is-emphasis" open>
+                      <summary class="diff-card-summary">
+                        <span class="diff-card-tags">
+                          <span class="sev-dot is-info" aria-hidden="true"></span>
+                          <span class="diff-type-tag">Different emphasis</span>
+                        </span>
+                        <span class="diff-card-claim">How much should the first language depend on your goal?</span>
+                      </summary>
+                      <div class="diff-card-body">
+                        <div class="diff-position">
+                          <div class="diff-position-label">ChatGPT, Gemini, DeepSeek</div>
+                          <div class="diff-position-stance">Start with Python regardless of the goal; switching later is cheap.</div>
+                          <blockquote class="diff-position-quote">Python's simplicity lets the fundamentals stick before you specialise</blockquote>
+                        </div>
+                        <div class="diff-position">
+                          <div class="diff-position-label">Claude, Mistral, Grok</div>
+                          <div class="diff-position-stance">Pick by destination: JavaScript if you want to ship something visible early.</div>
+                          <blockquote class="diff-position-quote">if you want to build for the web, JavaScript gets you to a running product fastest</blockquote>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <!-- Slide 3: critical contradiction -->
+            <article class="lp-slide">
+              <p class="lp-slide-q">“Can I take ibuprofen while on blood thinners?”</p>
+              <div class="consensus-verdict is-warn">
+                <span class="verdict-score" style="--val:41" title="Agreement score 41/100">
+                  <span class="verdict-score-ring" aria-hidden="true"></span>
+                  <span class="verdict-score-num">41</span>
+                </span>
+                <span class="verdict-main">
+                  <span class="verdict-headline">The models contradict each other on 1 point</span>
+                  <span class="verdict-detail"><span class="verdict-detail-crit">1 critical</span> — 6 models compared</span>
+                </span>
+                <span class="verdict-judge">
+                  <span>Analysis by Mistral</span>
+                  <span class="verdict-judge-sub">independent of the consensus engine</span>
+                </span>
+              </div>
+              <div class="consensus-box lp-mini">
+                <div class="consensus-main">
+                  <h2>Consensus Answer</h2>
+                  <div class="consensus-main-text">
+                    <p><strong>Avoid the combination unless a doctor approves it.</strong></p>
+                    <p>All models agree that ibuprofen raises bleeding risk on anticoagulants<button class="claim-badge" type="button" tabindex="-1" aria-label="6 of 6 models support this claim">6/6</button> and most name paracetamol as the safer default<button class="claim-badge has-dissent" type="button" tabindex="-1" aria-label="5 of 6 models support this claim"><span class="claim-dot" aria-hidden="true"></span>5/6</button>. They split on whether an occasional dose is acceptable.</p>
+                  </div>
+                </div>
+                <div class="consensus-differences">
+                  <h2>Differences</h2>
+                  <div class="differences-cards">
+                    <details class="diff-card is-contradiction is-major" open>
+                      <summary class="diff-card-summary">
+                        <span class="diff-card-tags">
+                          <span class="sev-dot is-crit" aria-hidden="true"></span>
+                          <span class="diff-type-tag">Contradiction · critical</span>
+                        </span>
+                        <span class="diff-card-claim">Is an occasional ibuprofen dose acceptable?</span>
+                      </summary>
+                      <div class="diff-card-body">
+                        <div class="diff-position">
+                          <div class="diff-position-label">ChatGPT, Claude, Gemini, DeepSeek</div>
+                          <div class="diff-position-stance">No — avoid NSAIDs entirely unless a doctor explicitly approves.</div>
+                          <blockquote class="diff-position-quote">even single doses can meaningfully increase bleeding risk</blockquote>
+                        </div>
+                        <div class="diff-position">
+                          <div class="diff-position-label">Mistral, Grok</div>
+                          <div class="diff-position-stance">A one-off low dose is usually tolerated.</div>
+                          <blockquote class="diff-position-quote">occasional use is generally considered low risk for most patients</blockquote>
+                        </div>
+                        <div class="diff-verify"><b>Worth verifying: </b>this is a medical decision — confirm with a doctor or pharmacist before combining the two.</div>
+                        <div class="diff-resolve">
+                          <button class="diff-resolve-btn" type="button" tabindex="-1">
+                            <svg class="diff-resolve-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h9M11 5 8.8 2.8M11 5 8.8 7.2"/><path d="M14 11H5M5 11l2.2-2.2M5 11l2.2 2.2"/></svg>
+                            <span class="diff-resolve-btn-label">Resolve with the models</span>
+                            <span class="pro-badge diff-resolve-pro-chip">Pro</span>
+                          </button>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+          </div>
+          <div class="lp-slider-nav">
+            <button class="lp-slider-arrow" type="button" data-slide-dir="-1" aria-label="Previous example">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+            <div class="lp-slider-dots">
+              <button class="lp-slider-dot is-active" type="button" aria-label="Example 1"></button>
+              <button class="lp-slider-dot" type="button" aria-label="Example 2"></button>
+              <button class="lp-slider-dot" type="button" aria-label="Example 3"></button>
             </div>
+            <button class="lp-slider-arrow" type="button" data-slide-dir="1" aria-label="Next example">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
           </div>
         </div>
       </div>
@@ -504,6 +707,50 @@
             entries.forEach(entry => { visible = entry.isIntersecting; if (visible) loop(); });
           }, { threshold: 0.4 });
           typeObserver.observe(typeTarget.closest(".lp-window") || typeTarget);
+        }
+      }
+
+      // Scene 03 slideshow: cycle through consensus/differences examples.
+      // Auto-advances only while in view; any manual interaction stops it.
+      const slider = document.getElementById("diffSlider");
+      if (slider) {
+        const slides = Array.from(slider.querySelectorAll(".lp-slide"));
+        const dots = Array.from(slider.querySelectorAll(".lp-slider-dot"));
+        let index = 0;
+        let timer = null;
+
+        const show = (next) => {
+          index = (next + slides.length) % slides.length;
+          slides.forEach((slide, i) => slide.classList.toggle("is-active", i === index));
+          dots.forEach((dot, i) => dot.classList.toggle("is-active", i === index));
+        };
+        const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+        const start = () => {
+          if (reducedMotion || timer) return;
+          timer = setInterval(() => show(index + 1), 7000);
+        };
+
+        slider.querySelectorAll("[data-slide-dir]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            stop();
+            show(index + Number(btn.dataset.slideDir));
+            window.umami?.track?.("landing_diff_slider_arrow");
+          });
+        });
+        dots.forEach((dot, i) => {
+          dot.addEventListener("click", () => {
+            stop();
+            show(i);
+            window.umami?.track?.("landing_diff_slider_dot");
+          });
+        });
+
+        if ("IntersectionObserver" in window) {
+          new IntersectionObserver(entries => {
+            entries.forEach(entry => { entry.isIntersecting ? start() : stop(); });
+          }, { threshold: 0.25 }).observe(slider);
+        } else {
+          start();
         }
       }
 

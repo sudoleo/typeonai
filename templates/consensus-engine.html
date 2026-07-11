@@ -18,8 +18,8 @@
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>How the Consensus Engine Works | consens.io</title>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260709-consensus-engine4">
-  <link rel="stylesheet" href="/static/css/consensus-engine.css?v=20260709-consensus-engine-flow">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260711-hero-consensus2">
+  <link rel="stylesheet" href="/static/css/consensus-engine.css?v=20260711-ce-redesign2">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -150,7 +150,7 @@
                   </span>
                 </div>
                 <div class="ce-mini-diff" aria-hidden="true">
-                  <span></span>
+                  <span class="ce-mini-diff-tag"><i class="sev-dot is-warn"></i><em></em></span>
                   <strong></strong>
                   <p></p>
                 </div>
@@ -250,22 +250,22 @@
         </div>
 
         <div class="ce-steps lp-reveal">
-          <article class="ce-step">
+          <article class="ce-step" data-step="01">
             <span class="ce-step-number">01</span>
             <h3>Six model families answer independently.</h3>
             <p>OpenAI, Claude, Gemini, Mistral, DeepSeek, and Grok receive the same prompt. Their original answers stay separate, so the synthesis never replaces the raw evidence.</p>
           </article>
-          <article class="ce-step">
+          <article class="ce-step" data-step="02">
             <span class="ce-step-number">02</span>
             <h3>The selected Consensus Engine writes the synthesis.</h3>
             <p>The engine you choose in the dropdown reads only the included answers, ignores excluded ones, and writes one response that preserves common ground plus necessary caveats.</p>
           </article>
-          <article class="ce-step">
+          <article class="ce-step" data-step="03">
             <span class="ce-step-number">03</span>
             <h3>A separate judge checks the consensus.</h3>
             <p>The Differences Judge extracts key claims, maps which models support or dissent, and preferably runs on a different model family than the synthesis engine.</p>
           </article>
-          <article class="ce-step">
+          <article class="ce-step" data-step="04">
             <span class="ce-step-number">04</span>
             <h3>The UI renders structured evidence.</h3>
             <p>The final payload contains the consensus text, agreement score, claim badges, contradiction cards, and judge metadata, so the interface can show what happened.</p>
@@ -316,25 +316,25 @@
         </div>
 
         <div class="ce-diff-engine-grid lp-reveal">
-          <article class="ce-diff-stage">
+          <article class="ce-diff-stage" data-step="01">
             <span class="ce-step-number">01</span>
             <h3>Inputs are filtered and anonymized.</h3>
             <p>Only non-empty, non-excluded model answers are used. Each answer is capped before analysis and then renamed to neutral labels like Model A, Model B, and Model C.</p>
             <p class="ce-tech-note">Why: anonymization and shuffled order reduce provider-name and position bias in the judge pass.</p>
           </article>
-          <article class="ce-diff-stage">
+          <article class="ce-diff-stage" data-step="02">
             <span class="ce-step-number">02</span>
             <h3>The judge must return strict JSON.</h3>
             <p>The prompt asks for central claims, agreeing models, dissenting quotes, difference cards, contradiction severity, verification hints, and the model closest to the consensus.</p>
             <p class="ce-tech-note">Types: <code>contradiction</code> for incompatible facts or conclusions, <code>emphasis</code> for different focus or missing context.</p>
           </article>
-          <article class="ce-diff-stage">
+          <article class="ce-diff-stage" data-step="03">
             <span class="ce-step-number">03</span>
             <h3>The judge is chosen independently.</h3>
             <p>The judge tier follows the selected Consensus Engine. Standard consensus uses a standard judge; Pro consensus tries a Pro judge from another model family.</p>
             <p class="ce-tech-note">Fallback: primary judge, retry, then the next available family; Pro attempts can fail open to a standard judge.</p>
           </article>
-          <article class="ce-diff-stage">
+          <article class="ce-diff-stage" data-step="04">
             <span class="ce-step-number">04</span>
             <h3>The server verifies and scores the result.</h3>
             <p>JSON is repaired if safely possible, model labels are mapped back, quotes are checked against the original answers, and unverifiable quotes are removed.</p>
@@ -355,14 +355,43 @@
           </section>
           <section class="ce-render-panel">
             <div class="consensus-verdict is-warn">
-              <span class="verdict-icon" aria-hidden="true"></span>
-              <span class="verdict-text">Caution (score 64/100): 1 critical contradiction</span>
-              <span class="verdict-judge">Analysis by Gemini (Pro), independent of the consensus engine</span>
+              <span class="verdict-score" style="--val:64" title="Agreement score 64/100">
+                <span class="verdict-score-ring" aria-hidden="true"></span>
+                <span class="verdict-score-num">64</span>
+              </span>
+              <span class="verdict-main">
+                <span class="verdict-headline">The models contradict each other on 1 point</span>
+                <span class="verdict-detail"><span class="verdict-detail-crit">1 critical</span> — 6 models compared</span>
+              </span>
+              <span class="verdict-judge">
+                <span>Analysis by Gemini (Pro)</span>
+                <span class="verdict-judge-sub">independent of the consensus engine</span>
+              </span>
             </div>
-            <div class="ce-diff-card">
-              <span>Contradiction · major</span>
-              <strong>Does the caveat change the recommendation?</strong>
-              <p>Position A supports the recommendation directly. Position B says the recommendation only holds under a specific condition.</p>
+            <div class="ce-render-diff">
+              <h4 class="ce-panel-title">Differences</h4>
+              <div class="differences-cards">
+                <details class="diff-card is-contradiction is-major" open>
+                  <summary class="diff-card-summary">
+                    <span class="diff-card-tags">
+                      <span class="sev-dot is-crit" aria-hidden="true"></span>
+                      <span class="diff-type-tag">Contradiction · critical</span>
+                    </span>
+                    <span class="diff-card-claim">Does the caveat change the recommendation?</span>
+                  </summary>
+                  <div class="diff-card-body">
+                    <div class="diff-position">
+                      <div class="diff-position-label">ChatGPT, Mistral, DeepSeek</div>
+                      <div class="diff-position-stance">The recommendation holds as stated.</div>
+                    </div>
+                    <div class="diff-position">
+                      <div class="diff-position-label">Claude, Gemini, Grok</div>
+                      <div class="diff-position-stance">It only holds under a specific condition.</div>
+                    </div>
+                    <div class="diff-verify"><b>Worth verifying: </b>check whether the condition applies to your case before acting on the answer.</div>
+                  </div>
+                </details>
+              </div>
             </div>
           </section>
         </div>
@@ -381,23 +410,49 @@
 
         <div class="ce-result-demo lp-reveal" aria-label="Example consensus result">
           <div class="consensus-verdict is-warn">
-            <span class="verdict-icon" aria-hidden="true"></span>
-            <span class="verdict-text">Caution (score 82/100): the models disagree on one important caveat</span>
+            <span class="verdict-score" style="--val:82" title="Agreement score 82/100">
+              <span class="verdict-score-ring" aria-hidden="true"></span>
+              <span class="verdict-score-num">82</span>
+            </span>
+            <span class="verdict-main">
+              <span class="verdict-headline">The models contradict each other on 1 point</span>
+              <span class="verdict-detail">minor details — 6 models compared</span>
+            </span>
+            <span class="verdict-judge">
+              <span>Analysis by Mistral</span>
+              <span class="verdict-judge-sub">independent of the consensus engine</span>
+            </span>
           </div>
           <div class="ce-result-grid">
             <section class="ce-answer">
               <h3>Consensus Answer</h3>
               <p><strong>Most models agree on the main recommendation.</strong></p>
               <p>The answer combines the repeated points, removes duplicated wording, and keeps caveats where the source answers were not fully aligned.</p>
-              <div class="ce-claim-row"><span>Main recommendation appears in most answers</span><b>5/6</b></div>
-              <div class="ce-claim-row"><span>Important caveat needs context</span><b>3/6</b></div>
+              <div class="ce-claim-row"><span>Main recommendation appears in most answers</span><span class="claim-badge has-dissent"><span class="claim-dot" aria-hidden="true"></span>5/6</span></div>
+              <div class="ce-claim-row"><span>Important caveat needs context</span><span class="claim-badge has-dissent"><span class="claim-dot" aria-hidden="true"></span>3/6</span></div>
             </section>
             <aside class="ce-differences">
               <h3>Differences</h3>
-              <div class="ce-diff-card">
-                <span>Contradiction</span>
-                <strong>How strong is the evidence?</strong>
-                <p>Three models treat the evidence as settled; three add a caveat about measurement or source quality.</p>
+              <div class="differences-cards">
+                <details class="diff-card is-contradiction" open>
+                  <summary class="diff-card-summary">
+                    <span class="diff-card-tags">
+                      <span class="sev-dot is-warn" aria-hidden="true"></span>
+                      <span class="diff-type-tag">Contradiction · minor detail</span>
+                    </span>
+                    <span class="diff-card-claim">How strong is the evidence?</span>
+                  </summary>
+                  <div class="diff-card-body">
+                    <div class="diff-position">
+                      <div class="diff-position-label">ChatGPT, Gemini, DeepSeek</div>
+                      <div class="diff-position-stance">The evidence is settled and supports the recommendation.</div>
+                    </div>
+                    <div class="diff-position">
+                      <div class="diff-position-label">Claude, Mistral, Grok</div>
+                      <div class="diff-position-stance">A caveat about measurement or source quality applies.</div>
+                    </div>
+                  </div>
+                </details>
               </div>
               <div class="ce-footnote">Analysis by a judge model, independent of the consensus engine where keys allow it.</div>
             </aside>

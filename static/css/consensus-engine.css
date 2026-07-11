@@ -8,10 +8,30 @@
 }
 
 .ce-hero-section {
+  position: relative;
+  overflow: hidden;
   min-height: calc(84svh - 54px);
   display: flex;
   align-items: center;
   padding: clamp(24px, 5vh, 52px) 0 clamp(34px, 6vh, 70px);
+}
+
+/* Soft accent glow behind the hero window — subtle depth without breaking
+   the flat Apple chrome. */
+.ce-hero-section::before {
+  content: "";
+  position: absolute;
+  top: 4%;
+  right: -12%;
+  width: min(760px, 62vw);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 9%, transparent), transparent 72%);
+  pointer-events: none;
+}
+
+.ce-hero {
+  position: relative;
 }
 
 .ce-hero {
@@ -37,7 +57,6 @@
 
 .ce-label,
 .ce-step-number,
-.ce-diff-card span,
 .ce-footnote {
   color: var(--text-secondary);
   font-size: 0.72rem;
@@ -239,26 +258,31 @@
   width: 58%;
 }
 
+/* Skeleton of a flat difference entry, matching the app's redesigned list:
+   hairline on top, severity dot + label bar instead of a filled amber card. */
 .ce-mini-diff {
   margin-top: 12px;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--accent-tertiary) 38%, var(--sidebar-border));
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent-tertiary) 8%, transparent);
-  box-shadow: inset 3px 0 0 var(--accent-tertiary);
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 45%, transparent);
 }
 
-.ce-mini-diff span {
+.ce-mini-diff-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ce-mini-diff-tag em {
   display: block;
-  width: 76px;
-  height: 18px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--accent-tertiary) 20%, var(--response-bg));
+  width: 92px;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-tertiary) 34%, var(--sidebar-border));
 }
 
 .ce-mini-diff strong {
   width: 86%;
-  margin-top: 10px;
+  margin-top: 11px;
 }
 
 .ce-mini-diff p {
@@ -313,22 +337,38 @@
   box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
+/* Branch connectors: the entry fans out into the two lanes, the lanes merge
+   back into the output. Blue for the consensus lane, amber for differences. */
+.ce-flow-entry::before,
 .ce-flow-entry::after,
-.ce-flow-output::before {
+.ce-flow-output::before,
+.ce-flow-output::after {
   content: "";
   position: absolute;
-  left: 50%;
   width: 2px;
   height: 20px;
-  background: color-mix(in srgb, var(--accent) 48%, var(--sidebar-border));
   transform: translateX(-50%);
 }
 
+.ce-flow-entry::before,
+.ce-flow-output::before {
+  left: 25%;
+  background: color-mix(in srgb, var(--accent) 48%, var(--sidebar-border));
+}
+
+.ce-flow-entry::after,
+.ce-flow-output::after {
+  left: 75%;
+  background: color-mix(in srgb, var(--accent-tertiary) 58%, var(--sidebar-border));
+}
+
+.ce-flow-entry::before,
 .ce-flow-entry::after {
   bottom: -21px;
 }
 
-.ce-flow-output::before {
+.ce-flow-output::before,
+.ce-flow-output::after {
   top: -21px;
 }
 
@@ -500,6 +540,44 @@
   overflow: hidden;
 }
 
+/* Oversized ghost numeral in the card corner (from data-step). */
+.ce-step::after,
+.ce-diff-stage::after {
+  content: attr(data-step);
+  position: absolute;
+  right: 8px;
+  bottom: -20px;
+  font-size: 5.6rem;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  color: color-mix(in srgb, var(--accent) 9%, transparent);
+  pointer-events: none;
+}
+
+.ce-diff-stage::after {
+  color: color-mix(in srgb, var(--accent-tertiary) 12%, transparent);
+}
+
+/* Gentle lift on hover, matching the landing's lp-card behaviour. */
+.ce-step,
+.ce-diff-stage,
+.ce-faq-list article {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.ce-step:hover,
+.ce-diff-stage:hover,
+.ce-faq-list article:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--glass-border));
+  box-shadow: var(--liquid-shadow-hover);
+}
+
+.ce-diff-stage:hover {
+  border-color: color-mix(in srgb, var(--accent-tertiary) 30%, var(--glass-border));
+}
+
 .ce-diff-engine {
   display: grid;
   gap: clamp(42px, 6vw, 68px);
@@ -512,6 +590,8 @@
 }
 
 .ce-diff-stage {
+  position: relative;
+  overflow: hidden;
   min-height: 310px;
   padding: 24px;
   border: 1px solid color-mix(in srgb, var(--glass-border) 60%, var(--glass-edge));
@@ -609,6 +689,7 @@
 .ce-render-panel {
   display: grid;
   gap: 14px;
+  align-content: start;
 }
 
 .ce-render-panel .consensus-verdict {
@@ -616,12 +697,33 @@
   margin: 0;
 }
 
+/* The panel column is narrow: the judge footnote wraps under the headline,
+   indented behind the score ring (42px ring + 14px gap), like the app. */
 .ce-render-panel .verdict-judge {
-  flex-basis: 100%;
-  margin-left: 20px;
-  color: color-mix(in srgb, currentColor 74%, var(--text-secondary));
-  font-size: 0.76rem;
-  font-weight: 400;
+  flex-basis: calc(100% - 56px);
+  margin-left: 56px;
+  text-align: left;
+}
+
+/* Glass panel around the rendered differences entry */
+.ce-render-diff {
+  padding: 18px 22px 10px;
+  border: 1px solid color-mix(in srgb, var(--glass-border) 60%, var(--glass-edge));
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 28%, transparent), transparent 44%),
+    color-mix(in srgb, var(--response-bg) 92%, var(--glass-bg-strong));
+  box-shadow: var(--liquid-shadow);
+}
+
+.ce-panel-title {
+  margin: 0 0 8px;
+  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .ce-split {
@@ -677,31 +779,15 @@
   line-height: 1.35;
 }
 
-.ce-claim-row b {
-  flex: 0 0 auto;
-  padding: 2px 9px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--sidebar-hover) 70%, transparent);
-  color: var(--text-primary);
-  font-size: 0.76rem;
+/* Agreement badges in the claim rows come from landing.css (.claim-badge);
+   only neutralize the inline-text margin here. */
+.ce-claim-row .claim-badge {
+  margin: 0;
 }
 
-.ce-diff-card {
-  margin-top: 16px;
-  padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--accent-tertiary) 42%, var(--sidebar-border));
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent-tertiary) 10%, var(--response-bg));
-  box-shadow: inset 3px 0 0 var(--accent-tertiary);
-}
-
-.ce-diff-card strong {
-  display: block;
-  margin-top: 8px;
-  color: var(--text-primary);
-  font-size: 1rem;
-  line-height: 1.32;
+/* The flat differences list needs some air below the panel heading. */
+.ce-differences .differences-cards {
+  margin-top: 4px;
 }
 
 .ce-footnote {
@@ -820,9 +906,15 @@
     grid-template-columns: 1fr;
   }
 
-  .ce-flow-entry::after,
+  /* Lanes are stacked: keep a single connector on the left edge. */
+  .ce-flow-entry::before,
   .ce-flow-output::before {
     left: 28px;
+  }
+
+  .ce-flow-entry::after,
+  .ce-flow-output::after {
+    display: none;
   }
 
   .ce-flow-lane-title {

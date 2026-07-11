@@ -380,6 +380,61 @@ img { display: block; max-width: 100%; }
   box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
+/* --- Hero window: the end result (verdict + consensus + differences) instead
+   of the input mock — the payoff first, the flow follows in scenes 01–03. */
+.lp-hero-result { gap: 13px; }
+
+.lp-hero-result .consensus-verdict { margin-bottom: 0; }
+
+.lp-hero-q {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lp-hero-q-label {
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.lp-hero-q-text {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.lp-hero-block + .lp-hero-block {
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 52%, transparent);
+  padding-top: 13px;
+}
+
+.lp-hero-block-title {
+  margin: 0 0 6px;
+  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.lp-hero-consensus-text {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--text-color) 92%, var(--sidebar-text-muted));
+}
+
+.lp-hero-consensus-text strong { color: var(--text-color); }
+
+/* The hero card is compact: trim the diff-card's outer padding. */
+.lp-hero-result .diff-card-body { padding-bottom: 4px; }
+
 /* Hero mockup floats gently in the air while loading: slow, calming drift. */
 .lp-hero .lp-window { animation: lpFloat 7s ease-in-out infinite; will-change: transform; }
 @keyframes lpFloat {
@@ -799,40 +854,119 @@ img { display: block; max-width: 100%; }
 .lp-scene-01 .lp-window { max-width: 620px; }
 .lp-scene-03 .lp-scene-visual { margin-top: clamp(40px, 5vw, 60px); }
 
-/* Verdict banner (full width, above the box) */
+/* Verdict bar (full width, above the box) — neutral glass bar like the /app:
+   the semantics live in the score ring (plus a 3–4% wash), text stays in the
+   normal text colour. */
 .consensus-verdict {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   margin-bottom: 14px;
-  padding: 11px 16px;
+  padding: 9px 16px 9px 11px;
   border-radius: var(--radius-md);
-  border: 1px solid transparent;
-  background: color-mix(in srgb, var(--glass-bg-strong) 70%, transparent);
-  box-shadow: var(--liquid-shadow);
-  font-size: 0.94rem;
-  font-weight: 600;
-  line-height: 1.35;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent);
+  background: var(--glass-bg-strong);
+  box-shadow: 0 2px 10px rgba(40, 56, 76, 0.05), inset 0 1px 0 var(--glass-highlight);
+  font-size: 0.89rem;
+  line-height: 1.3;
+  color: var(--text-color);
 }
 
-.consensus-verdict .verdict-icon { flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%; }
+.dark-mode .consensus-verdict {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2), inset 0 1px 0 var(--glass-highlight);
+}
 
 .consensus-verdict.is-calm {
-  background: color-mix(in srgb, #2c7a2c 9%, var(--response-bg));
-  border-color: color-mix(in srgb, #2c7a2c 28%, var(--sidebar-border));
-  color: color-mix(in srgb, #196a35 72%, var(--text-color));
+  --verdict-ring: #2c7a2c;
+  background: color-mix(in srgb, #2c7a2c 3%, var(--glass-bg-strong));
 }
-.consensus-verdict.is-calm .verdict-icon { background: #2c7a2c; }
 
 .consensus-verdict.is-warn {
-  background: color-mix(in srgb, #b97718 11%, var(--response-bg));
-  border-color: color-mix(in srgb, #b97718 36%, var(--sidebar-border));
-  color: color-mix(in srgb, #8a5a10 78%, var(--text-color));
+  --verdict-ring: #d99b46;
+  background: color-mix(in srgb, #b97718 4%, var(--glass-bg-strong));
 }
-.consensus-verdict.is-warn .verdict-icon { background: #d99b46; }
 
-.dark-mode .consensus-verdict.is-calm { color: color-mix(in srgb, #8ee6c8 70%, var(--text-color)); }
-.dark-mode .consensus-verdict.is-warn { color: color-mix(in srgb, #f3c66f 76%, var(--text-color)); }
+.dark-mode .consensus-verdict.is-calm { --verdict-ring: #6fcf9a; }
+.dark-mode .consensus-verdict.is-warn { --verdict-ring: #e8b968; }
+
+/* Score ring: conic gauge, fill level comes from --val (0–100). */
+.verdict-score {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+}
+
+.verdict-score-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--verdict-ring, var(--accent)) calc(var(--val, 0) * 1%),
+    color-mix(in srgb, var(--sidebar-border) 55%, transparent) 0
+  );
+  -webkit-mask: radial-gradient(closest-side, transparent 77%, #000 78%);
+  mask: radial-gradient(closest-side, transparent 77%, #000 78%);
+}
+
+.verdict-score-num {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Fallback without a score (also used by /consensus-engine): small status dot. */
+.consensus-verdict .verdict-icon {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--verdict-ring, var(--sidebar-text-muted));
+}
+
+.verdict-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.verdict-headline { font-weight: 600; }
+
+.verdict-detail {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--sidebar-text-muted);
+}
+
+.verdict-detail-crit {
+  font-weight: 650;
+  color: color-mix(in srgb, #b23b2e 70%, var(--text-color));
+}
+
+.dark-mode .verdict-detail-crit {
+  color: color-mix(in srgb, #f3a08f 78%, var(--text-color));
+}
+
+/* Judge footnote: which independent model family delivered the analysis */
+.consensus-verdict .verdict-judge {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: right;
+  font-size: 0.73rem;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--sidebar-text-muted);
+}
 
 /* The two-pane consensus box */
 .consensus-box {
@@ -871,13 +1005,8 @@ img { display: block; max-width: 100%; }
   box-shadow: none;
 }
 
-/* The differences PANEL itself stays neutral (no coloured edge). Only the inner
-   contradiction card (.diff-card.is-contradiction) carries the amber accent. */
-.consensus-differences.credibility-framed.cred-partially {
-  border-color: transparent;
-  border-left-color: color-mix(in srgb, var(--sidebar-border) 52%, transparent);
-  box-shadow: none;
-}
+/* The differences PANEL itself stays neutral (no coloured edge). Severity
+   lives in the sev-dot and the type label inside each entry. */
 
 .consensus-main > h2 {
   position: relative;
@@ -963,123 +1092,407 @@ img { display: block; max-width: 100%; }
 }
 .claims-fallback-text { min-width: 0; overflow-wrap: anywhere; }
 
+/* Monochrome chips like the /app; dissent is only a small amber dot inside
+   the chip, no filled pill anymore. */
 .claim-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  min-height: 20px;
-  padding: 1px 8px;
-  border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 80%, transparent);
-  background: color-mix(in srgb, var(--sidebar-hover) 70%, transparent);
-  color: color-mix(in srgb, var(--text-color) 76%, var(--sidebar-text-muted));
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  gap: 5px;
+  vertical-align: 2px;
+  margin: 0 2px 0 5px;
+  padding: 0 7px;
+  min-height: 18px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 90%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--glass-bg-strong) 55%, transparent);
+  color: var(--sidebar-text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
-.claim-badge.has-dissent {
-  background: color-mix(in srgb, #d99b46 16%, var(--response-bg));
-  border-color: color-mix(in srgb, #b97718 44%, var(--sidebar-border));
-  color: color-mix(in srgb, #8a5a10 80%, var(--text-color));
-}
-.dark-mode .claim-badge.has-dissent { color: color-mix(in srgb, #f3c66f 80%, var(--text-color)); }
 
-/* Differences cards */
-.differences-cards { display: flex; flex-direction: column; gap: 10px; }
+.claims-fallback-row .claim-badge { margin: 0; }
+
+.claim-badge .claim-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #d99b46;
+}
+
+.dark-mode .claim-badge .claim-dot { background: #e8b968; }
+
+/* Differences: flat list, exactly like the /app — hairline separators instead
+   of card frames; severity lives in the dot and the subtle text label. */
+.differences-cards { display: flex; flex-direction: column; }
 
 .diff-card {
-  border-radius: var(--radius-sm);
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent);
-  background: color-mix(in srgb, var(--response-bg) 90%, var(--glass-bg-strong) 10%);
-  overflow: hidden;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 45%, transparent);
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
 }
-.diff-card.is-contradiction {
-  border-color: color-mix(in srgb, #b97718 44%, var(--sidebar-border));
-  box-shadow: inset 3px 0 0 #d99b46;
-}
+
+.diff-card:first-child { border-top: 0; }
+
 .diff-card-summary {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  padding: 10px 12px;
+  padding: 13px 0 5px;
+  cursor: pointer;
+  list-style: none;
 }
+
+.diff-card:first-child > .diff-card-summary { padding-top: 2px; }
+
+.diff-card-summary::-webkit-details-marker { display: none; }
+
+/* Severity dot: the only colour carrier in the card head. */
+.sev-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sev-dot.is-crit { background: #cf5a4a; }
+.sev-dot.is-warn { background: #d99b46; }
+.sev-dot.is-info { background: color-mix(in srgb, var(--sidebar-text-muted) 55%, transparent); }
+.sev-dot.is-ok { background: #4d9e5f; }
+
+.dark-mode .sev-dot.is-crit { background: #e58a79; }
+.dark-mode .sev-dot.is-warn { background: #e8b968; }
+.dark-mode .sev-dot.is-ok { background: #6fcf9a; }
+
+.diff-card-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
 .diff-type-tag {
-  align-self: flex-start;
-  padding: 1px 8px;
-  border-radius: var(--radius-pill);
-  font-size: 0.66rem;
-  font-weight: 700;
+  font-size: 0.68rem;
+  font-weight: 650;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  background: color-mix(in srgb, var(--sidebar-hover) 80%, transparent);
   color: var(--sidebar-text-muted);
 }
+
 .diff-card.is-contradiction .diff-type-tag {
-  background: color-mix(in srgb, #d99b46 22%, var(--response-bg));
-  color: color-mix(in srgb, #8a5a10 80%, var(--text-color));
+  color: color-mix(in srgb, #8a5a10 70%, var(--text-color));
 }
-.dark-mode .diff-card.is-contradiction .diff-type-tag { color: color-mix(in srgb, #f3c66f 82%, var(--text-color)); }
+
+.dark-mode .diff-card.is-contradiction .diff-type-tag {
+  color: color-mix(in srgb, #f3c66f 78%, var(--text-color));
+}
+
+/* Critical contradictions (severity=major): red label instead of amber. */
+.diff-card.is-contradiction.is-major .diff-type-tag {
+  color: color-mix(in srgb, #96352a 72%, var(--text-color));
+}
+
+.dark-mode .diff-card.is-contradiction.is-major .diff-type-tag {
+  color: color-mix(in srgb, #f3a08f 80%, var(--text-color));
+}
+
 .diff-card-claim {
-  font-size: 0.86rem;
-  font-weight: 650;
-  line-height: 1.4;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.45;
   color: color-mix(in srgb, var(--text-color) 92%, var(--sidebar-text-muted));
   overflow-wrap: anywhere;
 }
-.diff-card-body { padding: 2px 12px 12px; }
-.diff-position { padding: 8px 0; }
-.diff-position + .diff-position { border-top: 1px dashed color-mix(in srgb, var(--sidebar-border) 65%, transparent); }
+
+.diff-card-body { padding: 0 0 13px; }
+
+.diff-position { padding: 6px 0; }
+
 .diff-position-label {
-  margin-bottom: 3px;
-  font-size: 0.74rem;
-  font-weight: 700;
-  color: color-mix(in srgb, var(--text-color) 80%, var(--sidebar-text-muted));
+  margin-bottom: 1px;
+  font-size: 0.76rem;
+  font-weight: 650;
+  color: color-mix(in srgb, var(--text-color) 84%, var(--sidebar-text-muted));
 }
+
 .diff-position-stance {
-  font-size: 0.83rem;
-  line-height: 1.45;
+  font-size: 0.8rem;
+  line-height: 1.5;
   color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
   overflow-wrap: anywhere;
 }
+
 .diff-position-quote {
   margin: 5px 0 0;
-  padding: 2px 0 2px 10px;
-  border-left: 2px solid color-mix(in srgb, var(--accent) 36%, var(--sidebar-border));
-  color: color-mix(in srgb, var(--text-color) 76%, var(--sidebar-text-muted));
-  font-size: 0.8rem;
+  padding: 1px 0 1px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--sidebar-text-muted) 38%, transparent);
+  color: var(--sidebar-text-muted);
+  font-size: 0.76rem;
   font-style: italic;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
-.diff-position-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
-.claim-jump-link {
-  flex-shrink: 0;
-  padding: 4px 10px;
-  min-height: 28px;
+
+.diff-position-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 4px;
+}
+
+/* Compact jump buttons: neutral at rest, accent on interaction. The arrow
+   signals that the model answer lives further up the page. */
+.diff-jump-link {
   display: inline-flex;
   align-items: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--sidebar-border));
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  color: color-mix(in srgb, var(--accent) 78%, var(--text-color));
-  font-size: 0.74rem;
-  font-weight: 650;
+  gap: 5px;
+  min-height: 26px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-color) 4%, transparent);
+  color: color-mix(in srgb, var(--text-color) 82%, var(--sidebar-text-muted));
+  font-size: 0.73rem;
+  font-weight: 600;
+  font-family: inherit;
   line-height: 1.2;
+  cursor: pointer;
   white-space: nowrap;
-  transition: box-shadow .2s ease, background-color .2s ease;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 55%, transparent);
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
-.claim-jump-link:hover { box-shadow: var(--liquid-focus-ring); }
-.diff-verify {
-  margin-top: 10px;
-  padding: 8px 10px;
-  border-radius: var(--radius-xs);
-  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--sidebar-border));
+
+.diff-jump-link::after {
+  content: "\2191";
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--sidebar-text-muted);
+  opacity: 0.75;
+}
+
+.diff-jump-link:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border));
   background: color-mix(in srgb, var(--accent) 7%, transparent);
-  font-size: 0.79rem;
-  line-height: 1.45;
-  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  color: color-mix(in srgb, var(--accent) 72%, var(--text-color));
+  box-shadow: var(--liquid-focus-ring);
+}
+
+/* Rail note instead of a filled hint box. */
+.diff-verify {
+  margin-top: 9px;
+  padding: 1px 0 1px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--sidebar-text-muted);
   overflow-wrap: anywhere;
+}
+
+.diff-verify b {
+  font-weight: 600;
+  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+}
+
+/* Resolve round: quiet ghost button with the gold Pro chip, like the /app. */
+.diff-resolve { margin-top: 8px; }
+
+.diff-resolve-btn {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 28px;
+  padding: 5px 8px 5px 12px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 90%, transparent);
+  background: transparent;
+  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: inherit;
+  line-height: 1.25;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: box-shadow 0.2s ease, color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.diff-resolve-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
+  color: color-mix(in srgb, var(--accent) 80%, var(--text-color));
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  box-shadow: var(--liquid-focus-ring);
+}
+
+.diff-resolve-icon { flex-shrink: 0; }
+
+/* Gold Pro badge (copied from the /app's central .pro-badge in layout.css). */
+.pro-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, #d4af37 55%, transparent);
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, color-mix(in srgb, #ffffff 24%, transparent), transparent 60%), #c9a232;
+  color: #ffffff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 2px 6px rgba(201, 162, 50, 0.22);
+}
+
+.diff-resolve-pro-chip {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  box-shadow: none;
+}
+
+/* Empty state: green dot + two text lines instead of a filled green box. */
+.diff-empty-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 2px 0 0;
+}
+
+.diff-empty-state > .sev-dot { margin-top: 6px; }
+
+.diff-empty-headline {
+  font-size: 0.83rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-color);
+}
+
+.diff-empty-note {
+  margin-top: 2px;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--sidebar-text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Scene 03 slideshow — more consensus/differences examples
+   -------------------------------------------------------------------------- */
+.lp-diff-slider { margin-top: clamp(52px, 7vw, 84px); }
+
+.lp-slider-eyebrow {
+  margin: 0 0 22px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+/* All slides share one grid cell: the container keeps the height of the
+   tallest slide, inactive slides fade out without collapsing the layout. */
+.lp-slides { display: grid; }
+
+.lp-slide {
+  grid-area: 1 / 1;
+  min-width: 0;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition: opacity 0.45s ease, transform 0.45s ease, visibility 0s linear 0.45s;
+}
+
+.lp-slide.is-active {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.lp-slide-q {
+  margin: 0 0 14px;
+  text-align: center;
+  color: var(--text-primary);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Compact variant of the consensus box inside slides */
+.lp-mini.consensus-box { gap: 22px; }
+.lp-mini .consensus-main { padding: 6px 12px 8px; }
+.lp-mini .consensus-main > h2 {
+  justify-content: flex-start;
+  padding: 0;
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+}
+.lp-mini .consensus-main-text { font-size: 0.9rem; line-height: 1.6; }
+.lp-mini .consensus-differences { padding: 6px 12px 8px 22px; }
+
+.lp-slider-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.lp-slider-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 85%, transparent);
+  border-radius: 50%;
+  background: var(--glass-bg-strong);
+  color: var(--text-secondary);
+  cursor: pointer;
+  box-shadow: var(--liquid-shadow);
+  transition: color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.lp-slider-arrow:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--sidebar-border));
+  box-shadow: var(--liquid-shadow-hover);
+}
+
+.lp-slider-arrow svg { width: 15px; height: 15px; }
+
+.lp-slider-dots { display: flex; gap: 8px; }
+
+.lp-slider-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-secondary) 32%, transparent);
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.lp-slider-dot.is-active {
+  background: var(--accent);
+  transform: scale(1.2);
 }
 
 /* --------------------------------------------------------------------------
@@ -1187,6 +1600,7 @@ img { display: block; max-width: 100%; }
 @media (prefers-reduced-motion: reduce) {
   .lp-reveal { opacity: 1; transform: none; transition: none; }
   .lp-pulse i, .lp-agent::before, .lp-hero .lp-window, .lp-prompt-text.is-typing::after { animation: none; }
+  .lp-slide { transition: none; transform: none; }
   html { scroll-behavior: auto; }
 }
 
@@ -1207,6 +1621,20 @@ img { display: block; max-width: 100%; }
     border-left: 0;
     border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 52%, transparent);
     padding: 14px 16px 8px;
+  }
+  .lp-mini .consensus-differences { padding: 14px 12px 8px; }
+
+  /* Verdict bar: judge footnote wraps under the headline, indented behind
+     the score ring (42px ring + 14px gap), like the /app on small screens.
+     verdict-main grows so ring + headline always share the first row. */
+  .consensus-verdict { flex-wrap: wrap; font-size: 0.86rem; padding: 9px 12px 9px 10px; }
+  .consensus-verdict .verdict-main { flex: 1 1 180px; }
+  .consensus-verdict .verdict-judge {
+    /* basis + 56px indent together fill the row, so the box never bleeds
+       past the verdict border */
+    flex-basis: calc(100% - 56px);
+    margin-left: 56px;
+    text-align: left;
   }
 
   /* Tablet & phone: the toggle switches become compact icon buttons, exactly
