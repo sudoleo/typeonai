@@ -54,6 +54,9 @@ DEFAULT_LIMITS = {
     "share_min_models": 3,
     "share_question_min_chars": 15,
     "share_question_max_chars": 300,
+    "watch_free_active_limit": 1,
+    "watch_pro_active_limit": 5,
+    "watch_max_runs_per_day": 50,
 }
 
 LIMITS = DEFAULT_LIMITS.copy()
@@ -761,6 +764,15 @@ def get_followup_question_char_limit() -> int:
 
 def get_followup_consensus_char_limit() -> int:
     return LIMITS["followup_max_consensus_chars"]
+
+
+def get_watch_active_limit(is_pro: bool) -> int:
+    key = "watch_pro_active_limit" if is_pro else "watch_free_active_limit"
+    return max(0, int(LIMITS[key]))
+
+
+def get_watch_max_runs_per_day() -> int:
+    return max(0, int(LIMITS["watch_max_runs_per_day"]))
 
 
 def get_output_token_limit(is_pro: bool, deep_search: bool = False) -> int:

@@ -135,10 +135,21 @@ async def delete_account(request: Request, data: dict = Body(default={})):
         try:
             docs = db_firestore.collection(collection_name).where("owner_uid", "==", uid).stream()
             for doc in docs:
+                if collection_name == "shares":
+                    for history_doc in doc.reference.collection("watch_history").stream():
+                        history_doc.reference.delete()
                 doc.reference.delete()
         except Exception as e:
             logging.error(f"delete_account: {collection_name} cleanup failed for {uid}: {e}")
             errors.append(collection_name)
+
+    try:
+        docs = db_firestore.collection("watches").where("owner_uid", "==", uid).stream()
+        for doc in docs:
+            doc.reference.delete()
+    except Exception as e:
+        logging.error(f"delete_account: watches cleanup failed for {uid}: {e}")
+        errors.append("watches")
 
     # 4. In-Memory-Zustand bereinigen (inkl. Tier-Flag-Cache, sonst wuerde ein
     #    geloeschter Pro-Account bis zu 60s weiter als Pro gecacht)

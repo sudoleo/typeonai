@@ -19,7 +19,7 @@ from app.core.security import CustomSecurityMiddleware
 from app.core.rate_limit import limiter
 
 # Import routers
-from app.api.routers import auth, users, bookmarks, chat, pages, admin, share
+from app.api.routers import auth, users, bookmarks, chat, pages, admin, share, watch
 from app.core.config import load_models_from_db
 from app.services.share_snapshots import cleanup_expired_pending, cleanup_revoked_shares
 
@@ -72,3 +72,4 @@ app.include_router(chat.router)
 app.include_router(pages.router)
 app.include_router(admin.router)
 app.include_router(share.router)
+app.include_router(watch.router)

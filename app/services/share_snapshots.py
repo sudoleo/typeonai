@@ -703,6 +703,10 @@ def revoke_share(share_id, uid, is_admin=False, db=None):
         "indexed": False,
         "revoked_at": firestore.SERVER_TIMESTAMP,
     })
+    # Scheduler-Metadaten sofort entfernen; kompakte History bleibt bis zum
+    # regulaeren Share-Hard-Delete erhalten.
+    from app.services.watch_service import delete_watches_for_share
+    delete_watches_for_share(share_id, db=db)
     invalidate_share_cache(share_id)
 
 
@@ -807,6 +811,11 @@ def cleanup_revoked_shares(db=None, max_docs=500):
         data = doc.to_dict() or {}
         revoked_at = data.get("revoked_at")
         if isinstance(revoked_at, datetime) and revoked_at < cutoff:
+            # Alte Unit-Test-Doubles modellieren keine Subcollections; der
+            # reale Firestore-DocumentReference tut es.
+            if hasattr(doc.reference, "collection"):
+                for history_doc in doc.reference.collection("watch_history").stream():
+                    history_doc.reference.delete()
             doc.reference.delete()
             invalidate_share_cache(doc.id)
             deleted += 1

@@ -49,6 +49,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `users.py` | `/user_status`, `/usage`, `/delete_account`, `/track-interest`. |
 | `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus`. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
+| `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches`, `/api/watch/{id}` (PATCH/DELETE) und öffentlicher, HMAC-signierter `/watch/unsubscribe`-Link. |
 | `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 **Zentrale Templates** (`templates/`, gerendert mit `Jinja2Templates`):
@@ -301,6 +302,7 @@ app/services/llm/
   attachments.py             Attachment-Validierung/Aufbereitung
 app/services/
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
+  watch_service.py           Watch-CRUD, Tier-/Intervallregeln, Share-Bindung, Unsubscribe-Tokens
   public_markdown.py         Server-Markdown-Rendering für Share-Seiten
   differences_stats.py       Anonyme Differences-Telemetrie (differences_stats-Collection, §6)
 ```
@@ -338,6 +340,10 @@ Wichtige Verträge im Backend:
 - `pending_results` — kurzlebige Consensus-Ergebnisse fürs Sharing (TTL/Cleanup).
 - `shares` — veröffentlichte Snapshots (Slug, `indexed`, `status`, `owner_uid`,
   `question_hash`, …).
+- `watches` — owner-gebundene Scheduling-Metadaten (`share_id`, Intervall,
+  Status, nächste Ausführung, Lease/Fehlerzähler); keine IP-/User-Agent-Daten.
+  Verlaufspunkte liegen datenminimiert in `shares/{id}/watch_history` und
+  verändern den Share-Snapshot nicht.
 - `benchmark_runs` — admin-only Benchmark-Dashboard-Snapshots aus lokalen Runs:
   `manifest`, `results`, `audits`, abgeleitete Fragenmatrix; **keine**
   `calls.jsonl`-Rohantworten, Prompts oder Request-Payloads.
@@ -364,6 +370,8 @@ Wichtige Verträge im Backend:
   `DEVELOPER_OPENAI_API_KEY`, `DEVELOPER_MISTRAL_API_KEY`,
   `DEVELOPER_ANTHROPIC_API_KEY`, `DEVELOPER_GEMINI_API_KEY`,
   `DEVELOPER_DEEPSEEK_API_KEY`, `DEVELOPER_GROK_API_KEY`.
+- Consensus-Watch-Mail/Abmeldung: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`,
+  `SMTP_PASSWORD`, `MAIL_FROM`, `WATCH_UNSUBSCRIBE_SECRET`.
 
 Modell-IDs/Tier-Zuordnung/Labels: ausschließlich in `app/core/config.py` pflegen
 (`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
