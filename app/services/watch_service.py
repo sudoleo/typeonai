@@ -22,6 +22,7 @@ WATCH_INTERVALS = {
     "monthly": timedelta(days=30),
 }
 WATCH_STATUSES = {"active", "paused"}
+WATCH_EMAIL_MODES = {"changes_only", "every_run"}
 UNSUBSCRIBE_MAX_AGE_DAYS = 90
 WATCH_LEASE_MINUTES = 15
 WORKER_LEASE_MINUTES = 29
@@ -52,6 +53,16 @@ def validate_interval(interval, is_pro: bool) -> str:
     return normalized
 
 
+def validate_email_mode(value) -> str:
+    normalized = str(value or "changes_only").strip().lower()
+    if normalized not in WATCH_EMAIL_MODES:
+        raise WatchError(
+            "invalid_email_mode",
+            "Email mode must be changes_only or every_run.",
+        )
+    return normalized
+
+
 def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> dict:
     def iso(value):
         return value.isoformat() if isinstance(value, datetime) else ""
@@ -65,6 +76,7 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         "share_path": share_snapshots.share_path(slug, share_id),
         "question": str(share.get("question") or data.get("question") or "")[:200],
         "interval": data.get("interval") or "weekly",
+        "email_mode": data.get("email_mode") or "changes_only",
         "status": data.get("status") or "paused",
         "next_run_at": iso(data.get("next_run_at")),
         "last_run_at": iso(data.get("last_run_at")),
@@ -93,9 +105,11 @@ def _check_active_limit(uid: str, is_pro: bool, db, *, excluding_id: str | None 
         raise WatchError("limit_reached", "Active watch limit reached.")
 
 
-def create_watch(uid: str, *, interval, is_pro: bool, result_id=None, share_id=None, db=None) -> dict:
+def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
+                 result_id=None, share_id=None, db=None) -> dict:
     db = db if db is not None else db_firestore
     interval = validate_interval(interval, is_pro)
+    email_mode = validate_email_mode(email_mode)
     _check_active_limit(uid, is_pro, db)
     if bool(result_id) == bool(share_id):
         raise WatchError("invalid_request", "Provide exactly one of result_id or share_id.")
@@ -121,6 +135,7 @@ def create_watch(uid: str, *, interval, is_pro: bool, result_id=None, share_id=N
         "share_id": share_id,
         "question_hash": share.get("question_hash") or share_snapshots.question_hash(share.get("question")),
         "interval": interval,
+        "email_mode": email_mode,
         "status": "active",
         "next_run_at": now + WATCH_INTERVALS[interval],
         "claimed_until": None,
@@ -158,12 +173,14 @@ def _owned_watch(uid: str, watch_id: str, db):
 def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) -> dict:
     db = db if db is not None else db_firestore
     ref, data = _owned_watch(uid, watch_id, db)
-    if not changes or any(key not in {"interval", "status"} for key in changes):
-        raise WatchError("invalid_request", "Only interval and status can be changed.")
+    if not changes or any(key not in {"interval", "status", "email_mode"} for key in changes):
+        raise WatchError("invalid_request", "Only interval, status, and email_mode can be changed.")
     updates = {}
     if "interval" in changes:
         interval = validate_interval(changes["interval"], is_pro)
         updates.update(interval=interval, next_run_at=utcnow() + WATCH_INTERVALS[interval])
+    if "email_mode" in changes:
+        updates["email_mode"] = validate_email_mode(changes["email_mode"])
     if "status" in changes:
         status = str(changes["status"] or "").strip().lower()
         if status not in WATCH_STATUSES:
@@ -237,6 +254,31 @@ def delete_watches_for_share(share_id: str, db=None) -> int:
         doc.reference.delete()
         deleted += 1
     return deleted
+
+
+def get_public_watch_meta(share_id: str, db=None) -> dict | None:
+    """Public, text-free status metadata for a share's current watch."""
+    db = db if db is not None else db_firestore
+    candidates = []
+    for doc in db.collection(WATCHES_COLLECTION).where("share_id", "==", share_id).stream():
+        data = doc.to_dict() or {}
+        if data.get("status") not in {"active", "paused", "paused_error"}:
+            continue
+        candidates.append(data)
+    if not candidates:
+        return None
+    candidates.sort(
+        key=lambda data: data.get("created_at") if isinstance(data.get("created_at"), datetime) else datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+    data = candidates[0]
+    return {
+        "status": data.get("status") or "paused",
+        "interval": data.get("interval") or "weekly",
+        "last_run_at": data.get("last_run_at"),
+        "next_run_at": data.get("next_run_at"),
+        "created_at": data.get("created_at"),
+    }
 
 
 def _claim_in_transaction(tx, watch_ref, budget_ref, now: datetime, daily_limit: int):

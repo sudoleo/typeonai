@@ -280,6 +280,7 @@ onIdTokenChanged(auth, async (user) => {
           <div class="popup-content" style="display: flex; flex-direction: column; align-items: flex-start;">
             <span class="user-email" style="margin-bottom: 12px; font-weight: 500; font-size: 0.95rem; color: var(--text-color);">${user.email}</span>
             <a id="sharedLinksButton" class="top-bar-about" style="cursor: pointer; text-decoration: none; align-self: flex-start; padding: 5px 0;">Shared links</a>
+            <a id="watchedLinksButton" class="top-bar-about" style="cursor: pointer; text-decoration: none; align-self: flex-start; padding: 5px 0;">Watched</a>
             <a id="logoutButton" class="top-bar-about" style="cursor: pointer; text-decoration: none; align-self: flex-start; padding: 5px 0;">Logout</a>
           </div>
         </div>
@@ -289,6 +290,7 @@ onIdTokenChanged(auth, async (user) => {
     const emailPopup = document.getElementById("emailPopup");
     const logoutButton = document.getElementById("logoutButton");
     const sharedLinksButton = document.getElementById("sharedLinksButton");
+    const watchedLinksButton = document.getElementById("watchedLinksButton");
 
     emailIcon.addEventListener("click", e => {
       e.stopPropagation();
@@ -305,6 +307,16 @@ onIdTokenChanged(auth, async (user) => {
         emailPopup.style.display = "none";
         if (typeof window.openShareDialog === "function") {
           window.openShareDialog("list");
+        }
+      });
+    }
+
+    if (watchedLinksButton) {
+      watchedLinksButton.addEventListener("click", e => {
+        e.stopPropagation();
+        emailPopup.style.display = "none";
+        if (typeof window.openWatchDialog === "function") {
+          window.openWatchDialog("list");
         }
       });
     }

@@ -93,7 +93,7 @@ deferred am `</body>` — `app-init.js`.
 - **`share-dialog.js`** — `window.openShareDialog` und Share-Liste.
 - **`consensus-actions.js`** — Copy/Citation/Share-Buttons am Consensus.
 - **`watch.js`** — `window.openWatchDialog`, Aktivierung neben Share,
-  Intervallwahl und „Watched“-Verwaltung im bestehenden Modal.
+  Intervall-/Mailmodus-Wahl und „Watched“-Verwaltung im bestehenden Modal.
 - **`user-tier.js`** — Free/Pro-UI, Premium-Modellstatus (`updateUserTierUI`,
   `updatePremiumModelsState`).
 - **`consensus-insights.js`** — strukturierte Auswertung: Claim-Badges,
@@ -110,7 +110,8 @@ deferred am `</body>` — `app-init.js`.
 
 **Nicht unter `static/js/`** (älter, eigene Verantwortung):
 - **`static/firebase.js`** (ES-Modul) — Firebase-Init, Login/Logout, Token-Handling,
-  `window.auth`, Bookmarks-CRUD-Calls, Feedback, Voting, Tier-Sync.
+  `window.auth`, Bookmarks-CRUD-Calls, Feedback, Voting, Tier-Sync sowie das
+  Nutzericon-Menü mit „Shared links“ und direkt darunter „Watched“.
 - **`static/demo.js`** (ES-Modul) — Demo-Flow (`runDemoFlow`) für die „Demo"-Query;
   zeigt Gästen nach Abschluss der Demo am Eingabebereich eine Login-/Registrierungs-
   Aufforderung, ohne die Demo-Frage aus dem deaktivierten Feld zu entfernen.
@@ -346,7 +347,8 @@ Wichtige Verträge im Backend:
 - `shares` — veröffentlichte Snapshots (Slug, `indexed`, `status`, `owner_uid`,
   `question_hash`, …).
 - `watches` — owner-gebundene Scheduling-Metadaten (`share_id`, Intervall,
-  Status, nächste Ausführung, Lease/Fehlerzähler); keine IP-/User-Agent-Daten.
+  `email_mode` = `changes_only|every_run`, Status, nächste Ausführung,
+  Lease/Fehlerzähler); keine IP-/User-Agent-Daten.
   Verlaufspunkte liegen datenminimiert in `shares/{id}/watch_history` und
   verändern den Share-Snapshot nicht.
 - `watch_runtime` — globaler Worker-Lease und datumsgebundener Tageszähler;
@@ -412,7 +414,7 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **402 passed** (2026-07-11).
+  Letzte bekannte Baseline: **409 passed** (2026-07-12).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, Consensus→Differences+Score,
@@ -460,6 +462,11 @@ strikt sequenziell. Die Reruns nutzen höchstens drei aktuelle
 `FREE_DEFAULT_MODEL_BY_PROVIDER`-Modelle, keine Attachments/Follow-ups und keine
 In-Memory-Usage-Zähler. Jeder erfolgreiche Lauf schreibt genau einen kompakten
 History-Punkt; nach drei Fehlern pausiert die Watch.
+Der Mailmodus ist pro Watch änderbar: `changes_only` nutzt die bestehende
+Major-/Score-Delta-Schwelle, `every_run` sendet nach jedem erfolgreichen Lauf
+genau eine Multipart-Mail inklusive neuem Consensus-Text. Öffentliche Share-
+Seiten zeigen für aktuelle oder historische Watches eine kompakte Metazeile mit
+Intervall sowie letztem und ggf. nächstem Fragenlauf.
 
 ---
 

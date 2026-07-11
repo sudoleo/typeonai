@@ -93,6 +93,44 @@ def build_change_message(*, recipient: str, question: str, old_score, new_score,
     return _base_message(recipient, subject, plain, html_body)
 
 
+def build_run_message(*, recipient: str, question: str, agreement_score,
+                      consensus: str, changed: bool, severity: str,
+                      summary: str, share_url: str, unsubscribe_url: str) -> EmailMessage:
+    """Full-content notification for users who opted into every successful run."""
+    clipped_question = " ".join(str(question or "").split())
+    subject_question = clipped_question[:72] + ("…" if len(clipped_question) > 72 else "")
+    subject = f"New consensus: {subject_question}"
+    consensus_text = str(consensus or "").strip()
+    change_line = (
+        f"Content change detected ({severity}): {summary}"
+        if changed else "No material content change was detected."
+    )
+    plain = (
+        f"Consensus Watch completed a new check.\n\n{clipped_question}\n"
+        f"Agreement score: {agreement_score}/100\n{change_line}\n\n"
+        f"NEW CONSENSUS\n\n{consensus_text}\n\n"
+        f"View history: {share_url}\nUnsubscribe: {unsubscribe_url}\n"
+    )
+    safe_question = html.escape(clipped_question)
+    safe_consensus = html.escape(consensus_text).replace("\n", "<br>")
+    safe_summary = html.escape(summary or "")
+    safe_share = html.escape(share_url)
+    safe_unsubscribe = html.escape(unsubscribe_url)
+    change_html = (
+        f"<p><strong>Content change detected ({html.escape(severity)}):</strong> {safe_summary}</p>"
+        if changed else "<p style='color:#667085'>No material content change was detected.</p>"
+    )
+    html_body = f"""<!doctype html><html><body style="font-family:Arial,sans-serif;color:#172033;line-height:1.55">
+<div style="max-width:680px;margin:auto;padding:24px"><h1 style="font-size:22px">New Consensus Watch result</h1>
+<p style="font-size:17px;font-weight:600">{safe_question}</p>
+<div style="padding:16px;background:#f3f6fb;border-radius:12px"><strong style="font-size:22px">{int(agreement_score)}/100</strong> agreement</div>
+{change_html}<div style="margin-top:20px;padding:18px;border:1px solid #d8deea;border-radius:12px"><h2 style="font-size:16px;margin-top:0">New consensus</h2><div>{safe_consensus}</div></div>
+<p><a href="{safe_share}" style="display:inline-block;background:#335cff;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px">View watch page and history</a></p>
+<p style="font-size:12px;color:#667085;margin-top:32px">You chose to receive every new consensus result. <a href="{safe_unsubscribe}">Pause this watch</a>.</p>
+</div></body></html>"""
+    return _base_message(recipient, subject, plain, html_body)
+
+
 def build_paused_message(*, recipient: str, question: str, share_url: str,
                          unsubscribe_url: str) -> EmailMessage:
     clipped = " ".join(str(question or "").split())

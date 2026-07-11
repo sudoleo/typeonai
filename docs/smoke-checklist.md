@@ -6,7 +6,7 @@ Modell-Ausschluss, Theme-Toggle und Picker-Persistenz ab (Lauf: siehe
 `tests/e2e/README.md`). Die übrigen Punkte weiterhin manuell durchgehen
 (oder zumindest die vom Cluster betroffenen), bevor committet wird. Backend
 bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
-(Baseline: 402 passed, Stand 2026-07-11).
+(Baseline: 409 passed, Stand 2026-07-12).
 
 ## Browser-Konsole
 - [ ] Beim Laden **keine** JS-Fehler in der Konsole (besonders: keine
@@ -40,12 +40,17 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 - [ ] Free: Daily ist als Pro markiert/gesperrt und das aktive Limit öffnet den
       bestehenden Pro-Teaser. Pro: Daily und bis zu fünf aktive Watches funktionieren.
 - [ ] „Watched“ listet Status und Intervall; Intervall ändern, Pause/Resume und
-      Delete funktionieren. Delete lässt bereits vorhandene Share-History bestehen.
-- [ ] Share-Seite ohne History zeigt keinen History-Bereich; mit History rendert
-      sie SVG-Linie/Punkte und Change-Liste in Light/Dark sowie ohne Mobile-Overflow.
+      Mailmodus ändern, Pause/Resume und Delete funktionieren. „Watched“ steht
+      außerdem im Nutzericon-Menü direkt unter „Shared links“. Delete lässt
+      bereits vorhandene Share-History bestehen.
+- [ ] Aktive Watch-Seite zeigt bereits vor dem ersten History-Punkt in einer
+      kompakten Metazeile Status, Intervall, letzten und nächsten Lauf. Mit History rendert
+      sie zusätzlich SVG-Linie/Punkte und Change-Liste in Light/Dark ohne Mobile-Overflow.
 - [ ] Fehlende SMTP-Konfiguration blockiert Watch-Läufe nicht. Mit Test-SMTP:
       Major Change bzw. Score-Delta ≥15 sendet genau eine Multipart-Mail; Minor
-      Change darunter sendet keine. Abmelde-Link pausiert ohne Login.
+      Change darunter sendet im Modus „changes only“ keine. „Every new consensus“
+      sendet bei jedem erfolgreichen Lauf genau eine Mail mit Consensus-Inhalt.
+      Abmelde-Link pausiert ohne Login.
 
 ## Modelle / Picker
 - [ ] Custom Model Picker öffnet/wählt, sichtbarer Name aktualisiert.

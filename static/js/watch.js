@@ -45,6 +45,13 @@
     `;
   }
 
+  function emailModeOptions(selected) {
+    return `
+      <option value="changes_only"${selected !== "every_run" ? " selected" : ""}>Material changes only</option>
+      <option value="every_run"${selected === "every_run" ? " selected" : ""}>Every new consensus (with content)</option>
+    `;
+  }
+
   function openWatchDialog(view) {
     const { modal } = els();
     if (!modal) return;
@@ -66,6 +73,9 @@
       <div class="watch-public-note"><strong>A public page is required.</strong> Activating Watch creates a non-indexed, read-only share page if needed. Anyone with its link can view it.</div>
       <label class="watch-interval-label" for="watchInterval">Check interval ${window.isUserPro ? "" : '<span class="pro-badge is-subtle">Pro: daily</span>'}</label>
       <select id="watchInterval" class="watch-interval-select">${intervalOptions("weekly")}</select>
+      <label class="watch-interval-label" for="watchEmailMode">E-mail notifications</label>
+      <select id="watchEmailMode" class="watch-interval-select watch-email-select">${emailModeOptions("changes_only")}</select>
+      <p class="watch-data-note">“Every new consensus” includes the newly generated consensus text in each successful-run e-mail.</p>
       <p class="watch-data-note">Only the question is rerun. Attachments and follow-up context are never resent.</p>
       <div class="share-modal-actions">
         <button type="button" id="watchConfirmBtn" class="share-primary-btn">Start watching</button>
@@ -86,7 +96,8 @@
       try {
         const data = await api("POST", "/api/watch", {
           result_id: window.lastShareResultId,
-          interval: document.getElementById("watchInterval").value
+          interval: document.getElementById("watchInterval").value,
+          email_mode: document.getElementById("watchEmailMode").value
         });
         window.App?.trackAppEvent?.("app_watch_created", { interval: data.watch.interval });
         renderSuccess(data.watch);
@@ -104,12 +115,15 @@
     title.textContent = "Consensus Watch is active";
     const url = window.location.origin + (watch.share_path || "");
     body.innerHTML = `
-      <p>We will check this question <strong></strong> and notify your verified e-mail only after a material change.</p>
+      <p>We will check this question <strong></strong>. <span id="watchMailSummary"></span></p>
       <div class="share-modal-actions">
         <a id="watchOpenLink" class="share-secondary-btn" target="_blank" rel="noopener">Open history page</a>
         <button type="button" id="watchListLink" class="share-link-btn">Watched</button>
       </div>`;
     body.querySelector("p strong").textContent = watch.interval;
+    document.getElementById("watchMailSummary").textContent = watch.email_mode === "every_run"
+      ? "You will receive every new consensus including its content."
+      : "You will be notified only after a material change.";
     document.getElementById("watchOpenLink").href = url;
     document.getElementById("watchListLink").addEventListener("click", renderWatchList);
   }
@@ -174,6 +188,20 @@
           select.value = watch.interval;
         } finally { select.disabled = false; }
       });
+      const emailSelect = document.createElement("select");
+      emailSelect.className = "watch-interval-select watch-email-select";
+      emailSelect.setAttribute("aria-label", "E-mail notifications");
+      emailSelect.innerHTML = emailModeOptions(watch.email_mode);
+      emailSelect.addEventListener("change", async () => {
+        emailSelect.disabled = true;
+        try {
+          await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), { email_mode: emailSelect.value });
+          popup("Watch e-mail preference updated.");
+        } catch (error) {
+          popup("Update failed: " + error.message);
+          emailSelect.value = watch.email_mode || "changes_only";
+        } finally { emailSelect.disabled = false; }
+      });
       const active = watch.status === "active";
       const pause = makeButton(active ? "Pause" : "Resume", "share-secondary-btn", async () => {
         pause.disabled = true;
@@ -195,7 +223,7 @@
           if (!list.children.length) renderWatchList();
         } catch (error) { remove.disabled = false; popup("Delete failed: " + error.message); }
       });
-      controls.append(select, pause, remove);
+      controls.append(select, emailSelect, pause, remove);
       item.append(main, controls);
       list.appendChild(item);
     });

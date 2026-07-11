@@ -32,7 +32,14 @@ def _raise(exc: watch_service.WatchError):
 async def create_watch(request: Request, data: dict = Body(...)):
     uid = _uid(request, data)
     try:
-        watch = watch_service.create_watch(uid, interval=data.get("interval"), is_pro=is_user_pro(uid), result_id=data.get("result_id"), share_id=data.get("share_id"))
+        watch = watch_service.create_watch(
+            uid,
+            interval=data.get("interval"),
+            email_mode=data.get("email_mode", "changes_only"),
+            is_pro=is_user_pro(uid),
+            result_id=data.get("result_id"),
+            share_id=data.get("share_id"),
+        )
     except watch_service.WatchError as exc:
         _raise(exc)
     except Exception:

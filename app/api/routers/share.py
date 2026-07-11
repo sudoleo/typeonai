@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Request, Body, HTTPException
@@ -11,6 +12,7 @@ from app.core.rate_limit import limiter
 from app.core.security import verify_user_token, extract_id_token, is_user_admin
 from app.api.routers.pages import SITE_URL
 from app.services import share_snapshots as snapshots
+from app.services import watch_service
 from app.services.share_snapshots import ShareError
 from app.services.public_markdown import (
     render_public_markdown,
@@ -67,6 +69,42 @@ def _build_watch_history_view(points):
         "start_date": points[0]["ts"].strftime("%Y-%m-%d"),
         "end_date": points[-1]["ts"].strftime("%Y-%m-%d"),
         "latest_score": points[-1]["agreement_score"],
+    }
+
+
+def _watch_datetime_view(value):
+    if not isinstance(value, datetime):
+        return {"iso": "", "display": ""}
+    normalized = value.astimezone(timezone.utc)
+    return {
+        "iso": normalized.isoformat(),
+        "display": normalized.strftime("%Y-%m-%d %H:%M UTC"),
+    }
+
+
+def _build_watch_page_meta(meta, history_points):
+    if not meta and not history_points:
+        return None
+    meta = meta or {}
+    status = meta.get("status") or "history"
+    labels = {
+        "active": "Active",
+        "paused": "Paused",
+        "paused_error": "Paused after errors",
+        "history": "Archived history",
+    }
+    last_run = meta.get("last_run_at")
+    if not isinstance(last_run, datetime) and history_points:
+        last_run = history_points[-1].get("ts")
+    return {
+        "status": status,
+        "status_label": labels.get(status, "Paused"),
+        "is_active": status == "active",
+        "interval": str(meta.get("interval") or ""),
+        "interval_label": str(meta.get("interval") or "").capitalize(),
+        "last_run": _watch_datetime_view(last_run),
+        "next_run": _watch_datetime_view(meta.get("next_run_at")),
+        "created": _watch_datetime_view(meta.get("created_at")),
     }
 
 
@@ -311,6 +349,12 @@ async def share_page(request: Request, slug_id: str):
         logging.exception("list_watch_history failed")
         history_points = []
     watch_history = _build_watch_history_view(history_points)
+    try:
+        current_watch_meta = watch_service.get_public_watch_meta(share_id)
+    except Exception:
+        logging.exception("get_public_watch_meta failed")
+        current_watch_meta = None
+    watch_page = _build_watch_page_meta(current_watch_meta, history_points)
 
     date_iso = payload["answered_at"] or payload["created_at"]
     meta_description = markdown_to_plaintext(payload["consensus_md"], limit=160)
@@ -349,6 +393,7 @@ async def share_page(request: Request, slug_id: str):
         "sources": sources_view,
         "related_shares": related_shares,
         "watch_history": watch_history,
+        "watch_page": watch_page,
         "included_models": payload["included_models"],
         "consulted_models": snapshots.consulted_models_view(payload["included_models"]),
         "consensus_model": payload["consensus_model"],

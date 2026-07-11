@@ -852,6 +852,11 @@ class SharePageRouteTests(unittest.TestCase):
         )
         self.watch_history_patch.start()
         self.addCleanup(self.watch_history_patch.stop)
+        self.watch_meta_patch = patch.object(
+            share_router.watch_service, "get_public_watch_meta", return_value=None
+        )
+        self.watch_meta_patch.start()
+        self.addCleanup(self.watch_meta_patch.stop)
 
     def _share_doc(self, **overrides):
         data = make_pending()
@@ -969,6 +974,24 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("M 38.0", body)
         self.assertIn("The central recommendation changed.", body)
         self.assertIn("76<span>/100</span>", body)
+
+    def test_active_watch_page_shows_run_metadata_before_history_exists(self):
+        doc = self._share_doc()
+        now = datetime(2026, 7, 12, 8, 30, tzinfo=timezone.utc)
+        meta = {
+            "status": "active", "interval": "weekly",
+            "last_run_at": now, "next_run_at": now + timedelta(days=7),
+            "created_at": now - timedelta(days=14),
+        }
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router.watch_service, "get_public_watch_meta", return_value=meta):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        body = response.text
+        self.assertIn('class="watch-meta-compact is-active"', body)
+        self.assertIn("<b>Last</b>", body)
+        self.assertIn("2026-07-12 08:30 UTC", body)
+        self.assertIn("<b>Next</b>", body)
+        self.assertIn("Original consensus", body)
 
     def test_rendered_citation_contains_canonical_url(self):
         doc = self._share_doc()

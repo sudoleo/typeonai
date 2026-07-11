@@ -2,6 +2,7 @@ import os
 import unittest
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import app.core.config as cfg
@@ -115,6 +116,7 @@ class WatchCrudTests(unittest.TestCase):
     def test_free_create_list_update_pause_delete(self):
         created = watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db)
         self.assertEqual(created["status"], "active")
+        self.assertEqual(created["email_mode"], "changes_only")
         self.assertEqual(created["last_agreement_score"], 60)
         self.assertEqual(len(watch_service.list_watches("u1", db=self.db)), 1)
 
@@ -124,6 +126,21 @@ class WatchCrudTests(unittest.TestCase):
         self.assertEqual(monthly["interval"], "monthly")
         watch_service.delete_watch("u1", created["id"], db=self.db)
         self.assertEqual(watch_service.list_watches("u1", db=self.db), [])
+
+    def test_every_run_email_mode_can_be_created_and_changed(self):
+        created = watch_service.create_watch(
+            "u1", share_id=self.share_id, interval="weekly", email_mode="every_run",
+            is_pro=False, db=self.db,
+        )
+        self.assertEqual(created["email_mode"], "every_run")
+        updated = watch_service.update_watch(
+            "u1", created["id"], {"email_mode": "changes_only"}, False, db=self.db
+        )
+        self.assertEqual(updated["email_mode"], "changes_only")
+        with self.assertRaisesRegex(WatchError, "Email mode"):
+            watch_service.update_watch(
+                "u1", created["id"], {"email_mode": "everything"}, False, db=self.db
+            )
 
     def test_free_daily_requires_pro(self):
         with self.assertRaisesRegex(WatchError, "Daily watches require Pro"):
@@ -252,6 +269,18 @@ class SchedulerSafetyTests(unittest.TestCase):
         self.assertTrue(watch_scheduler.should_notify(60, 61, True, "major"))
         self.assertTrue(watch_scheduler.should_notify(60, 75, False, "minor"))
         self.assertFalse(watch_scheduler.should_notify(60, 74, True, "minor"))
+        unchanged = {"agreement_score": 61, "changed": False, "severity": "minor"}
+        self.assertEqual(
+            watch_scheduler.notification_kind(
+                {"email_mode": "every_run", "last_agreement_score": 60}, unchanged
+            ),
+            "every_run",
+        )
+        self.assertIsNone(
+            watch_scheduler.notification_kind(
+                {"email_mode": "changes_only", "last_agreement_score": 60}, unchanged
+            )
+        )
 
     def test_mock_llm_watch_pipeline(self):
         with patch.dict(os.environ, {"MOCK_LLM": "1"}):
@@ -274,6 +303,30 @@ class MailerTests(unittest.TestCase):
         self.assertIn("text/plain", [part.get_content_type() for part in message.walk()])
         self.assertIn("text/html", [part.get_content_type() for part in message.walk()])
         self.assertIn("unsubscribe?token=x", message.as_string())
+
+    def test_every_run_mail_contains_new_consensus(self):
+        message = mailer.build_run_message(
+            recipient="owner@example.test", question="A question", agreement_score=71,
+            consensus="## New answer\n\nThe updated consensus content.", changed=False,
+            severity="minor", summary="", share_url="https://consens.io/s/q-id",
+            unsubscribe_url="https://consens.io/watch/unsubscribe?token=x",
+        )
+        rendered = message.as_string()
+        self.assertIn("New consensus:", rendered)
+        self.assertIn("The updated consensus content.", rendered)
+        self.assertIn("71/100", rendered)
+
+    def test_public_watch_meta_contains_run_schedule_but_no_owner(self):
+        db = FakeDb()
+        now = datetime(2026, 7, 12, tzinfo=timezone.utc)
+        db.stores["watches"]["w1"] = {
+            "owner_uid": "private-owner", "share_id": "A" * 16,
+            "status": "active", "interval": "weekly", "created_at": now,
+            "last_run_at": now, "next_run_at": now + timedelta(days=7),
+        }
+        meta = watch_service.get_public_watch_meta("A" * 16, db=db)
+        self.assertEqual(meta["interval"], "weekly")
+        self.assertNotIn("owner_uid", meta)
 
 
 class HistoryViewTests(unittest.TestCase):
@@ -310,3 +363,41 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             await watch_scheduler.run_watch_tick()
             await watch_scheduler.run_watch_tick()
         send_paused.assert_awaited_once_with("w1", claimed)
+
+    async def test_every_run_mode_sends_full_result_mail_without_change(self):
+        claimed = {
+            "owner_uid": "u1", "share_id": "A" * 16, "interval": "weekly",
+            "email_mode": "every_run", "last_agreement_score": 60,
+        }
+        result = {
+            "consensus": "New consensus content", "agreement_score": 61,
+            "changed": False, "severity": "minor", "change_summary": "",
+        }
+        share_data = {"status": "active", "slug": "q", "question": "Q", "consensus_md": "Old"}
+        with (
+            patch.object(watch_service, "acquire_worker_lease", return_value=True),
+            patch.object(watch_service, "release_worker_lease"),
+            patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
+            patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
+            patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
+            patch.object(watch_scheduler, "execute_watch", return_value=result),
+            patch.object(watch_service, "complete_watch_run"),
+            patch.object(watch_scheduler, "_send_run_mail", new_callable=AsyncMock) as send_run,
+            patch.object(watch_scheduler, "_send_change_mail", new_callable=AsyncMock) as send_change,
+        ):
+            completed = await watch_scheduler.run_watch_tick()
+        self.assertEqual(completed, 1)
+        send_run.assert_awaited_once_with("w1", claimed, result)
+        send_change.assert_not_awaited()
+
+
+class WatchFrontendContractTests(unittest.TestCase):
+    def test_user_menu_places_watched_after_shared_links(self):
+        source = Path("static/firebase.js").read_text(encoding="utf-8")
+        self.assertLess(source.index('id="sharedLinksButton"'), source.index('id="watchedLinksButton"'))
+        self.assertIn('window.openWatchDialog("list")', source)
+
+    def test_watch_ui_exposes_every_run_email_mode(self):
+        source = Path("static/js/watch.js").read_text(encoding="utf-8")
+        self.assertIn('value="every_run"', source)
+        self.assertIn("Every new consensus (with content)", source)

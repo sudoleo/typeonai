@@ -131,6 +131,17 @@ def should_notify(old_score, new_score, changed: bool, severity: str) -> bool:
     return (bool(changed) and severity == "major") or delta >= 15
 
 
+def notification_kind(watch: dict, result: dict) -> str | None:
+    if (watch.get("email_mode") or "changes_only") == "every_run":
+        return "every_run"
+    if should_notify(
+        watch.get("last_agreement_score"), result.get("agreement_score"),
+        bool(result.get("changed")), result.get("severity") or "minor",
+    ):
+        return "change"
+    return None
+
+
 def _notification_context(watch_id: str, watch: dict):
     share_path = share_snapshots.share_path(watch.get("share_slug") or "", watch["share_id"])
     share_url = SITE_URL + share_path
@@ -154,6 +165,28 @@ async def _send_change_mail(watch_id: str, watch: dict, result: dict):
         summary=summary, share_url=share_url, unsubscribe_url=unsubscribe_url,
     )
     await mailer.send_message(message)
+
+
+async def _send_run_mail(watch_id: str, watch: dict, result: dict):
+    if not mailer.is_configured():
+        logging.info("Consensus Watch mail skipped: SMTP_HOST/MAIL_FROM not configured")
+        return
+    user = await asyncio.to_thread(auth.get_user, watch["owner_uid"])
+    if not getattr(user, "email_verified", False) or not getattr(user, "email", None):
+        logging.warning("Watch %s owner has no verified e-mail; notification skipped", watch_id)
+        return
+    share_url, unsubscribe_url = _notification_context(watch_id, watch)
+    await mailer.send_message(mailer.build_run_message(
+        recipient=user.email,
+        question=watch.get("question") or "",
+        agreement_score=result["agreement_score"],
+        consensus=result.get("consensus") or "",
+        changed=bool(result.get("changed")),
+        severity=result.get("severity") or "minor",
+        summary=result.get("change_summary") or "",
+        share_url=share_url,
+        unsubscribe_url=unsubscribe_url,
+    ))
 
 
 async def _send_paused_mail(watch_id: str, watch: dict):
@@ -203,13 +236,17 @@ async def run_watch_tick() -> int:
                         logging.exception("Consensus Watch pause mail failed for %s", watch_id)
             else:
                 completed += 1
-                if should_notify(claimed.get("last_agreement_score"), result["agreement_score"], result["changed"], result["severity"]):
+                mail_kind = notification_kind(claimed, result)
+                if mail_kind:
                     try:
-                        await _send_change_mail(watch_id, claimed, result)
+                        if mail_kind == "every_run":
+                            await _send_run_mail(watch_id, claimed, result)
+                        else:
+                            await _send_change_mail(watch_id, claimed, result)
                     except Exception:
                         # Mail is best-effort and must never turn a completed
                         # LLM run into a scheduler failure/history rollback.
-                        logging.exception("Consensus Watch change mail failed for %s", watch_id)
+                        logging.exception("Consensus Watch result mail failed for %s", watch_id)
     finally:
         try:
             await asyncio.to_thread(watch_service.release_worker_lease)
