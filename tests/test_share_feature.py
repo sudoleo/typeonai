@@ -847,6 +847,11 @@ class SharePageRouteTests(unittest.TestCase):
         )
         self.related_shares_patch.start()
         self.addCleanup(self.related_shares_patch.stop)
+        self.watch_history_patch = patch.object(
+            share_router.snapshots, "list_watch_history", return_value=[]
+        )
+        self.watch_history_patch.start()
+        self.addCleanup(self.watch_history_patch.stop)
 
     def _share_doc(self, **overrides):
         data = make_pending()
@@ -945,6 +950,25 @@ class SharePageRouteTests(unittest.TestCase):
                 patch.object(share_router.snapshots, "list_related_shares", return_value=[]):
             response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
         self.assertNotIn("Related questions", response.text)
+
+    def test_watch_history_renders_inline_svg_and_events(self):
+        doc = self._share_doc()
+        points = [
+            {"ts": datetime(2026, 7, 1, tzinfo=timezone.utc), "agreement_score": 54,
+             "verdict": "partially", "changed": False, "severity": "minor", "change_summary": ""},
+            {"ts": datetime(2026, 7, 8, tzinfo=timezone.utc), "agreement_score": 76,
+             "verdict": "mostly", "changed": True, "severity": "major",
+             "change_summary": "The central recommendation changed."},
+        ]
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router.snapshots, "list_watch_history", return_value=points):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        body = response.text
+        self.assertIn("Agreement over time", body)
+        self.assertIn('class="watch-chart"', body)
+        self.assertIn("M 38.0", body)
+        self.assertIn("The central recommendation changed.", body)
+        self.assertIn("76<span>/100</span>", body)
 
     def test_rendered_citation_contains_canonical_url(self):
         doc = self._share_doc()

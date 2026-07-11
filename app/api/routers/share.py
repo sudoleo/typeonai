@@ -39,6 +39,35 @@ _BEST_MODEL_RE = re.compile(
 )
 
 
+def _build_watch_history_view(points):
+    if not points:
+        return None
+    width, height = 640, 190
+    left, right, top, bottom = 38, 18, 18, 30
+    plot_w, plot_h = width - left - right, height - top - bottom
+    count = len(points)
+    coords = []
+    for index, point in enumerate(points):
+        x = left + (plot_w * index / (count - 1) if count > 1 else plot_w / 2)
+        y = top + plot_h * (100 - point["agreement_score"]) / 100
+        coords.append({**point, "x": round(x, 1), "y": round(y, 1)})
+    path = " ".join(
+        ("M" if index == 0 else "L") + f" {point['x']} {point['y']}"
+        for index, point in enumerate(coords)
+    )
+    events = [point for point in reversed(coords) if point["changed"] or point["change_summary"]]
+    return {
+        "width": width,
+        "height": height,
+        "path": path,
+        "points": coords,
+        "events": events,
+        "start_date": points[0]["ts"].strftime("%Y-%m-%d"),
+        "end_date": points[-1]["ts"].strftime("%Y-%m-%d"),
+        "latest_score": points[-1]["agreement_score"],
+    }
+
+
 def _require_uid(request, data):
     id_token = extract_id_token(request, data)
     if not id_token:
@@ -274,6 +303,13 @@ async def share_page(request: Request, slug_id: str):
         logging.exception("list_related_shares failed")
         related_shares = []
 
+    try:
+        history_points = snapshots.list_watch_history(share_id)
+    except Exception:
+        logging.exception("list_watch_history failed")
+        history_points = []
+    watch_history = _build_watch_history_view(history_points)
+
     date_iso = payload["answered_at"] or payload["created_at"]
     meta_description = markdown_to_plaintext(payload["consensus_md"], limit=160)
 
@@ -310,6 +346,7 @@ async def share_page(request: Request, slug_id: str):
         "contradiction_count": contradiction_count,
         "sources": sources_view,
         "related_shares": related_shares,
+        "watch_history": watch_history,
         "included_models": payload["included_models"],
         "consulted_models": snapshots.consulted_models_view(payload["included_models"]),
         "consensus_model": payload["consensus_model"],

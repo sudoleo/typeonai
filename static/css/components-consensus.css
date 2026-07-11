@@ -1021,6 +1021,14 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   transform: translateY(1px);
 }
 
+.watch-consensus-pill {
+  width: auto;
+  gap: 4px;
+  padding: 0 7px;
+  font-size: .7rem;
+  font-weight: 650;
+}
+
 .share-pill-icon {
   width: 15px;
   height: 15px;

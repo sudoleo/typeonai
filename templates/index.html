@@ -56,7 +56,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260711-demo-login1">
+  <link rel="stylesheet" href="/static/style.css?v=20260711-watch1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -83,9 +83,11 @@
   <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
   <script src="/static/js/consensus-lifecycle.js?v=20260626-extract1" defer></script>
   <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
-  <script src="/static/js/share-dialog.js?v=20260626-extract1" defer></script>
+  <script src="/static/js/share-dialog.js?v=20260711-watch1" defer></script>
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-actions.js?v=20260706-fixes2" defer></script>
+  <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
+  <script src="/static/js/watch.js?v=20260711-watch1" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260711-tierinit1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
@@ -778,6 +780,17 @@
     .share-list-question { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-size: 0.9rem; }
     .share-list-actions { display: flex; gap: 6px; flex-shrink: 0; }
     .share-list-actions .share-secondary-btn, .share-list-actions .share-danger-btn { min-height: 30px; padding: 0 11px; font-size: 0.8rem; }
+    .watch-public-note { margin: 14px 0; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--sidebar-border)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 7%, transparent); font-size: .87rem; line-height: 1.45; }
+    .watch-interval-label { display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; font-size: .86rem; font-weight: 650; }
+    .watch-interval-select { min-height: 34px; max-width: 150px; padding: 0 9px; border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent); border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-color); font: inherit; font-size: .82rem; }
+    .watch-data-note { margin-top: 9px !important; color: var(--sidebar-text-muted); font-size: .79rem; }
+    .watch-list-item { align-items: flex-start !important; flex-direction: column; }
+    .watch-list-main { display: flex; width: 100%; align-items: center; gap: 9px; min-width: 0; }
+    .watch-list-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; }
+    .watch-list-controls .share-secondary-btn, .watch-list-controls .share-danger-btn { min-height: 32px; padding: 0 10px; font-size: .78rem; }
+    .watch-status { flex: 0 0 auto; border-radius: 999px; padding: 3px 8px; background: color-mix(in srgb, var(--accent) 9%, transparent); color: var(--sidebar-text-muted); font-size: .69rem; font-weight: 700; text-transform: capitalize; }
+    .watch-status-active { color: color-mix(in srgb, #15803d 78%, var(--text-color)); background: color-mix(in srgb, #22c55e 12%, transparent); }
+    .watch-status-paused_error { color: var(--clear-button-text); background: color-mix(in srgb, var(--clear-button-text) 10%, transparent); }
   </style>
   <div id="shareModal" class="modal">
     <div class="modal-content share-modal-content">

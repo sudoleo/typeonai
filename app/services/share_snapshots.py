@@ -1010,6 +1010,29 @@ def list_shares_for_owner(uid, db=None, max_items=200):
     return shares
 
 
+def list_watch_history(share_id, db=None, max_items=100):
+    """Whitelist compact public history points; never expose rerun text."""
+    db = db if db is not None else db_firestore
+    ref = db.collection(SHARES_COLLECTION).document(share_id).collection("watch_history")
+    points = []
+    for doc in ref.stream():
+        data = doc.to_dict() or {}
+        ts = data.get("ts")
+        score = data.get("agreement_score")
+        if not isinstance(ts, datetime) or not isinstance(score, (int, float)):
+            continue
+        points.append({
+            "ts": ts,
+            "agreement_score": max(0, min(100, int(score))),
+            "verdict": _clip(data.get("verdict"), 80),
+            "changed": bool(data.get("changed")),
+            "severity": _clip(data.get("severity"), 10),
+            "change_summary": _clip(data.get("change_summary"), 400),
+        })
+    points.sort(key=lambda item: item["ts"])
+    return points[-max_items:]
+
+
 def public_share_payload(data):
     """Whitelist-Serializer für alles, was die öffentliche Seite sehen darf.
 

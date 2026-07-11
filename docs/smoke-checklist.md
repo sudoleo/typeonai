@@ -34,6 +34,19 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 ## Agent Mode
 - [ ] Agent-Mode an/aus, Timer läuft, Status-Text korrekt, Auto-Consensus-Kopplung.
 
+## Consensus Watch
+- [ ] Nach erfolgreichem Consensus erscheint „Watch“ neben Share; Aktivierung
+      erklärt die öffentliche, nicht indexierte Link-Seite und bietet Weekly/Monthly.
+- [ ] Free: Daily ist als Pro markiert/gesperrt und das aktive Limit öffnet den
+      bestehenden Pro-Teaser. Pro: Daily und bis zu fünf aktive Watches funktionieren.
+- [ ] „Watched“ listet Status und Intervall; Intervall ändern, Pause/Resume und
+      Delete funktionieren. Delete lässt bereits vorhandene Share-History bestehen.
+- [ ] Share-Seite ohne History zeigt keinen History-Bereich; mit History rendert
+      sie SVG-Linie/Punkte und Change-Liste in Light/Dark sowie ohne Mobile-Overflow.
+- [ ] Fehlende SMTP-Konfiguration blockiert Watch-Läufe nicht. Mit Test-SMTP:
+      Major Change bzw. Score-Delta ≥15 sendet genau eine Multipart-Mail; Minor
+      Change darunter sendet keine. Abmelde-Link pausiert ohne Login.
+
 ## Modelle / Picker
 - [ ] Custom Model Picker öffnet/wählt, sichtbarer Name aktualisiert.
 - [ ] Tier-Defaults (Free vs. Pro) werden angewandt.

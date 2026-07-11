@@ -339,8 +339,9 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None, 
         "change_summary": str(result.get("change_summary") or "")[:400],
     }
     share_ref = db.collection("shares").document(claimed["share_id"])
-    share_ref.collection("watch_history").document(claimed["current_run_id"]).set(history)
-    db.collection(WATCHES_COLLECTION).document(watch_id).update({
+    history_ref = share_ref.collection("watch_history").document(claimed["current_run_id"])
+    watch_ref = db.collection(WATCHES_COLLECTION).document(watch_id)
+    watch_updates = {
         "next_run_at": now + WATCH_INTERVALS[interval],
         "claimed_until": None,
         "current_run_id": None,
@@ -348,7 +349,17 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None, 
         "last_run_at": now,
         "last_agreement_score": history["agreement_score"],
         "last_consensus_text": str(result.get("consensus") or "")[:100_000],
-    })
+    }
+    # History + Scheduler-Fortschritt atomar: ein Restart kann nie einen
+    # sichtbaren Punkt ohne vorgeruecktes next_run_at hinterlassen.
+    if hasattr(db, "batch"):
+        batch = db.batch()
+        batch.set(history_ref, history)
+        batch.update(watch_ref, watch_updates)
+        batch.commit()
+    else:  # schlanker Unit-Test-Seam
+        history_ref.set(history)
+        watch_ref.update(watch_updates)
     return history
 
 

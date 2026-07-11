@@ -91,10 +91,12 @@
         <button type="button" id="shareConfirmBtn" class="share-primary-btn">Create public link</button>
         <button type="button" id="shareCancelBtn" class="share-secondary-btn">Cancel</button>
         <button type="button" id="shareListLink" class="share-link-btn">My shared links</button>
+        <button type="button" id="watchListLink" class="share-link-btn">Watched</button>
       </div>
     `;
     document.getElementById("shareCancelBtn").addEventListener("click", closeShareDialog);
     document.getElementById("shareListLink").addEventListener("click", renderShareListView);
+    document.getElementById("watchListLink").addEventListener("click", () => window.openWatchDialog?.("list"));
     if (!window.lastShareResultId) {
       const confirmBtn = document.getElementById("shareConfirmBtn");
       confirmBtn.disabled = true;
@@ -133,6 +135,7 @@
       <div class="share-modal-actions">
         <a id="shareOpenLink" target="_blank" rel="noopener" class="share-secondary-btn">Open page</a>
         <button type="button" id="shareListLink" class="share-link-btn">My shared links</button>
+        <button type="button" id="watchListLink" class="share-link-btn">Watched</button>
       </div>
     `;
     const input = document.getElementById("shareUrlInput");
@@ -141,6 +144,7 @@
     document.getElementById("shareOpenLink").href = url;
     document.getElementById("shareCopyUrlBtn").addEventListener("click", () => copyShareUrl(url));
     document.getElementById("shareListLink").addEventListener("click", renderShareListView);
+    document.getElementById("watchListLink").addEventListener("click", () => window.openWatchDialog?.("list"));
   }
 
   async function renderShareListView() {

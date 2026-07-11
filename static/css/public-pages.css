@@ -2731,6 +2731,43 @@ canvas {
   color: var(--muted);
 }
 
+/* Consensus Watch history: server-rendered SVG, no chart dependency. */
+.watch-history-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+.watch-history-heading .eyebrow { margin: 0 0 4px; }
+.watch-history-heading h2 { margin: 0; }
+
+.watch-history-latest {
+  flex: 0 0 auto;
+  font-size: 1.55rem;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.watch-history-latest span { font-size: .72rem; color: var(--muted); }
+
+.watch-chart-scroll { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+.watch-chart { display: block; width: 100%; min-width: 460px; height: auto; overflow: visible; }
+.watch-grid { stroke: color-mix(in srgb, var(--border) 72%, transparent); stroke-width: 1; }
+.watch-axis-label, .watch-date-label { fill: var(--muted); font-size: 10px; font-family: Inter, sans-serif; }
+.watch-chart-line { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.watch-chart-point { fill: var(--panel-bg); stroke: var(--accent); stroke-width: 3; }
+.watch-chart-point.is-change { fill: var(--accent-secondary); stroke: var(--panel-bg); stroke-width: 2; }
+
+.watch-events { list-style: none; margin: 18px 0 0; padding: 0; border-top: 1px solid var(--border); }
+.watch-events li { display: grid; grid-template-columns: auto auto auto 1fr; gap: 8px 12px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.watch-events time { color: var(--muted); font-size: .8rem; }
+.watch-events strong { font-size: .86rem; color: var(--heading); }
+.watch-events p { grid-column: 4; margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.watch-event-major { padding: 2px 7px; border-radius: var(--radius-pill); background: color-mix(in srgb, #dc2626 12%, transparent); color: #b91c1c; font-size: .68rem; font-weight: 750; text-transform: uppercase; }
+.dark-mode .watch-event-major { color: #fca5a5; }
+
 /* Report-Bereich */
 .share-report {
   margin-top: 10px;
@@ -2826,5 +2863,8 @@ canvas {
     width: 100%;
     min-height: 44px;
   }
+
+  .watch-events li { grid-template-columns: auto auto 1fr; }
+  .watch-events p { grid-column: 1 / -1; }
 }
 

@@ -92,6 +92,8 @@ deferred am `</body>` — `app-init.js`.
   `window.App.consensusLifecycle.*`-Brücke (siehe §4/§8).
 - **`share-dialog.js`** — `window.openShareDialog` und Share-Liste.
 - **`consensus-actions.js`** — Copy/Citation/Share-Buttons am Consensus.
+- **`watch.js`** — `window.openWatchDialog`, Aktivierung neben Share,
+  Intervallwahl und „Watched“-Verwaltung im bestehenden Modal.
 - **`user-tier.js`** — Free/Pro-UI, Premium-Modellstatus (`updateUserTierUI`,
   `updatePremiumModelsState`).
 - **`consensus-insights.js`** — strukturierte Auswertung: Claim-Badges,
@@ -475,6 +477,7 @@ History-Punkt; nach drei Fehlern pausiert die Watch.
   `window.getConsensus`, `window.canGenerateConsensus`,
   `window.updateConsensusButtonAvailability`, `window.revealConsensusOutput` /
   `hideConsensusOutput`, `window.cancelCurrentConsensus`, `window.openShareDialog`,
+  `window.openWatchDialog`,
   `window.currentEvidenceSources`, `window.consensusCitationMeta`,
   `window.lastShareResultId`, `window.isUserPro`, `window.pendingAttachments`.
 - **`window.App.followup`** (definiert in `consensus-run.js`) ist der

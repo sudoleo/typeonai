@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import app.core.config as cfg
+from app.api.routers import share as share_router
 from app.services import watch_service
 from app.services import mailer, watch_scheduler
 from app.services.watch_service import WatchError
@@ -156,6 +157,17 @@ class WatchCrudTests(unittest.TestCase):
         with self.assertRaisesRegex(WatchError, "own watches"):
             watch_service.update_watch("u2", created["id"], {"status": "paused"}, False, db=self.db)
 
+    def test_result_id_uses_existing_share_flow(self):
+        with patch.object(
+            watch_service.share_snapshots, "create_share_from_pending",
+            return_value={"share_id": self.share_id, "slug": "question", "created": True},
+        ) as create_share:
+            created = watch_service.create_watch(
+                "u1", result_id="R" * 16, interval="weekly", is_pro=False, db=self.db
+            )
+        create_share.assert_called_once_with("u1", "R" * 16, db=self.db)
+        self.assertEqual(created["share_id"], self.share_id)
+
 
 class UnsubscribeTokenTests(unittest.TestCase):
     def setUp(self):
@@ -262,6 +274,21 @@ class MailerTests(unittest.TestCase):
         self.assertIn("text/plain", [part.get_content_type() for part in message.walk()])
         self.assertIn("text/html", [part.get_content_type() for part in message.walk()])
         self.assertIn("unsubscribe?token=x", message.as_string())
+
+
+class HistoryViewTests(unittest.TestCase):
+    def test_svg_view_coordinates_and_change_events(self):
+        points = [
+            {"ts": datetime(2026, 7, 1, tzinfo=timezone.utc), "agreement_score": 25,
+             "changed": False, "severity": "minor", "change_summary": "", "verdict": "hardly"},
+            {"ts": datetime(2026, 7, 8, tzinfo=timezone.utc), "agreement_score": 80,
+             "changed": True, "severity": "major", "change_summary": "Conclusion changed.", "verdict": "mostly"},
+        ]
+        view = share_router._build_watch_history_view(points)
+        self.assertEqual(view["latest_score"], 80)
+        self.assertTrue(view["path"].startswith("M 38.0"))
+        self.assertEqual(len(view["events"]), 1)
+        self.assertEqual(view["events"][0]["change_summary"], "Conclusion changed.")
 
 
 class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
