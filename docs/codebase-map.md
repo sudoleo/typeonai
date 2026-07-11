@@ -37,7 +37,8 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 **`main.py`** ist der App-Entry: lädt `.env`, setzt `GOOGLE_APPLICATION_CREDENTIALS`,
 fügt `CustomSecurityMiddleware` (CSP etc.) + slowapi-Limiter hinzu, mountet
 `/static`, registriert globale Exception-Handler und inkludiert alle Router.
-Im `lifespan`-Startup: `load_models_from_db()` + Share-Cleanups (siehe §7).
+Im `lifespan`-Startup: `load_models_from_db()` + Share-Cleanups (siehe §7) und
+ein cancellable asyncio-Task für den 30-Minuten-Consensus-Watch-Tick.
 
 Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 
@@ -303,6 +304,8 @@ app/services/llm/
 app/services/
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   watch_service.py           Watch-CRUD, Tier-/Intervallregeln, Share-Bindung, Unsubscribe-Tokens
+  watch_scheduler.py         Global-Lease, Tagesbudget und sequenzielle Free-Default-Watch-Läufe
+  mailer.py                  Multipart-HTML/Plaintext-SMTP-Versand via Thread-Executor
   public_markdown.py         Server-Markdown-Rendering für Share-Seiten
   differences_stats.py       Anonyme Differences-Telemetrie (differences_stats-Collection, §6)
 ```
@@ -344,6 +347,8 @@ Wichtige Verträge im Backend:
   Status, nächste Ausführung, Lease/Fehlerzähler); keine IP-/User-Agent-Daten.
   Verlaufspunkte liegen datenminimiert in `shares/{id}/watch_history` und
   verändern den Share-Snapshot nicht.
+- `watch_runtime` — globaler Worker-Lease und datumsgebundener Tageszähler;
+  verhindert parallele Scheduler-Worker und begrenzt Watch-Versuche restartfest.
 - `benchmark_runs` — admin-only Benchmark-Dashboard-Snapshots aus lokalen Runs:
   `manifest`, `results`, `audits`, abgeleitete Fragenmatrix; **keine**
   `calls.jsonl`-Rohantworten, Prompts oder Request-Payloads.
@@ -445,6 +450,14 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
 **Cleanup-Jobs** laufen ohne eigenen Scheduler im `lifespan`-Startup von `main.py`
 (getriggert durch den täglichen Render-Restart): `cleanup_expired_pending`,
 `cleanup_revoked_shares`.
+
+**Consensus Watch** läuft als eigener asyncio-Lifespan-Task alle 30 Minuten.
+Firestore-Transaktionen claimen einen globalen Worker-Lease, den einzelnen
+Watch-Lease und das globale Tagesbudget; innerhalb eines Workers laufen Watches
+strikt sequenziell. Die Reruns nutzen höchstens drei aktuelle
+`FREE_DEFAULT_MODEL_BY_PROVIDER`-Modelle, keine Attachments/Follow-ups und keine
+In-Memory-Usage-Zähler. Jeder erfolgreiche Lauf schreibt genau einen kompakten
+History-Punkt; nach drei Fehlern pausiert die Watch.
 
 ---
 

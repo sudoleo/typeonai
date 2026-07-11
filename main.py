@@ -1,3 +1,4 @@
+import asyncio
 import os
 import logging
 from contextlib import asynccontextmanager
@@ -22,6 +23,7 @@ from app.core.rate_limit import limiter
 from app.api.routers import auth, users, bookmarks, chat, pages, admin, share, watch
 from app.core.config import load_models_from_db
 from app.services.share_snapshots import cleanup_expired_pending, cleanup_revoked_shares
+from app.services.watch_scheduler import watch_scheduler_loop
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -39,7 +41,15 @@ async def lifespan(app: FastAPI):
         cleanup_revoked_shares()
     except Exception:
         logging.exception("cleanup_revoked_shares failed on startup")
-    yield
+    watch_task = asyncio.create_task(watch_scheduler_loop(), name="consensus-watch-scheduler")
+    try:
+        yield
+    finally:
+        watch_task.cancel()
+        try:
+            await watch_task
+        except asyncio.CancelledError:
+            pass
 
 app = FastAPI(lifespan=lifespan)
 

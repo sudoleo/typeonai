@@ -23,6 +23,9 @@ WATCH_INTERVALS = {
 }
 WATCH_STATUSES = {"active", "paused"}
 UNSUBSCRIBE_MAX_AGE_DAYS = 90
+WATCH_LEASE_MINUTES = 15
+WORKER_LEASE_MINUTES = 29
+RUNTIME_COLLECTION = "watch_runtime"
 
 
 class WatchError(Exception):
@@ -125,6 +128,9 @@ def create_watch(uid: str, *, interval, is_pro: bool, result_id=None, share_id=N
         "created_at": now,
         "last_run_at": None,
         "last_agreement_score": score if isinstance(score, (int, float)) else None,
+        # Nur der synthetisierte Konsens (keine Modellantworten) wird fuer den
+        # naechsten Change-Vergleich behalten.
+        "last_consensus_text": str(share.get("consensus_md") or "")[:100_000],
     }
     db.collection(WATCHES_COLLECTION).document(watch_id).set(doc)
     return _serialize_watch(watch_id, doc)
@@ -229,3 +235,136 @@ def delete_watches_for_share(share_id: str, db=None) -> int:
         doc.reference.delete()
         deleted += 1
     return deleted
+
+
+def _claim_in_transaction(tx, watch_ref, budget_ref, now: datetime, daily_limit: int):
+    """Pure transaction body, kept directly testable with the Firestore seam."""
+    watch_snap = watch_ref.get(transaction=tx)
+    data = watch_snap.to_dict() if watch_snap.exists else None
+    if not data or data.get("status") != "active":
+        return None, "not_due"
+    next_run = data.get("next_run_at")
+    claimed_until = data.get("claimed_until")
+    if not isinstance(next_run, datetime) or next_run > now:
+        return None, "not_due"
+    if isinstance(claimed_until, datetime) and claimed_until > now:
+        return None, "claimed"
+
+    budget_snap = budget_ref.get(transaction=tx)
+    budget = budget_snap.to_dict() if budget_snap.exists else {}
+    count = budget.get("count", 0)
+    count = count if isinstance(count, int) and count >= 0 else 0
+    if count >= daily_limit:
+        return None, "budget"
+
+    run_id = secrets.token_hex(12)
+    lease = now + timedelta(minutes=WATCH_LEASE_MINUTES)
+    tx.update(watch_ref, {"claimed_until": lease, "current_run_id": run_id})
+    tx.set(budget_ref, {"date": now.strftime("%Y-%m-%d"), "count": count + 1})
+    claimed = dict(data)
+    claimed.update({"claimed_until": lease, "current_run_id": run_id})
+    return claimed, "claimed"
+
+
+def claim_watch(watch_id: str, *, now=None, db=None):
+    from firebase_admin import firestore
+
+    db = db if db is not None else db_firestore
+    now = now or utcnow()
+    watch_ref = db.collection(WATCHES_COLLECTION).document(watch_id)
+    budget_ref = db.collection(RUNTIME_COLLECTION).document("daily_" + now.strftime("%Y%m%d"))
+    tx = db.transaction()
+
+    @firestore.transactional
+    def consume(transaction):
+        return _claim_in_transaction(transaction, watch_ref, budget_ref, now, cfg.get_watch_max_runs_per_day())
+
+    return consume(tx)
+
+
+def list_due_watch_ids(*, now=None, db=None, max_items=200) -> list[str]:
+    db = db if db is not None else db_firestore
+    now = now or utcnow()
+    result = []
+    for doc in db.collection(WATCHES_COLLECTION).where("status", "==", "active").stream():
+        data = doc.to_dict() or {}
+        if isinstance(data.get("next_run_at"), datetime) and data["next_run_at"] <= now:
+            result.append(doc.id)
+        if len(result) >= max_items:
+            break
+    return result
+
+
+def _worker_lease_transaction(tx, ref, now: datetime):
+    snap = ref.get(transaction=tx)
+    data = snap.to_dict() if snap.exists else {}
+    until = data.get("claimed_until")
+    if isinstance(until, datetime) and until > now:
+        return False
+    tx.set(ref, {"claimed_until": now + timedelta(minutes=WORKER_LEASE_MINUTES)})
+    return True
+
+
+def acquire_worker_lease(*, now=None, db=None) -> bool:
+    from firebase_admin import firestore
+
+    db = db if db is not None else db_firestore
+    now = now or utcnow()
+    ref = db.collection(RUNTIME_COLLECTION).document("global_worker")
+    tx = db.transaction()
+
+    @firestore.transactional
+    def acquire(transaction):
+        return _worker_lease_transaction(transaction, ref, now)
+
+    return acquire(tx)
+
+
+def release_worker_lease(*, db=None):
+    db = db if db is not None else db_firestore
+    db.collection(RUNTIME_COLLECTION).document("global_worker").update({"claimed_until": None})
+
+
+def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None, db=None):
+    """Persist one compact history point, then advance the schedule."""
+    db = db if db is not None else db_firestore
+    now = now or utcnow()
+    interval = claimed.get("interval") if claimed.get("interval") in WATCH_INTERVALS else "weekly"
+    history = {
+        "ts": now,
+        "agreement_score": int(result["agreement_score"]),
+        "verdict": str(result.get("verdict") or "")[:80],
+        "changed": bool(result.get("changed")),
+        "severity": str(result.get("severity") or "minor")[:10],
+        "change_summary": str(result.get("change_summary") or "")[:400],
+    }
+    share_ref = db.collection("shares").document(claimed["share_id"])
+    share_ref.collection("watch_history").document(claimed["current_run_id"]).set(history)
+    db.collection(WATCHES_COLLECTION).document(watch_id).update({
+        "next_run_at": now + WATCH_INTERVALS[interval],
+        "claimed_until": None,
+        "current_run_id": None,
+        "consecutive_failures": 0,
+        "last_run_at": now,
+        "last_agreement_score": history["agreement_score"],
+        "last_consensus_text": str(result.get("consensus") or "")[:100_000],
+    })
+    return history
+
+
+def fail_watch_run(watch_id: str, claimed: dict, *, now=None, db=None) -> bool:
+    """Record no history; pause after the third consecutive failure."""
+    db = db if db is not None else db_firestore
+    now = now or utcnow()
+    failures = int(claimed.get("consecutive_failures") or 0) + 1
+    interval = claimed.get("interval") if claimed.get("interval") in WATCH_INTERVALS else "weekly"
+    paused = failures >= 3
+    db.collection(WATCHES_COLLECTION).document(watch_id).update({
+        "status": "paused_error" if paused else "active",
+        "next_run_at": now + WATCH_INTERVALS[interval],
+        "claimed_until": None,
+        "current_run_id": None,
+        "consecutive_failures": failures,
+        "last_run_at": now,
+    })
+    return paused

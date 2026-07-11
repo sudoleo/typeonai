@@ -1527,6 +1527,48 @@ def query_differences(
     return f"Error in comparison: {last_error}", None
 
 
+def query_consensus_change(old_consensus: str, new_consensus: str, api_keys: dict,
+                           differences_model: str) -> dict:
+    """Compare two consensus texts through the existing standard Judge dispatch."""
+    prompt = (
+        "Compare the OLD and NEW consensus answers. Return ONLY a JSON object with "
+        'this schema: {"changed": boolean, "severity": "major" or "minor", '
+        '"change_summary": "plain text, at most 400 characters"}. '
+        "Set changed=false for wording, formatting, or citation-only differences. "
+        "Use major only when a conclusion, recommendation, central fact, or material "
+        "qualification changed.\n\nOLD:\n"
+        + str(old_consensus or "")[:20_000]
+        + "\n\nNEW:\n"
+        + str(new_consensus or "")[:20_000]
+    )
+    attempts = _differences_attempts(differences_model, api_keys)
+    if not attempts:
+        raise RuntimeError("No change Judge is available.")
+    last_error = "empty result"
+    for (provider, api_model, model_ref), _is_retry, judge_tier in attempts:
+        try:
+            raw = _call_engine_text(
+                provider, api_model, model_ref, api_keys,
+                system="Return valid JSON only.", prompt=prompt, max_tokens=512,
+                temperature=0.0, json_mode=True, effort=_judge_effort(judge_tier),
+            )
+            data = _extract_json_object(raw)
+            if not isinstance(data, dict) or not isinstance(data.get("changed"), bool):
+                raise ValueError("invalid structured change result")
+            severity = str(data.get("severity") or "minor").lower()
+            if severity not in {"major", "minor"}:
+                severity = "minor"
+            return {
+                "changed": data["changed"],
+                "severity": severity,
+                "change_summary": str(data.get("change_summary") or "").strip()[:400],
+            }
+        except Exception as exc:
+            last_error = str(exc)
+            continue
+    raise RuntimeError(f"Change Judge failed: {last_error}")
+
+
 # ---------------------------------------------------------------------------
 # Streaming-Varianten: liefern {"type": "delta", "text": ...} Events und am
 # Ende {"type": "final", "text": <Gesamttext>}. Fehler werden - wie bei den
