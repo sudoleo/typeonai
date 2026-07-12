@@ -48,7 +48,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (Pro, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
 | `auth.py` | `/register`, `/confirm-registration`. |
 | `users.py` | `/user_status`, `/usage`, `/delete_account`, `/track-interest`. |
-| `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus`. |
+| `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus`. Beide Save-Endpunkte liefern den vollständig zusammengeführten Bookmark-Datensatz zurück, damit der Client ihn ohne Reload aktualisiert. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches`, `/api/watch/{id}` (PATCH/DELETE) und öffentlicher, HMAC-signierter `/watch/unsubscribe`-Link. |
 | `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
@@ -75,7 +75,9 @@ deferred am `</body>` — `app-init.js`.
 
 - **`app-core.js`** — MUSS zuerst laden. Definiert `window.App`-Bus, `modelPrefs`
   (zentrales Mapping Provider→DOM-IDs), `deepThinkModelLabels`, gemeinsame Helfer
-  (`getModelOptionLabel`, `getSelectedModelCount`, `showPopup`, `trackAppEvent`).
+  (`getModelOptionLabel`, `getSelectedModelCount`, `setAppTitle`, `showPopup`,
+  `trackAppEvent`). `setAppTitle` setzt den Standardtitel oder einen gekürzten,
+  fragebezogenen Browser-Tab-Titel.
 - **`model-picker.js`** — Modellauswahl/Custom-Picker, Default-Modelle, localStorage-
   Persistenz (`restoreModelSelections`).
 - **`markdown-stream.js`** — Markdown-Rendering (`injectMarkdown`) + SSE-Helfer
@@ -111,7 +113,9 @@ deferred am `</body>` — `app-init.js`.
 **Nicht unter `static/js/`** (älter, eigene Verantwortung):
 - **`static/firebase.js`** (ES-Modul) — Firebase-Init, Login/Logout, Token-Handling,
   `window.auth`, Bookmarks-CRUD-Calls, Feedback, Voting, Tier-Sync sowie das
-  Nutzericon-Menü mit „Shared links“ und direkt darunter „Watched“.
+  Nutzericon-Menü mit „Shared links“ und direkt darunter „Watched“. Bookmark-
+  Saves aktualisieren `window.bookmarksData` und das DOM direkt aus dem vom
+  Server zurückgegebenen Merge-Ergebnis.
 - **`static/demo.js`** (ES-Modul) — Demo-Flow (`runDemoFlow`) für die „Demo"-Query;
   zeigt Gästen nach Abschluss der Demo am Eingabebereich eine Login-/Registrierungs-
   Aufforderung, ohne die Demo-Frage aus dem deaktivierten Feld zu entfernen.
@@ -492,6 +496,9 @@ Intervall sowie letztem und ggf. nächstem Fragenlauf.
   `query-send.js` (consume beim Senden), `app-init.js` (reset in
   `clearResponseBoxes`) und `user-tier.js` (render bei Tier-Wechsel) hängen
   daran; DOM-Ziel ist `#followupBar` in `index.html`.
+- **`window.App.setAppTitle(question?)`** (definiert in `app-core.js`) hält den
+  Standard- bzw. fragebezogenen Browser-Tab-Titel bei Query-Send, Bookmark-Open
+  und Clear synchron zur aktuellen Ansicht.
 - **`window.App.consensusLifecycle.*`** ist die gezielte Run-State-Brücke
   (`startRun/isActiveRun/finishRun/setSynthesizing/isRunning/setGate/
   markPendingCanceled/initAutoConsensusToggle`). Run-ID-Gating nicht umgehen, sonst

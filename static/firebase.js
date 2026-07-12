@@ -258,8 +258,7 @@ onIdTokenChanged(auth, async (user) => {
 
     // 3) Bookmarks einmal pro Login laden
     if (!bookmarksLoaded) {
-      await loadBookmarks();
-      bookmarksLoaded = true;
+      bookmarksLoaded = await loadBookmarks();
     }
 
     // 4) Usage-UI anzeigen
@@ -937,6 +936,16 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
       console.error("Error saving consensus bookmark:", data.detail);
       return;
     }
+    if (data.bookmark) {
+      if (!window.bookmarksData) window.bookmarksData = [];
+      const existingIndex = window.bookmarksData.findIndex(b => b.id === data.bookmark.id);
+      if (existingIndex >= 0) {
+        window.bookmarksData[existingIndex] = data.bookmark;
+      } else {
+        window.bookmarksData.unshift(data.bookmark);
+        addBookmarkToDOM(data.bookmark);
+      }
+    }
     trackAppEvent("app_bookmark_saved", { type: "consensus" });
   } catch (error) {
     console.error("Error in saveBookmarkConsensus:", error);
@@ -946,6 +955,8 @@ window.saveBookmarkConsensus = saveBookmarkConsensus;
 
 // Diese Funktion füllt die UI mit den Daten eines Bookmarks
 function loadSingleBookmarkUI(bookmark) {
+    window.App?.setAppTitle?.(bookmark?.query);
+
     // Konsens-Button deaktivieren
     const conBtn = document.getElementById("consensusButton");
     if(conBtn) conBtn.disabled = true;
@@ -1115,7 +1126,7 @@ function loadSingleBookmarkUI(bookmark) {
 }
 
 async function loadBookmarks() {
-  if (!auth.currentUser) return;
+  if (!auth.currentUser) return false;
   const id_token = await auth.currentUser.getIdToken(false);
 
   try {
@@ -1133,18 +1144,20 @@ async function loadBookmarks() {
     const container = document.getElementById("bookmarksContainer");
     if (container) container.innerHTML = "";
 
-    if (!res.ok) return;
+    if (!res.ok) return false;
 
     // Global speichern
     window.bookmarksData = data.bookmarks;
 
     [...data.bookmarks].reverse().forEach(bm => addBookmarkToDOM(bm));
+    return true;
 
   } catch (error) {
     console.error("Error in loadBookmarks:", error);
     // Skeleton auch im Fehlerfall (z. B. Netzwerkabbruch) entfernen.
     const container = document.getElementById("bookmarksContainer");
     if (container) container.innerHTML = "";
+    return false;
   }
 }
 

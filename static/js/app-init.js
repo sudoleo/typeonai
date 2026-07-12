@@ -587,6 +587,7 @@
         }
 
         const SIDEBAR_OVERLAY_BREAKPOINT = 1549;
+        const SIDEBAR_COLLAPSED_STORAGE_KEY = "sidebar_collapsed";
 
         function usesOverlaySidebar() {
           return window.matchMedia(`(max-width: ${SIDEBAR_OVERLAY_BREAKPOINT}px)`).matches;
@@ -817,6 +818,10 @@
           } else {
             sidebar.classList.toggle("collapsed");
             sidebar.classList.remove("active");
+            localStorage.setItem(
+              SIDEBAR_COLLAPSED_STORAGE_KEY,
+              String(sidebar.classList.contains("collapsed"))
+            );
           }
           updateToggleButton();
           trackAppEvent("app_sidebar_toggle", { open: !sidebar.classList.contains("collapsed") });
@@ -831,7 +836,8 @@
             sidebar.classList.add("collapsed");
             sidebar.classList.remove("active");
           } else {
-            sidebar.classList.remove("collapsed");
+            const prefersCollapsed = localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true";
+            sidebar.classList.toggle("collapsed", prefersCollapsed);
             sidebar.classList.remove("active");
           }
           updateToggleButton();
@@ -1470,6 +1476,7 @@
             inputBox.dispatchEvent(new Event("input", { bubbles: true }));
             window.syncDemoChipState?.();
           }
+          window.App.setAppTitle();
 
           setAgentModeStatus("idle");
         }

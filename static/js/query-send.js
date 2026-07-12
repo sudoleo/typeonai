@@ -262,6 +262,8 @@
         return;
       }
 
+      window.App.setAppTitle(question);
+
       trackAppEvent("app_query_started", {
         mode,
         selected_models: getSelectedModelCount(),

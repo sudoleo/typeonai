@@ -175,8 +175,22 @@ async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
         dataToMerge["sources"] = sources
     
     try:
-        db_firestore.collection("users").document(uid).collection("bookmarks").document(doc_id).set(dataToMerge, merge=True)
-        return {"status": "success", "message": "Consensus and differences saved."}
+        doc_ref = (
+            db_firestore
+            .collection("users")
+            .document(uid)
+            .collection("bookmarks")
+            .document(doc_id)
+        )
+        doc_ref.set(dataToMerge, merge=True)
+        snap = doc_ref.get()
+        bookmark = snap.to_dict()
+        bookmark["id"] = snap.id
+        return {
+            "status": "success",
+            "message": "Consensus and differences saved.",
+            "bookmark": bookmark,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error saving consensus")
 

@@ -32,6 +32,22 @@
     ].filter(id => document.getElementById(id)?.checked).length;
   }
 
+  const DEFAULT_APP_TITLE = "Consens | Compare AI Answers";
+
+  function setAppTitle(question = "") {
+    const normalized = String(question || "").replace(/\s+/g, " ").trim();
+    if (!normalized) {
+      document.title = DEFAULT_APP_TITLE;
+      return;
+    }
+
+    const maxQuestionLength = 64;
+    const shortened = normalized.length > maxQuestionLength
+      ? `${normalized.slice(0, maxQuestionLength - 1).trimEnd()}…`
+      : normalized;
+    document.title = `${shortened} | Consens`;
+  }
+
   // Definition der Modelle und IDs (zentral, von mehreren Clustern genutzt).
   const modelPrefs = [
     { key: "OpenAI", provider: "openai", label: "OpenAI", checkId: "selectOpenAI", selectId: "openaiModelSelect", responseId: "openaiResponse", textId: "openaiModelText" },
@@ -81,6 +97,7 @@
     deepThinkModelLabels,
     getModelOptionLabel,
     getSelectedModelCount,
+    setAppTitle,
     trackAppEvent,
     showPopup
   });
