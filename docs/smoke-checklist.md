@@ -36,11 +36,17 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 
 ## Consensus Watch
 - [ ] Nach erfolgreichem Consensus erscheint „Watch“ neben Share; Aktivierung
-      erklärt die öffentliche, nicht indexierte Link-Seite und bietet Weekly/Monthly.
+      verlangt die explizite Wahl zwischen privater Eigentümer-Seite und öffentlicher,
+      nicht indexierter Link-Seite und bietet Weekly/Monthly. Private Seiten sind in
+      einem fremden oder ausgeloggten Browser nicht lesbar.
+- [ ] Lokale Run-Uhrzeit ist bei Erstellung wählbar und zeigt die erkannte Zeitzone;
+      „Watched“ erlaubt eine spätere Änderung. `next_run_at` entspricht der gewählten
+      lokalen Uhrzeit (mit bis zu 30 Minuten Scheduler-Toleranz), auch über einen
+      Sommer-/Winterzeitwechsel hinweg.
 - [ ] Free: Daily ist als Pro markiert/gesperrt und das aktive Limit öffnet den
       bestehenden Pro-Teaser. Pro: Daily und bis zu fünf aktive Watches funktionieren.
-- [ ] „Watched“ listet Status und Intervall; Intervall ändern, Pause/Resume und
-      Mailmodus ändern, Pause/Resume und Delete funktionieren. „Watched“ steht
+- [ ] „Watched“ listet Status, Intervall und Sichtbarkeit; Intervall ändern,
+      Mailmodus bzw. Condition ändern, Pause/Resume und Delete funktionieren. „Watched“ steht
       außerdem im Nutzericon-Menü direkt unter „Shared links“. Delete lässt
       bereits vorhandene Share-History bestehen.
 - [ ] Aktive Watch-Seite zeigt bereits vor dem ersten History-Punkt in einer
@@ -50,6 +56,9 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       Major Change bzw. Score-Delta ≥15 sendet genau eine Multipart-Mail; Minor
       Change darunter sendet im Modus „changes only“ keine. „Every new consensus“
       sendet bei jedem erfolgreichen Lauf genau eine Mail mit Consensus-Inhalt.
+      Eine Condition sendet nur bei `not met -> met` (bzw. beim ersten `met`), nicht
+      erneut bei weiter bestehendem `met`; `unknown` löst nicht aus. Die Mail enthält
+      Condition, Begründung und neuen Consensus.
       Abmelde-Link pausiert ohne Login.
 
 ## Modelle / Picker

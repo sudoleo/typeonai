@@ -31,11 +31,17 @@ def _raise(exc: watch_service.WatchError):
 @limiter.limit("5/minute")
 async def create_watch(request: Request, data: dict = Body(...)):
     uid = _uid(request, data)
+    if "visibility" not in data:
+        raise HTTPException(status_code=400, detail="Choose whether the watch page is private or public.")
     try:
         watch = watch_service.create_watch(
             uid,
             interval=data.get("interval"),
             email_mode=data.get("email_mode", "changes_only"),
+            condition=data.get("condition", ""),
+            visibility=data.get("visibility", "public"),
+            run_time=data.get("run_time", ""),
+            timezone_name=data.get("timezone", ""),
             is_pro=is_user_pro(uid),
             result_id=data.get("result_id"),
             share_id=data.get("share_id"),

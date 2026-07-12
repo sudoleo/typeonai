@@ -46,7 +46,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 |---|---|
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, redirect→`/app` bei Session), `/app` (Haupt-App), `/admin`, `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (Pro, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
-| `auth.py` | `/register`, `/confirm-registration`. |
+| `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). |
 | `users.py` | `/user_status`, `/usage`, `/delete_account`, `/track-interest`. |
 | `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus`. Beide Save-Endpunkte liefern den vollständig zusammengeführten Bookmark-Datensatz zurück, damit der Client ihn ohne Reload aktualisiert. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
@@ -95,7 +95,9 @@ deferred am `</body>` — `app-init.js`.
 - **`share-dialog.js`** — `window.openShareDialog` und Share-Liste.
 - **`consensus-actions.js`** — Copy/Citation/Share-Buttons am Consensus.
 - **`watch.js`** — `window.openWatchDialog`, Aktivierung neben Share,
-  Intervall-/Mailmodus-Wahl und „Watched“-Verwaltung im bestehenden Modal.
+  explizite Public-/Private-Wahl, Intervall-/lokale Uhrzeit-/Mailmodus-/Condition-
+  Wahl und „Watched“-Verwaltung im bestehenden Modal. Die Browser-IANA-Zeitzone
+  wird zusammen mit `HH:MM` an das Backend gesendet.
 - **`user-tier.js`** — Free/Pro-UI, Premium-Modellstatus (`updateUserTierUI`,
   `updatePremiumModelsState`).
 - **`consensus-insights.js`** — strukturierte Auswertung: Claim-Badges,
@@ -280,11 +282,14 @@ Metadaten (Name/Typ/Größe) — siehe `bookmarks.py::sanitize_attachment_meta`.
 - `/consensus` legt ein `pending_results`-Dokument an → `result_id`.
 - `POST /api/share` (`share.py` → `share_snapshots.create_share_from_pending`)
   macht daraus einen unveränderlichen Share-Snapshot (`shares`-Collection) mit Slug.
-- Öffentliche Seite **`GET /s/{slug_id}`** rendert read-only aus dem Snapshot
-  (keine LLM-Calls), inkl. JSON-LD, Canonical-Dedup über `question_hash`,
-  „verwandte Fragen". **Indexierung (`index, follow`) nur wenn der Admin `indexed`
-  setzt** — nie automatisch; sonst `noindex`. Caching via `SHARE_CACHE_CONTROL`
-  + In-Process-Cache (`get_share_cached` / `invalidate_share_cache`).
+- **`GET /s/{slug_id}`** rendert read-only aus dem Snapshot (keine LLM-Calls).
+  Public-Snapshots enthalten JSON-LD, Canonical-Dedup über `question_hash` und
+  „verwandte Fragen"; **Indexierung (`index, follow`) nur wenn der Admin `indexed`
+  setzt** — nie automatisch; sonst `noindex`. Private Watch-Snapshots werden am
+  Endpoint serverseitig auf die Eigentümer-Session geprüft und nie indexiert,
+  gecacht, reportet oder als Related/Sitemap-Ziel ausgegeben. Public-Caching via
+  `SHARE_CACHE_CONTROL` + In-Process-Cache (`get_share_cached` /
+  `invalidate_share_cache`).
 - Lösch-/Moderationswege: Owner `DELETE /api/share/{id}`, Besucher-`report`,
   Admin-`moderate`. 30-Tage-Hard-Delete widerrufener Shares via `cleanup_revoked_shares`.
 
@@ -310,7 +315,7 @@ app/services/llm/
   attachments.py             Attachment-Validierung/Aufbereitung
 app/services/
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
-  watch_service.py           Watch-CRUD, Tier-/Intervallregeln, Share-Bindung, Unsubscribe-Tokens
+  watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
   watch_scheduler.py         Global-Lease, Tagesbudget und sequenzielle Free-Default-Watch-Läufe
   mailer.py                  Multipart-HTML/Plaintext-SMTP-Versand via Thread-Executor
   public_markdown.py         Server-Markdown-Rendering für Share-Seiten
@@ -348,11 +353,15 @@ Wichtige Verträge im Backend:
   bevorzugte Judge-Familie (`apply_judge_families`; nie die eigene Familie,
   ohne Eintrag/Key Auto über `JUDGE_FAMILY_PRIORITY`).
 - `pending_results` — kurzlebige Consensus-Ergebnisse fürs Sharing (TTL/Cleanup).
-- `shares` — veröffentlichte Snapshots (Slug, `indexed`, `status`, `owner_uid`,
-  `question_hash`, …).
-- `watches` — owner-gebundene Scheduling-Metadaten (`share_id`, Intervall,
-  `email_mode` = `changes_only|every_run`, Status, nächste Ausführung,
-  Lease/Fehlerzähler); keine IP-/User-Agent-Daten.
+- `shares` — unveränderliche Snapshots (Slug, `visibility=public|private`,
+  `indexed`, `status`, `owner_uid`, `question_hash`, …). Public-Shares sind per
+  Link lesbar; private Watch-Snapshots ausschließlich mit Eigentümer-Session.
+- `watches` — owner-gebundene Scheduling-Metadaten (`share_id`, `visibility`,
+  Intervall, optionale lokale `run_time` (`HH:MM`) + IANA-`timezone`,
+  `email_mode` = `changes_only|condition|every_run`, private
+  `condition`, `last_condition_status`, Status, nächste Ausführung,
+  Lease/Fehlerzähler); keine IP-/User-Agent-Daten. Conditions werden nie in
+  öffentliche Share-Payloads oder History-Punkte kopiert.
   Verlaufspunkte liegen datenminimiert in `shares/{id}/watch_history` und
   verändern den Share-Snapshot nicht.
 - `watch_runtime` — globaler Worker-Lease und datumsgebundener Tageszähler;
@@ -418,11 +427,12 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **409 passed** (2026-07-12).
+  Letzte bekannte Baseline: **421 passed** (2026-07-12).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, Consensus→Differences+Score,
-  Exclude, Theme, Picker-Persistenz). Startet einen eigenen uvicorn auf Port
+  Watch-Dialog mit Pflicht-Sichtbarkeit/Condition-Feld, Exclude, Theme,
+  Picker-Persistenz). Startet einen eigenen uvicorn auf Port
   8031 mit `MOCK_LLM=1` (deterministische Fixtures in
   `app/services/llm/mock_llm.py`, Seams: `_run_ask`,
   `_call_engine_text`/`_stream_engine_text`),
@@ -467,10 +477,19 @@ strikt sequenziell. Die Reruns nutzen höchstens drei aktuelle
 In-Memory-Usage-Zähler. Jeder erfolgreiche Lauf schreibt genau einen kompakten
 History-Punkt; nach drei Fehlern pausiert die Watch.
 Der Mailmodus ist pro Watch änderbar: `changes_only` nutzt die bestehende
-Major-/Score-Delta-Schwelle, `every_run` sendet nach jedem erfolgreichen Lauf
-genau eine Multipart-Mail inklusive neuem Consensus-Text. Öffentliche Share-
-Seiten zeigen für aktuelle oder historische Watches eine kompakte Metazeile mit
-Intervall sowie letztem und ggf. nächstem Fragenlauf.
+Major-/Score-Delta-Schwelle, `condition` lässt den bestehenden Change-Judge eine
+max. 500 Zeichen lange Nutzerbedingung gegen den neuen Consensus als
+`met|not_met|unknown` bewerten und mailt nur beim Übergang zu `met`, `every_run`
+sendet nach jedem erfolgreichen Lauf genau eine Multipart-Mail inklusive neuem
+Consensus-Text. Bei der Erstellung ist `visibility=private|public` Pflicht im UI:
+private Seiten erfordern die kurzlebige Eigentümer-Session, sind `noindex,nofollow`,
+`private,no-store` und erscheinen weder in Sitemap/Related noch im Report-Flow.
+Neu angelegte Watches bekommen eine lokale Ausführungszeit; das Backend berechnet
+`next_run_at` zeitzonen- und DST-fest und behält die lokale Uhrzeit bei Folge-Runs,
+Fehler-Retries und Resume bei. Legacy-Watches ohne Zeitfelder nutzen weiter die
+bisherige reine Intervalladdition.
+Watch-Seiten zeigen für aktuelle oder historische Watches eine kompakte Metazeile
+mit Intervall sowie letztem und ggf. nächstem Fragenlauf.
 
 ---
 

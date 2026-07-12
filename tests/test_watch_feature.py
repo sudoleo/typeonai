@@ -142,6 +142,25 @@ class WatchCrudTests(unittest.TestCase):
                 "u1", created["id"], {"email_mode": "everything"}, False, db=self.db
             )
 
+    def test_condition_mode_requires_condition_and_resets_state_when_edited(self):
+        with self.assertRaisesRegex(WatchError, "condition"):
+            watch_service.create_watch(
+                "u1", share_id=self.share_id, interval="weekly",
+                email_mode="condition", is_pro=False, db=self.db,
+            )
+        created = watch_service.create_watch(
+            "u1", share_id=self.share_id, interval="weekly",
+            email_mode="condition", condition="An official date is announced",
+            is_pro=False, db=self.db,
+        )
+        self.assertEqual(created["condition"], "An official date is announced")
+        self.db.stores["watches"][created["id"]]["last_condition_status"] = "met"
+        updated = watch_service.update_watch(
+            "u1", created["id"], {"condition": "The product is available"},
+            False, db=self.db,
+        )
+        self.assertIsNone(updated["last_condition_status"])
+
     def test_free_daily_requires_pro(self):
         with self.assertRaisesRegex(WatchError, "Daily watches require Pro"):
             watch_service.create_watch("u1", share_id=self.share_id, interval="daily", is_pro=False, db=self.db)
@@ -182,8 +201,56 @@ class WatchCrudTests(unittest.TestCase):
             created = watch_service.create_watch(
                 "u1", result_id="R" * 16, interval="weekly", is_pro=False, db=self.db
             )
-        create_share.assert_called_once_with("u1", "R" * 16, db=self.db)
+        create_share.assert_called_once_with("u1", "R" * 16, db=self.db, visibility="public")
         self.assertEqual(created["share_id"], self.share_id)
+
+    def test_private_watch_keeps_visibility_private(self):
+        private_id = "P" * 16
+        self.db.stores["shares"][private_id] = {**share(slug="private"), "visibility": "private"}
+        created = watch_service.create_watch(
+            "u1", share_id=private_id, interval="weekly", visibility="private",
+            is_pro=False, db=self.db,
+        )
+        self.assertEqual(created["visibility"], "private")
+
+    def test_watch_can_schedule_local_run_time(self):
+        now = datetime(2026, 3, 28, 10, 0, tzinfo=timezone.utc)
+        with patch.object(watch_service, "utcnow", return_value=now):
+            created = watch_service.create_watch(
+                "u1", share_id=self.share_id, interval="daily", is_pro=True,
+                run_time="09:00", timezone_name="Europe/Berlin", db=self.db,
+            )
+        self.assertEqual(created["run_time"], "09:00")
+        self.assertEqual(created["timezone"], "Europe/Berlin")
+        # 29 March 2026 is after the DST switch: 09:00 Berlin == 07:00 UTC.
+        self.assertEqual(
+            self.db.stores["watches"][created["id"]]["next_run_at"],
+            datetime(2026, 3, 29, 7, 0, tzinfo=timezone.utc),
+        )
+
+    def test_run_time_update_reschedules_and_rejects_invalid_values(self):
+        created = watch_service.create_watch(
+            "u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db,
+        )
+        updated = watch_service.update_watch(
+            "u1", created["id"],
+            {"run_time": "18:45", "timezone": "Europe/Berlin"},
+            False, db=self.db,
+        )
+        self.assertEqual(updated["run_time"], "18:45")
+        self.assertEqual(updated["timezone"], "Europe/Berlin")
+        with self.assertRaisesRegex(WatchError, "HH:MM"):
+            watch_service.update_watch(
+                "u1", created["id"],
+                {"run_time": "25:00", "timezone": "Europe/Berlin"},
+                False, db=self.db,
+            )
+        with self.assertRaisesRegex(WatchError, "IANA"):
+            watch_service.update_watch(
+                "u1", created["id"],
+                {"run_time": "09:00", "timezone": "Mars/Olympus"},
+                False, db=self.db,
+            )
 
 
 class UnsubscribeTokenTests(unittest.TestCase):
@@ -281,6 +348,32 @@ class SchedulerSafetyTests(unittest.TestCase):
                 {"email_mode": "changes_only", "last_agreement_score": 60}, unchanged
             )
         )
+        condition_result = {"agreement_score": 61, "condition_status": "met"}
+        condition = "An official date is announced"
+        condition_hash = watch_service.condition_hash(condition)
+        self.assertEqual(
+            watch_scheduler.notification_kind(
+                {"email_mode": "condition", "condition": condition,
+                 "last_condition_status": "not_met", "last_condition_hash": condition_hash},
+                condition_result,
+            ),
+            "condition",
+        )
+        self.assertIsNone(watch_scheduler.notification_kind(
+            {"email_mode": "condition", "condition": condition,
+             "last_condition_status": "met", "last_condition_hash": condition_hash},
+            condition_result,
+        ))
+        self.assertEqual(watch_scheduler.notification_kind(
+            {"email_mode": "condition", "condition": "A different condition",
+             "last_condition_status": "met", "last_condition_hash": condition_hash},
+            condition_result,
+        ), "condition")
+        self.assertIsNone(watch_scheduler.notification_kind(
+            {"email_mode": "condition", "condition": condition,
+             "last_condition_status": "not_met", "last_condition_hash": condition_hash},
+            {"agreement_score": 61, "condition_status": "unknown"},
+        ))
 
     def test_mock_llm_watch_pipeline(self):
         with patch.dict(os.environ, {"MOCK_LLM": "1"}):
@@ -316,16 +409,32 @@ class MailerTests(unittest.TestCase):
         self.assertIn("The updated consensus content.", rendered)
         self.assertIn("71/100", rendered)
 
+    def test_condition_mail_explains_trigger(self):
+        message = mailer.build_condition_message(
+            recipient="owner@example.test", question="A question",
+            condition="An official date is announced", reason="The date is 15 September.",
+            agreement_score=82, consensus="The launch is scheduled.",
+            share_url="https://consens.io/s/q-id",
+            unsubscribe_url="https://consens.io/watch/unsubscribe?token=x",
+        )
+        rendered = message.as_string()
+        self.assertIn("Watch condition met", rendered)
+        self.assertIn("15 September", rendered)
+        self.assertIn("The launch is scheduled", rendered)
+
     def test_public_watch_meta_contains_run_schedule_but_no_owner(self):
         db = FakeDb()
         now = datetime(2026, 7, 12, tzinfo=timezone.utc)
         db.stores["watches"]["w1"] = {
             "owner_uid": "private-owner", "share_id": "A" * 16,
             "status": "active", "interval": "weekly", "created_at": now,
+            "run_time": "09:00", "timezone": "Europe/Berlin",
             "last_run_at": now, "next_run_at": now + timedelta(days=7),
         }
         meta = watch_service.get_public_watch_meta("A" * 16, db=db)
         self.assertEqual(meta["interval"], "weekly")
+        self.assertEqual(meta["run_time"], "09:00")
+        self.assertEqual(meta["timezone"], "Europe/Berlin")
         self.assertNotIn("owner_uid", meta)
 
 
@@ -401,3 +510,7 @@ class WatchFrontendContractTests(unittest.TestCase):
         source = Path("static/js/watch.js").read_text(encoding="utf-8")
         self.assertIn('value="every_run"', source)
         self.assertIn("Every new consensus (with content)", source)
+        self.assertIn('value="condition"', source)
+        self.assertIn('id="watchVisibility"', source)
+        self.assertIn('id="watchRunTime"', source)
+        self.assertIn("resolvedOptions().timeZone", source)

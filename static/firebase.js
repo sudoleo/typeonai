@@ -45,9 +45,14 @@ function closeLogoutConfirm() {
   if (modal) modal.style.display = "none";
 }
 
-function performLogout() {
+async function performLogout() {
   trackAppEvent("auth_logout_click");
   closeLogoutConfirm();
+  try {
+    await fetch("/auth/session", { method: "DELETE" });
+  } catch (_) {
+    // Firebase logout still proceeds; the short-lived server cookie expires.
+  }
   signOut(auth).catch(err => console.error("Logout-Fehler", err));
 }
 
@@ -336,6 +341,7 @@ onIdTokenChanged(auth, async (user) => {
 
     } else {
         // Cleanup bei Logout
+        fetch("/auth/session", { method: "DELETE" }).catch(() => {});
         localStorage.removeItem("id_token");
         if (typeof window.updateQuestionInputAccess === "function") {
           window.updateQuestionInputAccess();

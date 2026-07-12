@@ -2,6 +2,7 @@ import logging
 import firebase_admin
 from firebase_admin import auth
 from fastapi import APIRouter, Request, Body, HTTPException
+from fastapi.responses import JSONResponse
 
 from app.core.rate_limit import limiter
 from app.core.security import verify_user_token
@@ -58,4 +59,22 @@ async def confirm_registration(request: Request, data: dict = Body(...)):
         # Diese Info ist okay, weil sie nichts über Passwort / Existenz aussagt
         raise HTTPException(status_code=400, detail="E-mail address not yet verified.")
 
-    return {"status": "registered"}
+    response = JSONResponse({"status": "registered"})
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
+    response.set_cookie(
+        "session",
+        token,
+        max_age=60 * 60,
+        httponly=True,
+        secure=request.url.scheme == "https" or forwarded_proto == "https",
+        samesite="lax",
+        path="/",
+    )
+    return response
+
+
+@router.delete("/auth/session")
+async def clear_session():
+    response = JSONResponse({"status": "signed_out"})
+    response.delete_cookie("session", path="/", httponly=True, samesite="lax")
+    return response

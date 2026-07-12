@@ -80,7 +80,7 @@ def _provider_answer(provider: str, question: str, keys: dict):
     return PROVIDER_FUNCTIONS[provider](question, key, **kwargs)
 
 
-def execute_watch(question: str, previous_consensus: str) -> dict:
+def execute_watch(question: str, previous_consensus: str, condition: str = "") -> dict:
     """Run at most three current free defaults; never touches usage counters."""
     keys = _developer_keys()
     providers = _selected_providers(keys)
@@ -114,7 +114,9 @@ def execute_watch(question: str, previous_consensus: str) -> dict:
         raise RuntimeError("Differences Judge failed.")
     agreement = compute_agreement_score(differences)
     differences["agreement"] = agreement
-    change = query_consensus_change(previous_consensus, consensus, keys, engine)
+    change = query_consensus_change(
+        previous_consensus, consensus, keys, engine, condition=condition,
+    )
     return {
         "consensus": consensus,
         "agreement_score": agreement["score"],
@@ -132,8 +134,17 @@ def should_notify(old_score, new_score, changed: bool, severity: str) -> bool:
 
 
 def notification_kind(watch: dict, result: dict) -> str | None:
-    if (watch.get("email_mode") or "changes_only") == "every_run":
+    email_mode = watch.get("email_mode") or "changes_only"
+    if email_mode == "every_run":
         return "every_run"
+    if email_mode == "condition":
+        current_hash = watch_service.condition_hash(watch.get("condition") or "")
+        previous_is_same_condition = watch.get("last_condition_hash") == current_hash
+        if (result.get("condition_status") == "met"
+                and (watch.get("last_condition_status") != "met"
+                     or not previous_is_same_condition)):
+            return "condition"
+        return None
     if should_notify(
         watch.get("last_agreement_score"), result.get("agreement_score"),
         bool(result.get("changed")), result.get("severity") or "minor",
@@ -143,7 +154,8 @@ def notification_kind(watch: dict, result: dict) -> str | None:
 
 
 def _notification_context(watch_id: str, watch: dict):
-    share_path = share_snapshots.share_path(watch.get("share_slug") or "", watch["share_id"])
+    slug = "" if watch.get("visibility") == "private" else watch.get("share_slug") or ""
+    share_path = share_snapshots.share_path(slug, watch["share_id"])
     share_url = SITE_URL + share_path
     token = watch_service.make_unsubscribe_token(watch_id)
     return share_url, SITE_URL + "/watch/unsubscribe?token=" + token
@@ -189,6 +201,27 @@ async def _send_run_mail(watch_id: str, watch: dict, result: dict):
     ))
 
 
+async def _send_condition_mail(watch_id: str, watch: dict, result: dict):
+    if not mailer.is_configured():
+        logging.info("Consensus Watch mail skipped: SMTP_HOST/MAIL_FROM not configured")
+        return False
+    user = await asyncio.to_thread(auth.get_user, watch["owner_uid"])
+    if not getattr(user, "email_verified", False) or not getattr(user, "email", None):
+        logging.warning("Watch %s owner has no verified e-mail; notification skipped", watch_id)
+        return False
+    share_url, unsubscribe_url = _notification_context(watch_id, watch)
+    return await mailer.send_message(mailer.build_condition_message(
+        recipient=user.email,
+        question=watch.get("question") or "",
+        condition=watch.get("condition") or "",
+        reason=result.get("condition_reason") or "The condition is met by the new consensus.",
+        agreement_score=result["agreement_score"],
+        consensus=result.get("consensus") or "",
+        share_url=share_url,
+        unsubscribe_url=unsubscribe_url,
+    ))
+
+
 async def _send_paused_mail(watch_id: str, watch: dict):
     if not mailer.is_configured():
         logging.info("Consensus Watch mail skipped: SMTP_HOST/MAIL_FROM not configured")
@@ -223,9 +256,15 @@ async def run_watch_tick() -> int:
                 claimed["question"] = share.get("question") or ""
                 claimed["share_slug"] = share.get("slug") or ""
                 result = await asyncio.to_thread(
-                    execute_watch, claimed["question"], share.get("consensus_md") or ""
+                    execute_watch, claimed["question"], share.get("consensus_md") or "",
+                    claimed.get("condition") if claimed.get("email_mode") == "condition" else "",
                 )
-                await asyncio.to_thread(watch_service.complete_watch_run, watch_id, claimed, result, now=watch_service.utcnow())
+                mail_kind = notification_kind(claimed, result)
+                await asyncio.to_thread(
+                    watch_service.complete_watch_run, watch_id, claimed, result,
+                    now=watch_service.utcnow(),
+                    defer_condition_status=mail_kind == "condition",
+                )
             except Exception:
                 logging.exception("Consensus Watch run failed for %s", watch_id)
                 paused = await asyncio.to_thread(watch_service.fail_watch_run, watch_id, claimed, now=watch_service.utcnow())
@@ -236,11 +275,17 @@ async def run_watch_tick() -> int:
                         logging.exception("Consensus Watch pause mail failed for %s", watch_id)
             else:
                 completed += 1
-                mail_kind = notification_kind(claimed, result)
                 if mail_kind:
                     try:
                         if mail_kind == "every_run":
                             await _send_run_mail(watch_id, claimed, result)
+                        elif mail_kind == "condition":
+                            sent = await _send_condition_mail(watch_id, claimed, result)
+                            if sent:
+                                await asyncio.to_thread(
+                                    watch_service.set_condition_status, watch_id, "met",
+                                    claimed.get("condition") or "",
+                                )
                         else:
                             await _send_change_mail(watch_id, claimed, result)
                     except Exception:

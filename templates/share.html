@@ -4,8 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="{{ robots_meta }}">
+  {% if is_private %}<meta name="referrer" content="no-referrer">{% endif %}
   <link rel="canonical" href="{{ canonical_url }}">
-  <title>{% if watch_page %}Consensus Watch – {% endif %}{{ question[:70] }} – consens.io</title>
+  <title>{% if watch_page %}Consensus Watch: {% endif %}{{ question[:70] }} | consens.io</title>
   <meta name="description" content="{{ meta_description }}">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="consens.io">
@@ -31,8 +32,8 @@
       }
     })();
   </script>
-  <!-- Umami Cloud Tracking -->
-  <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
+  {% if not is_private %}<!-- Umami Cloud Tracking -->
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>{% endif %}
   <!-- Share-Seiten-Styles liegen konsolidiert in public-pages.css (Abschnitt "Share page") -->
 </head>
 <body>
@@ -49,14 +50,14 @@
 
   <main class="page-shell">
     <header class="page-header share-header">
-      <p class="eyebrow">{% if watch_page %}Consensus Watch{% else %}Shared consensus{% endif %}</p>
+      <p class="eyebrow">{% if watch_page %}Consensus Watch{% else %}Shared consensus{% endif %}{% if is_private %} · Private{% endif %}</p>
       <h1 class="share-question{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}">{{ question }}</h1>
       <div class="share-meta">
         {% if date_display %}<span>{% if watch_page %}Original consensus {% endif %}{{ date_display }}</span>{% endif %}
         {% if watch_page %}
         <div class="watch-meta-compact is-{{ watch_page.status }}" aria-label="Consensus Watch status">
           <span class="watch-meta-state"><i aria-hidden="true"></i>{{ watch_page.status_label }}</span>
-          {% if watch_page.interval_label %}<span class="watch-meta-item"><b>Runs</b> {{ watch_page.interval }}</span>{% endif %}
+          {% if watch_page.schedule_label %}<span class="watch-meta-item"><b>Runs</b> {{ watch_page.schedule_label }}</span>{% endif %}
           <span class="watch-meta-item"><b>Last</b> {% if watch_page.last_run.display %}<time datetime="{{ watch_page.last_run.iso }}">{{ watch_page.last_run.display }}</time>{% else %}Not yet{% endif %}</span>
           {% if watch_page.is_active %}<span class="watch-meta-item"><b>Next</b> {% if watch_page.next_run.display %}<time datetime="{{ watch_page.next_run.iso }}">{{ watch_page.next_run.display }}</time>{% else %}Pending{% endif %}</span>{% endif %}
         </div>
@@ -239,7 +240,7 @@
         AI models can make mistakes – verify important information using the sources above.
       </p>
 
-      <div class="share-report">
+      {% if not is_private %}<div class="share-report">
         <button type="button" id="shareReportToggle" class="share-report-toggle">Report this page</button>
         <form id="shareReportForm" class="share-report-form" hidden>
           <label for="shareReportReason" class="visually-hidden" hidden>Reason</label>
@@ -253,7 +254,7 @@
           <button type="submit">Send report</button>
         </form>
         <p id="shareReportDone" hidden>Thanks – this page has been reported for review.</p>
-      </div>
+      </div>{% endif %}
     </div>
   </main>
 

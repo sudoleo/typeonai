@@ -579,6 +579,40 @@ class ShareFlowTests(unittest.TestCase):
         self.assertFalse(second["created"])
         self.assertEqual(len(quota_calls), 1)
 
+    def test_private_and_public_snapshots_are_distinct_and_idempotent(self):
+        result_id = self._store_pending()
+        quota_calls = []
+
+        def quota():
+            quota_calls.append(1)
+            return True
+
+        private = snapshots.create_share_from_pending(
+            self.uid, result_id, db=self.db, consume_quota=quota, visibility="private"
+        )
+        private_again = snapshots.create_share_from_pending(
+            self.uid, result_id, db=self.db, consume_quota=quota, visibility="private"
+        )
+        public = snapshots.create_share_from_pending(
+            self.uid, result_id, db=self.db, consume_quota=quota, visibility="public"
+        )
+        self.assertEqual(private["share_id"], private_again["share_id"])
+        self.assertNotEqual(private["share_id"], public["share_id"])
+        self.assertEqual(len(quota_calls), 2)
+        self.assertEqual(
+            self.db.stores[snapshots.SHARES_COLLECTION][private["share_id"]]["visibility"],
+            "private",
+        )
+
+    def test_private_share_cannot_be_reported(self):
+        result_id = self._store_pending()
+        created = snapshots.create_share_from_pending(
+            self.uid, result_id, db=self.db, consume_quota=lambda: True,
+            visibility="private",
+        )
+        with self.assertRaises(ShareError):
+            snapshots.report_share(created["share_id"], "spam", db=self.db)
+
     def test_revoke_by_owner(self):
         result_id = self._store_pending()
         created = snapshots.create_share_from_pending(self.uid, result_id,
@@ -636,7 +670,7 @@ class ShareFlowTests(unittest.TestCase):
         shares = snapshots.list_shares_for_owner(self.uid, db=self.db)
         self.assertEqual(len(shares), 1)
         self.assertEqual(shares[0]["share_id"], created["share_id"])
-        self.assertEqual(set(shares[0].keys()), {"share_id", "path", "question", "status", "created_at"})
+        self.assertEqual(set(shares[0].keys()), {"share_id", "path", "question", "status", "visibility", "created_at"})
 
 
 class ModerationAndCleanupTests(unittest.TestCase):
@@ -901,6 +935,25 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("Ask your own question", body)
         self.assertNotIn("user-1", body)  # owner_uid darf nie im HTML landen
 
+    def test_private_share_requires_owner_and_is_never_publicly_cached(self):
+        doc = self._share_doc(visibility="private", owner_uid="owner-1")
+        path = "/s/%s-%s" % (doc["slug"], self.share_id)
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router, "verify_user_token", return_value=""):
+            denied = self.client.get(path)
+        self.assertEqual(denied.status_code, 403)
+        self.assertNotIn("Photosynthese wandelt", denied.text)
+
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router, "extract_id_token", return_value="token"), \
+                patch.object(share_router, "verify_user_token", return_value="owner-1"):
+            allowed = self.client.get(path)
+        self.assertEqual(allowed.status_code, 200)
+        self.assertEqual(allowed.headers["Cache-Control"], "private, no-store")
+        self.assertIn("· Private", allowed.text)
+        self.assertNotIn("Report this page", allowed.text)
+        self.assertIn("noindex, nofollow", allowed.headers["X-Robots-Tag"])
+
     def test_differences_cards_and_toggle_rendered(self):
         doc = self._share_doc(differences_data={
             "claims": [],
@@ -992,6 +1045,19 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("2026-07-12 08:30 UTC", body)
         self.assertIn("<b>Next</b>", body)
         self.assertIn("Original consensus", body)
+
+    def test_watch_page_shows_selected_local_run_time(self):
+        doc = self._share_doc()
+        next_run = datetime(2026, 7, 19, 7, 0, tzinfo=timezone.utc)
+        meta = {
+            "status": "active", "interval": "weekly", "run_time": "09:00",
+            "timezone": "Europe/Berlin", "next_run_at": next_run,
+        }
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router.watch_service, "get_public_watch_meta", return_value=meta):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        self.assertIn("Weekly at 09:00 (Europe/Berlin)", response.text)
+        self.assertIn("2026-07-19 09:00 Europe/Berlin", response.text)
 
     def test_rendered_citation_contains_canonical_url(self):
         doc = self._share_doc()

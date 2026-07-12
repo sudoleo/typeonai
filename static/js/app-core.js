@@ -32,7 +32,7 @@
     ].filter(id => document.getElementById(id)?.checked).length;
   }
 
-  const DEFAULT_APP_TITLE = "Consens | Compare AI Answers";
+  const DEFAULT_APP_TITLE = "Compare AI Answers | consens.io";
 
   function setAppTitle(question = "") {
     const normalized = String(question || "").replace(/\s+/g, " ").trim();
@@ -45,7 +45,7 @@
     const shortened = normalized.length > maxQuestionLength
       ? `${normalized.slice(0, maxQuestionLength - 1).trimEnd()}…`
       : normalized;
-    document.title = `${shortened} | Consens`;
+    document.title = `${shortened} | consens.io`;
   }
 
   // Definition der Modelle und IDs (zentral, von mehreren Clustern genutzt).

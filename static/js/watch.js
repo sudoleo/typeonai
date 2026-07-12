@@ -45,11 +45,38 @@
     `;
   }
 
+  function browserTimezone() {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    } catch (_) {
+      return "UTC";
+    }
+  }
+
   function emailModeOptions(selected) {
     return `
-      <option value="changes_only"${selected !== "every_run" ? " selected" : ""}>Material changes only</option>
+      <option value="changes_only"${selected === "changes_only" || !selected ? " selected" : ""}>Material changes only</option>
+      <option value="condition"${selected === "condition" ? " selected" : ""}>When my condition is met</option>
       <option value="every_run"${selected === "every_run" ? " selected" : ""}>Every new consensus (with content)</option>
     `;
+  }
+
+  function conditionField(value) {
+    const escaped = String(value || "")
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+    return `<div id="watchConditionWrap" hidden>
+      <label class="watch-interval-label" for="watchCondition">Condition</label>
+      <textarea id="watchCondition" class="watch-condition-input" maxlength="500" rows="3" placeholder="Example: An official launch date for Germany is announced.">${escaped}</textarea>
+      <p class="watch-data-note">The condition is checked against each new consensus. You receive one e-mail when it changes from not met to met.</p>
+    </div>`;
+  }
+
+  function bindConditionVisibility(select, wrapper) {
+    if (!select || !wrapper) return;
+    const sync = () => { wrapper.hidden = select.value !== "condition"; };
+    select.addEventListener("change", sync);
+    sync();
   }
 
   function openWatchDialog(view) {
@@ -69,12 +96,22 @@
     if (!body) return;
     title.textContent = "Watch this consensus";
     body.innerHTML = `
-      <p>consens.io will rerun the <strong>original question</strong> at your chosen interval and e-mail you only when the result changes materially.</p>
-      <div class="watch-public-note"><strong>A public page is required.</strong> Activating Watch creates a non-indexed, read-only share page if needed. Anyone with its link can view it.</div>
+      <p>consens.io will rerun the <strong>original question</strong> at your chosen interval and apply your selected e-mail rule after each successful run.</p>
+      <label class="watch-interval-label" for="watchVisibility">Watch page visibility</label>
+      <select id="watchVisibility" class="watch-interval-select" required>
+        <option value="" selected disabled>Choose who can open the page…</option>
+        <option value="private">Private — only my account</option>
+        <option value="public">Public — anyone with the link</option>
+      </select>
+      <p class="watch-data-note">Private pages require you to be signed in. Public pages are read-only and non-indexed unless reviewed separately.</p>
       <label class="watch-interval-label" for="watchInterval">Check interval ${window.isUserPro ? "" : '<span class="pro-badge is-subtle">Pro: daily</span>'}</label>
       <select id="watchInterval" class="watch-interval-select">${intervalOptions("weekly")}</select>
+      <label class="watch-interval-label" for="watchRunTime">Run time</label>
+      <input id="watchRunTime" class="watch-time-input" type="time" value="09:00" required>
+      <p class="watch-data-note">Local time in <span id="watchTimezoneLabel"></span>. The first run is scheduled after the selected interval and normally starts within 30 minutes after this time.</p>
       <label class="watch-interval-label" for="watchEmailMode">E-mail notifications</label>
       <select id="watchEmailMode" class="watch-interval-select watch-email-select">${emailModeOptions("changes_only")}</select>
+      ${conditionField("")}
       <p class="watch-data-note">“Every new consensus” includes the newly generated consensus text in each successful-run e-mail.</p>
       <p class="watch-data-note">Only the question is rerun. Attachments and follow-up context are never resent.</p>
       <div class="share-modal-actions">
@@ -84,6 +121,11 @@
       </div>`;
     document.getElementById("watchCancelBtn").addEventListener("click", closeDialog);
     document.getElementById("watchListLink").addEventListener("click", renderWatchList);
+    document.getElementById("watchTimezoneLabel").textContent = browserTimezone();
+    bindConditionVisibility(
+      document.getElementById("watchEmailMode"),
+      document.getElementById("watchConditionWrap")
+    );
     const confirm = document.getElementById("watchConfirmBtn");
     if (!window.lastShareResultId) {
       confirm.disabled = true;
@@ -91,13 +133,34 @@
     }
     confirm.addEventListener("click", async function () {
       if (!window.lastShareResultId) return;
+      const visibility = document.getElementById("watchVisibility").value;
+      const emailMode = document.getElementById("watchEmailMode").value;
+      const condition = document.getElementById("watchCondition").value.trim();
+      const runTime = document.getElementById("watchRunTime").value;
+      if (!visibility) {
+        popup("Choose whether the watch page is private or public.");
+        return;
+      }
+      if (emailMode === "condition" && !condition) {
+        popup("Enter the condition you want to monitor.");
+        document.getElementById("watchCondition").focus();
+        return;
+      }
+      if (!runTime) {
+        popup("Choose a run time.");
+        return;
+      }
       this.disabled = true;
       this.textContent = "Starting…";
       try {
         const data = await api("POST", "/api/watch", {
           result_id: window.lastShareResultId,
           interval: document.getElementById("watchInterval").value,
-          email_mode: document.getElementById("watchEmailMode").value
+          email_mode: emailMode,
+          condition: condition,
+          visibility: visibility,
+          run_time: runTime,
+          timezone: browserTimezone()
         });
         window.App?.trackAppEvent?.("app_watch_created", { interval: data.watch.interval });
         renderSuccess(data.watch);
@@ -120,10 +183,17 @@
         <a id="watchOpenLink" class="share-secondary-btn" target="_blank" rel="noopener">Open history page</a>
         <button type="button" id="watchListLink" class="share-link-btn">Watched</button>
       </div>`;
-    body.querySelector("p strong").textContent = watch.interval;
+    body.querySelector("p strong").textContent = watch.run_time
+      ? `${watch.interval} at ${watch.run_time} (${watch.timezone})`
+      : watch.interval;
     document.getElementById("watchMailSummary").textContent = watch.email_mode === "every_run"
       ? "You will receive every new consensus including its content."
-      : "You will be notified only after a material change.";
+      : watch.email_mode === "condition"
+        ? "You will be notified when your condition becomes true."
+        : "You will be notified only after a material change.";
+    body.querySelector("p").appendChild(document.createTextNode(
+      watch.visibility === "private" ? " The history page is private." : " The history page is public."
+    ));
     document.getElementById("watchOpenLink").href = url;
     document.getElementById("watchListLink").addEventListener("click", renderWatchList);
   }
@@ -170,7 +240,8 @@
       link.textContent = watch.question || "(untitled)";
       const status = document.createElement("span");
       status.className = "watch-status watch-status-" + watch.status;
-      status.textContent = watch.status === "paused_error" ? "Paused after errors" : watch.status;
+      const statusLabel = watch.status === "paused_error" ? "Paused after errors" : watch.status;
+      status.textContent = statusLabel + " · " + (watch.visibility === "private" ? "Private" : "Public");
       main.append(link, status);
 
       const controls = document.createElement("div");
@@ -188,14 +259,72 @@
           select.value = watch.interval;
         } finally { select.disabled = false; }
       });
+      const timeInput = document.createElement("input");
+      timeInput.type = "time";
+      timeInput.className = "watch-time-input";
+      timeInput.setAttribute("aria-label", "Run time");
+      timeInput.value = watch.run_time || "";
+      timeInput.title = watch.timezone ? `Run time (${watch.timezone})` : "Choose a local run time";
+      timeInput.addEventListener("change", async () => {
+        if (!timeInput.value) return;
+        timeInput.disabled = true;
+        const previous = watch.run_time || "";
+        try {
+          const data = await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), {
+            run_time: timeInput.value,
+            timezone: browserTimezone()
+          });
+          watch.run_time = data.watch.run_time;
+          watch.timezone = data.watch.timezone;
+          popup("Watch run time updated.");
+        } catch (error) {
+          popup("Update failed: " + error.message);
+          timeInput.value = previous;
+        } finally { timeInput.disabled = false; }
+      });
       const emailSelect = document.createElement("select");
       emailSelect.className = "watch-interval-select watch-email-select";
       emailSelect.setAttribute("aria-label", "E-mail notifications");
       emailSelect.innerHTML = emailModeOptions(watch.email_mode);
+      const conditionEditor = document.createElement("div");
+      conditionEditor.className = "watch-condition-editor";
+      conditionEditor.hidden = watch.email_mode !== "condition";
+      const conditionInput = document.createElement("textarea");
+      conditionInput.className = "watch-condition-input";
+      conditionInput.maxLength = 500;
+      conditionInput.rows = 2;
+      conditionInput.placeholder = "Condition to monitor";
+      conditionInput.value = watch.condition || "";
+      const saveCondition = makeButton("Save condition", "share-secondary-btn", async () => {
+        const condition = conditionInput.value.trim();
+        if (!condition) {
+          popup("Enter the condition you want to monitor.");
+          return;
+        }
+        saveCondition.disabled = true;
+        try {
+          await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), {
+            email_mode: "condition",
+            condition: condition
+          });
+          watch.email_mode = "condition";
+          watch.condition = condition;
+          popup("Watch condition updated.");
+        } catch (error) {
+          popup("Update failed: " + error.message);
+        } finally { saveCondition.disabled = false; }
+      });
+      conditionEditor.append(conditionInput, saveCondition);
       emailSelect.addEventListener("change", async () => {
+        conditionEditor.hidden = emailSelect.value !== "condition";
+        if (emailSelect.value === "condition") {
+          conditionInput.focus();
+          return;
+        }
         emailSelect.disabled = true;
         try {
           await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), { email_mode: emailSelect.value });
+          watch.email_mode = emailSelect.value;
           popup("Watch e-mail preference updated.");
         } catch (error) {
           popup("Update failed: " + error.message);
@@ -215,7 +344,7 @@
         }
       });
       const remove = makeButton("Delete", "share-danger-btn", async () => {
-        if (!confirm("Delete this watch? Its existing public history will remain on the share page.")) return;
+        if (!confirm("Delete this watch? Its existing history page will remain available with its current visibility.")) return;
         remove.disabled = true;
         try {
           await api("DELETE", "/api/watch/" + encodeURIComponent(watch.id));
@@ -223,7 +352,7 @@
           if (!list.children.length) renderWatchList();
         } catch (error) { remove.disabled = false; popup("Delete failed: " + error.message); }
       });
-      controls.append(select, emailSelect, pause, remove);
+      controls.append(select, timeInput, emailSelect, conditionEditor, pause, remove);
       item.append(main, controls);
       list.appendChild(item);
     });

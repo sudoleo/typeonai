@@ -2,7 +2,7 @@
 docs/smoke-checklist.md gegen den Mock-Server (MOCK_LLM/MOCK_AUTH).
 
 Bewusst NICHT abgedeckt (Stand der ersten Iteration): Resolve-Runde,
-Share-Dialog, Attachments, Follow-up, Bookmarks, Agent-Mode-Timer,
+Share-Dialog-CRUD, Attachments, Follow-up, Bookmarks, Agent-Mode-Timer,
 Demo-Flow, Mobile-Layout - siehe tests/e2e/README.md.
 """
 
@@ -63,6 +63,7 @@ def test_app_loads_without_console_errors(app_page, get_console_errors):
     )
     assert missing == [], f"Fehlende window-Funktionen (Ladereihenfolge?): {missing}"
     assert app_page.evaluate("() => typeof window.App.consensusLifecycle") == "object"
+    expect(app_page).to_have_title("Compare AI Answers | consens.io")
 
     # Kurze Nachlaufzeit fuer asynchrone Init-Fehler (Tooltips, Usage-Fetch).
     app_page.wait_for_timeout(1500)
@@ -74,6 +75,7 @@ def test_send_question_streams_all_models(app_page):
     """Kern-Flow: Frage senden -> alle Modelle streamen (Zwischenzustand
     sichtbar) und rendern die finale Mock-Antwort."""
     _send_question(app_page)
+    expect(app_page).to_have_title(f"{QUESTION} | consens.io")
 
     # Streaming-Zwischenzustand: Anfang der Antwort sichtbar, Ende noch nicht
     # (MOCK_LLM_DELAY_MS drosselt die Deltas auf ~400ms pro Antwort).
@@ -108,6 +110,25 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
 
     errors = get_console_errors()
     assert errors == [], f"Konsolen-Fehler im Consensus-Flow: {errors}"
+
+
+def test_watch_dialog_requires_visibility_and_reveals_condition(app_page):
+    """Watch-Erstellung zeigt die explizite Public/Private-Wahl und blendet
+    das Condition-Feld nur für den entsprechenden Mailmodus ein."""
+    _send_question(app_page)
+    _wait_for_all_final_answers(app_page)
+    expect(app_page.locator("#consensusResponse")).to_contain_text("Mock consensus", timeout=30000)
+
+    app_page.click("#consensusWatchButton")
+    expect(app_page.locator("#watchVisibility")).to_be_visible()
+    assert app_page.locator("#watchVisibility").input_value() == ""
+    expect(app_page.locator("#watchRunTime")).to_have_value("09:00")
+    assert app_page.locator("#watchTimezoneLabel").text_content()
+    expect(app_page.locator("#watchConditionWrap")).to_be_hidden()
+
+    app_page.select_option("#watchEmailMode", "condition")
+    expect(app_page.locator("#watchConditionWrap")).to_be_visible()
+    expect(app_page.locator("#watchCondition")).to_have_attribute("maxlength", "500")
 
 
 def test_exclude_model_toggles_excluded_class(app_page):

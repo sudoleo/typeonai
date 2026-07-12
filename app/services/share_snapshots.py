@@ -134,7 +134,7 @@ def split_slug_id(slug_id):
 
 
 def share_path(slug, share_id):
-    return "/s/%s-%s" % (slug, share_id)
+    return "/s/%s-%s" % (slug, share_id) if slug else "/s/%s" % share_id
 
 
 def question_hash(question):
@@ -614,7 +614,18 @@ def invalidate_share_cache(share_id=None):
     _related_cache.clear()
 
 
-def create_share_from_pending(uid, result_id, db=None, consume_quota=None):
+SHARE_VISIBILITIES = {"public", "private"}
+
+
+def validate_share_visibility(value):
+    visibility = str(value or "public").strip().lower()
+    if visibility not in SHARE_VISIBILITIES:
+        raise ShareError("bad_request", "Visibility must be public or private.")
+    return visibility
+
+
+def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
+                              visibility="public"):
     """Kopiert ein Pending-Ergebnis in einen unveränderlichen Share-Snapshot.
 
     Wirft ShareError mit code in {"not_found", "forbidden", "quota_exceeded"}.
@@ -622,6 +633,7 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None):
     bestehenden aktiven Link zurück, ohne das Tageskontingent zu belasten.
     """
     db = db if db is not None else db_firestore
+    visibility = validate_share_visibility(visibility)
     if not is_valid_share_id(result_id):
         raise ShareError("not_found", "Result not found or expired.")
 
@@ -642,11 +654,22 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None):
     if pending.get("owner_uid") != uid:
         raise ShareError("forbidden", "You can only share your own results.")
 
-    existing_id = pending.get("share_id")
+    visibility_id_field = f"{visibility}_share_id"
+    existing_id = pending.get(visibility_id_field)
+    if not existing_id and visibility == "public":
+        # Legacy pending documents used one public share_id backlink.
+        existing_id = pending.get("share_id")
     if existing_id:
         existing = get_share(existing_id, db=db)
-        if existing is not None and existing.get("status") == "active":
-            return {"share_id": existing_id, "slug": existing.get("slug") or "", "created": False}
+        existing_visibility = str(existing.get("visibility") or "public") if existing else ""
+        if (existing is not None and existing.get("status") == "active"
+                and existing_visibility == visibility):
+            return {
+                "share_id": existing_id,
+                "slug": existing.get("slug") or "",
+                "created": False,
+                "visibility": visibility,
+            }
 
     if consume_quota is None:
         def consume_quota():
@@ -677,6 +700,7 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None):
         "question_hash": question_hash(question),
         "owner_uid": uid,
         "source_result_id": result_id,
+        "visibility": visibility,
         "index_eligible": compute_index_eligible(question, consensus_md, sources, included_models),
         "indexed": False,
         "reports_count": 0,
@@ -684,11 +708,14 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None):
     db.collection(SHARES_COLLECTION).document(share_id).set(share_doc)
 
     try:
-        pending_ref.update({"share_id": share_id})
+        backlinks = {visibility_id_field: share_id}
+        if visibility == "public":
+            backlinks["share_id"] = share_id
+        pending_ref.update(backlinks)
     except Exception:
         logging.exception("pending_result share_id backlink failed")
 
-    return {"share_id": share_id, "slug": slug, "created": True}
+    return {"share_id": share_id, "slug": slug, "created": True, "visibility": visibility}
 
 
 def revoke_share(share_id, uid, is_admin=False, db=None):
@@ -728,6 +755,8 @@ def moderate_share(share_id, action=None, indexed=None, db=None):
         raise ShareError("bad_request", "Unknown moderation action.")
     if action is None and indexed is None:
         raise ShareError("bad_request", "Nothing to moderate: pass action and/or indexed.")
+    if indexed is True and str(data.get("visibility") or "public") != "public":
+        raise ShareError("bad_request", "Private pages cannot be indexed.")
 
     status = data.get("status")
     updates = {"needs_review": False, "reviewed_at": firestore.SERVER_TIMESTAMP}
@@ -775,7 +804,10 @@ def list_shares_for_admin(db=None, only_reported=False, max_items=500):
         last_reported = data.get("last_reported_at")
         shares.append({
             "share_id": doc.id,
-            "path": share_path(data.get("slug") or "", doc.id),
+            "path": share_path(
+                "" if str(data.get("visibility") or "public") == "private" else data.get("slug") or "",
+                doc.id,
+            ),
             "question": _clip(data.get("question"), 200),
             "status": data.get("status") or "active",
             "owner_uid": data.get("owner_uid") or "",
@@ -783,6 +815,7 @@ def list_shares_for_admin(db=None, only_reported=False, max_items=500):
             "report_reasons": data.get("report_reasons") if isinstance(data.get("report_reasons"), dict) else {},
             "needs_review": bool(data.get("needs_review")),
             "indexed": bool(data.get("indexed")),
+            "visibility": str(data.get("visibility") or "public"),
             "index_eligible": bool(data.get("index_eligible")),
             "created_at": created_at.isoformat() if isinstance(created_at, datetime) else "",
             "last_reported_at": last_reported.isoformat() if isinstance(last_reported, datetime) else "",
@@ -842,7 +875,8 @@ def find_canonical_share(question_hash_value, db=None, max_candidates=50):
     best = None
     for doc in docs:
         data = doc.to_dict() or {}
-        if data.get("status") != "active" or not data.get("indexed"):
+        if (data.get("status") != "active" or not data.get("indexed")
+                or str(data.get("visibility") or "public") != "public"):
             continue
         created_at = data.get("created_at")
         created_key = created_at.isoformat() if isinstance(created_at, datetime) else "9999"
@@ -869,7 +903,8 @@ def list_indexed_share_urls(db=None, max_items=1000):
     urls = []
     for doc in docs:
         data = doc.to_dict() or {}
-        if data.get("status") != "active":
+        if (data.get("status") != "active"
+                or str(data.get("visibility") or "public") != "public"):
             continue
         created_at = data.get("created_at")
         urls.append({
@@ -921,7 +956,8 @@ def list_related_shares(exclude_share_id, question, db=None, limit=4, scan_limit
         if doc.id == exclude_share_id:
             continue
         data = doc.to_dict() or {}
-        if data.get("status") != "active":
+        if (data.get("status") != "active"
+                or str(data.get("visibility") or "public") != "public"):
             continue
         candidate_question = data.get("question") or ""
         overlap = len(query_tokens & _question_tokens(candidate_question)) if query_tokens else 0
@@ -958,7 +994,8 @@ def report_share(share_id, reason, db=None):
     """
     db = db if db is not None else db_firestore
     data = get_share(share_id, db=db)
-    if data is None or data.get("status") != "active":
+    if (data is None or data.get("status") != "active"
+            or str(data.get("visibility") or "public") != "public"):
         raise ShareError("not_found", "Share not found.")
     if reason not in REPORT_REASONS:
         reason = "other"
@@ -999,9 +1036,13 @@ def list_shares_for_owner(uid, db=None, max_items=200):
         created_at = data.get("created_at")
         shares.append({
             "share_id": doc.id,
-            "path": share_path(data.get("slug") or "", doc.id),
+            "path": share_path(
+                "" if str(data.get("visibility") or "public") == "private" else data.get("slug") or "",
+                doc.id,
+            ),
             "question": _clip(data.get("question"), 200),
             "status": data.get("status") or "active",
+            "visibility": str(data.get("visibility") or "public"),
             "created_at": created_at.isoformat() if isinstance(created_at, datetime) else "",
         })
         if len(shares) >= max_items:

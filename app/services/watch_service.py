@@ -7,8 +7,10 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import app.core.config as cfg
 from app.core.security import db_firestore
@@ -22,7 +24,9 @@ WATCH_INTERVALS = {
     "monthly": timedelta(days=30),
 }
 WATCH_STATUSES = {"active", "paused"}
-WATCH_EMAIL_MODES = {"changes_only", "every_run"}
+WATCH_EMAIL_MODES = {"changes_only", "condition", "every_run"}
+WATCH_CONDITION_MAX_CHARS = 500
+WATCH_RUN_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 UNSUBSCRIBE_MAX_AGE_DAYS = 90
 WATCH_LEASE_MINUTES = 15
 WORKER_LEASE_MINUTES = 29
@@ -58,9 +62,63 @@ def validate_email_mode(value) -> str:
     if normalized not in WATCH_EMAIL_MODES:
         raise WatchError(
             "invalid_email_mode",
-            "Email mode must be changes_only or every_run.",
+            "Email mode must be changes_only, condition, or every_run.",
         )
     return normalized
+
+
+def validate_condition(value, *, required=False) -> str:
+    condition = " ".join(str(value or "").split()).strip()
+    if required and not condition:
+        raise WatchError("invalid_condition", "Enter a condition for this watch.")
+    if len(condition) > WATCH_CONDITION_MAX_CHARS:
+        raise WatchError(
+            "invalid_condition",
+            f"Condition must be at most {WATCH_CONDITION_MAX_CHARS} characters.",
+        )
+    return condition
+
+
+def condition_hash(condition: str) -> str:
+    normalized = validate_condition(condition)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest() if normalized else ""
+
+
+def validate_run_schedule(run_time, timezone_name) -> tuple[str, str]:
+    """Validate an optional local HH:MM + IANA timezone pair."""
+    run_time = str(run_time or "").strip()
+    timezone_name = str(timezone_name or "").strip()
+    if not run_time and not timezone_name:
+        return "", ""
+    if not WATCH_RUN_TIME_RE.fullmatch(run_time):
+        raise WatchError("invalid_run_time", "Run time must use HH:MM in 24-hour format.")
+    if not timezone_name or len(timezone_name) > 64:
+        raise WatchError("invalid_timezone", "A valid timezone is required.")
+    try:
+        ZoneInfo(timezone_name)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise WatchError("invalid_timezone", "A valid IANA timezone is required.") from exc
+    return run_time, timezone_name
+
+
+def next_scheduled_run(interval: str, run_time: str, timezone_name: str, *,
+                       now: datetime, previous_scheduled: datetime | None = None) -> datetime:
+    """Advance by the existing interval while keeping the selected local time."""
+    delta = WATCH_INTERVALS[interval]
+    run_time, timezone_name = validate_run_schedule(run_time, timezone_name)
+    if not run_time:
+        return now + delta
+    zone = ZoneInfo(timezone_name)
+    reference = previous_scheduled if isinstance(previous_scheduled, datetime) else now
+    local_reference = reference.astimezone(zone)
+    hour, minute = (int(part) for part in run_time.split(":"))
+    candidate_date = (local_reference + delta).date()
+    while True:
+        local_candidate = datetime.combine(candidate_date, time(hour, minute), tzinfo=zone)
+        candidate = local_candidate.astimezone(timezone.utc)
+        if candidate > now:
+            return candidate
+        candidate_date += delta
 
 
 def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> dict:
@@ -70,13 +128,19 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
     share_id = str(data.get("share_id") or "")
     share = share or {}
     slug = str(share.get("slug") or data.get("share_slug") or "")
+    visibility = str(share.get("visibility") or data.get("visibility") or "public")
     return {
         "id": watch_id,
         "share_id": share_id,
-        "share_path": share_snapshots.share_path(slug, share_id),
+        "share_path": share_snapshots.share_path("" if visibility == "private" else slug, share_id),
         "question": str(share.get("question") or data.get("question") or "")[:200],
         "interval": data.get("interval") or "weekly",
+        "run_time": str(data.get("run_time") or ""),
+        "timezone": str(data.get("timezone") or ""),
         "email_mode": data.get("email_mode") or "changes_only",
+        "condition": str(data.get("condition") or ""),
+        "last_condition_status": data.get("last_condition_status"),
+        "visibility": visibility,
         "status": data.get("status") or "paused",
         "next_run_at": iso(data.get("next_run_at")),
         "last_run_at": iso(data.get("last_run_at")),
@@ -106,22 +170,35 @@ def _check_active_limit(uid: str, is_pro: bool, db, *, excluding_id: str | None 
 
 
 def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
-                 result_id=None, share_id=None, db=None) -> dict:
+                 condition="", visibility="public", run_time="", timezone_name="",
+                 result_id=None,
+                 share_id=None, db=None) -> dict:
     db = db if db is not None else db_firestore
     interval = validate_interval(interval, is_pro)
     email_mode = validate_email_mode(email_mode)
+    condition = validate_condition(condition, required=email_mode == "condition")
+    run_time, timezone_name = validate_run_schedule(run_time, timezone_name)
+    try:
+        visibility = share_snapshots.validate_share_visibility(visibility)
+    except share_snapshots.ShareError as exc:
+        raise WatchError(exc.code, exc.message) from exc
     _check_active_limit(uid, is_pro, db)
     if bool(result_id) == bool(share_id):
         raise WatchError("invalid_request", "Provide exactly one of result_id or share_id.")
     if result_id:
         try:
-            created = share_snapshots.create_share_from_pending(uid, str(result_id), db=db)
+            created = share_snapshots.create_share_from_pending(
+                uid, str(result_id), db=db, visibility=visibility,
+            )
         except share_snapshots.ShareError as exc:
             raise WatchError(exc.code, exc.message) from exc
         share_id = created["share_id"]
 
     share_id = str(share_id)
     share = _owned_active_share(uid, share_id, db)
+    share_visibility = str(share.get("visibility") or "public")
+    if share_visibility != visibility:
+        raise WatchError("invalid_visibility", "The selected page visibility does not match this page.")
     for existing in db.collection(WATCHES_COLLECTION).where("owner_uid", "==", uid).stream():
         if (existing.to_dict() or {}).get("share_id") == share_id:
             raise WatchError("already_exists", "This consensus is already watched.")
@@ -135,9 +212,17 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
         "share_id": share_id,
         "question_hash": share.get("question_hash") or share_snapshots.question_hash(share.get("question")),
         "interval": interval,
+        "run_time": run_time,
+        "timezone": timezone_name,
         "email_mode": email_mode,
+        "condition": condition,
+        "last_condition_status": None,
+        "last_condition_hash": None,
+        "visibility": visibility,
         "status": "active",
-        "next_run_at": now + WATCH_INTERVALS[interval],
+        "next_run_at": next_scheduled_run(
+            interval, run_time, timezone_name, now=now,
+        ),
         "claimed_until": None,
         "consecutive_failures": 0,
         "created_at": now,
@@ -173,14 +258,47 @@ def _owned_watch(uid: str, watch_id: str, db):
 def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) -> dict:
     db = db if db is not None else db_firestore
     ref, data = _owned_watch(uid, watch_id, db)
-    if not changes or any(key not in {"interval", "status", "email_mode"} for key in changes):
-        raise WatchError("invalid_request", "Only interval, status, and email_mode can be changed.")
+    allowed_changes = {"interval", "status", "email_mode", "condition", "run_time", "timezone"}
+    if not changes or any(key not in allowed_changes for key in changes):
+        raise WatchError(
+            "invalid_request",
+            "Only interval, status, email_mode, condition, run_time, and timezone can be changed.",
+        )
     updates = {}
+    now = utcnow()
+    effective_interval = data.get("interval") or "weekly"
     if "interval" in changes:
         interval = validate_interval(changes["interval"], is_pro)
-        updates.update(interval=interval, next_run_at=utcnow() + WATCH_INTERVALS[interval])
+        effective_interval = interval
+        updates["interval"] = interval
+    schedule_changed = any(key in changes for key in {"interval", "run_time", "timezone"})
+    if schedule_changed:
+        effective_run_time = changes.get("run_time", data.get("run_time") or "")
+        effective_timezone = changes.get("timezone", data.get("timezone") or "")
+        effective_run_time, effective_timezone = validate_run_schedule(
+            effective_run_time, effective_timezone,
+        )
+        updates.update(
+            run_time=effective_run_time,
+            timezone=effective_timezone,
+            next_run_at=next_scheduled_run(
+                effective_interval, effective_run_time, effective_timezone, now=now,
+            ),
+        )
     if "email_mode" in changes:
         updates["email_mode"] = validate_email_mode(changes["email_mode"])
+    if "condition" in changes:
+        updates["condition"] = validate_condition(changes["condition"])
+        if updates["condition"] != str(data.get("condition") or ""):
+            updates["last_condition_status"] = None
+            updates["last_condition_hash"] = None
+    effective_mode = updates.get("email_mode") or data.get("email_mode") or "changes_only"
+    effective_condition = updates.get("condition", str(data.get("condition") or ""))
+    if effective_mode == "condition":
+        updates["condition"] = validate_condition(effective_condition, required=True)
+        if data.get("email_mode") != "condition" and "last_condition_status" not in updates:
+            updates["last_condition_status"] = None
+            updates["last_condition_hash"] = None
     if "status" in changes:
         status = str(changes["status"] or "").strip().lower()
         if status not in WATCH_STATUSES:
@@ -189,7 +307,14 @@ def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) 
             _check_active_limit(uid, is_pro, db, excluding_id=watch_id)
             interval = updates.get("interval") or data.get("interval") or "weekly"
             validate_interval(interval, is_pro)
-            updates.update(next_run_at=utcnow() + WATCH_INTERVALS[interval], consecutive_failures=0)
+            run_time = updates.get("run_time", data.get("run_time") or "")
+            timezone_name = updates.get("timezone", data.get("timezone") or "")
+            updates.update(
+                next_run_at=next_scheduled_run(
+                    interval, run_time, timezone_name, now=now,
+                ),
+                consecutive_failures=0,
+            )
         updates.update(status=status, claimed_until=None)
     ref.update(updates)
     data.update(updates)
@@ -275,6 +400,8 @@ def get_public_watch_meta(share_id: str, db=None) -> dict | None:
     return {
         "status": data.get("status") or "paused",
         "interval": data.get("interval") or "weekly",
+        "run_time": str(data.get("run_time") or ""),
+        "timezone": str(data.get("timezone") or ""),
         "last_run_at": data.get("last_run_at"),
         "next_run_at": data.get("next_run_at"),
         "created_at": data.get("created_at"),
@@ -369,7 +496,8 @@ def release_worker_lease(*, db=None):
     db.collection(RUNTIME_COLLECTION).document("global_worker").update({"claimed_until": None})
 
 
-def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None, db=None):
+def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
+                       db=None, defer_condition_status=False):
     """Persist one compact history point, then advance the schedule."""
     db = db if db is not None else db_firestore
     now = now or utcnow()
@@ -386,13 +514,20 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None, 
     history_ref = share_ref.collection("watch_history").document(claimed["current_run_id"])
     watch_ref = db.collection(WATCHES_COLLECTION).document(watch_id)
     watch_updates = {
-        "next_run_at": now + WATCH_INTERVALS[interval],
+        "next_run_at": next_scheduled_run(
+            interval, claimed.get("run_time") or "", claimed.get("timezone") or "",
+            now=now, previous_scheduled=claimed.get("next_run_at"),
+        ),
         "claimed_until": None,
         "current_run_id": None,
         "consecutive_failures": 0,
         "last_run_at": now,
         "last_agreement_score": history["agreement_score"],
     }
+    condition_status = str(result.get("condition_status") or "unknown")
+    if condition_status in {"met", "not_met"} and not defer_condition_status:
+        watch_updates["last_condition_status"] = condition_status
+        watch_updates["last_condition_hash"] = condition_hash(claimed.get("condition") or "")
     # History + Scheduler-Fortschritt atomar: ein Restart kann nie einen
     # sichtbaren Punkt ohne vorgeruecktes next_run_at hinterlassen.
     if hasattr(db, "batch"):
@@ -406,6 +541,17 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None, 
     return history
 
 
+def set_condition_status(watch_id: str, status: str, condition: str, db=None):
+    """Persist a known condition state after its transition mail was accepted."""
+    if status not in {"met", "not_met"}:
+        raise ValueError("invalid condition status")
+    db = db if db is not None else db_firestore
+    db.collection(WATCHES_COLLECTION).document(watch_id).update({
+        "last_condition_status": status,
+        "last_condition_hash": condition_hash(condition),
+    })
+
+
 def fail_watch_run(watch_id: str, claimed: dict, *, now=None, db=None) -> bool:
     """Record no history; pause after the third consecutive failure."""
     db = db if db is not None else db_firestore
@@ -415,7 +561,10 @@ def fail_watch_run(watch_id: str, claimed: dict, *, now=None, db=None) -> bool:
     paused = failures >= 3
     db.collection(WATCHES_COLLECTION).document(watch_id).update({
         "status": "paused_error" if paused else "active",
-        "next_run_at": now + WATCH_INTERVALS[interval],
+        "next_run_at": next_scheduled_run(
+            interval, claimed.get("run_time") or "", claimed.get("timezone") or "",
+            now=now, previous_scheduled=claimed.get("next_run_at"),
+        ),
         "claimed_until": None,
         "current_run_id": None,
         "consecutive_failures": failures,

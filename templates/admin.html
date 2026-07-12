@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>consens.io - Admin Dashboard</title>
+    <title>Admin Dashboard | consens.io</title>
     <script>
         window.FIREBASE_CONFIG = {
           apiKey: "{{ firebase_api_key }}",
@@ -1211,8 +1211,9 @@
                     row.appendChild(badge('reported', `${share.reports_count} report(s)`, reasons));
                 }
                 row.appendChild(badge('', share.status));
+                if (share.visibility === 'private') row.appendChild(badge('', 'private'));
                 if (share.indexed) row.appendChild(badge('indexed', 'indexed'));
-                else if (share.index_eligible && share.status === 'active') row.appendChild(badge('', 'eligible'));
+                else if (share.visibility !== 'private' && share.index_eligible && share.status === 'active') row.appendChild(badge('', 'eligible'));
 
                 const actions = document.createElement('div');
                 actions.className = 'share-mod-actions';
@@ -1226,7 +1227,7 @@
                     if (share.indexed) {
                         actions.appendChild(actionBtn('De-index', () =>
                             moderateShare(share.share_id, { indexed: false })));
-                    } else {
+                    } else if (share.visibility !== 'private') {
                         actions.appendChild(actionBtn('Index', () =>
                             moderateShare(share.share_id, { indexed: true },
                                 share.index_eligible ? '' :

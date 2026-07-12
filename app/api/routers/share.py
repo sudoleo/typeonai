@@ -3,6 +3,7 @@ import logging
 import re
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Request, Body, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -72,13 +73,20 @@ def _build_watch_history_view(points):
     }
 
 
-def _watch_datetime_view(value):
+def _watch_datetime_view(value, timezone_name=""):
     if not isinstance(value, datetime):
         return {"iso": "", "display": ""}
+    display_zone = "UTC"
     normalized = value.astimezone(timezone.utc)
+    if timezone_name:
+        try:
+            normalized = value.astimezone(ZoneInfo(timezone_name))
+            display_zone = timezone_name
+        except (ZoneInfoNotFoundError, ValueError):
+            pass
     return {
-        "iso": normalized.isoformat(),
-        "display": normalized.strftime("%Y-%m-%d %H:%M UTC"),
+        "iso": value.astimezone(timezone.utc).isoformat(),
+        "display": normalized.strftime("%Y-%m-%d %H:%M ") + display_zone,
     }
 
 
@@ -96,15 +104,22 @@ def _build_watch_page_meta(meta, history_points):
     last_run = meta.get("last_run_at")
     if not isinstance(last_run, datetime) and history_points:
         last_run = history_points[-1].get("ts")
+    timezone_name = str(meta.get("timezone") or "")
+    run_time = str(meta.get("run_time") or "")
+    interval = str(meta.get("interval") or "")
     return {
         "status": status,
         "status_label": labels.get(status, "Paused"),
         "is_active": status == "active",
-        "interval": str(meta.get("interval") or ""),
-        "interval_label": str(meta.get("interval") or "").capitalize(),
-        "last_run": _watch_datetime_view(last_run),
-        "next_run": _watch_datetime_view(meta.get("next_run_at")),
-        "created": _watch_datetime_view(meta.get("created_at")),
+        "interval": interval,
+        "interval_label": interval.capitalize(),
+        "schedule_label": (
+            f"{interval.capitalize()} at {run_time} ({timezone_name})"
+            if interval and run_time and timezone_name else interval.capitalize()
+        ),
+        "last_run": _watch_datetime_view(last_run, timezone_name),
+        "next_run": _watch_datetime_view(meta.get("next_run_at"), timezone_name),
+        "created": _watch_datetime_view(meta.get("created_at"), timezone_name),
     }
 
 
@@ -131,7 +146,7 @@ async def create_share(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=400, detail="Missing required field: result_id")
 
     try:
-        result = snapshots.create_share_from_pending(uid, result_id)
+        result = snapshots.create_share_from_pending(uid, result_id, visibility="public")
     except ShareError as exc:
         _raise_share_error(exc)
     except Exception:
@@ -260,19 +275,32 @@ async def share_page(request: Request, slug_id: str):
             "This shared consensus has been removed by its creator or by consens.io.",
         )
 
+    is_private = str(data.get("visibility") or "public") == "private"
+    if is_private:
+        token = extract_id_token(request, {})
+        try:
+            viewer_uid = verify_user_token(token) if token else ""
+        except Exception:
+            viewer_uid = ""
+        if not viewer_uid or viewer_uid != data.get("owner_uid"):
+            return _unavailable_response(
+                request, 403, "Private watch page",
+                "This page is private. Sign in with its owner account to view it.",
+            )
+
     canonical_slug = data.get("slug") or ""
-    if slug != canonical_slug:
+    if not is_private and slug != canonical_slug:
         return RedirectResponse(
             url=snapshots.share_path(canonical_slug, share_id), status_code=301
         )
 
     payload = snapshots.public_share_payload(data)
-    page_url = SITE_URL + snapshots.share_path(canonical_slug, share_id)
+    page_url = SITE_URL + snapshots.share_path("" if is_private else canonical_slug, share_id)
     consensus_html = render_public_markdown(payload["consensus_md"], payload["sources"])
 
     # Indexierung: nur wenn der Admin "indexed" gesetzt hat (nie automatisch).
-    is_indexed = bool(data.get("indexed"))
-    robots_meta = "index, follow" if is_indexed else "noindex, follow"
+    is_indexed = bool(data.get("indexed")) and not is_private
+    robots_meta = "index, follow" if is_indexed else "noindex, nofollow" if is_private else "noindex, follow"
 
     # Canonical-Dedup über question_hash: Nicht indexierte Duplikate zeigen
     # auf den ältesten aktiven UND indexierten Share derselben Frage. Ein
@@ -337,11 +365,12 @@ async def share_page(request: Request, slug_id: str):
     contradiction_count = sum(1 for d in differences if d.get("type") == "contradiction")
 
     # "Verwandte Fragen": nur indexierte, aktive Shares (read-only, gecacht).
-    try:
-        related_shares = snapshots.list_related_shares(share_id, payload["question"])
-    except Exception:
-        logging.exception("list_related_shares failed")
-        related_shares = []
+    related_shares = []
+    if not is_private:
+        try:
+            related_shares = snapshots.list_related_shares(share_id, payload["question"])
+        except Exception:
+            logging.exception("list_related_shares failed")
 
     try:
         history_points = snapshots.list_watch_history(share_id)
@@ -382,6 +411,7 @@ async def share_page(request: Request, slug_id: str):
     response = templates.TemplateResponse("share.html", {
         "request": request,
         "share_id": share_id,
+        "is_private": is_private,
         "question": payload["question"],
         "consensus_html": consensus_html,
         "differences": differences,
@@ -409,5 +439,5 @@ async def share_page(request: Request, slug_id: str):
         "citation_text": snapshots.build_citation(payload, page_url),
     })
     response.headers["X-Robots-Tag"] = robots_meta
-    response.headers["Cache-Control"] = SHARE_CACHE_CONTROL
+    response.headers["Cache-Control"] = "private, no-store" if is_private else SHARE_CACHE_CONTROL
     return response

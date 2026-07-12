@@ -131,6 +131,46 @@ def build_run_message(*, recipient: str, question: str, agreement_score,
     return _base_message(recipient, subject, plain, html_body)
 
 
+def build_condition_message(*, recipient: str, question: str, condition: str,
+                            reason: str, agreement_score, consensus: str,
+                            share_url: str, unsubscribe_url: str) -> EmailMessage:
+    """Notification emitted once when a user-defined condition becomes true."""
+    clipped_question = " ".join(str(question or "").split())
+    clipped_condition = " ".join(str(condition or "").split())[:500]
+    clipped_reason = " ".join(str(reason or "").split())[:400]
+    subject_condition = clipped_condition[:72] + ("…" if len(clipped_condition) > 72 else "")
+    subject = f"Watch condition met: {subject_condition}"
+    consensus_text = str(consensus or "").strip()
+    plain = (
+        f"Your Consensus Watch condition is now met.\n\n"
+        f"QUESTION\n{clipped_question}\n\nCONDITION\n{clipped_condition}\n\n"
+        f"WHY IT TRIGGERED\n{clipped_reason}\n\nAgreement score: {agreement_score}/100\n\n"
+        f"NEW CONSENSUS\n\n{consensus_text}\n\n"
+        f"Open watch page: {share_url}\nPause this watch: {unsubscribe_url}\n"
+    )
+    safe = {key: html.escape(str(value)) for key, value in {
+        "question": clipped_question,
+        "condition": clipped_condition,
+        "reason": clipped_reason,
+        "score": agreement_score,
+        "consensus": consensus_text,
+        "share": share_url,
+        "unsubscribe": unsubscribe_url,
+    }.items()}
+    safe["consensus"] = safe["consensus"].replace("\n", "<br>")
+    html_body = f"""<!doctype html><html><body style="font-family:Arial,sans-serif;color:#172033;line-height:1.55">
+<div style="max-width:680px;margin:auto;padding:24px"><h1 style="font-size:22px">Your watch condition is met</h1>
+<p style="font-size:17px;font-weight:600">{safe['question']}</p>
+<div style="padding:18px;background:#eef8f1;border-radius:12px"><strong>Condition</strong><br>{safe['condition']}</div>
+<p><strong>Why it triggered:</strong> {safe['reason']}</p>
+<div style="padding:14px;background:#f3f6fb;border-radius:12px"><strong>{safe['score']}/100</strong> agreement</div>
+<div style="margin-top:20px;padding:18px;border:1px solid #d8deea;border-radius:12px"><h2 style="font-size:16px;margin-top:0">New consensus</h2><div>{safe['consensus']}</div></div>
+<p><a href="{safe['share']}" style="display:inline-block;background:#335cff;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px">Open watch page</a></p>
+<p style="font-size:12px;color:#667085;margin-top:32px">This message was sent because your watch condition became true. It will not repeat while the condition remains true. <a href="{safe['unsubscribe']}">Pause this watch</a>.</p>
+</div></body></html>"""
+    return _base_message(recipient, subject, plain, html_body)
+
+
 def build_paused_message(*, recipient: str, question: str, share_url: str,
                          unsubscribe_url: str) -> EmailMessage:
     clipped = " ".join(str(question or "").split())

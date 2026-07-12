@@ -180,7 +180,7 @@
 
       const question = document.createElement("a");
       question.className = "share-list-question";
-      question.textContent = share.question || "(untitled)";
+      question.textContent = (share.visibility === "private" ? "Private · " : "") + (share.question || "(untitled)");
       question.href = url;
       question.target = "_blank";
       question.rel = "noopener";
@@ -191,7 +191,7 @@
       const copyBtn = document.createElement("button");
       copyBtn.type = "button";
       copyBtn.className = "share-secondary-btn";
-      copyBtn.textContent = "Copy link";
+      copyBtn.textContent = share.visibility === "private" ? "Copy private link" : "Copy link";
       copyBtn.addEventListener("click", () => copyShareUrl(url));
 
       const revokeBtn = document.createElement("button");
@@ -199,7 +199,9 @@
       revokeBtn.className = "share-danger-btn";
       revokeBtn.textContent = "Revoke";
       revokeBtn.addEventListener("click", async () => {
-        if (!confirm("Revoke this public link? Visitors will no longer be able to open it.")) return;
+        if (!confirm(share.visibility === "private"
+          ? "Revoke this private page? It will no longer be available to you."
+          : "Revoke this public link? Visitors will no longer be able to open it.")) return;
         revokeBtn.disabled = true;
         try {
           await shareApiRequest("DELETE", "/api/share/" + encodeURIComponent(share.share_id));

@@ -7,7 +7,7 @@
   <meta name="description" content="Use consens.io to compare multiple AI model answers side by side in one workspace.">
   <meta name="robots" content="noindex, follow">
   <link rel="canonical" href="https://www.consens.io/app">
-  <title>Consens | Compare AI Answers</title>
+  <title>Compare AI Answers | consens.io</title>
   <script>
     window.FIREBASE_CONFIG = {
       apiKey: "{{ firebase_api_key }}",
@@ -65,11 +65,11 @@
   <!-- DOMPurify (HTML Sanitizer) -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260712-bookmarks-live1"></script>
+  <script type="module" src="/static/firebase.js?v=20260712-private-watch1"></script>
   <script type="module" src="/static/demo.js?v=20260711-demo-login1"></script>
   <script src="/static/app-ui.js?v=20260628-prompt-default2" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
-  <script src="/static/js/app-core.js?v=20260712-tab-title2" defer></script>
+  <script src="/static/js/app-core.js?v=20260712-tab-title-brand1" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
   <script src="/static/js/model-picker.js?v=20260707-fixes1" defer></script>
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
@@ -83,11 +83,11 @@
   <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
   <script src="/static/js/consensus-lifecycle.js?v=20260626-extract1" defer></script>
   <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
-  <script src="/static/js/share-dialog.js?v=20260711-watch1" defer></script>
+  <script src="/static/js/share-dialog.js?v=20260712-private-watch1" defer></script>
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-actions.js?v=20260706-fixes2" defer></script>
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
-  <script src="/static/js/watch.js?v=20260712-every-run1" defer></script>
+  <script src="/static/js/watch.js?v=20260712-watch-time1" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260711-tierinit1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
@@ -783,7 +783,14 @@
     .watch-public-note { margin: 14px 0; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--sidebar-border)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 7%, transparent); font-size: .87rem; line-height: 1.45; }
     .watch-interval-label { display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; font-size: .86rem; font-weight: 650; }
     .watch-interval-select { min-height: 34px; max-width: 150px; padding: 0 9px; border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent); border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-color); font: inherit; font-size: .82rem; }
+    .watch-time-input { min-height: 34px; padding: 0 9px; border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent); border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-color); font: inherit; font-size: .82rem; color-scheme: light dark; }
     .watch-email-select { max-width: 250px; }
+    #watchVisibility { max-width: 100%; }
+    .watch-condition-input { width: 100%; box-sizing: border-box; resize: vertical; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent); border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-color); font: inherit; font-size: .84rem; line-height: 1.4; }
+    .watch-condition-input:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border)); box-shadow: var(--liquid-focus-ring); }
+    .watch-condition-editor { flex: 1 1 100%; display: flex; align-items: flex-end; gap: 7px; }
+    .watch-condition-editor[hidden] { display: none; }
+    .watch-condition-editor .watch-condition-input { flex: 1; }
     .watch-data-note { margin-top: 9px !important; color: var(--sidebar-text-muted); font-size: .79rem; }
     .watch-list-item { align-items: flex-start !important; flex-direction: column; }
     .watch-list-main { display: flex; width: 100%; align-items: center; gap: 9px; min-width: 0; }
