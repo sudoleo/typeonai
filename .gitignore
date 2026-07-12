@@ -19,3 +19,6 @@ data/benchmark/runs/
 recordings/
 recording/
 .recording-tools/
+
+# Local operator workflow notes
+docs/seo-share-indexing-process.md
