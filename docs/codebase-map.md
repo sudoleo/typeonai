@@ -44,14 +44,14 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `pages.py` | HTML-Seiten + SEO: `/` (Landing, redirect→`/app` bei Session), `/app` (Haupt-App), `/admin`, `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
+| `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/app` (Haupt-App), `/admin`, `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (Pro, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). |
 | `users.py` | `/user_status`, `/usage`, `/delete_account`, `/track-interest`. |
 | `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus`. Beide Save-Endpunkte liefern den vollständig zusammengeführten Bookmark-Datensatz zurück, damit der Client ihn ohne Reload aktualisiert. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches`, `/api/watch/{id}` (PATCH/DELETE) und öffentlicher, HMAC-signierter `/watch/unsubscribe`-Link. |
-| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
+| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST), `/api/admin/watches` (Diagnose-Liste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 **Zentrale Templates** (`templates/`, gerendert mit `Jinja2Templates`):
 `landing.html` (Marketing), `index.html` (die App — Haupt-Markup + Script-Tags),
@@ -117,7 +117,8 @@ deferred am `</body>` — `app-init.js`.
   `window.auth`, Bookmarks-CRUD-Calls, Feedback, Voting, Tier-Sync sowie das
   Nutzericon-Menü mit „Shared links“ und direkt darunter „Watched“. Bookmark-
   Saves aktualisieren `window.bookmarksData` und das DOM direkt aus dem vom
-  Server zurückgegebenen Merge-Ergebnis.
+  Server zurückgegebenen Merge-Ergebnis. Nach einer E-Mail-Registrierung zeigt
+  das Auth-Modal einen eigenen Verifizierungs-Erfolgszustand statt eines Browser-Alerts.
 - **`static/demo.js`** (ES-Modul) — Demo-Flow (`runDemoFlow`) für die „Demo"-Query;
   zeigt Gästen nach Abschluss der Demo am Eingabebereich eine Login-/Registrierungs-
   Aufforderung, ohne die Demo-Frage aus dem deaktivierten Feld zu entfernen.
@@ -316,7 +317,7 @@ app/services/llm/
 app/services/
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
-  watch_scheduler.py         Global-Lease, Tagesbudget und sequenzielle Free-Default-Watch-Läufe
+  watch_scheduler.py         Global-Lease, Tagesbudget und sequenzielle tierkonfigurierte Watch-Läufe
   mailer.py                  Multipart-HTML/Plaintext-SMTP-Versand via Thread-Executor
   public_markdown.py         Server-Markdown-Rendering für Share-Seiten
   differences_stats.py       Anonyme Differences-Telemetrie (differences_stats-Collection, §6)
@@ -409,12 +410,18 @@ defaulten auf die günstigen Basis-Modelle. Mistral Small ist bewusst KEIN Early
 Admin-Modellkonfig (`/admin`, `app_config/models` in Firestore): Provider-Listen sind
 geordnet (Picker-Reihenfolge via `MODEL_ORDER_BY_PROVIDER`/`get_ordered_models`, im Admin
 per ↑/↓ sortierbar); Feld `defaults` setzt den Free-Default je Provider (`apply_default_models`,
-nur Nicht-Premium/Nicht-Early erlaubt, sonst `_BASE_FREE_DEFAULTS`). `normalize_models_document`
-erhält die Reihenfolge (kein `sorted` mehr) und validiert `defaults` + `deep_think_model`.
+nur Nicht-Premium/Nicht-Early erlaubt, sonst `_BASE_FREE_DEFAULTS`). Feld `watch_models`
+enthält getrennte `free`-/`pro`-Mappings Provider→Modell; je Tier sind mindestens zwei
+Provider nötig, Free wird serverseitig auf Nicht-Premium/Nicht-Early begrenzt.
+`normalize_models_document` erhält die Reihenfolge (kein `sorted` mehr) und validiert
+`defaults`, `watch_models` + `deep_think_model`.
 Das Admin-UI (Tabs: Models / Consensus & Deep Think / Limits / Shared Pages) bekommt via
 `GET /api/admin/models` ein `meta`-Objekt (Alias-Auflösung, server-erzwungene Modelle je
 Provider, Early-Set, Labels), mit dem Required-/Early-Badges gerendert werden — die
-ensure/drop-Logik des Servers ist damit im UI sichtbar statt implizit. E2E-Zugriff auf
+ensure/drop-Logik des Servers ist damit im UI sichtbar statt implizit. Ein separater
+„Consensus Watch“-Tab zeigt die Free-/Pro-Watch-Modellmatrix, operative Watch-Metadaten,
+SMTP-Konfigurationsstatus und admin-only Aktionen für eine echte Testmail sowie den sofortigen Start einer aktiven Watch;
+der eigentliche Lauf bleibt im normalen Lease-/Budget-/Scheduler-Pfad. E2E-Zugriff auf
 Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
 
 ---
@@ -427,7 +434,7 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **421 passed** (2026-07-12).
+  Letzte bekannte Baseline: **435 passed** (2026-07-12).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, Consensus→Differences+Score,
@@ -472,8 +479,10 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
 **Consensus Watch** läuft als eigener asyncio-Lifespan-Task alle 30 Minuten.
 Firestore-Transaktionen claimen einen globalen Worker-Lease, den einzelnen
 Watch-Lease und das globale Tagesbudget; innerhalb eines Workers laufen Watches
-strikt sequenziell. Die Reruns nutzen höchstens drei aktuelle
-`FREE_DEFAULT_MODEL_BY_PROVIDER`-Modelle, keine Attachments/Follow-ups und keine
+strikt sequenziell. Die Reruns ermitteln den aktuellen Pro-Status des Eigentümers und
+nutzen das entsprechende `WATCH_MODELS_BY_TIER`-Mapping aus Firestore `watch_models`;
+je konfiguriertem Provider läuft genau ein Modell (mindestens zwei), deren Antwort-Calls
+laufen innerhalb des einzelnen Watch-Runs parallel. Keine Attachments/Follow-ups und keine
 In-Memory-Usage-Zähler. Jeder erfolgreiche Lauf schreibt genau einen kompakten
 History-Punkt; nach drei Fehlern pausiert die Watch.
 Der Mailmodus ist pro Watch änderbar: `changes_only` nutzt die bestehende
@@ -490,6 +499,11 @@ Fehler-Retries und Resume bei. Legacy-Watches ohne Zeitfelder nutzen weiter die
 bisherige reine Intervalladdition.
 Watch-Seiten zeigen für aktuelle oder historische Watches eine kompakte Metazeile
 mit Intervall sowie letztem und ggf. nächstem Fragenlauf.
+Im Admin-Dashboard kann eine aktive Watch fällig gestellt und der In-Process-Scheduler
+sofort aufgeweckt werden; der HTTP-Request wartet nicht auf die Modellaufrufe.
+Der manuelle Lauf verbraucht reale Modellaufrufe, schreibt reguläre History, rückt den Zeitplan vor
+und wendet unverändert die konfigurierte Mailregel an. Der unabhängige SMTP-Test führt
+keinen Watch-Lauf aus und ändert keinen Zeitplan.
 
 ---
 

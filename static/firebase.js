@@ -536,9 +536,21 @@ const registerErr = document.getElementById("registerError");
 const loginErr = document.getElementById("loginError");
 
 const forgotBtn = document.getElementById("forgotPasswordButton");
+const registrationSuccessEl = document.getElementById("registrationSuccess");
+const registrationSuccessEmailEl = document.getElementById("registrationSuccessEmail");
+const registrationLoginBtn = document.getElementById("registrationLoginButton");
+
+function setRegisterPending(isPending) {
+  confirmRegisterBtn.disabled = isPending;
+  confirmRegisterBtn.setAttribute("aria-busy", String(isPending));
+  confirmRegisterBtn.textContent = isPending ? "Creating account…" : "Create account";
+}
 
 function setMode(mode) {
   formEl.dataset.mode = mode;
+  formEl.hidden = false;
+  registrationSuccessEl.hidden = true;
+  setRegisterPending(false);
 
   const isRegister = mode === "register";
   // Titel & Hinweise
@@ -566,6 +578,21 @@ function setMode(mode) {
   loginErr.textContent = "";
 }
 
+function showRegistrationSuccess(email) {
+  titleEl.textContent = "Check your inbox";
+  registrationSuccessEmailEl.textContent = email;
+  formEl.hidden = true;
+  registrationSuccessEl.hidden = false;
+  passEl.value = "";
+  passConfirmEl.value = "";
+  registrationSuccessEl.focus();
+}
+
+registrationLoginBtn.addEventListener("click", () => {
+  setMode("login");
+  emailEl.focus();
+});
+
 toggleRegisterBtn.addEventListener("click", () => {
   const current = formEl.dataset.mode === "register" ? "register" : "login";
   setMode(current === "login" ? "register" : "login");
@@ -574,6 +601,7 @@ toggleRegisterBtn.addEventListener("click", () => {
 
 // --- Registrierung (läuft NICHT über loginButton, sondern über confirmRegisterButton) ---
 confirmRegisterBtn.addEventListener("click", () => {
+  if (confirmRegisterBtn.disabled) return;
   registerErr.textContent = "";
   trackAppEvent("auth_register_started");
 
@@ -604,6 +632,8 @@ confirmRegisterBtn.addEventListener("click", () => {
     return;
   }
 
+  setRegisterPending(true);
+
   // Request an Backend
   fetch("/register", {
     method: "POST",
@@ -618,33 +648,39 @@ confirmRegisterBtn.addEventListener("click", () => {
           .then(() => {
             sendEmailVerification(auth.currentUser)
               .then(() => {
-                alert("Registration successful! Please confirm your e-mail address by clicking on the link in the e-mail.");
-                signOut(auth);
-                setMode("login");
+                showRegistrationSuccess(email);
                 trackAppEvent("auth_register_result", { status: "success" });
+                signOut(auth).catch((error) => console.error("Post-registration sign-out failed:", error));
               })
               .catch((error) => {
                 // Keine rohen Firebase-Texte
                 console.error("Error sending verification e-mail:", error);
                 registerErr.textContent = "Error sending the verification e-mail. Please try again later.";
+                setRegisterPending(false);
+                signOut(auth).catch(() => {});
                 trackAppEvent("auth_register_result", { status: "email_error" });
               });
           })
           .catch((error) => {
             const msg = mapFirebaseRegisterError(error);
             registerErr.textContent = msg;
+            setRegisterPending(false);
             trackAppEvent("auth_register_result", { status: "error" });
           });
       } else if (data.detail) {
         registerErr.textContent = data.detail;
+        setRegisterPending(false);
         trackAppEvent("auth_register_result", { status: "error" });
       } else {
         registerErr.textContent = "Unexpected response from server.";
+        setRegisterPending(false);
         trackAppEvent("auth_register_result", { status: "error" });
       }
     })
     .catch((error) => {
-      registerErr.textContent = error.message;
+      console.error("Registration request failed:", error);
+      registerErr.textContent = "We couldn't create your account. Check your connection and try again.";
+      setRegisterPending(false);
       trackAppEvent("auth_register_result", { status: "error" });
     });
 });
@@ -1199,20 +1235,17 @@ async function deleteBookmark(bookmarkId) {
 }
 window.deleteBookmark = deleteBookmark;
 
-// Login per Enter-Taste auslösen: Bei Fokus im Email- oder Passwortfeld wird der Login-Button "geklickt".
-document.getElementById("loginEmail").addEventListener("keydown", function(e) {
+// Passende Auth-Aktion per Enter auslösen – auch in den Bestätigungsfeldern.
+[emailEl, emailConfirmEl, passEl, passConfirmEl].forEach((field) => field.addEventListener("keydown", function(e) {
   if (e.key === "Enter") {
     e.preventDefault();
-    document.getElementById("loginButton").click();
+    if (formEl.dataset.mode === "register") {
+      confirmRegisterBtn.click();
+    } else {
+      loginBtn.click();
+    }
   }
-});
-
-document.getElementById("loginPassword").addEventListener("keydown", function(e) {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    document.getElementById("loginButton").click();
-  }
-});
+}));
 
 function sendFeedback(message, email) {
   // Prüfe, ob der Nutzer eingeloggt ist

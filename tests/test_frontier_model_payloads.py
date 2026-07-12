@@ -533,6 +533,41 @@ class FrontierModelPayloadTests(unittest.TestCase):
             cfg.FREE_DEFAULT_MODEL_BY_PROVIDER.clear()
             cfg.FREE_DEFAULT_MODEL_BY_PROVIDER.update(free_snapshot)
 
+    def test_watch_models_are_separate_for_free_and_pro(self):
+        normalized = normalize_models_document({
+            "openai": [cfg.DEFAULT_OPENAI_MODEL, "gpt-5.5"],
+            "mistral": [cfg.DEFAULT_MISTRAL_MODEL, cfg.MISTRAL_PRO_MODEL],
+            "anthropic": [cfg.DEFAULT_ANTHROPIC_MODEL, cfg.ANTHROPIC_PRO_MODEL],
+            "gemini": [cfg.DEFAULT_GEMINI_MODEL],
+            "deepseek": [cfg.DEEPSEEK_FLASH_MODEL],
+            "grok": [cfg.DEFAULT_GROK_MODEL],
+            "premium": ["gpt-5.5", cfg.MISTRAL_PRO_MODEL, cfg.ANTHROPIC_PRO_MODEL],
+            "watch_models": {
+                "free": {
+                    "openai": cfg.DEFAULT_OPENAI_MODEL,
+                    "mistral": cfg.DEFAULT_MISTRAL_MODEL,
+                    "anthropic": cfg.ANTHROPIC_PRO_MODEL,
+                },
+                "pro": {
+                    "openai": "gpt-5.5",
+                    "mistral": cfg.MISTRAL_PRO_MODEL,
+                    "anthropic": cfg.ANTHROPIC_PRO_MODEL,
+                },
+            },
+        })
+        self.assertEqual(set(normalized["watch_models"]["free"]), {"openai", "mistral"})
+        self.assertEqual(len(normalized["watch_models"]["pro"]), 3)
+
+        snapshot = {tier: dict(models) for tier, models in cfg.WATCH_MODELS_BY_TIER.items()}
+        try:
+            cfg.apply_watch_models(normalized["watch_models"])
+            self.assertEqual(cfg.get_watch_models(False), normalized["watch_models"]["free"])
+            self.assertEqual(cfg.get_watch_models(True), normalized["watch_models"]["pro"])
+        finally:
+            for tier, models in snapshot.items():
+                cfg.WATCH_MODELS_BY_TIER[tier].clear()
+                cfg.WATCH_MODELS_BY_TIER[tier].update(models)
+
     def test_admin_model_rows_have_order_and_default_controls(self):
         template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
         self.assertIn("default-radio", template)
@@ -547,6 +582,12 @@ class FrontierModelPayloadTests(unittest.TestCase):
         self.assertIn("moveConsensusRow", template)
         self.assertIn("consensusListValues()", template)
         self.assertIn("globalModelsData.consensus", template)
+
+    def test_admin_exposes_free_and_pro_watch_model_config(self):
+        template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
+        self.assertIn('id="watchModelConfig"', template)
+        self.assertIn("watch_models: { free: {}, pro: {} }", template)
+        self.assertIn("data.watch_models[select.dataset.watchTier]", template)
 
     def test_gemini_frontier_low_consensus_payload_uses_api_model(self):
         request = build_provider_payload(

@@ -126,6 +126,25 @@ EARLY_DEFAULT_MODEL_BY_PROVIDER = {
 # Override gilt diese Basis (siehe apply_default_models).
 _BASE_FREE_DEFAULTS = dict(FREE_DEFAULT_MODEL_BY_PROVIDER)
 
+# Antwortmodelle fuer geplante Consensus-Watches. Pro Tier kann je Provider
+# genau ein Modell aktiv sein; fehlende Legacy-Konfiguration behaelt das
+# bisherige Verhalten mit drei guenstigen Modellen bei.
+_BASE_WATCH_MODELS_BY_TIER = {
+    "free": {
+        "openai": DEFAULT_OPENAI_MODEL,
+        "mistral": DEFAULT_MISTRAL_MODEL,
+        "gemini": DEFAULT_GEMINI_MODEL,
+    },
+    "pro": {
+        "openai": DEFAULT_OPENAI_MODEL,
+        "mistral": DEFAULT_MISTRAL_MODEL,
+        "gemini": DEFAULT_GEMINI_MODEL,
+    },
+}
+WATCH_MODELS_BY_TIER = {
+    tier: dict(models) for tier, models in _BASE_WATCH_MODELS_BY_TIER.items()
+}
+
 # Vom Admin gepflegte Anzeige-Reihenfolge der Modelle je Provider in den normalen
 # Pickern. Leere Liste => deterministischer Auto-Sort (model_picker_sort_key).
 MODEL_ORDER_BY_PROVIDER: dict[str, list[str]] = {
@@ -687,6 +706,31 @@ def apply_default_models(defaults: dict | None) -> None:
             FREE_DEFAULT_MODEL_BY_PROVIDER[provider] = base
 
 
+def apply_watch_models(config: dict | None) -> None:
+    """Apply validated per-tier Watch model mappings with legacy fallbacks."""
+    incoming = config if isinstance(config, dict) else {}
+    allowed_sets = _provider_allowed_sets()
+    for tier in ("free", "pro"):
+        tier_data = incoming.get(tier)
+        tier_data = tier_data if isinstance(tier_data, dict) else {}
+        clean = {}
+        for provider in DEFAULT_MODEL_BY_PROVIDER:
+            model = str(tier_data.get(provider) or "").strip()
+            if not model or model not in allowed_sets.get(provider, set()):
+                continue
+            if tier == "free" and (model in PREMIUM_MODELS or model in EARLY_MODELS):
+                continue
+            clean[provider] = model
+        if len(clean) < 2:
+            clean = dict(_BASE_WATCH_MODELS_BY_TIER[tier])
+        WATCH_MODELS_BY_TIER[tier].clear()
+        WATCH_MODELS_BY_TIER[tier].update(clean)
+
+
+def get_watch_models(is_pro: bool) -> dict[str, str]:
+    return dict(WATCH_MODELS_BY_TIER["pro" if is_pro else "free"])
+
+
 rebuild_model_configs()
 
 
@@ -873,6 +917,7 @@ def load_models_from_db():
             # und Free-Default je Provider uebernehmen.
             apply_model_order({provider: data.get(provider) for provider in MODEL_ORDER_BY_PROVIDER})
             apply_default_models(data.get("defaults"))
+            apply_watch_models(data.get("watch_models"))
 
             apply_limits(data.get("limits"))
             ensure_default_models_allowed()
@@ -899,6 +944,9 @@ def load_models_from_db():
                 "judge_models": get_judge_models(),
                 "judge_models_pro": get_pro_judge_models(),
                 "judge_families": get_judge_families(),
+                "watch_models": {
+                    tier: dict(models) for tier, models in WATCH_MODELS_BY_TIER.items()
+                },
                 "limits": get_limits_config()
             })
             rebuild_model_configs()

@@ -1,6 +1,10 @@
 import unittest
 from pathlib import Path
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.api.routers import pages as pages_router
 from app.api.routers.pages import SITE_URL, robots_txt, sitemap_xml, sitemap_pages_xml
 
 
@@ -8,6 +12,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class SeoBasicsTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        app = FastAPI()
+        app.include_router(pages_router.router)
+        cls.client = TestClient(app)
+
+    def test_landing_remains_accessible_with_session_cookie(self):
+        response = self.client.get("/", headers={"Cookie": "session=valid-looking-session"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("consens.io", response.text)
+        self.assertNotEqual(str(response.url.path), "/app")
+
+    def test_app_logo_links_to_landing_page(self):
+        template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('<a href="/" id="logoLink">', template)
+
     def test_robots_txt_points_to_sitemap(self):
         content = robots_txt()
 

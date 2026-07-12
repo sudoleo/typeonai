@@ -244,6 +244,47 @@ def list_watches(uid: str, db=None) -> list[dict]:
     return items
 
 
+def list_watches_for_admin(db=None) -> list[dict]:
+    """Return operational watch metadata for the admin diagnostics page."""
+    db = db if db is not None else db_firestore
+    items = []
+    for doc in db.collection(WATCHES_COLLECTION).stream():
+        data = doc.to_dict() or {}
+        share = share_snapshots.get_share(str(data.get("share_id") or ""), db=db) or {}
+        item = _serialize_watch(doc.id, data, share)
+        item.update({
+            "owner_uid": str(data.get("owner_uid") or ""),
+            "consecutive_failures": int(data.get("consecutive_failures") or 0),
+            "claimed_until": (
+                data["claimed_until"].isoformat()
+                if isinstance(data.get("claimed_until"), datetime) else ""
+            ),
+        })
+        items.append(item)
+    items.sort(key=lambda item: item["created_at"], reverse=True)
+    return items
+
+
+def queue_watch_run(watch_id: str, *, now=None, db=None) -> dict:
+    """Make an active watch due for the normal leased scheduler path."""
+    db = db if db is not None else db_firestore
+    now = now or utcnow()
+    ref = db.collection(WATCHES_COLLECTION).document(watch_id)
+    snap = ref.get()
+    data = snap.to_dict() if snap.exists else None
+    if not data:
+        raise WatchError("not_found", "Watch not found.")
+    if data.get("status") != "active":
+        raise WatchError("invalid_status", "Only an active watch can be queued.")
+    claimed_until = data.get("claimed_until")
+    if isinstance(claimed_until, datetime) and claimed_until > now:
+        raise WatchError("already_claimed", "This watch is currently running.")
+    ref.update({"next_run_at": now})
+    data["next_run_at"] = now
+    share = share_snapshots.get_share(str(data.get("share_id") or ""), db=db) or {}
+    return _serialize_watch(watch_id, data, share)
+
+
 def _owned_watch(uid: str, watch_id: str, db):
     ref = db.collection(WATCHES_COLLECTION).document(watch_id)
     snap = ref.get()

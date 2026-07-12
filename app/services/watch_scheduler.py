@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 from firebase_admin import auth
 
 import app.core.config as cfg
+from app.core import security
 from app.api.routers.pages import SITE_URL
 from app.services import mailer, share_snapshots, watch_service
 from app.services.llm.base import get_system_prompt
@@ -32,6 +34,7 @@ from app.services.llm.mock_llm import mock_ask_result, mock_llm_enabled
 
 
 TICK_SECONDS = 30 * 60
+_scheduler_wake_event: asyncio.Event | None = None
 PROVIDER_ORDER = ("openai", "mistral", "gemini", "anthropic", "deepseek", "grok")
 PROVIDER_LABELS = {
     "openai": "OpenAI", "mistral": "Mistral", "anthropic": "Anthropic",
@@ -52,26 +55,32 @@ def _developer_keys() -> dict:
     return {PROVIDER_LABELS[p]: os.environ.get(env, "").strip() for p, env in PROVIDER_ENV.items()}
 
 
-def _selected_providers(keys: dict) -> list[str]:
+def _selected_models(keys: dict, is_pro: bool) -> list[tuple[str, str]]:
+    configured = cfg.get_watch_models(is_pro)
     if mock_llm_enabled():
-        return list(PROVIDER_ORDER[:3])
+        return [
+            (provider, configured[provider])
+            for provider in PROVIDER_ORDER if configured.get(provider)
+        ]
     adc_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
     return [
-        provider for provider in PROVIDER_ORDER
-        if keys.get(PROVIDER_LABELS[provider])
-        or (provider == "gemini" and adc_path and os.path.isfile(adc_path))
-    ][:3]
+        (provider, configured[provider]) for provider in PROVIDER_ORDER
+        if configured.get(provider) and (
+            keys.get(PROVIDER_LABELS[provider])
+            or (provider == "gemini" and adc_path and os.path.isfile(adc_path))
+        )
+    ]
 
 
-def _provider_answer(provider: str, question: str, keys: dict):
+def _provider_answer(provider: str, model: str, question: str, keys: dict, is_pro: bool):
     label = PROVIDER_LABELS[provider]
     if mock_llm_enabled():
         return mock_ask_result(label, question)
     kwargs = {
         "system_prompt": get_system_prompt(),
         "deep_search": False,
-        "model_override": cfg.FREE_DEFAULT_MODEL_BY_PROVIDER[provider],
-        "max_output_tokens": cfg.get_output_token_limit(False, False),
+        "model_override": model,
+        "max_output_tokens": cfg.get_output_token_limit(is_pro, False),
         "attachments": [],
     }
     key = keys.get(label) or ""
@@ -80,19 +89,31 @@ def _provider_answer(provider: str, question: str, keys: dict):
     return PROVIDER_FUNCTIONS[provider](question, key, **kwargs)
 
 
-def execute_watch(question: str, previous_consensus: str, condition: str = "") -> dict:
-    """Run at most three current free defaults; never touches usage counters."""
+def execute_watch(question: str, previous_consensus: str, condition: str = "",
+                  is_pro: bool = False) -> dict:
+    """Run the configured tier models; never touches usage counters."""
     keys = _developer_keys()
-    providers = _selected_providers(keys)
+    selected_models = _selected_models(keys, is_pro)
     if mock_llm_enabled():
-        for provider in providers:
+        for provider, _model in selected_models:
             keys[PROVIDER_LABELS[provider]] = "mock"
     answers = {}
-    for provider in providers:
-        result = _provider_answer(provider, question, keys)
-        text = result_text(result).strip()
-        if text and not text.lower().startswith("error") and not (isinstance(result, dict) and result.get("error")):
-            answers[provider] = text
+    with ThreadPoolExecutor(max_workers=max(1, len(selected_models))) as pool:
+        futures = {
+            provider: pool.submit(_provider_answer, provider, model, question, keys, is_pro)
+            for provider, model in selected_models
+        }
+        # In konfigurierter Provider-Reihenfolge einsammeln, damit Engine-Wahl
+        # und Quellen-Nummerierung trotz parallelem Fan-out deterministisch sind.
+        for provider, _model in selected_models:
+            try:
+                result = futures[provider].result()
+            except Exception:
+                logging.exception("Consensus Watch provider failed: %s", provider)
+                continue
+            text = result_text(result).strip()
+            if text and not text.lower().startswith("error") and not (isinstance(result, dict) and result.get("error")):
+                answers[provider] = text
     if len(answers) < 2:
         raise RuntimeError("Fewer than two provider answers completed.")
 
@@ -255,9 +276,11 @@ async def run_watch_tick() -> int:
                     raise RuntimeError("Watch share is unavailable.")
                 claimed["question"] = share.get("question") or ""
                 claimed["share_slug"] = share.get("slug") or ""
+                is_pro = await asyncio.to_thread(security.is_user_pro, claimed["owner_uid"])
                 result = await asyncio.to_thread(
                     execute_watch, claimed["question"], share.get("consensus_md") or "",
                     claimed.get("condition") if claimed.get("email_mode") == "condition" else "",
+                    is_pro,
                 )
                 mail_kind = notification_kind(claimed, result)
                 await asyncio.to_thread(
@@ -300,12 +323,31 @@ async def run_watch_tick() -> int:
     return completed
 
 
+def wake_watch_scheduler():
+    """Wake the in-process scheduler so newly queued work starts promptly."""
+    if _scheduler_wake_event is not None:
+        _scheduler_wake_event.set()
+
+
 async def watch_scheduler_loop():
-    while True:
-        try:
-            await run_watch_tick()
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logging.exception("Consensus Watch scheduler tick failed")
-        await asyncio.sleep(TICK_SECONDS)
+    global _scheduler_wake_event
+    wake_event = asyncio.Event()
+    _scheduler_wake_event = wake_event
+    try:
+        while True:
+            # Clear before the tick so a wake-up arriving during a long run is
+            # retained and causes another immediate scan afterwards.
+            wake_event.clear()
+            try:
+                await run_watch_tick()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logging.exception("Consensus Watch scheduler tick failed")
+            try:
+                await asyncio.wait_for(wake_event.wait(), timeout=TICK_SECONDS)
+            except asyncio.TimeoutError:
+                pass
+    finally:
+        if _scheduler_wake_event is wake_event:
+            _scheduler_wake_event = None

@@ -56,7 +56,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260711-watch1">
+  <link rel="stylesheet" href="/static/style.css?v=20260712-auth-success1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -65,7 +65,7 @@
   <!-- DOMPurify (HTML Sanitizer) -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260712-private-watch1"></script>
+  <script type="module" src="/static/firebase.js?v=20260712-auth-success1"></script>
   <script type="module" src="/static/demo.js?v=20260711-demo-login1"></script>
   <script src="/static/app-ui.js?v=20260628-prompt-default2" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
@@ -643,6 +643,19 @@
 
         <h2 id="authTitle" class="auth-title">Log in to consens.io</h2>
 
+        <section id="registrationSuccess" class="auth-success" aria-live="polite" tabindex="-1" hidden>
+          <div class="auth-success-icon" aria-hidden="true">&#10003;</div>
+          <p class="auth-success-lead">We sent a verification link to</p>
+          <strong id="registrationSuccessEmail" class="auth-success-email"></strong>
+          <ol class="auth-success-steps">
+            <li>Open the verification e-mail.</li>
+            <li>Click the link to confirm your address.</li>
+            <li>Come back here and log in.</li>
+          </ol>
+          <p class="auth-success-note">It may take a minute to arrive. Please also check your spam folder.</p>
+          <button type="button" id="registrationLoginButton" class="auth-primary-action">Continue to login</button>
+        </section>
+
         <!-- Das Login-Formular hat autocomplete="on" -->
         <form id="loginForm" class="auth-form" autocomplete="on" data-mode="login">
 
@@ -677,8 +690,8 @@
             </div>
 
             <!-- Inline errors -->
-            <div id="loginError" class="error-message"></div>
-            <div id="registerError" class="error-message"></div>
+            <div id="loginError" class="error-message" role="alert" aria-live="polite"></div>
+            <div id="registerError" class="error-message" role="alert" aria-live="polite"></div>
 
             <div id="singleMailNote" class="auth-note">
               Note: each e-mail address can be used for one account only.
@@ -734,7 +747,10 @@
 
   <!-- Share-Modal: öffentliche Links erstellen/verwalten -->
   <style>
-    .share-modal-content { max-width: 480px; text-align: left; }
+    .share-modal-content {
+      max-width: 480px; max-height: calc(100dvh - 32px); box-sizing: border-box;
+      overflow-y: auto; overscroll-behavior: contain; text-align: left;
+    }
     .share-modal-content h2 { margin: 0 24px 14px 0; text-align: left; font-size: 1.12rem; line-height: 1.3; }
     .share-modal-content p { margin: 0 0 12px; }
     .share-modal-notes { margin: 12px 0; padding-left: 18px; font-size: 0.88rem; line-height: 1.5; color: color-mix(in srgb, var(--text-color) 86%, var(--sidebar-text-muted)); }

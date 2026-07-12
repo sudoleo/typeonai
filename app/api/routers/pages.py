@@ -6,11 +6,11 @@ import openai
 from mistralai import Mistral
 import google.generativeai as genai
 from fastapi import APIRouter, Request, Body, HTTPException
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 import requests
 
 from app.core.rate_limit import limiter
-from app.core.security import verify_user_token, is_valid_session, extract_id_token, db_firestore
+from app.core.security import verify_user_token, extract_id_token, db_firestore
 from firebase_admin import firestore
 from app.core.state import last_feedback_time
 import app.core.config as cfg
@@ -83,10 +83,6 @@ def sitemap_pages_xml():
 
 @router.get("/", response_class=HTMLResponse)
 async def landing(request: Request):
-    token = request.cookies.get("session") or request.headers.get("Authorization", "").removeprefix("Bearer ")
-    force_landing = request.query_params.get("landing") == "1"
-    if token and is_valid_session(token) and not force_landing:
-        return RedirectResponse(url="/app")
     return templates.TemplateResponse("landing.html", {"request": request})
 
 @router.get("/privacy", response_class=HTMLResponse)

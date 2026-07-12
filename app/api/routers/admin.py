@@ -1,10 +1,13 @@
+import asyncio
 import logging
+from firebase_admin import auth
 from fastapi import APIRouter, Request, Body, HTTPException
 
 from app.core.security import extract_id_token, verify_user_token, is_user_admin, db_firestore
 import app.core.config as cfg
 from app.core.config import apply_limits, get_limits_config, load_models_from_db
 from app.services import share_snapshots as snapshots
+from app.services import mailer, watch_scheduler, watch_service
 from app.services.share_snapshots import ShareError
 
 router = APIRouter()
@@ -24,6 +27,57 @@ def _require_admin(request, data):
 
 
 _SHARE_ERROR_STATUS = {"not_found": 404, "bad_request": 400}
+
+
+@router.get("/api/admin/watches")
+def admin_list_watches(request: Request):
+    _require_admin(request, {})
+    try:
+        watches = watch_service.list_watches_for_admin()
+    except Exception:
+        logging.exception("admin_list_watches failed")
+        raise HTTPException(status_code=500, detail="Failed to load watches")
+    return {
+        "status": "success",
+        "smtp_configured": mailer.is_configured(),
+        "watches": watches,
+    }
+
+
+@router.post("/api/admin/watches/{watch_id}/run")
+async def admin_run_watch(request: Request, watch_id: str, data: dict = Body(default={})):
+    _require_admin(request, data)
+    try:
+        watch = await asyncio.to_thread(watch_service.queue_watch_run, watch_id)
+        watch_scheduler.wake_watch_scheduler()
+    except watch_service.WatchError as exc:
+        status = 404 if exc.code == "not_found" else 409
+        raise HTTPException(status_code=status, detail=exc.message)
+    except Exception:
+        logging.exception("admin_run_watch failed")
+        raise HTTPException(status_code=500, detail="Failed to start watch")
+    return {"status": "success", "watch": watch, "run_requested": True}
+
+
+@router.post("/api/admin/watches/test-email")
+async def admin_send_watch_test_email(request: Request, data: dict = Body(default={})):
+    uid = _require_admin(request, data)
+    if not mailer.is_configured():
+        raise HTTPException(status_code=503, detail="SMTP_HOST and MAIL_FROM must be configured")
+    try:
+        user = await asyncio.to_thread(auth.get_user, uid)
+        recipient = getattr(user, "email", None)
+        if not getattr(user, "email_verified", False) or not recipient:
+            raise HTTPException(status_code=409, detail="The admin account needs a verified e-mail address")
+        accepted = await mailer.send_message(mailer.build_test_message(recipient=recipient))
+        if not accepted:
+            raise HTTPException(status_code=502, detail="SMTP did not accept the test message")
+    except HTTPException:
+        raise
+    except Exception:
+        logging.exception("admin_send_watch_test_email failed")
+        raise HTTPException(status_code=500, detail="Failed to send watch test e-mail")
+    return {"status": "success", "recipient": recipient}
 
 
 @router.get("/api/admin/shares")
@@ -159,6 +213,26 @@ def normalize_models_document(data: dict) -> dict:
             clean_defaults[provider] = chosen
     normalized["defaults"] = clean_defaults
 
+    # Watch-Antwortmodelle: je Tier hoechstens ein Modell pro Provider. Free
+    # darf keine Premium-/Early-Modelle verwenden. Bei Legacy-Dokumenten ohne
+    # dieses Feld wird das bisherige Drei-Modell-Setup eingeblendet.
+    incoming_watch = normalized.get("watch_models")
+    incoming_watch = incoming_watch if isinstance(incoming_watch, dict) else {}
+    clean_watch = {}
+    for tier in ("free", "pro"):
+        supplied = incoming_watch.get(tier)
+        source = supplied if isinstance(supplied, dict) else cfg._BASE_WATCH_MODELS_BY_TIER[tier]
+        tier_models = {}
+        for provider in PROVIDER_KEYS:
+            chosen = str(source.get(provider) or "").strip()
+            if not chosen or chosen not in set(normalized.get(provider) or []):
+                continue
+            if tier == "free" and (chosen in premium or chosen in cfg.EARLY_MODELS):
+                continue
+            tier_models[provider] = chosen
+        clean_watch[tier] = tier_models
+    normalized["watch_models"] = clean_watch
+
     allowed_direct_consensus = set()
     for provider in PROVIDER_KEYS:
         allowed_direct_consensus.update(normalized.get(provider) or [])
@@ -291,6 +365,9 @@ def get_models(request: Request):
                 "premium": list(PREMIUM_MODELS),
                 "consensus": list(cfg.ALLOWED_CONSENSUS_MODELS),
                 "defaults": dict(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER),
+                "watch_models": {
+                    tier: dict(models) for tier, models in cfg.WATCH_MODELS_BY_TIER.items()
+                },
                 "deep_think_model": cfg.get_deep_think_consensus_model(),
                 "judge_models": cfg.get_judge_models(),
                 "judge_models_pro": cfg.get_pro_judge_models(),
@@ -314,6 +391,14 @@ def update_models(request: Request, data: dict = Body(...)):
     try:
         apply_limits(data.get("limits"))
         normalized = normalize_models_document(data)
+        incoming_watch = data.get("watch_models")
+        if not isinstance(incoming_watch, dict):
+            raise HTTPException(status_code=400, detail="watch_models must contain free and pro mappings")
+        for tier in ("free", "pro"):
+            if not isinstance(incoming_watch.get(tier), dict):
+                raise HTTPException(status_code=400, detail=f"watch_models.{tier} must be a provider mapping")
+            if len(normalized["watch_models"][tier]) < 2:
+                raise HTTPException(status_code=400, detail=f"Select at least two valid {tier} Watch models")
         doc_ref = db_firestore.collection("app_config").document("models")
         doc_ref.set({
             "openai": normalized["openai"],
@@ -325,6 +410,7 @@ def update_models(request: Request, data: dict = Body(...)):
             "premium": normalized["premium"],
             "consensus": normalized["consensus"],
             "defaults": normalized["defaults"],
+            "watch_models": normalized["watch_models"],
             "deep_think_model": normalized["deep_think_model"],
             "judge_models": normalized["judge_models"],
             "judge_models_pro": normalized["judge_models_pro"],
@@ -336,6 +422,8 @@ def update_models(request: Request, data: dict = Body(...)):
         load_models_from_db()
 
         return {"status": "success", "message": "Configuration updated successfully."}
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"Error updating models: {e}")
         raise HTTPException(status_code=500, detail="Failed to update models")

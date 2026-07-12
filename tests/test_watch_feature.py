@@ -1,12 +1,19 @@
+import asyncio
 import os
 import unittest
+from types import SimpleNamespace
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
 import app.core.config as cfg
 from app.api.routers import share as share_router
+from app.api.routers import admin as admin_router
+from app.core.rate_limit import limiter
 from app.services import watch_service
 from app.services import mailer, watch_scheduler
 from app.services.watch_service import WatchError
@@ -74,6 +81,9 @@ class FakeCollection:
     def where(self, field, op, value):
         assert op == "=="
         return FakeQuery(self.store, field, value)
+
+    def stream(self):
+        return FakeQuery(self.store, None, None).stream()
 
 
 class FakeDb:
@@ -185,6 +195,34 @@ class WatchCrudTests(unittest.TestCase):
         watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db)
         with self.assertRaisesRegex(WatchError, "already watched"):
             watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", is_pro=True, db=self.db)
+
+    def test_admin_can_list_and_queue_active_watch(self):
+        created = watch_service.create_watch(
+            "u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db
+        )
+        queued_at = datetime(2026, 7, 12, 12, 0, tzinfo=timezone.utc)
+        listed = watch_service.list_watches_for_admin(db=self.db)
+        self.assertEqual(listed[0]["owner_uid"], "u1")
+        self.assertEqual(listed[0]["consecutive_failures"], 0)
+
+        queued = watch_service.queue_watch_run(created["id"], now=queued_at, db=self.db)
+        self.assertEqual(queued["next_run_at"], queued_at.isoformat())
+        self.assertEqual(self.db.stores["watches"][created["id"]]["next_run_at"], queued_at)
+
+    def test_admin_queue_rejects_paused_or_claimed_watch(self):
+        created = watch_service.create_watch(
+            "u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db
+        )
+        watch_id = created["id"]
+        now = datetime(2026, 7, 12, 12, 0, tzinfo=timezone.utc)
+        self.db.stores["watches"][watch_id]["status"] = "paused"
+        with self.assertRaisesRegex(WatchError, "active watch"):
+            watch_service.queue_watch_run(watch_id, now=now, db=self.db)
+        self.db.stores["watches"][watch_id].update(
+            status="active", claimed_until=now + timedelta(minutes=10)
+        )
+        with self.assertRaisesRegex(WatchError, "currently running"):
+            watch_service.queue_watch_run(watch_id, now=now, db=self.db)
 
     def test_update_rejects_unknown_fields_and_owner(self):
         created = watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db)
@@ -384,6 +422,19 @@ class SchedulerSafetyTests(unittest.TestCase):
         self.assertIsInstance(result["agreement_score"], int)
         self.assertFalse(result["changed"])
 
+    def test_watch_uses_all_configured_models_for_the_selected_tier(self):
+        configured = {
+            "openai": cfg.DEFAULT_OPENAI_MODEL,
+            "mistral": cfg.DEFAULT_MISTRAL_MODEL,
+            "gemini": cfg.DEFAULT_GEMINI_MODEL,
+            "anthropic": cfg.ANTHROPIC_PRO_MODEL,
+        }
+        keys = {label: "key" for label in watch_scheduler.PROVIDER_LABELS.values()}
+        with patch.object(cfg, "get_watch_models", return_value=configured):
+            selected = watch_scheduler._selected_models(keys, True)
+        self.assertEqual(dict(selected), configured)
+        self.assertEqual(len(selected), 4)
+
 
 class MailerTests(unittest.TestCase):
     def test_change_mail_is_multipart_with_unsubscribe(self):
@@ -422,6 +473,12 @@ class MailerTests(unittest.TestCase):
         self.assertIn("15 September", rendered)
         self.assertIn("The launch is scheduled", rendered)
 
+    def test_admin_test_mail_is_multipart_and_does_not_claim_a_watch(self):
+        message = mailer.build_test_message(recipient="admin@example.test")
+        self.assertTrue(message.is_multipart())
+        self.assertEqual(message["Subject"], "Consensus Watch e-mail test")
+        self.assertIn("No watch was executed", message.as_string())
+
     def test_public_watch_meta_contains_run_schedule_but_no_owner(self):
         db = FakeDb()
         now = datetime(2026, 7, 12, tzinfo=timezone.utc)
@@ -454,6 +511,43 @@ class HistoryViewTests(unittest.TestCase):
 
 
 class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
+    async def test_scheduler_wake_triggers_an_immediate_second_tick(self):
+        calls = 0
+
+        async def tick():
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                watch_scheduler.wake_watch_scheduler()
+            else:
+                raise asyncio.CancelledError
+
+        with patch.object(watch_scheduler, "run_watch_tick", side_effect=tick):
+            with self.assertRaises(asyncio.CancelledError):
+                await watch_scheduler.watch_scheduler_loop()
+        self.assertEqual(calls, 2)
+
+    async def test_every_run_mail_targets_verified_watch_owner(self):
+        watch = {
+            "owner_uid": "u1", "share_id": "A" * 16, "share_slug": "question",
+            "visibility": "public", "question": "Q",
+        }
+        result = {
+            "consensus": "New consensus", "agreement_score": 72,
+            "changed": False, "severity": "minor", "change_summary": "",
+        }
+        user = SimpleNamespace(email="owner@example.test", email_verified=True)
+        with (
+            patch.object(watch_scheduler.mailer, "is_configured", return_value=True),
+            patch.object(watch_scheduler.auth, "get_user", return_value=user),
+            patch.object(watch_service, "make_unsubscribe_token", return_value="token"),
+            patch.object(watch_scheduler.mailer, "send_message", new_callable=AsyncMock, return_value=True) as send,
+        ):
+            await watch_scheduler._send_run_mail("w1", watch, result)
+        message = send.await_args.args[0]
+        self.assertEqual(message["To"], "owner@example.test")
+        self.assertIn("New consensus", message.as_string())
+
     async def test_pause_mail_emitted_exactly_on_third_failure(self):
         claimed = {
             "owner_uid": "u1", "share_id": "A" * 16, "share_slug": "q",
@@ -464,6 +558,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             patch.object(watch_service, "release_worker_lease"),
             patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
             patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
+            patch.object(watch_scheduler.security, "is_user_pro", return_value=False),
             patch.object(watch_scheduler, "execute_watch", side_effect=RuntimeError("provider failed")),
             patch.object(watch_service, "fail_watch_run", side_effect=[False, False, True]),
             patch.object(watch_scheduler, "_send_paused_mail", new_callable=AsyncMock) as send_paused,
@@ -488,6 +583,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             patch.object(watch_service, "release_worker_lease"),
             patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
             patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
+            patch.object(watch_scheduler.security, "is_user_pro", return_value=True) as pro_check,
             patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
             patch.object(watch_scheduler, "execute_watch", return_value=result),
             patch.object(watch_service, "complete_watch_run"),
@@ -496,6 +592,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
         ):
             completed = await watch_scheduler.run_watch_tick()
         self.assertEqual(completed, 1)
+        pro_check.assert_called_once_with("u1")
         send_run.assert_awaited_once_with("w1", claimed, result)
         send_change.assert_not_awaited()
 
@@ -514,3 +611,62 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn('id="watchVisibility"', source)
         self.assertIn('id="watchRunTime"', source)
         self.assertIn("resolvedOptions().timeZone", source)
+
+    def test_watch_modal_scrolls_instead_of_overflowing_actions(self):
+        source = Path("templates/index.html").read_text(encoding="utf-8")
+        self.assertIn("max-height: calc(100dvh - 32px)", source)
+        self.assertIn("overflow-y: auto", source)
+
+
+class AdminWatchRouteTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        app = FastAPI()
+        app.state.limiter = limiter
+        app.include_router(admin_router.router)
+        cls.client = TestClient(app)
+
+    def _admin_patches(self, is_admin=True):
+        return (
+            patch.object(admin_router, "extract_id_token", return_value="tok"),
+            patch.object(admin_router, "verify_user_token", return_value="admin-1"),
+            patch.object(admin_router, "is_user_admin", return_value=is_admin),
+        )
+
+    def test_watch_diagnostics_requires_admin(self):
+        token_patch, verify_patch, admin_patch = self._admin_patches(False)
+        with token_patch, verify_patch, admin_patch:
+            response = self.client.get("/api/admin/watches")
+        self.assertEqual(response.status_code, 403)
+
+    def test_watch_diagnostics_lists_and_starts_run(self):
+        token_patch, verify_patch, admin_patch = self._admin_patches()
+        with token_patch, verify_patch, admin_patch, \
+                patch.object(admin_router.watch_service, "list_watches_for_admin", return_value=[]), \
+                patch.object(admin_router.mailer, "is_configured", return_value=True):
+            response = self.client.get("/api/admin/watches")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["smtp_configured"])
+
+        token_patch, verify_patch, admin_patch = self._admin_patches()
+        queued = {"id": "w1", "status": "active"}
+        with token_patch, verify_patch, admin_patch, \
+                patch.object(admin_router.watch_service, "queue_watch_run", return_value=queued) as queue, \
+                patch.object(admin_router.watch_scheduler, "wake_watch_scheduler") as wake:
+            response = self.client.post("/api/admin/watches/w1/run", json={})
+        self.assertEqual(response.status_code, 200)
+        queue.assert_called_once_with("w1")
+        wake.assert_called_once_with()
+        self.assertTrue(response.json()["run_requested"])
+
+    def test_admin_test_email_uses_verified_admin_address(self):
+        token_patch, verify_patch, admin_patch = self._admin_patches()
+        user = SimpleNamespace(email="admin@example.test", email_verified=True)
+        with token_patch, verify_patch, admin_patch, \
+                patch.object(admin_router.mailer, "is_configured", return_value=True), \
+                patch.object(admin_router.auth, "get_user", return_value=user), \
+                patch.object(admin_router.mailer, "send_message", new_callable=AsyncMock, return_value=True) as send:
+            response = self.client.post("/api/admin/watches/test-email", json={})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["recipient"], "admin@example.test")
+        send.assert_awaited_once()

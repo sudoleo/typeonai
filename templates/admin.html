@@ -315,12 +315,31 @@
             box-shadow: none !important;
         }
 
+        /* Consensus Watch diagnostics */
+        .watch-admin-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+        .watch-admin-row {
+            display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px;
+            padding: 12px 0; border-bottom: 1px solid var(--input-border);
+        }
+        .watch-admin-row:last-child { border-bottom: none; }
+        .watch-admin-question { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .watch-admin-meta { grid-column: 1 / -1; font-size: 0.8em; color: var(--sidebar-text-muted); }
+        .watch-admin-actions { display: flex; gap: 6px; align-items: center; }
+        .watch-admin-actions button { white-space: nowrap; }
+        .watch-model-grid { display: grid; grid-template-columns: auto minmax(180px, 1fr) minmax(180px, 1fr); gap: 8px 12px; align-items: center; margin: 12px 0 22px; }
+        .watch-model-grid .watch-model-head { font-size: 0.75em; font-weight: 700; color: var(--sidebar-text-muted); text-transform: uppercase; }
+        .watch-model-provider { font-size: 0.84em; font-weight: 650; text-transform: capitalize; }
+        .watch-model-select { width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid var(--input-border); border-radius: var(--radius-xs); background: var(--input-bg); color: var(--text-color); }
+
         .admin-tab-panel[hidden] { display: none; }
 
         @media (max-width: 820px) {
             .providers-grid { grid-template-columns: 1fr; }
             .limits-grid { grid-template-columns: 1fr; }
             .limit-row { grid-template-columns: 1fr; }
+            .watch-model-grid { grid-template-columns: 1fr; }
+            .watch-model-grid .watch-model-head { display: none; }
+            .watch-model-provider { margin-top: 8px; }
             .admin-savebar { top: 58px; flex-wrap: wrap; }
         }
     </style>
@@ -391,7 +410,7 @@
         // ==============================
         // Tabs
         // ==============================
-        const TAB_IDS = ['models', 'consensus', 'limits', 'shares'];
+        const TAB_IDS = ['models', 'consensus', 'limits', 'shares', 'watches'];
         function activateTab(tabId) {
             if (!TAB_IDS.includes(tabId)) tabId = 'models';
             TAB_IDS.forEach(id => {
@@ -460,6 +479,47 @@
             return span;
         }
 
+        function renderWatchModelConfig() {
+            const container = document.getElementById('watchModelConfig');
+            if (!container) return;
+            container.innerHTML = '';
+            ['Provider', 'Free Watch', 'Pro Watch'].forEach(text => {
+                const head = document.createElement('div');
+                head.className = 'watch-model-head';
+                head.textContent = text;
+                container.appendChild(head);
+            });
+            const premium = new Set(globalModelsData.premium || []);
+            const configured = globalModelsData.watch_models || {};
+            providers.forEach(provider => {
+                const label = document.createElement('div');
+                label.className = 'watch-model-provider';
+                label.textContent = provider;
+                container.appendChild(label);
+                ['free', 'pro'].forEach(tier => {
+                    const select = document.createElement('select');
+                    select.className = 'watch-model-select';
+                    select.dataset.watchTier = tier;
+                    select.dataset.provider = provider;
+                    const disabled = document.createElement('option');
+                    disabled.value = '';
+                    disabled.textContent = 'Disabled';
+                    select.appendChild(disabled);
+                    (globalModelsData[provider] || []).forEach(model => {
+                        if (tier === 'free' && (premium.has(model) || isEarly(model))) return;
+                        const option = document.createElement('option');
+                        option.value = model;
+                        option.textContent = labelFor(model) || model;
+                        if (option.textContent !== model) option.textContent += ` (${model})`;
+                        select.appendChild(option);
+                    });
+                    select.value = ((configured[tier] || {})[provider]) || '';
+                    select.addEventListener('change', markDirty);
+                    container.appendChild(select);
+                });
+            });
+        }
+
         // ==============================
         // Rendering
         // ==============================
@@ -510,6 +570,7 @@
             renderConsensusModels();
             renderDeepThinkSelect();
             renderJudgeSelects();
+            renderWatchModelConfig();
         }
 
         function createModelRow(provider, modelName, isPremium, isConsensus, isDefault) {
@@ -1057,6 +1118,7 @@
                 judge_models: currentJudgeModels(),
                 judge_models_pro: currentProJudgeModels(),
                 judge_families: currentJudgeFamilies(),
+                watch_models: { free: {}, pro: {} },
                 defaults: {},
                 limits: {}
             };
@@ -1096,6 +1158,16 @@
                     }
                 });
             });
+
+            document.querySelectorAll('[data-watch-tier][data-provider]').forEach(select => {
+                if (select.value) data.watch_models[select.dataset.watchTier][select.dataset.provider] = select.value;
+            });
+            for (const tier of ['free', 'pro']) {
+                if (Object.keys(data.watch_models[tier]).length < 2) {
+                    setStatus(`Select at least two ${tier} Watch models.`, true);
+                    return;
+                }
+            }
 
             try {
                 const response = await fetch('/api/admin/models', {
@@ -1269,11 +1341,107 @@
         document.getElementById('loadReportedSharesBtn').addEventListener('click', () => loadShares('reported'));
         document.getElementById('loadAllSharesBtn').addEventListener('click', () => loadShares('all'));
 
+        // === Consensus Watch diagnostics ===
+        function watchesStatus(message, isError) {
+            const el = document.getElementById('watchesStatus');
+            el.textContent = message || '';
+            el.className = isError ? 'error' : 'success';
+        }
+
+        function formatAdminTime(value) {
+            if (!value) return 'never';
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+        }
+
+        function renderAdminWatches(watches) {
+            const container = document.getElementById('watchesContainer');
+            container.innerHTML = '';
+            if (!watches.length) {
+                container.textContent = 'No Consensus Watches exist.';
+                return;
+            }
+            watches.forEach(watch => {
+                const row = document.createElement('div');
+                row.className = 'watch-admin-row';
+                const question = document.createElement('a');
+                question.className = 'watch-admin-question';
+                question.href = watch.share_path || '#';
+                question.target = '_blank';
+                question.rel = 'noopener';
+                question.textContent = watch.question || '(untitled)';
+
+                const actions = document.createElement('div');
+                actions.className = 'watch-admin-actions';
+                const queue = actionBtn('Run now', async () => {
+                    if (!confirm('Run this watch now? This performs real LLM calls and applies its configured e-mail rule.')) return;
+                    queue.disabled = true;
+                    watchesStatus('Starting watch…', false);
+                    try {
+                        await shareAdminRequest('POST', `/api/admin/watches/${encodeURIComponent(watch.id)}/run`, {});
+                        watchesStatus('Watch queued and scheduler started. Reload shortly to see the result.', false);
+                        await loadAdminWatches();
+                    } catch (err) {
+                        watchesStatus(err.message, true);
+                    } finally {
+                        queue.disabled = false;
+                    }
+                });
+                queue.className = 'admin-btn secondary';
+                const leaseActive = watch.claimed_until && new Date(watch.claimed_until).getTime() > Date.now();
+                queue.disabled = watch.status !== 'active' || leaseActive;
+                queue.title = watch.status !== 'active' ? 'Only active watches can run' : 'Start now through the normal leased scheduler path';
+                actions.appendChild(queue);
+
+                const metaLine = document.createElement('div');
+                metaLine.className = 'watch-admin-meta';
+                metaLine.textContent = [
+                    `Status: ${watch.status}`,
+                    `Mode: ${watch.email_mode}`,
+                    `Interval: ${watch.interval}${watch.run_time ? ` at ${watch.run_time} (${watch.timezone})` : ''}`,
+                    `Next: ${formatAdminTime(watch.next_run_at)}`,
+                    `Last: ${formatAdminTime(watch.last_run_at)}`,
+                    `Failures: ${watch.consecutive_failures}`,
+                    `Owner: ${watch.owner_uid}`
+                ].join(' · ');
+                row.append(question, actions, metaLine);
+                container.appendChild(row);
+            });
+        }
+
+        async function loadAdminWatches() {
+            watchesStatus('Loading…', false);
+            try {
+                const data = await shareAdminRequest('GET', '/api/admin/watches');
+                document.getElementById('smtpConfigState').textContent = data.smtp_configured ? 'SMTP configured' : 'SMTP not configured';
+                renderAdminWatches(data.watches || []);
+                watchesStatus('', false);
+            } catch (err) {
+                watchesStatus(err.message, true);
+            }
+        }
+
+        document.getElementById('loadWatchesBtn').addEventListener('click', loadAdminWatches);
+        document.getElementById('sendWatchTestMailBtn').addEventListener('click', async function () {
+            if (!confirm('Send a real SMTP test message to your verified admin e-mail address?')) return;
+            this.disabled = true;
+            watchesStatus('Sending test e-mail…', false);
+            try {
+                const data = await shareAdminRequest('POST', '/api/admin/watches/test-email', {});
+                watchesStatus(`Test e-mail accepted for ${data.recipient}.`, false);
+            } catch (err) {
+                watchesStatus(err.message, true);
+            } finally {
+                this.disabled = false;
+            }
+        });
+
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 const idToken = await user.getIdToken();
                 fetchModels(idToken);
                 loadShares('reported');
+                loadAdminWatches();
             } else {
                 setStatus('Please log in to access the admin panel.', true);
                 window.location.href = '/';
@@ -1303,6 +1471,7 @@
             <button type="button" data-tab="consensus" role="tab">Consensus &amp; Deep Think</button>
             <button type="button" data-tab="limits" role="tab">Limits</button>
             <button type="button" data-tab="shares" role="tab">Shared Pages</button>
+            <button type="button" data-tab="watches" role="tab">Consensus Watch</button>
         </nav>
 
         <div id="adminSavebar" class="admin-savebar">
@@ -1402,6 +1571,28 @@
                     <span id="sharesStatus" style="font-size: 0.85em;"></span>
                 </div>
                 <div id="sharesContainer">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+        </section>
+
+        <section id="tab-watches" class="admin-tab-panel" role="tabpanel" hidden>
+            <div class="admin-section">
+                <h3>Consensus Watch diagnostics</h3>
+                <p class="section-hint">
+                    Test SMTP independently or start an active watch immediately through the normal leased scheduler path.
+                    Manual runs make real model calls, write history, advance their schedule, and apply their configured e-mail rule.
+                </p>
+                <h4>Answer models by user tier</h4>
+                <p class="section-hint">Choose one model per enabled provider. At least two providers are required for each tier; Free only offers non-Premium models.</p>
+                <div id="watchModelConfig" class="watch-model-grid"></div>
+                <div class="watch-admin-toolbar">
+                    <button id="loadWatchesBtn" type="button" class="admin-btn secondary">Reload watches</button>
+                    <button id="sendWatchTestMailBtn" type="button" class="admin-btn">Send test e-mail</button>
+                    <span id="smtpConfigState" class="admin-chip">SMTP unknown</span>
+                    <span id="watchesStatus" style="font-size: 0.85em;" role="status"></span>
+                </div>
+                <div id="watchesContainer">
                     <!-- Populated by JavaScript -->
                 </div>
             </div>

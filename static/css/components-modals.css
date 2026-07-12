@@ -289,6 +289,76 @@
   box-shadow: var(--shadow-hover);
 }
 
+#loginModalContent .auth-primary-action:disabled {
+  opacity: 0.62;
+  cursor: wait;
+  transform: none;
+  box-shadow: none;
+}
+
+.auth-success {
+  margin: 0 24px 24px;
+  padding: 4px 0 0;
+  text-align: center;
+}
+
+.auth-success[hidden] {
+  display: none;
+}
+
+.auth-success-icon {
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  border: 1px solid color-mix(in srgb, var(--accent-secondary) 52%, var(--sidebar-border));
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent-secondary) 14%, transparent);
+  color: color-mix(in srgb, var(--accent-secondary) 74%, var(--text-color));
+  font-size: 1.55rem;
+  font-weight: 700;
+}
+
+.auth-success-lead,
+.auth-success-note {
+  color: var(--sidebar-text-muted);
+  font-size: 0.84rem;
+}
+
+.auth-success-lead {
+  margin: 0 0 5px !important;
+}
+
+.auth-success-email {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--text-color);
+  font-size: 0.94rem;
+}
+
+.auth-success-steps {
+  margin: 20px 0 16px;
+  padding: 16px 16px 16px 38px;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--sidebar-hover) 50%, transparent);
+  color: var(--text-color);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.auth-success-steps li + li {
+  margin-top: 7px;
+}
+
+.auth-success-note {
+  margin: 0 0 18px !important;
+  line-height: 1.45 !important;
+}
+
 .error-message {
   min-height: 0;
   color: var(--clear-button-text);

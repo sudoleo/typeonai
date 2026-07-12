@@ -9,6 +9,7 @@ import os
 import smtplib
 import ssl
 from email.message import EmailMessage
+from datetime import datetime, timezone
 
 
 def _smtp_config():
@@ -184,3 +185,19 @@ def build_paused_message(*, recipient: str, question: str, share_url: str,
         f"<p style='font-size:12px;color:#667085'><a href='{html.escape(unsubscribe_url)}'>Pause/unsubscribe</a></p></div></body></html>"
     )
     return _base_message(recipient, subject, plain, html_body)
+
+
+def build_test_message(*, recipient: str) -> EmailMessage:
+    """Small delivery probe used only by the authenticated admin endpoint."""
+    sent_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    plain = (
+        "Consensus Watch e-mail delivery is configured correctly.\n\n"
+        f"This test was requested from the admin dashboard at {sent_at}.\n"
+        "No watch was executed and no schedule was changed.\n"
+    )
+    html_body = f"""<!doctype html><html><body style="font-family:Arial,sans-serif;color:#172033;line-height:1.55">
+<div style="max-width:620px;margin:auto;padding:24px"><h1 style="font-size:22px">Consensus Watch test successful</h1>
+<p>The application connected to SMTP and submitted this message successfully.</p>
+<p style="color:#667085">Requested from the admin dashboard at {html.escape(sent_at)}. No watch was executed and no schedule was changed.</p>
+</div></body></html>"""
+    return _base_message(recipient, "Consensus Watch e-mail test", plain, html_body)
