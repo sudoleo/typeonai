@@ -8,6 +8,8 @@
 // =====================================================================
 
 (function () {
+  let dialogReturnFocus = null;
+
   function shareDialogEls() {
     return {
       modal: document.getElementById("shareModal"),
@@ -16,9 +18,32 @@
     };
   }
 
+  function setSharedModalOpen(isOpen, mode) {
+    const { modal, body } = shareDialogEls();
+    if (!modal) return;
+    if (isOpen) {
+      if (modal.style.display !== "flex") dialogReturnFocus = document.activeElement;
+      modal.classList.toggle("is-watch-dialog", mode === "watch");
+      modal.classList.toggle("is-share-dialog", mode !== "watch");
+      modal.style.display = "flex";
+      document.documentElement.classList.add("share-modal-open");
+      requestAnimationFrame(() => {
+        if (body) body.scrollTop = 0;
+      });
+      return;
+    }
+    modal.style.display = "none";
+    modal.classList.remove("is-watch-dialog", "is-share-dialog");
+    document.documentElement.classList.remove("share-modal-open");
+    if (dialogReturnFocus && dialogReturnFocus.isConnected
+        && typeof dialogReturnFocus.focus === "function") {
+      dialogReturnFocus.focus({ preventScroll: true });
+    }
+    dialogReturnFocus = null;
+  }
+
   function closeShareDialog() {
-    const { modal } = shareDialogEls();
-    if (modal) modal.style.display = "none";
+    setSharedModalOpen(false);
   }
 
   function openShareDialog(view) {
@@ -28,7 +53,7 @@
       window.App.showPopup("Please log in to share.");
       return;
     }
-    modal.style.display = "block";
+    setSharedModalOpen(true, "share");
     if (view === "list") {
       renderShareListView();
     } else {
@@ -227,6 +252,10 @@
   // Global verfügbar machen, damit z.B. das User-Icon-Menü (firebase.js)
   // die Übersicht der geteilten Links direkt öffnen kann.
   window.openShareDialog = openShareDialog;
+  window.App.sharedModal = {
+    open: (mode) => setSharedModalOpen(true, mode),
+    close: closeShareDialog
+  };
 
   (function initShareModal() {
     const modal = document.getElementById("shareModal");
@@ -235,6 +264,11 @@
     if (closeBtn) closeBtn.addEventListener("click", closeShareDialog);
     window.addEventListener("click", (event) => {
       if (event.target === modal) closeShareDialog();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && modal.style.display === "flex") {
+        closeShareDialog();
+      }
     });
   })();
 })();

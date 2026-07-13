@@ -92,7 +92,9 @@ deferred am `</body>` — `app-init.js`.
 - **`consensus-lifecycle.js`** — Consensus-Sichtbarkeit, Gate/Availability,
   Run-State, Abort/Cancel, Run-ID-Gating, Auto-Consensus-Persistenz. Exponiert die
   `window.App.consensusLifecycle.*`-Brücke (siehe §4/§8).
-- **`share-dialog.js`** — `window.openShareDialog` und Share-Liste.
+- **`share-dialog.js`** — `window.openShareDialog`, Share-Liste und die gemeinsame
+  `window.App.sharedModal.*`-Steuerung für den Share-/Watch-Dialog (einziger
+  innerer Scrollbereich, Background-Scroll-Lock, Escape/Focus-Restore).
 - **`consensus-actions.js`** — Copy/Citation/Share-Buttons am Consensus.
 - **`watch.js`** — `window.openWatchDialog` (Create-Dialog im Share-Modal) und
   `window.openWatchDashboard` (eigene Seite `/app/watches`: Vollbild-View
@@ -567,6 +569,9 @@ keinen Watch-Lauf aus und ändert keinen Zeitplan.
 - **`window.App.watch.showFeatureNudge()`** wird nach einem erfolgreichen
   Consensus-Final aufgerufen und zeigt den einmaligen, lokal dismissbaren
   Consensus-Watch-Hinweis nur für eingeloggte Nutzer mit `result_id`.
+- **`window.App.sharedModal.open(mode)` / `.close()`** koordinieren den gemeinsam
+  genutzten `#shareModal` für Share und Watch einschließlich Modusklasse,
+  Background-Scroll-Lock und Rückgabe des Fokus an den Auslöser.
 - **DOM-als-State**: `dataset.consensusAnswer`, `dataset.consensusSources`,
   `dataset.responseState`, `.excluded`-Klassen u. a. sind echte State-Quellen.
   Vorsicht beim Umbauen von

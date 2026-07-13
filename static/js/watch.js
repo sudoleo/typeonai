@@ -82,6 +82,10 @@
   }
 
   function closeDialog() {
+    if (window.App?.sharedModal?.close) {
+      window.App.sharedModal.close();
+      return;
+    }
     const { modal } = els();
     if (modal) modal.style.display = "none";
   }
@@ -166,7 +170,12 @@
     }
     const { modal } = els();
     if (!modal) return;
-    modal.style.display = "block";
+    if (window.App?.sharedModal?.open) {
+      window.App.sharedModal.open("watch");
+    } else {
+      modal.classList.add("is-watch-dialog");
+      modal.style.display = "flex";
+    }
     renderConfirm();
   }
 
@@ -175,24 +184,34 @@
     if (!body) return;
     title.textContent = "Watch this consensus";
     body.innerHTML = `
-      <p>consens.io will rerun the <strong>original question</strong> at your chosen interval and apply your selected e-mail rule after each successful run.</p>
-      <label class="watch-interval-label" for="watchVisibility">Watch page visibility</label>
-      <select id="watchVisibility" class="watch-interval-select" required>
-        <option value="" selected disabled>Choose who can open the page…</option>
-        <option value="private">Private — only my account</option>
-        <option value="public">Public — anyone with the link</option>
-      </select>
-      <p class="watch-data-note">Private pages require you to be signed in. Public pages are read-only and non-indexed unless reviewed separately.</p>
-      <label class="watch-interval-label" for="watchInterval">Check interval ${window.isUserPro ? "" : '<span class="pro-badge is-subtle">Pro: daily</span>'}</label>
-      <select id="watchInterval" class="watch-interval-select">${intervalOptions("weekly")}</select>
-      <label class="watch-interval-label" for="watchRunTime">Run time</label>
-      <input id="watchRunTime" class="watch-time-input" type="time" value="09:00" required>
-      <p class="watch-data-note">Local time in <span id="watchTimezoneLabel"></span>. The first run is scheduled after the selected interval and normally starts within 30 minutes after this time.</p>
-      <label class="watch-interval-label" for="watchEmailMode">E-mail notifications</label>
-      <select id="watchEmailMode" class="watch-interval-select watch-email-select">${emailModeOptions("changes_only")}</select>
-      ${conditionField("")}
-      <p class="watch-data-note">“Every new consensus” includes the newly generated consensus text in each successful-run e-mail.</p>
-      <p class="watch-data-note">Only the question is rerun. Attachments and follow-up context are never resent.</p>
+      <p class="watch-config-intro">Schedule automatic reruns of the <strong>original question</strong> and choose when we should e-mail you.</p>
+      <div class="watch-config-field">
+        <label class="watch-interval-label" for="watchVisibility">Page visibility</label>
+        <select id="watchVisibility" class="watch-interval-select" required>
+          <option value="" selected disabled>Choose who can open the page…</option>
+          <option value="private">Private — only my account</option>
+          <option value="public">Public — anyone with the link</option>
+        </select>
+        <p class="watch-data-note">Private requires your login. Public is read-only and non-indexed by default.</p>
+      </div>
+      <div class="watch-config-grid">
+        <div class="watch-config-field">
+          <label class="watch-interval-label" for="watchInterval">Interval ${window.isUserPro ? "" : '<span class="pro-badge is-subtle">Pro: daily</span>'}</label>
+          <select id="watchInterval" class="watch-interval-select">${intervalOptions("weekly")}</select>
+        </div>
+        <div class="watch-config-field">
+          <label class="watch-interval-label" for="watchRunTime">Run time</label>
+          <input id="watchRunTime" class="watch-time-input" type="time" value="09:00" required>
+          <p class="watch-data-note"><span id="watchTimezoneLabel"></span> · starts within about 30 minutes</p>
+        </div>
+      </div>
+      <div class="watch-config-field">
+        <label class="watch-interval-label" for="watchEmailMode">E-mail notifications</label>
+        <select id="watchEmailMode" class="watch-interval-select watch-email-select">${emailModeOptions("changes_only")}</select>
+        <p class="watch-data-note">“Every new consensus” includes the full generated answer.</p>
+        ${conditionField("")}
+      </div>
+      <p class="watch-config-assurance"><span aria-hidden="true">✓</span> Attachments and follow-up context are never resent.</p>
       <div class="share-modal-actions">
         <button type="button" id="watchConfirmBtn" class="share-primary-btn">Start watching</button>
         <button type="button" id="watchCancelBtn" class="share-secondary-btn">Cancel</button>

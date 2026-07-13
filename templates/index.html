@@ -83,11 +83,11 @@
   <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
   <script src="/static/js/consensus-lifecycle.js?v=20260626-extract1" defer></script>
   <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
-  <script src="/static/js/share-dialog.js?v=20260712-private-watch1" defer></script>
+  <script src="/static/js/share-dialog.js?v=20260713-modal-scroll1" defer></script>
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-actions.js?v=20260706-fixes2" defer></script>
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
-  <script src="/static/js/watch.js?v=20260713-watch-nudge1" defer></script>
+  <script src="/static/js/watch.js?v=20260713-modal-scroll1" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260711-tierinit1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
@@ -756,11 +756,42 @@
 
   <!-- Share-Modal: öffentliche Links erstellen/verwalten -->
   <style>
-    .share-modal-content {
-      max-width: 480px; max-height: calc(100dvh - 32px); box-sizing: border-box;
-      overflow-y: auto; overscroll-behavior: contain; text-align: left;
+    html.share-modal-open,
+    html.share-modal-open body {
+      overflow: hidden;
+      overscroll-behavior: none;
     }
-    .share-modal-content h2 { margin: 0 24px 14px 0; text-align: left; font-size: 1.12rem; line-height: 1.3; }
+    #shareModal {
+      align-items: center; justify-content: center; overflow: hidden;
+      box-sizing: border-box; padding: 16px;
+    }
+    .share-modal-content {
+      position: relative; display: flex; flex-direction: column;
+      width: min(100%, 480px); max-width: 480px; max-height: calc(100dvh - 32px);
+      box-sizing: border-box; margin: 0; padding: 0; overflow: hidden;
+      overscroll-behavior: contain; text-align: left;
+    }
+    #shareModal .close {
+      position: absolute; z-index: 3; top: 12px; right: 12px; float: none;
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; padding: 0; border: 0; border-radius: var(--radius-xs);
+      background: transparent; color: var(--sidebar-text-muted); font: inherit;
+      font-size: 1.25rem; font-weight: 400; line-height: 1; cursor: pointer;
+    }
+    #shareModal .close:hover, #shareModal .close:focus-visible {
+      background: color-mix(in srgb, var(--sidebar-hover) 72%, transparent);
+      color: var(--text-color); outline: none;
+    }
+    .share-modal-content h2 {
+      flex: 0 0 auto; margin: 0; padding: 18px 52px 15px 20px;
+      border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 62%, transparent);
+      text-align: left; font-size: 1.12rem; line-height: 1.3;
+    }
+    #shareModalBody {
+      min-height: 0; padding: 17px 20px 20px; overflow-y: auto;
+      overscroll-behavior: contain; scrollbar-width: thin;
+      scrollbar-color: color-mix(in srgb, var(--sidebar-text-muted) 34%, transparent) transparent;
+    }
     .share-modal-content p { margin: 0 0 12px; }
     .share-modal-notes { margin: 12px 0; padding-left: 18px; font-size: 0.88rem; line-height: 1.5; color: color-mix(in srgb, var(--text-color) 86%, var(--sidebar-text-muted)); }
     .share-modal-notes li { margin-bottom: 6px; padding-left: 2px; }
@@ -799,29 +830,78 @@
       box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
     }
     .share-url-row input:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border)); box-shadow: var(--liquid-focus-ring); }
-    .share-list { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; }
+    .share-list { list-style: none; margin: 0; padding: 0; max-height: none; overflow: visible; }
     .share-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent); }
     .share-list li:last-child { border-bottom: none; }
     .share-list-question { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-size: 0.9rem; }
     .share-list-actions { display: flex; gap: 6px; flex-shrink: 0; }
     .share-list-actions .share-secondary-btn, .share-list-actions .share-danger-btn { min-height: 30px; padding: 0 11px; font-size: 0.8rem; }
     .watch-public-note { margin: 14px 0; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--sidebar-border)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 7%, transparent); font-size: .87rem; line-height: 1.45; }
-    .watch-interval-label { display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; font-size: .86rem; font-weight: 650; }
-    .watch-interval-select { min-height: 34px; max-width: 150px; padding: 0 9px; border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent); border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-color); font: inherit; font-size: .82rem; }
-    .watch-time-input { min-height: 34px; padding: 0 9px; border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent); border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-color); font: inherit; font-size: .82rem; color-scheme: light dark; }
-    .watch-email-select { max-width: 250px; }
-    #watchVisibility { max-width: 100%; }
+    .watch-config-intro { color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted)); font-size: .88rem; line-height: 1.5; }
+    .watch-config-field { min-width: 0; margin-top: 14px; }
+    .watch-config-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+    .watch-interval-label { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: .8rem; font-weight: 680; }
+    .watch-interval-select, .watch-time-input {
+      width: 100%; min-height: 38px; box-sizing: border-box; padding: 0 10px;
+      border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent);
+      border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-color);
+      font: inherit; font-size: .82rem;
+    }
+    .watch-time-input { color-scheme: light dark; }
+    .watch-interval-select:focus, .watch-time-input:focus {
+      outline: none; border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border));
+      box-shadow: var(--liquid-focus-ring);
+    }
     .watch-condition-input { width: 100%; box-sizing: border-box; resize: vertical; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent); border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-color); font: inherit; font-size: .84rem; line-height: 1.4; }
     .watch-condition-input:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border)); box-shadow: var(--liquid-focus-ring); }
+    #watchConditionWrap { margin-top: 12px; }
     .watch-condition-editor { flex: 1 1 100%; display: flex; align-items: flex-end; gap: 7px; }
     .watch-condition-editor[hidden] { display: none; }
     .watch-condition-editor .watch-condition-input { flex: 1; }
-    .watch-data-note { margin-top: 9px !important; color: var(--sidebar-text-muted); font-size: .79rem; }
+    .watch-data-note { margin: 6px 0 0 !important; color: var(--sidebar-text-muted); font-size: .72rem; line-height: 1.4; }
+    .watch-config-assurance {
+      display: flex; align-items: flex-start; gap: 8px; margin: 16px 0 0 !important;
+      padding: 10px 11px; border-radius: var(--radius-sm);
+      background: color-mix(in srgb, var(--accent) 6%, transparent);
+      color: var(--sidebar-text-muted); font-size: .74rem; line-height: 1.4;
+    }
+    .watch-config-assurance > span { color: var(--accent); font-weight: 750; }
+    #shareModal.is-watch-dialog .share-modal-actions {
+      position: sticky; z-index: 2; bottom: -20px; margin: 18px -20px -20px;
+      padding: 12px 20px 14px;
+      border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 58%, transparent);
+      background: color-mix(in srgb, var(--bg-color) 12%, #ffffff);
+      box-shadow: 0 -8px 18px color-mix(in srgb, var(--bg-color) 34%, transparent);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    }
+    .dark-mode #shareModal.is-watch-dialog .share-modal-actions {
+      background: color-mix(in srgb, var(--bg-color) 86%, #202b36);
+      box-shadow: 0 -8px 20px rgba(0, 0, 0, .18);
+    }
+    @media (max-width: 600px) {
+      #shareModal { align-items: flex-end; padding: 8px 8px 0; }
+      #shareModal .share-modal-content {
+        width: 100%; max-width: none; max-height: calc(100dvh - 8px);
+        border-bottom: 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      }
+      #shareModalBody { padding: 16px 16px max(16px, env(safe-area-inset-bottom)); }
+      .share-modal-content h2 { padding: 17px 48px 14px 16px; }
+      #shareModal .close { top: 10px; right: 10px; }
+      .watch-config-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+      #shareModal.is-watch-dialog .share-modal-actions {
+        display: grid; grid-template-columns: minmax(0, 1fr) auto;
+        bottom: calc(-1 * max(16px, env(safe-area-inset-bottom)));
+        margin: 18px -16px calc(-1 * max(16px, env(safe-area-inset-bottom)));
+        padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+      }
+      #shareModal.is-watch-dialog .share-primary-btn { width: 100%; }
+      #shareModal.is-watch-dialog .share-link-btn { grid-column: 1 / -1; justify-self: center; margin-left: 0; min-height: 28px; }
+    }
     /* Die Watch-Liste lebt jetzt im Dashboard-Overlay (components-watch.css). */
   </style>
-  <div id="shareModal" class="modal">
+  <div id="shareModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="shareModalTitle">
     <div class="modal-content share-modal-content">
-      <span class="close" id="closeShareModal">&times;</span>
+      <button type="button" class="close" id="closeShareModal" aria-label="Close dialog">&times;</button>
       <h2 id="shareModalTitle">Share this consensus publicly</h2>
       <div id="shareModalBody"></div>
     </div>

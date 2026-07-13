@@ -617,10 +617,21 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn('id="watchRunTime"', source)
         self.assertIn("resolvedOptions().timeZone", source)
 
-    def test_watch_modal_scrolls_instead_of_overflowing_actions(self):
-        source = Path("templates/index.html").read_text(encoding="utf-8")
-        self.assertIn("max-height: calc(100dvh - 32px)", source)
-        self.assertIn("overflow-y: auto", source)
+    def test_watch_modal_has_one_scroll_area_and_locks_background(self):
+        html_source = Path("templates/index.html").read_text(encoding="utf-8")
+        self.assertIn("max-height: calc(100dvh - 32px)", html_source)
+        self.assertIn("html.share-modal-open", html_source)
+        self.assertIn("#shareModalBody", html_source)
+        self.assertIn("overflow-y: auto", html_source)
+        self.assertIn("#shareModal { align-items: flex-end", html_source)
+
+        share_source = Path("static/js/share-dialog.js").read_text(encoding="utf-8")
+        self.assertIn('document.documentElement.classList.add("share-modal-open")', share_source)
+        self.assertIn('modal.style.display = "flex"', share_source)
+        self.assertIn('window.App.sharedModal', share_source)
+
+        watch_source = Path("static/js/watch.js").read_text(encoding="utf-8")
+        self.assertIn('window.App.sharedModal.open("watch")', watch_source)
 
     def test_watch_dashboard_is_a_page_with_topbar_entry(self):
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
