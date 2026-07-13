@@ -1,6 +1,78 @@
 // Consensus Watch UI. Classic script/module contract: exports window.openWatchDialog
 // (create dialog + dashboard) and window.openWatchDashboard (dashboard only).
 (function () {
+  const FEATURE_NUDGE_STORAGE_KEY = "consensio.watchFeatureNudge.dismissed.v1";
+  let featureNudgeTimer = null;
+
+  function featureNudgeWasDismissed() {
+    try {
+      return localStorage.getItem(FEATURE_NUDGE_STORAGE_KEY) === "true";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function dismissWatchFeatureNudge(reason) {
+    const nudge = document.getElementById("watchFeatureNudge");
+    const wasActive = Boolean(featureNudgeTimer || nudge);
+    if (featureNudgeTimer) {
+      clearTimeout(featureNudgeTimer);
+      featureNudgeTimer = null;
+    }
+    const anchor = document.querySelector(".watch-feature-anchor");
+    if (nudge) nudge.remove();
+    if (anchor) {
+      anchor.classList.remove("has-feature-nudge");
+      anchor.closest("h2")?.classList.remove("has-watch-feature-nudge");
+    }
+    try {
+      localStorage.setItem(FEATURE_NUDGE_STORAGE_KEY, "true");
+    } catch (_) {
+      // Storage can be unavailable in hardened/private browser contexts.
+    }
+    if (wasActive) {
+      window.App?.trackAppEvent?.("app_watch_feature_nudge_dismissed", {
+        reason: reason || "dismissed"
+      });
+    }
+  }
+
+  function showWatchFeatureNudge() {
+    if (featureNudgeWasDismissed() || featureNudgeTimer
+        || document.getElementById("watchFeatureNudge")) return;
+    // Only promote an immediately usable action. Guests and failed snapshot
+    // persistence keep the normal Watch button without a marketing nudge.
+    if (!window.auth?.currentUser || !window.lastShareResultId) return;
+
+    featureNudgeTimer = setTimeout(() => {
+      featureNudgeTimer = null;
+      if (featureNudgeWasDismissed() || !window.auth?.currentUser
+          || !window.lastShareResultId) return;
+      const anchor = document.querySelector(".watch-feature-anchor");
+      if (!anchor || document.getElementById("watchFeatureNudge")) return;
+
+      const nudge = document.createElement("span");
+      nudge.id = "watchFeatureNudge";
+      nudge.className = "watch-feature-nudge";
+      nudge.setAttribute("role", "status");
+      nudge.setAttribute("aria-label", "New Consensus Watch feature");
+      nudge.innerHTML = `
+        <button type="button" class="watch-feature-nudge-close" aria-label="Dismiss new feature tip">&times;</button>
+        <span class="watch-feature-nudge-label">New</span>
+        <strong>Track this consensus</strong>
+        <span class="watch-feature-nudge-copy">Rerun the question automatically and get notified when the consensus changes.</span>
+      `;
+      nudge.querySelector(".watch-feature-nudge-close").addEventListener("click", event => {
+        event.stopPropagation();
+        dismissWatchFeatureNudge("dismissed");
+      });
+      anchor.classList.add("has-feature-nudge");
+      anchor.closest("h2")?.classList.add("has-watch-feature-nudge");
+      anchor.appendChild(nudge);
+      window.App?.trackAppEvent?.("app_watch_feature_nudge_shown");
+    }, 650);
+  }
+
   function els() {
     return {
       modal: document.getElementById("shareModal"),
@@ -749,9 +821,15 @@
     button.title = "Watch this consensus for material changes";
     button.setAttribute("aria-label", "Watch this consensus for changes");
     button.innerHTML = '<svg class="share-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg><span>Watch</span>';
-    button.addEventListener("click", () => openWatchDialog("confirm"));
+    button.addEventListener("click", () => {
+      dismissWatchFeatureNudge("opened");
+      openWatchDialog("confirm");
+    });
+    const anchor = document.createElement("span");
+    anchor.className = "watch-feature-anchor";
+    anchor.appendChild(button);
     const actions = bar.querySelector(".consensus-actions-wrapper");
-    bar.insertBefore(button, actions || null);
+    bar.insertBefore(anchor, actions || null);
   }
 
   function initTopbarWatchesLink() {
@@ -767,6 +845,9 @@
 
   window.openWatchDialog = openWatchDialog;
   window.openWatchDashboard = openWatchDashboard;
+  window.App.watch = Object.assign(window.App.watch || {}, {
+    showFeatureNudge: showWatchFeatureNudge
+  });
   initWatchButton();
   initTopbarWatchesLink();
   initWatchPageRoute();

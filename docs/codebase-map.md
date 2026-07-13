@@ -104,7 +104,10 @@ deferred am `</body>` — `app-init.js`.
   die Morning-Brief-Karte (`/api/my/watch-brief`, Toggle im selben
   `.switch`/`.slider`-Stil wie das Input-Feld). `openWatchDialog("list")`
   leitet auf die Seite um; Einstieg zusätzlich über den login-gated
-  Topbar-Link `#topbarWatchesLink` (firebase.js blendet ihn ein/aus). Die
+  Topbar-Link `#topbarWatchesLink` (firebase.js blendet ihn ein/aus). Nach dem
+  ersten erfolgreichen, speicherbaren Consensus zeigt `window.App.watch.*`
+  einmalig einen dezenten Hinweis am Watch-Button; Schließen oder Öffnen des
+  Features persistiert die Bestätigung in `localStorage`. Die
   Browser-IANA-Zeitzone wird zusammen mit `HH:MM` an das Backend gesendet.
 - **`user-tier.js`** — Free/Pro-UI, Premium-Modellstatus (`updateUserTierUI`,
   `updatePremiumModelsState`).
@@ -561,6 +564,9 @@ keinen Watch-Lauf aus und ändert keinen Zeitplan.
   (`startRun/isActiveRun/finishRun/setSynthesizing/isRunning/setGate/
   markPendingCanceled/initAutoConsensusToggle`). Run-ID-Gating nicht umgehen, sonst
   rendern alte Läufe in neue.
+- **`window.App.watch.showFeatureNudge()`** wird nach einem erfolgreichen
+  Consensus-Final aufgerufen und zeigt den einmaligen, lokal dismissbaren
+  Consensus-Watch-Hinweis nur für eingeloggte Nutzer mit `result_id`.
 - **DOM-als-State**: `dataset.consensusAnswer`, `dataset.consensusSources`,
   `dataset.responseState`, `.excluded`-Klassen u. a. sind echte State-Quellen.
   Vorsicht beim Umbauen von

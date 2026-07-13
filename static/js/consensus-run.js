@@ -616,6 +616,7 @@
           trigger,
           included_models: includedAnswerCount
         });
+        window.App.watch?.showFeatureNudge?.();
 
         const bestModelFromConsensus =
           (data.differences_data && data.differences_data.best_model) ||
