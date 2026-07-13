@@ -187,6 +187,88 @@ def build_paused_message(*, recipient: str, question: str, share_url: str,
     return _base_message(recipient, subject, plain, html_body)
 
 
+def _brief_status_label(status: str) -> str:
+    return {
+        "active": "Active",
+        "paused": "Paused",
+        "paused_error": "Paused after errors",
+    }.get(status, "Paused")
+
+
+def _brief_score_line(item: dict) -> str:
+    score = item.get("score")
+    if not isinstance(score, (int, float)):
+        return "No check completed yet"
+    previous = item.get("previous_score")
+    if isinstance(previous, (int, float)) and int(previous) != int(score):
+        arrow = "↑" if score > previous else "↓"
+        return f"{int(score)}/100 agreement ({arrow} from {int(previous)})"
+    return f"{int(score)}/100 agreement"
+
+
+def build_brief_message(*, recipient: str, date_label: str, items: list,
+                        changes_count: int, site_url: str,
+                        unsubscribe_url: str) -> EmailMessage:
+    """Daily digest over all watches of one user (no per-watch mail replaced)."""
+    watch_count = len(items)
+    subject = (
+        f"Morning brief: {changes_count} change{'s' if changes_count != 1 else ''} "
+        f"across {watch_count} watch{'es' if watch_count != 1 else ''}"
+        if changes_count else
+        f"Morning brief: your {watch_count} watch{'es' if watch_count != 1 else ''}, no material changes"
+    )
+    plain_rows, html_rows = [], []
+    for item in items:
+        question = " ".join(str(item.get("question") or "").split())
+        status_label = _brief_status_label(str(item.get("status") or ""))
+        score_line = _brief_score_line(item)
+        url = site_url + str(item.get("share_path") or "")
+        schedule = str(item.get("interval") or "").capitalize()
+        if item.get("run_time") and item.get("timezone"):
+            schedule += f" at {item['run_time']} ({item['timezone']})"
+        summaries = [
+            " ".join(str(point.get("change_summary") or "").split())
+            for point in (item.get("new_points") or [])
+            if point.get("notable") and point.get("change_summary")
+        ]
+        plain = f"- {question}\n  {status_label} · {score_line} · {schedule}\n"
+        for summary in summaries[:3]:
+            plain += f"  Change: {summary}\n"
+        plain += f"  {url}\n"
+        plain_rows.append(plain)
+
+        safe_question = html.escape(question)
+        safe_url = html.escape(url)
+        change_html = "".join(
+            f"<p style='margin:6px 0 0;font-size:13px'><strong>Change:</strong> {html.escape(summary)}</p>"
+            for summary in summaries[:3]
+        )
+        html_rows.append(
+            f"<div style='margin:0 0 14px;padding:14px 16px;border:1px solid #d8deea;border-radius:12px'>"
+            f"<p style='margin:0;font-weight:600'><a href='{safe_url}' style='color:#172033;text-decoration:none'>{safe_question}</a></p>"
+            f"<p style='margin:6px 0 0;font-size:13px;color:#667085'>{html.escape(status_label)} · {html.escape(score_line)} · {html.escape(schedule)}</p>"
+            f"{change_html}"
+            f"</div>"
+        )
+    plain = (
+        f"Your Consensus Watch morning brief — {date_label}\n\n"
+        + ("\n".join(plain_rows) if plain_rows else "You have no watches yet.\n")
+        + f"\nOpen consens.io: {site_url}/app\nUnsubscribe from this brief: {unsubscribe_url}\n"
+    )
+    intro = (
+        f"{changes_count} notable change{'s' if changes_count != 1 else ''} since your last brief."
+        if changes_count else "No material changes since your last brief."
+    )
+    html_body = f"""<!doctype html><html><body style="font-family:Arial,sans-serif;color:#172033;line-height:1.55">
+<div style="max-width:680px;margin:auto;padding:24px"><h1 style="font-size:22px">Your consensus morning brief</h1>
+<p style="color:#667085;margin-top:-6px">{html.escape(date_label)} · {html.escape(intro)}</p>
+{''.join(html_rows)}
+<p><a href="{html.escape(site_url)}/app" style="display:inline-block;background:#335cff;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px">Open your watch dashboard</a></p>
+<p style="font-size:12px;color:#667085;margin-top:32px">You receive this daily digest because you enabled the Morning Brief. <a href="{html.escape(unsubscribe_url)}">Unsubscribe from the brief</a> — individual watch alerts are unaffected.</p>
+</div></body></html>"""
+    return _base_message(recipient, subject, plain, html_body)
+
+
 def build_test_message(*, recipient: str) -> EmailMessage:
     """Small delivery probe used only by the authenticated admin endpoint."""
     sent_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")

@@ -6,13 +6,14 @@ import asyncio
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from firebase_admin import auth
 
 import app.core.config as cfg
 from app.core import security
 from app.api.routers.pages import SITE_URL
-from app.services import mailer, share_snapshots, watch_service
+from app.services import mailer, share_snapshots, watch_brief, watch_service
 from app.services.llm.base import get_system_prompt
 from app.services.llm.citations import result_text
 from app.services.llm.consensus_engine import (
@@ -323,6 +324,53 @@ async def run_watch_tick() -> int:
     return completed
 
 
+async def run_brief_tick() -> int:
+    """Deliver due Morning Briefs. Claim-advance happens transactionally per
+    brief BEFORE sending, so a crash can skip one digest but never double-send."""
+    if not mailer.is_configured():
+        return 0
+    now = watch_brief.utcnow()
+    sent = 0
+    try:
+        due_uids = await asyncio.to_thread(watch_brief.list_due_brief_uids, now=now)
+    except Exception:
+        logging.exception("Morning brief due-scan failed")
+        return 0
+    for uid in due_uids:
+        try:
+            claimed = await asyncio.to_thread(watch_brief.claim_brief, uid, now=now)
+            if not claimed:
+                continue
+            user = await asyncio.to_thread(auth.get_user, uid)
+            if not getattr(user, "email_verified", False) or not getattr(user, "email", None):
+                logging.warning("Morning brief for %s skipped: no verified e-mail", uid)
+                continue
+            items, changes = await asyncio.to_thread(
+                watch_brief.collect_brief_items, uid, since=claimed["baseline"],
+            )
+            if not items:
+                continue
+            if claimed.get("mode") == "changes_only" and changes == 0:
+                continue
+            timezone_name = str(claimed.get("timezone") or "UTC")
+            try:
+                date_label = now.astimezone(ZoneInfo(timezone_name)).strftime("%A, %d %B %Y")
+            except (ZoneInfoNotFoundError, ValueError):
+                date_label = now.strftime("%A, %d %B %Y")
+            message = mailer.build_brief_message(
+                recipient=user.email, date_label=date_label, items=items,
+                changes_count=changes, site_url=SITE_URL,
+                unsubscribe_url=SITE_URL + "/watch/brief/unsubscribe?token="
+                + watch_brief.make_brief_unsubscribe_token(uid),
+            )
+            if await mailer.send_message(message):
+                await asyncio.to_thread(watch_brief.mark_brief_sent, uid, now=now)
+                sent += 1
+        except Exception:
+            logging.exception("Morning brief delivery failed for %s", uid)
+    return sent
+
+
 def wake_watch_scheduler():
     """Wake the in-process scheduler so newly queued work starts promptly."""
     if _scheduler_wake_event is not None:
@@ -344,6 +392,12 @@ async def watch_scheduler_loop():
                 raise
             except Exception:
                 logging.exception("Consensus Watch scheduler tick failed")
+            try:
+                await run_brief_tick()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logging.exception("Morning brief scheduler tick failed")
             try:
                 await asyncio.wait_for(wake_event.wait(), timeout=TICK_SECONDS)
             except asyncio.TimeoutError:

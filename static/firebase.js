@@ -275,6 +275,10 @@ onIdTokenChanged(auth, async (user) => {
     const accountSection = document.getElementById("accountSettingsSection");
     if (accountSection) accountSection.style.display = "block";
 
+    // Prominenter Watch-Dashboard-Einstieg in der Topbar (nur eingeloggt)
+    const topbarWatchesLink = document.getElementById("topbarWatchesLink");
+    if (topbarWatchesLink) topbarWatchesLink.hidden = false;
+
     // 5) E‑Mail & Logout als Popup
     const emailInitial = user.email.charAt(0).toUpperCase();
     loginContainer.innerHTML = `
@@ -347,6 +351,9 @@ onIdTokenChanged(auth, async (user) => {
           window.updateQuestionInputAccess();
         }
         loginContainer.innerText = "Log in";
+
+        const topbarWatchesLinkOff = document.getElementById("topbarWatchesLink");
+        if (topbarWatchesLinkOff) topbarWatchesLinkOff.hidden = true;
 
         if (usageOptions) usageOptions.style.display = "none";
 

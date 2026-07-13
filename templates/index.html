@@ -56,7 +56,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260712-auth-success1">
+  <link rel="stylesheet" href="/static/style.css?v=20260713-watchpage1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -65,7 +65,7 @@
   <!-- DOMPurify (HTML Sanitizer) -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260712-auth-success1"></script>
+  <script type="module" src="/static/firebase.js?v=20260713-watchpage1"></script>
   <script type="module" src="/static/demo.js?v=20260711-demo-login1"></script>
   <script src="/static/app-ui.js?v=20260628-prompt-default2" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
@@ -87,7 +87,7 @@
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-actions.js?v=20260706-fixes2" defer></script>
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
-  <script src="/static/js/watch.js?v=20260712-watch-time1" defer></script>
+  <script src="/static/js/watch.js?v=20260713-watchpage1" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260711-tierinit1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
@@ -119,6 +119,15 @@
         <span id="proBadge" class="pro-badge" style="display: none;">PRO</span>
         <a id="upgradeLink" href="#" style="display: none;">Upgrade</a>
       </div>
+      <!-- Prominenter Einstieg ins Watch-Dashboard (nur eingeloggt sichtbar, firebase.js) -->
+      <a id="topbarWatchesLink" class="top-bar-watches" href="/app/watches" hidden
+        title="Consensus Watch — your watched questions" aria-label="Open your Consensus Watch dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path>
+          <circle cx="12" cy="12" r="2.5"></circle>
+        </svg>
+        <span>Watches</span>
+      </a>
       <!-- Neuer About-Link -->
       <div id="loginContainer" class="login-text">Log in</div>
       <script>
@@ -808,19 +817,28 @@
     .watch-condition-editor[hidden] { display: none; }
     .watch-condition-editor .watch-condition-input { flex: 1; }
     .watch-data-note { margin-top: 9px !important; color: var(--sidebar-text-muted); font-size: .79rem; }
-    .watch-list-item { align-items: flex-start !important; flex-direction: column; }
-    .watch-list-main { display: flex; width: 100%; align-items: center; gap: 9px; min-width: 0; }
-    .watch-list-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; }
-    .watch-list-controls .share-secondary-btn, .watch-list-controls .share-danger-btn { min-height: 32px; padding: 0 10px; font-size: .78rem; }
-    .watch-status { flex: 0 0 auto; border-radius: 999px; padding: 3px 8px; background: color-mix(in srgb, var(--accent) 9%, transparent); color: var(--sidebar-text-muted); font-size: .69rem; font-weight: 700; text-transform: capitalize; }
-    .watch-status-active { color: color-mix(in srgb, #15803d 78%, var(--text-color)); background: color-mix(in srgb, #22c55e 12%, transparent); }
-    .watch-status-paused_error { color: var(--clear-button-text); background: color-mix(in srgb, var(--clear-button-text) 10%, transparent); }
+    /* Die Watch-Liste lebt jetzt im Dashboard-Overlay (components-watch.css). */
   </style>
   <div id="shareModal" class="modal">
     <div class="modal-content share-modal-content">
       <span class="close" id="closeShareModal">&times;</span>
       <h2 id="shareModalTitle">Share this consensus publicly</h2>
       <div id="shareModalBody"></div>
+    </div>
+  </div>
+
+  <!-- Consensus-Watch-Seite (/app/watches): Vollbild-View unter der Topbar,
+       Übersicht aller Watches + Morning Brief. URL-Sync in watch.js. -->
+  <div id="watchDashboard" class="watch-page" hidden>
+    <div class="watch-page-inner">
+      <div class="watch-dash-header">
+        <button type="button" id="watchDashClose" class="watch-page-back">
+          <span aria-hidden="true">&larr;</span> Back to app
+        </button>
+        <h1 id="watchDashTitle">Consensus Watch</h1>
+        <p class="watch-dash-subtitle">Your watched questions, their agreement trend, and upcoming checks.</p>
+      </div>
+      <div id="watchDashBody"></div>
     </div>
   </div>
 

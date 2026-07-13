@@ -44,13 +44,13 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/app` (Haupt-App), `/admin`, `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
+| `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin`, `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (Pro, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). |
 | `users.py` | `/user_status`, `/usage`, `/delete_account`, `/track-interest`. |
 | `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus`. Beide Save-Endpunkte liefern den vollständig zusammengeführten Bookmark-Datensatz zurück, damit der Client ihn ohne Reload aktualisiert. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
-| `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches`, `/api/watch/{id}` (PATCH/DELETE) und öffentlicher, HMAC-signierter `/watch/unsubscribe`-Link. |
+| `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. kompakter History je Watch), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH) sowie öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST), `/api/admin/watches` (Diagnose-Liste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 **Zentrale Templates** (`templates/`, gerendert mit `Jinja2Templates`):
@@ -94,10 +94,18 @@ deferred am `</body>` — `app-init.js`.
   `window.App.consensusLifecycle.*`-Brücke (siehe §4/§8).
 - **`share-dialog.js`** — `window.openShareDialog` und Share-Liste.
 - **`consensus-actions.js`** — Copy/Citation/Share-Buttons am Consensus.
-- **`watch.js`** — `window.openWatchDialog`, Aktivierung neben Share,
-  explizite Public-/Private-Wahl, Intervall-/lokale Uhrzeit-/Mailmodus-/Condition-
-  Wahl und „Watched“-Verwaltung im bestehenden Modal. Die Browser-IANA-Zeitzone
-  wird zusammen mit `HH:MM` an das Backend gesendet.
+- **`watch.js`** — `window.openWatchDialog` (Create-Dialog im Share-Modal) und
+  `window.openWatchDashboard` (eigene Seite `/app/watches`: Vollbild-View
+  `#watchDashboard` unter der fixen Topbar, Styles in
+  `static/css/components-watch.css`; URL-Sync via pushState/popstate, Deep-Link
+  wartet auf den asynchronen Firebase-Auth-Status): Karten je Watch mit
+  Score/Delta/History-Sparkline, letzter Änderung, nächstem Lauf und
+  Inline-Settings (Intervall/Uhrzeit/Mailmodus/Condition, Pause/Delete) sowie
+  die Morning-Brief-Karte (`/api/my/watch-brief`, Toggle im selben
+  `.switch`/`.slider`-Stil wie das Input-Feld). `openWatchDialog("list")`
+  leitet auf die Seite um; Einstieg zusätzlich über den login-gated
+  Topbar-Link `#topbarWatchesLink` (firebase.js blendet ihn ein/aus). Die
+  Browser-IANA-Zeitzone wird zusammen mit `HH:MM` an das Backend gesendet.
 - **`user-tier.js`** — Free/Pro-UI, Premium-Modellstatus (`updateUserTierUI`,
   `updatePremiumModelsState`).
 - **`consensus-insights.js`** — strukturierte Auswertung: Claim-Badges,
@@ -317,7 +325,8 @@ app/services/llm/
 app/services/
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
-  watch_scheduler.py         Global-Lease, Tagesbudget und sequenzielle tierkonfigurierte Watch-Läufe
+  watch_brief.py             Morning-Brief-Settings (watch_briefs), transaktionaler Claim, Digest-Aggregation, Brief-Unsubscribe-Tokens
+  watch_scheduler.py         Global-Lease, Tagesbudget, sequenzielle tierkonfigurierte Watch-Läufe + run_brief_tick (Morning-Brief-Versand)
   mailer.py                  Multipart-HTML/Plaintext-SMTP-Versand via Thread-Executor
   public_markdown.py         Server-Markdown-Rendering für Share-Seiten
   differences_stats.py       Anonyme Differences-Telemetrie (differences_stats-Collection, §6)
@@ -367,6 +376,11 @@ Wichtige Verträge im Backend:
   verändern den Share-Snapshot nicht.
 - `watch_runtime` — globaler Worker-Lease und datumsgebundener Tageszähler;
   verhindert parallele Scheduler-Worker und begrenzt Watch-Versuche restartfest.
+- `watch_briefs/{uid}` — user-level Morning-Brief-Einstellungen (`enabled`,
+  `send_time` `HH:MM`, IANA-`timezone`, `mode` = `always|changes_only`,
+  `next_send_at`, `last_evaluated_at`, `last_sent_at`, `enabled_at`). Reine
+  Aggregation vorhandener Watch-/History-Daten — keine LLM-Calls, daher nicht
+  Pro-gated.
 - `benchmark_runs` — admin-only Benchmark-Dashboard-Snapshots aus lokalen Runs:
   `manifest`, `results`, `audits`, abgeleitete Fragenmatrix; **keine**
   `calls.jsonl`-Rohantworten, Prompts oder Request-Payloads.
@@ -499,6 +513,17 @@ Fehler-Retries und Resume bei. Legacy-Watches ohne Zeitfelder nutzen weiter die
 bisherige reine Intervalladdition.
 Watch-Seiten zeigen für aktuelle oder historische Watches eine kompakte Metazeile
 mit Intervall sowie letztem und ggf. nächstem Fragenlauf.
+**Morning Brief**: opt-in tägliche Digest-Mail pro Nutzer (nicht pro Watch),
+konfiguriert im Watch-Dashboard (`/api/my/watch-brief`), gespeichert in
+`watch_briefs/{uid}`. Der 30-Minuten-Loop ruft nach `run_watch_tick` ein
+`run_brief_tick` auf: fällige Briefs werden transaktional geclaimt (Zeitplan
+rückt VOR dem Versand vor — at-most-once, nie doppelt), dann wird der Digest
+aus `list_watches(include_history=True)` aggregiert (Score/Delta, notable
+Changes seit dem letzten Brief = changed-Flag oder Score-Sprung ≥15) und als
+Multipart-Mail versendet. Modus `changes_only` überspringt Briefs ohne notable
+Changes. Kein LLM-Call, kein Watch-Lease nötig; unverifizierte E-Mail-Adressen
+werden übersprungen. `/watch/brief/unsubscribe` (eigener HMAC-Token-Typ,
+gleicher `WATCH_UNSUBSCRIBE_SECRET`) deaktiviert nur den Brief.
 Im Admin-Dashboard kann eine aktive Watch fällig gestellt und der In-Process-Scheduler
 sofort aufgeweckt werden; der HTTP-Request wartet nicht auf die Modellaufrufe.
 Der manuelle Lauf verbraucht reale Modellaufrufe, schreibt reguläre History, rückt den Zeitplan vor
@@ -521,7 +546,7 @@ keinen Watch-Lauf aus und ändert keinen Zeitplan.
   `window.getConsensus`, `window.canGenerateConsensus`,
   `window.updateConsensusButtonAvailability`, `window.revealConsensusOutput` /
   `hideConsensusOutput`, `window.cancelCurrentConsensus`, `window.openShareDialog`,
-  `window.openWatchDialog`,
+  `window.openWatchDialog`, `window.openWatchDashboard`,
   `window.currentEvidenceSources`, `window.consensusCitationMeta`,
   `window.lastShareResultId`, `window.isUserPro`, `window.pendingAttachments`.
 - **`window.App.followup`** (definiert in `consensus-run.js`) ist der

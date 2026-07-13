@@ -1,0 +1,242 @@
+/* ==========================================================================
+   Consensus Watch page (/app/watches, full view below the fixed top bar)
+   + Morning Brief settings + top-bar entry point.
+   The small create/confirm dialog keeps using the share-modal styles in
+   index.html; everything here is page-only.
+   ========================================================================== */
+
+/* --- Top-bar entry point (visible when logged in, firebase.js toggles) --- */
+.top-bar-watches {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--sidebar-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text-color);
+  font-size: 0.82rem;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.top-bar-watches:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--sidebar-border));
+}
+.top-bar-watches svg { width: 16px; height: 16px; flex: 0 0 auto; }
+.top-bar-watches[hidden] { display: none; }
+
+@media (max-width: 640px) {
+  /* Auf Mobile bleibt der Einstieg sichtbar — als reines Icon. */
+  .top-bar-watches { padding: 5px 8px; }
+  .top-bar-watches span { display: none; }
+}
+
+/* --- Page shell --- */
+.watch-page {
+  position: fixed;
+  top: 45px; /* fixe Topbar-Höhe (layout.css .top-bar) bleibt sichtbar */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1400; /* über Sidebar/Sidebar-Toggle (1100/1200), unter Topbar (1500) */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Gleiche Fläche wie der Body (base.css), damit es wie eine echte Seite wirkt. */
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--bg-color) 92%, #ffffff 8%) 0%, var(--bg-color) 44%, color-mix(in srgb, var(--accent-secondary) 10%, var(--bg-color)) 100%),
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 36%, color-mix(in srgb, var(--accent-tertiary) 8%, transparent));
+  color: var(--text-color);
+}
+.watch-page[hidden] { display: none; }
+
+.watch-page-inner {
+  max-width: 980px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: clamp(18px, 4vh, 36px) clamp(12px, 3vw, 28px) 48px;
+}
+
+.watch-dash-header { text-align: left; }
+.watch-dash-header h1 {
+  margin: 10px 0 0;
+  font-size: 1.5rem;
+  line-height: 1.25;
+  text-align: left;
+}
+.watch-dash-subtitle { margin: 6px 0 0; color: var(--sidebar-text-muted); font-size: .88rem; }
+
+.watch-page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: none;
+  background: transparent;
+  padding: 4px 2px;
+  color: var(--sidebar-text-muted);
+  font: inherit;
+  font-size: .84rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.watch-page-back:hover { color: var(--text-color); text-decoration: underline; text-underline-offset: 3px; }
+
+.watch-dash-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0 4px;
+}
+.watch-dash-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--glass-bg-strong, var(--input-bg)) 55%, transparent);
+  font-size: .8rem;
+  color: var(--sidebar-text-muted);
+}
+.watch-dash-stat strong { color: var(--text-color); font-size: .86rem; }
+
+.watch-dash-section-title {
+  margin: 26px 0 10px;
+  font-size: .78rem;
+  font-weight: 750;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--sidebar-text-muted);
+}
+
+/* --- Morning Brief card --- */
+.watch-brief-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--sidebar-border));
+  border-radius: var(--radius-md, 12px);
+  background: color-mix(in srgb, var(--accent) 6%, var(--container-bg));
+}
+.watch-brief-main { flex: 1 1 260px; min-width: 0; }
+.watch-brief-title { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: .95rem; cursor: pointer; }
+.watch-brief-note { margin: 4px 0 0; color: var(--sidebar-text-muted); font-size: .79rem; line-height: 1.45; }
+.watch-brief-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.watch-brief-controls[hidden] { display: none; }
+.watch-brief-controls .watch-interval-select { max-width: 220px; }
+/* Der Toggle ist derselbe .switch/.slider wie im Input-Feld (components-controls.css). */
+.watch-brief-switch { flex: 0 0 auto; }
+
+/* --- Watch cards --- */
+.watch-dash-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+
+.watch-card {
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 78%, transparent);
+  border-radius: var(--radius-md, 12px);
+  background: color-mix(in srgb, var(--container-bg) 88%, transparent);
+  box-shadow: 0 8px 26px rgba(28, 42, 60, 0.06);
+  padding: 14px 16px;
+}
+.watch-card-top { display: flex; align-items: flex-start; gap: 10px; }
+.watch-card-question {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: .98rem;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.watch-card-question a { color: inherit; text-decoration: none; }
+.watch-card-question a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.watch-card-chips { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
+.watch-chip {
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: .68rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  color: var(--sidebar-text-muted);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  white-space: nowrap;
+}
+.watch-chip-active { color: color-mix(in srgb, #15803d 78%, var(--text-color)); background: color-mix(in srgb, #22c55e 13%, transparent); }
+.watch-chip-paused_error { color: var(--clear-button-text); background: color-mix(in srgb, var(--clear-button-text) 10%, transparent); }
+
+.watch-card-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 22px;
+  margin-top: 12px;
+}
+.watch-card-score { display: flex; align-items: baseline; gap: 8px; min-width: 150px; }
+.watch-card-score strong { font-size: 1.45rem; line-height: 1; }
+.watch-card-score .watch-score-max { color: var(--sidebar-text-muted); font-size: .8rem; font-weight: 600; }
+.watch-score-delta { font-size: .78rem; font-weight: 700; }
+.watch-score-delta.up { color: #16a34a; }
+.watch-score-delta.down { color: #dc2626; }
+.watch-score-empty { color: var(--sidebar-text-muted); font-size: .84rem; }
+
+.watch-sparkline { flex: 0 0 auto; }
+.watch-sparkline svg { display: block; }
+.watch-sparkline .spark-path { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.watch-sparkline .spark-area { fill: color-mix(in srgb, var(--accent) 14%, transparent); stroke: none; }
+.watch-sparkline .spark-dot { fill: var(--accent); }
+.watch-sparkline .spark-dot.event { fill: #d97706; }
+
+.watch-card-meta { flex: 1 1 220px; min-width: 0; font-size: .8rem; color: var(--sidebar-text-muted); line-height: 1.55; }
+.watch-card-meta .watch-meta-change { color: var(--text-color); }
+.watch-card-meta .watch-meta-change.major { color: #b45309; font-weight: 600; }
+
+.watch-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 50%, transparent);
+}
+.watch-card-actions .share-secondary-btn,
+.watch-card-actions .share-danger-btn { min-height: 31px; padding: 0 11px; font-size: .78rem; }
+.watch-card-actions .share-link-btn { font-size: .8rem; }
+.watch-card-actions .watch-card-spacer { flex: 1; }
+
+.watch-card-settings { margin-top: 12px; }
+.watch-card-settings[hidden] { display: none; }
+.watch-card-settings-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  padding: 12px 14px;
+  border: 1px dashed color-mix(in srgb, var(--sidebar-border) 78%, transparent);
+  border-radius: var(--radius-sm);
+}
+.watch-card-settings-grid .watch-field { display: flex; flex-direction: column; gap: 5px; }
+.watch-card-settings-grid .watch-field > span { font-size: .72rem; font-weight: 700; color: var(--sidebar-text-muted); }
+.watch-card-settings-grid .watch-condition-editor { align-items: flex-end; }
+
+.watch-dash-empty {
+  padding: 28px 18px;
+  border: 1px dashed color-mix(in srgb, var(--sidebar-border) 80%, transparent);
+  border-radius: var(--radius-md, 12px);
+  text-align: center;
+  color: var(--sidebar-text-muted);
+  font-size: .92rem;
+  line-height: 1.6;
+}
+
+.watch-dash-loading { padding: 24px 0; color: var(--sidebar-text-muted); font-size: .9rem; }
+
+@media (max-width: 640px) {
+  .watch-page-inner { padding: 14px 12px 40px; }
+  .watch-card-body { gap: 10px 14px; }
+  .watch-card-chips { flex-wrap: wrap; }
+}

@@ -1332,6 +1332,10 @@ a:hover {
 
 .page-content {
   display: grid;
+  /* Keep intrinsically wide children (for example the Watch chart) from
+     widening the whole share page on small screens. The child owns its
+     horizontal scrolling; the grid track stays inside the viewport. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   padding: 0 0 68px;
 }

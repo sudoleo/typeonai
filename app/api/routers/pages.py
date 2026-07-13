@@ -120,6 +120,9 @@ def benchmark(req: Request):
     return templates.TemplateResponse("benchmark.html", {"request": req})
 
 @router.get("/app", response_class=HTMLResponse)
+# Deep-Link auf das Watch-Dashboard: gleiche App-Shell, das Frontend öffnet
+# die Watch-Seite anhand des Pfads (watch.js).
+@router.get("/app/watches", response_class=HTMLResponse)
 async def read_root(request: Request):
     firebase_config = {
         "firebase_api_key": os.environ.get("FIREBASE_API_KEY"),

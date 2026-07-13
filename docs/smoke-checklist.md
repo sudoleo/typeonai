@@ -45,10 +45,23 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       Sommer-/Winterzeitwechsel hinweg.
 - [ ] Free: Daily ist als Pro markiert/gesperrt und das aktive Limit öffnet den
       bestehenden Pro-Teaser. Pro: Daily und bis zu fünf aktive Watches funktionieren.
-- [ ] „Watched“ listet Status, Intervall und Sichtbarkeit; Intervall ändern,
-      Mailmodus bzw. Condition ändern, Pause/Resume und Delete funktionieren. „Watched“ steht
-      außerdem im Nutzericon-Menü direkt unter „Shared links“. Delete lässt
-      bereits vorhandene Share-History bestehen.
+- [ ] Das Watch-Dashboard ist eine eigene Seite `/app/watches` (Topbar bleibt
+      sichtbar): erreichbar über den Topbar-Link „Watches“ (nur eingeloggt,
+      Mobile icon-only) und „Watched“ im Nutzericon-Menü; Browser-Back/Forward
+      und Deep-Link/Reload auf `/app/watches` funktionieren (vor dem Login
+      erscheint ein Hinweis statt Daten). Kopfzeile mit aktiv/pausiert-Zählung,
+      nächstem Lauf und Änderungen der letzten 7 Tage; pro Watch eine Karte mit
+      Frage, Status-/Sichtbarkeits-Chip, Agreement-Score + Delta,
+      History-Sparkline, letzter Änderung und nächstem Lauf. „Settings“ klappt
+      Intervall/Uhrzeit/Mailmodus/Condition auf; Pause/Resume und Delete
+      funktionieren. Delete lässt bereits vorhandene Share-History bestehen.
+      „← Back to app“ und ESC führen zurück. Light/Dark und Mobile ohne Overflow.
+- [ ] Morning Brief (Karte im Dashboard): Toggle aktiviert die tägliche
+      Digest-Mail mit Uhrzeit (Browser-Zeitzone) und Modus „Every morning“ /
+      „Only when something changed“; Einstellungen überleben ein erneutes
+      Öffnen. Mit Test-SMTP: Brief-Mail listet alle Watches mit Score/Delta und
+      Änderungs-Summaries; der Abmelde-Link deaktiviert nur den Brief, nicht
+      die Watch-Mails.
 - [ ] Aktive Watch-Seite zeigt bereits vor dem ersten History-Punkt in einer
       kompakten Metazeile Status, Intervall, letzten und nächsten Lauf. Mit History rendert
       sie zusätzlich SVG-Linie/Punkte und Change-Liste in Light/Dark ohne Mobile-Overflow.

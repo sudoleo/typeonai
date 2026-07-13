@@ -13,9 +13,11 @@ from fastapi.testclient import TestClient
 import app.core.config as cfg
 from app.api.routers import share as share_router
 from app.api.routers import admin as admin_router
+from app.api.routers import pages as pages_router
+from app.api.routers import watch as watch_router
 from app.core.rate_limit import limiter
 from app.services import watch_service
-from app.services import mailer, watch_scheduler
+from app.services import mailer, watch_brief, watch_scheduler
 from app.services.watch_service import WatchError
 
 
@@ -522,7 +524,10 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             else:
                 raise asyncio.CancelledError
 
-        with patch.object(watch_scheduler, "run_watch_tick", side_effect=tick):
+        with (
+            patch.object(watch_scheduler, "run_watch_tick", side_effect=tick),
+            patch.object(watch_scheduler, "run_brief_tick", new_callable=AsyncMock, return_value=0),
+        ):
             with self.assertRaises(asyncio.CancelledError):
                 await watch_scheduler.watch_scheduler_loop()
         self.assertEqual(calls, 2)
@@ -616,6 +621,393 @@ class WatchFrontendContractTests(unittest.TestCase):
         source = Path("templates/index.html").read_text(encoding="utf-8")
         self.assertIn("max-height: calc(100dvh - 32px)", source)
         self.assertIn("overflow-y: auto", source)
+
+    def test_watch_dashboard_is_a_page_with_topbar_entry(self):
+        html_source = Path("templates/index.html").read_text(encoding="utf-8")
+        self.assertIn('id="topbarWatchesLink"', html_source)
+        self.assertIn('href="/app/watches"', html_source)
+        self.assertIn('id="watchDashboard"', html_source)
+        js_source = Path("static/js/watch.js").read_text(encoding="utf-8")
+        self.assertIn('"/app/watches"', js_source)
+        self.assertIn("pushState", js_source)
+        self.assertIn("popstate", js_source)
+        # Morning-Brief-Toggle nutzt denselben switch/slider wie das Input-Feld.
+        self.assertIn('class="switch watch-brief-switch"', js_source)
+        self.assertIn('<span class="slider">', js_source)
+        firebase_source = Path("static/firebase.js").read_text(encoding="utf-8")
+        self.assertEqual(firebase_source.count('getElementById("topbarWatchesLink")'), 2)
+
+
+class WatchPageRouteTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        app = FastAPI()
+        app.state.limiter = limiter
+        app.include_router(pages_router.router)
+        cls.client = TestClient(app)
+
+    def test_watch_page_serves_app_shell_noindex(self):
+        response = self.client.get("/app/watches")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="watchDashboard"', response.text)
+        self.assertIn("noindex", response.headers.get("X-Robots-Tag", ""))
+
+
+class WatchHistorySerializationTests(unittest.TestCase):
+    def test_list_watches_can_attach_compact_history(self):
+        db = FakeDb()
+        share_id = "A" * 16
+        db.stores["shares"][share_id] = share()
+        created = watch_service.create_watch(
+            "u1", share_id=share_id, interval="weekly", is_pro=False, db=db
+        )
+        points = [
+            {"ts": datetime(2026, 7, 1, tzinfo=timezone.utc), "agreement_score": 40,
+             "changed": False, "severity": "minor", "change_summary": ""},
+            {"ts": datetime(2026, 7, 8, tzinfo=timezone.utc), "agreement_score": 70,
+             "changed": True, "severity": "major", "change_summary": "Conclusion changed."},
+        ]
+        with patch.object(watch_service.share_snapshots, "list_watch_history", return_value=points):
+            items = watch_service.list_watches("u1", db=db, include_history=True)
+        history = items[0]["history"]
+        self.assertEqual(len(history), 2)
+        self.assertEqual(history[0]["ts"], "2026-07-01T00:00:00+00:00")
+        self.assertTrue(history[1]["changed"])
+        self.assertEqual(history[1]["change_summary"], "Conclusion changed.")
+        self.assertEqual(created["id"], items[0]["id"])
+
+    def test_history_lookup_failure_degrades_to_empty_list(self):
+        db = FakeDb()
+        share_id = "A" * 16
+        db.stores["shares"][share_id] = share()
+        watch_service.create_watch("u1", share_id=share_id, interval="weekly", is_pro=False, db=db)
+        # FakeDb has no subcollections: the real lookup raises and must degrade.
+        items = watch_service.list_watches("u1", db=db, include_history=True)
+        self.assertEqual(items[0]["history"], [])
+
+    def test_serialize_history_points_caps_at_newest(self):
+        points = [
+            {"ts": datetime(2026, 7, day, tzinfo=timezone.utc), "agreement_score": day}
+            for day in range(1, 21)
+        ]
+        serialized = watch_service.serialize_history_points(points, max_items=5)
+        self.assertEqual(len(serialized), 5)
+        self.assertEqual(serialized[-1]["agreement_score"], 20)
+        self.assertEqual(serialized[0]["agreement_score"], 16)
+
+
+class BriefSettingsTests(unittest.TestCase):
+    def setUp(self):
+        self.db = FakeDb()
+
+    def test_defaults_when_no_document_exists(self):
+        brief = watch_brief.get_brief("u1", db=self.db)
+        self.assertFalse(brief["enabled"])
+        self.assertEqual(brief["send_time"], "07:00")
+        self.assertEqual(brief["mode"], "always")
+        self.assertEqual(brief["next_send_at"], "")
+
+    def test_enabling_requires_timezone_and_schedules_dst_safe(self):
+        with self.assertRaisesRegex(WatchError, "timezone"):
+            watch_brief.update_brief("u1", {"enabled": True, "send_time": "07:00"}, db=self.db)
+        now = datetime(2026, 3, 28, 10, 0, tzinfo=timezone.utc)
+        with patch.object(watch_brief, "utcnow", return_value=now):
+            brief = watch_brief.update_brief(
+                "u1", {"enabled": True, "send_time": "07:00", "timezone": "Europe/Berlin"},
+                db=self.db,
+            )
+        self.assertTrue(brief["enabled"])
+        # 29 March 2026 is after the DST switch: 07:00 Berlin == 05:00 UTC.
+        self.assertEqual(
+            self.db.stores["watch_briefs"]["u1"]["next_send_at"],
+            datetime(2026, 3, 29, 5, 0, tzinfo=timezone.utc),
+        )
+        self.assertEqual(self.db.stores["watch_briefs"]["u1"]["enabled_at"], now)
+
+    def test_time_change_while_enabled_reschedules(self):
+        now = datetime(2026, 7, 13, 10, 0, tzinfo=timezone.utc)
+        with patch.object(watch_brief, "utcnow", return_value=now):
+            watch_brief.update_brief(
+                "u1", {"enabled": True, "send_time": "07:00", "timezone": "Europe/Berlin"},
+                db=self.db,
+            )
+            watch_brief.update_brief("u1", {"send_time": "18:30", "timezone": "Europe/Berlin"}, db=self.db)
+        self.assertEqual(
+            self.db.stores["watch_briefs"]["u1"]["next_send_at"],
+            datetime(2026, 7, 13, 16, 30, tzinfo=timezone.utc),
+        )
+
+    def test_mode_and_field_validation(self):
+        with self.assertRaisesRegex(WatchError, "always or changes_only"):
+            watch_brief.update_brief("u1", {"mode": "weekly"}, db=self.db)
+        with self.assertRaisesRegex(WatchError, "Only enabled"):
+            watch_brief.update_brief("u1", {"owner_uid": "u2"}, db=self.db)
+        brief = watch_brief.update_brief("u1", {"mode": "changes_only"}, db=self.db)
+        self.assertEqual(brief["mode"], "changes_only")
+        self.assertFalse(brief["enabled"])
+
+    def test_disable_keeps_settings(self):
+        watch_brief.update_brief(
+            "u1", {"enabled": True, "send_time": "07:00", "timezone": "Europe/Berlin"},
+            db=self.db,
+        )
+        brief = watch_brief.update_brief("u1", {"enabled": False}, db=self.db)
+        self.assertFalse(brief["enabled"])
+        self.assertEqual(brief["send_time"], "07:00")
+        self.assertEqual(brief["timezone"], "Europe/Berlin")
+
+
+class BriefClaimTests(unittest.TestCase):
+    def setUp(self):
+        self.now = datetime(2026, 7, 13, 5, 1, tzinfo=timezone.utc)
+        self.store = {"u1": {
+            "enabled": True, "send_time": "07:00", "timezone": "Europe/Berlin",
+            "mode": "always", "next_send_at": self.now - timedelta(minutes=1),
+            "enabled_at": self.now - timedelta(days=3),
+        }}
+        self.ref = FakeDocRef(self.store, "u1")
+
+    def test_claim_advances_before_sending_and_prevents_double_send(self):
+        claimed = watch_brief._claim_in_transaction(FakeTransaction(), self.ref, self.now)
+        self.assertIsNotNone(claimed)
+        self.assertEqual(claimed["baseline"], self.now - timedelta(days=3))
+        self.assertGreater(self.store["u1"]["next_send_at"], self.now)
+        self.assertEqual(self.store["u1"]["last_evaluated_at"], self.now)
+        self.assertIsNone(watch_brief._claim_in_transaction(FakeTransaction(), self.ref, self.now))
+
+    def test_disabled_or_not_due_is_not_claimed(self):
+        self.store["u1"]["enabled"] = False
+        self.assertIsNone(watch_brief._claim_in_transaction(FakeTransaction(), self.ref, self.now))
+        self.store["u1"].update(enabled=True, next_send_at=self.now + timedelta(hours=1))
+        self.assertIsNone(watch_brief._claim_in_transaction(FakeTransaction(), self.ref, self.now))
+
+    def test_unschedulable_settings_disable_instead_of_hot_looping(self):
+        self.store["u1"]["timezone"] = ""
+        self.assertIsNone(watch_brief._claim_in_transaction(FakeTransaction(), self.ref, self.now))
+        self.assertFalse(self.store["u1"]["enabled"])
+
+    def test_baseline_falls_back_to_first_brief_window(self):
+        self.store["u1"].pop("enabled_at")
+        claimed = watch_brief._claim_in_transaction(FakeTransaction(), self.ref, self.now)
+        self.assertEqual(claimed["baseline"], self.now - watch_brief.FIRST_BRIEF_WINDOW)
+
+    def test_due_scan_lists_only_enabled_due_briefs(self):
+        db = FakeDb()
+        db.stores["watch_briefs"]["due"] = dict(self.store["u1"])
+        db.stores["watch_briefs"]["later"] = {
+            **self.store["u1"], "next_send_at": self.now + timedelta(hours=2),
+        }
+        db.stores["watch_briefs"]["off"] = {**self.store["u1"], "enabled": False}
+        self.assertEqual(watch_brief.list_due_brief_uids(now=self.now, db=db), ["due"])
+
+
+class BriefCollectTests(unittest.TestCase):
+    def test_notable_changes_are_counted_since_baseline(self):
+        since = datetime(2026, 7, 10, tzinfo=timezone.utc)
+        history = [
+            {"ts": "2026-07-05T00:00:00+00:00", "agreement_score": 50, "changed": True,
+             "severity": "major", "change_summary": "Old change."},
+            {"ts": "2026-07-11T00:00:00+00:00", "agreement_score": 52, "changed": False,
+             "severity": "minor", "change_summary": ""},
+            {"ts": "2026-07-12T00:00:00+00:00", "agreement_score": 80, "changed": False,
+             "severity": "minor", "change_summary": ""},
+            {"ts": "2026-07-13T00:00:00+00:00", "agreement_score": 78, "changed": True,
+             "severity": "major", "change_summary": "New conclusion."},
+        ]
+        watches = [{
+            "question": "Q", "share_path": "/s/q-a", "status": "active",
+            "interval": "weekly", "run_time": "09:00", "timezone": "Europe/Berlin",
+            "last_agreement_score": 78, "next_run_at": "", "last_run_at": "",
+            "history": history,
+        }]
+        with patch.object(watch_brief.watch_service, "list_watches", return_value=watches):
+            items, changes = watch_brief.collect_brief_items("u1", since=since, db=FakeDb())
+        # 52->80 is a score event, the last point is flagged; the pre-baseline
+        # change and the small 50->52 move do not count.
+        self.assertEqual(changes, 2)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(len(items[0]["new_points"]), 3)
+        self.assertEqual(items[0]["previous_score"], 80)
+
+
+class BriefMailTests(unittest.TestCase):
+    def _items(self):
+        return [{
+            "question": "Will the launch happen in 2026?", "share_path": "/s/launch-a",
+            "status": "active", "interval": "daily", "run_time": "09:00",
+            "timezone": "Europe/Berlin", "score": 78, "previous_score": 60,
+            "new_points": [{"notable": True, "change_summary": "A date was announced."}],
+            "next_run_at": "2026-07-14T07:00:00+00:00", "last_run_at": "",
+        }]
+
+    def test_brief_mail_is_multipart_with_summary_and_unsubscribe(self):
+        message = mailer.build_brief_message(
+            recipient="owner@example.test", date_label="Monday, 13 July 2026",
+            items=self._items(), changes_count=1, site_url="https://consens.io",
+            unsubscribe_url="https://consens.io/watch/brief/unsubscribe?token=x",
+        )
+        self.assertTrue(message.is_multipart())
+        rendered = message.as_string()
+        self.assertIn("Morning brief: 1 change across 1 watch", message["Subject"])
+        self.assertIn("Will the launch happen in 2026?", rendered)
+        self.assertIn("A date was announced.", rendered)
+        self.assertIn("78/100 agreement", rendered)
+        self.assertIn("brief/unsubscribe", rendered)
+
+    def test_brief_mail_without_changes_uses_calm_subject(self):
+        items = self._items()
+        items[0]["new_points"] = []
+        message = mailer.build_brief_message(
+            recipient="owner@example.test", date_label="Monday, 13 July 2026",
+            items=items, changes_count=0, site_url="https://consens.io",
+            unsubscribe_url="https://consens.io/watch/brief/unsubscribe?token=x",
+        )
+        self.assertIn("no material changes", message["Subject"])
+
+
+class BriefTokenTests(unittest.TestCase):
+    def setUp(self):
+        self.db = FakeDb()
+        self.now = datetime(2026, 7, 13, tzinfo=timezone.utc)
+        self.env = patch.dict(os.environ, {"WATCH_UNSUBSCRIBE_SECRET": "test-secret"})
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+
+    def test_valid_token_disables_brief(self):
+        self.db.stores["watch_briefs"]["u1"] = {"enabled": True}
+        token = watch_brief.make_brief_unsubscribe_token("u1", now=self.now)
+        with patch.object(watch_brief, "utcnow", return_value=self.now):
+            result = watch_brief.unsubscribe_brief(token, db=self.db)
+        self.assertEqual(result["uid"], "u1")
+        self.assertFalse(self.db.stores["watch_briefs"]["u1"]["enabled"])
+
+    def test_watch_token_is_not_accepted_for_brief(self):
+        token = watch_service.make_unsubscribe_token("w1", now=self.now)
+        with self.assertRaisesRegex(WatchError, "invalid"):
+            watch_brief.parse_brief_unsubscribe_token(token, now=self.now)
+
+    def test_expired_brief_token(self):
+        token = watch_brief.make_brief_unsubscribe_token("u1", now=self.now, max_age_days=1)
+        with self.assertRaisesRegex(WatchError, "expired"):
+            watch_brief.parse_brief_unsubscribe_token(token, now=self.now + timedelta(days=2))
+
+
+class BriefTickTests(unittest.IsolatedAsyncioTestCase):
+    def _claimed(self, mode="always"):
+        return {
+            "enabled": True, "send_time": "07:00", "timezone": "Europe/Berlin",
+            "mode": mode, "baseline": datetime(2026, 7, 12, 5, tzinfo=timezone.utc),
+        }
+
+    async def test_due_brief_is_sent_and_marked(self):
+        user = SimpleNamespace(email="owner@example.test", email_verified=True)
+        items = [{"question": "Q", "share_path": "/s/q-a", "status": "active",
+                  "interval": "weekly", "run_time": "", "timezone": "",
+                  "score": 70, "previous_score": None, "new_points": [],
+                  "next_run_at": "", "last_run_at": ""}]
+        with (
+            patch.object(watch_scheduler.mailer, "is_configured", return_value=True),
+            patch.object(watch_scheduler.watch_brief, "list_due_brief_uids", return_value=["u1"]),
+            patch.object(watch_scheduler.watch_brief, "claim_brief", return_value=self._claimed()),
+            patch.object(watch_scheduler.auth, "get_user", return_value=user),
+            patch.object(watch_scheduler.watch_brief, "collect_brief_items", return_value=(items, 0)),
+            patch.object(watch_scheduler.watch_brief, "make_brief_unsubscribe_token", return_value="token"),
+            patch.object(watch_scheduler.mailer, "send_message", new_callable=AsyncMock, return_value=True) as send,
+            patch.object(watch_scheduler.watch_brief, "mark_brief_sent") as mark,
+        ):
+            sent = await watch_scheduler.run_brief_tick()
+        self.assertEqual(sent, 1)
+        send.assert_awaited_once()
+        mark.assert_called_once()
+        message = send.await_args.args[0]
+        self.assertEqual(message["To"], "owner@example.test")
+
+    async def test_changes_only_brief_is_skipped_without_changes(self):
+        user = SimpleNamespace(email="owner@example.test", email_verified=True)
+        items = [{"question": "Q", "share_path": "/s/q-a", "status": "active",
+                  "interval": "weekly", "run_time": "", "timezone": "",
+                  "score": 70, "previous_score": None, "new_points": [],
+                  "next_run_at": "", "last_run_at": ""}]
+        with (
+            patch.object(watch_scheduler.mailer, "is_configured", return_value=True),
+            patch.object(watch_scheduler.watch_brief, "list_due_brief_uids", return_value=["u1"]),
+            patch.object(watch_scheduler.watch_brief, "claim_brief", return_value=self._claimed("changes_only")),
+            patch.object(watch_scheduler.auth, "get_user", return_value=user),
+            patch.object(watch_scheduler.watch_brief, "collect_brief_items", return_value=(items, 0)),
+            patch.object(watch_scheduler.mailer, "send_message", new_callable=AsyncMock) as send,
+        ):
+            sent = await watch_scheduler.run_brief_tick()
+        self.assertEqual(sent, 0)
+        send.assert_not_awaited()
+
+    async def test_unverified_owner_never_receives_a_brief(self):
+        user = SimpleNamespace(email="owner@example.test", email_verified=False)
+        with (
+            patch.object(watch_scheduler.mailer, "is_configured", return_value=True),
+            patch.object(watch_scheduler.watch_brief, "list_due_brief_uids", return_value=["u1"]),
+            patch.object(watch_scheduler.watch_brief, "claim_brief", return_value=self._claimed()),
+            patch.object(watch_scheduler.auth, "get_user", return_value=user),
+            patch.object(watch_scheduler.mailer, "send_message", new_callable=AsyncMock) as send,
+        ):
+            sent = await watch_scheduler.run_brief_tick()
+        self.assertEqual(sent, 0)
+        send.assert_not_awaited()
+
+
+class BriefRouteTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        app = FastAPI()
+        app.state.limiter = limiter
+        app.include_router(watch_router.router)
+        cls.client = TestClient(app)
+
+    def _auth_patches(self):
+        return (
+            patch.object(watch_router, "extract_id_token", return_value="tok"),
+            patch.object(watch_router, "verify_user_token", return_value="u1"),
+        )
+
+    def test_get_and_patch_brief_settings(self):
+        token_patch, verify_patch = self._auth_patches()
+        brief = {"enabled": False, "send_time": "07:00", "timezone": "", "mode": "always",
+                 "next_send_at": "", "last_sent_at": ""}
+        with token_patch, verify_patch, \
+                patch.object(watch_router.watch_brief, "get_brief", return_value=brief):
+            response = self.client.get("/api/my/watch-brief")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["brief"]["enabled"])
+
+        token_patch, verify_patch = self._auth_patches()
+        with token_patch, verify_patch, \
+                patch.object(watch_router.watch_brief, "update_brief", return_value={**brief, "enabled": True}) as update:
+            response = self.client.patch(
+                "/api/my/watch-brief",
+                json={"enabled": True, "send_time": "07:00", "timezone": "Europe/Berlin", "id_token": "x"},
+            )
+        self.assertEqual(response.status_code, 200)
+        # id_token is transport, not a setting: it must never reach the service.
+        self.assertNotIn("id_token", update.call_args.args[1])
+
+    def test_patch_brief_maps_watch_errors_to_http_400(self):
+        token_patch, verify_patch = self._auth_patches()
+        with token_patch, verify_patch, \
+                patch.object(watch_router.watch_brief, "update_brief",
+                             side_effect=WatchError("invalid_mode", "Brief mode must be always or changes_only.")):
+            response = self.client.patch("/api/my/watch-brief", json={"mode": "weekly"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_brief_unsubscribe_page(self):
+        with patch.object(watch_router.watch_brief, "unsubscribe_brief", return_value={"uid": "u1"}):
+            response = self.client.get("/watch/brief/unsubscribe?token=x")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Morning brief disabled", response.text)
+        with patch.object(watch_router.watch_brief, "unsubscribe_brief",
+                          side_effect=WatchError("invalid_token", "This unsubscribe link is invalid.")):
+            response = self.client.get("/watch/brief/unsubscribe?token=broken")
+        self.assertEqual(response.status_code, 400)
 
 
 class AdminWatchRouteTests(unittest.TestCase):

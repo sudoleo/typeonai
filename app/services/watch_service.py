@@ -31,6 +31,7 @@ UNSUBSCRIBE_MAX_AGE_DAYS = 90
 WATCH_LEASE_MINUTES = 15
 WORKER_LEASE_MINUTES = 29
 RUNTIME_COLLECTION = "watch_runtime"
+WATCH_HISTORY_POINTS = 16
 
 
 class WatchError(Exception):
@@ -233,13 +234,38 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
     return _serialize_watch(watch_id, doc, share)
 
 
-def list_watches(uid: str, db=None) -> list[dict]:
+def serialize_history_points(points, max_items=WATCH_HISTORY_POINTS) -> list[dict]:
+    """Compact, JSON-safe view of the newest history points (ascending)."""
+    serialized = []
+    for point in points[-max_items:]:
+        ts = point.get("ts")
+        serialized.append({
+            "ts": ts.isoformat() if isinstance(ts, datetime) else "",
+            "agreement_score": point.get("agreement_score"),
+            "changed": bool(point.get("changed")),
+            "severity": str(point.get("severity") or ""),
+            "change_summary": str(point.get("change_summary") or ""),
+        })
+    return serialized
+
+
+def list_watches(uid: str, db=None, include_history=False) -> list[dict]:
     db = db if db is not None else db_firestore
     items = []
     for doc in db.collection(WATCHES_COLLECTION).where("owner_uid", "==", uid).stream():
         data = doc.to_dict() or {}
-        share = share_snapshots.get_share(str(data.get("share_id") or ""), db=db) or {}
-        items.append(_serialize_watch(doc.id, data, share))
+        share_id = str(data.get("share_id") or "")
+        share = share_snapshots.get_share(share_id, db=db) or {}
+        item = _serialize_watch(doc.id, data, share)
+        if include_history:
+            try:
+                points = share_snapshots.list_watch_history(
+                    share_id, db=db, max_items=WATCH_HISTORY_POINTS,
+                )
+            except Exception:
+                points = []
+            item["history"] = serialize_history_points(points)
+        items.append(item)
     items.sort(key=lambda item: item["created_at"], reverse=True)
     return items
 
