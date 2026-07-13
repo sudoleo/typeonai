@@ -106,17 +106,20 @@ def _build_watch_page_meta(meta, history_points):
         last_run = history_points[-1].get("ts")
     timezone_name = str(meta.get("timezone") or "")
     run_time = str(meta.get("run_time") or "")
+    run_weekday = str(meta.get("run_weekday") or "")
     interval = str(meta.get("interval") or "")
+    schedule_label = interval.capitalize()
+    if interval == "weekly" and run_weekday:
+        schedule_label += f" on {run_weekday.capitalize()}"
+    if run_time and timezone_name:
+        schedule_label += f" at {run_time} ({timezone_name})"
     return {
         "status": status,
         "status_label": labels.get(status, "Paused"),
         "is_active": status == "active",
         "interval": interval,
         "interval_label": interval.capitalize(),
-        "schedule_label": (
-            f"{interval.capitalize()} at {run_time} ({timezone_name})"
-            if interval and run_time and timezone_name else interval.capitalize()
-        ),
+        "schedule_label": schedule_label,
         "last_run": _watch_datetime_view(last_run, timezone_name),
         "next_run": _watch_datetime_view(meta.get("next_run_at"), timezone_name),
         "created": _watch_datetime_view(meta.get("created_at"), timezone_name),

@@ -268,6 +268,50 @@ class WatchCrudTests(unittest.TestCase):
             datetime(2026, 3, 29, 7, 0, tzinfo=timezone.utc),
         )
 
+    def test_free_weekly_watch_uses_selected_local_weekday(self):
+        now = datetime(2026, 3, 28, 10, 0, tzinfo=timezone.utc)
+        with patch.object(watch_service, "utcnow", return_value=now):
+            created = watch_service.create_watch(
+                "u1", share_id=self.share_id, interval="weekly", is_pro=False,
+                run_weekday="wednesday", run_time="09:00",
+                timezone_name="Europe/Berlin", db=self.db,
+            )
+        self.assertEqual(created["run_weekday"], "wednesday")
+        # Wednesday after the DST switch: 09:00 Berlin == 07:00 UTC.
+        self.assertEqual(
+            self.db.stores["watches"][created["id"]]["next_run_at"],
+            datetime(2026, 4, 1, 7, 0, tzinfo=timezone.utc),
+        )
+
+    def test_weekly_run_day_can_be_updated_and_rejects_invalid_values(self):
+        created = watch_service.create_watch(
+            "u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db,
+        )
+        now = datetime(2026, 7, 13, 10, 0, tzinfo=timezone.utc)  # Monday
+        with patch.object(watch_service, "utcnow", return_value=now):
+            updated = watch_service.update_watch(
+                "u1", created["id"],
+                {"run_weekday": "friday", "run_time": "18:45", "timezone": "Europe/Berlin"},
+                False, db=self.db,
+            )
+        self.assertEqual(updated["run_weekday"], "friday")
+        self.assertEqual(
+            self.db.stores["watches"][created["id"]]["next_run_at"],
+            datetime(2026, 7, 17, 16, 45, tzinfo=timezone.utc),
+        )
+        with self.assertRaisesRegex(WatchError, "Monday through Sunday"):
+            watch_service.update_watch(
+                "u1", created["id"], {"run_weekday": "funday"}, False, db=self.db,
+            )
+
+    def test_manual_run_keeps_the_selected_weekday(self):
+        manual_run = datetime(2026, 7, 13, 10, 0, tzinfo=timezone.utc)  # Monday
+        next_run = watch_service.next_scheduled_run(
+            "weekly", "09:00", "Europe/Berlin", "friday",
+            now=manual_run, previous_scheduled=manual_run,
+        )
+        self.assertEqual(next_run, datetime(2026, 7, 17, 7, 0, tzinfo=timezone.utc))
+
     def test_run_time_update_reschedules_and_rejects_invalid_values(self):
         created = watch_service.create_watch(
             "u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db,
@@ -487,17 +531,25 @@ class MailerTests(unittest.TestCase):
         db.stores["watches"]["w1"] = {
             "owner_uid": "private-owner", "share_id": "A" * 16,
             "status": "active", "interval": "weekly", "created_at": now,
-            "run_time": "09:00", "timezone": "Europe/Berlin",
+            "run_weekday": "wednesday", "run_time": "09:00", "timezone": "Europe/Berlin",
             "last_run_at": now, "next_run_at": now + timedelta(days=7),
         }
         meta = watch_service.get_public_watch_meta("A" * 16, db=db)
         self.assertEqual(meta["interval"], "weekly")
+        self.assertEqual(meta["run_weekday"], "wednesday")
         self.assertEqual(meta["run_time"], "09:00")
         self.assertEqual(meta["timezone"], "Europe/Berlin")
         self.assertNotIn("owner_uid", meta)
 
 
 class HistoryViewTests(unittest.TestCase):
+    def test_watch_page_schedule_includes_weekday(self):
+        view = share_router._build_watch_page_meta({
+            "status": "active", "interval": "weekly", "run_weekday": "wednesday",
+            "run_time": "09:00", "timezone": "Europe/Berlin",
+        }, [])
+        self.assertEqual(view["schedule_label"], "Weekly on Wednesday at 09:00 (Europe/Berlin)")
+
     def test_svg_view_coordinates_and_change_events(self):
         points = [
             {"ts": datetime(2026, 7, 1, tzinfo=timezone.utc), "agreement_score": 25,
@@ -615,6 +667,8 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn('value="condition"', source)
         self.assertIn('id="watchVisibility"', source)
         self.assertIn('id="watchRunTime"', source)
+        self.assertIn('id="watchWeekday"', source)
+        self.assertIn("run_weekday", source)
         self.assertIn("resolvedOptions().timeZone", source)
 
     def test_watch_modal_has_one_scroll_area_and_locks_background(self):
@@ -623,7 +677,10 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn("html.share-modal-open", html_source)
         self.assertIn("#shareModalBody", html_source)
         self.assertIn("overflow-y: auto", html_source)
-        self.assertIn("#shareModal { align-items: flex-end", html_source)
+        self.assertIn("height: 100dvh", html_source)
+        self.assertIn("env(safe-area-inset-bottom)", html_source)
+        self.assertIn("#shareModal.is-watch-dialog { align-items: center; }", html_source)
+        self.assertIn("max-height: 100%", html_source)
 
         share_source = Path("static/js/share-dialog.js").read_text(encoding="utf-8")
         self.assertIn('document.documentElement.classList.add("share-modal-open")', share_source)
@@ -965,6 +1022,31 @@ class BriefTickTests(unittest.IsolatedAsyncioTestCase):
             sent = await watch_scheduler.run_brief_tick()
         self.assertEqual(sent, 0)
         send.assert_not_awaited()
+
+
+class WatchRouteTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        app = FastAPI()
+        app.state.limiter = limiter
+        app.include_router(watch_router.router)
+        cls.client = TestClient(app)
+
+    def test_create_forwards_weekday_schedule(self):
+        created = {"id": "w1", "interval": "weekly", "run_weekday": "friday"}
+        with (
+            patch.object(watch_router, "extract_id_token", return_value="tok"),
+            patch.object(watch_router, "verify_user_token", return_value="u1"),
+            patch.object(watch_router, "is_user_pro", return_value=False),
+            patch.object(watch_router.watch_service, "create_watch", return_value=created) as create,
+        ):
+            response = self.client.post("/api/watch", json={
+                "result_id": "result-1", "interval": "weekly", "visibility": "private",
+                "run_weekday": "friday", "run_time": "09:00", "timezone": "Europe/Berlin",
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["watch"]["run_weekday"], "friday")
+        self.assertEqual(create.call_args.kwargs["run_weekday"], "friday")
 
 
 class BriefRouteTests(unittest.TestCase):

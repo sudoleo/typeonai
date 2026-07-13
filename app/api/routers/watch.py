@@ -40,6 +40,7 @@ async def create_watch(request: Request, data: dict = Body(...)):
             email_mode=data.get("email_mode", "changes_only"),
             condition=data.get("condition", ""),
             visibility=data.get("visibility", "public"),
+            run_weekday=data.get("run_weekday", ""),
             run_time=data.get("run_time", ""),
             timezone_name=data.get("timezone", ""),
             is_pro=is_user_pro(uid),

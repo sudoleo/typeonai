@@ -37,12 +37,15 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 ## Consensus Watch
 - [ ] Nach erfolgreichem Consensus erscheint „Watch“ neben Share; Aktivierung
       verlangt die explizite Wahl zwischen privater Eigentümer-Seite und öffentlicher,
-      nicht indexierter Link-Seite und bietet Weekly/Monthly. Private Seiten sind in
-      einem fremden oder ausgeloggten Browser nicht lesbar.
+      nicht indexierter Link-Seite und bietet Weekly/Monthly. Ein Klick auf „Start
+      watching“ markiert fehlende Pflichtangaben direkt am jeweiligen Feld und scrollt
+      zum ersten Fehler. Der Dialog bleibt auf iPhone-Größen vollständig im sichtbaren
+      Bereich. Private Seiten sind in einem fremden oder ausgeloggten Browser nicht lesbar.
 - [ ] Lokale Run-Uhrzeit ist bei Erstellung wählbar und zeigt die erkannte Zeitzone;
-      „Watched“ erlaubt eine spätere Änderung. `next_run_at` entspricht der gewählten
-      lokalen Uhrzeit (mit bis zu 30 Minuten Scheduler-Toleranz), auch über einen
-      Sommer-/Winterzeitwechsel hinweg.
+      Weekly bietet auch Free-Nutzern einen Wochentag-Picker. „Watched“ erlaubt eine
+      spätere Änderung von Tag und Uhrzeit. `next_run_at` entspricht dem gewählten
+      lokalen Wochentag und der Uhrzeit (mit bis zu 30 Minuten Scheduler-Toleranz),
+      auch über einen Sommer-/Winterzeitwechsel hinweg.
 - [ ] Free: Daily ist als Pro markiert/gesperrt und das aktive Limit öffnet den
       bestehenden Pro-Teaser. Pro: Daily und bis zu fünf aktive Watches funktionieren.
 - [ ] Das Watch-Dashboard ist eine eigene Seite `/app/watches` (Topbar bleibt

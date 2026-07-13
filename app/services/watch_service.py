@@ -25,6 +25,9 @@ WATCH_INTERVALS = {
 }
 WATCH_STATUSES = {"active", "paused"}
 WATCH_EMAIL_MODES = {"changes_only", "condition", "every_run"}
+WATCH_WEEKDAYS = (
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+)
 WATCH_CONDITION_MAX_CHARS = 500
 WATCH_RUN_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 UNSUBSCRIBE_MAX_AGE_DAYS = 90
@@ -102,24 +105,48 @@ def validate_run_schedule(run_time, timezone_name) -> tuple[str, str]:
     return run_time, timezone_name
 
 
-def next_scheduled_run(interval: str, run_time: str, timezone_name: str, *,
+def validate_run_weekday(value, interval: str, *, has_run_time: bool) -> str:
+    """Validate the optional local weekday used by weekly schedules."""
+    normalized = str(value or "").strip().lower()
+    if not normalized:
+        return ""
+    if interval != "weekly":
+        raise WatchError("invalid_run_weekday", "A run day can only be set for weekly watches.")
+    if normalized not in WATCH_WEEKDAYS:
+        raise WatchError("invalid_run_weekday", "Run day must be Monday through Sunday.")
+    if not has_run_time:
+        raise WatchError("invalid_run_weekday", "A weekly run day requires a run time.")
+    return normalized
+
+
+def next_scheduled_run(interval: str, run_time: str, timezone_name: str, run_weekday="", *,
                        now: datetime, previous_scheduled: datetime | None = None) -> datetime:
     """Advance by the existing interval while keeping the selected local time."""
     delta = WATCH_INTERVALS[interval]
     run_time, timezone_name = validate_run_schedule(run_time, timezone_name)
+    run_weekday = validate_run_weekday(run_weekday, interval, has_run_time=bool(run_time))
     if not run_time:
         return now + delta
     zone = ZoneInfo(timezone_name)
     reference = previous_scheduled if isinstance(previous_scheduled, datetime) else now
     local_reference = reference.astimezone(zone)
     hour, minute = (int(part) for part in run_time.split(":"))
-    candidate_date = (local_reference + delta).date()
+    if interval == "weekly" and run_weekday:
+        target_weekday = WATCH_WEEKDAYS.index(run_weekday)
+        days_ahead = (target_weekday - local_reference.weekday()) % 7
+        if isinstance(previous_scheduled, datetime) and days_ahead == 0:
+            days_ahead = 7
+        candidate_date = local_reference.date() + timedelta(days=days_ahead)
+        step = timedelta(days=7)
+    else:
+        candidate_date = (local_reference + delta).date()
+        step = delta
     while True:
         local_candidate = datetime.combine(candidate_date, time(hour, minute), tzinfo=zone)
         candidate = local_candidate.astimezone(timezone.utc)
         if candidate > now:
             return candidate
-        candidate_date += delta
+        candidate_date += step
 
 
 def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> dict:
@@ -136,6 +163,7 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         "share_path": share_snapshots.share_path("" if visibility == "private" else slug, share_id),
         "question": str(share.get("question") or data.get("question") or "")[:200],
         "interval": data.get("interval") or "weekly",
+        "run_weekday": str(data.get("run_weekday") or ""),
         "run_time": str(data.get("run_time") or ""),
         "timezone": str(data.get("timezone") or ""),
         "email_mode": data.get("email_mode") or "changes_only",
@@ -172,6 +200,7 @@ def _check_active_limit(uid: str, is_pro: bool, db, *, excluding_id: str | None 
 
 def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
                  condition="", visibility="public", run_time="", timezone_name="",
+                 run_weekday="",
                  result_id=None,
                  share_id=None, db=None) -> dict:
     db = db if db is not None else db_firestore
@@ -179,6 +208,7 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
     email_mode = validate_email_mode(email_mode)
     condition = validate_condition(condition, required=email_mode == "condition")
     run_time, timezone_name = validate_run_schedule(run_time, timezone_name)
+    run_weekday = validate_run_weekday(run_weekday, interval, has_run_time=bool(run_time))
     try:
         visibility = share_snapshots.validate_share_visibility(visibility)
     except share_snapshots.ShareError as exc:
@@ -213,6 +243,7 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
         "share_id": share_id,
         "question_hash": share.get("question_hash") or share_snapshots.question_hash(share.get("question")),
         "interval": interval,
+        "run_weekday": run_weekday,
         "run_time": run_time,
         "timezone": timezone_name,
         "email_mode": email_mode,
@@ -222,7 +253,7 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
         "visibility": visibility,
         "status": "active",
         "next_run_at": next_scheduled_run(
-            interval, run_time, timezone_name, now=now,
+            interval, run_time, timezone_name, run_weekday, now=now,
         ),
         "claimed_until": None,
         "consecutive_failures": 0,
@@ -325,11 +356,13 @@ def _owned_watch(uid: str, watch_id: str, db):
 def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) -> dict:
     db = db if db is not None else db_firestore
     ref, data = _owned_watch(uid, watch_id, db)
-    allowed_changes = {"interval", "status", "email_mode", "condition", "run_time", "timezone"}
+    allowed_changes = {
+        "interval", "status", "email_mode", "condition", "run_weekday", "run_time", "timezone",
+    }
     if not changes or any(key not in allowed_changes for key in changes):
         raise WatchError(
             "invalid_request",
-            "Only interval, status, email_mode, condition, run_time, and timezone can be changed.",
+            "Only interval, status, email_mode, condition, run_weekday, run_time, and timezone can be changed.",
         )
     updates = {}
     now = utcnow()
@@ -338,18 +371,28 @@ def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) 
         interval = validate_interval(changes["interval"], is_pro)
         effective_interval = interval
         updates["interval"] = interval
-    schedule_changed = any(key in changes for key in {"interval", "run_time", "timezone"})
+    schedule_changed = any(
+        key in changes for key in {"interval", "run_weekday", "run_time", "timezone"}
+    )
     if schedule_changed:
         effective_run_time = changes.get("run_time", data.get("run_time") or "")
         effective_timezone = changes.get("timezone", data.get("timezone") or "")
         effective_run_time, effective_timezone = validate_run_schedule(
             effective_run_time, effective_timezone,
         )
+        requested_weekday = changes.get("run_weekday", data.get("run_weekday") or "")
+        if effective_interval != "weekly" and "run_weekday" not in changes:
+            requested_weekday = ""
+        effective_run_weekday = validate_run_weekday(
+            requested_weekday, effective_interval, has_run_time=bool(effective_run_time),
+        )
         updates.update(
+            run_weekday=effective_run_weekday,
             run_time=effective_run_time,
             timezone=effective_timezone,
             next_run_at=next_scheduled_run(
-                effective_interval, effective_run_time, effective_timezone, now=now,
+                effective_interval, effective_run_time, effective_timezone,
+                effective_run_weekday, now=now,
             ),
         )
     if "email_mode" in changes:
@@ -376,9 +419,10 @@ def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) 
             validate_interval(interval, is_pro)
             run_time = updates.get("run_time", data.get("run_time") or "")
             timezone_name = updates.get("timezone", data.get("timezone") or "")
+            run_weekday = updates.get("run_weekday", data.get("run_weekday") or "")
             updates.update(
                 next_run_at=next_scheduled_run(
-                    interval, run_time, timezone_name, now=now,
+                    interval, run_time, timezone_name, run_weekday, now=now,
                 ),
                 consecutive_failures=0,
             )
@@ -467,6 +511,7 @@ def get_public_watch_meta(share_id: str, db=None) -> dict | None:
     return {
         "status": data.get("status") or "paused",
         "interval": data.get("interval") or "weekly",
+        "run_weekday": str(data.get("run_weekday") or ""),
         "run_time": str(data.get("run_time") or ""),
         "timezone": str(data.get("timezone") or ""),
         "last_run_at": data.get("last_run_at"),
@@ -583,6 +628,7 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
     watch_updates = {
         "next_run_at": next_scheduled_run(
             interval, claimed.get("run_time") or "", claimed.get("timezone") or "",
+            claimed.get("run_weekday") or "",
             now=now, previous_scheduled=claimed.get("next_run_at"),
         ),
         "claimed_until": None,
@@ -630,6 +676,7 @@ def fail_watch_run(watch_id: str, claimed: dict, *, now=None, db=None) -> bool:
         "status": "paused_error" if paused else "active",
         "next_run_at": next_scheduled_run(
             interval, claimed.get("run_time") or "", claimed.get("timezone") or "",
+            claimed.get("run_weekday") or "",
             now=now, previous_scheduled=claimed.get("next_run_at"),
         ),
         "claimed_until": None,

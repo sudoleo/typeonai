@@ -224,6 +224,8 @@ def build_brief_message(*, recipient: str, date_label: str, items: list,
         score_line = _brief_score_line(item)
         url = site_url + str(item.get("share_path") or "")
         schedule = str(item.get("interval") or "").capitalize()
+        if item.get("interval") == "weekly" and item.get("run_weekday"):
+            schedule += f" on {str(item['run_weekday']).capitalize()}"
         if item.get("run_time") and item.get("timezone"):
             schedule += f" at {item['run_time']} ({item['timezone']})"
         summaries = [

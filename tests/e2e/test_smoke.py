@@ -119,16 +119,54 @@ def test_watch_dialog_requires_visibility_and_reveals_condition(app_page):
     _wait_for_all_final_answers(app_page)
     expect(app_page.locator("#consensusResponse")).to_contain_text("Mock consensus", timeout=30000)
 
+    # Dieser Test prüft nur Client-Validierung/Layout und braucht keinen echten
+    # Firestore-persistierten pending_result.
+    app_page.evaluate("() => { window.lastShareResultId = 'e2e-watch-validation'; }")
+    app_page.set_viewport_size({"width": 390, "height": 844})
     app_page.click("#consensusWatchButton")
     expect(app_page.locator("#watchVisibility")).to_be_visible()
+    dialog_box = app_page.locator("#shareModal .share-modal-content").bounding_box()
+    assert dialog_box is not None
+    assert dialog_box["y"] >= 0
+    assert dialog_box["y"] + dialog_box["height"] <= 844.5
     assert app_page.locator("#watchVisibility").input_value() == ""
     expect(app_page.locator("#watchRunTime")).to_have_value("09:00")
+    expect(app_page.locator("#watchWeekdayWrap")).to_be_visible()
+    app_page.select_option("#watchWeekday", "friday")
+    expect(app_page.locator("#watchWeekday")).to_have_value("friday")
+    app_page.select_option("#watchInterval", "monthly")
+    expect(app_page.locator("#watchWeekdayWrap")).to_be_hidden()
+    app_page.select_option("#watchInterval", "weekly")
+    expect(app_page.locator("#watchWeekdayWrap")).to_be_visible()
+    expect(app_page.locator("#watchWeekday")).to_have_value("friday")
     assert app_page.locator("#watchTimezoneLabel").text_content()
     expect(app_page.locator("#watchConditionWrap")).to_be_hidden()
+
+    app_page.click("#watchConfirmBtn")
+    expect(app_page.locator("#watchVisibilityError")).to_have_text(
+        "Choose whether this page should be private or public."
+    )
+    expect(app_page.locator("#watchVisibility")).to_have_attribute("aria-invalid", "true")
+
+    app_page.select_option("#watchVisibility", "private")
+    expect(app_page.locator("#watchVisibilityError")).to_be_hidden()
+
+    app_page.fill("#watchRunTime", "")
+    app_page.click("#watchConfirmBtn")
+    expect(app_page.locator("#watchRunTimeError")).to_have_text(
+        "Choose a run time for the automatic check."
+    )
+    expect(app_page.locator("#watchRunTime")).to_have_attribute("aria-invalid", "true")
+    app_page.fill("#watchRunTime", "09:00")
 
     app_page.select_option("#watchEmailMode", "condition")
     expect(app_page.locator("#watchConditionWrap")).to_be_visible()
     expect(app_page.locator("#watchCondition")).to_have_attribute("maxlength", "500")
+    app_page.click("#watchConfirmBtn")
+    expect(app_page.locator("#watchConditionError")).to_have_text(
+        "Enter the condition you want to monitor."
+    )
+    expect(app_page.locator("#watchCondition")).to_have_attribute("aria-invalid", "true")
 
 
 def test_exclude_model_toggles_excluded_class(app_page):

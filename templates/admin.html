@@ -1398,7 +1398,7 @@
                 metaLine.textContent = [
                     `Status: ${watch.status}`,
                     `Mode: ${watch.email_mode}`,
-                    `Interval: ${watch.interval}${watch.run_time ? ` at ${watch.run_time} (${watch.timezone})` : ''}`,
+                    `Interval: ${watch.interval}${watch.run_weekday ? ` on ${watch.run_weekday}` : ''}${watch.run_time ? ` at ${watch.run_time} (${watch.timezone})` : ''}`,
                     `Next: ${formatAdminTime(watch.next_run_at)}`,
                     `Last: ${formatAdminTime(watch.last_run_at)}`,
                     `Failures: ${watch.consecutive_failures}`,

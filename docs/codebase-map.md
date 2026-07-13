@@ -111,6 +111,8 @@ deferred am `</body>` — `app-init.js`.
   einmalig einen dezenten Hinweis am Watch-Button; Schließen oder Öffnen des
   Features persistiert die Bestätigung in `localStorage`. Die
   Browser-IANA-Zeitzone wird zusammen mit `HH:MM` an das Backend gesendet.
+  Weekly-Watches senden zusätzlich den gewählten lokalen Wochentag
+  (`run_weekday`) und können ihn im Dashboard nachträglich ändern.
 - **`user-tier.js`** — Free/Pro-UI, Premium-Modellstatus (`updateUserTierUI`,
   `updatePremiumModelsState`).
 - **`consensus-insights.js`** — strukturierte Auswertung: Claim-Badges,
@@ -372,7 +374,8 @@ Wichtige Verträge im Backend:
   `indexed`, `status`, `owner_uid`, `question_hash`, …). Public-Shares sind per
   Link lesbar; private Watch-Snapshots ausschließlich mit Eigentümer-Session.
 - `watches` — owner-gebundene Scheduling-Metadaten (`share_id`, `visibility`,
-  Intervall, optionale lokale `run_time` (`HH:MM`) + IANA-`timezone`,
+  Intervall, optionaler `run_weekday` für Weekly sowie lokale `run_time`
+  (`HH:MM`) + IANA-`timezone`,
   `email_mode` = `changes_only|condition|every_run`, private
   `condition`, `last_condition_status`, Status, nächste Ausführung,
   Lease/Fehlerzähler); keine IP-/User-Agent-Daten. Conditions werden nie in
@@ -510,12 +513,15 @@ max. 500 Zeichen lange Nutzerbedingung gegen den neuen Consensus als
 `met|not_met|unknown` bewerten und mailt nur beim Übergang zu `met`, `every_run`
 sendet nach jedem erfolgreichen Lauf genau eine Multipart-Mail inklusive neuem
 Consensus-Text. Bei der Erstellung ist `visibility=private|public` Pflicht im UI:
+fehlende Pflichtwerte werden direkt am jeweiligen Feld angezeigt; der mobile
+Create-Dialog bleibt innerhalb des dynamischen Viewports und scrollt intern.
 private Seiten erfordern die kurzlebige Eigentümer-Session, sind `noindex,nofollow`,
 `private,no-store` und erscheinen weder in Sitemap/Related noch im Report-Flow.
 Neu angelegte Watches bekommen eine lokale Ausführungszeit; das Backend berechnet
 `next_run_at` zeitzonen- und DST-fest und behält die lokale Uhrzeit bei Folge-Runs,
-Fehler-Retries und Resume bei. Legacy-Watches ohne Zeitfelder nutzen weiter die
-bisherige reine Intervalladdition.
+Fehler-Retries und Resume bei. Weekly-Watches können einen lokalen Wochentag wählen;
+Legacy-Watches ohne Wochentag bzw. Zeitfelder nutzen weiter die bisherige reine
+Intervalladdition.
 Watch-Seiten zeigen für aktuelle oder historische Watches eine kompakte Metazeile
 mit Intervall sowie letztem und ggf. nächstem Fragenlauf.
 **Morning Brief**: opt-in tägliche Digest-Mail pro Nutzer (nicht pro Watch),

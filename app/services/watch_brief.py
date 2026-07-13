@@ -219,6 +219,7 @@ def collect_brief_items(uid: str, *, since: datetime, db=None) -> tuple[list[dic
             "share_path": watch.get("share_path") or "",
             "status": watch.get("status") or "paused",
             "interval": watch.get("interval") or "weekly",
+            "run_weekday": watch.get("run_weekday") or "",
             "run_time": watch.get("run_time") or "",
             "timezone": watch.get("timezone") or "",
             "score": watch.get("last_agreement_score"),

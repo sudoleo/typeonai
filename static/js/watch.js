@@ -2,6 +2,9 @@
 // (create dialog + dashboard) and window.openWatchDashboard (dashboard only).
 (function () {
   const FEATURE_NUDGE_STORAGE_KEY = "consensio.watchFeatureNudge.dismissed.v1";
+  const WATCH_WEEKDAYS = [
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
+  ];
   let featureNudgeTimer = null;
 
   function featureNudgeWasDismissed() {
@@ -128,6 +131,29 @@
     `;
   }
 
+  function browserWeekday() {
+    const sundayFirstIndex = new Date().getDay();
+    return WATCH_WEEKDAYS[(sundayFirstIndex + 6) % 7];
+  }
+
+  function weekdayOptions(selected) {
+    const current = WATCH_WEEKDAYS.includes(selected) ? selected : browserWeekday();
+    return WATCH_WEEKDAYS.map(day =>
+      `<option value="${day}"${day === current ? " selected" : ""}>${day[0].toUpperCase() + day.slice(1)}</option>`
+    ).join("");
+  }
+
+  function formatWatchSchedule(watch) {
+    let label = String(watch.interval || "weekly");
+    if (watch.interval === "weekly" && WATCH_WEEKDAYS.includes(watch.run_weekday)) {
+      label += " on " + watch.run_weekday[0].toUpperCase() + watch.run_weekday.slice(1);
+    }
+    if (watch.run_time) {
+      label += " at " + watch.run_time + (watch.timezone ? " (" + watch.timezone + ")" : "");
+    }
+    return label;
+  }
+
   function browserTimezone() {
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -147,16 +173,62 @@
   function conditionField(value) {
     return `<div id="watchConditionWrap" hidden>
       <label class="watch-interval-label" for="watchCondition">Condition</label>
-      <textarea id="watchCondition" class="watch-condition-input" maxlength="500" rows="3" placeholder="Example: An official launch date for Germany is announced.">${escapeHtml(value)}</textarea>
-      <p class="watch-data-note">The condition is checked against each new consensus. You receive one e-mail when it changes from not met to met.</p>
+      <textarea id="watchCondition" class="watch-condition-input" maxlength="500" rows="3" placeholder="Example: An official launch date for Germany is announced." aria-describedby="watchConditionNote watchConditionError">${escapeHtml(value)}</textarea>
+      <p id="watchConditionNote" class="watch-data-note">The condition is checked against each new consensus. You receive one e-mail when it changes from not met to met.</p>
+      <p id="watchConditionError" class="watch-field-error" role="alert" hidden></p>
     </div>`;
   }
 
   function bindConditionVisibility(select, wrapper) {
     if (!select || !wrapper) return;
-    const sync = () => { wrapper.hidden = select.value !== "condition"; };
+    const sync = () => {
+      wrapper.hidden = select.value !== "condition";
+      if (wrapper.hidden) clearWatchFieldError(document.getElementById("watchCondition"));
+    };
     select.addEventListener("change", sync);
     sync();
+  }
+
+  function bindWeekdayVisibility(intervalSelect, wrapper) {
+    if (!intervalSelect || !wrapper) return;
+    const sync = () => { wrapper.hidden = intervalSelect.value !== "weekly"; };
+    intervalSelect.addEventListener("change", sync);
+    sync();
+  }
+
+  function clearWatchFieldError(field) {
+    if (!field) return;
+    field.removeAttribute("aria-invalid");
+    const error = document.getElementById(field.id + "Error");
+    if (error) {
+      error.textContent = "";
+      error.hidden = true;
+    }
+  }
+
+  function setWatchFieldError(field, message) {
+    if (!field) return;
+    field.setAttribute("aria-invalid", "true");
+    const error = document.getElementById(field.id + "Error");
+    if (error) {
+      error.textContent = message;
+      error.hidden = false;
+    }
+  }
+
+  function focusWatchField(field) {
+    if (!field) return;
+    field.scrollIntoView({ behavior: "smooth", block: "center" });
+    try {
+      field.focus({ preventScroll: true });
+    } catch (_) {
+      field.focus();
+    }
+  }
+
+  function bindWatchFieldErrorReset(field, eventName) {
+    if (!field) return;
+    field.addEventListener(eventName, () => clearWatchFieldError(field));
   }
 
   function openWatchDialog(view) {
@@ -187,22 +259,28 @@
       <p class="watch-config-intro">Schedule automatic reruns of the <strong>original question</strong> and choose when we should e-mail you.</p>
       <div class="watch-config-field">
         <label class="watch-interval-label" for="watchVisibility">Page visibility</label>
-        <select id="watchVisibility" class="watch-interval-select" required>
+        <select id="watchVisibility" class="watch-interval-select" required aria-describedby="watchVisibilityNote watchVisibilityError">
           <option value="" selected disabled>Choose who can open the page…</option>
           <option value="private">Private — only my account</option>
           <option value="public">Public — anyone with the link</option>
         </select>
-        <p class="watch-data-note">Private requires your login. Public is read-only and non-indexed by default.</p>
+        <p id="watchVisibilityNote" class="watch-data-note">Private requires your login. Public is read-only and non-indexed by default.</p>
+        <p id="watchVisibilityError" class="watch-field-error" role="alert" hidden></p>
       </div>
       <div class="watch-config-grid">
         <div class="watch-config-field">
           <label class="watch-interval-label" for="watchInterval">Interval ${window.isUserPro ? "" : '<span class="pro-badge is-subtle">Pro: daily</span>'}</label>
           <select id="watchInterval" class="watch-interval-select">${intervalOptions("weekly")}</select>
+          <div id="watchWeekdayWrap" class="watch-weekday-wrap">
+            <label class="watch-interval-label" for="watchWeekday">Run day</label>
+            <select id="watchWeekday" class="watch-interval-select">${weekdayOptions(browserWeekday())}</select>
+          </div>
         </div>
         <div class="watch-config-field">
           <label class="watch-interval-label" for="watchRunTime">Run time</label>
-          <input id="watchRunTime" class="watch-time-input" type="time" value="09:00" required>
-          <p class="watch-data-note"><span id="watchTimezoneLabel"></span> · starts within about 30 minutes</p>
+          <input id="watchRunTime" class="watch-time-input" type="time" value="09:00" required aria-describedby="watchRunTimeNote watchRunTimeError">
+          <p id="watchRunTimeNote" class="watch-data-note"><span id="watchTimezoneLabel"></span> · starts within about 30 minutes</p>
+          <p id="watchRunTimeError" class="watch-field-error" role="alert" hidden></p>
         </div>
       </div>
       <div class="watch-config-field">
@@ -227,6 +305,16 @@
       document.getElementById("watchEmailMode"),
       document.getElementById("watchConditionWrap")
     );
+    bindWeekdayVisibility(
+      document.getElementById("watchInterval"),
+      document.getElementById("watchWeekdayWrap")
+    );
+    const visibilitySelect = document.getElementById("watchVisibility");
+    const runTimeInput = document.getElementById("watchRunTime");
+    const conditionInput = document.getElementById("watchCondition");
+    bindWatchFieldErrorReset(visibilitySelect, "change");
+    bindWatchFieldErrorReset(runTimeInput, "input");
+    bindWatchFieldErrorReset(conditionInput, "input");
     const confirm = document.getElementById("watchConfirmBtn");
     if (!window.lastShareResultId) {
       confirm.disabled = true;
@@ -236,19 +324,24 @@
       if (!window.lastShareResultId) return;
       const visibility = document.getElementById("watchVisibility").value;
       const emailMode = document.getElementById("watchEmailMode").value;
-      const condition = document.getElementById("watchCondition").value.trim();
-      const runTime = document.getElementById("watchRunTime").value;
+      const condition = conditionInput.value.trim();
+      const runTime = runTimeInput.value;
+      [visibilitySelect, runTimeInput, conditionInput].forEach(clearWatchFieldError);
+      const invalidFields = [];
       if (!visibility) {
-        popup("Choose whether the watch page is private or public.");
-        return;
-      }
-      if (emailMode === "condition" && !condition) {
-        popup("Enter the condition you want to monitor.");
-        document.getElementById("watchCondition").focus();
-        return;
+        setWatchFieldError(visibilitySelect, "Choose whether this page should be private or public.");
+        invalidFields.push(visibilitySelect);
       }
       if (!runTime) {
-        popup("Choose a run time.");
+        setWatchFieldError(runTimeInput, "Choose a run time for the automatic check.");
+        invalidFields.push(runTimeInput);
+      }
+      if (emailMode === "condition" && !condition) {
+        setWatchFieldError(conditionInput, "Enter the condition you want to monitor.");
+        invalidFields.push(conditionInput);
+      }
+      if (invalidFields.length) {
+        focusWatchField(invalidFields[0]);
         return;
       }
       this.disabled = true;
@@ -257,6 +350,8 @@
         const data = await api("POST", "/api/watch", {
           result_id: window.lastShareResultId,
           interval: document.getElementById("watchInterval").value,
+          run_weekday: document.getElementById("watchInterval").value === "weekly"
+            ? document.getElementById("watchWeekday").value : "",
           email_mode: emailMode,
           condition: condition,
           visibility: visibility,
@@ -284,9 +379,7 @@
         <a id="watchOpenLink" class="share-secondary-btn" target="_blank" rel="noopener">Open history page</a>
         <button type="button" id="watchListLink" class="share-link-btn">Open dashboard</button>
       </div>`;
-    body.querySelector("p strong").textContent = watch.run_time
-      ? `${watch.interval} at ${watch.run_time} (${watch.timezone})`
-      : watch.interval;
+    body.querySelector("p strong").textContent = formatWatchSchedule(watch);
     document.getElementById("watchMailSummary").textContent = watch.email_mode === "every_run"
       ? "You will receive every new consensus including its content."
       : watch.email_mode === "condition"
@@ -618,9 +711,7 @@
     } else if (watch.last_run_at) {
       metaLines.push(`Last check ${escapeHtml(relativeTime(watch.last_run_at))} — no material change.`);
     }
-    const scheduleBits = [watch.interval];
-    if (watch.run_time) scheduleBits.push("at " + watch.run_time + (watch.timezone ? " (" + watch.timezone + ")" : ""));
-    let scheduleLine = escapeHtml(scheduleBits.join(" "));
+    let scheduleLine = escapeHtml(formatWatchSchedule(watch));
     if (watch.status === "active" && watch.next_run_at) {
       scheduleLine += " · next check " + escapeHtml(formatDateTime(watch.next_run_at));
     }
@@ -687,15 +778,49 @@
     const select = document.createElement("select");
     select.className = "watch-interval-select";
     select.innerHTML = intervalOptions(watch.interval);
+    const weekdaySelect = document.createElement("select");
+    weekdaySelect.className = "watch-interval-select";
+    weekdaySelect.innerHTML = weekdayOptions(watch.run_weekday);
+    const weekdayField = field("Run day", weekdaySelect);
+    const syncWeekdayField = () => {
+      weekdayField.hidden = select.value !== "weekly";
+    };
+    syncWeekdayField();
     select.addEventListener("change", async () => {
+      const previousInterval = watch.interval;
       select.disabled = true;
+      weekdaySelect.disabled = true;
       try {
-        await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), { interval: select.value });
+        const data = await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), {
+          interval: select.value,
+          run_weekday: select.value === "weekly" ? weekdaySelect.value : ""
+        });
+        watch.interval = data.watch.interval;
+        watch.run_weekday = data.watch.run_weekday;
+        syncWeekdayField();
         popup("Watch interval updated.");
       } catch (error) {
         popup("Update failed: " + error.message);
-        select.value = watch.interval;
-      } finally { select.disabled = false; }
+        select.value = previousInterval;
+        syncWeekdayField();
+      } finally {
+        select.disabled = false;
+        weekdaySelect.disabled = false;
+      }
+    });
+    weekdaySelect.addEventListener("change", async () => {
+      const previousWeekday = watch.run_weekday || browserWeekday();
+      weekdaySelect.disabled = true;
+      try {
+        const data = await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), {
+          run_weekday: weekdaySelect.value
+        });
+        watch.run_weekday = data.watch.run_weekday;
+        popup("Weekly run day updated.");
+      } catch (error) {
+        popup("Update failed: " + error.message);
+        weekdaySelect.value = previousWeekday;
+      } finally { weekdaySelect.disabled = false; }
     });
     const timeInput = document.createElement("input");
     timeInput.type = "time";
@@ -770,6 +895,7 @@
 
     grid.append(
       field("Interval", select),
+      weekdayField,
       field("Run time", timeInput),
       field("E-mail notifications", emailSelect),
       conditionEditor
