@@ -316,12 +316,22 @@
     bindWatchFieldErrorReset(runTimeInput, "input");
     bindWatchFieldErrorReset(conditionInput, "input");
     const confirm = document.getElementById("watchConfirmBtn");
-    if (!window.lastShareResultId) {
+    if (!window.lastShareResultId && window.currentBookmarkShareResultContext) {
+      confirm.disabled = true;
+      confirm.textContent = "Preparing saved consensus…";
+      window.resolveCurrentShareResultId?.().then(resultId => {
+        if (!confirm.isConnected) return;
+        confirm.disabled = !resultId;
+        confirm.textContent = resultId ? "Start watching" : "Saved consensus unavailable";
+      });
+    } else if (!window.lastShareResultId) {
       confirm.disabled = true;
       confirm.textContent = "Run a consensus first";
     }
     confirm.addEventListener("click", async function () {
-      if (!window.lastShareResultId) return;
+      const resultId = await (window.resolveCurrentShareResultId?.()
+        || Promise.resolve(window.lastShareResultId));
+      if (!resultId) return;
       const visibility = document.getElementById("watchVisibility").value;
       const emailMode = document.getElementById("watchEmailMode").value;
       const condition = conditionInput.value.trim();
@@ -348,7 +358,7 @@
       this.textContent = "Starting…";
       try {
         const data = await api("POST", "/api/watch", {
-          result_id: window.lastShareResultId,
+          result_id: resultId,
           interval: document.getElementById("watchInterval").value,
           run_weekday: document.getElementById("watchInterval").value === "weekly"
             ? document.getElementById("watchWeekday").value : "",

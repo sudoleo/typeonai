@@ -122,13 +122,22 @@
     document.getElementById("shareCancelBtn").addEventListener("click", closeShareDialog);
     document.getElementById("shareListLink").addEventListener("click", renderShareListView);
     document.getElementById("watchListLink").addEventListener("click", () => window.openWatchDialog?.("list"));
-    if (!window.lastShareResultId) {
-      const confirmBtn = document.getElementById("shareConfirmBtn");
+    const confirmBtn = document.getElementById("shareConfirmBtn");
+    if (!window.lastShareResultId && window.currentBookmarkShareResultContext) {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "Preparing saved consensus…";
+      window.resolveCurrentShareResultId?.().then(resultId => {
+        if (!confirmBtn.isConnected) return;
+        confirmBtn.disabled = !resultId;
+        confirmBtn.textContent = resultId ? "Create public link" : "Saved consensus unavailable";
+      });
+    } else if (!window.lastShareResultId) {
       confirmBtn.disabled = true;
       confirmBtn.textContent = "Run a consensus first";
     }
-    document.getElementById("shareConfirmBtn").addEventListener("click", async function () {
-      const resultId = window.lastShareResultId;
+    confirmBtn.addEventListener("click", async function () {
+      const resultId = await (window.resolveCurrentShareResultId?.()
+        || Promise.resolve(window.lastShareResultId));
       if (!resultId) {
         window.App.showPopup("Please run a consensus first.");
         return;

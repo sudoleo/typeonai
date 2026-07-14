@@ -345,6 +345,7 @@ onIdTokenChanged(auth, async (user) => {
 
     } else {
         // Cleanup bei Logout
+        window.clearPreparedBookmarkShareResult?.();
         fetch("/auth/session", { method: "DELETE" }).catch(() => {});
         localStorage.removeItem("id_token");
         if (typeof window.updateQuestionInputAccess === "function") {
@@ -957,7 +958,8 @@ async function saveBookmark(question, response, modelName, mode) {
 
 window.saveBookmark = saveBookmark;
 
-async function saveBookmarkConsensus(question, consensusText, differencesText, differencesData) {
+async function saveBookmarkConsensus(question, consensusText, differencesText, differencesData,
+                                     resultId, consensusModel, modelLabels) {
   if (!auth.currentUser) return;
   const id_token = await auth.currentUser?.getIdToken(/* forceRefresh= */ false);
   if (!id_token) return;
@@ -977,7 +979,10 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
          // Strukturierte Differences (Verdict, Karten, Badges) mitspeichern,
          // damit das Bookmark dieselbe Ansicht wie eine echte Query zeigt.
          differencesData: differencesData || null,
-         sources: sources // HIER: Hinzufügen
+         sources: sources,
+         resultId: resultId || null,
+         consensusModel: consensusModel || "",
+         modelLabels: modelLabels || null
        })
     });
     const data = await res.json();
@@ -1002,9 +1007,75 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
 }
 window.saveBookmarkConsensus = saveBookmarkConsensus;
 
+let bookmarkShareResultVersion = 0;
+window.currentBookmarkShareResultPromise = null;
+window.currentBookmarkShareResultContext = null;
+
+window.clearPreparedBookmarkShareResult = function () {
+  bookmarkShareResultVersion += 1;
+  window.currentBookmarkShareResultPromise = null;
+  window.currentBookmarkShareResultContext = null;
+  window.lastShareResultId = null;
+};
+
+function prepareBookmarkShareResult(bookmark) {
+  window.clearPreparedBookmarkShareResult();
+  const bookmarkId = bookmark?.id;
+  const consensusText = bookmark?.responses?.consensus;
+  if (!auth.currentUser || !bookmarkId || !String(consensusText || "").trim()) {
+    return null;
+  }
+  window.currentBookmarkShareResultContext = { bookmarkId };
+  return window.currentBookmarkShareResultContext;
+}
+
+async function requestBookmarkShareResult() {
+  const context = window.currentBookmarkShareResultContext;
+  if (!context || !auth.currentUser) return null;
+  const version = bookmarkShareResultVersion;
+  const promise = (async () => {
+    try {
+      const idToken = await auth.currentUser.getIdToken(false);
+      const response = await fetch("/bookmark/consensus/share-result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_token: idToken, bookmarkId: context.bookmarkId })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Could not prepare bookmark.");
+      if (version === bookmarkShareResultVersion) {
+        window.lastShareResultId = data.result_id || null;
+      }
+      return version === bookmarkShareResultVersion ? window.lastShareResultId : null;
+    } catch (error) {
+      if (version === bookmarkShareResultVersion) {
+        console.error("Error preparing bookmarked consensus for share/watch:", error);
+      }
+      return null;
+    }
+  })();
+  window.currentBookmarkShareResultPromise = promise;
+  const resultId = await promise;
+  if (!resultId && version === bookmarkShareResultVersion) {
+    window.currentBookmarkShareResultPromise = null;
+  }
+  return resultId;
+}
+
+window.resolveCurrentShareResultId = async function () {
+  if (window.lastShareResultId) return window.lastShareResultId;
+  if (window.currentBookmarkShareResultPromise) {
+    return await window.currentBookmarkShareResultPromise;
+  }
+  return await requestBookmarkShareResult();
+};
+
 // Diese Funktion füllt die UI mit den Daten eines Bookmarks
 function loadSingleBookmarkUI(bookmark) {
     window.App?.setAppTitle?.(bookmark?.query);
+    // Never let Share/Watch target a run that was displayed previously.
+    // A consensus bookmark gets a reusable server-side snapshot on Share/Watch.
+    prepareBookmarkShareResult(bookmark);
 
     // Konsens-Button deaktivieren
     const conBtn = document.getElementById("consensusButton");

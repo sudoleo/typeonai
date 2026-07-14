@@ -48,7 +48,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (Pro, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). |
 | `users.py` | `/user_status`, `/usage`, `/delete_account`, `/track-interest`. |
-| `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus`. Beide Save-Endpunkte liefern den vollständig zusammengeführten Bookmark-Datensatz zurück, damit der Client ihn ohne Reload aktualisiert. |
+| `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` zum sicheren Wiederherstellen eines Share-/Watch-fähigen Pending-Snapshots aus einem eigenen Consensus-Bookmark. Beide Save-Endpunkte liefern den vollständig zusammengeführten Bookmark-Datensatz zurück, damit der Client ihn ohne Reload aktualisiert. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. kompakter History je Watch), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH) sowie öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST), `/api/admin/watches` (Diagnose-Liste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
@@ -88,7 +88,9 @@ deferred am `</body>` — `app-init.js`.
   `getAttachmentsPayload`.
 - **`agent-mode.js`** — Agent-Mode-UI/Status/Timer; zeigt pro Modell den
   Query-Abschluss aus `dataset.responseState`; einzige Stelle, die den
-  Auto-Consensus-Toggle erzwingt/sperrt.
+  Auto-Consensus-Toggle erzwingt/sperrt. Sobald Antworten vorliegen, bietet das
+  Panel einen dezenten, session-lokalen „Show/Hide model answers“-Disclosure;
+  jeder neue Lauf startet wieder mit verborgenen Einzelantworten.
 - **`consensus-lifecycle.js`** — Consensus-Sichtbarkeit, Gate/Availability,
   Run-State, Abort/Cancel, Run-ID-Gating, Auto-Consensus-Persistenz. Exponiert die
   `window.App.consensusLifecycle.*`-Brücke (siehe §4/§8).
@@ -261,7 +263,10 @@ Modellen).
 `query-send.js` automatisch `getConsensus` aus. Run-State/Gating läuft über
 `consensus-lifecycle.js` (`startRun()→{runId,signal}`, `isActiveRun`, `finishRun`,
 `setSynthesizing`, `cancelCurrentConsensus`). Agent Mode ist die **einzige** Stelle,
-die den Auto-Consensus-Toggle erzwingt/sperrt.
+die den Auto-Consensus-Toggle erzwingt/sperrt. Standardmäßig bleiben die sechs
+Einzelantwortboxen verborgen; `#agentModeAnswersToggle` setzt ausschließlich die
+session-lokale Body-Klasse `.agent-mode-show-answers`, ohne Agent Mode oder dessen
+Auto-Consensus-Kopplung zu deaktivieren.
 
 ### Attachments (Pro)
 Frontend `attachments.js` baut Payload; Backend `app/services/llm/attachments.py`
@@ -293,9 +298,22 @@ Metadaten (Name/Typ/Größe) — siehe `bookmarks.py::sanitize_attachment_meta`.
 - Limits/Defaults kommen aus `app/core/config.py` (`get_usage_limit`,
   `get_word_limit`, `get_output_token_limit`, …) und können per Firestore
   (`app_config/models.limits`) überschrieben werden.
+- Die Antwortmodell-Picker wenden bei einem Tier-Wechsel die Free-/Early-/Pro-
+  Defaults erneut an, solange der Nutzer für den jeweiligen Provider keine
+  explizite Auswahl (`pref_select_*`) gespeichert hat. Explizite Picker-Werte
+  haben Vorrang. Watch-Runs lesen den aktuellen Pro-Status des Owners bei jedem
+  Lauf neu und wählen danach `WATCH_MODELS_BY_TIER` (ein Upgrade wirkt deshalb
+  auch auf bereits bestehende Watches nach Ablauf des Tier-Cache).
 
 ### Sharing
 - `/consensus` legt ein `pending_results`-Dokument an → `result_id`.
+- Consensus-Bookmarks speichern diese ID mit, solange sie gültig ist. Beim
+  Teilen/Watchen eines älteren, geöffneten Bookmarks erzeugt
+  `POST /bookmark/consensus/share-result` aus dem serverseitigen Bookmark
+  best-effort einen neuen sanitisierten Pending-Snapshot; Share/Watch warten
+  auf diese Rehydration und können dadurch auch außerhalb der Ursprungssession
+  verwendet werden. Ein Versions-Gate verhindert, dass eine verspätete Antwort
+  auf ein inzwischen anderes angezeigtes Ergebnis zeigt.
 - `POST /api/share` (`share.py` → `share_snapshots.create_share_from_pending`)
   macht daraus einen unveränderlichen Share-Snapshot (`shares`-Collection) mit Slug.
 - **`GET /s/{slug_id}`** rendert read-only aus dem Snapshot (keine LLM-Calls).
@@ -456,7 +474,7 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **435 passed** (2026-07-12).
+  Letzte bekannte Baseline: **473 passed** (2026-07-14).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, Consensus→Differences+Score,
@@ -559,7 +577,10 @@ keinen Watch-Lauf aus und ändert keinen Zeitplan.
   `hideConsensusOutput`, `window.cancelCurrentConsensus`, `window.openShareDialog`,
   `window.openWatchDialog`, `window.openWatchDashboard`,
   `window.currentEvidenceSources`, `window.consensusCitationMeta`,
-  `window.lastShareResultId`, `window.isUserPro`, `window.pendingAttachments`.
+  `window.lastShareResultId`, `window.currentBookmarkShareResultContext`,
+  `window.currentBookmarkShareResultPromise`,
+  `window.resolveCurrentShareResultId`, `window.clearPreparedBookmarkShareResult`,
+  `window.isUserPro`, `window.pendingAttachments`.
 - **`window.App.followup`** (definiert in `consensus-run.js`) ist der
   Follow-up-Kontext-State (`offer/arm/discard/consume/reset/render`).
   `query-send.js` (consume beim Senden), `app-init.js` (reset in
@@ -579,7 +600,8 @@ keinen Watch-Lauf aus und ändert keinen Zeitplan.
   genutzten `#shareModal` für Share und Watch einschließlich Modusklasse,
   Background-Scroll-Lock und Rückgabe des Fokus an den Auslöser.
 - **DOM-als-State**: `dataset.consensusAnswer`, `dataset.consensusSources`,
-  `dataset.responseState`, `.excluded`-Klassen u. a. sind echte State-Quellen.
+  `dataset.responseState`, `.excluded`-Klassen und die session-lokale
+  `.agent-mode-show-answers`-Body-Klasse u. a. sind echte State-Quellen.
   Vorsicht beim Umbauen von
   Markup — der State-Refactor ist bewusst noch nicht passiert.
 - **Jinja↔JS-Brücke**: Config geht nur über den `<head>`-`window.*`-Block

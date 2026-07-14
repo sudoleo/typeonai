@@ -604,6 +604,17 @@ class ShareFlowTests(unittest.TestCase):
             "private",
         )
 
+    def test_pending_result_reuse_requires_owner_and_unexpired_ttl(self):
+        db = FakeDb()
+        result_id = "P" * 16
+        db.stores["pending_results"][result_id] = make_pending(uid="owner")
+        self.assertTrue(snapshots.pending_result_is_available("owner", result_id, db=db))
+        self.assertFalse(snapshots.pending_result_is_available("other", result_id, db=db))
+        db.stores["pending_results"][result_id]["expires_at"] = (
+            datetime.now(timezone.utc) - timedelta(seconds=1)
+        )
+        self.assertFalse(snapshots.pending_result_is_available("owner", result_id, db=db))
+
     def test_private_share_cannot_be_reported(self):
         result_id = self._store_pending()
         created = snapshots.create_share_from_pending(

@@ -448,6 +448,7 @@
 
     // Share-Feature: result_id des letzten Laufs zurücksetzen; Modell-
     // Labels (Option-Text) für die serverseitige Snapshot-Zitation.
+    window.clearPreparedBookmarkShareResult?.();
     window.lastShareResultId = null;
     // Resolve-Persistenz: Payload des letzten erfolgreichen Laufs invalidieren,
     // damit eine Resolve-Runde nie in ein fremdes Bookmark schreibt.
@@ -609,7 +610,10 @@
           differencesData: data.differences_data || null
         };
         if (window.auth?.currentUser) {
-          window.saveBookmarkConsensus(question, data.consensus_response, data.differences, data.differences_data);
+          window.saveBookmarkConsensus(
+            question, data.consensus_response, data.differences, data.differences_data,
+            data.result_id, consensus_model, shareModelLabels
+          );
         }
         trackAppEvent("app_consensus_completed", {
           status: "success",

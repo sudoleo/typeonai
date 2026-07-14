@@ -653,6 +653,32 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
         send_run.assert_awaited_once_with("w1", claimed, result)
         send_change.assert_not_awaited()
 
+    async def test_each_watch_run_uses_the_owners_current_tier(self):
+        claimed = {
+            "owner_uid": "u1", "share_id": "A" * 16, "interval": "weekly",
+            "email_mode": "changes_only", "last_agreement_score": 60,
+        }
+        result = {
+            "consensus": "New consensus", "agreement_score": 61,
+            "changed": False, "severity": "minor", "change_summary": "",
+        }
+        share_data = {"status": "active", "slug": "q", "question": "Q", "consensus_md": "Old"}
+        with (
+            patch.object(watch_service, "acquire_worker_lease", return_value=True),
+            patch.object(watch_service, "release_worker_lease"),
+            patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
+            patch.object(watch_service, "claim_watch", return_value=(dict(claimed), "claimed")),
+            patch.object(watch_scheduler.security, "is_user_pro", side_effect=[False, True]),
+            patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
+            patch.object(watch_scheduler, "execute_watch", return_value=result) as execute,
+            patch.object(watch_service, "complete_watch_run"),
+        ):
+            await watch_scheduler.run_watch_tick()
+            await watch_scheduler.run_watch_tick()
+
+        self.assertFalse(execute.call_args_list[0].args[-1])
+        self.assertTrue(execute.call_args_list[1].args[-1])
+
 
 class WatchFrontendContractTests(unittest.TestCase):
     def test_user_menu_places_watched_after_shared_links(self):

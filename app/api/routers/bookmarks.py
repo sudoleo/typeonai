@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request, Body, HTTPException
 from app.core.rate_limit import limiter
 from app.core.security import verify_user_token, extract_id_token, db_firestore
 from app.services.llm.attachments import ALLOWED_ATTACHMENT_MIMES, MAX_ATTACHMENTS
+from app.services import share_snapshots
 from app.services.share_snapshots import sanitize_differences_data
 
 router = APIRouter()
@@ -144,6 +145,9 @@ async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
     differencesText = data.get("differencesText")
     differencesData = data.get("differencesData")
     sources = data.get("sources")
+    result_id = str(data.get("resultId") or "").strip()
+    consensus_model = str(data.get("consensusModel") or "").strip()[:80]
+    model_labels = data.get("modelLabels")
 
     if not id_token or not question or consensusText is None or differencesText is None:
         raise HTTPException(status_code=400, detail="Missing required fields.")
@@ -173,6 +177,18 @@ async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
 
     if sources is not None:
         dataToMerge["sources"] = sources
+
+    if result_id and share_snapshots.pending_result_is_available(
+        uid, result_id, db=db_firestore
+    ):
+        dataToMerge["share_result_id"] = result_id
+    if consensus_model:
+        dataToMerge["consensus_model"] = consensus_model
+    clean_labels = share_snapshots.sanitize_model_labels(
+        model_labels, share_snapshots.PROVIDER_ORDER
+    )
+    if clean_labels:
+        dataToMerge["model_labels"] = clean_labels
     
     try:
         doc_ref = (
@@ -193,6 +209,67 @@ async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error saving consensus")
+
+
+@router.post("/bookmark/consensus/share-result")
+@limiter.limit("10/minute")
+async def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
+    """Create or reuse a share/watch pending result for an owned bookmark."""
+    id_token = extract_id_token(request, data)
+    bookmark_id = str(data.get("bookmarkId") or "").strip()
+    if not id_token or not re.fullmatch(r"[A-Za-z0-9_]{1,100}", bookmark_id):
+        raise HTTPException(status_code=400, detail="Missing or invalid bookmark id.")
+    try:
+        uid = verify_user_token(id_token)
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Authentication failed") from exc
+
+    doc_ref = (
+        db_firestore.collection("users").document(uid)
+        .collection("bookmarks").document(bookmark_id)
+    )
+    snap = doc_ref.get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Bookmark not found.")
+    bookmark = snap.to_dict() or {}
+    responses = bookmark.get("responses")
+    responses = responses if isinstance(responses, dict) else {}
+    consensus_text = str(responses.get("consensus") or "").strip()
+    question = str(bookmark.get("query") or "").strip()
+    if not question or not consensus_text:
+        raise HTTPException(status_code=400, detail="This bookmark has no consensus result.")
+
+    existing_id = str(bookmark.get("share_result_id") or "").strip()
+    if share_snapshots.pending_result_is_available(uid, existing_id, db=db_firestore):
+        return {"status": "success", "result_id": existing_id, "created": False}
+
+    compared = responses.get("differences_data")
+    compared = compared.get("models_compared") if isinstance(compared, dict) else []
+    compared = set(compared) if isinstance(compared, list) else set()
+    included_providers = [
+        provider for provider in share_snapshots.PROVIDER_ORDER
+        if str(responses.get(provider) or "").strip() or provider in compared
+    ]
+    payload = share_snapshots.build_pending_result(
+        uid=uid,
+        question=question,
+        consensus_md=consensus_text,
+        differences_data=responses.get("differences_data"),
+        differences_text=responses.get("differences") or "",
+        model_sources=bookmark.get("sources") or [],
+        included_providers=included_providers,
+        model_labels=bookmark.get("model_labels"),
+        consensus_model=bookmark.get("consensus_model") or "",
+    )
+    if payload is None:
+        raise HTTPException(status_code=400, detail="This bookmark cannot be shared.")
+    try:
+        result_id = share_snapshots.save_pending_result(payload, db=db_firestore)
+        doc_ref.set({"share_result_id": result_id}, merge=True)
+    except Exception as exc:
+        logging.exception("prepare_bookmark_share_result failed")
+        raise HTTPException(status_code=500, detail="Could not prepare bookmark for sharing.") from exc
+    return {"status": "success", "result_id": result_id, "created": True}
 
 
 @router.delete("/bookmark")

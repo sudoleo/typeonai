@@ -3,7 +3,7 @@ docs/smoke-checklist.md gegen den Mock-Server (MOCK_LLM/MOCK_AUTH).
 
 Bewusst NICHT abgedeckt (Stand der ersten Iteration): Resolve-Runde,
 Share-Dialog-CRUD, Attachments, Follow-up, Bookmarks, Agent-Mode-Timer,
-Demo-Flow, Mobile-Layout - siehe tests/e2e/README.md.
+Demo-Flow und das vollständige Mobile-Layout - siehe tests/e2e/README.md.
 """
 
 from playwright.sync_api import expect
@@ -110,6 +110,33 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
 
     errors = get_console_errors()
     assert errors == [], f"Konsolen-Fehler im Consensus-Flow: {errors}"
+
+
+def test_agent_mode_can_reveal_hidden_model_answers_on_mobile(app_page):
+    """The compact mobile Agent Mode panel explains and toggles hidden answers."""
+    app_page.set_viewport_size({"width": 390, "height": 844})
+    app_page.evaluate(
+        """() => {
+          localStorage.setItem("agentModePanelCollapsed", "true");
+          window.setAgentMode(true, { persist: true });
+        }"""
+    )
+    _send_question(app_page)
+    _wait_for_all_final_answers(app_page)
+
+    toggle = app_page.locator("#agentModeAnswersToggle")
+    expect(toggle).to_be_visible(timeout=15000)
+    expect(toggle).to_have_text("Show model answers")
+    expect(app_page.locator("#openaiResponse")).to_be_hidden()
+
+    toggle.click()
+    expect(app_page.locator("body.agent-mode-enabled.agent-mode-show-answers")).to_have_count(1)
+    expect(toggle).to_have_text("Hide model answers")
+    expect(app_page.locator("#openaiResponse")).to_be_visible()
+
+    toggle.click()
+    expect(toggle).to_have_text("Show model answers")
+    expect(app_page.locator("#openaiResponse")).to_be_hidden()
 
 
 def test_watch_dialog_requires_visibility_and_reveals_condition(app_page):
@@ -236,6 +263,45 @@ def test_deep_think_temporarily_selects_gemini_35_flash(app_page):
         "() => document.getElementById('consensusModelDropdown').value === 'Grok'",
         timeout=5000,
     )
+
+
+def test_tier_upgrade_applies_pro_defaults_but_keeps_explicit_picker_choice(app_page):
+    """Free -> Pro changes tier defaults only where no explicit preference exists."""
+    result = app_page.evaluate(
+        """() => {
+          const pref = window.App.modelPrefs.find(item =>
+            window.FREE_DEFAULT_MODELS[item.provider] !== window.PRO_DEFAULT_MODELS[item.provider]
+          );
+          if (!pref) return { skipped: true };
+          const select = document.getElementById(pref.selectId);
+          const key = "pref_select_" + pref.key;
+          localStorage.removeItem(key);
+
+          window.updatePremiumModelsState(false, false);
+          const freeValue = select.value;
+          window.updatePremiumModelsState(true, true);
+          const proValue = select.value;
+
+          select.value = freeValue;
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+          window.updatePremiumModelsState(false, false);
+          window.updatePremiumModelsState(true, true);
+          return {
+            skipped: false,
+            freeValue,
+            proValue,
+            expectedFree: window.FREE_DEFAULT_MODELS[pref.provider],
+            expectedPro: window.PRO_DEFAULT_MODELS[pref.provider],
+            explicitValue: select.value,
+            storedValue: localStorage.getItem(key),
+          };
+        }"""
+    )
+    assert not result["skipped"]
+    assert result["freeValue"] == result["expectedFree"]
+    assert result["proValue"] == result["expectedPro"]
+    assert result["explicitValue"] == result["freeValue"]
+    assert result["storedValue"] == result["freeValue"]
 
 
 def test_model_selection_persists_across_reload(app_page):

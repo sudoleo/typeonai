@@ -33,6 +33,10 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 
 ## Agent Mode
 - [ ] Agent-Mode an/aus, Timer läuft, Status-Text korrekt, Auto-Consensus-Kopplung.
+- [ ] Nach der ersten fertigen Modellantwort erscheint dezent „Show model answers“
+      (auch im eingeklappten Mobile-Panel); der Toggle zeigt/versteckt die
+      einzelnen Antwortboxen, ohne Agent Mode auszuschalten, und startet bei
+      einer neuen Frage wieder in der cleanen, verborgenen Ansicht.
 
 ## Consensus Watch
 - [ ] Nach erfolgreichem Consensus erscheint „Watch“ neben Share; Aktivierung
@@ -79,7 +83,8 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 
 ## Modelle / Picker
 - [ ] Custom Model Picker öffnet/wählt, sichtbarer Name aktualisiert.
-- [ ] Tier-Defaults (Free vs. Pro) werden angewandt.
+- [ ] Tier-Defaults (Free vs. Pro) werden beim Tier-Wechsel angewandt; eine
+      zuvor explizit im Picker gewählte Provider-Auswahl bleibt erhalten.
 - [ ] Modell-Auswahl bleibt nach Reload erhalten (localStorage).
 
 ## Attachments (Pro)
@@ -93,6 +98,9 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 
 ## Bookmarks / Sidebar
 - [ ] Bookmarks laden/aufklappen, Chat-Suche filtert.
+- [ ] Einen gespeicherten Consensus nach Reload öffnen: Share-Link und Watch
+      lassen sich ohne erneuten Consensus-Lauf erstellen (während der kurzen
+      Vorbereitung zeigt der Dialog einen deaktivierten Ladezustand).
 - [ ] Leaderboard auf/zu.
 
 ## Demo & Sonstiges

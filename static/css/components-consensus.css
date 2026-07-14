@@ -117,8 +117,12 @@
   opacity: 0;
 }
 
-.agent-mode-enabled .response-section > .response-box {
+.agent-mode-enabled:not(.agent-mode-show-answers) .response-section > .response-box {
   display: none;
+}
+
+.agent-mode-enabled.agent-mode-show-answers .response-section > .response-box {
+  animation: modelBoxesIn 0.28s cubic-bezier(0.2, 0, 0, 1);
 }
 
 .agent-mode-enabled .agent-mode-panel {
@@ -215,6 +219,50 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   transform: rotate(180deg);
 }
 
+.agent-mode-answers-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.agent-mode-answers-row[hidden] {
+  display: none;
+}
+
+.agent-mode-answers-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--sidebar-text-muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.agent-mode-answers-toggle:hover {
+  color: var(--text-color);
+  opacity: 1;
+}
+
+.agent-mode-answers-toggle:focus-visible {
+  color: var(--text-color);
+  outline: 2px solid color-mix(in srgb, var(--button-bg) 62%, transparent);
+  outline-offset: 3px;
+}
+
+.agent-mode-panel.is-collapsed .agent-mode-answers-row {
+  justify-content: flex-start;
+  margin-top: 5px;
+}
+
 /* Eingeklappter Zustand: nur noch eine kompakte Zeile mit "Agent Mode",
    beantworteten Modellen und Laufzeit; Chips/Status/Animation verschwinden. */
 .agent-mode-panel.is-collapsed {
@@ -285,6 +333,9 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   .agent-mode-panel.is-collapsed .agent-mode-collapsed-hint,
   .agent-mode-panel.is-collapsed .agent-mode-count {
     display: none;
+  }
+  .agent-mode-panel.is-collapsed .agent-mode-answers-row {
+    margin-top: 4px;
   }
 }
 

@@ -36,6 +36,8 @@
   let agentModeTimerStartedAt = null;
   let agentModeTimerElapsedMs = 0;
   let agentModeTimerInterval = null;
+  // Session-only disclosure: every new grouped run starts in the clean view.
+  let modelAnswersVisible = false;
 
   function isAgentModeEnabled() {
     return localStorage.getItem(AGENT_MODE_STORAGE_KEY) === "true";
@@ -107,6 +109,7 @@
           label: pref.label,
           model: modelText,
           responseState: responseBox?.dataset?.responseState || "",
+          hasAnswer: Boolean(responseBox?.querySelector(".collapsible-content")?.textContent?.trim()),
           usesDeepThinkModel: deepSearchActive
         };
       });
@@ -167,10 +170,29 @@
     const statusEl = document.getElementById("agentModeStatus");
     const countEl = document.getElementById("agentModeCount");
     const titleEl = document.getElementById("agentModeTitle");
+    const answersRow = document.getElementById("agentModeAnswersRow");
+    const answersToggle = document.getElementById("agentModeAnswersToggle");
     const activeModels = getActiveAgentModels();
+    const hasModelAnswers = activeModels.some(model => model.hasAnswer || model.responseState === "complete");
+
+    if (!enabled || !hasModelAnswers) modelAnswersVisible = false;
 
     document.body.classList.toggle("agent-mode-enabled", enabled);
     document.body.classList.toggle("agent-mode-running", enabled && agentModeStatus === "running");
+    document.body.classList.toggle(
+      "agent-mode-show-answers",
+      enabled && hasModelAnswers && modelAnswersVisible
+    );
+
+    if (answersRow) answersRow.hidden = !enabled || !hasModelAnswers;
+    if (answersToggle) {
+      const label = modelAnswersVisible ? "Hide model answers" : "Show model answers";
+      answersToggle.setAttribute("aria-expanded", String(modelAnswersVisible));
+      answersToggle.title = label;
+      answersToggle.setAttribute("aria-label", label);
+      const labelEl = answersToggle.querySelector("span");
+      if (labelEl) labelEl.textContent = label;
+    }
 
     if (switchEl) switchEl.checked = enabled;
     if (toggleBtn) {
@@ -277,6 +299,7 @@
       localStorage.setItem(AGENT_MODE_STORAGE_KEY, String(nextEnabled));
     }
     if (wasEnabled !== nextEnabled) {
+      modelAnswersVisible = false;
       document.body.classList.add("agent-mode-transitioning");
       window.setTimeout(() => {
         document.body.classList.remove("agent-mode-transitioning");
@@ -293,11 +316,13 @@
 
   function setAgentModeStatus(status, message = "") {
     if (status === "running") {
+      if (agentModeStatus !== "running") modelAnswersVisible = false;
       agentModeStatusMessage = "";
       startAgentModeTimer();
     } else if (status === "complete" || status === "canceled" || status === "error") {
       stopAgentModeTimer();
     } else if (status === "idle") {
+      modelAnswersVisible = false;
       agentModeStatusMessage = "";
       resetAgentModeTimer();
     }
@@ -322,6 +347,17 @@
       if (window.App && typeof window.App.trackAppEvent === "function") {
         window.App.trackAppEvent("app_agent_mode_panel_toggled", { collapsed: next });
       }
+      updateAgentModeUI();
+    });
+  }
+
+  const agentAnswersToggle = document.getElementById("agentModeAnswersToggle");
+  if (agentAnswersToggle) {
+    agentAnswersToggle.addEventListener("click", function () {
+      modelAnswersVisible = !modelAnswersVisible;
+      window.App?.trackAppEvent?.("app_agent_mode_answers_toggled", {
+        visible: modelAnswersVisible
+      });
       updateAgentModeUI();
     });
   }

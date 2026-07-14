@@ -549,6 +549,21 @@ def persist_pending_result(uid, question, consensus_md, differences_data,
         return None
 
 
+def pending_result_is_available(uid, result_id, db=None):
+    """Return whether a pending result can still be reused by its owner."""
+    if not uid or not is_valid_share_id(result_id):
+        return False
+    db = db if db is not None else db_firestore
+    snap = db.collection(PENDING_COLLECTION).document(result_id).get()
+    if not snap.exists:
+        return False
+    pending = snap.to_dict() or {}
+    if pending.get("owner_uid") != uid:
+        return False
+    expires_at = pending.get("expires_at")
+    return not isinstance(expires_at, datetime) or expires_at >= _utcnow()
+
+
 def consume_daily_share_quota(uid, db=None, limit=SHARE_DAILY_LIMIT):
     """Firestore-Zähler pro UID und Tag (slowapi kann nur IP/in-memory)."""
     db = db if db is not None else db_firestore
