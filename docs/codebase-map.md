@@ -84,8 +84,9 @@ deferred am `</body>` — `app-init.js`.
   (`createStreamRenderer`, `streamSSERequest`).
 - **`sources.js`** — Quellen/Evidence-Mapping; nutzt DOM-Datasets
   `dataset.consensusAnswer` / `dataset.consensusSources`; `window.currentEvidenceSources`.
-- **`attachments.js`** — Attachment-UI/Payload (Pro); `window.pendingAttachments`,
-  `getAttachmentsPayload`.
+- **`attachments.js`** — Attachment-UI/Payload (Pro), inklusive Bild-Paste im
+  Fragefeld und Bild-Drag-and-drop auf den Input-Container;
+  `window.pendingAttachments`, `getAttachmentsPayload`.
 - **`agent-mode.js`** — Agent-Mode-UI/Status/Timer; zeigt pro Modell den
   Query-Abschluss aus `dataset.responseState`; einzige Stelle, die den
   Auto-Consensus-Toggle erzwingt/sperrt. Sobald Antworten vorliegen, bietet das
@@ -274,6 +275,10 @@ validiert: max **2** Dateien, je **5 MB**, MIMEs PDF/PNG/JPEG/WebP. Bild-Support
 openai/anthropic/gemini/grok; PDF-Support: openai/anthropic/gemini (sonst
 Text-Fallback/PDF-Extraktion). **In Firestore landen nie Datei-Bytes**, nur
 Metadaten (Name/Typ/Größe) — siehe `bookmarks.py::sanitize_attachment_meta`.
+Bilder können zusätzlich zum Dateiauswahldialog per Paste im `#questionInput`
+oder per Drag-and-drop auf `.chat-input-container` angehängt werden; beide Wege
+nutzen dasselbe Pro-Gate sowie dieselben Anzahl-/Größenlimits und die bestehende
+Whitelist für Bild-MIME-Typen.
 
 ### Auth / Usage / Tier
 - Firebase-ID-Token wird mit `verify_user_token` geprüft (Standard: nur

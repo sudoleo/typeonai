@@ -89,6 +89,10 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 
 ## Attachments (Pro)
 - [ ] Datei anhängen → Chip erscheint, Vorschau öffnet, Entfernen funktioniert.
+- [ ] PNG/JPG/WebP mit Strg+V im Fragefeld einfügen → Bild-Chip erscheint;
+      normaler Text-Paste bleibt unverändert möglich.
+- [ ] PNG/JPG/WebP auf den Input ziehen → Drop-Hinweis erscheint und nach dem
+      Ablegen wird ein Bild-Chip angelegt.
 - [ ] Bookmark-Attachments werden angezeigt.
 
 ## Auth / Usage / Tier

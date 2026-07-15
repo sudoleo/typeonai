@@ -7,7 +7,7 @@
 @import url('./css/base.css?v=20260706-fixes1');
 @import url('./css/layout.css?v=20260707-fixes2');
 /* components.css was split by section into the files below (same cascade order). */
-@import url('./css/components-input.css?v=20260714-agent-answers1');
+@import url('./css/components-input.css?v=20260715-image-drop1');
 @import url('./css/components-attachment-viewer.css?v=20260627-split1');
 @import url('./css/components-consensus.css?v=20260714-agent-answers1');
 @import url('./css/components-controls.css?v=20260627-split1');

@@ -1,7 +1,7 @@
 // =====================================================================
 // attachments.js
-// Datei-Anhaenge (Pro-Feature): Attach-Menue, Upload-Validierung, Chips,
-// Viewer-Vorschau, Bookmark-Vorschau-Chips. In eigene IIFE gekapselt.
+// Datei-Anhaenge (Pro-Feature): Attach-Menue, Upload-/Paste-/Drop-Validierung,
+// Chips, Viewer-Vorschau, Bookmark-Vorschau-Chips. In eigene IIFE gekapselt.
 // Extrahiert aus templates/index.html (initApp-Closure).
 // Exporte: window.pendingAttachments, window.renderAttachmentChips,
 // window.clearPendingAttachments, window.getAttachmentsPayload,
@@ -31,7 +31,11 @@
     const fileInput = document.getElementById("attachFileInput");
     const bar = document.getElementById("attachmentBar");
     const inputContainer = document.querySelector(".chat-input-container");
+    const questionInput = document.getElementById("questionInput");
     if (!trigger || !menu || !uploadOption || !fileInput || !bar) return;
+
+    let pendingFileReads = 0;
+    let dragDepth = 0;
 
     function setMenuOpen(open) {
       menu.hidden = !open;
@@ -135,16 +139,20 @@
       });
     }
 
+    function showAttachmentProGate(source) {
+      setMenuOpen(false);
+      trackAppEvent("app_attachment_locked_click", { source: source });
+      const modal = document.getElementById("proFeatureModal");
+      if (modal) {
+        modal.style.display = "block";
+      } else {
+        alert("File uploads are a Pro feature.");
+      }
+    }
+
     uploadOption.addEventListener("click", function () {
       if (!window.isUserPro) {
-        setMenuOpen(false);
-        trackAppEvent("app_attachment_locked_click");
-        const modal = document.getElementById("proFeatureModal");
-        if (modal) {
-          modal.style.display = "block";
-        } else {
-          alert("File uploads are a Pro feature.");
-        }
+        showAttachmentProGate("picker");
         return;
       }
       setMenuOpen(false);
@@ -243,44 +251,154 @@
       return null;
     }
 
-    fileInput.addEventListener("change", function () {
-      const files = Array.from(fileInput.files || []);
-      fileInput.value = "";
+    function imageExtension(mime) {
+      if (mime === "image/jpeg") return "jpg";
+      if (mime === "image/webp") return "webp";
+      return "png";
+    }
+
+    function attachmentName(file, mime, source, index) {
+      const originalName = String(file.name || "").trim();
+      if (originalName) return originalName;
+      if (source === "paste") {
+        return "pasted-image-" + Date.now() + (index ? "-" + (index + 1) : "") + "." + imageExtension(mime);
+      }
+      return "image-" + Date.now() + (index ? "-" + (index + 1) : "") + "." + imageExtension(mime);
+    }
+
+    function addFiles(files, options) {
+      const source = options && options.source ? options.source : "picker";
+      const imagesOnly = !!(options && options.imagesOnly);
       if (!files.length) return;
 
-      for (const file of files) {
-        if (window.pendingAttachments.length >= ATTACH_MAX_FILES) {
-          alert("You can attach up to " + ATTACH_MAX_FILES + " files per question.");
-          break;
-        }
+      if (!window.isUserPro) {
+        showAttachmentProGate(source);
+        return;
+      }
+
+      let unsupportedShown = false;
+      let limitShown = false;
+
+      files.forEach(function (file, index) {
         const mime = inferMime(file);
-        if (!mime) {
-          alert("'" + file.name + "' is not supported. Allowed: PDF, PNG, JPG, WebP.");
-          continue;
+        if (!mime || (imagesOnly && mime.indexOf("image/") !== 0)) {
+          if (!unsupportedShown) {
+            alert(imagesOnly
+              ? "Only PNG, JPG, and WebP images can be pasted or dropped here."
+              : "'" + (file.name || "This file") + "' is not supported. Allowed: PDF, PNG, JPG, WebP.");
+            unsupportedShown = true;
+          }
+          return;
         }
         if (file.size > ATTACH_MAX_BYTES) {
-          alert("'" + file.name + "' is too large. The limit is 5 MB per file.");
-          continue;
+          alert("'" + attachmentName(file, mime, source, index) + "' is too large. The limit is 5 MB per file.");
+          return;
+        }
+        if (window.pendingAttachments.length + pendingFileReads >= ATTACH_MAX_FILES) {
+          if (!limitShown) {
+            alert("You can attach up to " + ATTACH_MAX_FILES + " files per question.");
+            limitShown = true;
+          }
+          return;
         }
 
+        pendingFileReads += 1;
         const reader = new FileReader();
         reader.onload = function () {
+          pendingFileReads = Math.max(0, pendingFileReads - 1);
           const result = String(reader.result || "");
           const base64Data = result.split(",", 2)[1] || "";
           if (!base64Data) return;
           if (window.pendingAttachments.length >= ATTACH_MAX_FILES) return;
           window.pendingAttachments.push({
-            name: file.name,
+            name: attachmentName(file, mime, source, index),
             mime: mime,
             size: file.size,
             data: base64Data
           });
           renderAttachmentChips();
-          trackAppEvent("app_attachment_added", { mime: mime });
+          trackAppEvent("app_attachment_added", { mime: mime, source: source });
+        };
+        reader.onerror = function () {
+          pendingFileReads = Math.max(0, pendingFileReads - 1);
+          alert("The file could not be read. Please try again.");
         };
         reader.readAsDataURL(file);
-      }
+      });
+    }
+
+    function transferFiles(dataTransfer) {
+      if (!dataTransfer) return [];
+      const directFiles = Array.from(dataTransfer.files || []);
+      if (directFiles.length) return directFiles;
+      return Array.from(dataTransfer.items || [])
+        .filter(function (item) { return item.kind === "file"; })
+        .map(function (item) { return item.getAsFile(); })
+        .filter(Boolean);
+    }
+
+    function isImageLike(file) {
+      if (String(file.type || "").toLowerCase().indexOf("image/") === 0) return true;
+      const name = String(file.name || "").toLowerCase();
+      return /\.(png|jpe?g|webp)$/.test(name);
+    }
+
+    function isFileDrag(event) {
+      return Array.from((event.dataTransfer && event.dataTransfer.types) || []).indexOf("Files") !== -1;
+    }
+
+    function clearDragState() {
+      dragDepth = 0;
+      if (inputContainer) inputContainer.classList.remove("is-image-dragover");
+    }
+
+    fileInput.addEventListener("change", function () {
+      const files = Array.from(fileInput.files || []);
+      fileInput.value = "";
+      addFiles(files, { source: "picker", imagesOnly: false });
     });
+
+    if (questionInput) {
+      questionInput.addEventListener("paste", function (event) {
+        const files = transferFiles(event.clipboardData).filter(isImageLike);
+        if (!files.length) return;
+        event.preventDefault();
+        addFiles(files, { source: "paste", imagesOnly: true });
+      });
+    }
+
+    if (inputContainer) {
+      inputContainer.addEventListener("dragenter", function (event) {
+        if (!isFileDrag(event)) return;
+        event.preventDefault();
+        dragDepth += 1;
+        inputContainer.classList.add("is-image-dragover");
+      });
+
+      inputContainer.addEventListener("dragover", function (event) {
+        if (!isFileDrag(event)) return;
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+        inputContainer.classList.add("is-image-dragover");
+      });
+
+      inputContainer.addEventListener("dragleave", function (event) {
+        if (!isFileDrag(event)) return;
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (dragDepth === 0) inputContainer.classList.remove("is-image-dragover");
+      });
+
+      inputContainer.addEventListener("drop", function (event) {
+        if (!isFileDrag(event)) return;
+        event.preventDefault();
+        const files = transferFiles(event.dataTransfer);
+        clearDragState();
+        addFiles(files, { source: "drop", imagesOnly: true });
+      });
+
+      window.addEventListener("dragend", clearDragState);
+      window.addEventListener("drop", clearDragState);
+    }
   })();
 
   window.getAttachmentsPayload = function () {

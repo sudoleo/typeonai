@@ -116,6 +116,29 @@ textarea:focus {
   box-shadow: var(--card-shadow-hover);
 }
 
+.chat-input-container.is-image-dragover {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--glass-border));
+  box-shadow: var(--card-shadow-hover), 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.chat-input-container.is-image-dragover::after {
+  content: "Drop image to attach";
+  position: absolute;
+  inset: 6px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed color-mix(in srgb, var(--accent) 70%, var(--glass-border));
+  border-radius: calc(var(--radius-lg) - 5px);
+  background: color-mix(in srgb, var(--response-bg) 88%, transparent);
+  color: var(--text-color);
+  font-size: 0.88rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+}
+
 .chat-input-container .input-field {
   flex-grow: 1;
   background: transparent;
