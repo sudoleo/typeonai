@@ -139,7 +139,7 @@
   border: 1px solid color-mix(in srgb, var(--sidebar-border) 78%, transparent);
   border-radius: var(--radius-md, 12px);
   background: color-mix(in srgb, var(--container-bg) 88%, transparent);
-  box-shadow: 0 8px 26px rgba(28, 42, 60, 0.06);
+  box-shadow: 0 8px 26px rgba(24, 25, 27, 0.06);
   padding: 14px 16px;
 }
 .watch-card-top { display: flex; align-items: flex-start; gap: 10px; }

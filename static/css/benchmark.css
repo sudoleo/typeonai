@@ -45,12 +45,12 @@
   --scale: 3.2px;          /* px per accuracy point (plot height = 320px) */
   /* Bar palette (TerminalBench-style): high-contrast bars on a crisp card.
      Light mode — muted slate bars pop against the white card. */
-  --bench-model-fill: #b7c2d3;
-  --bench-model-edge: #93a0b6;
-  --bench-majority-fill: #d8dee9;
-  --bench-majority-edge: #b4bdce;
+  --bench-model-fill: #bdbfc2;
+  --bench-model-edge: #9b9ea1;
+  --bench-majority-fill: #dcdee0;
+  --bench-majority-edge: #b8babd;
   --bench-consensus-fill: var(--accent);
-  --bench-consensus-edge: color-mix(in srgb, var(--accent) 60%, #05384f);
+  --bench-consensus-edge: color-mix(in srgb, var(--accent) 60%, #101112);
   --bench-ci-color: color-mix(in srgb, var(--text-primary) 40%, transparent);
   --bench-axis: color-mix(in srgb, var(--sidebar-border) 100%, transparent);
   margin-top: clamp(30px, 4vw, 48px);
@@ -63,15 +63,15 @@
 
 /* Dark mode — near-black card with light/blue bars, mirroring the reference. */
 .dark-mode .bench-chart {
-  --bench-model-fill: #363c46;
-  --bench-model-edge: #565d6a;
-  --bench-majority-fill: #262b34;
-  --bench-majority-edge: #434b58;
+  --bench-model-fill: #3a3b3d;
+  --bench-model-edge: #5a5c5f;
+  --bench-majority-fill: #292a2d;
+  --bench-majority-edge: #47494c;
   --bench-consensus-fill: var(--accent);
   --bench-consensus-edge: color-mix(in srgb, var(--accent) 70%, #ffffff);
   --bench-ci-color: color-mix(in srgb, var(--text-primary) 38%, transparent);
   --bench-axis: color-mix(in srgb, var(--sidebar-border) 150%, transparent);
-  background: #0b0c0e;
+  background: #0b0b0b;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 22px 48px -26px rgba(0, 0, 0, 0.8);
 }
 
@@ -435,9 +435,9 @@
   max-width: 40px;
   height: 0;
   border-radius: 6px 6px 0 0;
-  border: 1px solid #93a0b6;
+  border: 1px solid #9b9ea1;
   border-bottom: 0;
-  background: #b7c2d3;
+  background: #bdbfc2;
   transition: height 0.9s cubic-bezier(0.22, 0.61, 0.36, 1);
   transition-delay: calc(var(--i, 0) * 70ms);
 }
@@ -447,10 +447,10 @@
 .bench-mini.is-visible .bench-mini-val { opacity: 1; }
 
 .bench-mini-col.is-consensus .bench-mini-bar {
-  border-color: color-mix(in srgb, var(--accent) 70%, #06324a);
+  border-color: color-mix(in srgb, var(--accent) 70%, #121314);
   background: var(--accent);
 }
-.dark-mode .bench-mini-bar { background: #363c46; border-color: #565d6a; }
+.dark-mode .bench-mini-bar { background: #3a3b3d; border-color: #5a5c5f; }
 
 .bench-mini-icons {
   display: flex;

@@ -12,18 +12,18 @@
   --radius-pill: 999px;
 
   /* Colors - Light Mode */
-  --bg-color: #edf1f7;
+  --bg-color: #f5f5f4;
   --container-bg: rgba(255, 255, 255, 0.66);
-  --text-color: #233140;
+  --text-color: #26282b;
   --input-bg: rgba(255, 255, 255, 0.58);
-  --input-border: rgba(117, 137, 154, 0.24);
-  --button-bg: #15233c;
+  --input-border: rgba(60, 62, 65, 0.2);
+  --button-bg: #1d2126;
   --button-text: #ffffff;
   --response-bg: rgba(255, 255, 255, 0.62);
   /* Additional UI Colors */
-  --sidebar-bg: rgba(246, 250, 252, 0.68);
-  --sidebar-border: rgba(114, 132, 148, 0.22);
-  --sidebar-text-muted: #6d7b8b;
+  --sidebar-bg: var(--bg-color);
+  --sidebar-border: rgba(0, 0, 0, 0.1);
+  --sidebar-text-muted: #6e7175;
   --sidebar-hover: rgba(255, 255, 255, 0.5);
 
   --code-bg: #f7f7f7;
@@ -39,39 +39,39 @@
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.5);
   --consensus-button-text: #333;
   --checkbox-border: #ccc;
-  --checkbox-checked: #007bff;
+  --checkbox-checked: #1d2126;
   --icon-color: #111; /* For Burger/Clear Icons */
   --help-button-color: #4e4e4e;
-  --help-button-hover: #007bff;
+  --help-button-hover: #1d2126;
   --link-color: color-mix(in srgb, var(--text-color) 85%, transparent);
   
   /* Vote Badge Colors */
-  --vote-model-bg: #e6f0ff;
-  --vote-model-color: #1a4aa1;
+  --vote-model-bg: #eaeaea;
+  --vote-model-color: #3c3f43;
   --vote-best-bg: #e6ffed;
   --vote-best-color: #2c7a2c;
   --vote-exclude-bg: var(--clear-button-bg);
   --vote-exclude-color: var(--clear-button-text);
   
   /* Modern UI / Pulse Tokens */
-  --accent: #0c84c2;
-  --accent-contrast: #042b40;
+  --accent: #28292b;
+  --accent-contrast: #171819;
   --accent-secondary: #4fc2a3;
   --accent-tertiary: #d99b46;
   --glass-bg: rgba(255, 255, 255, 0.54);
   --glass-bg-strong: rgba(255, 255, 255, 0.72);
   --glass-bg-soft: rgba(255, 255, 255, 0.36);
   --glass-border: rgba(255, 255, 255, 0.62);
-  --glass-edge: rgba(92, 113, 134, 0.2);
+  --glass-edge: rgba(98, 101, 105, 0.2);
   --glass-highlight: rgba(255, 255, 255, 0.9);
   --glass-blur: 18px;
-  --liquid-shadow: 0 14px 38px rgba(40, 56, 76, 0.08), 0 2px 8px rgba(40, 56, 76, 0.045), inset 0 1px 0 rgba(255, 255, 255, 0.78);
-  --liquid-shadow-hover: 0 22px 54px rgba(40, 56, 76, 0.11), 0 4px 16px rgba(40, 56, 76, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  --liquid-shadow: 0 14px 38px rgba(28, 30, 33, 0.08), 0 2px 8px rgba(28, 30, 33, 0.045), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  --liquid-shadow-hover: 0 22px 54px rgba(28, 30, 33, 0.11), 0 4px 16px rgba(28, 30, 33, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.86);
   --liquid-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
   --chip-bg: rgba(255,255,255,0.42);
   --chip-border: rgba(255,255,255,0.58);
-  --chip-shadow: 0 8px 24px rgba(46,61,79,0.09), inset 0 1px 0 rgba(255,255,255,0.72);
-  --chip-shadow-active: 0 10px 28px rgba(15,143,184,0.18);
+  --chip-shadow: 0 8px 24px rgba(30,32,35,0.09), inset 0 1px 0 rgba(255,255,255,0.72);
+  --chip-shadow-active: 0 10px 28px rgba(25,26,28,0.14);
   --overlay-dim: rgba(0, 0, 0, 0.38);
 
   /* Box Shadows */
@@ -102,21 +102,21 @@
 
 /* Colors - Dark Mode */
 .dark-mode {
-  --bg-color: #0a0f14;
-  --container-bg: rgba(18, 24, 31, 0.84);
-  --text-color: #edf5fb;
-  --input-bg: rgba(15, 21, 28, 0.76);
-  --input-border: rgba(190, 216, 230, 0.16);
-  --button-bg: #dff5ff;
-  --button-text: #071217;
-  --response-bg: rgba(24, 31, 39, 0.8);
-  
-  --sidebar-bg: rgba(17, 23, 30, 0.82);
-  --sidebar-border: rgba(190, 216, 230, 0.16);
-  --sidebar-text-muted: #a2b1bd;
+  --bg-color: #1e1e1e;
+  --container-bg: rgba(38, 38, 38, 0.84);
+  --text-color: #ececec;
+  --input-bg: rgba(30, 30, 30, 0.76);
+  --input-border: rgba(255, 255, 255, 0.14);
+  --button-bg: #f0f0f0;
+  --button-text: #141414;
+  --response-bg: rgba(42, 42, 42, 0.8);
+
+  --sidebar-bg: var(--bg-color);
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-text-muted: #a7a9ac;
   --sidebar-hover: rgba(255, 255, 255, 0.08);
 
-  --code-bg: #1e1e1e;
+  --code-bg: #161616;
   --feedback-text-color: #949494;
   --feedback-text-hover-color: #bbb;
   --clear-button-bg: #3d1f1f;
@@ -129,38 +129,38 @@
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.5);
   --consensus-button-text: #eee;
   --checkbox-border: #555;
-  --checkbox-checked: #7dd3fc;
+  --checkbox-checked: #e6e6e6;
   --icon-color: #fff;
   --help-button-color: #cccccc;
-  --help-button-hover: #66b2ff;
+  --help-button-hover: #ffffff;
   --link-color: color-mix(in srgb, var(--text-color) 92%, transparent);
 
   /* Vote Badge Colors (Dark) */
-  --vote-model-bg: #2c2f3c;
-  --vote-model-color: #82aaff;
+  --vote-model-bg: #333333;
+  --vote-model-color: #d6d6d6;
   --vote-best-bg: #203c20;
   --vote-best-color: #8aff8a;
   --vote-exclude-bg: var(--clear-button-bg);
   --vote-exclude-color: var(--clear-button-text);
   
-  --accent: #6ecbf5;
-  --accent-contrast: #062235;
+  --accent: #e6e6e6;
+  --accent-contrast: #141414;
   --accent-secondary: #8ee6c8;
   --accent-tertiary: #f3c66f;
-  --glass-bg: rgba(23, 31, 40, 0.34);
-  --glass-bg-strong: rgba(31, 41, 52, 0.52);
+  --glass-bg: rgba(44, 44, 44, 0.34);
+  --glass-bg-strong: rgba(52, 52, 52, 0.52);
   --glass-bg-soft: rgba(255, 255, 255, 0.04);
-  --glass-border: rgba(226, 244, 255, 0.11);
-  --glass-edge: rgba(226, 244, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.11);
+  --glass-edge: rgba(255, 255, 255, 0.06);
   --glass-highlight: rgba(255, 255, 255, 0.1);
   --glass-blur: 14px;
   --liquid-shadow: 0 8px 22px rgba(0, 0, 0, 0.2), 0 1px 5px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.045);
   --liquid-shadow-hover: 0 10px 30px rgba(0, 0, 0, 0.25), 0 2px 9px rgba(0, 0, 0, 0.17), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   --liquid-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
   --chip-bg: rgba(255,255,255,0.08);
-  --chip-border: rgba(226,244,255,0.12);
+  --chip-border: rgba(255,255,255,0.12);
   --chip-shadow: 0 7px 18px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.06);
-  --chip-shadow-active: 0 3px 14px rgba(125,211,252,0.14);
+  --chip-shadow-active: 0 3px 14px rgba(0,0,0,0.3);
   --overlay-dim: rgba(0, 0, 0, 0.62);
 
   --box-shadow: var(--liquid-shadow);

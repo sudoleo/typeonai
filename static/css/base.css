@@ -6,10 +6,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  background:
-    linear-gradient(145deg, color-mix(in srgb, var(--bg-color) 92%, #ffffff 8%) 0%, var(--bg-color) 44%, color-mix(in srgb, var(--accent-secondary) 10%, var(--bg-color)) 100%),
-    linear-gradient(90deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 36%, color-mix(in srgb, var(--accent-tertiary) 8%, transparent));
-  background-attachment: fixed;
+  background: var(--bg-color);
   color: var(--text-color);
   margin: 0;
   padding: 10px;

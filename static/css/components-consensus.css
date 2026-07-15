@@ -423,8 +423,8 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 }
 
 .dark-mode .agent-mode-chip-done {
-  background: color-mix(in srgb, #e7f9ff 88%, var(--button-bg) 12%);
-  color: #122232;
+  background: color-mix(in srgb, #f2f2f2 88%, var(--button-bg) 12%);
+  color: #1a1a1a;
   box-shadow:
     0 0 0 1px color-mix(in srgb, #ffffff 48%, transparent),
     0 2px 5px rgba(0, 0, 0, 0.24);
@@ -905,7 +905,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 .consensus-differences.credibility-framed:hover {
   box-shadow:
     inset 1px 0 0 color-mix(in srgb, var(--cred-frame) 42%, transparent),
-    0 10px 24px rgba(15, 23, 42, 0.045),
+    0 10px 24px rgba(20, 21, 23, 0.045),
     0 0 0 3px var(--cred-frame-wash);
 }
 
@@ -1109,7 +1109,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   background:
     linear-gradient(145deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 58%),
     var(--watch-nudge-surface);
-  box-shadow: 0 12px 30px rgba(25, 39, 54, .15), inset 0 1px 0 color-mix(in srgb, #fff 62%, transparent);
+  box-shadow: 0 12px 30px rgba(25, 26, 28, .15), inset 0 1px 0 color-mix(in srgb, #fff 62%, transparent);
   color: var(--text-color);
   text-align: left;
   white-space: normal;
@@ -1130,7 +1130,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 }
 
 .dark-mode .watch-feature-nudge {
-  --watch-nudge-surface: color-mix(in srgb, var(--bg-color) 84%, #202b36);
+  --watch-nudge-surface: color-mix(in srgb, var(--bg-color) 84%, #262626);
 }
 
 .watch-feature-nudge-label {
@@ -1285,7 +1285,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
     color-mix(in srgb, var(--container-bg) 94%, #ffffff 6%);
   border: 1px solid color-mix(in srgb, var(--glass-border) 64%, var(--sidebar-border));
   border-radius: var(--radius-md);
-  box-shadow: 0 14px 36px rgba(46, 61, 79, 0.12), 0 2px 8px rgba(46, 61, 79, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  box-shadow: 0 14px 36px rgba(30, 32, 35, 0.12), 0 2px 8px rgba(30, 32, 35, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
   z-index: var(--z-dropdown);
   backdrop-filter: blur(calc(var(--glass-blur) * 0.8)) saturate(1.2);
   -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.8)) saturate(1.2);
@@ -1552,7 +1552,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 }
 
 .dark-mode #consensusButton.is-cancel-action:hover {
-  background: #30333a;
+  background: #2e2e2e;
 }
 
 #consensusButton:hover {
@@ -1611,7 +1611,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   appearance: none;
   background: color-mix(in srgb, var(--input-bg) 92%, var(--sidebar-hover) 8%);
   color: var(--text-color);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 2px rgba(20, 21, 23, 0.04);
   cursor: pointer;
   font: inherit;
   font-size: 0.84rem;
@@ -1637,7 +1637,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--input-bg) 92%, var(--sidebar-hover) 8%);
   color: var(--text-color);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 2px rgba(20, 21, 23, 0.04);
   cursor: pointer;
   font: inherit;
   font-size: 0.84rem;
