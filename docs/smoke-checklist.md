@@ -6,19 +6,40 @@ Modell-Ausschluss, Theme-Toggle und Picker-Persistenz ab (Lauf: siehe
 `tests/e2e/README.md`). Die übrigen Punkte weiterhin manuell durchgehen
 (oder zumindest die vom Cluster betroffenen), bevor committet wird. Backend
 bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
-(Baseline: 409 passed, Stand 2026-07-12).
+(Baseline: 480 passed, Stand 2026-07-16).
 
 ## Browser-Konsole
 - [ ] Beim Laden **keine** JS-Fehler in der Konsole (besonders: keine
       `ReferenceError: X is not defined`, keine `window.X is not a function`).
 
 ## Kern-Flow
+- [ ] Frischer `/app`-Load: keine Topbar; Brand + Collapse im Sidebar-Kopf,
+      eingeloggter Account (Name/Plan + Avatar) und Settings im Sidebar-Footer.
+      Ausgeloggt stehen Login/Sign-up nur oben rechts; die Sidebar zeigt kein
+      zweites Login-Feld. Das Account-Popup hat in Light und Dark einen
+      vollständig deckenden, gut lesbaren Hintergrund.
+      Das Eingabefeld steht mit Begrüßung mittig; nach dem ersten Senden gleitet
+      es nach oben und die unveränderten Modell-Antwortboxen blenden ein.
+- [ ] Sidebar-Navigation: Models, Leaderboard und Bookmarks tragen ihre Icons
+      direkt in der jeweiligen Überschrift; außerhalb der Sidebar gibt es keine
+      zweite Icon-Leiste. Bei offener Desktop-Sidebar bleibt das Eingabefeld in
+      der Viewport-Mitte; mobil verschwindet die schwebende Brand vollständig.
+- [ ] Settings: Experience, Connections, Model behavior und Account sind als
+      klar getrennte Kategorien erkennbar; alle Schalter, API-Key-Felder,
+      System Prompt und Account-Löschung funktionieren weiterhin.
 - [ ] Frage eingeben + senden → alle ausgewählten Modelle streamen Antworten.
+- [ ] Ohne Agent Mode erscheint direkt unter dem Input die kompakte Pipeline:
+      Zähler folgt den fertigen Modellantworten, danach wird „Consensus &
+      differences“ ohne falsche Prozent-/Zeitprognose aktiv; Abschluss, Fehler
+      und Stop blenden die Zeile wieder aus. Light/Dark und Mobile ohne Clipping.
 - [ ] Senden während Lauf abbrechen (Stop) funktioniert.
 - [ ] Modell ein-/ausschließen (Checkbox/Toggle) blendet Antwortbox korrekt ein/aus.
 - [ ] Quellen-Chips / Evidence-Links erscheinen und sind klickbar.
 
 ## Consensus (höchstes Risiko)
+- [ ] Consensus und Differences erscheinen oberhalb der Modellantworten; der
+      Reveal scrollt nur dann sanft zum Ergebnis, wenn es außerhalb des
+      relevanten Viewports liegt.
 - [ ] Consensus manuell generieren → Antwort + Differences erscheinen.
 - [ ] Auto-Consensus (Toggle an) triggert automatisch nach Abschluss.
 - [ ] Credibility-Frame-Farbe (cred-very … cred-not) wird gesetzt.
@@ -52,9 +73,10 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       auch über einen Sommer-/Winterzeitwechsel hinweg.
 - [ ] Free: Daily ist als Pro markiert/gesperrt und das aktive Limit öffnet den
       bestehenden Pro-Teaser. Pro: Daily und bis zu fünf aktive Watches funktionieren.
-- [ ] Das Watch-Dashboard ist eine eigene Seite `/app/watches` (Topbar bleibt
-      sichtbar): erreichbar über den Topbar-Link „Watches“ (nur eingeloggt,
-      Mobile icon-only) und „Watched“ im Nutzericon-Menü; Browser-Back/Forward
+- [ ] Das Watch-Dashboard ist eine eigene Seite `/app/watches`: erreichbar über
+      den schwebenden View-Switch „Consensus | Watches“ (nur eingeloggt, Watches
+      auf Mobile icon-only) und „Watched“ im Nutzericon-Menü; aktiver Pill-Zustand,
+      Browser-Back/Forward
       und Deep-Link/Reload auf `/app/watches` funktionieren (vor dem Login
       erscheint ein Hinweis statt Daten). Kopfzeile mit aktiv/pausiert-Zählung,
       nächstem Lauf und Änderungen der letzten 7 Tage; pro Watch eine Karte mit
@@ -102,6 +124,8 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 
 ## Bookmarks / Sidebar
 - [ ] Bookmarks laden/aufklappen, Chat-Suche filtert.
+- [ ] Bookmark aus dem frischen Leerzustand öffnen: Input dockt ohne Hero-Sprung
+      oben an und die gespeicherten Antworten sind direkt sichtbar.
 - [ ] Einen gespeicherten Consensus nach Reload öffnen: Share-Link und Watch
       lassen sich ohne erneuten Consensus-Lauf erstellen (während der kurzen
       Vorbereitung zeigt der Dialog einen deaktivierten Ladezustand).
@@ -112,6 +136,6 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 - [ ] Nach Abschluss der Demo sieht ein ausgeloggter Nutzer unter dem gefüllten
       Eingabefeld eine Login-/Registrierungs-Aufforderung; deren Button öffnet
       das Login-Modal. Nach erfolgreichem Login verschwindet die Aufforderung.
-- [ ] Dark/Light-Toggle.
+- [ ] Dark/Light-Toggle in Settings (Desktop und Mobile).
 - [ ] Mobile-Layout (< 768px): Overlay-Sidebar, Info-Popups.
 - [ ] System-Prompt-Modal + Help-Modal (app-ui.js) öffnen/speichern.

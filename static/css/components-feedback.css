@@ -32,10 +32,10 @@
 
 .consensus-thinking-wrap {
   align-items: center;
-  gap: 10px;
-  color: color-mix(in srgb, var(--button-bg) 72%, var(--text-color));
-  font-size: 0.94rem;
-  font-weight: 650;
+  gap: 8px;
+  color: color-mix(in srgb, var(--text-color) 72%, var(--sidebar-text-muted));
+  font-size: 0.82rem;
+  font-weight: 600;
   white-space: normal;
 }
 
@@ -48,23 +48,23 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 7px;
-  width: 58px;
-  min-width: 58px;
-  height: 18px;
+  gap: 3px;
+  width: 25px;
+  min-width: 25px;
+  height: 10px;
   line-height: 0;
 }
 
 .consensus-loader span {
-  width: 9px;
-  height: 9px;
-  flex: 0 0 9px;
+  width: 4px;
+  height: 4px;
+  flex: 0 0 4px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--button-bg) 72%, var(--text-color) 28%);
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--button-bg) 16%, transparent);
-  opacity: 0.42;
-  transform: scale(0.84);
-  animation: consensusLoaderDots 1.2s ease-in-out infinite;
+  background: currentColor;
+  box-shadow: none;
+  opacity: 0.28;
+  transform: scale(0.82);
+  animation: consensusLoaderDots 1.55s ease-in-out infinite;
 }
 
 .consensus-loader span:nth-child(2) {
@@ -116,8 +116,7 @@
   .spinner,
   .typing-dots span,
   .consensus-loader span,
-  .consensus-box.is-synthesizing .consensus-main::before,
-  .consensus-box.is-synthesizing .consensus-differences::before {
+  .consensus-box.is-synthesizing::after {
     animation: none;
   }
 
@@ -137,25 +136,19 @@
   }
 }
 
-@keyframes consensusSynthesisSweep {
-  0%, 100% {
-    background-position: center, -140% 0;
-  }
-  50% {
-    background-position: center, 140% 0;
-  }
+@keyframes consensusLoadingLine {
+  0% { transform: translateX(-115%); }
+  100% { transform: translateX(415%); }
 }
 
 @keyframes consensusLoaderDots {
   0%, 100% {
-    opacity: 0.42;
-    transform: scale(0.84);
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--button-bg) 14%, transparent);
+    opacity: 0.28;
+    transform: scale(0.82);
   }
-  45% {
-    opacity: 1;
+  42% {
+    opacity: 0.78;
     transform: scale(1);
-    box-shadow: 0 0 0 7px color-mix(in srgb, var(--button-bg) 0%, transparent);
   }
 }
 
@@ -256,5 +249,4 @@
   color: var(--button-bg) !important;
   opacity: 1;
 }
-
 

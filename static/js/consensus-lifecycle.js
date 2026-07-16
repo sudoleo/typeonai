@@ -38,8 +38,19 @@
     }
     consensusOutputEl.classList.remove("is-hidden");
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => consensusOutputEl.classList.add("is-visible"));
+      requestAnimationFrame(() => {
+        consensusOutputEl.classList.add("is-visible");
+        // Konsens lebt OBERHALB der Antwortboxen: Wer beim Reveal weiter
+        // unten liest, wird sanft dorthin geholt (scroll-margin-top in CSS
+        // hält Abstand zur Float-Nav). Nur scrollen, wenn nötig.
+        const rect = consensusOutputEl.getBoundingClientRect();
+        if (rect.top < 0 || rect.top > window.innerHeight * 0.65) {
+          consensusOutputEl.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
     });
+    // Demo-Pfad ruft reveal direkt (ohne startRun): Pipeline auf Stufe 2.
+    window.App?.consensusPipeline?.onConsensusStart?.();
   }
 
   function hideConsensusOutput() {
@@ -124,6 +135,7 @@
     currentConsensusController = new AbortController();
     consensusRequestRunning = true;
     setButtonRunning(true);
+    window.App?.consensusPipeline?.onConsensusStart?.();
     return {
       runId: currentConsensusRunId,
       signal: currentConsensusController.signal
@@ -143,6 +155,7 @@
     currentConsensusController = null;
     setSynthesizing(false);
     setButtonRunning(false);
+    window.App?.consensusPipeline?.onConsensusEnd?.();
   }
 
   function isRunning() {
@@ -173,6 +186,8 @@
     const runId = currentConsensusRunId;
     currentConsensusController.abort();
     markPendingCanceled();
+    // Abbruch: Pipeline sofort weg (vor finishRun, sonst blitzt "done" auf).
+    window.App?.consensusPipeline?.dismiss?.();
     finishRun(runId);
     trackAppEvent("app_consensus_canceled");
   }

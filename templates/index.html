@@ -56,7 +56,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260715-neutral3">
+  <link rel="stylesheet" href="/static/style.css?v=20260716-consensus-loader3">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -65,11 +65,11 @@
   <!-- DOMPurify (HTML Sanitizer) -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260714-bookmark-share1"></script>
-  <script type="module" src="/static/demo.js?v=20260711-demo-login1"></script>
+  <script type="module" src="/static/firebase.js?v=20260716-navigation-settings1"></script>
+  <script type="module" src="/static/demo.js?v=20260716-consensus-progress1"></script>
   <script src="/static/app-ui.js?v=20260628-prompt-default2" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
-  <script src="/static/js/app-core.js?v=20260712-tab-title-brand1" defer></script>
+  <script src="/static/js/app-core.js?v=20260716-redesign2" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
   <script src="/static/js/model-picker.js?v=20260707-fixes1" defer></script>
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
@@ -79,91 +79,92 @@
   <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
   <script src="/static/js/attachments.js?v=20260715-image-drop1" defer></script>
   <!-- Agent Mode (aus index.html ausgelagert) -->
-  <script src="/static/js/agent-mode.js?v=20260714-agent-answers1" defer></script>
+  <script src="/static/js/agent-mode.js?v=20260716-consensus-progress1" defer></script>
+  <!-- Kompakte Zwei-Phasen-Anzeige fuer regulaere Laeufe (ohne Agent Mode). -->
+  <script src="/static/js/consensus-progress.js?v=20260716-consensus-progress1" defer></script>
   <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
-  <script src="/static/js/consensus-lifecycle.js?v=20260626-extract1" defer></script>
+  <script src="/static/js/consensus-lifecycle.js?v=20260716-consensus-progress1" defer></script>
   <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
   <script src="/static/js/share-dialog.js?v=20260714-bookmark-share1" defer></script>
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-actions.js?v=20260706-fixes2" defer></script>
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
-  <script src="/static/js/watch.js?v=20260714-bookmark-share1" defer></script>
+  <script src="/static/js/watch.js?v=20260715-redesign1" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
-  <script src="/static/js/user-tier.js?v=20260711-tierinit1" defer></script>
+  <script src="/static/js/user-tier.js?v=20260715-redesign1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-insights.js?v=20260711-differences4" defer></script>
   <script src="/static/js/consensus-run.js?v=20260714-bookmark-share1" defer></script>
-  <script src="/static/js/query-send.js?v=20260712-tab-title1" defer></script>
+  <script src="/static/js/query-send.js?v=20260716-consensus-progress1" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
 
-<body>
-  <header class="top-bar">
-    <!-- Sidebar Toggle Button -->
-    <button id="toggleSidebarButton" class="sidebar-toggle collapse-btn">
+<body class="is-hero">
+  <script>
+    // Agent-Mode-Klasse so früh wie möglich setzen: Das Hero-CSS zeigt auf dem
+    // Desktop die Response-Boxen nur ohne Agent Mode — ohne diesen Vorgriff
+    // würden sie für Agent-Mode-Nutzer kurz aufblitzen (agent-mode.js läuft
+    // erst deferred).
+    try {
+      if (localStorage.getItem("agentMode") === "true") {
+        document.body.classList.add("agent-mode-enabled");
+      }
+    } catch (e) {}
+  </script>
+  <!-- Schwebende Navigation oben links: Sidebar-Toggle + Mini-Brand
+       (Brand nur sichtbar, wenn die Sidebar zu ist). Ersetzt die Topbar. -->
+  <div class="app-nav-float">
+    <button id="toggleSidebarButton" class="sidebar-toggle collapse-btn" aria-label="Open sidebar" aria-expanded="false" title="Open sidebar">
       <span class="burger-icon">&#9776;</span>
     </button>
-
-    <!-- Logo und Titel -->
-    <div class="top-bar-logo">
-      <a href="/" id="logoLink">
-        <img src="/static/favicon.png" alt="Favicon" class="top-bar-favicon">
-      </a>
-      <span class="top-bar-title">consens.io</span>
-    </div>
-
-    <!-- Rechte Seite -->
-    <div class="top-bar-right">
-      <div class="top-bar-plan">
-        <span id="proBadge" class="pro-badge" style="display: none;">PRO</span>
-        <a id="upgradeLink" href="#" style="display: none;">Upgrade</a>
-      </div>
-      <!-- Prominenter Einstieg ins Watch-Dashboard (nur eingeloggt sichtbar, firebase.js) -->
-      <a id="topbarWatchesLink" class="top-bar-watches" href="/app/watches" hidden
-        title="Consensus Watch — your watched questions" aria-label="Open your Consensus Watch dashboard">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-          <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path>
-          <circle cx="12" cy="12" r="2.5"></circle>
-        </svg>
-        <span>Watches</span>
-      </a>
-      <!-- Neuer About-Link -->
-      <div id="loginContainer" class="login-text">Log in</div>
-      <script>
-        // Skeleton-Avatar anzeigen, solange der Firebase-Auth-Status noch nicht
-        // aufgeloest ist. Liegt ein id_token vor, war der Nutzer eingeloggt:
-        // statt "Log in" einen grauen Platzhalter-Kreis zeigen, bis
-        // onIdTokenChanged (firebase.js) das echte Avatar-Icon rendert.
-        (function () {
-          try {
-            if (localStorage.getItem("id_token")) {
-              var c = document.getElementById("loginContainer");
-              if (c) c.innerHTML = '<span class="skeleton login-skeleton" aria-hidden="true" role="status" aria-label="Loading account"></span>';
-            }
-          } catch (e) {}
-        })();
-      </script>
-      <!-- Dünner vertikaler Strich -->
-      <span class="top-bar-divider" aria-hidden="true"></span>
-      <!-- Bisheriger Login-Text -->
-      <a href="/about" class="top-bar-about">About us</a>
-      <!-- Dark/Light Toggle -->
-      <div class="mode-switch">
-        <button type="button" id="modeToggle" class="theme-toggle" aria-label="Switch to dark mode" title="Switch to dark mode">
-          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M21 14.4A7.6 7.6 0 0 1 9.6 3a8.5 8.5 0 1 0 11.4 11.4Z" />
-          </svg>
-          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="4.2" />
-            <path d="M12 2.8v2.1M12 19.1v2.1M4.2 4.2l1.5 1.5M18.3 18.3l1.5 1.5M2.8 12h2.1M19.1 12h2.1M4.2 19.8l1.5-1.5M18.3 5.7l1.5-1.5" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  </header>
-  <div class="top-bar-spacer" aria-hidden="true"></div>
+    <a href="/" class="brand-float" aria-label="consens.io home">
+      <img src="/static/favicon.png" alt="" class="app-favicon">
+      <span class="brand-float-title">consens.io</span>
+    </a>
+  </div>
+  <!-- Auth oben rechts (nur ausgeloggt; firebase.js blendet um): Login +
+       Registrieren öffnen das Auth-Modal im jeweiligen Modus. -->
+  <div id="authTopActions" class="auth-top-actions" hidden>
+    <button type="button" id="authTopLoginBtn" class="auth-top-login">Log in</button>
+    <button type="button" id="authTopSignupBtn" class="auth-top-signup">Sign up</button>
+  </div>
+  <script>
+    // Gäste sehen die Auth-Buttons sofort (kein Warten auf Firebase); lag ein
+    // id_token vor, bleibt der Bereich versteckt, bis onIdTokenChanged
+    // (firebase.js) den echten Zustand kennt.
+    (function () {
+      try {
+        if (!localStorage.getItem("id_token")) {
+          document.getElementById("authTopActions").hidden = false;
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <!-- Ansichts-Umschalter oben mittig (Consensus | Watches), immer sichtbar —
+       ausgeloggt bittet der Watches-Klick per Popup um Login (watch.js
+       verdrahtet Klicks + aktiven Zustand). -->
+  <nav id="viewSwitch" class="view-switch" aria-label="Switch view">
+    <button type="button" id="viewSwitchConsensus" class="view-switch-btn is-active" aria-pressed="true">Consensus</button>
+    <button type="button" id="viewSwitchWatches" class="view-switch-btn" aria-pressed="false"
+      title="Consensus Watch — your watched questions">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+        <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path>
+        <circle cx="12" cy="12" r="2.5"></circle>
+      </svg>
+      <span>Watches</span>
+    </button>
+  </nav>
   <div class="sidebar">
+    <!-- Brand-Kopf: Logo + Name (ehemals Topbar), Pro-Badge daneben.
+         Rechts bleibt Platz für den fixierten Sidebar-Toggle (app-nav-float). -->
+    <div class="sidebar-brand">
+      <a href="/" id="logoLink" aria-label="consens.io home">
+        <img src="/static/favicon.png" alt="consens.io" class="app-favicon">
+      </a>
+      <span class="sidebar-brand-title">consens.io</span>
+      <span id="proBadge" class="pro-badge" style="display: none;">PRO</span>
+    </div>
     <!-- Pinned: Usage, Models, Leaderboard — does not scroll with bookmarks -->
     <div class="sidebar-pinned">
 
@@ -182,7 +183,14 @@
       <div class="sidebar-section models-section is-collapsed">
         <h2 class="sidebar-toggle-heading">
           <button id="toggleModelSelection" class="sidebar-toggle-btn" type="button" onclick="toggleModelSelection()" aria-expanded="false" aria-controls="modelSelectionArea" data-tooltip="Choose the models you want to use.">
-            <span>Models</span>
+            <span class="sidebar-heading-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                <polyline points="2 17 12 22 22 17"></polyline>
+                <polyline points="2 12 12 17 22 12"></polyline>
+              </svg>
+              <span>Models</span>
+            </span>
             <span class="sidebar-toggle-arrow" aria-hidden="true">&#8250;</span>
           </button>
         </h2>
@@ -214,7 +222,14 @@
       <div class="sidebar-section leaderboard-section is-collapsed">
         <h2 class="sidebar-toggle-heading">
           <button id="toggleLeaderboard" class="sidebar-toggle-btn" type="button" onclick="toggleLeaderboard()" aria-expanded="false" aria-controls="leaderboardContentContainer" data-tooltip="For every query, the best model answer is picked by the consensus engine. This process is completely anonymized.">
-            <span>Leaderboard</span>
+            <span class="sidebar-heading-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="6" y1="20" x2="6" y2="14"></line>
+                <line x1="12" y1="20" x2="12" y2="8"></line>
+                <line x1="18" y1="20" x2="18" y2="4"></line>
+              </svg>
+              <span>Leaderboard</span>
+            </span>
             <span class="sidebar-toggle-arrow" aria-hidden="true">&#8250;</span>
           </button>
         </h2>
@@ -232,7 +247,12 @@
       <div class="sidebar-section bookmarks-section">
         <h2 class="sidebar-toggle-heading">
           <button id="bookmarksToggle" class="sidebar-toggle-btn" type="button" onclick="toggleBookmarks()" aria-expanded="true" aria-controls="bookmarksContainer" data-tooltip="All your chats if you are logged in.">
-            <span>Bookmarks</span>
+            <span class="sidebar-heading-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+              </svg>
+              <span>Bookmarks</span>
+            </span>
             <span class="sidebar-toggle-arrow" aria-hidden="true">&#8250;</span>
           </button>
         </h2>
@@ -265,22 +285,52 @@
         } catch (e) {}
       })();
     </script>
-    <!-- Neuer Abschnitt in der Sidebar für Einstellungen -->
+    <!-- Fußzeile: Account-Icon nur für eingeloggte Nutzer; Gäste verwenden
+         ausschließlich die Auth-Aktionen oben rechts. -->
     <div class="sidebar-settings">
-      <button id="editSystemPromptBtn" title="Settings">
-        <span class="settings-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-          </svg>
-        </span>
-        <span class="settings-label">Settings</span>
-      </button>
-      <span id="version-number">v1.8.4</span>
+      <div class="sidebar-footer-row">
+        <div id="loginContainer" class="login-text" hidden></div>
+        <script>
+          // Skeleton-Avatar anzeigen, solange der Firebase-Auth-Status noch nicht
+          // aufgeloest ist. Liegt ein id_token vor, war der Nutzer eingeloggt:
+          // statt "Log in" einen grauen Platzhalter-Kreis zeigen, bis
+          // onIdTokenChanged (firebase.js) das echte Avatar-Icon rendert.
+          (function () {
+            try {
+              if (localStorage.getItem("id_token")) {
+                var c = document.getElementById("loginContainer");
+                if (c) {
+                  c.hidden = false;
+                  c.innerHTML = '<span class="skeleton login-skeleton" aria-hidden="true" role="status" aria-label="Loading account"></span>';
+                }
+              }
+            } catch (e) {}
+          })();
+        </script>
+        <div class="sidebar-account-meta">
+          <span id="accountLabel" class="sidebar-account-label" hidden></span>
+          <a id="upgradeLink" href="#" style="display: none;">Upgrade</a>
+        </div>
+        <button id="editSystemPromptBtn" title="Settings" aria-label="Settings">
+          <span class="settings-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </span>
+        </button>
+      </div>
+      <div class="sidebar-footer-meta">
+        <a href="/about" class="sidebar-footer-link">About us</a>
+        <span aria-hidden="true">&middot;</span>
+        <span id="version-number">v1.8.4</span>
+      </div>
     </div>
   </div>
   <div class="container">
     <div class="input-section">
+      <!-- Begrüßung im Hero-Zustand (zentriertes Eingabefeld vor der ersten Frage) -->
+      <p class="hero-greeting">What should the models cross-check?</p>
       <div class="chat-input-container" style="position: relative;">
         <div id="attachmentBar" class="attachment-bar" hidden></div>
         <!-- Follow-up-Fragen (Pro): Affordance/Kontext-Chip, gefüllt von
@@ -369,6 +419,31 @@
           </button>
         </div>
       </div>
+      <!-- Rahmenlose Zwei-Phasen-Anzeige fuer regulaere Laeufe. Der erste
+           Abschnitt ist anhand fertiger Antworten determiniert; die Dauer der
+           Synthese wird bewusst nicht als scheinexakter Prozentwert verkauft. -->
+      <div id="consensusPipeline" class="consensus-pipeline" data-stage="answers"
+        role="status" aria-live="polite" aria-atomic="true" hidden>
+        <span id="consensusPipelineStatus" class="visually-hidden"></span>
+        <div class="consensus-pipeline-steps" aria-hidden="true">
+          <span class="consensus-pipeline-step" data-step="answers">
+            <span class="consensus-pipeline-dot"></span>
+            <span>Model answers</span>
+            <span id="consensusPipelineCount" class="consensus-pipeline-count"></span>
+          </span>
+          <svg class="consensus-pipeline-arrow" viewBox="0 0 18 10" fill="none" aria-hidden="true">
+            <path d="M1 5h15m-3-3 3 3-3 3"></path>
+          </svg>
+          <span class="consensus-pipeline-step" data-step="consensus">
+            <span class="consensus-pipeline-dot"></span>
+            <span>Consensus &amp; differences</span>
+          </span>
+        </div>
+        <div class="consensus-pipeline-track" aria-hidden="true">
+          <span id="consensusPipelineBar" class="consensus-pipeline-bar"></span>
+          <span class="consensus-pipeline-sweep"></span>
+        </div>
+      </div>
       <div id="postDemoLoginPrompt" class="post-demo-login-prompt" role="status" aria-live="polite" hidden>
         <span class="post-demo-login-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -420,7 +495,41 @@
       </section>
     </div>
 
-    <div class="response-section" style="position: relative;">
+    <!-- Konsens-Section: bewusst OBERHALB der Modellantworten (User-Vorgabe) —
+         das Ergebnis (Konsens + Differences) ist die Hauptsache, die einzelnen
+         Antworten darunter sind der Beleg. -->
+    <div class="consensus-section">
+      <div class="consensus-wrapper">
+        <!-- Konsens erscheint rahmenlos und erst, wenn alle Antworten fertig sind -->
+        <div id="consensusOutput" class="consensus-output is-hidden">
+          <!-- Verdict-Header: kompakte Einordnung, bevor der Nutzer liest -->
+          <div id="consensusVerdict" class="consensus-verdict" hidden aria-live="polite"></div>
+          <!-- Konsens-Box mit zwei nebeneinanderliegenden Bereichen -->
+          <div class="consensus-box" id="consensusResponse">
+            <!-- Linker Bereich: Konsens-Antwort (80%) -->
+            <div class="consensus-main">
+              <h2>Consensus Answer</h2>
+              <p></p>
+              <!-- Kernaussagen, deren Anker nicht im Text gefunden wurde -->
+              <div id="consensusClaimsFallback" class="consensus-claims-fallback" hidden></div>
+            </div>
+            <!-- Rechter Bereich: Unterschiede (20%) -->
+            <div class="consensus-differences">
+              <h2>Differences</h2>
+              <div id="differencesCards" class="differences-cards" hidden></div>
+              <p></p>
+            </div>
+          </div>
+          <!-- Dezenter Trennstrich zwischen Konsens-Bereich und Antwort-Grid -->
+          <div class="consensus-divider" aria-hidden="true"></div>
+        </div>
+        <!-- Popover (Desktop) / Bottom Sheet (Mobile) für Claim-Badges -->
+        <div id="claimSheetBackdrop" class="claim-sheet-backdrop" hidden></div>
+        <div id="claimPopover" class="claim-popover" role="dialog" aria-label="Model agreement details" hidden></div>
+      </div>
+    </div>
+
+    <div class="response-section" style="position: relative;" inert aria-hidden="true">
       <div id="agentModePanel" class="agent-mode-panel" aria-live="polite" aria-hidden="true">
         <div class="agent-mode-header">
           <div class="agent-mode-heading">
@@ -599,54 +708,27 @@
       </div>
     </div>
 
-    <!-- Konsens-Section -->
-    <div class="consensus-section">
-      <div class="consensus-wrapper">
-        <!-- Konsens erscheint rahmenlos und erst, wenn alle Antworten fertig sind -->
-        <div id="consensusOutput" class="consensus-output is-hidden">
-          <!-- Dezenter Trennstrich zwischen Antwort-Grid und Konsens-Bereich -->
-          <div class="consensus-divider" aria-hidden="true"></div>
-          <!-- Verdict-Header: kompakte Einordnung, bevor der Nutzer liest -->
-          <div id="consensusVerdict" class="consensus-verdict" hidden aria-live="polite"></div>
-          <!-- Konsens-Box mit zwei nebeneinanderliegenden Bereichen -->
-          <div class="consensus-box" id="consensusResponse">
-            <!-- Linker Bereich: Konsens-Antwort (80%) -->
-            <div class="consensus-main">
-              <h2>Consensus Answer</h2>
-              <p></p>
-              <!-- Kernaussagen, deren Anker nicht im Text gefunden wurde -->
-              <div id="consensusClaimsFallback" class="consensus-claims-fallback" hidden></div>
-            </div>
-            <!-- Rechter Bereich: Unterschiede (20%) -->
-            <div class="consensus-differences">
-              <h2>Differences</h2>
-              <div id="differencesCards" class="differences-cards" hidden></div>
-              <p></p>
-            </div>
-          </div>
-        </div>
-        <!-- Popover (Desktop) / Bottom Sheet (Mobile) für Claim-Badges -->
-        <div id="claimSheetBackdrop" class="claim-sheet-backdrop" hidden></div>
-        <div id="claimPopover" class="claim-popover" role="dialog" aria-label="Model agreement details" hidden></div>
-        <div class="feedback-line">
-          <span class="feedback-note">
-            Please avoid personal or sensitive data. AI models can make mistakes.
-          </span>
-          <button id="feedbackButton" class="feedback-button" title="Send feedback">Feedback</button>
-          <a href="/terms" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Terms of Use"
-            aria-label="Terms of Use">Terms</a>
-          <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Privacy Policy"
-            aria-label="Privacy Policy">Privacy</a>
-          <a href="/imprint" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Imprint"
-            aria-label="Imprint">Imprint</a>
-          <a href="/about" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="About"
-            aria-label="About">About</a>
-          <span id="feedback-note"></span>
-        </div>
+    <!-- Fußzeile (Disclaimer + Legal-Links): bleibt unter den Antworten,
+         auch wenn der Konsens-Bereich jetzt oben lebt. -->
+    <footer class="app-footer">
+      <div class="feedback-line">
+        <span class="feedback-note">
+          Please avoid personal or sensitive data. AI models can make mistakes.
+        </span>
+        <button id="feedbackButton" class="feedback-button" title="Send feedback">Feedback</button>
+        <a href="/terms" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Terms of Use"
+          aria-label="Terms of Use">Terms</a>
+        <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Privacy Policy"
+          aria-label="Privacy Policy">Privacy</a>
+        <a href="/imprint" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Imprint"
+          aria-label="Imprint">Imprint</a>
+        <a href="/about" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="About"
+          aria-label="About">About</a>
+        <span id="feedback-note"></span>
       </div>
-    </div>
+    </footer>
 
-    <script src="/static/js/app-init.js?v=20260712-sidebar-state1" defer></script>
+    <script src="/static/js/app-init.js?v=20260716-navigation-settings1" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing
@@ -929,7 +1011,7 @@
     </div>
   </div>
 
-  <!-- Consensus-Watch-Seite (/app/watches): Vollbild-View unter der Topbar,
+  <!-- Consensus-Watch-Seite (/app/watches): Vollbild-View unter dem View-Switch,
        Übersicht aller Watches + Morning Brief. URL-Sync in watch.js. -->
   <div id="watchDashboard" class="watch-page" hidden>
     <div class="watch-page-inner">
@@ -1068,78 +1150,81 @@
         </div>
 
         <div class="settings-body">
-
-          <div class="settings-section settings-theme-section">
-            <div class="settings-theme-row">
-              <div>
-                <h3>Appearance</h3>
-                <p>Switch between light and dark mode.</p>
+          <section class="settings-category" aria-labelledby="settingsExperienceTitle">
+            <div class="settings-category-heading">
+              <h3 id="settingsExperienceTitle">Experience</h3>
+              <p>Appearance and how model runs are presented.</p>
+            </div>
+            <div class="settings-group">
+              <div class="settings-section settings-theme-section">
+                <div class="settings-theme-row">
+                  <div>
+                    <h4>Appearance</h4>
+                    <p>Switch between light and dark mode.</p>
+                  </div>
+                  <div class="mode-switch settings-mode-switch">
+                    <button type="button" id="mobileModeToggle" class="theme-toggle" aria-label="Switch to dark mode"
+                      title="Switch to dark mode">
+                      <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M21 14.4A7.6 7.6 0 0 1 9.6 3a8.5 8.5 0 1 0 11.4 11.4Z" />
+                      </svg>
+                      <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="12" cy="12" r="4.2" />
+                        <path d="M12 2.8v2.1M12 19.1v2.1M4.2 4.2l1.5 1.5M18.3 18.3l1.5 1.5M2.8 12h2.1M19.1 12h2.1M4.2 19.8l1.5-1.5M18.3 5.7l1.5-1.5" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div class="mode-switch settings-mode-switch">
-                <button type="button" id="mobileModeToggle" class="theme-toggle" aria-label="Switch to dark mode"
-                  title="Switch to dark mode">
-                  <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M21 14.4A7.6 7.6 0 0 1 9.6 3a8.5 8.5 0 1 0 11.4 11.4Z" />
-                  </svg>
-                  <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true">
-                    <circle cx="12" cy="12" r="4.2" />
-                    <path
-                      d="M12 2.8v2.1M12 19.1v2.1M4.2 4.2l1.5 1.5M18.3 18.3l1.5 1.5M2.8 12h2.1M19.1 12h2.1M4.2 19.8l1.5-1.5M18.3 5.7l1.5-1.5" />
-                  </svg>
-                </button>
+
+              <div class="settings-section">
+                <label for="agentModeSwitch" class="custom-checkbox-label settings-switch-row settings-agent-mode-row">
+                  <span>
+                    <strong>Agent Mode</strong>
+                    <small>Group selected models while keeping their answers available for consensus.</small>
+                  </span>
+                  <input type="checkbox" id="agentModeSwitch">
+                </label>
+              </div>
+
+              <div class="settings-section">
+                <label for="autoConsensusToggle" class="custom-checkbox-label settings-switch-row">
+                  <span>
+                    <strong>Auto Consensus</strong>
+                    <small>Build consensus and differences automatically after all models finish.</small>
+                  </span>
+                  <input type="checkbox" id="autoConsensusToggle">
+                </label>
               </div>
             </div>
-          </div>
+          </section>
 
-          <hr class="settings-divider settings-theme-section">
-
-          <div class="settings-section">
-            <label for="agentModeSwitch" class="custom-checkbox-label settings-agent-mode-row"
-              style="width: 100%; display: flex; justify-content: space-between; font-weight: bold;">
-              Agent Mode
-              <input type="checkbox" id="agentModeSwitch">
-            </label>
-            <p style="font-size: 0.85em; color: #666; margin-top: 5px;">
-              Show selected models as one grouped agent box while keeping responses available for consensus.
-            </p>
-          </div>
-
-          <hr class="settings-divider">
-
-          <div class="settings-section">
-            <label for="autoConsensusToggle" class="custom-checkbox-label"
-              style="width: 100%; display: flex; justify-content: space-between; font-weight: bold;">
-              Auto Consensus
-              <input type="checkbox" id="autoConsensusToggle">
-            </label>
-            <p style="font-size: 0.85em; color: #666; margin-top: 5px;">
-              Automatically synthesise a consensus once every model has finished answering. On by default;
-              turn it off to keep only the individual answers.
-            </p>
-          </div>
-
-          <hr class="settings-divider">
-
-          <div class="settings-section">
-            <label for="useOwnKeysSwitch" class="custom-checkbox-label"
-              style="width: 100%; display: flex; justify-content: space-between; font-weight: bold;">
-              Use your own API keys
-              <input type="checkbox" id="useOwnKeysSwitch">
-            </label>
-            <p style="font-size: 0.85em; color: #666; margin-top: 5px;">
-              Requires a verified login. Your keys are stored only in this browser and are used instead of the free quota.
-            </p>
-          </div>
-
-          <hr class="settings-divider">
-
-          <div class="settings-section">
-            <div class="collapse-header" onclick="toggleSettingsCollapse('apiSettingsArea', 'apiArrow')">
-              <h3>API Keys (Endpoints)</h3>
-              <span id="apiArrow" class="arrow">&#9660;</span>
+          <section class="settings-category" aria-labelledby="settingsConnectionsTitle">
+            <div class="settings-category-heading">
+              <h3 id="settingsConnectionsTitle">Connections</h3>
+              <p>Choose between the included quota and your own provider access.</p>
             </div>
+            <div class="settings-group">
+              <div class="settings-section">
+                <label for="useOwnKeysSwitch" class="custom-checkbox-label settings-switch-row">
+                  <span>
+                    <strong>Use your own API keys</strong>
+                    <small>Keys stay in this browser and replace the included quota.</small>
+                  </span>
+                  <input type="checkbox" id="useOwnKeysSwitch">
+                </label>
+              </div>
 
-            <div id="apiSettingsArea" style="display: none; margin-top: 15px;">
+              <div class="settings-section">
+                <div class="collapse-header" onclick="toggleSettingsCollapse('apiSettingsArea', 'apiArrow')">
+                  <div>
+                    <h4>Provider API keys</h4>
+                    <p>Manage and test credentials for individual providers.</p>
+                  </div>
+                  <span id="apiArrow" class="arrow">&#9660;</span>
+                </div>
+
+                <div id="apiSettingsArea" class="settings-collapsible-area" style="display: none;">
 
               <div class="api-key-group">
                 <label for="openaiKey">OpenAI API Key <span id="openaiFeedback" class="feedback"></span></label>
@@ -1172,36 +1257,43 @@
                 <span id="apiSpinner" class="spinner" style="display: none;"></span>
               </button>
               <div id="apiKeysStatus" class="api-keys-status" role="status" aria-live="polite" hidden></div>
+                </div>
+              </div>
             </div>
-          </div>
+          </section>
 
-          <hr class="settings-divider">
-
-          <div class="settings-section">
-            <h3>System Prompt</h3>
-            <p style="font-size: 0.9em; color: #666; margin-bottom: 10px;">
-              Customize how the models behave. Leave empty for default.
-            </p>
-            <textarea id="systemPromptInput" class="systemPromptInputSytle" rows="7"></textarea>
-            <button id="saveSystemPromptBtn" class="save-prompt-btn">Save System Prompt</button>
-          </div>
-
-          <div id="accountSettingsSection" style="display: none;">
-            <hr class="settings-divider">
-            <div class="settings-section">
-              <h3>Account</h3>
-              <p style="font-size: 0.85em; color: #666; margin-top: 5px;">
-                Permanently delete your account, bookmarks, and all data stored about you.
-                This cannot be undone.
-              </p>
-              <button type="button" id="deleteAccountBtn"
-                style="margin-top: 8px; background: none; border: 1px solid #c0392b; color: #c0392b; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 0.9em;">
-                Delete account
-              </button>
+          <section class="settings-category" aria-labelledby="settingsBehaviorTitle">
+            <div class="settings-category-heading">
+              <h3 id="settingsBehaviorTitle">Model behavior</h3>
+              <p>Set the shared instruction sent to every selected model.</p>
             </div>
-          </div>
+            <div class="settings-group">
+              <div class="settings-section">
+                <label class="settings-field-label" for="systemPromptInput">System prompt</label>
+                <p>Customize how the models respond. Leave empty to use the default.</p>
+                <textarea id="systemPromptInput" class="systemPromptInputSytle" rows="7"></textarea>
+                <button id="saveSystemPromptBtn" class="save-prompt-btn">Save System Prompt</button>
+              </div>
+            </div>
+          </section>
 
-          <div style="text-align: center; margin-top: 20px; opacity: 0.5; font-size: 0.8em;">
+          <section id="accountSettingsSection" class="settings-category" aria-labelledby="settingsAccountTitle" style="display: none;">
+            <div class="settings-category-heading">
+              <h3 id="settingsAccountTitle">Account</h3>
+              <p>Manage permanent account actions.</p>
+            </div>
+            <div class="settings-group">
+              <div class="settings-section settings-danger-section">
+                <div>
+                  <h4>Delete account</h4>
+                  <p>Permanently delete your account, bookmarks, and stored data. This cannot be undone.</p>
+                </div>
+                <button type="button" id="deleteAccountBtn" class="settings-danger-btn">Delete account</button>
+              </div>
+            </div>
+          </section>
+
+          <div class="settings-version">
             v1.8.4
           </div>
         </div>

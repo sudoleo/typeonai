@@ -228,7 +228,10 @@ onIdTokenChanged(auth, async (user) => {
         window.updateQuestionInputAccess();
       }
       if (usageOptions) usageOptions.style.display = "none";
-      if (loginContainer) loginContainer.innerText = "Verify your e-mail to continue";
+      if (loginContainer) {
+        loginContainer.innerHTML = "";
+        loginContainer.hidden = true;
+      }
       return; // <--- ganz wichtig
     }
 
@@ -275,21 +278,33 @@ onIdTokenChanged(auth, async (user) => {
     const accountSection = document.getElementById("accountSettingsSection");
     if (accountSection) accountSection.style.display = "block";
 
-    // Prominenter Watch-Dashboard-Einstieg in der Topbar (nur eingeloggt)
-    const topbarWatchesLink = document.getElementById("topbarWatchesLink");
-    if (topbarWatchesLink) topbarWatchesLink.hidden = false;
+    // View-Switch-Pill ist immer sichtbar (auch ausgeloggt) — hier nichts tun.
+    // Auth-Buttons oben rechts sind nur für Gäste.
+    const authTopActions = document.getElementById("authTopActions");
+    if (authTopActions) authTopActions.hidden = true;
+    if (loginContainer) loginContainer.hidden = false;
 
-    // 5) E‑Mail & Logout als Popup
+    // Account-Label neben dem Avatar in der Sidebar-Fußzeile
+    const accountLabel = document.getElementById("accountLabel");
+    if (accountLabel) {
+      const accountName = (user.displayName || user.email.split("@")[0]).trim();
+      accountLabel.dataset.accountName = accountName;
+      accountLabel.textContent = `${accountName} · ${window.isUserPro ? "Pro" : "Free"}`;
+      accountLabel.title = user.email;
+      accountLabel.hidden = false;
+    }
+
+    // 5) E‑Mail & Logout als Popup (öffnet aus der Sidebar-Fußzeile nach oben)
     const emailInitial = user.email.charAt(0).toUpperCase();
     loginContainer.innerHTML = `
-      <div class="email-container" style="position: relative; display: inline-block;">
-        <span id="emailIcon" class="email-icon" style="display: inline-block; width: 32px; height: 32px; border-radius: 50%; background-color: var(--sidebar-border, #ddd); color: var(--text-color); text-align: center; line-height: 32px; font-weight: bold; font-size: 14px; cursor: pointer;">${emailInitial}</span>
-        <div id="emailPopup" class="email-popup" style="display: none; position: absolute; top: 45px; right: 0; background-color: var(--container-bg, #fff); border: 1px solid var(--sidebar-border, #ddd); border-radius: 8px; padding: 15px 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); z-index: 100; min-width: 150px;">
-          <div class="popup-content" style="display: flex; flex-direction: column; align-items: flex-start;">
-            <span class="user-email" style="margin-bottom: 12px; font-weight: 500; font-size: 0.95rem; color: var(--text-color);">${user.email}</span>
-            <a id="sharedLinksButton" class="top-bar-about" style="cursor: pointer; text-decoration: none; align-self: flex-start; padding: 5px 0;">Shared links</a>
-            <a id="watchedLinksButton" class="top-bar-about" style="cursor: pointer; text-decoration: none; align-self: flex-start; padding: 5px 0;">Watched</a>
-            <a id="logoutButton" class="top-bar-about" style="cursor: pointer; text-decoration: none; align-self: flex-start; padding: 5px 0;">Logout</a>
+      <div class="email-container">
+        <span id="emailIcon" class="email-icon" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" aria-label="Open account menu">${emailInitial}</span>
+        <div id="emailPopup" class="email-popup" role="menu" hidden>
+          <div class="popup-content">
+            <span class="user-email">${user.email}</span>
+            <a id="sharedLinksButton" class="top-bar-about" role="menuitem">Shared links</a>
+            <a id="watchedLinksButton" class="top-bar-about" role="menuitem">Watched</a>
+            <a id="logoutButton" class="top-bar-about" role="menuitem">Logout</a>
           </div>
         </div>
       </div>
@@ -300,10 +315,22 @@ onIdTokenChanged(auth, async (user) => {
     const sharedLinksButton = document.getElementById("sharedLinksButton");
     const watchedLinksButton = document.getElementById("watchedLinksButton");
 
+    function setAccountMenuOpen(isOpen) {
+      if ((!emailPopup.hidden) === isOpen) return;
+      emailPopup.hidden = !isOpen;
+      emailIcon.setAttribute("aria-expanded", String(isOpen));
+      trackAppEvent("app_account_menu_toggled", { open: isOpen });
+    }
+
     emailIcon.addEventListener("click", e => {
       e.stopPropagation();
-      emailPopup.style.display = emailPopup.style.display === "none" ? "block" : "none";
-      trackAppEvent("app_account_menu_toggled", { open: emailPopup.style.display === "block" });
+      setAccountMenuOpen(emailPopup.hidden);
+    });
+    emailIcon.addEventListener("keydown", e => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setAccountMenuOpen(emailPopup.hidden);
     });
 
     // Übersicht der geteilten Consensus-Links direkt aus dem User-Menü öffnen.
@@ -312,7 +339,7 @@ onIdTokenChanged(auth, async (user) => {
     if (sharedLinksButton) {
       sharedLinksButton.addEventListener("click", e => {
         e.stopPropagation();
-        emailPopup.style.display = "none";
+        setAccountMenuOpen(false);
         if (typeof window.openShareDialog === "function") {
           window.openShareDialog("list");
         }
@@ -322,7 +349,7 @@ onIdTokenChanged(auth, async (user) => {
     if (watchedLinksButton) {
       watchedLinksButton.addEventListener("click", e => {
         e.stopPropagation();
-        emailPopup.style.display = "none";
+        setAccountMenuOpen(false);
         if (typeof window.openWatchDialog === "function") {
           window.openWatchDialog("list");
         }
@@ -333,13 +360,13 @@ onIdTokenChanged(auth, async (user) => {
       // stopPropagation: Klick soll weder das Icon-Toggle noch den
       // loginContainer-Handler treffen.
       e.stopPropagation();
-      emailPopup.style.display = "none";
+      setAccountMenuOpen(false);
       openLogoutConfirm();
     });
 
     document.addEventListener("click", e => {
       if (!loginContainer.contains(e.target)) {
-        emailPopup.style.display = "none";
+        setAccountMenuOpen(false);
       }
     });
 
@@ -351,10 +378,24 @@ onIdTokenChanged(auth, async (user) => {
         if (typeof window.updateQuestionInputAccess === "function") {
           window.updateQuestionInputAccess();
         }
-        loginContainer.innerText = "Log in";
+        loginContainer.innerHTML = "";
+        loginContainer.hidden = true;
 
-        const topbarWatchesLinkOff = document.getElementById("topbarWatchesLink");
-        if (topbarWatchesLinkOff) topbarWatchesLinkOff.hidden = true;
+        // Gäste: Login/Sign-up-Buttons oben rechts einblenden (View-Switch
+        // bleibt sichtbar; Watches bittet beim Klick um Login).
+        const authTopActionsOff = document.getElementById("authTopActions");
+        if (authTopActionsOff) authTopActionsOff.hidden = false;
+
+        const accountLabelOff = document.getElementById("accountLabel");
+        if (accountLabelOff) {
+          accountLabelOff.textContent = "";
+          delete accountLabelOff.dataset.accountName;
+          accountLabelOff.removeAttribute("title");
+          accountLabelOff.hidden = true;
+        }
+
+        const upgradeLinkOff = document.getElementById("upgradeLink");
+        if (upgradeLinkOff) upgradeLinkOff.style.display = "none";
 
         if (usageOptions) usageOptions.style.display = "none";
 
@@ -726,6 +767,18 @@ document.getElementById("loginContainer").addEventListener("click", () => {
   }
 });
 
+// Auth-Buttons oben rechts (nur ausgeloggt sichtbar): öffnen das Modal direkt
+// im passenden Modus — "Sign up" landet ohne Umweg im Registrierungsformular.
+function openAuthModal(mode) {
+  if (auth.currentUser) return;
+  setMode(mode);
+  document.getElementById("loginModal").style.display = "block";
+  trackAppEvent("auth_modal_open", { mode });
+}
+
+document.getElementById("authTopLoginBtn")?.addEventListener("click", () => openAuthModal("login"));
+document.getElementById("authTopSignupBtn")?.addEventListener("click", () => openAuthModal("register"));
+
 // Schließen des Modals
 document.getElementById("closeLoginModal").addEventListener("click", () => {
   document.getElementById("loginModal").style.display = "none";
@@ -1072,6 +1125,9 @@ window.resolveCurrentShareResultId = async function () {
 
 // Diese Funktion füllt die UI mit den Daten eines Bookmarks
 function loadSingleBookmarkUI(bookmark) {
+    // Ein geladenes Bookmark zeigt sofort Antworten und startet daher nie im
+    // zentrierten Leerzustand.
+    window.exitHeroMode?.();
     window.App?.setAppTitle?.(bookmark?.query);
     // Never let Share/Watch target a run that was displayed previously.
     // A consensus bookmark gets a reusable server-side snapshot on Share/Watch.

@@ -92,6 +92,40 @@
     }, 3000);
   }
 
+  // Desktop-Schwelle des Hero-CSS (components-input.css): ab hier sind die
+  // Response-Boxen ohne Agent Mode schon vor der ersten Frage sichtbar.
+  const heroDesktopQuery = window.matchMedia("(min-width: 1100px)");
+
+  // Haelt inert/aria-hidden der .response-section synchron zur CSS-Sichtbarkeit
+  // im Hero: verborgen nur, wenn der Hero zentriert ist (Agent Mode aktiv oder
+  // kein Desktop). Wird auch von agent-mode.js (updateAgentModeUI) gerufen.
+  function syncHeroResponseAccess() {
+    const responses = document.querySelector(".response-section");
+    if (!responses) return;
+    const hiddenInHero =
+      document.body.classList.contains("is-hero") &&
+      (document.body.classList.contains("agent-mode-enabled") || !heroDesktopQuery.matches);
+    responses.inert = hiddenInHero;
+    if (hiddenInHero) {
+      responses.setAttribute("aria-hidden", "true");
+    } else {
+      responses.removeAttribute("aria-hidden");
+    }
+  }
+
+  if (typeof heroDesktopQuery.addEventListener === "function") {
+    heroDesktopQuery.addEventListener("change", syncHeroResponseAccess);
+  }
+  syncHeroResponseAccess();
+
+  function exitHeroMode() {
+    document.body.classList.remove("is-hero");
+    syncHeroResponseAccess();
+  }
+
+  window.exitHeroMode = exitHeroMode;
+  window.syncHeroResponseAccess = syncHeroResponseAccess;
+
   Object.assign(window.App, {
     modelPrefs,
     deepThinkModelLabels,
@@ -99,6 +133,8 @@
     getSelectedModelCount,
     setAppTitle,
     trackAppEvent,
-    showPopup
+    showPopup,
+    exitHeroMode,
+    syncHeroResponseAccess
   });
 })();

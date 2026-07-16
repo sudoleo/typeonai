@@ -459,10 +459,14 @@ async function renderDemoConsensus(mainP, diffP) {
     DEMO_DATA.differencesData?.best_model ||
     (DEMO_DATA.differences.match(/BestModel:\s*(.*)/i)?.[1] || "").trim();
   if (best) window.recordModelVote?.(best, "BestModel");
+  window.App?.consensusPipeline?.onConsensusEnd?.();
   showPostDemoLoginPrompt();
 }
 
 async function runDemoFlow() {
+  // Die Demo kann auch direkt über den "Try Demo"-Chip starten und muss dann
+  // denselben Hero->Antworten-Übergang wie eine reguläre Frage auslösen.
+  window.exitHeroMode?.();
   const runId = ++demoRunId;
   const sendBtn = document.getElementById("sendButton");
   const consensusBtn = document.getElementById("consensusButton");

@@ -204,9 +204,9 @@
       if (window.resetCredibilityFrame && consensusBox) {
         window.resetCredibilityFrame(consensusBox.querySelector(".consensus-differences"));
       }
-      if (isAgentModeEnabled()) {
-        setAgentModeStatus("canceled");
-      }
+      // Der Status-Hub steuert neben dem Agent-Panel auch die kompakte
+      // Consensus-Pipeline. Deshalb immer melden, auch ohne Agent Mode.
+      setAgentModeStatus("canceled");
     }
 
     window.cancelCurrentQuery = function () {
@@ -239,6 +239,15 @@
       const question = document.getElementById("questionInput").value;
       window.lastQuestion = question;  // Speichern in einer globalen Variable (auch von consensus-run.js gelesen)
 
+      if (!question.trim()) {
+        alert("Please enter a question.");
+        return;
+      }
+
+      // Ab dem ersten echten Lauf dockt das Eingabefeld dauerhaft oben an.
+      // Der Demo-Pfad nutzt denselben Übergang.
+      window.exitHeroMode?.();
+
       // === DEMO: Früh raus, wenn "Demo" ===
       if (isDemoQuery(question)) {
         trackAppEvent("app_demo_started", {
@@ -257,11 +266,6 @@
 
       // clearResponseBoxes();
       consensusGenerated = false;
-      if (!question) {
-        alert("Please enter a question.");
-        return;
-      }
-
       window.App.setAppTitle(question);
 
       trackAppEvent("app_query_started", {
@@ -541,6 +545,7 @@
               if (outputEl) markModelError(outputEl, message, prepareData);
             });
             finishQueryRun(queryRunId);
+            setAgentModeStatus("error", message);
             setConsensusGate(true);
             return;
           }

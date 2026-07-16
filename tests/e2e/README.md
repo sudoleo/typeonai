@@ -38,9 +38,12 @@ Backend-Baseline (`python -m pytest tests`) bleibt unverändert.
     Anchor-/Quote-Verifikation und Agreement-Score laufen **echt**.
     Zusätzlich wird die `pending_results`-Share-Persistenz übersprungen
     (kein Firestore-Schreiben aus Tests).
-  - `MOCK_AUTH=1` — `verify_user_token` akzeptiert das Sentinel-Token
-    `e2e-mock-token` (uid `e2e-mock-user`, Free-Tier, kein Firestore-Read).
-  - `DISABLE_RATE_LIMIT=1` — slowapi aus, sonst laufen die Tests in die
+- `MOCK_AUTH=1` — `verify_user_token` akzeptiert das Sentinel-Token
+  `e2e-mock-token` (uid `e2e-mock-user`, Free-Tier, kein Firestore-Read).
+- Die Send-Hilfe aktiviert lokale Dummy-Eigenkeys. Damit bleibt die Suite vom
+  aktuell aus Firestore geladenen Free-Limit unabhängig; `MOCK_LLM=1`
+  verhindert weiterhin jeden echten Provider-Aufruf.
+- `DISABLE_RATE_LIMIT=1` — slowapi aus, sonst laufen die Tests in die
     3-5/minute-Limits der Endpoints.
   - `MOCK_LLM_DELAY_MS=40` — Deltas gedrosselt, damit die Tests den
     Streaming-Zwischenzustand beobachten können.

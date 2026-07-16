@@ -96,10 +96,8 @@
   border-color: #141414 !important;
 }
 
-.settings-theme-section {
-  display: none;
-}
-
+/* Appearance-Zeile in den Settings: seit dem Topbar-Aus der einzige
+   Dark-Mode-Toggle — auf allen Viewports sichtbar. */
 .settings-theme-row {
   display: flex;
   align-items: center;

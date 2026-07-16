@@ -11,10 +11,29 @@
   width: min(var(--app-container-width, 980px), calc(100vw - 320px));
   max-width: none;
   margin: 0 auto;
-  padding: 0;
+  /* Ohne Topbar: fester Abstand nach oben, unter Float-Nav und View-Switch. */
+  padding: 58px 0 0;
   position: relative;
   container-type: inline-size;
   isolation: isolate;
+  /* Sidebar auf/zu: Die nutzbare Breite gleitet, die Seitenmitte bleibt stabil. */
+  transition: width 0.3s ease;
+}
+
+/* Desktop (>1099px): Die fixe Sidebar nimmt keinen Flow-Platz weg. Bei
+   offener Sidebar begrenzen symmetrische 260px-Gutters die Breite, sodass
+   Input und Ergebnisse in der echten Viewport-Mitte bleiben und zugleich
+   nicht unter die Sidebar laufen. Eingeklappt steht fast die volle Breite
+   zur Verfügung. Fixed-Overlays dürfen weiterhin NICHT im Container liegen
+   (container-type macht ihn ohnehin zum Containing Block). */
+@media (min-width: 1100px) {
+  .container {
+    width: min(var(--app-container-width, 980px), calc(100vw - 520px));
+  }
+
+  body:has(.sidebar.collapsed) .container {
+    width: min(var(--app-container-width, 980px), calc(100vw - 60px));
+  }
 }
 
 .main-wrapper {
@@ -31,58 +50,69 @@ body:has(.sidebar.collapsed) .main-wrapper {
 }
 
 /* --------------------------------------------------------------------------
-   Top Bar
+   Kopflose App: schwebende Navigation statt Topbar.
+   .app-nav-float = Sidebar-Toggle + Mini-Brand oben links (fixed).
+   Das Brand-Element erscheint nur bei geschlossener Sidebar; ist die Sidebar
+   offen, zeigt .sidebar-brand Logo + Namen im Sidebar-Kopf.
    -------------------------------------------------------------------------- */
-.top-bar {
+.app-nav-float {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  box-sizing: border-box;
-  height: 45px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--glass-bg-strong) 92%, transparent), color-mix(in srgb, var(--glass-bg) 84%, transparent)),
-    var(--container-bg);
+  /* 16px: Button-Mitte (16 + 34/2 = 33px) liegt auf der Mitte der
+     Sidebar-Brand-Zeile (12px Sidebar-Padding + 4px Brand-Padding + 34/2). */
+  top: 16px;
+  /* Offene Sidebar (Desktop): Toggle sitzt in ihrer rechten oberen Ecke
+     (260px Breite − 34px Button − 12px Rand). Eingeklappt: links oben. */
+  left: 214px;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  padding: 0 12px 0 20px;
+  gap: 8px;
   z-index: var(--z-header);
-  border-bottom: 1px solid var(--sidebar-border);
-  box-shadow: 0 10px 34px rgba(20, 21, 23, 0.08), inset 0 1px 0 var(--glass-highlight);
-  flex-wrap: nowrap;
-  backdrop-filter: blur(calc(var(--glass-blur) * 0.78)) saturate(1.22);
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.78)) saturate(1.22);
+  transition: left 0.3s ease;
 }
 
-/* Spacer statt <br><br><br>: schiebt Inhalt unter die fixierte 45px-Topbar. */
-.top-bar-spacer {
-  height: 60px;
+body:has(.sidebar.collapsed) .app-nav-float {
+  left: 12px;
 }
 
-.top-bar-right {
-  display: flex;
+/* Overlay-Sidebar (≤1099px): Toggle bleibt immer links oben; die offene
+   Overlay-Sidebar schiebt ihre Brand-Zeile stattdessen nach rechts.
+   Darüber schiebt die Sidebar den Inhalt (Push statt Overlay). */
+@media (max-width: 1099px) {
+  .app-nav-float,
+  body:has(.sidebar.collapsed) .app-nav-float {
+    left: 12px;
+  }
+
+  .brand-float,
+  body:has(.sidebar.collapsed) .brand-float {
+    display: none;
+  }
+}
+
+/* Waehrend die Watch-Seite offen ist, uebernimmt der View-Switch die
+   Navigation — Burger/Brand wuerden unter dem Overlay nichts bewirken. */
+body:has(.watch-page:not([hidden])) .app-nav-float {
+  display: none;
+}
+
+.brand-float {
+  display: none;
   align-items: center;
-  gap: 16px;
-  margin-left: auto;
-  margin-right: 0;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--text-color);
 }
 
-.top-bar-logo {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-}
-
-#logoLink {
+body:has(.sidebar.collapsed) .brand-float {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
 }
 
-.top-bar-favicon {
+/* Offene Overlay-Sidebar (mobil): Brand ausblenden, der Sidebar-Kopf zeigt es. */
+body:has(.sidebar.active) .brand-float {
+  display: none;
+}
+
+.app-favicon {
   height: 22px;
   width: auto;
   aspect-ratio: 279 / 200;
@@ -92,11 +122,12 @@ body:has(.sidebar.collapsed) .main-wrapper {
   transition: filter 0.3s ease;
 }
 
-.dark-mode .top-bar-favicon {
+.dark-mode .app-favicon {
   filter: invert(0);
 }
 
-.top-bar-title {
+.brand-float-title,
+.sidebar-brand-title {
   color: var(--text-color);
   font-size: 1.05rem;
   font-weight: 650;
@@ -106,10 +137,21 @@ body:has(.sidebar.collapsed) .main-wrapper {
   font-feature-settings: "kern" 1;
 }
 
-.top-bar-plan {
+/* Brand-Zeile im Sidebar-Kopf; rechts bleibt Platz für den fixierten Toggle. */
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-shrink: 0;
+  padding: 4px 44px 0 8px;
+  min-height: 34px;
+}
+
+#logoLink {
   display: inline-flex;
   align-items: center;
-  line-height: 1;
+  justify-content: center;
+  flex: 0 0 auto;
 }
 
 /* Einheitliches Pro-Badge im App-Gold — die eine Quelle für alle
@@ -145,10 +187,10 @@ body:has(.sidebar.collapsed) .main-wrapper {
   color: color-mix(in srgb, #e8c76a 86%, var(--text-color) 14%);
 }
 
-/* Top-Bar-Variante: minimal größer, JS blendet sie für Pro-Nutzer ein. */
+/* Brand-Variante im Sidebar-Kopf: JS blendet sie für Pro-Nutzer ein. */
 #proBadge {
   display: none;
-  padding: 3px 8px;
+  padding: 2px 7px;
   letter-spacing: 0.08em;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 4px 12px rgba(201, 162, 50, 0.24);
 }
@@ -175,6 +217,8 @@ body:has(.sidebar.collapsed) .main-wrapper {
   background: color-mix(in srgb, var(--accent) 7%, var(--glass-bg-strong));
 }
 
+/* Ehemalige Topbar-Link-Optik; lebt weiter in den Links des Account-Popups
+   (#emailPopup, firebase.js rendert .top-bar-about-Klassen). */
 .top-bar-about {
   font-size: 0.9rem;
   font-weight: 550;
@@ -187,10 +231,86 @@ body:has(.sidebar.collapsed) .main-wrapper {
   color: var(--text-color);
 }
 
-.top-bar-divider {
-  width: 1px;
-  height: 16px;
-  background: color-mix(in srgb, var(--sidebar-border) 80%, transparent);
+/* --------------------------------------------------------------------------
+   Auth-Buttons oben rechts (nur ausgeloggt, firebase.js): Log in als ruhige
+   Pill, Sign up als Primär-Button. Fixed, auf Höhe der Float-Nav.
+   -------------------------------------------------------------------------- */
+.auth-top-actions {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: var(--z-header);
+}
+
+.auth-top-actions[hidden] {
+  display: none;
+}
+
+.auth-top-login,
+.auth-top-signup {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
+}
+
+.auth-top-login {
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 80%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 36%, transparent), transparent 62%),
+    color-mix(in srgb, var(--glass-bg-strong) 62%, transparent);
+  color: var(--text-color);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 1px 3px rgba(20, 21, 23, 0.05);
+}
+
+.auth-top-login:hover {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--sidebar-border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 42%, transparent), transparent 62%),
+    color-mix(in srgb, var(--accent) 8%, var(--glass-bg-strong));
+  opacity: 1;
+}
+
+.auth-top-signup {
+  border: 1px solid color-mix(in srgb, var(--button-bg) 78%, transparent);
+  background: var(--button-bg);
+  color: var(--button-text);
+}
+
+.auth-top-signup:hover {
+  opacity: 0.92;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--button-bg) 18%, transparent);
+}
+
+@media (max-width: 640px) {
+  .auth-top-actions {
+    right: 10px;
+  }
+
+  .auth-top-login,
+  .auth-top-signup {
+    min-height: 29px;
+    padding-inline: 11px;
+    font-size: 0.8rem;
+  }
+}
+
+/* Sehr schmale Screens: nur Log in zeigen, Registrieren lebt im Modal. */
+@media (max-width: 480px) {
+  .auth-top-signup {
+    display: none;
+  }
 }
 
 .login-text {
@@ -222,6 +342,10 @@ body:has(.sidebar.collapsed) .main-wrapper {
   box-shadow: inset 0 1px 0 var(--glass-highlight), 0 6px 16px color-mix(in srgb, var(--accent) 10%, transparent);
   text-decoration: none;
   opacity: 1;
+}
+
+.login-text[hidden] {
+  display: none;
 }
 
 /* Eingeloggt zeigt der Container nur das runde Initial-Symbol –
@@ -331,7 +455,7 @@ body:has(.sidebar.collapsed) .main-wrapper {
 .sidebar-pinned {
   flex-shrink: 0;
   padding: 0;
-  margin-top: 58px;
+  margin-top: 22px;
   overflow: hidden;
 }
 
@@ -408,7 +532,10 @@ body:has(.sidebar.collapsed) .main-wrapper {
   background-color: var(--scrollbar-thumb-hover);
 }
 
-.sidebar-toggle {
+/* .app-nav-float-Präfix: gewinnt gegen die generische .collapse-btn-Regel
+   (24px, opacity .6, components-misc.css lädt später) — der Burger soll
+   34px hoch bleiben und mittig auf der Sidebar-Brand-Zeile sitzen. */
+.app-nav-float .sidebar-toggle {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -416,19 +543,20 @@ body:has(.sidebar.collapsed) .main-wrapper {
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  margin-right: 10px;
+  margin: 0;
   width: 34px;
   height: 34px;
-  z-index: var(--z-sidebar-toggle);
+  opacity: 1;
   transition: background-color .15s ease, box-shadow .15s ease;
 }
 
-.sidebar-toggle:hover {
+.app-nav-float .sidebar-toggle:hover {
   background-color: color-mix(in srgb, var(--glass-bg-strong) 72%, transparent);
   box-shadow: inset 0 1px 0 var(--glass-highlight), 0 6px 16px rgba(28, 30, 33, 0.08);
+  transform: none;
 }
 
-.dark-mode .sidebar-toggle:hover {
+.dark-mode .app-nav-float .sidebar-toggle:hover {
   background-color: rgba(255,255,255,0.1);
 }
 
@@ -470,32 +598,91 @@ body:has(.sidebar.collapsed) .main-wrapper {
 
 .sidebar-settings {
   position: fixed;
-  bottom: 20px;
-  left: 20px;
-  width: calc(260px - 40px);
+  bottom: 14px;
+  left: 12px;
+  width: calc(260px - 24px);
   text-align: center;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent);
+  background: var(--sidebar-bg);
 }
 
-/* Settings als ruhiges Sidebar-Item: SVG-Zahnrad + Label, linksbündig wie
-   die Bookmark-Zeilen, dezenter Hover statt Card-Schatten. Als ID-Selektor,
-   damit der globale button-Selektor (components-input.css) nicht gewinnt. */
-#editSystemPromptBtn {
+/* Fußzeile: Avatar/Login links, Account-Label flexibel, Zahnrad rechts. */
+.sidebar-footer-row {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
   gap: 9px;
+  min-height: 36px;
+  padding: 0 2px;
+}
+
+.sidebar-account-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.sidebar-account-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.sidebar-account-label[hidden] {
+  display: none;
+}
+
+.sidebar-footer-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  color: var(--sidebar-text-muted);
+  opacity: 0.85;
+}
+
+.sidebar-footer-link {
+  color: inherit;
+  text-decoration: none;
+  transition: color .15s ease;
+}
+
+.sidebar-footer-link:hover {
+  color: var(--text-color);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Settings als reines Icon rechts in der Fußzeile. Als ID-Selektor,
+   damit der globale button-Selektor (components-input.css) nicht gewinnt. */
+#editSystemPromptBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 0;
   background: transparent;
   border: 0;
   color: var(--sidebar-text-muted);
   cursor: pointer;
-  font-size: 0.84rem;
-  font-weight: 600;
-  padding: 8px 10px;
-  width: 100%;
-  margin: 0;
+  padding: 0;
+  width: 34px;
+  height: 34px;
+  margin: 0 0 0 auto;
   border-radius: var(--radius-xs);
   transition: background-color 0.15s ease, color 0.15s ease;
 }
@@ -558,6 +745,20 @@ body:has(.sidebar.collapsed) .main-wrapper {
   letter-spacing: inherit;
   cursor: pointer;
   transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+.sidebar-heading-label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.sidebar-heading-label svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--sidebar-text-muted) 82%, var(--text-color));
 }
 
 .sidebar-toggle-btn:hover,
@@ -623,12 +824,117 @@ body:has(.sidebar.collapsed) .main-wrapper {
 
 #version-number {
   position: static;
-  display: block;
+  display: inline;
+  margin: 0;
+  opacity: 1;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Account-Avatar in der Fußzeile: leicht getönter Initial-Kreis (Teal).
+   firebase.js rendert .email-icon; Optik lebt hier statt in Inline-Styles. */
+.email-icon {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: color-mix(in srgb, #1d9e75 20%, var(--sidebar-bg));
+  border: 1px solid color-mix(in srgb, #1d9e75 34%, var(--sidebar-border));
+  color: color-mix(in srgb, #0f6e56 72%, var(--text-color));
   text-align: center;
-  margin-top: 10px;
-  opacity: 0.6;
-  font-size: 0.7rem;
-  color: var(--sidebar-text-muted);
+  line-height: 30px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+
+.email-icon:hover {
+  background-color: color-mix(in srgb, #1d9e75 30%, var(--sidebar-bg));
+}
+
+.email-icon:focus-visible {
+  outline: 2px solid color-mix(in srgb, #1d9e75 50%, transparent);
+  outline-offset: 2px;
+}
+
+.email-container {
+  position: relative;
+  display: inline-block;
+}
+
+.email-popup {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  z-index: 120;
+  min-width: 190px;
+  padding: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--text-color);
+  box-shadow: 0 16px 38px rgba(20, 22, 25, 0.18), 0 3px 10px rgba(20, 22, 25, 0.1);
+}
+
+.email-popup[hidden] {
+  display: none;
+}
+
+.email-popup .popup-content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.email-popup .user-email {
+  display: block;
+  max-width: 210px;
+  margin: 0 0 8px;
+  padding: 2px 5px 9px;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.09);
+  color: var(--text-color);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.email-popup .top-bar-about {
+  align-self: stretch;
+  padding: 8px 7px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+}
+
+.email-popup .top-bar-about:hover,
+.email-popup .top-bar-about:focus-visible {
+  background: #f3f4f4;
+  outline: none;
+}
+
+.dark-mode .email-icon {
+  background-color: color-mix(in srgb, #1d9e75 26%, var(--sidebar-bg));
+  color: color-mix(in srgb, #9fe1cb 76%, var(--text-color));
+}
+
+.dark-mode .email-popup {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #282828;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42), 0 3px 12px rgba(0, 0, 0, 0.28);
+}
+
+.dark-mode .email-popup .user-email {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .email-popup .top-bar-about:hover,
+.dark-mode .email-popup .top-bar-about:focus-visible {
+  background: #363636;
 }
 
 
@@ -785,11 +1091,26 @@ body:has(.sidebar.collapsed) .main-wrapper {
   outline: none;
 }
 
-@media (max-width: 1549px) {
+@media (max-width: 1099px) {
+  .brand-float,
+  body:has(.sidebar.collapsed) .brand-float {
+    display: none;
+  }
+
+  /* Während das mobile Navigationspanel offen ist, gehören die fixierten
+     View-/Auth-Aktionen zur verdeckten Seite und dürfen den Sidebar-Kopf
+     nicht überlagern. Der Burger bleibt als Close-Aktion sichtbar. */
+  body:has(.sidebar.active) .view-switch,
+  body:has(.sidebar.active) .auth-top-actions {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+  }
+
   .sidebar {
-    top: 45px;
+    top: 0;
     width: min(82vw, 360px);
-    height: calc(100% - 45px);
+    height: 100%;
     padding: 12px;
     background: var(--sidebar-bg);
     box-shadow: 16px 0 48px rgba(0, 0, 0, 0.18);
@@ -801,8 +1122,13 @@ body:has(.sidebar.collapsed) .main-wrapper {
   }
 
   .sidebar-pinned {
-    margin-top: 6px;
+    margin-top: 16px;
     padding: 2px;
+  }
+
+  /* Overlay-Sidebar: Brand-Zeile beginnt rechts vom fixierten Toggle. */
+  .sidebar-brand {
+    padding: 4px 8px 0 48px;
   }
 
   .sidebar-content {
@@ -813,9 +1139,9 @@ body:has(.sidebar.collapsed) .main-wrapper {
 
   .sidebar-settings {
     position: absolute;
-    left: 15px;
-    bottom: 18px;
-    width: calc(100% - 30px);
+    left: 12px;
+    bottom: 14px;
+    width: calc(100% - 24px);
   }
 
   .container {
@@ -829,44 +1155,18 @@ body:has(.sidebar.collapsed) .main-wrapper {
     padding-inline: 6px;
   }
 
-  .top-bar {
-    padding-inline: 10px 12px;
-  }
-
-  .top-bar-right {
-    gap: 10px;
-    margin-right: 0;
-  }
-
-  .top-bar .mode-switch {
+  .brand-float-title {
     display: none;
   }
 
-  .top-bar-about,
-  .top-bar-divider {
-    display: none;
-  }
-
-  .top-bar-logo {
-    gap: 8px;
-  }
-
-  .top-bar-favicon {
+  .app-favicon {
     height: 20px;
-  }
-
-  .top-bar-title {
-    font-size: 0.96rem;
   }
 
   .login-text {
     min-height: 29px;
     padding-inline: 12px;
     font-size: 0.83rem;
-  }
-
-  .sidebar-toggle {
-    margin-right: 6px;
   }
 
   .container {

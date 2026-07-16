@@ -6,7 +6,7 @@
    Buttons & Inputs
    -------------------------------------------------------------------------- */
 .button,
-button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(.sidebar-toggle-btn):not(#clearButton):not(#consensusButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.consensus-share-pill):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle):not(.model-picker-display):not(.model-picker-option):not(.mode-explainer-trigger):not(.mode-explainer-dismiss):not(.attach-trigger):not(.attach-menu-item):not(.attachment-chip-remove):not(.attachment-viewer-close):not(.claim-badge):not(.claim-jump-link):not(.diff-jump-link):not(.claim-popover-close):not(.diff-resolve-btn):not(.resolve-model-toggle):not(.resolve-prompt-toggle):not(.agent-mode-collapse-btn):not(.agent-mode-answers-toggle):not(.response-code-copy):not(.followup-offer-btn):not(.followup-chip-remove):not(.post-demo-login-action):not(.exclude-btn):not(.delete-bookmark):not(#editSystemPromptBtn):not(.share-primary-btn):not(.share-secondary-btn):not(.share-danger-btn):not(.share-link-btn):not(.watch-page-back) {
+button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(.sidebar-toggle-btn):not(#clearButton):not(#consensusButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.consensus-share-pill):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle):not(.model-picker-display):not(.model-picker-option):not(.mode-explainer-trigger):not(.mode-explainer-dismiss):not(.attach-trigger):not(.attach-menu-item):not(.attachment-chip-remove):not(.attachment-viewer-close):not(.claim-badge):not(.claim-jump-link):not(.diff-jump-link):not(.claim-popover-close):not(.diff-resolve-btn):not(.resolve-model-toggle):not(.resolve-prompt-toggle):not(.agent-mode-collapse-btn):not(.agent-mode-answers-toggle):not(.response-code-copy):not(.followup-offer-btn):not(.followup-chip-remove):not(.post-demo-login-action):not(.exclude-btn):not(.delete-bookmark):not(#editSystemPromptBtn):not(.share-primary-btn):not(.share-secondary-btn):not(.share-danger-btn):not(.share-link-btn):not(.watch-page-back):not(.view-switch-btn):not(.sidebar-rail-btn):not(.auth-top-login):not(.auth-top-signup):not(.settings-danger-btn) {
   padding: 10px 16px;
   font-size: 1em;
   background:
@@ -53,6 +53,106 @@ textarea:focus {
 .input-section {
   text-align: center;
   margin-bottom: 36px;
+  position: relative;
+  transition: transform 0.5s cubic-bezier(0.22, 0.9, 0.28, 1);
+}
+
+/* --------------------------------------------------------------------------
+   Hero-Zustand: Vor der ersten Frage sitzt das Eingabefeld vertikal mittig
+   (body.is-hero, index.html). window.exitHeroMode() entfernt die Klasse beim
+   Senden/Bookmark-Laden/Demo-Start — das Feld gleitet dann per Transform nach
+   oben und der Antwortbereich blendet ein.
+   68px = body padding-top (10px) + .container padding-top (58px).
+   -------------------------------------------------------------------------- */
+body.is-hero .input-section {
+  transform: translateY(max(0px, calc(50svh - 50% - 68px)));
+}
+
+/* Begrüßungszeile schwebt über dem Eingabefeld und nimmt keinen Platz im
+   Layout ein — so springt beim Verlassen des Hero-Zustands nichts. */
+.hero-greeting {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin: 0 0 20px;
+  font-size: 1.4rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text-color);
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+body.is-hero .hero-greeting {
+  opacity: 1;
+  transform: none;
+}
+
+/* Leere Antwort-Platzhalter (Response-Boxen, Agent-Panel) erst nach der
+   ersten Frage zeigen; sanftes Einblenden nach dem Slide-up. */
+.response-section {
+  transition: opacity 0.35s ease 0.16s;
+}
+
+body.is-hero .response-section {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Die Feedback-/Legal-Zeile (consensus-section) haengt im Flow unter dem
+   Antwortbereich. Im zentrierten Hero (Input per Transform nach unten
+   verschoben) wuerde sie sonst OBERHALB des Eingabefelds erscheinen, sobald
+   der Agent Mode die Response-Boxen auf display:none setzt — daher im Hero
+   gemeinsam mit den Boxen ausblenden. */
+body.is-hero .consensus-section {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Auf schmalen Screens wird der Hero-Input vertikal verschoben. Der Footer
+   bleibt sonst an seiner alten Flow-Position und würde über Begrüßung und
+   Eingabefeld liegen. Nach dem ersten Senden erscheint er wieder regulär. */
+@media (max-width: 1099px) {
+  body.is-hero .app-footer {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+/* Desktop ohne Agent Mode: Die Modell-Antwortboxen sind schon vor der ersten
+   Frage sichtbar (Mockup). Das Eingabefeld bleibt dann oben im Flow statt
+   vertikal zentriert; app-core.js (syncHeroResponseAccess) hebt inert/
+   aria-hidden entsprechend auf. */
+@media (min-width: 1100px) {
+  body.is-hero:not(.agent-mode-enabled) .input-section {
+    transform: none;
+  }
+
+  body.is-hero:not(.agent-mode-enabled) .hero-greeting {
+    position: static;
+    margin: 6px 0 4px;
+  }
+
+  body.is-hero:not(.agent-mode-enabled) .response-section,
+  body.is-hero:not(.agent-mode-enabled) .consensus-section {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .input-section,
+  .hero-greeting,
+  .response-section {
+    transition: none;
+  }
 }
 
 .visually-hidden {
@@ -89,6 +189,200 @@ textarea:focus {
   -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.74)) saturate(1.2);
   overflow: hidden;
   isolation: isolate;
+}
+
+/* Im Light Theme ist das Eingabefeld eine wirklich weiße Arbeitsfläche statt
+   einer grauen Glass-Mischung. Dark Mode behält die bestehende Oberfläche. */
+body:not(.dark-mode) .chat-input-container {
+  background: #ffffff;
+}
+
+body:not(.dark-mode) .chat-input-container::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0) 58%);
+  opacity: 0.42;
+}
+
+/* --------------------------------------------------------------------------
+   Consensus-Pipeline: kompakte Statuszeile direkt unter dem Eingabefeld.
+   Keine zusaetzliche Karte oder Umrandung: Die Hierarchie entsteht nur durch
+   Typografie, Statuspunkte und eine zwei Pixel hohe Fortschrittslinie.
+   -------------------------------------------------------------------------- */
+.consensus-pipeline {
+  --pipeline-progress: 4%;
+  width: calc(100% - 12px);
+  max-height: 0;
+  margin: -2px 6px 0;
+  padding: 0 2px;
+  box-sizing: border-box;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition:
+    max-height 0.24s cubic-bezier(0.2, 0, 0, 1),
+    opacity 0.18s ease,
+    transform 0.24s cubic-bezier(0.2, 0, 0, 1),
+    margin-bottom 0.24s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.consensus-pipeline.is-visible {
+  max-height: 34px;
+  margin-bottom: 8px;
+  opacity: 1;
+  transform: none;
+}
+
+.consensus-pipeline-steps {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 21px;
+  color: color-mix(in srgb, var(--sidebar-text-muted) 74%, transparent);
+  font-size: 0.7rem;
+  font-weight: 550;
+  letter-spacing: 0.005em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.consensus-pipeline-step {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  transition: color 0.2s ease;
+}
+
+.consensus-pipeline-dot {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.46;
+  transition: opacity 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.consensus-pipeline-count {
+  margin-left: -2px;
+  color: var(--sidebar-text-muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.consensus-pipeline-arrow {
+  width: 18px;
+  height: 10px;
+  flex: 0 0 auto;
+  margin: 0 9px;
+  color: color-mix(in srgb, var(--sidebar-text-muted) 44%, transparent);
+  stroke: currentColor;
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.consensus-pipeline-track {
+  position: relative;
+  height: 2px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--sidebar-border) 58%, transparent);
+}
+
+.consensus-pipeline-bar,
+.consensus-pipeline-sweep {
+  position: absolute;
+  inset-block: 0;
+  display: block;
+  border-radius: inherit;
+}
+
+.consensus-pipeline-bar {
+  left: 0;
+  width: var(--pipeline-progress);
+  background: color-mix(in srgb, var(--button-bg) 78%, var(--accent-secondary));
+  transition: width 0.42s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.consensus-pipeline-sweep {
+  left: 66%;
+  width: 12%;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--button-bg) 76%, var(--accent-secondary)), transparent);
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+
+.consensus-pipeline[data-stage="answers"] [data-step="answers"],
+.consensus-pipeline[data-stage="consensus"] [data-step="consensus"] {
+  color: var(--text-color);
+}
+
+.consensus-pipeline[data-stage="answers"] [data-step="answers"] .consensus-pipeline-dot,
+.consensus-pipeline[data-stage="consensus"] [data-step="consensus"] .consensus-pipeline-dot {
+  opacity: 0.9;
+  transform: scale(1.08);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--button-bg) 10%, transparent);
+  animation: consensusPipelinePulse 1.7s ease-in-out infinite;
+}
+
+.consensus-pipeline[data-stage="answers-done"] [data-step="answers"],
+.consensus-pipeline[data-stage="consensus"] [data-step="answers"],
+.consensus-pipeline[data-stage="done"] .consensus-pipeline-step {
+  color: color-mix(in srgb, var(--text-color) 76%, var(--sidebar-text-muted));
+}
+
+.consensus-pipeline[data-stage="answers-done"] [data-step="answers"] .consensus-pipeline-dot,
+.consensus-pipeline[data-stage="consensus"] [data-step="answers"] .consensus-pipeline-dot,
+.consensus-pipeline[data-stage="done"] .consensus-pipeline-dot {
+  opacity: 0.9;
+  box-shadow: none;
+  animation: none;
+}
+
+.consensus-pipeline[data-stage="consensus"] .consensus-pipeline-sweep {
+  opacity: 1;
+  animation: consensusPipelineSweep 1.75s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes consensusPipelinePulse {
+  0%, 100% { opacity: 0.62; }
+  50% { opacity: 1; }
+}
+
+@keyframes consensusPipelineSweep {
+  0% { transform: translateX(-120%); opacity: 0; }
+  18% { opacity: 0.9; }
+  82% { opacity: 0.9; }
+  100% { transform: translateX(285%); opacity: 0; }
+}
+
+@media (max-width: 480px) {
+  .consensus-pipeline {
+    width: calc(100% - 8px);
+    margin-inline: 4px;
+  }
+
+  .consensus-pipeline-steps {
+    font-size: 0.66rem;
+  }
+
+  .consensus-pipeline-arrow {
+    width: 14px;
+    margin-inline: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .consensus-pipeline,
+  .consensus-pipeline-bar {
+    transition-duration: 0.01ms;
+  }
+
+  .consensus-pipeline-dot,
+  .consensus-pipeline-sweep {
+    animation: none !important;
+  }
 }
 
 .chat-input-container::before {
@@ -930,4 +1224,3 @@ textarea:focus {
   background: color-mix(in srgb, var(--clear-button-bg) 80%, transparent);
   color: var(--clear-button-text);
 }
-

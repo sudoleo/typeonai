@@ -76,10 +76,21 @@ deferred am `</body>` — `app-init.js`.
 - **`app-core.js`** — MUSS zuerst laden. Definiert `window.App`-Bus, `modelPrefs`
   (zentrales Mapping Provider→DOM-IDs), `deepThinkModelLabels`, gemeinsame Helfer
   (`getModelOptionLabel`, `getSelectedModelCount`, `setAppTitle`, `showPopup`,
-  `trackAppEvent`). `setAppTitle` setzt den Standardtitel oder einen gekürzten,
-  fragebezogenen Browser-Tab-Titel.
+  `trackAppEvent`, `exitHeroMode`). `setAppTitle` setzt den Standardtitel oder
+  einen gekürzten, fragebezogenen Browser-Tab-Titel; `exitHeroMode` schaltet
+  Antwortbereich und Input vom zentrierten Leerzustand in den Laufzustand.
 - **`model-picker.js`** — Modellauswahl/Custom-Picker, Default-Modelle, localStorage-
   Persistenz (`restoreModelSelections`).
+- **Navigation/Settings-Shell** (`templates/index.html`, `layout.css`,
+  `components-modals.css`, `app-init.js`, `firebase.js`) — Models,
+  Leaderboard und Bookmarks sind ausschließlich Sidebar-Abschnitte mit
+  integrierten Icons. Bei offener Desktop-Sidebar begrenzen symmetrische
+  Gutters die Contentbreite und halten den Input in der Viewport-Mitte; mobil
+  bleibt außerhalb der Sidebar nur der Burger sichtbar. Gast-Login/-Sign-up
+  sitzt oben rechts, während der Sidebar-Footer nur für eingeloggte Accounts
+  das Avatar-Menü mit deckender Light-/Dark-Fläche zeigt. Settings sind in
+  Experience, Connections, Model behavior und Account gruppiert; die
+  bestehenden Control-IDs bleiben der JavaScript-Vertrag.
 - **`markdown-stream.js`** — Markdown-Rendering (`injectMarkdown`) + SSE-Helfer
   (`createStreamRenderer`, `streamSSERequest`).
 - **`sources.js`** — Quellen/Evidence-Mapping; nutzt DOM-Datasets
@@ -92,6 +103,11 @@ deferred am `</body>` — `app-init.js`.
   Auto-Consensus-Toggle erzwingt/sperrt. Sobald Antworten vorliegen, bietet das
   Panel einen dezenten, session-lokalen „Show/Hide model answers“-Disclosure;
   jeder neue Lauf startet wieder mit verborgenen Einzelantworten.
+- **`consensus-progress.js`** — beobachtende Zwei-Phasen-Anzeige direkt unter
+  dem Input für reguläre Läufe: zählt fertige Modellantworten determiniert und
+  zeigt die anschließende Consensus-/Differences-Synthese bewusst indeterminiert.
+  Im Agent Mode bleibt sie verborgen; Status-Brücke ist
+  `window.App.consensusPipeline.*`.
 - **`consensus-lifecycle.js`** — Consensus-Sichtbarkeit, Gate/Availability,
   Run-State, Abort/Cancel, Run-ID-Gating, Auto-Consensus-Persistenz. Exponiert die
   `window.App.consensusLifecycle.*`-Brücke (siehe §4/§8).
@@ -101,15 +117,16 @@ deferred am `</body>` — `app-init.js`.
 - **`consensus-actions.js`** — Copy/Citation/Share-Buttons am Consensus.
 - **`watch.js`** — `window.openWatchDialog` (Create-Dialog im Share-Modal) und
   `window.openWatchDashboard` (eigene Seite `/app/watches`: Vollbild-View
-  `#watchDashboard` unter der fixen Topbar, Styles in
+  `#watchDashboard` unter dem fixen View-Switch, Styles in
   `static/css/components-watch.css`; URL-Sync via pushState/popstate, Deep-Link
   wartet auf den asynchronen Firebase-Auth-Status): Karten je Watch mit
   Score/Delta/History-Sparkline, letzter Änderung, nächstem Lauf und
   Inline-Settings (Intervall/Uhrzeit/Mailmodus/Condition, Pause/Delete) sowie
   die Morning-Brief-Karte (`/api/my/watch-brief`, Toggle im selben
   `.switch`/`.slider`-Stil wie das Input-Feld). `openWatchDialog("list")`
-  leitet auf die Seite um; Einstieg zusätzlich über den login-gated
-  Topbar-Link `#topbarWatchesLink` (firebase.js blendet ihn ein/aus). Nach dem
+  leitet auf die Seite um; Einstieg zusätzlich über den login-gated,
+  schwebenden View-Switch `#viewSwitch` (Consensus/Watches; `firebase.js`
+  blendet ihn ein/aus, `watch.js` synchronisiert URL und aktiven Zustand). Nach dem
   ersten erfolgreichen, speicherbaren Consensus zeigt `window.App.watch.*`
   einmalig einen dezenten Hinweis am Watch-Button; Schließen oder Öffnen des
   Features persistiert die Bestätigung in `localStorage`. Die
@@ -117,7 +134,7 @@ deferred am `</body>` — `app-init.js`.
   Weekly-Watches senden zusätzlich den gewählten lokalen Wochentag
   (`run_weekday`) und können ihn im Dashboard nachträglich ändern.
 - **`user-tier.js`** — Free/Pro-UI, Premium-Modellstatus (`updateUserTierUI`,
-  `updatePremiumModelsState`).
+  `updatePremiumModelsState`) und Plan-Label im Sidebar-Account-Footer.
 - **`consensus-insights.js`** — strukturierte Auswertung: Claim-Badges,
   Difference-Karten, Credibility-Frame-Farben, Jump-to-answer, Spalten-Balancer,
   Resolve-Runde (Button an Widerspruchs-Karten → `POST /resolve`).
@@ -125,7 +142,8 @@ deferred am `</body>` — `app-init.js`.
   den SSE-Stream, rendert Ergebnis + Citation/Share-Meta. `parseBestModel`.
 - **`query-send.js`** — `window.sendQuestion`: `/prepare` + `/ask_*`-Fan-out,
   Streaming-Rendering, Usage/Tier-UI, Auto-Consensus-Trigger, Query-Run-State
-  (`isQueryRequestRunning`, `cancelCurrentQuery`).
+  (`isQueryRequestRunning`, `cancelCurrentQuery`). Ein valider erster Lauf
+  beendet über `window.exitHeroMode()` den zentrierten Input-Leerzustand.
 - **`app-init.js`** — das gesamte `initApp()`: Theme, Usage/Limits + User-Status,
   Response-Box-Toggles, Sidebar/Layout, Modals, Tooltips, Evidence-Rendering,
   API-Key-Test. Läuft als letztes Script, ruft `initApp()` direkt auf.
@@ -133,13 +151,16 @@ deferred am `</body>` — `app-init.js`.
 **Nicht unter `static/js/`** (älter, eigene Verantwortung):
 - **`static/firebase.js`** (ES-Modul) — Firebase-Init, Login/Logout, Token-Handling,
   `window.auth`, Bookmarks-CRUD-Calls, Feedback, Voting, Tier-Sync sowie das
-  Nutzericon-Menü mit „Shared links“ und direkt darunter „Watched“. Bookmark-
+  Nutzericon-Menü im Sidebar-Footer (Avatar, Name/Plan, „Shared links“ und
+  direkt darunter „Watched“). Ein geöffnetes Bookmark beendet den Hero-
+  Leerzustand sofort. Bookmark-
   Saves aktualisieren `window.bookmarksData` und das DOM direkt aus dem vom
   Server zurückgegebenen Merge-Ergebnis. Nach einer E-Mail-Registrierung zeigt
   das Auth-Modal einen eigenen Verifizierungs-Erfolgszustand statt eines Browser-Alerts.
 - **`static/demo.js`** (ES-Modul) — Demo-Flow (`runDemoFlow`) für die „Demo"-Query;
   zeigt Gästen nach Abschluss der Demo am Eingabebereich eine Login-/Registrierungs-
-  Aufforderung, ohne die Demo-Frage aus dem deaktivierten Feld zu entfernen.
+  Aufforderung, ohne die Demo-Frage aus dem deaktivierten Feld zu entfernen, und
+  beendet beim Start denselben Hero-Leerzustand wie eine echte Anfrage.
 - **`static/app-ui.js`** — System-Prompt-/Help-Modal + App-Width-Resizer.
 
 **Abhängigkeitsrichtung**: `app-core.js` → Feature-Module → `app-init.js`. Module
@@ -166,6 +187,10 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
    `event: delta {text}` … dann `event: final {response, sources,
    free_usage_remaining, deep_remaining, is_pro_user, key_used}`. Bei Fehler kommt
    ein `final` mit `error`. Frontend rendert deltas und wertet `final` aus.
+4. Ohne Agent Mode begleitet `consensus-progress.js` den Lauf rahmenlos unter
+   dem Input: Antwortfortschritt basiert auf `dataset.responseState`; nach dem
+   Fan-out wechselt die Anzeige zur nicht prozentual geschätzten Synthesephase
+   und verschwindet bei Abschluss, Fehler oder Abbruch.
 
 ### Follow-up-Fragen (Pro)
 Nach einem erfolgreichen Consensus kann eine Anschlussfrage mit Kontext
@@ -189,6 +214,9 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   `/prepare`-Fallback-Pfad des Frontends überlebt.
 
 ### Consensus & Differences
+- Im App-Layout steht `#consensusOutput` oberhalb der Modellantworten: Das
+  synthetisierte Ergebnis ist die Primäransicht, die einzelnen Antworten sind
+  darunter die prüfbare Grundlage.
 - `getConsensus` (`consensus-run.js`) sammelt die vorhandenen Modellantworten +
   `excluded_models` + `consensus_model` und ruft **`POST /consensus`**
   (`stream:true`).
@@ -479,17 +507,20 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **473 passed** (2026-07-14).
+  Letzte bekannte Baseline: **480 passed** (2026-07-16).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
-  (Laden ohne Konsolen-Fehler, Send→Streaming, Consensus→Differences+Score,
-  Watch-Dialog mit Pflicht-Sichtbarkeit/Condition-Feld, Exclude, Theme,
-  Picker-Persistenz). Startet einen eigenen uvicorn auf Port
+  (Laden ohne Konsolen-Fehler, Send→Streaming, kompakte Antwort→Consensus-
+  Pipeline inkl. Mobile-Clipping/Ergebnis-Reihenfolge,
+  Consensus→Differences+Score, Watch-Dialog mit Pflicht-Sichtbarkeit/Condition-
+  Feld, Exclude, Theme, Picker-Persistenz). Startet einen eigenen uvicorn auf Port
   8031 mit `MOCK_LLM=1` (deterministische Fixtures in
   `app/services/llm/mock_llm.py`, Seams: `_run_ask`,
   `_call_engine_text`/`_stream_engine_text`),
   `MOCK_AUTH=1` (Sentinel-Token statt Firebase, Browser-Stub ersetzt
-  `firebase.js` per Playwright-Route) und `DISABLE_RATE_LIMIT=1`. Lauf:
+  `firebase.js` per Playwright-Route), lokale Dummy-Eigenkeys (kein Einfluss
+  des live geladenen Free-Limits; `MOCK_LLM` verhindert echte Calls) und
+  `DISABLE_RATE_LIMIT=1`. Lauf:
   ```powershell
   $env:RUN_E2E = "1"; .\venv\Scripts\python.exe -m pytest tests\e2e -v
   ```

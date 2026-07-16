@@ -415,7 +415,7 @@
   }
 
   // ------------------------------------------------------------------
-  // Watch page (/app/watches): full view below the top bar with URL sync.
+  // Watch page (/app/watches): full view with URL + segmented-switch sync.
   // ------------------------------------------------------------------
 
   const WATCH_PAGE_PATH = "/app/watches";
@@ -433,6 +433,17 @@
     return window.location.pathname === WATCH_PAGE_PATH;
   }
 
+  function setViewSwitchState(isWatchView) {
+    const consensusButton = document.getElementById("viewSwitchConsensus");
+    const watchesButton = document.getElementById("viewSwitchWatches");
+    if (!consensusButton || !watchesButton) return;
+
+    consensusButton.classList.toggle("is-active", !isWatchView);
+    consensusButton.setAttribute("aria-pressed", String(!isWatchView));
+    watchesButton.classList.toggle("is-active", isWatchView);
+    watchesButton.setAttribute("aria-pressed", String(isWatchView));
+  }
+
   function wireWatchPage() {
     const { page, close } = dashEls();
     if (!page || page.dataset.wired) return;
@@ -444,7 +455,10 @@
     // Browser-Navigation (Back/Forward) hält Seite und URL synchron.
     window.addEventListener("popstate", () => {
       if (onWatchPagePath()) showWatchPage();
-      else page.hidden = true;
+      else {
+        page.hidden = true;
+        setViewSwitchState(false);
+      }
     });
   }
 
@@ -452,6 +466,7 @@
     const { page } = dashEls();
     if (!page) return;
     page.hidden = true;
+    setViewSwitchState(false);
     if (!onWatchPagePath()) return;
     // Innerhalb der App geöffnet: echter History-Schritt zurück. Direkt auf
     // /app/watches geladen: URL ohne neuen History-Eintrag auf /app setzen.
@@ -467,6 +482,7 @@
     if (!page) return;
     wireWatchPage();
     page.hidden = false;
+    setViewSwitchState(true);
     renderDashboard();
   }
 
@@ -489,6 +505,7 @@
     if (!page || !body) return;
     wireWatchPage();
     page.hidden = false;
+    setViewSwitchState(true);
     body.innerHTML = '<p class="watch-dash-loading">Checking your session…</p>';
     const startedAt = Date.now();
     (function waitForAuth() {
@@ -987,15 +1004,14 @@
     bar.insertBefore(anchor, actions || null);
   }
 
-  function initTopbarWatchesLink() {
-    const link = document.getElementById("topbarWatchesLink");
-    if (!link) return;
-    link.addEventListener("click", event => {
-      // SPA-Navigation ohne Reload; Cmd/Ctrl-Klick (neuer Tab) bleibt nativ.
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.button === 1) return;
-      event.preventDefault();
-      openWatchDashboard();
-    });
+  function initViewSwitch() {
+    const consensusButton = document.getElementById("viewSwitchConsensus");
+    const watchesButton = document.getElementById("viewSwitchWatches");
+    if (!consensusButton || !watchesButton) return;
+
+    consensusButton.addEventListener("click", closeWatchDashboard);
+    watchesButton.addEventListener("click", openWatchDashboard);
+    setViewSwitchState(onWatchPagePath());
   }
 
   window.openWatchDialog = openWatchDialog;
@@ -1004,6 +1020,6 @@
     showFeatureNudge: showWatchFeatureNudge
   });
   initWatchButton();
-  initTopbarWatchesLink();
+  initViewSwitch();
   initWatchPageRoute();
 })();

@@ -10,6 +10,20 @@
 // =====================================================================
 
 (function () {
+  function syncSidebarAccountLabel(isPro, isLoggedIn) {
+    const accountLabel = document.getElementById("accountLabel");
+    if (!accountLabel) return;
+
+    const accountName = accountLabel.dataset.accountName;
+    if (!isLoggedIn || !accountName) {
+      accountLabel.textContent = "";
+      accountLabel.hidden = true;
+      return;
+    }
+
+    accountLabel.textContent = `${accountName} · ${isPro ? "Pro" : "Free"}`;
+    accountLabel.hidden = false;
+  }
   function updateUserTierUI(isPro, isLoggedIn = false, isEarly) { // Standardmäßig false
     // 1. Globalen Status aktualisieren. Pro schliesst Early-Zugang ein.
     // Viele Aufrufer (z.B. nach jeder Query) uebergeben kein isEarly -> dann den
@@ -29,6 +43,7 @@
     const badge = document.getElementById("proBadge");
     const upgradeLink = document.getElementById("upgradeLink");
     const deepSearchLabel = document.querySelector('.switch.deep-switch');
+    syncSidebarAccountLabel(isPro, isLoggedIn);
 
     // === CASE 1: NICHT EINGELOGGT ===
     if (!isLoggedIn) {
@@ -160,4 +175,5 @@
 
   window.updateUserTierUI = updateUserTierUI;
   window.updatePremiumModelsState = updatePremiumModelsState;
+  window.syncSidebarAccountLabel = syncSidebarAccountLabel;
 })();

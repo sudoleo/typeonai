@@ -39,6 +39,20 @@ def _select_all_models(page):
 
 
 def _send_question(page, question=QUESTION):
+    # Die Suite prüft Frontend/SSE, nicht die Quotenlogik. Dummy-Eigenkeys
+    # halten die Runs unabhängig vom aktuell aus Firestore geladenen Free-Limit;
+    # MOCK_LLM verhindert weiterhin jeden echten Provider-Aufruf.
+    page.evaluate(
+        """() => {
+          const keys = [
+            'openaiKey', 'mistralKey', 'anthropicKey',
+            'geminiKey', 'deepseekKey', 'grokKey',
+          ];
+          for (const key of keys) localStorage.setItem(key, 'e2e-dummy-key');
+          const ownKeys = document.getElementById('useOwnKeysSwitch');
+          if (ownKeys) ownKeys.checked = true;
+        }"""
+    )
     _select_all_models(page)
     page.fill("#questionInput", question)
     page.click("#sendButton")
@@ -96,8 +110,29 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     triggert nach Abschluss aller Antworten und rendert Consensus-Text,
     Claim-Badges, Widerspruchs-Karte und Agreement-Score. Einen manuellen
     Consensus-Button gibt es im aktuellen UI nicht mehr."""
+    app_page.set_viewport_size({"width": 390, "height": 844})
+    app_page.evaluate("() => window.setAgentMode(false, { persist: true })")
     _send_question(app_page)
+
+    # Regulärer Modus: determinate Antwortphase -> indeterminate Synthese.
+    # Die rahmenlose Zeile bleibt mobil kompakt und clippt ihren Text nicht.
+    pipeline = app_page.locator("#consensusPipeline")
+    expect(pipeline).to_be_visible(timeout=10000)
+    expect(pipeline).to_have_attribute("data-stage", "answers")
+    metrics = pipeline.evaluate(
+        """(el) => {
+          const steps = el.querySelector('.consensus-pipeline-steps');
+          return {
+            height: el.getBoundingClientRect().height,
+            clipped: steps.scrollWidth > steps.clientWidth,
+          };
+        }"""
+    )
+    assert metrics["height"] <= 34
+    assert metrics["clipped"] is False
+
     _wait_for_all_final_answers(app_page)
+    expect(pipeline).to_have_attribute("data-stage", "consensus", timeout=20000)
 
     expect(app_page.locator("#consensusResponse")).to_contain_text("Mock consensus", timeout=30000)
 
@@ -107,6 +142,13 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
 
     expect(app_page.locator(".claim-badge").first).to_be_visible(timeout=15000)
     expect(app_page.locator(".diff-card.is-contradiction").first).to_be_visible(timeout=15000)
+
+    consensus_box = app_page.locator("#consensusOutput").bounding_box()
+    first_answer_box = app_page.locator("#openaiResponse").bounding_box()
+    assert consensus_box is not None
+    assert first_answer_box is not None
+    assert consensus_box["y"] < first_answer_box["y"]
+    expect(pipeline).to_be_hidden(timeout=10000)
 
     errors = get_console_errors()
     assert errors == [], f"Konsolen-Fehler im Consensus-Flow: {errors}"
@@ -219,7 +261,20 @@ def test_theme_toggle(app_page):
     persistiert."""
     initially_dark = app_page.evaluate("() => document.body.classList.contains('dark-mode')")
 
-    app_page.click("#modeToggle")
+    # Ohne Topbar lebt der Theme-Toggle in den Settings; das Zahnrad sitzt in
+    # der Sidebar-Fußzeile und braucht die geöffnete Sidebar. Auf Desktop-
+    # Breiten (Push-Modus ab 1100px) ist sie standardmäßig schon offen —
+    # nur öffnen, wenn sie tatsächlich zu ist.
+    app_page.evaluate(
+        """() => {
+          const sidebar = document.querySelector(".sidebar");
+          if (sidebar && sidebar.classList.contains("collapsed")) {
+            document.getElementById("toggleSidebarButton").click();
+          }
+        }"""
+    )
+    app_page.click("#editSystemPromptBtn")
+    app_page.click("#mobileModeToggle")
     app_page.wait_for_function(
         "(wasDark) => document.body.classList.contains('dark-mode') !== wasDark",
         arg=initially_dark,
@@ -228,12 +283,15 @@ def test_theme_toggle(app_page):
     stored = app_page.evaluate("() => localStorage.getItem('theme')")
     assert stored in ("dark", "light")
 
-    app_page.click("#modeToggle")
+    app_page.click("#mobileModeToggle")
     app_page.wait_for_function(
         "(wasDark) => document.body.classList.contains('dark-mode') === wasDark",
         arg=initially_dark,
         timeout=5000,
     )
+    # Modal wieder schliessen, damit Folgetests keine ueberdeckte Seite sehen.
+    app_page.click("#closeSystemPromptModal")
+    expect(app_page.locator("#systemPromptModal")).to_be_hidden()
 
 
 def test_deep_think_temporarily_selects_gemini_35_flash(app_page):

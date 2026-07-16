@@ -586,7 +586,8 @@
           } catch (e) { console.error(e); }
         }
 
-        const SIDEBAR_OVERLAY_BREAKPOINT = 1549;
+        // Muss zum Push/Overlay-Umschaltpunkt in layout.css (1099px) passen.
+        const SIDEBAR_OVERLAY_BREAKPOINT = 1099;
         const SIDEBAR_COLLAPSED_STORAGE_KEY = "sidebar_collapsed";
 
         function usesOverlaySidebar() {
@@ -848,6 +849,16 @@
         // Aktualisiert den Pfeil des Sidebar-Toggle-Buttons
         function updateToggleButton() {
           const sidebar = document.querySelector(".sidebar");
+          const toggleButton = document.getElementById("toggleSidebarButton");
+          if (!sidebar) return;
+          const isOpen = usesOverlaySidebar()
+            ? sidebar.classList.contains("active")
+            : !sidebar.classList.contains("collapsed");
+          if (toggleButton) {
+            toggleButton.setAttribute("aria-expanded", String(isOpen));
+            toggleButton.setAttribute("aria-label", isOpen ? "Collapse sidebar" : "Open sidebar");
+            toggleButton.title = isOpen ? "Collapse sidebar" : "Open sidebar";
+          }
           const newText = sidebar.classList.contains("collapsed") ? "►" : "◄";
           const arrow = document.querySelector(".sidebar-toggle .arrow");
           if (arrow) {

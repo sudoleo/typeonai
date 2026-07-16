@@ -716,20 +716,25 @@ class WatchFrontendContractTests(unittest.TestCase):
         watch_source = Path("static/js/watch.js").read_text(encoding="utf-8")
         self.assertIn('window.App.sharedModal.open("watch")', watch_source)
 
-    def test_watch_dashboard_is_a_page_with_topbar_entry(self):
+    def test_watch_dashboard_is_a_page_with_segmented_view_switch(self):
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
-        self.assertIn('id="topbarWatchesLink"', html_source)
-        self.assertIn('href="/app/watches"', html_source)
+        self.assertIn('id="viewSwitch"', html_source)
+        self.assertIn('id="viewSwitchConsensus"', html_source)
+        self.assertIn('id="viewSwitchWatches"', html_source)
         self.assertIn('id="watchDashboard"', html_source)
         js_source = Path("static/js/watch.js").read_text(encoding="utf-8")
         self.assertIn('"/app/watches"', js_source)
         self.assertIn("pushState", js_source)
         self.assertIn("popstate", js_source)
+        self.assertIn("setViewSwitchState", js_source)
         # Morning-Brief-Toggle nutzt denselben switch/slider wie das Input-Feld.
         self.assertIn('class="switch watch-brief-switch"', js_source)
         self.assertIn('<span class="slider">', js_source)
+        # Der View-Switch ist immer sichtbar (auch ausgeloggt): kein hidden im
+        # Markup, firebase.js blendet ihn nicht mehr um.
+        self.assertNotIn('id="viewSwitch" class="view-switch" hidden', html_source)
         firebase_source = Path("static/firebase.js").read_text(encoding="utf-8")
-        self.assertEqual(firebase_source.count('getElementById("topbarWatchesLink")'), 2)
+        self.assertEqual(firebase_source.count('getElementById("viewSwitch")'), 0)
 
 
 class WatchPageRouteTests(unittest.TestCase):

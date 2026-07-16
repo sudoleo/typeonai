@@ -179,6 +179,11 @@
 
     document.body.classList.toggle("agent-mode-enabled", enabled);
     document.body.classList.toggle("agent-mode-running", enabled && agentModeStatus === "running");
+    // Hero-Desktop zeigt die Response-Boxen nur ohne Agent Mode; inert/
+    // aria-hidden muessen der CSS-Sichtbarkeit folgen (app-core.js).
+    if (typeof window.syncHeroResponseAccess === "function") {
+      window.syncHeroResponseAccess();
+    }
     document.body.classList.toggle(
       "agent-mode-show-answers",
       enabled && hasModelAnswers && modelAnswersVisible
@@ -336,6 +341,9 @@
     if (typeof window.updateConsensusButtonAvailability === "function") {
       window.updateConsensusButtonAvailability();
     }
+    // Zentraler Status-Hub für JEDEN Lauf (auch ohne Agent Mode): die
+    // Fortschritts-Pipeline unter dem Input hört hier mit (consensus-progress.js).
+    window.App?.consensusPipeline?.onQueryStatus?.(status);
   }
 
   // Einklapp-Pfeil oben rechts im Panel (Zustand wird gemerkt).
