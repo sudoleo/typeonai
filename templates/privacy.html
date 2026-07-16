@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, noarchive">
   <title>Privacy | consens.io</title>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260715-neutral1">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260716-position-map2">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -24,18 +24,7 @@
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
 <body>
-  <nav class="site-nav" aria-label="Primary">
-    <a href="/" class="brand" aria-label="consens.io home">
-      <img src="/static/favicon.png" alt="">
-      <span>consens.io</span>
-    </a>
-    <div class="nav-links">
-      <a href="/about">About</a>
-      <a href="/terms">Terms</a>
-      <a href="/imprint">Imprint</a>
-      <a href="/app" class="nav-cta">Open app</a>
-    </div>
-  </nav>
+  {% include "partials/public_nav.html" %}
 
   <main class="page-shell">
     <header class="page-header">
@@ -148,7 +137,7 @@
           shown as a related page. Please do not include personal data in content you make public.
         </p>
         <p>
-          Visitors can report a shared page ("Report this page"). Reports are stored without any personal data —
+          Visitors can report a shared page ("Report this page"). Reports are stored without any personal data.
           as anonymous counters per reason only; we do not store the reporter's IP address or browser data.
         </p>
         <p>
@@ -203,8 +192,8 @@
           <li><strong>AI model providers:</strong> the providers selected per query (see section 4).</li>
         </ul>
         <p>
-          Processing may occur outside the EU/EEA, in particular in the USA and — only if you select DeepSeek
-          models — in China. For transfers to the USA we rely on the EU-U.S. Data Privacy Framework and/or Standard
+          Processing may occur outside the EU/EEA, in particular in the USA and, only if you select DeepSeek
+          models, in China. For transfers to the USA we rely on the EU-U.S. Data Privacy Framework and/or Standard
           Contractual Clauses; for other transfers on appropriate safeguards under Art. 44 et seq. GDPR or, for
           DeepSeek, on your request to route the query to that provider (Art. 49(1)(b) GDPR).
         </p>
@@ -268,17 +257,8 @@
     </div>
   </main>
 
-  <footer class="footer">
-    <div class="footer-inner">
-      <span>Last updated: 12 July 2026</span>
-      <div class="footer-links">
-        <a href="/app">App</a>
-        <a href="/about">About</a>
-        <a href="/terms">Terms</a>
-        <a href="/imprint">Imprint</a>
-      </div>
-    </div>
-  </footer>
+  {% set public_footer_note = "Last updated: 12 July 2026" %}
+  {% include "partials/public_footer.html" %}
 
   <script>
     (function () {

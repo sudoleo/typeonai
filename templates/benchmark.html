@@ -17,7 +17,7 @@
   <meta name="twitter:description" content="How a fused consensus answer compares to six leading AI models on expert-level questions.">
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>Consensus Benchmark (MMLU-Pro) | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260715-neutral1">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260716-observatory1">
   <link rel="stylesheet" href="/static/css/benchmark.css?v=20260715-neutral1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -57,17 +57,7 @@
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
 <body>
-  <nav class="lp-nav" aria-label="Primary">
-    <a href="/" class="lp-brand" aria-label="consens.io home">
-      <img src="/static/favicon.png" alt="">
-      <span>consens.io</span>
-    </a>
-    <div class="lp-nav-links">
-      <a href="/ai-model-comparison">AI comparison</a>
-      <a href="/about">About</a>
-      <a href="/app" class="lp-nav-cta">Open app</a>
-    </div>
-  </nav>
+  {% include "partials/public_nav.html" %}
 
   <main>
     <!-- ====================================================== HERO -->
@@ -380,20 +370,7 @@
     </section>
   </main>
 
-  <footer class="lp-footer">
-    <div class="lp-footer-inner">
-      <span>&copy; 2026 consens.io</span>
-      <div class="lp-footer-links">
-        <a href="/app">App</a>
-        <a href="/ai-model-comparison">AI comparison</a>
-        <a href="/benchmark">Benchmark</a>
-        <a href="/about">About</a>
-        <a href="/terms">Terms</a>
-        <a href="/privacy">Privacy</a>
-        <a href="/imprint">Imprint</a>
-      </div>
-    </div>
-  </footer>
+  {% include "partials/public_footer.html" %}
 
   <script>
     document.addEventListener("DOMContentLoaded", () => {

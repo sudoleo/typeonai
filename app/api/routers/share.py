@@ -61,6 +61,38 @@ def _build_watch_history_view(points):
         for index, point in enumerate(coords)
     )
     events = [point for point in reversed(coords) if point["changed"] or point["score_event"]]
+    mapped_points = [point for point in coords if point.get("opinion_map")]
+    position_view = None
+    if mapped_points:
+        latest_map = mapped_points[-1]["opinion_map"]
+        providers = []
+        for point in mapped_points:
+            for model in point["opinion_map"].get("models") or []:
+                provider = model.get("provider")
+                if provider and provider not in providers:
+                    providers.append(provider)
+        trajectories = []
+        for provider in providers:
+            cells = []
+            for point in mapped_points:
+                model = next((
+                    item for item in point["opinion_map"].get("models") or []
+                    if item.get("provider") == provider
+                ), None)
+                cells.append({
+                    "date": point["ts"].strftime("%Y-%m-%d"),
+                    "score": model.get("movement_score") if model else None,
+                    "moved": bool(model and model.get("moved")),
+                    "summary": model.get("summary") if model else "",
+                })
+            trajectories.append({"provider": provider, "cells": cells})
+        position_view = {
+            "dates": [point["ts"].strftime("%b %d") for point in mapped_points],
+            "trajectories": trajectories,
+            "dimensions": latest_map.get("dimensions") or [],
+            "shift_score": latest_map.get("shift_score"),
+            "shift_label": latest_map.get("shift_label") or "New baseline",
+        }
     return {
         "width": width,
         "height": height,
@@ -70,6 +102,7 @@ def _build_watch_history_view(points):
         "start_date": points[0]["ts"].strftime("%Y-%m-%d"),
         "end_date": points[-1]["ts"].strftime("%Y-%m-%d"),
         "latest_score": points[-1]["agreement_score"],
+        "position_map": position_view,
     }
 
 

@@ -13,7 +13,7 @@ from firebase_admin import auth
 import app.core.config as cfg
 from app.core import security
 from app.api.routers.pages import SITE_URL
-from app.services import mailer, share_snapshots, watch_brief, watch_service
+from app.services import mailer, opinion_map, share_snapshots, watch_brief, watch_service
 from app.services.llm.base import get_system_prompt
 from app.services.llm.citations import result_text
 from app.services.llm.consensus_engine import (
@@ -91,7 +91,7 @@ def _provider_answer(provider: str, model: str, question: str, keys: dict, is_pr
 
 
 def execute_watch(question: str, previous_consensus: str, condition: str = "",
-                  is_pro: bool = False) -> dict:
+                  previous_opinion_map=None, is_pro: bool = False) -> dict:
     """Run the configured tier models; never touches usage counters."""
     keys = _developer_keys()
     selected_models = _selected_models(keys, is_pro)
@@ -136,6 +136,7 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
         raise RuntimeError("Differences Judge failed.")
     agreement = compute_agreement_score(differences)
     differences["agreement"] = agreement
+    position_map = opinion_map.build_opinion_map(differences, previous_opinion_map)
     change = query_consensus_change(
         previous_consensus, consensus, keys, engine, condition=condition,
     )
@@ -143,6 +144,7 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
         "consensus": consensus,
         "agreement_score": agreement["score"],
         "verdict": agreement.get("level") or "",
+        "opinion_map": position_map,
         **change,
     }
 
@@ -278,9 +280,24 @@ async def run_watch_tick() -> int:
                 claimed["question"] = share.get("question") or ""
                 claimed["share_slug"] = share.get("slug") or ""
                 is_pro = await asyncio.to_thread(security.is_user_pro, claimed["owner_uid"])
+                try:
+                    history = await asyncio.to_thread(
+                        share_snapshots.list_watch_history, claimed["share_id"], max_items=1,
+                    )
+                except Exception:
+                    logging.warning(
+                        "Consensus Watch position baseline unavailable for %s",
+                        watch_id, exc_info=True,
+                    )
+                    history = []
+                previous_position_map = (
+                    history[-1].get("opinion_map") if history
+                    else opinion_map.build_opinion_map(share.get("differences_data") or {})
+                )
                 result = await asyncio.to_thread(
                     execute_watch, claimed["question"], share.get("consensus_md") or "",
                     claimed.get("condition") if claimed.get("email_mode") == "condition" else "",
+                    previous_position_map,
                     is_pro,
                 )
                 mail_kind = notification_kind(claimed, result)

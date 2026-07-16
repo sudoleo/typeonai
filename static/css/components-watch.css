@@ -159,6 +159,9 @@
 .watch-brief-controls .watch-interval-select { max-width: 220px; }
 /* Der Toggle ist derselbe .switch/.slider wie im Input-Feld (components-controls.css). */
 .watch-brief-switch { flex: 0 0 auto; }
+.watch-brief-card.is-disabled { border-color: var(--sidebar-border); background: var(--container-bg); }
+.watch-brief-card.is-disabled .watch-brief-title { cursor: default; }
+.watch-brief-card.is-disabled .watch-brief-switch { opacity: .5; }
 
 /* --- Watch cards --- */
 .watch-dash-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }

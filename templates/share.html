@@ -19,7 +19,7 @@
   <meta name="twitter:description" content="{{ meta_description }}">
   <script type="application/ld+json">{{ jsonld | safe }}</script>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260715-neutral1">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260716-position-map2">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -37,16 +37,10 @@
   <!-- Share-Seiten-Styles liegen konsolidiert in public-pages.css (Abschnitt "Share page") -->
 </head>
 <body>
-  <nav class="site-nav" aria-label="Primary">
-    <a href="/" class="brand" aria-label="consens.io home">
-      <img src="/static/favicon.png" alt="">
-      <span>consens.io</span>
-    </a>
-    <div class="nav-links">
-      <a href="/about">About</a>
-      <a href="/" class="nav-cta" data-umami-event="share_page_cta">Ask your own question</a>
-    </div>
-  </nav>
+  {% set public_nav_cta_href = "/" %}
+  {% set public_nav_cta_label = "Ask your own question" %}
+  {% set public_nav_event = "share_page_cta" %}
+  {% include "partials/public_nav.html" %}
 
   <main class="page-shell">
     <header class="page-header share-header">
@@ -181,9 +175,76 @@
         <div class="watch-history-heading">
           <div>
             <p class="eyebrow">Consensus Watch</p>
-            <h2 id="watchHistoryHeading">Agreement over time</h2>
+            <h2 id="watchHistoryHeading">How AI answers move</h2>
           </div>
-          <strong class="watch-history-latest">{{ watch_history.latest_score }}<span>/100</span></strong>
+          <strong class="watch-history-latest">{{ watch_history.latest_score }}<span>/100</span><small> agreement</small></strong>
+        </div>
+        {% if watch_history.position_map %}
+        <div class="watch-position-map" aria-labelledby="watchPositionHeading">
+          <div class="watch-position-intro">
+            <div>
+              <h3 id="watchPositionHeading">Position Map</h3>
+              <p>Each question keeps its own dimensions. The map tracks providers moving between positions instead of forcing every answer onto a yes/no axis.</p>
+            </div>
+            <div class="watch-direction-score" aria-label="Direction Shift score">
+              {% if watch_history.position_map.shift_score is not none %}
+              <strong>{{ watch_history.position_map.shift_score }}<span>/100</span></strong>
+              {% else %}
+              <strong>&mdash;</strong>
+              {% endif %}
+              <span>Direction Shift &middot; {{ watch_history.position_map.shift_label }}</span>
+            </div>
+          </div>
+
+          {% if watch_history.position_map.trajectories %}
+          <div class="watch-trajectory-scroll">
+            <table class="watch-trajectory">
+              <caption class="sr-only">Provider position movement by watch date</caption>
+              <thead>
+                <tr><th scope="col">Provider</th>{% for date in watch_history.position_map.dates %}<th scope="col">{{ date }}</th>{% endfor %}</tr>
+              </thead>
+              <tbody>
+                {% for row in watch_history.position_map.trajectories %}
+                <tr>
+                  <th scope="row">{{ row.provider }}</th>
+                  {% for cell in row.cells %}
+                  <td>
+                    {% if cell.score is not none %}
+                    <span class="watch-motion-marker{% if cell.moved %} is-moved{% else %} is-stable{% endif %}"
+                          aria-label="{{ row.provider }} on {{ cell.date }}: {% if cell.moved %}position moved, {{ cell.score }} out of 100{% else %}stable{% endif %}"
+                          title="{{ row.provider }} · {{ cell.date }} · {% if cell.moved %}moved {{ cell.score }}/100{% if cell.summary %}: {{ cell.summary }}{% endif %}{% else %}stable{% endif %}"></span>
+                    {% else %}<span class="watch-motion-marker is-missing" aria-label="No comparable position">&mdash;</span>{% endif %}
+                  </td>
+                  {% endfor %}
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="watch-motion-legend" aria-hidden="true"><span><i class="is-stable"></i>Stable</span><span><i class="is-moved"></i>Moved</span></div>
+          {% endif %}
+
+          <div class="watch-position-dimensions" aria-label="Latest provider positions">
+            {% for dimension in watch_history.position_map.dimensions %}
+            <article class="watch-position-dimension">
+              <span class="watch-dimension-type">{% if dimension.type == "contradiction" %}Contradiction{% elif dimension.type == "claim" %}Key claim{% else %}Different emphasis{% endif %}</span>
+              <h4>{{ dimension.label }}</h4>
+              <div class="watch-position-clusters">
+                {% for position in dimension.positions %}
+                <div class="watch-position-cluster">
+                  <p>{{ position.stance }}</p>
+                  <ul>{% for model in position.models %}<li>{{ model }}</li>{% endfor %}</ul>
+                </div>
+                {% endfor %}
+              </div>
+            </article>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        <div class="watch-agreement-heading">
+          <h3>Agreement over time</h3>
+          <p>How strongly the providers support the same claims.</p>
         </div>
         <div class="watch-chart-scroll">
           <svg class="watch-chart" viewBox="0 0 {{ watch_history.width }} {{ watch_history.height }}" role="img"
@@ -197,7 +258,7 @@
             <path class="watch-chart-line" d="{{ watch_history.path }}"></path>
             {% for point in watch_history.points %}
             <circle class="watch-chart-point{% if point.changed %} is-change{% endif %}" cx="{{ point.x }}" cy="{{ point.y }}" r="{% if point.changed %}5{% else %}4{% endif %}">
-              <title>{{ point.ts.strftime("%Y-%m-%d") }}: {{ point.agreement_score }}/100{% if point.change_summary %} — {{ point.change_summary }}{% endif %}</title>
+              <title>{{ point.ts.strftime("%Y-%m-%d") }}: {{ point.agreement_score }}/100{% if point.change_summary %}. {{ point.change_summary }}{% endif %}</title>
             </circle>
             {% endfor %}
             <text class="watch-date-label" x="38" y="184">{{ watch_history.start_date }}</text>
@@ -258,18 +319,7 @@
     </div>
   </main>
 
-  <footer class="footer">
-    <div class="footer-inner">
-      <span>© 2026 consens.io</span>
-      <div class="footer-links">
-        <a href="/">App</a>
-        <a href="/about">About</a>
-        <a href="/terms">Terms</a>
-        <a href="/privacy">Privacy</a>
-        <a href="/imprint">Imprint</a>
-      </div>
-    </div>
-  </footer>
+  {% include "partials/public_footer.html" %}
 
   <script>
     // Consensus/Differences-Toggle: reine Client-Anzeige auf den Snapshot-

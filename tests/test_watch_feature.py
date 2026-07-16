@@ -17,7 +17,7 @@ from app.api.routers import pages as pages_router
 from app.api.routers import watch as watch_router
 from app.core.rate_limit import limiter
 from app.services import watch_service
-from app.services import mailer, watch_brief, watch_scheduler
+from app.services import mailer, opinion_map, watch_brief, watch_scheduler
 from app.services.watch_service import WatchError
 
 
@@ -564,6 +564,54 @@ class HistoryViewTests(unittest.TestCase):
         self.assertEqual(view["events"][0]["change_summary"], "Conclusion changed.")
 
 
+class OpinionMapTests(unittest.TestCase):
+    def _differences(self, openai_stance="Adopt now", openai_with="Gemini"):
+        first_models = ["OpenAI", openai_with] if openai_with else ["OpenAI"]
+        second_models = [provider for provider in ("Gemini", "Anthropic") if provider not in first_models]
+        return {
+            "differences": [{
+                "claim": "Recommended adoption timeline",
+                "type": "contradiction",
+                "severity": "major",
+                "positions": [
+                    {"stance": openai_stance, "models": first_models},
+                    {"stance": "Wait for stronger evidence", "models": second_models},
+                ],
+            }],
+        }
+
+    def test_multidimensional_map_tracks_provider_cluster_movement(self):
+        baseline = opinion_map.build_opinion_map(self._differences())
+        current = opinion_map.build_opinion_map(
+            self._differences(openai_stance="Wait for stronger evidence", openai_with="Anthropic"),
+            baseline,
+        )
+        self.assertEqual(current["dimensions"][0]["label"], "Recommended adoption timeline")
+        self.assertGreater(current["shift_score"], 0)
+        openai = next(item for item in current["models"] if item["provider"] == "OpenAI")
+        self.assertTrue(openai["moved"])
+
+    def test_map_is_compact_and_contains_no_raw_answers(self):
+        result = opinion_map.build_opinion_map(self._differences())
+        self.assertNotIn("answers", result)
+        self.assertLessEqual(len(result["dimensions"]), opinion_map.MAX_DIMENSIONS)
+
+    def test_unanimous_claims_still_produce_a_direction_baseline(self):
+        result = opinion_map.build_opinion_map({
+            "claims": [{
+                "anchor": "The treatment lowers short-term risk",
+                "agree": ["OpenAI", "Claude", "Gemini"],
+                "dissent": [],
+            }],
+            "differences": [],
+        })
+        self.assertEqual(result["dimensions"][0]["type"], "claim")
+        self.assertEqual(
+            result["dimensions"][0]["positions"][0]["models"],
+            ["OpenAI", "Anthropic", "Gemini"],
+        )
+
+
 class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
     async def test_scheduler_wake_triggers_an_immediate_second_tick(self):
         calls = 0
@@ -798,6 +846,7 @@ class WatchHistorySerializationTests(unittest.TestCase):
 class BriefSettingsTests(unittest.TestCase):
     def setUp(self):
         self.db = FakeDb()
+        self.db.stores["watches"]["w1"] = {"owner_uid": "u1", "status": "active"}
 
     def test_defaults_when_no_document_exists(self):
         brief = watch_brief.get_brief("u1", db=self.db)
@@ -805,6 +854,24 @@ class BriefSettingsTests(unittest.TestCase):
         self.assertEqual(brief["send_time"], "07:00")
         self.assertEqual(brief["mode"], "always")
         self.assertEqual(brief["next_send_at"], "")
+
+    def test_enabling_without_a_watch_is_rejected(self):
+        self.db.stores["watches"].clear()
+        with self.assertRaisesRegex(WatchError, "Create at least one watch"):
+            watch_brief.update_brief(
+                "u1", {"enabled": True, "send_time": "07:00", "timezone": "Europe/Berlin"},
+                db=self.db,
+            )
+
+    def test_final_watch_removal_disables_an_active_brief(self):
+        watch_brief.update_brief(
+            "u1", {"enabled": True, "send_time": "07:00", "timezone": "Europe/Berlin"},
+            db=self.db,
+        )
+        self.db.stores["watches"].clear()
+        self.assertTrue(watch_brief.disable_if_no_watches("u1", db=self.db))
+        self.assertFalse(self.db.stores["watch_briefs"]["u1"]["enabled"])
+        self.assertIsNone(self.db.stores["watch_briefs"]["u1"]["next_send_at"])
 
     def test_enabling_requires_timezone_and_schedules_dst_safe(self):
         with self.assertRaisesRegex(WatchError, "timezone"):

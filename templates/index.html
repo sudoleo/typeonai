@@ -56,7 +56,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260716-consensus-loader3">
+  <link rel="stylesheet" href="/static/style.css?v=20260716-agent-greeting1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -89,13 +89,13 @@
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-actions.js?v=20260706-fixes2" defer></script>
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
-  <script src="/static/js/watch.js?v=20260715-redesign1" defer></script>
+  <script src="/static/js/watch.js?v=20260716-briefgate1" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260715-redesign1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-insights.js?v=20260711-differences4" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260714-bookmark-share1" defer></script>
-  <script src="/static/js/query-send.js?v=20260716-consensus-progress1" defer></script>
+  <script src="/static/js/consensus-insights.js?v=20260716-copy1" defer></script>
+  <script src="/static/js/consensus-run.js?v=20260716-copy1" defer></script>
+  <script src="/static/js/query-send.js?v=20260716-copy1" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
@@ -147,7 +147,7 @@
   <nav id="viewSwitch" class="view-switch" aria-label="Switch view">
     <button type="button" id="viewSwitchConsensus" class="view-switch-btn is-active" aria-pressed="true">Consensus</button>
     <button type="button" id="viewSwitchWatches" class="view-switch-btn" aria-pressed="false"
-      title="Consensus Watch — your watched questions">
+      title="Consensus Watch: your watched questions">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
         <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path>
         <circle cx="12" cy="12" r="2.5"></circle>
@@ -329,7 +329,7 @@
   </div>
   <div class="container">
     <div class="input-section">
-      <!-- Begrüßung im Hero-Zustand (zentriertes Eingabefeld vor der ersten Frage) -->
+      <!-- Nur im Agent-Mode-Hero und nur bei ausreichender Viewport-Fläche sichtbar. -->
       <p class="hero-greeting">What should the models cross-check?</p>
       <div class="chat-input-container" style="position: relative;">
         <div id="attachmentBar" class="attachment-bar" hidden></div>
@@ -493,6 +493,26 @@
           </label>
         </div>
       </section>
+
+      <!-- Disclaimer + Legal-Links gehören zum Eingabebereich. Dadurch folgen
+           sie dessen Hero-/Agent-Mode-Bewegung und bleiben immer darunter. -->
+      <footer class="app-footer">
+        <div class="feedback-line">
+          <span class="feedback-note">
+            Please avoid personal or sensitive data. AI models can make mistakes.
+          </span>
+          <button id="feedbackButton" class="feedback-button" title="Send feedback">Feedback</button>
+          <a href="/terms" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Terms of Use"
+            aria-label="Terms of Use">Terms</a>
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Privacy Policy"
+            aria-label="Privacy Policy">Privacy</a>
+          <a href="/imprint" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Imprint"
+            aria-label="Imprint">Imprint</a>
+          <a href="/about" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="About"
+            aria-label="About">About</a>
+          <span id="feedback-note"></span>
+        </div>
+      </footer>
     </div>
 
     <!-- Konsens-Section: bewusst OBERHALB der Modellantworten (User-Vorgabe) —
@@ -661,7 +681,7 @@
                 id="deepseekModelText">{{ model_labels.get(default_models['deepseek'], default_models['deepseek']) }}</span></small>
             <span class="no-web-indicator" tabindex="0" role="img"
                   aria-label="DeepSeek has no live internet access and answers only from its training data."
-                  title="No live web access — DeepSeek answers from its training data and can't look up current sources.">
+                  title="No live web access. DeepSeek answers from its training data and can't look up current sources.">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M12 3.4 22.2 20.6H1.8L12 3.4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
                 <line x1="12" y1="10" x2="12" y2="14.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -708,27 +728,7 @@
       </div>
     </div>
 
-    <!-- Fußzeile (Disclaimer + Legal-Links): bleibt unter den Antworten,
-         auch wenn der Konsens-Bereich jetzt oben lebt. -->
-    <footer class="app-footer">
-      <div class="feedback-line">
-        <span class="feedback-note">
-          Please avoid personal or sensitive data. AI models can make mistakes.
-        </span>
-        <button id="feedbackButton" class="feedback-button" title="Send feedback">Feedback</button>
-        <a href="/terms" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Terms of Use"
-          aria-label="Terms of Use">Terms</a>
-        <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Privacy Policy"
-          aria-label="Privacy Policy">Privacy</a>
-        <a href="/imprint" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="Imprint"
-          aria-label="Imprint">Imprint</a>
-        <a href="/about" target="_blank" rel="noopener noreferrer" class="privacy-inline-link" title="About"
-          aria-label="About">About</a>
-        <span id="feedback-note"></span>
-      </div>
-    </footer>
-
-    <script src="/static/js/app-init.js?v=20260716-navigation-settings1" defer></script>
+    <script src="/static/js/app-init.js?v=20260716-copy1" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing
@@ -811,9 +811,9 @@
 
           <div id="authConsentNote" class="auth-note" style="display:block;">
             By signing in or creating an account you agree to the
-            <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Use</a> &mdash; including the
+            <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Use</a>, including the
             transmission of your prompts to the AI providers you select (e.g. OpenAI, Anthropic, Google, Mistral,
-            xAI, DeepSeek) &mdash; and acknowledge the
+            xAI, DeepSeek), and acknowledge the
             <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Notice</a>.
           </div>
 

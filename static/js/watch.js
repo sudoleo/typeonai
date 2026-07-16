@@ -261,8 +261,8 @@
         <label class="watch-interval-label" for="watchVisibility">Page visibility</label>
         <select id="watchVisibility" class="watch-interval-select" required aria-describedby="watchVisibilityNote watchVisibilityError">
           <option value="" selected disabled>Choose who can open the page…</option>
-          <option value="private">Private — only my account</option>
-          <option value="public">Public — anyone with the link</option>
+          <option value="private">Private, only my account</option>
+          <option value="public">Public, anyone with the link</option>
         </select>
         <p id="watchVisibilityNote" class="watch-data-note">Private requires your login. Public is read-only and non-indexed by default.</p>
         <p id="watchVisibilityError" class="watch-field-error" role="alert" hidden></p>
@@ -611,7 +611,7 @@
     container.appendChild(stats);
   }
 
-  function renderBriefCard(container, brief) {
+  function renderBriefCard(container, brief, hasWatches) {
     const card = document.createElement("div");
     card.className = "watch-brief-card";
     const timezone = browserTimezone();
@@ -624,8 +624,9 @@
           </span>
           Morning Brief
         </label>
-        <p class="watch-brief-note">One daily e-mail summarizing all your watches — current agreement,
-        changes since the last brief, and upcoming checks. No extra model runs. Times use ${escapeHtml(timezone)}.</p>
+        <p class="watch-brief-note">${hasWatches
+          ? `One daily e-mail summarizing all your watches, including current agreement, changes since the last brief, and upcoming checks. No extra model runs. Times use ${escapeHtml(timezone)}.`
+          : "Create a watch first to activate your daily digest."}</p>
       </div>
       <div class="watch-brief-controls" id="watchBriefControls" hidden>
         <input type="time" id="watchBriefTime" class="watch-time-input" aria-label="Brief delivery time">
@@ -640,8 +641,10 @@
     const controls = card.querySelector("#watchBriefControls");
     const timeInput = card.querySelector("#watchBriefTime");
     const modeSelect = card.querySelector("#watchBriefMode");
-    toggle.checked = !!brief.enabled;
-    controls.hidden = !brief.enabled;
+    card.classList.toggle("is-disabled", !hasWatches);
+    toggle.checked = hasWatches && !!brief.enabled;
+    toggle.disabled = !hasWatches;
+    controls.hidden = !toggle.checked;
     timeInput.value = brief.send_time || "07:00";
     modeSelect.value = brief.mode || "always";
 
@@ -659,7 +662,8 @@
         popup("Brief update failed: " + error.message);
         if (revert) revert();
       } finally {
-        toggle.disabled = timeInput.disabled = modeSelect.disabled = false;
+        toggle.disabled = !hasWatches;
+        timeInput.disabled = modeSelect.disabled = false;
       }
     }
 
@@ -736,7 +740,7 @@
         `${escapeHtml(lastEvent.change_summary)}</span> <span>(${escapeHtml(relativeTime(lastEvent.ts))}${lastEvent.severity ? ", " + escapeHtml(lastEvent.severity) : ""})</span>`
       );
     } else if (watch.last_run_at) {
-      metaLines.push(`Last check ${escapeHtml(relativeTime(watch.last_run_at))} — no material change.`);
+      metaLines.push(`Last check ${escapeHtml(relativeTime(watch.last_run_at))}. No material change.`);
     }
     let scheduleLine = escapeHtml(formatWatchSchedule(watch));
     if (watch.status === "active" && watch.next_run_at) {
@@ -962,7 +966,7 @@
     briefTitle.className = "watch-dash-section-title";
     briefTitle.textContent = "Daily digest";
     body.appendChild(briefTitle);
-    renderBriefCard(body, brief);
+    renderBriefCard(body, brief, watches.length > 0);
 
     const listTitle = document.createElement("h3");
     listTitle.className = "watch-dash-section-title";

@@ -81,14 +81,21 @@ body.is-hero .input-section {
   letter-spacing: -0.02em;
   color: var(--text-color);
   opacity: 0;
+  visibility: hidden;
   transform: translateY(6px);
   pointer-events: none;
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
-body.is-hero .hero-greeting {
-  opacity: 1;
-  transform: none;
+/* Die Frage gehört ausschließlich zum zentrierten Agent-Mode-Leerzustand.
+   Auf schmalen oder niedrigen Viewports bleibt der Platz für Eingabe und
+   Controls reserviert. */
+@media (min-width: 680px) and (min-height: 620px) {
+  body.is-hero.agent-mode-enabled .hero-greeting {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+  }
 }
 
 /* Leere Antwort-Platzhalter (Response-Boxen, Agent-Panel) erst nach der
@@ -103,26 +110,12 @@ body.is-hero .response-section {
   pointer-events: none;
 }
 
-/* Die Feedback-/Legal-Zeile (consensus-section) haengt im Flow unter dem
-   Antwortbereich. Im zentrierten Hero (Input per Transform nach unten
-   verschoben) wuerde sie sonst OBERHALB des Eingabefelds erscheinen, sobald
-   der Agent Mode die Response-Boxen auf display:none setzt — daher im Hero
-   gemeinsam mit den Boxen ausblenden. */
+/* Der Consensus-Bereich bleibt im leeren Hero unsichtbar. Der Disclaimer ist
+   dagegen Teil der .input-section und folgt deren Hero-/Agent-Mode-Transform. */
 body.is-hero .consensus-section {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-}
-
-/* Auf schmalen Screens wird der Hero-Input vertikal verschoben. Der Footer
-   bleibt sonst an seiner alten Flow-Position und würde über Begrüßung und
-   Eingabefeld liegen. Nach dem ersten Senden erscheint er wieder regulär. */
-@media (max-width: 1099px) {
-  body.is-hero .app-footer {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-  }
 }
 
 /* Desktop ohne Agent Mode: Die Modell-Antwortboxen sind schon vor der ersten
@@ -132,11 +125,6 @@ body.is-hero .consensus-section {
 @media (min-width: 1100px) {
   body.is-hero:not(.agent-mode-enabled) .input-section {
     transform: none;
-  }
-
-  body.is-hero:not(.agent-mode-enabled) .hero-greeting {
-    position: static;
-    margin: 6px 0 4px;
   }
 
   body.is-hero:not(.agent-mode-enabled) .response-section,

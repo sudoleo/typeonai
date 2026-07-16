@@ -408,7 +408,7 @@
         const PRO_FEATURE_DESCRIPTIONS = {
           "Deep Think": "Complex reasoning requires advanced compute power. Upgrade to access the smartest AI models.",
           "Resolve": "Let the disagreeing models confront each other's position and see whether they revise or hold their ground.",
-          "Follow-up questions": "Keep the conversation going — your previous question and its consensus answer travel along as context.",
+          "Follow-up questions": "Keep the conversation going. Your previous question and its consensus answer travel along as context.",
         };
         const PRO_FEATURE_DESCRIPTION_FALLBACK = "Upgrade to unlock the full consens.io toolkit, including the smartest AI models.";
         window.App.showProFeatureModal = function (featureName) {

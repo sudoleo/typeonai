@@ -74,6 +74,27 @@ def get_brief(uid: str, db=None) -> dict:
     return _serialize_brief(snap.to_dict() if snap.exists else None)
 
 
+def has_watches(uid: str, db=None) -> bool:
+    db = db if db is not None else db_firestore
+    for _doc in db.collection(watch_service.WATCHES_COLLECTION).where("owner_uid", "==", uid).stream():
+        return True
+    return False
+
+
+def disable_if_no_watches(uid: str, db=None) -> bool:
+    """Disable a stale brief after its owner's final watch is removed."""
+    db = db if db is not None else db_firestore
+    if has_watches(uid, db=db):
+        return False
+    ref = db.collection(BRIEFS_COLLECTION).document(uid)
+    snap = ref.get()
+    data = snap.to_dict() if snap.exists else None
+    if not data or not data.get("enabled"):
+        return False
+    ref.update({"enabled": False, "next_send_at": None, "updated_at": utcnow()})
+    return True
+
+
 def update_brief(uid: str, changes: dict, db=None) -> dict:
     """Owner-scoped upsert of the brief settings document."""
     db = db if db is not None else db_firestore
@@ -97,6 +118,11 @@ def update_brief(uid: str, changes: dict, db=None) -> dict:
     if "enabled" in changes:
         updates["enabled"] = bool(changes["enabled"])
     effective_enabled = updates.get("enabled", bool(data.get("enabled")))
+    if effective_enabled and not has_watches(uid, db=db):
+        raise WatchError(
+            "watch_required",
+            "Create at least one watch before enabling the Morning Brief.",
+        )
     if effective_enabled and (schedule_changed or "enabled" in changes):
         send_time, timezone_name = watch_service.validate_run_schedule(send_time, timezone_name)
         if not send_time or not timezone_name:

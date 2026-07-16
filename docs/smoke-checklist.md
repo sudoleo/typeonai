@@ -6,11 +6,23 @@ Modell-Ausschluss, Theme-Toggle und Picker-Persistenz ab (Lauf: siehe
 `tests/e2e/README.md`). Die übrigen Punkte weiterhin manuell durchgehen
 (oder zumindest die vom Cluster betroffenen), bevor committet wird. Backend
 bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
-(Baseline: 480 passed, Stand 2026-07-16).
+(Baseline: 485 passed, Stand 2026-07-16).
 
 ## Browser-Konsole
 - [ ] Beim Laden **keine** JS-Fehler in der Konsole (besonders: keine
       `ReferenceError: X is not defined`, keine `window.X is not a function`).
+
+## Öffentliche Seiten
+- [ ] `/`, `/about`, `/ai-model-comparison`, `/consensus-engine`, `/benchmark`,
+      `/privacy`, `/terms`, `/imprint` und öffentliche Share-/Unavailable-Seiten
+      verwenden dieselbe Navigation, denselben Footer und die an `/app`
+      angelehnten Tokens. Light/Dark folgen der gespeicherten App-Einstellung
+      bzw. ohne Einstellung dem System-Theme.
+- [ ] Desktop und Mobile haben keinen horizontalen Overflow; Focus States sind
+      auf Links, Buttons und Formularfeldern klar sichtbar. Landingpage und
+      Consensus-Engine-Seite zeigen dieselbe aktuelle Consensus-/Differences-
+      Darstellung. Der Landingpage-Walkthrough verwendet die aktuellen
+      Modellnamen und hält Einzelantworten im Agent Mode standardmäßig verborgen.
 
 ## Kern-Flow
 - [ ] Frischer `/app`-Load: keine Topbar; Brand + Collapse im Sidebar-Kopf,
@@ -91,9 +103,15 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       Öffnen. Mit Test-SMTP: Brief-Mail listet alle Watches mit Score/Delta und
       Änderungs-Summaries; der Abmelde-Link deaktiviert nur den Brief, nicht
       die Watch-Mails.
+- [ ] Ohne Watch ist der Morning-Brief-Toggle deaktiviert und erklärt „Create a
+      watch first“; ein direkter Aktivierungs-Request wird abgelehnt. Nach dem
+      Löschen der letzten Watch ist ein zuvor aktiver Brief ausgeschaltet.
 - [ ] Aktive Watch-Seite zeigt bereits vor dem ersten History-Punkt in einer
       kompakten Metazeile Status, Intervall, letzten und nächsten Lauf. Mit History rendert
       sie zusätzlich SVG-Linie/Punkte und Change-Liste in Light/Dark ohne Mobile-Overflow.
+      Neue History zeigt davor die mehrdimensionale Position Map mit Provider-
+      Trajektorien, aktuellen Standpunkt-Gruppen und Direction Shift; alte
+      Punkte ohne `opinion_map` degradieren auf den Agreement-Chart.
 - [ ] Fehlende SMTP-Konfiguration blockiert Watch-Läufe nicht. Mit Test-SMTP:
       Major Change bzw. Score-Delta ≥15 sendet genau eine Multipart-Mail; Minor
       Change darunter sendet im Modus „changes only“ keine. „Every new consensus“

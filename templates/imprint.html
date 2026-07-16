@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, noarchive">
   <title>Imprint | consens.io</title>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260715-neutral1">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260716-position-map2">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -24,18 +24,7 @@
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
 <body>
-  <nav class="site-nav" aria-label="Primary">
-    <a href="/" class="brand" aria-label="consens.io home">
-      <img src="/static/favicon.png" alt="">
-      <span>consens.io</span>
-    </a>
-    <div class="nav-links">
-      <a href="/about">About</a>
-      <a href="/terms">Terms</a>
-      <a href="/privacy">Privacy</a>
-      <a href="/app" class="nav-cta">Open app</a>
-    </div>
-  </nav>
+  {% include "partials/public_nav.html" %}
 
   <main class="page-shell">
     <header class="page-header">
@@ -73,7 +62,7 @@
           accuracy, completeness, or topicality. As a service provider, we are responsible for our own
           content on these pages in accordance with general laws (&sect; 7 DDG). We are not obliged to
           monitor third-party information that is transmitted or stored, or to investigate circumstances
-          indicating illegal activity (Art. 8 Regulation (EU) 2022/2065 &mdash; Digital Services Act).
+          indicating illegal activity (Art. 8 Regulation (EU) 2022/2065, Digital Services Act).
           Answers displayed in the app are AI-generated content from third-party model providers and may
           be inaccurate; see the <a href="/terms">Terms of Use</a>.
         </p>
@@ -104,17 +93,8 @@
     </div>
   </main>
 
-  <footer class="footer">
-    <div class="footer-inner">
-      <span>Last updated: 11 June 2026</span>
-      <div class="footer-links">
-        <a href="/app">App</a>
-        <a href="/about">About</a>
-        <a href="/terms">Terms</a>
-        <a href="/privacy">Privacy</a>
-      </div>
-    </div>
-  </footer>
+  {% set public_footer_note = "Last updated: 11 June 2026" %}
+  {% include "partials/public_footer.html" %}
 
   <script>
     function drawLinesToCanvas(canvas, lines, opts = {}) {

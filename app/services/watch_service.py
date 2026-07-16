@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import app.core.config as cfg
 from app.core.security import db_firestore
-from app.services import share_snapshots
+from app.services import opinion_map, share_snapshots
 
 
 WATCHES_COLLECTION = "watches"
@@ -276,6 +276,7 @@ def serialize_history_points(points, max_items=WATCH_HISTORY_POINTS) -> list[dic
             "changed": bool(point.get("changed")),
             "severity": str(point.get("severity") or ""),
             "change_summary": str(point.get("change_summary") or ""),
+            "opinion_map": opinion_map.sanitize_opinion_map(point.get("opinion_map")),
         })
     return serialized
 
@@ -622,6 +623,9 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
         "severity": str(result.get("severity") or "minor")[:10],
         "change_summary": str(result.get("change_summary") or "")[:400],
     }
+    position_map = opinion_map.sanitize_opinion_map(result.get("opinion_map"))
+    if position_map:
+        history["opinion_map"] = position_map
     share_ref = db.collection("shares").document(claimed["share_id"])
     history_ref = share_ref.collection("watch_history").document(claimed["current_run_id"])
     watch_ref = db.collection(WATCHES_COLLECTION).document(watch_id)

@@ -33,6 +33,19 @@ def test_mobile_brand_and_desktop_input_centering_contract():
     assert "body:has(.sidebar.collapsed) .brand-float" in layout
 
 
+def test_disclaimer_stays_attached_below_the_moving_input_section():
+    template = read("templates/index.html")
+    input_css = read("static/css/components-input.css")
+
+    input_start = template.index('<div class="input-section">')
+    footer = template.index('<footer class="app-footer">')
+    consensus = template.index('<div class="consensus-section">')
+
+    assert input_start < footer < consensus
+    assert template.count('<footer class="app-footer">') == 1
+    assert "body.is-hero .app-footer" not in input_css
+
+
 def test_light_input_is_white_and_account_popup_uses_opaque_surfaces():
     input_css = read("static/css/components-input.css")
     layout = read("static/css/layout.css")
@@ -46,6 +59,17 @@ def test_light_input_is_white_and_account_popup_uses_opaque_surfaces():
     assert "background: #282828" in layout
     assert 'class="email-popup" role="menu" hidden' in firebase
     assert "emailPopup.hidden = !isOpen" in firebase
+
+
+def test_hero_greeting_requires_agent_mode_and_available_space():
+    template = read("templates/index.html")
+    input_css = read("static/css/components-input.css")
+
+    assert "What should the models cross-check?" in template
+    assert "body.is-hero.agent-mode-enabled .hero-greeting" in input_css
+    assert "@media (min-width: 680px) and (min-height: 620px)" in input_css
+    assert "body.is-hero .hero-greeting" not in input_css
+    assert "body.is-hero:not(.agent-mode-enabled) .hero-greeting" not in input_css
 
 
 def test_settings_are_grouped_without_changing_control_ids():

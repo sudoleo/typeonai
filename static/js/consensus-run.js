@@ -185,7 +185,7 @@
         btn.appendChild(badge);
 
         if (window.isUserPro) {
-          btn.title = "Ask a follow-up question — the previous question and its consensus answer go along as context.";
+          btn.title = "Ask a follow-up question. The previous question and its consensus answer go along as context.";
           badge.classList.add("is-subtle");
         } else {
           btn.classList.add("is-pro-locked");

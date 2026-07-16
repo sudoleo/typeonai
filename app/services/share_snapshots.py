@@ -25,6 +25,7 @@ from firebase_admin import firestore
 
 import app.core.config as cfg
 from app.core.security import db_firestore
+from app.services import opinion_map
 
 PENDING_COLLECTION = "pending_results"
 SHARES_COLLECTION = "shares"
@@ -1067,7 +1068,11 @@ def list_shares_for_owner(uid, db=None, max_items=200):
 
 
 def list_watch_history(share_id, db=None, max_items=100):
-    """Whitelist compact public history points; never expose rerun text."""
+    """Whitelist compact public history; never expose rerun consensus or raw answers.
+
+    ``opinion_map`` contains only capped stance labels and provider grouping
+    derived from structured Differences data.
+    """
     db = db if db is not None else db_firestore
     ref = db.collection(SHARES_COLLECTION).document(share_id).collection("watch_history")
     points = []
@@ -1085,6 +1090,7 @@ def list_watch_history(share_id, db=None, max_items=100):
             "changed": bool(data.get("changed")),
             "severity": _clip(data.get("severity"), 10),
             "change_summary": _clip(data.get("change_summary"), 400),
+            "opinion_map": opinion_map.sanitize_opinion_map(data.get("opinion_map")),
         })
     points.sort(key=lambda item: item["ts"])
     return points

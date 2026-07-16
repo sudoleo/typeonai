@@ -913,7 +913,7 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "No response received. The model may have timed out — please try again.", data);
+              markModelError(outputEl, "No response received. The model may have timed out. Please try again.", data);
             }
             // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -1001,7 +1001,7 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "No response received. The model may have timed out — please try again.", data);
+              markModelError(outputEl, "No response received. The model may have timed out. Please try again.", data);
             }
             // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -1089,7 +1089,7 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "No response received. The model may have timed out — please try again.", data);
+              markModelError(outputEl, "No response received. The model may have timed out. Please try again.", data);
             }
             // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -1177,7 +1177,7 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "No response received. The model may have timed out — please try again.", data);
+              markModelError(outputEl, "No response received. The model may have timed out. Please try again.", data);
             }
             // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
@@ -1264,7 +1264,7 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "No response received. The model may have timed out — please try again.", data);
+              markModelError(outputEl, "No response received. The model may have timed out. Please try again.", data);
             }
             // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
             const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;

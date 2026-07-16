@@ -465,7 +465,7 @@
               const note = emphases > 0
                 ? emphases + " difference" + (emphases === 1 ? "" : "s") + " in emphasis, no contradictions"
                 : "no contradictions found";
-              detail.textContent = note + " — " + modelsLabel;
+              detail.textContent = note + ", " + modelsLabel;
             } else if (hasSeverity && critical > 0) {
               const crit = document.createElement("span");
               crit.className = "verdict-detail-crit";
@@ -474,9 +474,9 @@
               const minor = contradictions - critical;
               detail.appendChild(document.createTextNode(
                 (minor > 0 ? " · " + minor + " minor detail" + (minor === 1 ? "" : "s") : "")
-                + " — " + modelsLabel));
+                + ", " + modelsLabel));
             } else if (hasSeverity) {
-              detail.textContent = "minor details — " + modelsLabel;
+              detail.textContent = "minor details, " + modelsLabel;
             } else {
               detail.textContent = modelsLabel;
             }
@@ -518,8 +518,8 @@
             }
             badge.appendChild(document.createTextNode(agreeCount + "/" + total));
             badge.title = claim.dissent.length
-              ? agreeCount + " of " + total + " models support this — tap for details"
-              : "All " + total + " models that address this agree — tap for details";
+              ? agreeCount + " of " + total + " models support this. Tap for details"
+              : "All " + total + " models that address this agree. Tap for details";
             badge.setAttribute("aria-haspopup", "dialog");
             badge.addEventListener("click", function (event) {
               event.stopPropagation();

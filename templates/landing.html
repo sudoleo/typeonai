@@ -3,21 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="consens.io compares model answers in one focused workspace and shows where they agree, differ, and need checking.">
+  <meta name="description" content="consens.io independently measures where leading AI answers agree, contradict one another, and change over time.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://www.consens.io/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="consens.io">
-  <meta property="og:title" content="consens.io - compare before you trust">
-  <meta property="og:description" content="Compare model answers side by side and see where they agree, differ, and need checking.">
+  <meta property="og:title" content="consens.io - the independent AI answer observatory">
+  <meta property="og:description" content="See where leading AI answers contradict one another and when their positions change.">
   <meta property="og:url" content="https://www.consens.io/">
   <meta property="og:image" content="https://www.consens.io/static/favicon-square.png">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="consens.io - compare before you trust">
-  <meta name="twitter:description" content="Compare model answers side by side and turn them into a structured consensus.">
+  <meta name="twitter:title" content="consens.io - the independent AI answer observatory">
+  <meta name="twitter:description" content="See where leading AI answers contradict one another and when their positions change.">
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
-  <title>Compare AI Answers Before You Trust | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260715-neutral1">
+  <title>Track Where AI Answers Disagree and Change | consens.io</title>
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260716-observatory1">
   <link rel="stylesheet" href="/static/css/benchmark.css?v=20260715-neutral1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -40,7 +40,7 @@
         "url": "https://www.consens.io/",
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "Web browser",
-        "description": "consens.io compares leading AI models side by side and creates a structured consensus from their answers.",
+        "description": "consens.io independently measures where leading AI answers agree, contradict one another, and change over time.",
         "creator": {
           "@id": "https://www.consens.io/#organization"
         },
@@ -66,89 +66,31 @@
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
 <body>
-  <nav class="lp-nav" aria-label="Primary">
-    <a href="/" class="lp-brand" aria-label="consens.io home">
-      <img src="/static/favicon.png" alt="">
-      <span>consens.io</span>
-    </a>
-    <div class="lp-nav-links">
-      <a href="#product">Product</a>
-      <a href="#agent-mode">Agent Mode</a>
-      <a href="#models">Models</a>
-      <a href="/benchmark">Benchmark</a>
-      <a href="/ai-model-comparison">AI comparison</a>
-      <a href="/consensus-engine">Consensus Engine</a>
-      <a id="navCtaButton" href="/app" class="lp-nav-cta">Open app</a>
-    </div>
-  </nav>
+  {% include "partials/public_nav.html" %}
 
   <main>
     <!-- ====================================================== HERO -->
     <section class="lp-section lp-section--white lp-section--hero">
       <div class="lp-shell lp-hero">
         <div class="lp-hero-copy">
-          <p class="lp-eyebrow">Comparison workspace</p>
-          <h1 class="lp-display">See where they differ.<br>Trust where they agree.</h1>
+          <p class="lp-eyebrow">The independent AI answer observatory</p>
+          <h1 class="lp-display">AI answers shape what the world believes.<br>We track when they move.</h1>
           <p class="lp-lead">
-            Ask once. Read every model's answer side by side, then let the consensus
-            layer show where they agree, and where they don't.
+            consens.io independently measures where leading AI models agree,
+            where they contradict one another, and when their positions change.
           </p>
           <div class="lp-hero-actions">
-            <a id="ctaButton" href="/app" class="lp-btn lp-btn--primary">Start comparing</a>
-            <a href="#product" class="lp-link" data-umami-event="landing_watch_workflow">Watch the workflow</a>
+            <a id="ctaButton" href="/app" class="lp-btn lp-btn--primary">Compare AI answers</a>
+            <a href="#product" class="lp-link" data-umami-event="landing_watch_workflow">See how it works</a>
+          </div>
+          <div class="lp-hero-proof" aria-label="What consens.io measures">
+            <span><strong>6 providers</strong>One question, independent answers</span>
+            <span><strong>Contradictions</strong>Made visible, not averaged away</span>
+            <span><strong>Direction</strong>Positions tracked as they change</span>
           </div>
         </div>
 
-        <div class="lp-window" aria-label="consens.io app preview">
-          <div class="lp-window-bar">
-            <span class="lp-mocklogo"><img src="/static/favicon.png" alt=""> consens.io</span>
-            <span class="lp-mock-login">Log in</span>
-          </div>
-          <div class="lp-window-body lp-hero-result">
-            <p class="lp-hero-q">
-              <span class="lp-hero-q-label">One question · 6 models</span>
-              <span class="lp-hero-q-text">What is the longest river in the world?</span>
-            </p>
-            <div class="consensus-verdict is-warn">
-              <span class="verdict-score" style="--val:68" title="Agreement score 68/100">
-                <span class="verdict-score-ring" aria-hidden="true"></span>
-                <span class="verdict-score-num">68</span>
-              </span>
-              <span class="verdict-main">
-                <span class="verdict-headline">The models contradict each other on 1 point</span>
-                <span class="verdict-detail">minor details — 6 models compared</span>
-              </span>
-            </div>
-            <div class="lp-hero-block">
-              <h3 class="lp-hero-block-title">Consensus Answer</h3>
-              <p class="lp-hero-consensus-text"><strong>The Nile is the conventional longest river, but the Amazon has a credible claim.</strong> By convention the Nile leads at about 6,650 km<button class="claim-badge" type="button" tabindex="-1" aria-label="6 of 6 models support this claim">6/6</button>, while a disputed 2007 survey puts the Amazon ahead<button class="claim-badge has-dissent" type="button" tabindex="-1" aria-label="3 of 6 models support this claim"><span class="claim-dot" aria-hidden="true"></span>3/6</button>.</p>
-            </div>
-            <div class="lp-hero-block">
-              <h3 class="lp-hero-block-title">Differences</h3>
-              <div class="differences-cards">
-                <details class="diff-card is-contradiction" open>
-                  <summary class="diff-card-summary">
-                    <span class="diff-card-tags">
-                      <span class="sev-dot is-warn" aria-hidden="true"></span>
-                      <span class="diff-type-tag">Contradiction · minor detail</span>
-                    </span>
-                    <span class="diff-card-claim">Is the Nile definitively the longest river?</span>
-                  </summary>
-                  <div class="diff-card-body">
-                    <div class="diff-position">
-                      <div class="diff-position-label">ChatGPT, Mistral, DeepSeek</div>
-                      <div class="diff-position-stance">The Nile is the settled answer at ~6,650 km.</div>
-                    </div>
-                    <div class="diff-position">
-                      <div class="diff-position-label">Claude, Gemini, Grok</div>
-                      <div class="diff-position-stance">The 2007 Amazon survey is a credible challenger.</div>
-                    </div>
-                  </div>
-                </details>
-              </div>
-            </div>
-          </div>
-        </div>
+        {% include "partials/product_result_mockup.html" %}
       </div>
     </section>
 
@@ -181,7 +123,7 @@
                 <div class="lp-actions">
                   <div class="lp-consensus-picker" aria-label="Consensus model">
                     <span>Consensus</span>
-                    <button type="button" tabindex="-1">Gemini 3.1 <i aria-hidden="true"></i></button>
+                    <button type="button" tabindex="-1">Grok 4.20 <i aria-hidden="true"></i></button>
                   </div>
                   <button class="lp-clear" type="button" tabindex="-1" aria-label="Clear all responses">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -226,36 +168,40 @@
                 </div>
                 <div class="lp-pulse" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
                 <p class="lp-agent-note">Querying selected models in parallel.</p>
+                <div class="lp-agent-disclosure">
+                  <span>Completed model answers stay hidden by default.</span>
+                  <button type="button" tabindex="-1">Show model answers</button>
+                </div>
               </div>
-              <div class="lp-responses">
+              <div class="lp-responses" hidden>
                 <div class="lp-response">
                   <strong>ChatGPT</strong>
-                  <small><img src="/static/icons/chat_icons/chatgpt.png" alt=""> GPT-5.5</small>
+                  <small><img src="/static/icons/chat_icons/chatgpt.png" alt=""> gpt-5.6-luna</small>
                   <p>The Nile is traditionally listed first at about 6,650 km, the Amazon second.</p>
                 </div>
                 <div class="lp-response">
                   <strong>Mistral</strong>
-                  <small><img src="/static/icons/chat_icons/mistral.png" alt=""> mistral-medium</small>
+                  <small><img src="/static/icons/chat_icons/mistral.png" alt=""> Mistral Small 4</small>
                   <p>Most references name the Nile, though some studies argue the Amazon is longer.</p>
                 </div>
                 <div class="lp-response">
                   <strong>Claude</strong>
-                  <small><img src="/static/icons/chat_icons/claude.png" alt=""> claude-opus-4-8</small>
+                  <small><img src="/static/icons/chat_icons/claude.png" alt=""> Claude Haiku 4.5</small>
                   <p>It depends on measurement: counting the Pará estuary, the Amazon may exceed 7,000 km.</p>
                 </div>
                 <div class="lp-response">
                   <strong>Gemini</strong>
-                  <small><img src="/static/icons/chat_icons/gemini-icon.png" alt=""> gemini-3.1-pro</small>
+                  <small><img src="/static/icons/chat_icons/gemini-icon.png" alt=""> Gemini 3.1 Flash-Lite</small>
                   <p>The Nile, ~6,650 km. A 2007 expedition measured the Amazon at 6,992 km.</p>
                 </div>
                 <div class="lp-response">
                   <strong>DeepSeek</strong>
-                  <small><img src="/static/icons/chat_icons/deepseek.png" alt=""> deepseek-v4-pro</small>
+                  <small><img src="/static/icons/chat_icons/deepseek.png" alt=""> DeepSeek V4 Flash</small>
                   <p>Largest by discharge is the Amazon. By length the Nile is usually cited first.</p>
                 </div>
                 <div class="lp-response">
                   <strong>Grok</strong>
-                  <small><img src="/static/icons/chat_icons/grok.png" alt=""> grok-4.3</small>
+                  <small><img src="/static/icons/chat_icons/grok.png" alt=""> Grok 4.20</small>
                   <p>Officially the Nile. Some expeditions put the Amazon ahead. It depends on the source.</p>
                 </div>
               </div>
@@ -265,7 +211,7 @@
       </div>
     </section>
 
-    <!-- Scene 03 — THE HIGHLIGHT -->
+    <!-- Scene 03: the highlight -->
     <section class="lp-section lp-section--grey lp-scene-03">
       <div class="lp-shell">
         <div class="lp-head lp-reveal">
@@ -281,7 +227,7 @@
             </span>
             <span class="verdict-main">
               <span class="verdict-headline">The models contradict each other on 1 point</span>
-              <span class="verdict-detail">minor details — 6 models compared</span>
+              <span class="verdict-detail">Minor details, 6 models compared</span>
             </span>
             <span class="verdict-judge">
               <span>Analysis by Gemini</span>
@@ -376,7 +322,7 @@
                 </span>
                 <span class="verdict-main">
                   <span class="verdict-headline">High agreement</span>
-                  <span class="verdict-detail">no contradictions found — 6 models compared</span>
+                  <span class="verdict-detail">No contradictions found, 6 models compared</span>
                 </span>
                 <span class="verdict-judge">
                   <span>Analysis by Claude</span>
@@ -387,7 +333,7 @@
                 <div class="consensus-main">
                   <h2>Consensus Answer</h2>
                   <div class="consensus-main-text">
-                    <p><strong>Yes — its lifecycle emissions are on par with wind.</strong></p>
+                    <p><strong>Yes. Its lifecycle emissions are on par with wind.</strong></p>
                     <p>All six models put nuclear power at roughly 10–15 g CO₂-eq per kWh over its full lifecycle<button class="claim-badge" type="button" tabindex="-1" aria-label="6 of 6 models support this claim">6/6</button>, far below coal and gas. The open questions they name are cost and construction time, not carbon.</p>
                   </div>
                 </div>
@@ -416,7 +362,7 @@
                 </span>
                 <span class="verdict-main">
                   <span class="verdict-headline">High agreement</span>
-                  <span class="verdict-detail">1 difference in emphasis, no contradictions — 6 models compared</span>
+                  <span class="verdict-detail">1 difference in emphasis, no contradictions, 6 models compared</span>
                 </span>
                 <span class="verdict-judge">
                   <span>Analysis by OpenAI</span>
@@ -428,7 +374,7 @@
                   <h2>Consensus Answer</h2>
                   <div class="consensus-main-text">
                     <p><strong>Python is the default first language.</strong></p>
-                    <p>Every model recommends Python for its readable syntax and broad use in data, automation and scripting<button class="claim-badge" type="button" tabindex="-1" aria-label="6 of 6 models support this claim">6/6</button>. Several add that the choice should follow your goal — if you want to build for the web, JavaScript is the pragmatic start<button class="claim-badge has-dissent" type="button" tabindex="-1" aria-label="4 of 6 models support this claim"><span class="claim-dot" aria-hidden="true"></span>4/6</button>.</p>
+                    <p>Every model recommends Python for its readable syntax and broad use in data, automation and scripting<button class="claim-badge" type="button" tabindex="-1" aria-label="6 of 6 models support this claim">6/6</button>. Several add that the choice should follow your goal. If you want to build for the web, JavaScript is the pragmatic start<button class="claim-badge has-dissent" type="button" tabindex="-1" aria-label="4 of 6 models support this claim"><span class="claim-dot" aria-hidden="true"></span>4/6</button>.</p>
                   </div>
                 </div>
                 <div class="consensus-differences">
@@ -470,7 +416,7 @@
                 </span>
                 <span class="verdict-main">
                   <span class="verdict-headline">The models contradict each other on 1 point</span>
-                  <span class="verdict-detail"><span class="verdict-detail-crit">1 critical</span> — 6 models compared</span>
+                  <span class="verdict-detail"><span class="verdict-detail-crit">1 critical</span>, 6 models compared</span>
                 </span>
                 <span class="verdict-judge">
                   <span>Analysis by Mistral</span>
@@ -499,7 +445,7 @@
                       <div class="diff-card-body">
                         <div class="diff-position">
                           <div class="diff-position-label">ChatGPT, Claude, Gemini, DeepSeek</div>
-                          <div class="diff-position-stance">No — avoid NSAIDs entirely unless a doctor explicitly approves.</div>
+                          <div class="diff-position-stance">No. Avoid NSAIDs entirely unless a doctor explicitly approves.</div>
                           <blockquote class="diff-position-quote">even single doses can meaningfully increase bleeding risk</blockquote>
                         </div>
                         <div class="diff-position">
@@ -507,7 +453,7 @@
                           <div class="diff-position-stance">A one-off low dose is usually tolerated.</div>
                           <blockquote class="diff-position-quote">occasional use is generally considered low risk for most patients</blockquote>
                         </div>
-                        <div class="diff-verify"><b>Worth verifying: </b>this is a medical decision — confirm with a doctor or pharmacist before combining the two.</div>
+                        <div class="diff-verify"><b>Worth verifying: </b>this is a medical decision. Confirm with a doctor or pharmacist before combining the two.</div>
                         <div class="diff-resolve">
                           <button class="diff-resolve-btn" type="button" tabindex="-1">
                             <svg class="diff-resolve-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h9M11 5 8.8 2.8M11 5 8.8 7.2"/><path d="M14 11H5M5 11l2.2-2.2M5 11l2.2 2.2"/></svg>
@@ -640,21 +586,7 @@
     </section>
   </main>
 
-  <footer class="lp-footer">
-    <div class="lp-footer-inner">
-      <span>&copy; 2026 consens.io</span>
-      <div class="lp-footer-links">
-        <a href="/app">App</a>
-        <a href="/benchmark">Benchmark</a>
-        <a href="/ai-model-comparison">AI comparison</a>
-        <a href="/consensus-engine">Consensus Engine</a>
-        <a href="/about">About</a>
-        <a href="/terms">Terms</a>
-        <a href="/privacy">Privacy</a>
-        <a href="/imprint">Imprint</a>
-      </div>
-    </div>
-  </footer>
+  {% include "partials/public_footer.html" %}
 
   <script>
     document.addEventListener("DOMContentLoaded", () => {

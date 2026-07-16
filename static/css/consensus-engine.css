@@ -45,7 +45,12 @@
   max-width: 39ch;
 }
 
-.ce-engine-window {
+.ce-engine-result {
+  min-width: 0;
+}
+
+.ce-engine-window,
+.ce-engine-result .lp-window {
   animation: lpFloat 7s ease-in-out infinite;
 }
 
@@ -867,7 +872,8 @@
     grid-template-columns: 1fr;
   }
 
-  .ce-engine-window {
+  .ce-engine-window,
+  .ce-engine-result {
     max-width: 720px;
   }
 
@@ -1040,6 +1046,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .ce-engine-window,
+  .ce-engine-result .lp-window,
   .ce-judge-dot,
   .consensus-loader span,
   .ce-loading-box .consensus-main::before,

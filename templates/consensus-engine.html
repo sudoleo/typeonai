@@ -18,8 +18,8 @@
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>How the Consensus Engine Works | consens.io</title>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260715-neutral1">
-  <link rel="stylesheet" href="/static/css/consensus-engine.css?v=20260715-neutral1">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260716-observatory1">
+  <link rel="stylesheet" href="/static/css/consensus-engine.css?v=20260716-public-system1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -87,18 +87,7 @@
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
 <body class="ce-page">
-  <nav class="lp-nav" aria-label="Primary">
-    <a href="/" class="lp-brand" aria-label="consens.io home">
-      <img src="/static/favicon.png" alt="">
-      <span>consens.io</span>
-    </a>
-    <div class="lp-nav-links">
-      <a href="/ai-model-comparison">AI comparison</a>
-      <a href="/consensus-engine" aria-current="page">Consensus Engine</a>
-      <a href="/benchmark">Benchmark</a>
-      <a id="navCtaButton" href="/app" class="lp-nav-cta">Open app</a>
-    </div>
-  </nav>
+  {% include "partials/public_nav.html" %}
 
   <main>
     <section class="lp-section lp-section--white ce-hero-section">
@@ -116,51 +105,8 @@
           </div>
         </div>
 
-        <div class="lp-window ce-engine-window" aria-label="Consensus Engine app preview">
-          <div class="lp-window-bar">
-            <span class="lp-mocklogo"><img src="/static/favicon.png" alt=""> consens.io</span>
-            <span class="lp-mock-login">Consensus</span>
-          </div>
-          <div class="ce-engine-stage">
-            <div class="ce-model-strip" aria-label="Model responses ready">
-              <span><img src="/static/icons/chat_icons/chatgpt.png" alt="">OpenAI</span>
-              <span><img src="/static/icons/chat_icons/claude.png" alt="">Claude</span>
-              <span><img src="/static/icons/chat_icons/gemini-icon.png" alt="">Gemini</span>
-              <span><img src="/static/icons/chat_icons/mistral.png" alt="">Mistral</span>
-              <span><img src="/static/icons/chat_icons/deepseek.png" alt="">DeepSeek</span>
-              <span><img src="/static/icons/chat_icons/grok.png" alt="">Grok</span>
-            </div>
-            <div class="consensus-box ce-loading-box is-synthesizing" aria-label="Consensus generation preview">
-              <section class="consensus-main">
-                <h2>Consensus Answer</h2>
-                <div class="ce-loader-row">
-                  <span class="thinking-wrap consensus-thinking-wrap" role="status" aria-live="polite" aria-busy="true">
-                    <span class="consensus-loader" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
-                    <span class="thinking consensus-thinking">Synthesizing consensus</span>
-                  </span>
-                </div>
-                <div class="ce-skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
-              </section>
-              <aside class="consensus-differences">
-                <h2>Differences</h2>
-                <div class="ce-loader-row">
-                  <span class="thinking-wrap consensus-thinking-wrap" role="status" aria-live="polite" aria-busy="true">
-                    <span class="consensus-loader" aria-hidden="true"><span></span><span></span><span></span></span>
-                    <span class="thinking consensus-thinking">Comparing responses</span>
-                  </span>
-                </div>
-                <div class="ce-mini-diff" aria-hidden="true">
-                  <span class="ce-mini-diff-tag"><i class="sev-dot is-warn"></i><em></em></span>
-                  <strong></strong>
-                  <p></p>
-                </div>
-              </aside>
-            </div>
-            <div class="ce-judge">
-              <span class="ce-judge-dot"></span>
-              <span>Independent analysis checks claims and differences</span>
-            </div>
-          </div>
+        <div class="ce-engine-result">
+          {% include "partials/product_result_mockup.html" %}
         </div>
       </div>
     </section>
@@ -361,7 +307,7 @@
               </span>
               <span class="verdict-main">
                 <span class="verdict-headline">The models contradict each other on 1 point</span>
-                <span class="verdict-detail"><span class="verdict-detail-crit">1 critical</span> — 6 models compared</span>
+                <span class="verdict-detail"><span class="verdict-detail-crit">1 critical</span>, 6 models compared</span>
               </span>
               <span class="verdict-judge">
                 <span>Analysis by Gemini (Pro)</span>
@@ -416,7 +362,7 @@
             </span>
             <span class="verdict-main">
               <span class="verdict-headline">The models contradict each other on 1 point</span>
-              <span class="verdict-detail">minor details — 6 models compared</span>
+              <span class="verdict-detail">Minor details, 6 models compared</span>
             </span>
             <span class="verdict-judge">
               <span>Analysis by Mistral</span>
@@ -525,21 +471,7 @@
     </section>
   </main>
 
-  <footer class="lp-footer">
-    <div class="lp-footer-inner">
-      <span>&copy; 2026 consens.io</span>
-      <div class="lp-footer-links">
-        <a href="/app">App</a>
-        <a href="/ai-model-comparison">AI comparison</a>
-        <a href="/consensus-engine">Consensus Engine</a>
-        <a href="/benchmark">Benchmark</a>
-        <a href="/about">About</a>
-        <a href="/terms">Terms</a>
-        <a href="/privacy">Privacy</a>
-        <a href="/imprint">Imprint</a>
-      </div>
-    </div>
-  </footer>
+  {% include "partials/public_footer.html" %}
 
   <script>
     document.addEventListener("DOMContentLoaded", () => {

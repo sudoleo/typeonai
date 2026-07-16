@@ -1039,6 +1039,41 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("The central recommendation changed.", body)
         self.assertIn("76<span>/100</span>", body)
 
+    def test_watch_history_renders_position_map_and_direction_shift(self):
+        doc = self._share_doc()
+        position_map = {
+            "schema_version": 1,
+            "shift_score": 50,
+            "shift_label": "Turning",
+            "center": ["Adopt now"],
+            "models": [
+                {"provider": "OpenAI", "movement_score": 100, "moved": True,
+                 "summary": "Recommended adoption timeline: Wait"},
+                {"provider": "Gemini", "movement_score": 0, "moved": False, "summary": ""},
+            ],
+            "dimensions": [{
+                "label": "Recommended adoption timeline", "type": "contradiction",
+                "positions": [
+                    {"stance": "Adopt now", "models": ["Gemini"]},
+                    {"stance": "Wait", "models": ["OpenAI"]},
+                ],
+            }],
+        }
+        points = [{
+            "ts": datetime(2026, 7, 8, tzinfo=timezone.utc), "agreement_score": 62,
+            "verdict": "partially", "changed": True, "severity": "major",
+            "change_summary": "Recommendation changed.", "opinion_map": position_map,
+        }]
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router.snapshots, "list_watch_history", return_value=points):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        body = response.text
+        self.assertIn("Position Map", body)
+        self.assertIn("Direction Shift", body)
+        self.assertIn("50<span>/100</span>", body)
+        self.assertIn("Recommended adoption timeline", body)
+        self.assertIn("OpenAI", body)
+
     def test_active_watch_page_shows_run_metadata_before_history_exists(self):
         doc = self._share_doc()
         now = datetime(2026, 7, 12, 8, 30, tzinfo=timezone.utc)

@@ -91,6 +91,12 @@ async def remove_watch(request: Request, watch_id: str, data: dict = Body(defaul
     except Exception:
         logging.exception("delete_watch failed")
         raise HTTPException(status_code=500, detail="Error deleting watch")
+    try:
+        watch_brief.disable_if_no_watches(uid)
+    except Exception:
+        # Die Watch ist bereits gelöscht; Brief-Cleanup darf dem Client keinen
+        # falschen Delete-Fehler melden. Das Aktivierungs-Gate bleibt intakt.
+        logging.exception("Morning Brief cleanup after final watch failed")
     return {"status": "success"}
 
 
@@ -99,7 +105,11 @@ async def remove_watch(request: Request, watch_id: str, data: dict = Body(defaul
 async def my_watch_brief(request: Request):
     uid = _uid(request, {})
     try:
-        return {"status": "success", "brief": watch_brief.get_brief(uid)}
+        return {
+            "status": "success",
+            "brief": watch_brief.get_brief(uid),
+            "has_watches": watch_brief.has_watches(uid),
+        }
     except Exception:
         logging.exception("my_watch_brief failed")
         raise HTTPException(status_code=500, detail="Error loading brief settings")

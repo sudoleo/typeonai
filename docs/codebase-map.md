@@ -59,6 +59,14 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 Template + Firebase-Auth-Modul wie `admin.html`), `share.html` (öffentliche
 Consensus-Seite), `share_unavailable.html`, plus statische Rechts-/SEO-Seiten
 und SEO-Erklärseiten wie `ai-model-comparison.html` / `consensus-engine.html`.
+Alle öffentlichen HTML-Seiten teilen Navigation und Footer über
+`templates/partials/public_nav.html` und `public_footer.html`. Landingpage und
+Consensus-Engine-Seite nutzen zusätzlich dieselbe aktuelle Ergebnisdarstellung
+aus `partials/product_result_mockup.html`. Die gemeinsamen, an `/app`
+ausgerichteten Light-/Dark-Tokens liegen in `static/css/public-tokens.css` und
+werden von `landing.css` sowie `public-pages.css` importiert; seitenbezogene
+Layouts bleiben in diesen beiden Dateien bzw. in `benchmark.css` und
+`consensus-engine.css`.
 **`index.html` enthält kein App-JS inline mehr**
 — nur den Jinja-Config-Block im `<head>` und die Modul-`<script>`-Tags.
 
@@ -123,7 +131,9 @@ deferred am `</body>` — `app-init.js`.
   Score/Delta/History-Sparkline, letzter Änderung, nächstem Lauf und
   Inline-Settings (Intervall/Uhrzeit/Mailmodus/Condition, Pause/Delete) sowie
   die Morning-Brief-Karte (`/api/my/watch-brief`, Toggle im selben
-  `.switch`/`.slider`-Stil wie das Input-Feld). `openWatchDialog("list")`
+  `.switch`/`.slider`-Stil wie das Input-Feld). Ohne vorhandene Watch ist der
+  Toggle erklärend deaktiviert; das Backend erzwingt dasselbe Gate und schaltet
+  den Brief beim Löschen der letzten Watch ab. `openWatchDialog("list")`
   leitet auf die Seite um; Einstieg zusätzlich über den login-gated,
   schwebenden View-Switch `#viewSwitch` (Consensus/Watches; `firebase.js`
   blendet ihn ein/aus, `watch.js` synchronisiert URL und aktiven Zustand). Nach dem
@@ -383,6 +393,7 @@ app/services/llm/
 app/services/
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
+  opinion_map.py             Datenminimierte, mehrdimensionale Provider-Positionen + Direction-Shift-Berechnung
   watch_brief.py             Morning-Brief-Settings (watch_briefs), transaktionaler Claim, Digest-Aggregation, Brief-Unsubscribe-Tokens
   watch_scheduler.py         Global-Lease, Tagesbudget, sequenzielle tierkonfigurierte Watch-Läufe + run_brief_tick (Morning-Brief-Versand)
   mailer.py                  Multipart-HTML/Plaintext-SMTP-Versand via Thread-Executor
@@ -432,7 +443,10 @@ Wichtige Verträge im Backend:
   Lease/Fehlerzähler); keine IP-/User-Agent-Daten. Conditions werden nie in
   öffentliche Share-Payloads oder History-Punkte kopiert.
   Verlaufspunkte liegen datenminimiert in `shares/{id}/watch_history` und
-  verändern den Share-Snapshot nicht.
+  verändern den Share-Snapshot nicht. Neben Score/Change-Metadaten können sie
+  eine kompakte `opinion_map` tragen: maximal vier aus der strukturierten
+  Differences-Analyse abgeleitete Dimensionen, kurze Standpunkte,
+  Provider-Gruppen und einen 0–100 `shift_score`; niemals Rohantworten.
 - `watch_runtime` — globaler Worker-Lease und datumsgebundener Tageszähler;
   verhindert parallele Scheduler-Worker und begrenzt Watch-Versuche restartfest.
 - `watch_briefs/{uid}` — user-level Morning-Brief-Einstellungen (`enabled`,
@@ -507,7 +521,7 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **480 passed** (2026-07-16).
+  Letzte bekannte Baseline: **485 passed** (2026-07-16).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, kompakte Antwort→Consensus-
@@ -578,9 +592,15 @@ Legacy-Watches ohne Wochentag bzw. Zeitfelder nutzen weiter die bisherige reine
 Intervalladdition.
 Watch-Seiten zeigen für aktuelle oder historische Watches eine kompakte Metazeile
 mit Intervall sowie letztem und ggf. nächstem Fragenlauf.
+Die öffentliche Watch-History rendert zusätzlich eine **Position Map**: statt
+einer universellen Ja/Nein-Achse zeigt sie frage-spezifische Standpunkt-
+Dimensionen, Provider-Bewegungen über die Läufe und den gemeinsamen
+**Direction Shift**. Die Berechnung ist deterministisch aus dem ohnehin
+vorhandenen Differences-JSON und verursacht keinen zusätzlichen LLM-Call.
 **Morning Brief**: opt-in tägliche Digest-Mail pro Nutzer (nicht pro Watch),
 konfiguriert im Watch-Dashboard (`/api/my/watch-brief`), gespeichert in
-`watch_briefs/{uid}`. Der 30-Minuten-Loop ruft nach `run_watch_tick` ein
+`watch_briefs/{uid}`; Aktivierung setzt mindestens eine vorhandene Watch voraus.
+Der 30-Minuten-Loop ruft nach `run_watch_tick` ein
 `run_brief_tick` auf: fällige Briefs werden transaktional geclaimt (Zeitplan
 rückt VOR dem Versand vor — at-most-once, nie doppelt), dann wird der Digest
 aus `list_watches(include_history=True)` aggregiert (Score/Delta, notable
