@@ -119,8 +119,11 @@ deferred am `</body>` — `app-init.js`.
 - **`sources.js`** — Quellen/Evidence-Mapping; nutzt DOM-Datasets
   `dataset.consensusAnswer` / `dataset.consensusSources`; `window.currentEvidenceSources`.
 - **`attachments.js`** — Attachment-UI/Payload (Pro), inklusive Bild-Paste im
-  Fragefeld und Bild-Drag-and-drop auf den Input-Container;
-  `window.pendingAttachments`, `getAttachmentsPayload`.
+  Fragefeld und Bild-Drag-and-drop auf den Input-Container. Solange ein echter
+  Anhang für die nächste Frage bereitliegt, wird DeepSeek temporär mit einem
+  sichtbaren Kompatibilitätshinweis deaktiviert, weil dessen Chat-API keine
+  Datei-/Bild-Inputs akzeptiert; nach Entfernen wird die vorherige Auswahl
+  wiederhergestellt. `window.pendingAttachments`, `getAttachmentsPayload`.
 - **`agent-mode.js`** — Agent-Mode-UI/Status/Timer; zeigt pro Modell den
   Query-Abschluss aus `dataset.responseState`; einzige Stelle, die den
   Auto-Consensus-Toggle erzwingt/sperrt. Sobald Antworten vorliegen, bietet das

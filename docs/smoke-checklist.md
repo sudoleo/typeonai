@@ -48,13 +48,16 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       und Stop blenden die Zeile wieder aus. Light/Dark und Mobile ohne Clipping.
 - [ ] Senden während Lauf abbrechen (Stop) funktioniert.
 - [ ] Modell ein-/ausschließen (Checkbox/Toggle) blendet Antwortbox korrekt ein/aus.
+- [ ] Echter Bild-/PDF-Anhang pausiert DeepSeek mit sichtbarer Erklärung; nach
+      Entfernen aller Anhänge wird die vorherige DeepSeek-Auswahl wiederhergestellt.
 - [ ] Quellen-Chips / Evidence-Links erscheinen und sind klickbar.
 
 ## Consensus (höchstes Risiko)
 - [ ] Presets: Fast/Balanced setzen sichtbar alle sechs Antwortmodelle und die
       konfigurierte Consensus-Engine; eine manuelle Modellwahl wechselt zu Custom.
-- [ ] High Quality zeigt ein Pro-Badge, oeffnet fuer Free das Upgrade-Modal und setzt
-      fuer Pro das vollstaendige Premium-Model-Set. Deep Think bleibt separat.
+- [ ] High Quality zeigt ein Pro-Badge, hat beim Hover/Fokus eine dezente
+      Power-Animation, oeffnet fuer Free das Upgrade-Modal und setzt fuer Pro das
+      vollstaendige Premium-Model-Set. Deep Think bleibt separat.
 - [ ] Consensus und Differences erscheinen oberhalb der Modellantworten; der
       Reveal scrollt nur dann sanft zum Ergebnis, wenn es außerhalb des
       relevanten Viewports liegt.

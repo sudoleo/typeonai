@@ -992,6 +992,19 @@ body:not(.dark-mode) .chat-input-container::before {
   display: none;
 }
 
+.attachment-provider-notice {
+  flex: 1 0 100%;
+  margin: 2px 2px 0;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, #f59e0b 24%, var(--glass-border));
+  border-radius: 9px;
+  background: color-mix(in srgb, #f59e0b 7%, var(--glass-bg-strong));
+  color: color-mix(in srgb, var(--text-color) 82%, #92400e 18%);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
 .attachment-chip {
   display: inline-flex;
   align-items: center;

@@ -64,6 +64,7 @@ Backend-Baseline (`python -m pytest tests`) bleibt unverändert.
 
 ## Bewusst (noch) nicht abgedeckt
 
-Resolve-Runde, Share-Dialog, Attachments (Pro), Follow-up (Pro), Bookmarks,
-Agent-Mode-Timer, Demo-Flow, Mobile-Layout, Login-Flow selbst. Mit dem
+Resolve-Runde, Share-Dialog, echte Datei-Picker-/Paste-/Drop-Uploads (Pro),
+Follow-up (Pro), Bookmarks, Agent-Mode-Timer, Demo-Flow, Mobile-Layout,
+Login-Flow selbst. Mit dem
 vorhandenen Auth-Mock sind Resolve/Share später günstig nachrüstbar.

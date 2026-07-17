@@ -22,6 +22,7 @@
   const ATTACH_MAX_FILES = 2;
   const ATTACH_MAX_BYTES = 5 * 1024 * 1024;
   const ATTACH_ALLOWED_MIMES = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
+  const DEEPSEEK_ATTACHMENT_MESSAGE = "DeepSeek is paused for this question because its API cannot read attachments. Remove the files to use DeepSeek again.";
   window.pendingAttachments = [];
 
   (function initAttachments() {
@@ -36,6 +37,63 @@
 
     let pendingFileReads = 0;
     let dragDepth = 0;
+    let deepSeekSelectionBeforeAttachment = null;
+
+    function hasSendableAttachments() {
+      return (window.pendingAttachments || []).some(function (att) {
+        return !att.previewOnly && !!att.data;
+      });
+    }
+
+    function syncDeepSeekAttachmentCompatibility() {
+      const checkbox = document.getElementById("selectDeepSeek");
+      if (!checkbox) return;
+
+      const incompatible = hasSendableAttachments();
+      const label = document.querySelector("label[for='selectDeepSeek']");
+      const responseBox = document.getElementById("deepseekResponse");
+      const excludeButton = responseBox?.querySelector(".exclude-btn");
+
+      if (incompatible) {
+        if (deepSeekSelectionBeforeAttachment === null) {
+          deepSeekSelectionBeforeAttachment = checkbox.checked;
+        }
+        if (checkbox.checked) {
+          window.App?.setModelSelectionState?.("deepseekResponse", false, {
+            persist: false,
+            syncCheckbox: true,
+            animate: true
+          });
+        }
+        checkbox.disabled = true;
+        checkbox.setAttribute("aria-describedby", "attachmentProviderNotice");
+        if (label) {
+          label.classList.add("is-attachment-incompatible");
+          label.title = DEEPSEEK_ATTACHMENT_MESSAGE;
+        }
+        if (excludeButton) {
+          excludeButton.disabled = true;
+          excludeButton.title = DEEPSEEK_ATTACHMENT_MESSAGE;
+          excludeButton.setAttribute("aria-label", DEEPSEEK_ATTACHMENT_MESSAGE);
+        }
+        return;
+      }
+
+      checkbox.disabled = false;
+      checkbox.removeAttribute("aria-describedby");
+      if (label) label.classList.remove("is-attachment-incompatible");
+      if (excludeButton) excludeButton.disabled = false;
+
+      if (deepSeekSelectionBeforeAttachment !== null) {
+        const shouldRestore = deepSeekSelectionBeforeAttachment;
+        deepSeekSelectionBeforeAttachment = null;
+        window.App?.setModelSelectionState?.("deepseekResponse", shouldRestore, {
+          persist: false,
+          syncCheckbox: true,
+          animate: true
+        });
+      }
+    }
 
     function setMenuOpen(open) {
       menu.hidden = !open;
@@ -231,6 +289,18 @@
 
         bar.appendChild(chip);
       });
+
+      if (hasSendableAttachments()) {
+        const notice = document.createElement("p");
+        notice.id = "attachmentProviderNotice";
+        notice.className = "attachment-provider-notice";
+        notice.setAttribute("role", "status");
+        notice.setAttribute("aria-live", "polite");
+        notice.textContent = DEEPSEEK_ATTACHMENT_MESSAGE;
+        bar.appendChild(notice);
+      }
+
+      syncDeepSeekAttachmentCompatibility();
     }
 
     window.renderAttachmentChips = renderAttachmentChips;
@@ -399,6 +469,10 @@
       window.addEventListener("dragend", clearDragState);
       window.addEventListener("drop", clearDragState);
     }
+
+    window.addEventListener("pageshow", function () {
+      window.setTimeout(syncDeepSeekAttachmentCompatibility, 0);
+    });
   })();
 
   window.getAttachmentsPayload = function () {

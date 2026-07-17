@@ -416,6 +416,81 @@ def test_consensus_presets_apply_full_model_sets_and_gate_thorough(app_page):
     )
 
 
+def test_attachment_pauses_deepseek_and_restores_previous_selection(app_page):
+    """Echte Anhaenge nehmen DeepSeek temporaer aus dem Fan-out; reine
+    Bookmark-Metadaten tun das nicht und die Nutzerwahl bleibt erhalten."""
+    result = app_page.evaluate(
+        """() => {
+          const checkbox = document.getElementById("selectDeepSeek");
+          window.App.setModelSelectionState("deepseekResponse", true, {
+            persist: false,
+            syncCheckbox: true,
+            animate: false,
+          });
+          const persistedBefore = localStorage.getItem("pref_check_DeepSeek");
+
+          window.pendingAttachments = [{
+            name: "brief.pdf",
+            mime: "application/pdf",
+            size: 128,
+            data: "JVBERi0xLjcK",
+          }];
+          window.renderAttachmentChips();
+          const whileAttached = {
+            checked: checkbox.checked,
+            disabled: checkbox.disabled,
+            notice: document.getElementById("attachmentProviderNotice")?.textContent || "",
+            responseExcluded: document.getElementById("deepseekResponse").classList.contains("excluded"),
+          };
+
+          window.clearPendingAttachments();
+          window.pendingAttachments = [{
+            name: "saved-image.png",
+            mime: "image/png",
+            size: 64,
+            data: null,
+            previewOnly: true,
+          }];
+          window.renderAttachmentChips();
+          const withBookmarkPreview = {
+            checked: checkbox.checked,
+            disabled: checkbox.disabled,
+            noticeExists: !!document.getElementById("attachmentProviderNotice"),
+          };
+          window.clearPendingAttachments();
+          return {
+            persistedBefore,
+            persistedAfter: localStorage.getItem("pref_check_DeepSeek"),
+            whileAttached,
+            withBookmarkPreview,
+            afterRemoval: {
+              checked: checkbox.checked,
+              disabled: checkbox.disabled,
+              noticeExists: !!document.getElementById("attachmentProviderNotice"),
+              responseExcluded: document.getElementById("deepseekResponse").classList.contains("excluded"),
+            },
+          };
+        }"""
+    )
+
+    assert result["whileAttached"]["checked"] is False
+    assert result["whileAttached"]["disabled"] is True
+    assert "cannot read attachments" in result["whileAttached"]["notice"]
+    assert result["whileAttached"]["responseExcluded"] is True
+    assert result["withBookmarkPreview"] == {
+        "checked": True,
+        "disabled": False,
+        "noticeExists": False,
+    }
+    assert result["afterRemoval"] == {
+        "checked": True,
+        "disabled": False,
+        "noticeExists": False,
+        "responseExcluded": False,
+    }
+    assert result["persistedAfter"] == result["persistedBefore"]
+
+
 def test_tier_upgrade_applies_pro_defaults_but_keeps_explicit_picker_choice(app_page):
     """Im Custom-Modus aendert Free -> Pro nur nicht explizit gewaehlte Defaults.
     Aktive Presets haben absichtlich Vorrang vor diesen Tier-Defaults."""

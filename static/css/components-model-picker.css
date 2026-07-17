@@ -292,6 +292,101 @@
   opacity: 1;
 }
 
+/* High Quality: dezenter "Power-up" beim Hover, ohne dauerhaftes Geflimmer. */
+.model-picker-preset-option[data-preset="thorough"] {
+  isolation: isolate;
+  overflow: hidden;
+  transform: translateZ(0);
+  transition: background-color .2s ease, box-shadow .25s ease, color .2s ease, transform .2s ease;
+}
+
+.model-picker-preset-option[data-preset="thorough"] > * {
+  position: relative;
+  z-index: 1;
+}
+
+.model-picker-preset-option[data-preset="thorough"]::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: -55% -35%;
+  border-radius: inherit;
+  background: linear-gradient(
+    105deg,
+    transparent 31%,
+    rgba(99, 102, 241, 0.04) 39%,
+    rgba(59, 130, 246, 0.22) 48%,
+    rgba(168, 85, 247, 0.18) 53%,
+    rgba(236, 72, 153, 0.08) 59%,
+    transparent 68%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-62%) skewX(-10deg);
+}
+
+.model-picker-preset-option[data-preset="thorough"]:not(:disabled):hover,
+.model-picker-preset-option[data-preset="thorough"]:not(:disabled):focus-visible {
+  background: color-mix(in srgb, #6366f1 10%, var(--glass-bg-strong));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #818cf8 26%, transparent),
+    0 5px 18px color-mix(in srgb, #6366f1 15%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.36);
+  animation: high-quality-power-pulse 1.8s ease-in-out infinite;
+}
+
+.model-picker-preset-option[data-preset="thorough"]:not(:disabled):hover::before,
+.model-picker-preset-option[data-preset="thorough"]:not(:disabled):focus-visible::before {
+  opacity: 1;
+  animation: high-quality-power-sweep 1.55s cubic-bezier(.2, .75, .25, 1) infinite;
+}
+
+.model-picker-preset-option[data-preset="thorough"]:not(:disabled):hover .model-picker-preset-name,
+.model-picker-preset-option[data-preset="thorough"]:not(:disabled):focus-visible .model-picker-preset-name {
+  text-shadow: 0 0 12px color-mix(in srgb, #818cf8 32%, transparent);
+}
+
+.model-picker-preset-option[data-preset="thorough"]:not(:disabled):hover .model-picker-pro-badge,
+.model-picker-preset-option[data-preset="thorough"]:not(:disabled):focus-visible .model-picker-pro-badge {
+  animation: high-quality-badge-charge 1.8s ease-in-out infinite;
+}
+
+.model-picker-preset-option[data-preset="thorough"].is-selected::after {
+  z-index: 1;
+}
+
+@keyframes high-quality-power-sweep {
+  0% { transform: translateX(-62%) skewX(-10deg); }
+  68%, 100% { transform: translateX(62%) skewX(-10deg); }
+}
+
+@keyframes high-quality-power-pulse {
+  0%, 100% { transform: translateZ(0) scale(1); }
+  50% { transform: translateZ(0) scale(1.008); }
+}
+
+@keyframes high-quality-badge-charge {
+  0%, 100% { filter: brightness(1); transform: translateY(0); }
+  50% { filter: brightness(1.08); transform: translateY(-1px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .model-picker-preset-option[data-preset="thorough"]:not(:disabled):hover,
+  .model-picker-preset-option[data-preset="thorough"]:not(:disabled):focus-visible,
+  .model-picker-preset-option[data-preset="thorough"]:not(:disabled):hover::before,
+  .model-picker-preset-option[data-preset="thorough"]:not(:disabled):focus-visible::before,
+  .model-picker-preset-option[data-preset="thorough"]:not(:disabled):hover .model-picker-pro-badge,
+  .model-picker-preset-option[data-preset="thorough"]:not(:disabled):focus-visible .model-picker-pro-badge {
+    animation: none;
+  }
+
+  .model-picker-preset-option[data-preset="thorough"]:not(:disabled):hover::before,
+  .model-picker-preset-option[data-preset="thorough"]:not(:disabled):focus-visible::before {
+    opacity: .55;
+    transform: translateX(0) skewX(-10deg);
+  }
+}
+
 /* "Custom"-Zeile: fuehrt zur vollen Modell-Liste, leichte Trennung oben. */
 .model-picker-custom-option {
   margin-top: 5px;
