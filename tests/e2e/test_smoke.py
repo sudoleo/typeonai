@@ -85,6 +85,28 @@ def test_app_loads_without_console_errors(app_page, get_console_errors):
     assert errors == [], f"Konsolen-Fehler beim Laden: {errors}"
 
 
+def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
+    page_metrics = app_page.evaluate(
+        """() => ({
+          scrollHeight: document.documentElement.scrollHeight,
+          clientHeight: document.documentElement.clientHeight,
+        })"""
+    )
+    assert page_metrics["scrollHeight"] <= page_metrics["clientHeight"]
+
+    app_page.locator(".consensus-model .model-picker-display").click()
+    menu_metrics = app_page.locator(".consensus-model .model-picker-menu").evaluate(
+        """element => ({
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth,
+          overflowX: getComputedStyle(element).overflowX,
+        })"""
+    )
+    assert menu_metrics["scrollWidth"] <= menu_metrics["clientWidth"]
+    assert menu_metrics["overflowX"] == "hidden"
+    app_page.locator(".consensus-model .model-picker-display").click()
+
+
 def test_send_question_streams_all_models(app_page):
     """Kern-Flow: Frage senden -> alle Modelle streamen (Zwischenzustand
     sichtbar) und rendern die finale Mock-Antwort."""
@@ -323,10 +345,83 @@ def test_deep_think_temporarily_selects_gemini_35_flash(app_page):
     )
 
 
-def test_tier_upgrade_applies_pro_defaults_but_keeps_explicit_picker_choice(app_page):
-    """Free -> Pro changes tier defaults only where no explicit preference exists."""
+def test_consensus_presets_apply_full_model_sets_and_gate_thorough(app_page):
+    """Fast/Balanced sind vollstaendige Model-Sets; High Quality bleibt fuer Free
+    sichtbar, aber oeffnet mit Pro-Badge das Upgrade-Modal."""
     result = app_page.evaluate(
         """() => {
+          window.isUserPro = false;
+          window.isUserEarly = false;
+          window.updatePremiumModelsState(false, false);
+          localStorage.setItem("pref_consensus_preset", "balanced");
+          window.restoreModelSelections();
+          const consensus = document.getElementById("consensusModelDropdown");
+          consensus._customModelPicker.displayButton.click();
+          const fast = consensus._customModelPicker.menu.querySelector('[data-preset="fast"]');
+          fast.click();
+          const configured = window.CONSENSUS_PRESETS.find(preset => preset.id === "fast");
+          const actual = Object.fromEntries(window.App.modelPrefs.map(pref => [
+            pref.provider,
+            document.getElementById(pref.selectId).value,
+          ]));
+
+          consensus._customModelPicker.displayButton.click();
+          const thorough = consensus._customModelPicker.menu.querySelector('[data-preset="thorough"]');
+          const understandableLabel = thorough.textContent.includes('High Quality');
+          const hasProBadge = !!thorough.querySelector('.model-picker-pro-badge');
+          thorough.click();
+          return {
+            actual,
+            expected: configured.models,
+            consensus: consensus.value,
+            expectedConsensus: configured.consensus_model,
+            storedPreset: localStorage.getItem("pref_consensus_preset"),
+            understandableLabel,
+            hasProBadge,
+            proModalDisplay: document.getElementById("proFeatureModal").style.display,
+          };
+        }"""
+    )
+    assert result["actual"] == result["expected"]
+    assert result["consensus"] == result["expectedConsensus"]
+    assert result["storedPreset"] == "fast"
+    assert result["understandableLabel"]
+    assert result["hasProBadge"]
+    assert result["proModalDisplay"] == "block"
+
+    app_page.evaluate(
+        """() => {
+          document.getElementById("keepFreeBtn").click();
+          const pref = window.App.modelPrefs[0];
+          const select = document.getElementById(pref.selectId);
+          const alternative = Array.from(select.options).find(option =>
+            !option.disabled && option.value !== select.value
+          );
+          if (alternative) {
+            select.value = alternative.value;
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        }"""
+    )
+    assert app_page.evaluate("() => localStorage.getItem('pref_consensus_preset')") == "custom"
+    app_page.evaluate(
+        """() => {
+          for (const pref of window.App.modelPrefs) {
+            localStorage.removeItem("pref_select_" + pref.key);
+          }
+          localStorage.removeItem("pref_select_consensus");
+          localStorage.removeItem("pref_consensus_preset");
+          window.updatePremiumModelsState(false, false);
+        }"""
+    )
+
+
+def test_tier_upgrade_applies_pro_defaults_but_keeps_explicit_picker_choice(app_page):
+    """Im Custom-Modus aendert Free -> Pro nur nicht explizit gewaehlte Defaults.
+    Aktive Presets haben absichtlich Vorrang vor diesen Tier-Defaults."""
+    result = app_page.evaluate(
+        """() => {
+          localStorage.setItem("pref_consensus_preset", "custom");
           const pref = window.App.modelPrefs.find(item =>
             window.FREE_DEFAULT_MODELS[item.provider] !== window.PRO_DEFAULT_MODELS[item.provider]
           );

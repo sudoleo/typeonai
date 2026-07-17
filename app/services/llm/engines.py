@@ -204,7 +204,7 @@ def build_provider_payload(
         else:
             internal_model = model_override or DEFAULT_OPENAI_MODEL
             api_model, model_config = cfg.resolve_api_model(model_override, DEFAULT_OPENAI_MODEL, "openai")
-            request_config = model_config.low_config if model_config.is_low_reasoning else None
+            request_config = model_config.request_config
         payload = _openai_responses_payload(
             model=api_model,
             system_prompt=system_prompt,
@@ -280,8 +280,8 @@ def build_provider_payload(
                 "name": "web_search",
                 "max_uses": 5,
             }]
-        if model_config and model_config.is_low_reasoning:
-            _merge_nested_config(payload, model_config.low_config)
+        if model_config and model_config.request_config:
+            _merge_nested_config(payload, model_config.request_config)
         return {
             "provider": "anthropic",
             "endpoint": "messages",
@@ -319,8 +319,8 @@ def build_provider_payload(
         }
         if not benchmark_mode:
             payload["tools"] = [{"google_search": {}}]
-        if model_config and model_config.is_low_reasoning:
-            _merge_nested_config(payload, model_config.low_config)
+        if model_config and model_config.request_config:
+            _merge_nested_config(payload, model_config.request_config)
         return {
             "provider": "gemini",
             "endpoint": "generateContent",
@@ -363,7 +363,7 @@ def build_provider_payload(
         else:
             internal_model = model_override or DEFAULT_GROK_MODEL
             api_model, model_config = cfg.resolve_api_model(model_override, DEFAULT_GROK_MODEL, "grok")
-            request_config = model_config.low_config if model_config.is_low_reasoning else None
+            request_config = model_config.request_config
         payload = _openai_responses_payload(
             model=api_model,
             system_prompt=system_prompt,

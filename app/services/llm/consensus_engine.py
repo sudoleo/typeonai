@@ -78,7 +78,7 @@ def _gemini_engine_payload(
     Bewusst NICHT über build_provider_payload: dessen Gemini-Pfad kappt die
     Frage bei 12k Zeichen und hängt Chat-Instruktionen an — beides falsch für
     die langen Engine-Prompts. Frontier-Low-Mapping (interne ID -> api_model
-    + low_config) läuft über resolve_api_model. effort ("low") kappt das
+    + request_config) läuft über resolve_api_model. effort ("low") kappt das
     Thinking-Budget (thinkingLevel) — genutzt für Judge-Calls, deren Task
     kein tiefes Denken braucht."""
     api_model, model_config = cfg.resolve_api_model(model_ref, GEMINI_FLASH_MODEL, "gemini")
@@ -96,8 +96,8 @@ def _gemini_engine_payload(
         payload["generationConfig"]["temperature"] = temperature
     if json_mode:
         payload["generationConfig"]["responseMimeType"] = "application/json"
-    if model_config and model_config.is_low_reasoning:
-        _merge_nested_config(payload, model_config.low_config)
+    if model_config and model_config.request_config:
+        _merge_nested_config(payload, model_config.request_config)
     if effort:
         _merge_nested_config(payload, {"generationConfig": {"thinkingConfig": {"thinkingLevel": effort}}})
     return api_model, payload
@@ -247,7 +247,7 @@ def _resolve_engine(engine_model: str) -> tuple[str, str, str] | None:
     zu (provider, api_model, gemini_model_ref) auf.
 
     gemini_model_ref ist der Wert für resolve_api_model: bei internen IDs die
-    ID selbst (Frontier-Low mappt dort auf api_model + low_config), bei
+    ID selbst (Frontier-Low mappt dort auf api_model + request_config), bei
     Aliassen direkt das API-Modell."""
     config = resolve_consensus_engine_model(engine_model)
     if not config or not config.provider:

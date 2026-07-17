@@ -407,6 +407,7 @@
         // passt sich dem geklickten Feature an (Fallback: generischer Text).
         const PRO_FEATURE_DESCRIPTIONS = {
           "Deep Think": "Complex reasoning requires advanced compute power. Upgrade to access the smartest AI models.",
+          "High Quality mode": "Use a premium model set across all six answers and the final consensus synthesis.",
           "Resolve": "Let the disagreeing models confront each other's position and see whether they revise or hold their ground.",
           "Follow-up questions": "Keep the conversation going. Your previous question and its consensus answer travel along as context.",
         };
@@ -1030,6 +1031,7 @@
           if (select) {
             select.addEventListener("change", function () {
               localStorage.setItem("pref_select_" + pref.key, this.value);
+              window.App.markConsensusPresetCustom?.();
               const selectedLabel = getModelOptionLabel(this.options[this.selectedIndex]) || this.value;
               if (labelText) {
                 labelText.textContent = selectedLabel;
@@ -1067,7 +1069,7 @@
             // Eine explizite Modellwahl (change-Event) verlaesst die
             // Preset-Ebene; Preset-Klicks und die temporaere Deep-Think-
             // Auswahl feuern bewusst KEIN change (siehe model-picker.js).
-            localStorage.setItem("pref_consensus_preset", "custom");
+            window.App.markConsensusPresetCustom?.();
             const selectedLabel = getModelOptionLabel(this.options[this.selectedIndex]) || this.value;
             trackAppEvent("app_consensus_model_changed", { model: selectedLabel });
 

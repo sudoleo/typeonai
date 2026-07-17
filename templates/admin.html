@@ -15,11 +15,70 @@
         };
     </script>
     <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=20260715-neutral3">
+    <link rel="stylesheet" href="/static/style.css?v=20260718-layoutfix1">
     <style>
         /* Hinweis: der globale button:not(...)-Selektor in components-input.css
            uebersteuert page-lokale Buttons; kompakte Admin-Buttons brauchen
            deshalb !important auf den betroffenen Properties. */
+        .top-bar {
+            position: fixed;
+            inset: 0 0 auto;
+            z-index: var(--z-sticky);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-sizing: border-box;
+            height: 64px;
+            padding: 0 22px;
+            border-bottom: 1px solid var(--input-border);
+            background: color-mix(in srgb, var(--bg-color) 88%, transparent);
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+        }
+        .top-bar-logo,
+        .top-bar-right {
+            display: flex;
+            align-items: center;
+        }
+        .top-bar-logo { gap: 10px; min-width: 0; }
+        .top-bar-right { gap: 18px; }
+        #logoLink {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            flex: 0 0 34px;
+        }
+        .top-bar-favicon {
+            display: block;
+            width: 30px;
+            height: 30px;
+            max-width: 100%;
+            object-fit: contain;
+        }
+        .top-bar-title {
+            overflow: hidden;
+            color: var(--text-color);
+            font-size: 1rem;
+            font-weight: 700;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .top-bar-right .top-bar-about {
+            display: inline-flex;
+            align-items: center;
+            min-height: 34px;
+            color: var(--sidebar-text-muted);
+            font-size: 0.88rem;
+            font-weight: 600;
+        }
+        .top-bar-right .top-bar-about:hover,
+        .top-bar-right .top-bar-about:focus-visible {
+            color: var(--text-color);
+            outline: none;
+        }
         .admin-shell {
             max-width: 1240px;
             margin: 96px auto 60px;
@@ -203,6 +262,45 @@
 
         /* Consensus-Tab */
         .deepthink-card { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+        .preset-model-cards {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }
+        .preset-model-card {
+            padding: 12px;
+            border: 1px solid var(--input-border);
+            border-radius: var(--radius-sm);
+            background: color-mix(in srgb, var(--input-bg) 72%, transparent);
+        }
+        .preset-model-card h4 {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0 0 10px;
+            font-size: 0.9em;
+        }
+        .preset-model-field {
+            display: grid;
+            grid-template-columns: 82px minmax(0, 1fr);
+            align-items: center;
+            gap: 8px;
+            margin-top: 7px;
+        }
+        .preset-model-field label {
+            color: var(--sidebar-text-muted);
+            font-size: 0.76em;
+            text-transform: capitalize;
+        }
+        .preset-model-field select {
+            width: 100%;
+            min-width: 0;
+            padding: 6px 8px;
+            border: 1px solid var(--input-border);
+            border-radius: var(--radius-xs);
+            background: var(--input-bg);
+            color: var(--text-color);
+        }
         .judge-row {
             display: grid;
             grid-template-columns: 110px minmax(0, 1fr) minmax(0, 1fr);
@@ -334,10 +432,14 @@
         .admin-tab-panel[hidden] { display: none; }
 
         @media (max-width: 820px) {
+            .top-bar { padding-inline: 14px; }
+            .top-bar-right { gap: 10px; }
+            .top-bar-right .top-bar-about { font-size: 0.8rem; }
             .providers-grid { grid-template-columns: 1fr; }
             .limits-grid { grid-template-columns: 1fr; }
             .limit-row { grid-template-columns: 1fr; }
             .watch-model-grid { grid-template-columns: 1fr; }
+            .preset-model-cards { grid-template-columns: 1fr; }
             .watch-model-grid .watch-model-head { display: none; }
             .watch-model-provider { margin-top: 8px; }
             .admin-savebar { top: 58px; flex-wrap: wrap; }
@@ -451,6 +553,7 @@
         document.getElementById('tab-models').addEventListener('change', () => {
             renderJudgeSelects();
             renderConsensusAddSelect();
+            renderPresetModels();
         });
 
         // ==============================
@@ -520,6 +623,78 @@
             });
         }
 
+        function currentPresetModels() {
+            const result = {};
+            document.querySelectorAll('[data-preset-id][data-preset-slot]').forEach(select => {
+                const presetId = select.dataset.presetId;
+                if (!result[presetId]) result[presetId] = {};
+                if (select.value) result[presetId][select.dataset.presetSlot] = select.value;
+            });
+            return result;
+        }
+
+        function isLockedConsensusModel(model) {
+            const alias = (meta().aliases || {})[model];
+            if (alias && model.endsWith('-Pro')) return true;
+            return (globalModelsData.premium || []).includes(model) || isEarly(model);
+        }
+
+        function appendPresetOption(select, value, label) {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label || value;
+            if (option.textContent !== value) option.textContent += ` (${value})`;
+            select.appendChild(option);
+        }
+
+        function renderPresetModels() {
+            const container = document.getElementById('presetModelsContainer');
+            if (!container) return;
+            const chosenNow = currentPresetModels();
+            const saved = globalModelsData.preset_models || {};
+            const premium = new Set(globalModelsData.premium || []);
+            container.innerHTML = '';
+
+            (meta().preset_definitions || []).forEach(definition => {
+                const configured = chosenNow[definition.id] || saved[definition.id] || {};
+                const card = document.createElement('div');
+                card.className = 'preset-model-card';
+                const title = document.createElement('h4');
+                title.textContent = definition.label;
+                if (definition.pro_only) title.appendChild(chip('', 'Pro', 'This preset is available to Pro users only.'));
+                card.appendChild(title);
+
+                [...providers, 'consensus'].forEach(slot => {
+                    const field = document.createElement('div');
+                    field.className = 'preset-model-field';
+                    const label = document.createElement('label');
+                    label.textContent = slot;
+                    const select = document.createElement('select');
+                    select.dataset.presetId = definition.id;
+                    select.dataset.presetSlot = slot;
+                    select.setAttribute('aria-label', `${definition.label} ${slot} model`);
+
+                    if (slot === 'consensus') {
+                        consensusListValues().forEach(model => {
+                            if (!definition.pro_only && isLockedConsensusModel(model)) return;
+                            appendPresetOption(select, model, consensusDescription(model));
+                        });
+                    } else {
+                        currentProviderModels(slot).forEach(model => {
+                            if (!definition.pro_only && (premium.has(model) || isEarly(model))) return;
+                            appendPresetOption(select, model, labelFor(model));
+                        });
+                    }
+                    select.value = configured[slot] || '';
+                    select.addEventListener('change', markDirty);
+                    field.appendChild(label);
+                    field.appendChild(select);
+                    card.appendChild(field);
+                });
+                container.appendChild(card);
+            });
+        }
+
         // ==============================
         // Rendering
         // ==============================
@@ -568,6 +743,7 @@
             // Nach den Provider-Listen rendern, damit Add-Dropdown und
             // Alias-Aufloesung den aktuellen DOM-Stand sehen.
             renderConsensusModels();
+            renderPresetModels();
             renderDeepThinkSelect();
             renderJudgeSelects();
             renderWatchModelConfig();
@@ -674,6 +850,9 @@
                 row.remove();
                 renderJudgeSelects();
                 renderConsensusAddSelect();
+                renderPresetModels();
+                renderDeepThinkSelect();
+                renderWatchModelConfig();
                 markDirty();
             };
 
@@ -807,6 +986,7 @@
             setProviderConsensusChecked(value, true);
             renderConsensusAddSelect();
             renderDeepThinkSelect();
+            renderPresetModels();
         }
 
         function removeConsensusListValue(modelName) {
@@ -818,6 +998,7 @@
             setProviderConsensusChecked(value, false);
             renderConsensusAddSelect();
             renderDeepThinkSelect();
+            renderPresetModels();
         }
 
         // Kandidaten fuer das Add-Dropdown: Aliase + direkte Modell-IDs aus den
@@ -1114,6 +1295,7 @@
             const data = {
                 premium: [],
                 consensus: consensusListValues(),
+                preset_models: currentPresetModels(),
                 deep_think_model: currentDeepThinkModel(),
                 judge_models: currentJudgeModels(),
                 judge_models_pro: currentProJudgeModels(),
@@ -1165,6 +1347,14 @@
             for (const tier of ['free', 'pro']) {
                 if (Object.keys(data.watch_models[tier]).length < 2) {
                     setStatus(`Select at least two ${tier} Watch models.`, true);
+                    return;
+                }
+            }
+            for (const definition of (meta().preset_definitions || [])) {
+                const configured = data.preset_models[definition.id] || {};
+                const missing = [...providers, 'consensus'].filter(key => !configured[key]);
+                if (missing.length) {
+                    setStatus(`${definition.label} preset is missing: ${missing.join(', ')}.`, true);
                     return;
                 }
             }
@@ -1497,10 +1687,22 @@
 
         <section id="tab-consensus" class="admin-tab-panel" role="tabpanel" hidden>
             <div class="admin-section">
+                <h3>Preset Model Sets</h3>
+                <p class="section-hint">
+                    Each preset selects all six answer models and the final Consensus engine together.
+                    Fast and Balanced accept Free-tier models only; High Quality is always Pro-only.
+                </p>
+                <div id="presetModelsContainer" class="preset-model-cards">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+
+            <div class="admin-section">
                 <h3>Deep Think Model</h3>
                 <p class="section-hint">
-                    Consensus engine Deep Think switches to while active. Invalid values fall back to the
-                    server default. The selected model is always kept in the Consensus list.
+                    Consensus engine Deep Think switches to while active. Deep Think remains a separate
+                    request mode: it adds the deeper prompt, reasoning settings, token budget and quota on
+                    top of the preset selection. The selected engine stays in the Consensus list.
                 </p>
                 <div class="deepthink-card">
                     <select id="deepThinkModelSelect" aria-label="Deep Think consensus model"></select>

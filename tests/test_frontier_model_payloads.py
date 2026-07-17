@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import HTTPException
 
 import app.core.config as cfg
-from app.api.routers.admin import normalize_models_document
+from app.api.routers.admin import _server_enforced_models, normalize_models_document
 from app.api.routers.chat import parse_boolean_flag, validate_question_word_limit
 from app.services.llm.base import validate_model
 from app.services.llm.engines import build_provider_payload
@@ -96,7 +96,6 @@ class FrontierModelPayloadTests(unittest.TestCase):
             ("openai", "gpt-5.5", "gpt-5.5"),
             ("anthropic", cfg.ANTHROPIC_PRO_MODEL, cfg.ANTHROPIC_PRO_MODEL),
             ("gemini", cfg.GEMINI_PRO_MODEL, cfg.GEMINI_PRO_MODEL),
-            ("grok", "grok-4.3", "grok-4.3"),
         ]
 
         for provider, model_id, api_model in cases:
@@ -118,6 +117,55 @@ class FrontierModelPayloadTests(unittest.TestCase):
                 self.assertNotIn("output_config", request["payload"])
                 self.assertNotIn("reasoning", request["payload"])
                 self.assertNotIn("reasoning_effort", request["payload"])
+
+    def test_grok_43_no_reasoning_uses_canonical_api_model_and_none_effort(self):
+        request = build_provider_payload(
+            "grok",
+            question="payload dry run",
+            system_prompt="system",
+            model_override=cfg.GROK_NO_REASONING_MODEL,
+            max_output_tokens=123,
+        )
+        self.assertEqual(request["internal_model"], cfg.GROK_NO_REASONING_MODEL)
+        self.assertEqual(request["api_model"], "grok-4.3")
+        self.assertEqual(request["payload"]["reasoning"], {"effort": "none"})
+        self.assertFalse(request["is_low_reasoning"])
+        self.assertNotIn(cfg.GROK_NO_REASONING_MODEL, cfg.PREMIUM_MODELS)
+
+        high_request = build_provider_payload(
+            "grok",
+            question="payload dry run",
+            system_prompt="system",
+            model_override="grok-4.3",
+            max_output_tokens=123,
+        )
+        self.assertEqual(high_request["api_model"], "grok-4.3")
+        self.assertEqual(high_request["payload"]["reasoning"], {"effort": "high"})
+        self.assertIn("grok-4.3", cfg.PREMIUM_MODELS)
+
+    def test_admin_migrates_retired_grok_aliases_without_enforcing_fast_variant(self):
+        old_non_reasoning = "grok-4-1-fast-non-reasoning-latest"
+        old_reasoning = "grok-4-fast-reasoning-latest"
+        normalized = normalize_models_document({
+            "grok": [old_non_reasoning, old_reasoning, cfg.DEFAULT_GROK_MODEL, "grok-4.3"],
+            "premium": [old_non_reasoning, old_reasoning, "grok-4.3"],
+            "preset_models": {
+                "fast": {
+                    **cfg._BASE_CONSENSUS_PRESET_MODELS["fast"],
+                    "grok": old_non_reasoning,
+                },
+            },
+        })
+        self.assertNotIn(old_non_reasoning, normalized["grok"])
+        self.assertNotIn(old_reasoning, normalized["grok"])
+        self.assertIn(cfg.GROK_NO_REASONING_MODEL, normalized["grok"])
+        self.assertIn(cfg.GROK_FRONTIER_LOW_MODEL, normalized["grok"])
+        self.assertNotIn(cfg.GROK_NO_REASONING_MODEL, normalized["premium"])
+        self.assertEqual(
+            normalized["preset_models"]["fast"]["grok"],
+            cfg.GROK_NO_REASONING_MODEL,
+        )
+        self.assertNotIn(cfg.GROK_NO_REASONING_MODEL, _server_enforced_models()["grok"])
 
     def test_free_defaults_use_cheap_base_models(self):
         # Nicht-Early-Nutzer fallen auf die guenstigen Basis-Modelle zurueck;
@@ -247,6 +295,59 @@ class FrontierModelPayloadTests(unittest.TestCase):
         self.assertTrue(cfg.is_premium_consensus_model(cfg.GEMINI_35_FLASH_MODEL))
         normalized = cfg.normalize_consensus_models(["Grok"])
         self.assertIn(cfg.GEMINI_35_FLASH_MODEL, normalized)
+
+    def test_consensus_presets_are_complete_model_sets(self):
+        presets = {preset["id"]: preset for preset in cfg.get_consensus_presets()}
+        self.assertEqual(set(presets), {"fast", "balanced", "thorough"})
+        for preset in presets.values():
+            self.assertEqual(set(preset["models"]), set(cfg.DEFAULT_MODEL_BY_PROVIDER))
+            self.assertTrue(preset["consensus_model"])
+        self.assertEqual(presets["balanced"]["models"]["openai"], cfg.OPENAI_LUNA_MODEL)
+        self.assertEqual(presets["balanced"]["consensus_model"], cfg.OPENAI_LUNA_MODEL)
+        self.assertEqual(presets["thorough"]["models"]["openai"], cfg.OPENAI_SOL_MODEL)
+        self.assertEqual(presets["thorough"]["label"], "High Quality")
+        self.assertIn(cfg.OPENAI_SOL_MODEL, cfg.PREMIUM_MODELS)
+        self.assertEqual(
+            presets["fast"]["models"]["grok"],
+            cfg.GROK_FAST_MODEL,
+        )
+        self.assertTrue(presets["thorough"]["pro_only"])
+
+    def test_admin_normalizes_preset_models_and_keeps_free_presets_free(self):
+        normalized = normalize_models_document({
+            "openai": [cfg.OPENAI_LUNA_MODEL, "gpt-5.5"],
+            "mistral": [cfg.DEFAULT_MISTRAL_MODEL],
+            "anthropic": [cfg.DEFAULT_ANTHROPIC_MODEL],
+            "gemini": [cfg.DEFAULT_GEMINI_MODEL],
+            "deepseek": [cfg.DEEPSEEK_FLASH_MODEL],
+            "grok": [cfg.DEFAULT_GROK_MODEL, cfg.GROK_FAST_MODEL],
+            "premium": ["gpt-5.5"],
+            "consensus": ["Gemini"],
+            "preset_models": {
+                "balanced": {
+                    **cfg._BASE_CONSENSUS_PRESET_MODELS["balanced"],
+                    "openai": "gpt-5.5",
+                    "consensus": "OpenAI-Pro",
+                },
+                "thorough": {
+                    **cfg._BASE_CONSENSUS_PRESET_MODELS["thorough"],
+                    "openai": "gpt-5.5",
+                },
+            },
+        })
+        self.assertEqual(
+            normalized["preset_models"]["balanced"]["openai"],
+            cfg.OPENAI_LUNA_MODEL,
+        )
+        self.assertEqual(
+            normalized["preset_models"]["balanced"]["consensus"],
+            cfg.OPENAI_LUNA_MODEL,
+        )
+        self.assertIn(cfg.OPENAI_LUNA_MODEL, normalized["consensus"])
+        self.assertEqual(
+            normalized["preset_models"]["thorough"],
+            cfg._BASE_CONSENSUS_PRESET_MODELS["thorough"],
+        )
 
     def test_apply_deep_think_model_validates_and_falls_back(self):
         snapshot = cfg.get_deep_think_consensus_model()
@@ -427,6 +528,25 @@ class FrontierModelPayloadTests(unittest.TestCase):
         self.assertIn('judgeFamiliesContainer', template)
         self.assertIn('data-tab="consensus"', template)
         self.assertIn('data-tab="models"', template)
+        self.assertIn('id="presetModelsContainer"', template)
+        self.assertIn('preset_models: currentPresetModels()', template)
+        self.assertIn('.top-bar-favicon {', template)
+        self.assertIn('width: 30px;', template)
+
+    def test_consensus_preset_picker_applies_answers_and_pro_gates_thorough(self):
+        module = (ROOT / "static" / "js" / "model-picker.js").read_text(encoding="utf-8")
+        self.assertIn('preset.models?.[pref.provider]', module)
+        self.assertIn('preset.consensus_model', module)
+        self.assertIn('preset.pro_only && window.isUserPro !== true', module)
+        self.assertIn('badge.textContent = "Pro"', module)
+        self.assertIn('window.App.markConsensusPresetCustom', module)
+
+    def test_empty_app_and_consensus_picker_css_prevent_overflow(self):
+        base_css = (ROOT / "static" / "css" / "base.css").read_text(encoding="utf-8")
+        picker_css = (ROOT / "static" / "css" / "components-model-picker.css").read_text(encoding="utf-8")
+        self.assertIn("box-sizing: border-box;", base_css)
+        self.assertIn("grid-template-columns: minmax(0, 1fr);", picker_css)
+        self.assertIn("overflow-x: hidden;", picker_css)
 
     def test_index_injects_deep_think_consensus_model(self):
         template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")

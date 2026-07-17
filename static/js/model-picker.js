@@ -8,11 +8,9 @@
 //   2) Custom-Model-Picker: das eigene, getunte Listbox-Dropdown, das die
 //      nativen <select> ueberlagert (expandedModelPicker ist modul-privat).
 //   3) Consensus-Presets: der Consensus-Picker zeigt primaer die Presets
-//      Fast/Balanced/Thorough (window.CONSENSUS_PRESETS, tier-bewusst
-//      aufgeloest ueber disabled-Optionen) plus "Custom" fuer die volle
-//      Modell-Liste. Preset-Zustand in localStorage "pref_consensus_preset";
-//      die Preset-Aufloesung setzt den nativen Select OHNE change-Event,
-//      damit pref_select_consensus (explizite Modellwahl) erhalten bleibt.
+//      Fast/Balanced/High Quality (window.CONSENSUS_PRESETS) plus "Custom" fuer
+//      die volle Modell-Liste. Ein Preset setzt die sechs Antwortmodelle und
+//      die Consensus-Engine gemeinsam. High Quality bleibt Pro-only.
 // Extrahiert aus templates/index.html (initApp-Closure), verhaltenserhaltend.
 // Exporte:
 //   window.restoreModelSelections, window.syncCustomModelPickers,
@@ -189,7 +187,7 @@
     }
   };
 
-  // --- CONSENSUS-PRESETS (Fast/Balanced/Thorough + Custom) ---
+  // --- CONSENSUS-PRESETS (Fast/Balanced/High Quality + Custom) ---
 
   const CONSENSUS_PRESET_STORAGE_KEY = "pref_consensus_preset";
 
@@ -209,7 +207,11 @@
     if (!presets.length) return "custom";
     const stored = localStorage.getItem(CONSENSUS_PRESET_STORAGE_KEY);
     if (stored === "custom") return "custom";
-    if (stored && presets.some(preset => preset.id === stored)) return stored;
+    if (stored && presets.some(preset => preset.id === stored)) {
+      const preset = presets.find(entry => entry.id === stored);
+      if (!preset.pro_only || window.isUserPro === true) return stored;
+      return getDefaultConsensusPresetId();
+    }
     // Migration: eine bereits gespeicherte explizite Modellwahl (Bestand vor
     // den Presets) bleibt als Custom-Auswahl erhalten.
     if (localStorage.getItem("pref_select_consensus") !== null) return "custom";
@@ -217,15 +219,26 @@
   }
 
   function resolveConsensusPresetValue(select, presetId) {
-    // Erster Kandidat, dessen Option fuer das aktuelle Tier freigeschaltet
-    // ist (Premium/Early sind via option.disabled gegatet, siehe user-tier.js).
     const preset = getConsensusPresets().find(entry => entry.id === presetId);
     if (!preset || !select) return null;
-    for (const candidate of preset.candidates || []) {
-      const option = Array.from(select.options).find(opt => opt.value === candidate);
-      if (option && !option.disabled) return candidate;
+    if (preset.pro_only && window.isUserPro !== true) return null;
+
+    const consensusValue = preset.consensus_model
+      || (Array.isArray(preset.candidates) ? preset.candidates[0] : null);
+    const consensusOption = Array.from(select.options).find(opt =>
+      opt.value === consensusValue && !opt.disabled
+    );
+    if (!consensusOption) return null;
+
+    for (const pref of window.App.modelPrefs) {
+      const model = preset.models?.[pref.provider];
+      const providerSelect = document.getElementById(pref.selectId);
+      const option = Array.from(providerSelect?.options || []).find(opt =>
+        opt.value === model && !opt.disabled
+      );
+      if (!option) return null;
     }
-    return null;
+    return consensusValue;
   }
 
   function applyConsensusPreset(select, presetId) {
@@ -233,18 +246,41 @@
     // nicht ueberschreiben (gleiches Muster wie die temporaere
     // Deep-Think-Auswahl in app-init.js).
     const value = resolveConsensusPresetValue(select, presetId);
-    if (value && select.value !== value) {
-      select.value = value;
-    }
+    if (!value) return null;
+    const preset = getConsensusPresets().find(entry => entry.id === presetId);
+    window.App.modelPrefs.forEach(pref => {
+      const providerSelect = document.getElementById(pref.selectId);
+      const labelText = document.getElementById(pref.textId);
+      setPickerToValue(providerSelect, labelText, preset.models?.[pref.provider]);
+    });
+    select.value = value;
+    window.syncCustomModelPickers?.();
+    window.updateAgentModeUI?.();
     return value;
   }
 
   function selectConsensusPreset(select, presetId) {
+    const preset = getConsensusPresets().find(entry => entry.id === presetId);
+    if (preset?.pro_only && window.isUserPro !== true) {
+      window.App.showProFeatureModal?.(`${preset.label || "High Quality"} mode`);
+      return;
+    }
     localStorage.setItem(CONSENSUS_PRESET_STORAGE_KEY, presetId);
     applyConsensusPreset(select, presetId);
     window.App.trackAppEvent("app_consensus_preset_changed", { preset: presetId });
     collapseExpandedModelPicker(select);
     syncCustomModelPicker(select);
+  }
+
+  function markConsensusPresetCustom() {
+    localStorage.setItem(CONSENSUS_PRESET_STORAGE_KEY, "custom");
+    window.App.modelPrefs.forEach(pref => {
+      const select = document.getElementById(pref.selectId);
+      if (select?.value) localStorage.setItem("pref_select_" + pref.key, select.value);
+    });
+    const consensus = document.getElementById("consensusModelDropdown");
+    if (consensus?.value) localStorage.setItem("pref_select_consensus", consensus.value);
+    window.syncCustomModelPickers?.();
   }
 
   // --- CUSTOM MODEL PICKER (eigene Listbox ueber den nativen <select>) ---
@@ -302,7 +338,10 @@
       item.className = "model-picker-option model-picker-preset-option";
       item.dataset.preset = preset.id;
       item.setAttribute("role", "option");
-      item.disabled = !resolved;
+      const isProLocked = !!preset.pro_only && window.isUserPro !== true;
+      item.disabled = !resolved && !isProLocked;
+      item.classList.toggle("is-locked", isProLocked);
+      item.setAttribute("aria-disabled", String(isProLocked || !resolved));
       const isSelected = preset.id === activePresetId;
       item.classList.toggle("is-selected", isSelected);
       item.setAttribute("aria-selected", String(isSelected));
@@ -321,9 +360,20 @@
       }
       item.appendChild(label);
 
+      if (preset.pro_only) {
+        const badge = document.createElement("span");
+        badge.className = "pro-badge model-picker-pro-badge";
+        badge.textContent = "Pro";
+        item.appendChild(badge);
+      }
+
       item.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
+        if (isProLocked) {
+          window.App.showProFeatureModal?.(`${preset.label || "High Quality"} mode`);
+          return;
+        }
         if (item.disabled) return;
         selectConsensusPreset(select, preset.id);
       });
@@ -400,7 +450,7 @@
 
     state.menu.innerHTML = "";
 
-    // Preset-Ebene: Fast/Balanced/Thorough + Custom statt der Modell-Liste.
+    // Preset-Ebene: Fast/Balanced/High Quality + Custom statt der Modell-Liste.
     if (state.presets && state.view !== "custom") {
       renderConsensusPresetMenu(select, state);
       syncCustomModelPicker(select);
@@ -624,4 +674,5 @@
   window.App.openModelPicker = openModelPicker;
   window.App.collapseExpandedModelPicker = collapseExpandedModelPicker;
   window.App.initCustomModelPicker = initCustomModelPicker;
+  window.App.markConsensusPresetCustom = markConsensusPresetCustom;
 })();

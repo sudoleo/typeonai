@@ -18,7 +18,7 @@ class ModelConfig:
     is_pro: bool = False
     is_frontier: bool = False
     is_low_reasoning: bool = False
-    low_config: dict[str, Any] = field(default_factory=dict)
+    request_config: dict[str, Any] = field(default_factory=dict)
 
 DEFAULT_LIMITS = {
     "free_usage_limit": 25,
@@ -72,6 +72,8 @@ REASONING_EFFORT_FOR_DEEP = "low"
 GEMINI_MAX_TOKENS = MAX_TOKENS
 GEMINI_DEEP_MAX_TOKENS = DEEP_SEARCH_MAX_TOKENS
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
+OPENAI_LUNA_MODEL = "gpt-5.6-luna"
+OPENAI_SOL_MODEL = "gpt-5.6-sol"
 DEFAULT_MISTRAL_MODEL = "mistral-small-latest"
 MISTRAL_PRO_MODEL = "mistral-medium-3-5"
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"
@@ -80,12 +82,14 @@ DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
 DEEPSEEK_FLASH_MODEL = "deepseek-v4-flash"
 DEEPSEEK_PRO_MODEL = "deepseek-v4-pro"
 DEFAULT_DEEPSEEK_MODEL = DEEPSEEK_PRO_MODEL
+GROK_NO_REASONING_MODEL = "grok-4.3-no-reasoning"
+GROK_FAST_MODEL = GROK_NO_REASONING_MODEL
 DEFAULT_GROK_MODEL = "grok-4.20-non-reasoning"
 
 OPENAI_FRONTIER_LOW_MODEL = "gpt-5.5-frontier-low"
 ANTHROPIC_FRONTIER_LOW_MODEL = "claude-opus-4-8-frontier-low"
 GEMINI_FRONTIER_LOW_MODEL = "gemini-3.1-pro-preview-frontier-low"
-GROK_FRONTIER_LOW_MODEL = "grok-4.3-frontier-low"
+GROK_FRONTIER_LOW_MODEL = "grok-4.3-low-reasoning"
 
 DEFAULT_MODEL_BY_PROVIDER = {
     "openai": DEFAULT_OPENAI_MODEL,
@@ -176,6 +180,7 @@ DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
 DEFAULT_CONSENSUS_MODELS = [
     GEMINI_FRONTIER_LOW_MODEL,
     GEMINI_35_FLASH_MODEL,
+    OPENAI_LUNA_MODEL,
     "Grok",
     "OpenAI",
     "Anthropic",
@@ -196,35 +201,72 @@ UNSUPPORTED_GEMINI_MODELS = {
     "gemini-3-pro-preview",
 }
 
-# Nutzerfreundliche Presets fuer den Consensus-Picker der App: Die primaere
-# Picker-Ebene zeigt Eigenschafts-Optionen (Fast/Balanced/Thorough) statt
-# roher Modellnamen; "Custom" oeffnet weiterhin die volle Engine-Liste.
-# Jedes Preset ist eine geordnete Kandidatenliste ueber Consensus-Werte
-# (Engine-Aliase oder direkte Modell-IDs) — der Client waehlt den ersten
-# Kandidaten, dessen Picker-Option fuer das Tier des Nutzers freigeschaltet
-# ist (Premium-/Early-Optionen sind fuer Free disabled). "balanced" bildet
-# bewusst die bisherigen Tier-Defaults ab (Frontier-Low fuer Early/Pro,
-# sonst Grok), damit sich das Default-Verhalten nicht aendert.
-CONSENSUS_PRESETS = [
+# Produktdefinition der Model-Set-Presets. Die sechs Antwortmodelle plus
+# Consensus-Engine koennen getrennt davon aus Firestore ueberschrieben werden;
+# "Custom" oeffnet weiterhin die volle Engine-Liste.
+# High Quality (interne ID: thorough) bleibt als Produktregel Pro-only; Fast
+# und Balanced werden bei der
+# Admin-Normalisierung strikt auf Free-faehige Modelle begrenzt.
+CONSENSUS_PRESET_DEFINITIONS = [
     {
         "id": "fast",
         "label": "Fast",
         "hint": "Quick synthesis for everyday questions",
-        "candidates": ["Gemini", "Mistral", "Grok"],
+        "pro_only": False,
     },
     {
         "id": "balanced",
         "label": "Balanced",
         "hint": "Reliable default for most questions",
-        "candidates": [GEMINI_FRONTIER_LOW_MODEL, "Grok", "OpenAI", "Gemini"],
+        "pro_only": False,
     },
     {
         "id": "thorough",
-        "label": "Thorough",
-        "hint": "Deeper reasoning, takes longer",
-        "candidates": ["Gemini-Pro", "Anthropic-Pro", "OpenAI-Pro", "DeepSeek", "Anthropic"],
+        "label": "High Quality",
+        "hint": "Premium models for the best answer quality",
+        "pro_only": True,
     },
 ]
+
+_BASE_CONSENSUS_PRESET_MODELS = {
+    "fast": {
+        "openai": OPENAI_LUNA_MODEL,
+        "mistral": DEFAULT_MISTRAL_MODEL,
+        "anthropic": DEFAULT_ANTHROPIC_MODEL,
+        "gemini": DEFAULT_GEMINI_MODEL,
+        "deepseek": DEEPSEEK_FLASH_MODEL,
+        "grok": GROK_FAST_MODEL,
+        "consensus": "Gemini",
+    },
+    "balanced": {
+        "openai": OPENAI_LUNA_MODEL,
+        "mistral": DEFAULT_MISTRAL_MODEL,
+        "anthropic": DEFAULT_ANTHROPIC_MODEL,
+        "gemini": DEFAULT_GEMINI_MODEL,
+        "deepseek": DEEPSEEK_FLASH_MODEL,
+        "grok": DEFAULT_GROK_MODEL,
+        "consensus": OPENAI_LUNA_MODEL,
+    },
+    "thorough": {
+        "openai": OPENAI_SOL_MODEL,
+        "mistral": MISTRAL_PRO_MODEL,
+        "anthropic": ANTHROPIC_PRO_MODEL,
+        "gemini": GEMINI_PRO_MODEL,
+        "deepseek": DEEPSEEK_PRO_MODEL,
+        "grok": "grok-4.3",
+        "consensus": "Gemini-Pro",
+    },
+}
+# Alte gespeicherte Preset-Werte, die bei einem Deploy automatisch auf die
+# aktuelle Basis migriert werden. Das Modell bleibt ausserhalb des Presets
+# weiterhin erlaubt, solange andere Flows/Aliase es noch verwenden.
+DEPRECATED_CONSENSUS_PRESET_MODELS = {
+    "thorough": {"openai": {"gpt-5.5"}},
+}
+CONSENSUS_PRESET_MODELS = {
+    preset_id: dict(models)
+    for preset_id, models in _BASE_CONSENSUS_PRESET_MODELS.items()
+}
 DEFAULT_CONSENSUS_PRESET = "balanced"
 
 PRO_USAGE_LIMIT = LIMITS["pro_usage_limit"]
@@ -279,7 +321,7 @@ LEADERBOARD_MODEL_ALIASES = {
 ALLOWED_OPENAI_MODELS = {
     "gpt-5-nano", "gpt-5-mini", "gpt-4.1", "gpt-4o", "gpt-3.5-turbo",
     "gpt-5", "gpt-5-chat-latest", "gpt-5.1", "gpt-5.2", "gpt-5.3", "gpt-5.3-chat-latest", "gpt-5.4",
-    "gpt-5.5", "gpt-5.4-mini", OPENAI_FRONTIER_LOW_MODEL,
+    "gpt-5.5", "gpt-5.4-mini", OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL, OPENAI_FRONTIER_LOW_MODEL,
 }
 
 ALLOWED_MISTRAL_MODELS = {
@@ -309,10 +351,46 @@ ALLOWED_DEEPSEEK_MODELS = {
 }
 
 ALLOWED_GROK_MODELS = {
-    "grok-4-fast-non-reasoning-latest", "grok-4-1-fast-non-reasoning-latest",
-    "grok-4-latest", "grok-3-latest", "grok-4-fast-reasoning-latest", "grok-4.20",
-    "grok-4.20-non-reasoning", "grok-4.3", GROK_FRONTIER_LOW_MODEL,
+    GROK_NO_REASONING_MODEL, GROK_FRONTIER_LOW_MODEL,
+    "grok-4.20", "grok-4.20-non-reasoning", "grok-4.3",
 }
+
+# Alte xAI-Aliasse, die seit Mai 2026 ohnehin auf Grok 4.3 umgeleitet werden.
+# Beim Laden bestehender Admin-Daten werden sie auf unsere expliziten
+# Reasoning-Varianten migriert, damit keine doppelten/irrefuehrenden Zeilen
+# im Picker und in der Admin-DB verbleiben.
+GROK_MODEL_MIGRATIONS = {
+    "grok-4.3-frontier-low": GROK_FRONTIER_LOW_MODEL,
+    "grok-4-1-fast-non-reasoning": GROK_NO_REASONING_MODEL,
+    "grok-4-1-fast-non-reasoning-latest": GROK_NO_REASONING_MODEL,
+    "grok-4-fast-non-reasoning": GROK_NO_REASONING_MODEL,
+    "grok-4-fast-non-reasoning-latest": GROK_NO_REASONING_MODEL,
+    "grok-3": GROK_NO_REASONING_MODEL,
+    "grok-3-latest": GROK_NO_REASONING_MODEL,
+    "grok-4-1-fast-reasoning": GROK_FRONTIER_LOW_MODEL,
+    "grok-4-1-fast-reasoning-latest": GROK_FRONTIER_LOW_MODEL,
+    "grok-4-fast-reasoning": GROK_FRONTIER_LOW_MODEL,
+    "grok-4-fast-reasoning-latest": GROK_FRONTIER_LOW_MODEL,
+    "grok-4-0709": GROK_FRONTIER_LOW_MODEL,
+    "grok-4": "grok-4.3",
+    "grok-4-latest": "grok-4.3",
+}
+DEPRECATED_GROK_MODELS = set(GROK_MODEL_MIGRATIONS)
+
+
+def canonical_model_id(model_id: str | None, provider: str | None = None) -> str:
+    value = str(model_id or "").strip()
+    if provider in (None, "grok"):
+        return GROK_MODEL_MIGRATIONS.get(value, value)
+    return value
+
+
+def canonical_model_ids(models, provider: str) -> list[str]:
+    return list(dict.fromkeys(
+        canonical_model_id(model, provider)
+        for model in (models or [])
+        if canonical_model_id(model, provider)
+    ))
 
 FRONTIER_LOW_MODEL_IDS_BY_PROVIDER = {
     "openai": OPENAI_FRONTIER_LOW_MODEL,
@@ -328,12 +406,17 @@ EARLY_AND_PRO_MODELS = {DEEPSEEK_PRO_MODEL}
 # Early-Modelle sind ab sofort tag-gated (nicht mehr gratis fuer alle): nur mit
 # Early-Tag (oder Pro, das Early einschliesst) auswaehlbar.
 EARLY_MODELS = FRONTIER_LOW_MODELS | EARLY_AND_PRO_MODELS
-REQUIRED_PRO_MODELS = {MISTRAL_PRO_MODEL, ANTHROPIC_PRO_MODEL, GEMINI_35_FLASH_MODEL}
+REQUIRED_PRO_MODELS = {
+    "gpt-5.5", OPENAI_SOL_MODEL, MISTRAL_PRO_MODEL, ANTHROPIC_PRO_MODEL,
+    GEMINI_PRO_MODEL, GEMINI_35_FLASH_MODEL, "grok-4.3",
+}
 DEPRECATED_DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner"}
 REQUIRED_DEEPSEEK_MODELS = {DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL}
 
 def ensure_default_models_allowed():
-    ALLOWED_OPENAI_MODELS.add(DEFAULT_OPENAI_MODEL)
+    ALLOWED_OPENAI_MODELS.update({
+        DEFAULT_OPENAI_MODEL, OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL, "gpt-5.5"
+    })
     ALLOWED_MISTRAL_MODELS.difference_update(DEPRECATED_MISTRAL_MODELS)
     ALLOWED_MISTRAL_MODELS.add(DEFAULT_MISTRAL_MODEL)
     ALLOWED_MISTRAL_MODELS.add(MISTRAL_PRO_MODEL)
@@ -343,7 +426,11 @@ def ensure_default_models_allowed():
     ALLOWED_GEMINI_MODELS.add(GEMINI_35_FLASH_MODEL)
     ALLOWED_DEEPSEEK_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
     ALLOWED_DEEPSEEK_MODELS.update(REQUIRED_DEEPSEEK_MODELS)
-    ALLOWED_GROK_MODELS.add(DEFAULT_GROK_MODEL)
+    ALLOWED_GROK_MODELS.update({
+        DEFAULT_GROK_MODEL,
+        "grok-4.3",
+    })
+    ALLOWED_GROK_MODELS.difference_update(DEPRECATED_GROK_MODELS)
     ALLOWED_OPENAI_MODELS.add(OPENAI_FRONTIER_LOW_MODEL)
     ALLOWED_ANTHROPIC_MODELS.add(ANTHROPIC_FRONTIER_LOW_MODEL)
     ALLOWED_GEMINI_MODELS.add(GEMINI_FRONTIER_LOW_MODEL)
@@ -354,17 +441,18 @@ ensure_default_models_allowed()
 PREMIUM_MODELS = {
     "gpt-5", "gpt-5-chat-latest", "gpt-5.1", "gpt-5.2", "gpt-5.3", "gpt-5.3-chat-latest", "gpt-5.4",
     "gpt-5.5",
+    OPENAI_SOL_MODEL,
     "claude-sonnet-4-5", "claude-opus-4-5", "claude-sonnet-4-6", "claude-opus-4-6",
     "claude-opus-4-7", ANTHROPIC_PRO_MODEL,
     "mistral-large-latest", "mistral-medium-latest", MISTRAL_PRO_MODEL,
     GEMINI_PRO_MODEL, "gemini-2.5-pro",
     DEEPSEEK_PRO_MODEL,
-    "grok-4-latest", "grok-3-latest", "grok-4-fast-reasoning-latest", "grok-4.20",
-    "grok-4.3",
+    "grok-4.20", "grok-4.3",
 }
 PREMIUM_MODELS.difference_update(FRONTIER_LOW_MODELS)
 PREMIUM_MODELS.difference_update(DEPRECATED_MISTRAL_MODELS)
 PREMIUM_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
+PREMIUM_MODELS.difference_update(DEPRECATED_GROK_MODELS)
 PREMIUM_MODELS.update(EARLY_AND_PRO_MODELS)
 PREMIUM_MODELS.update(REQUIRED_PRO_MODELS)
 
@@ -374,12 +462,15 @@ ALL_ALLOWED_MODELS = (
 )
 
 MODEL_LABEL_OVERRIDES = {
+    OPENAI_LUNA_MODEL: "GPT-5.6 Luna",
+    OPENAI_SOL_MODEL: "GPT-5.6 Sol",
     "gpt-5.5": "GPT-5.5",
     OPENAI_FRONTIER_LOW_MODEL: "GPT-5.5",
     DEFAULT_OPENAI_MODEL: "GPT-5.4 mini",
     DEFAULT_ANTHROPIC_MODEL: "Claude Haiku 4.5",
     DEFAULT_GEMINI_MODEL: "Gemini 3.1 Flash-Lite",
-    DEFAULT_GROK_MODEL: "Grok 4.20",
+    DEFAULT_GROK_MODEL: "Grok 4.20 · No reasoning",
+    GROK_NO_REASONING_MODEL: "Grok 4.3 · No reasoning",
     "mistral-small-latest": "Mistral Small 4",
     MISTRAL_PRO_MODEL: "Mistral Medium 3.5",
     "claude-opus-4-7": "Claude Opus 4.7",
@@ -388,8 +479,9 @@ MODEL_LABEL_OVERRIDES = {
     GEMINI_35_FLASH_MODEL: "Gemini 3.5 Flash",
     GEMINI_PRO_MODEL: "Gemini 3.1",
     GEMINI_FRONTIER_LOW_MODEL: "Gemini 3.1",
-    "grok-4.3": "Grok 4.3",
-    GROK_FRONTIER_LOW_MODEL: "Grok 4.3",
+    "grok-4.20": "Grok 4.20 · Reasoning",
+    "grok-4.3": "Grok 4.3 · High reasoning",
+    GROK_FRONTIER_LOW_MODEL: "Grok 4.3 · Low reasoning",
     DEEPSEEK_FLASH_MODEL: "DeepSeek V4 Flash",
     DEEPSEEK_PRO_MODEL: "DeepSeek V4 Pro",
 }
@@ -434,7 +526,7 @@ def rebuild_model_configs():
             is_free=True,
             is_frontier=True,
             is_low_reasoning=True,
-            low_config={"reasoning": {"effort": "low"}},
+            request_config={"reasoning": {"effort": "low"}},
         ),
         ANTHROPIC_FRONTIER_LOW_MODEL: ModelConfig(
             internal_id=ANTHROPIC_FRONTIER_LOW_MODEL,
@@ -444,7 +536,7 @@ def rebuild_model_configs():
             is_free=True,
             is_frontier=True,
             is_low_reasoning=True,
-            low_config={
+            request_config={
                 "thinking": {"type": "adaptive"},
                 "output_config": {"effort": "low"},
             },
@@ -457,17 +549,34 @@ def rebuild_model_configs():
             is_free=True,
             is_frontier=True,
             is_low_reasoning=True,
-            low_config={"generationConfig": {"thinkingConfig": {"thinkingLevel": "low"}}},
+            request_config={"generationConfig": {"thinkingConfig": {"thinkingLevel": "low"}}},
+        ),
+        GROK_NO_REASONING_MODEL: ModelConfig(
+            internal_id=GROK_NO_REASONING_MODEL,
+            provider="grok",
+            api_model="grok-4.3",
+            label="Grok 4.3 · No reasoning",
+            is_free=True,
+            request_config={"reasoning": {"effort": "none"}},
+        ),
+        "grok-4.3": ModelConfig(
+            internal_id="grok-4.3",
+            provider="grok",
+            api_model="grok-4.3",
+            label="Grok 4.3 · High reasoning",
+            is_free=False,
+            is_pro=True,
+            request_config={"reasoning": {"effort": "high"}},
         ),
         GROK_FRONTIER_LOW_MODEL: ModelConfig(
             internal_id=GROK_FRONTIER_LOW_MODEL,
             provider="grok",
             api_model="grok-4.3",
-            label="Grok 4.3",
+            label="Grok 4.3 · Low reasoning",
             is_free=True,
             is_frontier=True,
             is_low_reasoning=True,
-            low_config={"reasoning": {"effort": "low"}},
+            request_config={"reasoning": {"effort": "low"}},
         ),
         DEEPSEEK_PRO_MODEL: ModelConfig(
             internal_id=DEEPSEEK_PRO_MODEL,
@@ -484,6 +593,7 @@ def rebuild_model_configs():
 def get_model_config(model_id: str | None, provider: str | None = None) -> ModelConfig | None:
     if not model_id:
         return None
+    model_id = canonical_model_id(model_id, provider)
     config = MODEL_CONFIGS.get(model_id)
     if config:
         return config
@@ -564,24 +674,73 @@ def get_consensus_model_badge(model_id: str) -> str:
 
 
 def get_consensus_presets() -> list[dict]:
-    """Presets fuer den App-Consensus-Picker, gefiltert auf die aktuell
-    konfigurierte Consensus-Liste (der Admin kann Engines entfernen).
-    Presets ohne verbleibende Kandidaten werden ausgelassen; der Client
-    faellt dann auf die Custom-Liste zurueck."""
-    presets = []
-    for preset in CONSENSUS_PRESETS:
-        candidates = [
-            model for model in preset["candidates"]
-            if model in ALLOWED_CONSENSUS_MODELS
-        ]
-        if not candidates:
-            continue
-        presets.append({**preset, "candidates": candidates})
-    return presets
+    """Liefert die produktseitigen Preset-Metadaten plus das aktuell aus der
+    Admin-Konfiguration aufgeloeste Antwort-/Consensus-Model-Set."""
+    return [
+        {
+            **preset,
+            "models": {
+                provider: CONSENSUS_PRESET_MODELS[preset["id"]][provider]
+                for provider in DEFAULT_MODEL_BY_PROVIDER
+            },
+            "consensus_model": CONSENSUS_PRESET_MODELS[preset["id"]]["consensus"],
+        }
+        for preset in CONSENSUS_PRESET_DEFINITIONS
+    ]
+
+
+def get_consensus_preset_models() -> dict[str, dict[str, str]]:
+    return {
+        preset_id: dict(models)
+        for preset_id, models in CONSENSUS_PRESET_MODELS.items()
+    }
+
+
+def apply_consensus_preset_models(config: dict | None) -> None:
+    """Validiert und aktiviert die Firestore-Model-Sets. Fast/Balanced duerfen
+    keine Pro-/Early-Modelle enthalten; High Quality (ID: thorough) ist durch
+    die Produktdefinition Pro-gated und darf die Premium-Modelle nutzen."""
+    incoming = config if isinstance(config, dict) else {}
+    allowed_sets = _provider_allowed_sets()
+    definitions = {preset["id"]: preset for preset in CONSENSUS_PRESET_DEFINITIONS}
+
+    for preset_id, base in _BASE_CONSENSUS_PRESET_MODELS.items():
+        supplied = incoming.get(preset_id)
+        supplied = supplied if isinstance(supplied, dict) else {}
+        pro_only = bool(definitions[preset_id]["pro_only"])
+        clean = {}
+        for provider in DEFAULT_MODEL_BY_PROVIDER:
+            chosen = canonical_model_id(supplied.get(provider), provider)
+            deprecated = (
+                DEPRECATED_CONSENSUS_PRESET_MODELS
+                .get(preset_id, {})
+                .get(provider, set())
+            )
+            if chosen in deprecated:
+                chosen = ""
+            if chosen not in allowed_sets.get(provider, set()):
+                chosen = base[provider]
+            if not pro_only and (chosen in PREMIUM_MODELS or chosen in EARLY_MODELS):
+                chosen = base[provider]
+            clean[provider] = chosen
+
+        consensus = canonical_model_id(supplied.get("consensus"))
+        consensus_config = get_consensus_model_config(consensus)
+        if not consensus_config or not consensus_config.provider:
+            consensus = base["consensus"]
+        if not pro_only and (
+            is_premium_consensus_model(consensus) or is_early_consensus_model(consensus)
+        ):
+            consensus = base["consensus"]
+        clean["consensus"] = consensus
+        CONSENSUS_PRESET_MODELS[preset_id].clear()
+        CONSENSUS_PRESET_MODELS[preset_id].update(clean)
+        for provider in DEFAULT_MODEL_BY_PROVIDER:
+            allowed_sets[provider].add(clean[provider])
 
 
 def normalize_consensus_models(models) -> list[str]:
-    incoming = [str(model).strip() for model in (models or []) if str(model or "").strip()]
+    incoming = [canonical_model_id(model) for model in (models or []) if str(model or "").strip()]
     if not incoming:
         incoming = list(DEFAULT_CONSENSUS_MODELS)
     allowed = []
@@ -599,6 +758,12 @@ def normalize_consensus_models(models) -> list[str]:
     # verfuegbar bleiben.
     if DEEP_THINK_CONSENSUS_MODEL not in allowed:
         allowed.append(DEEP_THINK_CONSENSUS_MODEL)
+    # Auch die Admin-konfigurierten Preset-Engines muessen im nativen Select
+    # vorhanden sein; die sichtbare Preset-Ebene setzt genau diese Werte.
+    for preset in CONSENSUS_PRESET_MODELS.values():
+        model = preset["consensus"]
+        if model not in allowed:
+            allowed.append(model)
     return allowed
 
 
@@ -730,7 +895,7 @@ def apply_model_order(order_by_provider: dict | None) -> None:
             seen = set()
             ordered = []
             for model in incoming:
-                model = str(model)
+                model = canonical_model_id(model, provider)
                 if model in allowed and model not in seen:
                     seen.add(model)
                     ordered.append(model)
@@ -746,7 +911,7 @@ def apply_default_models(defaults: dict | None) -> None:
     overrides = defaults or {}
     allowed_sets = _provider_allowed_sets()
     for provider, base in _BASE_FREE_DEFAULTS.items():
-        chosen = str(overrides.get(provider) or "").strip()
+        chosen = canonical_model_id(overrides.get(provider), provider)
         allowed = allowed_sets.get(provider, set())
         if chosen and chosen in allowed and chosen not in PREMIUM_MODELS and chosen not in EARLY_MODELS:
             FREE_DEFAULT_MODEL_BY_PROVIDER[provider] = chosen
@@ -763,7 +928,7 @@ def apply_watch_models(config: dict | None) -> None:
         tier_data = tier_data if isinstance(tier_data, dict) else {}
         clean = {}
         for provider in DEFAULT_MODEL_BY_PROVIDER:
-            model = str(tier_data.get(provider) or "").strip()
+            model = canonical_model_id(tier_data.get(provider), provider)
             if not model or model not in allowed_sets.get(provider, set()):
                 continue
             if tier == "free" and (model in PREMIUM_MODELS or model in EARLY_MODELS):
@@ -920,7 +1085,8 @@ def load_models_from_db():
             # Update Grok
             if "grok" in data:
                 ALLOWED_GROK_MODELS.clear()
-                ALLOWED_GROK_MODELS.update(data["grok"])
+                ALLOWED_GROK_MODELS.update(canonical_model_ids(data["grok"], "grok"))
+                ALLOWED_GROK_MODELS.difference_update(DEPRECATED_GROK_MODELS)
 
             ensure_default_models_allowed()
             
@@ -933,6 +1099,7 @@ def load_models_from_db():
                 PREMIUM_MODELS.difference_update(DEPRECATED_MISTRAL_MODELS)
                 PREMIUM_MODELS.add(GEMINI_PRO_MODEL)
                 PREMIUM_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
+                PREMIUM_MODELS.difference_update(DEPRECATED_GROK_MODELS)
                 PREMIUM_MODELS.update(EARLY_AND_PRO_MODELS)
                 PREMIUM_MODELS.update(REQUIRED_PRO_MODELS)
 
@@ -942,6 +1109,11 @@ def load_models_from_db():
                 ALLOWED_GEMINI_MODELS | ALLOWED_DEEPSEEK_MODELS | ALLOWED_GROK_MODELS
             )
             rebuild_model_configs()
+
+            # Preset-Model-Sets brauchen die finalen Provider-/Tier-Listen und
+            # muessen vor der Consensus-Normalisierung aktiv sein, damit ihre
+            # Consensus-Engines sicher im nativen Picker landen.
+            apply_consensus_preset_models(data.get("preset_models"))
 
             # Deep-Think-Modell VOR der Consensus-Normalisierung anwenden,
             # damit normalize_consensus_models das konfigurierte Modell in der
@@ -988,6 +1160,7 @@ def load_models_from_db():
                 "grok": list(ALLOWED_GROK_MODELS),
                 "premium": list(PREMIUM_MODELS),
                 "consensus": list(ALLOWED_CONSENSUS_MODELS),
+                "preset_models": get_consensus_preset_models(),
                 "deep_think_model": DEEP_THINK_CONSENSUS_MODEL,
                 "judge_models": get_judge_models(),
                 "judge_models_pro": get_pro_judge_models(),

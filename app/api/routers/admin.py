@@ -172,6 +172,7 @@ def _ordered_unique(items, drop=None, ensure=None) -> list:
 
 def normalize_models_document(data: dict) -> dict:
     normalized = dict(data or {})
+    normalized["grok"] = cfg.canonical_model_ids(normalized.get("grok"), "grok")
     # Provider-Listen behalten ihre (Admin-)Reihenfolge bei, damit die normalen
     # Picker exakt diese Anordnung anzeigen. Pflichtmodelle werden hinten ergaenzt.
     provider_frontier = {
@@ -198,6 +199,7 @@ def normalize_models_document(data: dict) -> dict:
     premium = set(normalized.get("premium") or [])
     premium.difference_update(cfg.FRONTIER_LOW_MODELS)
     premium.difference_update(cfg.DEPRECATED_DEEPSEEK_MODELS)
+    premium.difference_update(cfg.DEPRECATED_GROK_MODELS)
     premium.update(cfg.EARLY_AND_PRO_MODELS)
     premium.update(cfg.REQUIRED_PRO_MODELS)
     normalized["premium"] = sorted(premium)
@@ -207,7 +209,7 @@ def normalize_models_document(data: dict) -> dict:
     incoming_defaults = normalized.get("defaults") or {}
     clean_defaults = {}
     for provider in PROVIDER_KEYS:
-        chosen = str(incoming_defaults.get(provider) or "").strip()
+        chosen = cfg.canonical_model_id(incoming_defaults.get(provider), provider)
         allowed = set(normalized.get(provider) or [])
         if chosen and chosen in allowed and chosen not in premium and chosen not in cfg.EARLY_MODELS:
             clean_defaults[provider] = chosen
@@ -224,7 +226,7 @@ def normalize_models_document(data: dict) -> dict:
         source = supplied if isinstance(supplied, dict) else cfg._BASE_WATCH_MODELS_BY_TIER[tier]
         tier_models = {}
         for provider in PROVIDER_KEYS:
-            chosen = str(source.get(provider) or "").strip()
+            chosen = cfg.canonical_model_id(source.get(provider), provider)
             if not chosen or chosen not in set(normalized.get(provider) or []):
                 continue
             if tier == "free" and (chosen in premium or chosen in cfg.EARLY_MODELS):
@@ -236,6 +238,60 @@ def normalize_models_document(data: dict) -> dict:
     allowed_direct_consensus = set()
     for provider in PROVIDER_KEYS:
         allowed_direct_consensus.update(normalized.get(provider) or [])
+
+    # Vollstaendige Model-Sets je Picker-Preset. Fast/Balanced bleiben auch bei
+    # Admin-Konfiguration Free-faehig; High Quality (ID: thorough) ist Pro-only.
+    incoming_presets = normalized.get("preset_models")
+    incoming_presets = incoming_presets if isinstance(incoming_presets, dict) else {}
+    preset_definitions = {
+        preset["id"]: preset for preset in cfg.CONSENSUS_PRESET_DEFINITIONS
+    }
+    clean_presets = {}
+    for preset_id, base in cfg._BASE_CONSENSUS_PRESET_MODELS.items():
+        supplied = incoming_presets.get(preset_id)
+        supplied = supplied if isinstance(supplied, dict) else {}
+        pro_only = bool(preset_definitions[preset_id]["pro_only"])
+        clean = {}
+        for provider in PROVIDER_KEYS:
+            chosen = cfg.canonical_model_id(supplied.get(provider), provider)
+            deprecated = (
+                cfg.DEPRECATED_CONSENSUS_PRESET_MODELS
+                .get(preset_id, {})
+                .get(provider, set())
+            )
+            if chosen in deprecated:
+                chosen = ""
+            if chosen not in set(normalized.get(provider) or []):
+                chosen = base[provider]
+            if not pro_only and (chosen in premium or chosen in cfg.EARLY_MODELS):
+                chosen = base[provider]
+            clean[provider] = chosen
+
+        consensus_model = cfg.canonical_model_id(supplied.get("consensus"))
+        consensus_valid = (
+            consensus_model in cfg.CONSENSUS_ENGINE_ALIASES
+            or consensus_model in allowed_direct_consensus
+        )
+        consensus_locked = (
+            consensus_model.endswith("-Pro")
+            or consensus_model in premium
+            or consensus_model in cfg.EARLY_MODELS
+        )
+        if not consensus_valid or (not pro_only and consensus_locked):
+            consensus_model = base["consensus"]
+        clean["consensus"] = consensus_model
+        clean_presets[preset_id] = clean
+    normalized["preset_models"] = clean_presets
+
+    # Nur die tatsaechlich konfigurierten Preset-Modelle muessen in den
+    # Provider-Listen bleiben. Dadurch kann der Admin alte Basiswerte nach dem
+    # Umstellen eines Presets wirklich umbenennen oder entfernen.
+    for provider in PROVIDER_KEYS:
+        selected = [preset[provider] for preset in clean_presets.values()]
+        normalized[provider] = _ordered_unique(
+            normalized.get(provider), ensure=selected
+        )
+
     consensus = [
         str(model).strip()
         for model in (normalized.get("consensus") or cfg.DEFAULT_CONSENSUS_MODELS)
@@ -249,6 +305,9 @@ def normalize_models_document(data: dict) -> dict:
             normalized_consensus.append(model)
     if cfg.GEMINI_FRONTIER_LOW_MODEL not in normalized_consensus:
         normalized_consensus.insert(0, cfg.GEMINI_FRONTIER_LOW_MODEL)
+    for preset in clean_presets.values():
+        if preset["consensus"] not in normalized_consensus:
+            normalized_consensus.append(preset["consensus"])
 
     # Deep-Think-Modell: jeder gueltige Consensus-Wert (Alias oder Modell-ID
     # aus den Provider-Listen); ungueltige Werte fallen auf die Basis zurueck.
@@ -274,7 +333,7 @@ def normalize_models_document(data: dict) -> dict:
         incoming_judges = normalized.get(field) or {}
         clean_judges = {}
         for provider in PROVIDER_KEYS:
-            chosen = str(incoming_judges.get(provider) or "").strip()
+            chosen = cfg.canonical_model_id(incoming_judges.get(provider), provider)
             allowed = set(normalized.get(provider) or [])
             if chosen and chosen in allowed and chosen not in cfg.FRONTIER_LOW_MODELS:
                 clean_judges[provider] = chosen
@@ -297,14 +356,15 @@ def normalize_models_document(data: dict) -> dict:
 def _server_enforced_models() -> dict:
     """Modelle, die der Server je Provider immer wieder ergaenzt — im Admin-UI
     als 'Required' markiert, damit klar ist, warum sie nicht entfernbar sind."""
-    return {
+    enforced = {
         "openai": [cfg.DEFAULT_OPENAI_MODEL, cfg.OPENAI_FRONTIER_LOW_MODEL],
         "mistral": [cfg.DEFAULT_MISTRAL_MODEL, cfg.MISTRAL_PRO_MODEL],
         "anthropic": [cfg.DEFAULT_ANTHROPIC_MODEL, cfg.ANTHROPIC_PRO_MODEL, cfg.ANTHROPIC_FRONTIER_LOW_MODEL],
         "gemini": [cfg.DEFAULT_GEMINI_MODEL, cfg.GEMINI_35_FLASH_MODEL, cfg.GEMINI_FRONTIER_LOW_MODEL],
         "deepseek": sorted(cfg.REQUIRED_DEEPSEEK_MODELS),
-        "grok": [cfg.DEFAULT_GROK_MODEL, cfg.GROK_FRONTIER_LOW_MODEL],
+        "grok": [cfg.DEFAULT_GROK_MODEL, cfg.GROK_FRONTIER_LOW_MODEL, "grok-4.3"],
     }
+    return enforced
 
 
 def _admin_meta() -> dict:
@@ -340,6 +400,7 @@ def _admin_meta() -> dict:
         "judge_defaults": dict(cfg._BASE_DIFFERENCES_JUDGE_BY_PROVIDER),
         "judge_pro_defaults": dict(cfg._BASE_PRO_JUDGE_BY_PROVIDER),
         "judge_priority": list(cfg.JUDGE_FAMILY_PRIORITY),
+        "preset_definitions": list(cfg.CONSENSUS_PRESET_DEFINITIONS),
     }
 
 @router.get("/api/admin/models")
@@ -364,6 +425,7 @@ def get_models(request: Request):
                 "grok": list(ALLOWED_GROK_MODELS),
                 "premium": list(PREMIUM_MODELS),
                 "consensus": list(cfg.ALLOWED_CONSENSUS_MODELS),
+                "preset_models": cfg.get_consensus_preset_models(),
                 "defaults": dict(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER),
                 "watch_models": {
                     tier: dict(models) for tier, models in cfg.WATCH_MODELS_BY_TIER.items()
@@ -391,6 +453,20 @@ def update_models(request: Request, data: dict = Body(...)):
     try:
         apply_limits(data.get("limits"))
         normalized = normalize_models_document(data)
+        incoming_presets = data.get("preset_models")
+        if not isinstance(incoming_presets, dict):
+            raise HTTPException(status_code=400, detail="preset_models must contain Fast, Balanced and High Quality mappings")
+        for preset in cfg.CONSENSUS_PRESET_DEFINITIONS:
+            preset_id = preset["id"]
+            supplied = incoming_presets.get(preset_id)
+            if not isinstance(supplied, dict):
+                raise HTTPException(status_code=400, detail=f"preset_models.{preset_id} must be a model mapping")
+            missing = [key for key in (*PROVIDER_KEYS, "consensus") if not supplied.get(key)]
+            if missing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"preset_models.{preset_id} is missing: {', '.join(missing)}",
+                )
         incoming_watch = data.get("watch_models")
         if not isinstance(incoming_watch, dict):
             raise HTTPException(status_code=400, detail="watch_models must contain free and pro mappings")
@@ -409,6 +485,7 @@ def update_models(request: Request, data: dict = Body(...)):
             "grok": normalized["grok"],
             "premium": normalized["premium"],
             "consensus": normalized["consensus"],
+            "preset_models": normalized["preset_models"],
             "defaults": normalized["defaults"],
             "watch_models": normalized["watch_models"],
             "deep_think_model": normalized["deep_think_model"],

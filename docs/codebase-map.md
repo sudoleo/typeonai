@@ -92,11 +92,14 @@ deferred am `</body>` — `app-init.js`.
   Antwortbereich und Input vom zentrierten Leerzustand in den Laufzustand.
 - **`model-picker.js`** — Modellauswahl/Custom-Picker, Default-Modelle, localStorage-
   Persistenz (`restoreModelSelections`). Der Consensus-Picker hat seit 2026-07-18
-  eine Preset-Ebene (Fast/Balanced/Thorough + Custom): Presets kommen aus
-  `window.CONSENSUS_PRESETS` (config.py `CONSENSUS_PRESETS`, gefiltert auf die
-  Admin-Consensus-Liste), werden clientseitig tier-bewusst aufgeloest (erster
-  Kandidat mit nicht-disabled Option) und setzen den nativen Select OHNE
-  change-Event (Muster wie Deep Think). Zustand in localStorage
+  eine Preset-Ebene (Fast/Balanced/High Quality + Custom): Presets kommen aus
+  `window.CONSENSUS_PRESETS` und setzen als zusammenhaengendes Model-Set alle
+  sechs Antwortmodelle plus Consensus-Engine. High Quality (interne ID
+  `thorough`) ist Pro-only und zeigt
+  ein Pro-Badge; eine manuelle Antwort- oder Consensus-Modellwahl wechselt zu
+  Custom. Die nativen Selects werden dabei OHNE change-Event gesetzt (Muster
+  wie Deep Think). Die High-Quality-Basis nutzt OpenAI GPT-5.6 Sol; gespeicherte
+  Legacy-Werte mit GPT-5.5 werden bei der Normalisierung migriert. Zustand in localStorage
   `pref_consensus_preset` ("custom" = explizite Modellwahl, ausgeloest durch
   jedes change-Event am Dropdown); `pref_select_consensus` bleibt die
   Custom-Wahl. Bestandsnutzer mit gespeicherter Modellwahl migrieren zu
@@ -242,7 +245,10 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
 - `getConsensus` (`consensus-run.js`) sammelt die vorhandenen Modellantworten +
   `excluded_models` + `consensus_model` und ruft **`POST /consensus`**
   (`stream:true`).
-- Deep Think wählt im Frontend temporär `Gemini 3.5 Flash` als Pro-Consensus-
+- Deep Think bleibt ein separater Pro-Laufmodus neben High Quality: Das Preset
+  waehlt Premium-Modelle, Deep Think ergaenzt Prompt, Provider-Reasoning,
+  hoeheres Tokenbudget und eigenes Kontingent. Deep Think wählt im Frontend
+  temporär `Gemini 3.5 Flash` als Pro-Consensus-
   Modell. Beim Ausschalten wird die vorherige Consensus-Auswahl wiederhergestellt,
   ohne die gespeicherte Nutzerpräferenz zu überschreiben. Das Modell bleibt in
   der serverseitig normalisierten Consensus-Liste verpflichtend verfügbar.
@@ -426,7 +432,7 @@ Wichtige Verträge im Backend:
 **Firestore-Collections** (verifiziert über Code):
 - `users/{uid}` — `tier`, `role`; Subcollections `bookmarks`, `counters`.
 - `app_config/models` — von `load_models_from_db()` gelesen/erzeugt: erlaubte
-  Modelle pro Provider, `premium`, `consensus`, `deep_think_model`,
+  Modelle pro Provider, `premium`, `consensus`, `preset_models`, `deep_think_model`,
   `judge_models`, `limits`.
   **Single Source of Truth für Limits/Modelle in Produktion** (überschreibt die
   `config.py`-Defaults beim Startup). `consensus` steuert den App-Consensus-Picker;
@@ -498,10 +504,18 @@ Wichtige Verträge im Backend:
 Modell-IDs/Tier-Zuordnung/Labels: ausschließlich in `app/core/config.py` pflegen
 (`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
 `FREE_DEFAULT_MODEL_BY_PROVIDER`, `EARLY_DEFAULT_MODEL_BY_PROVIDER`,
-Frontier-Low-Mappings, `MODEL_LABEL_OVERRIDES`). Ebenfalls dort: die
-Consensus-Picker-Presets `CONSENSUS_PRESETS` (geordnete Kandidatenlisten;
-`get_consensus_presets()` filtert auf die konfigurierte Consensus-Liste,
-kein Firestore-Override).
+Frontier-Low-Mappings, `MODEL_LABEL_OVERRIDES`). Ebenfalls dort: die festen
+Produkt-Metadaten `CONSENSUS_PRESET_DEFINITIONS` und die Basis-Model-Sets.
+Firestore `preset_models` ueberschreibt pro Fast/Balanced/High Quality (ID:
+`thorough`) die sechs
+Antwortmodelle plus Consensus-Engine; Fast/Balanced bleiben Free-faehig und
+High Quality bleibt unabhaengig von der Konfiguration Pro-only. Grok-Alt-Aliasse
+(u. a. 4.1 Fast) werden beim Laden auf explizite interne Grok-4.3-Varianten
+migriert: `grok-4.3-no-reasoning` sendet API-Modell `grok-4.3` mit
+`reasoning.effort=none` und bleibt Free; `grok-4.3-low-reasoning` nutzt `low` und
+bleibt Early, waehrend das Pro-Modell `grok-4.3` explizit `high` nutzt. Nur
+aktuell konfigurierte Preset-Modelle werden in Provider-Listen
+gesichert, sodass ersetzte Basiswerte im Admin danach entfernt werden koennen.
 
 Early-Gating: `EARLY_MODELS` (Frontier-Low + DeepSeek V4 Pro) sind tag-gated, nicht
 mehr gratis. Zugang via `is_user_early(uid)` (Firestore-Feld `early`/`tier=='early'`);
@@ -516,7 +530,7 @@ nur Nicht-Premium/Nicht-Early erlaubt, sonst `_BASE_FREE_DEFAULTS`). Feld `watch
 enthält getrennte `free`-/`pro`-Mappings Provider→Modell; je Tier sind mindestens zwei
 Provider nötig, Free wird serverseitig auf Nicht-Premium/Nicht-Early begrenzt.
 `normalize_models_document` erhält die Reihenfolge (kein `sorted` mehr) und validiert
-`defaults`, `watch_models` + `deep_think_model`.
+`defaults`, `preset_models`, `watch_models` + `deep_think_model`.
 Das Admin-UI (Tabs: Models / Consensus & Deep Think / Limits / Shared Pages) bekommt via
 `GET /api/admin/models` ein `meta`-Objekt (Alias-Auflösung, server-erzwungene Modelle je
 Provider, Early-Set, Labels), mit dem Required-/Early-Badges gerendert werden — die
@@ -536,7 +550,7 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **485 passed** (2026-07-16).
+  Letzte bekannte Baseline: **498 passed** (2026-07-18).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, kompakte Antwort→Consensus-
@@ -677,7 +691,8 @@ keinen Watch-Lauf aus und ändert keinen Zeitplan.
   Markup — der State-Refactor ist bewusst noch nicht passiert.
 - **Jinja↔JS-Brücke**: Config geht nur über den `<head>`-`window.*`-Block
   (`FIREBASE_CONFIG`, `APP_LIMITS`, `FREE_DEFAULT_MODELS`, `PRO_DEFAULT_MODELS`,
-  `CONSENSUS_PRESETS`, `DEFAULT_CONSENSUS_PRESET`, `FREE_LIMIT`) oder
+  `CONSENSUS_PRESETS` inklusive Antwort-/Consensus-Model-Sets,
+  `DEFAULT_CONSENSUS_PRESET`, `FREE_LIMIT`) oder
   serverseitig gerenderte Template-Optionen wie
   `consensus_models` für den Consensus-Picker. `app-init.js` kann kein Jinja
   rendern — neue Server-Werte müssen hier gebridged werden.

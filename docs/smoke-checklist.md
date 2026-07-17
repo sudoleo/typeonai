@@ -6,7 +6,7 @@ Modell-Ausschluss, Theme-Toggle und Picker-Persistenz ab (Lauf: siehe
 `tests/e2e/README.md`). Die übrigen Punkte weiterhin manuell durchgehen
 (oder zumindest die vom Cluster betroffenen), bevor committet wird. Backend
 bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
-(Baseline: 485 passed, Stand 2026-07-16).
+(Baseline: 498 passed, Stand 2026-07-18).
 
 ## Browser-Konsole
 - [ ] Beim Laden **keine** JS-Fehler in der Konsole (besonders: keine
@@ -25,6 +25,8 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       Modellnamen und hält Einzelantworten im Agent Mode standardmäßig verborgen.
 
 ## Kern-Flow
+- [ ] Frischer `/app`-Load passt ohne vertikales Scrollen in den Desktop-
+      Viewport; der Consensus-Picker hat keinen horizontalen Scrollbalken.
 - [ ] Frischer `/app`-Load: keine Topbar; Brand + Collapse im Sidebar-Kopf,
       eingeloggter Account (Name/Plan + Avatar) und Settings im Sidebar-Footer.
       Ausgeloggt stehen Login/Sign-up nur oben rechts; die Sidebar zeigt kein
@@ -49,6 +51,10 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 - [ ] Quellen-Chips / Evidence-Links erscheinen und sind klickbar.
 
 ## Consensus (höchstes Risiko)
+- [ ] Presets: Fast/Balanced setzen sichtbar alle sechs Antwortmodelle und die
+      konfigurierte Consensus-Engine; eine manuelle Modellwahl wechselt zu Custom.
+- [ ] High Quality zeigt ein Pro-Badge, oeffnet fuer Free das Upgrade-Modal und setzt
+      fuer Pro das vollstaendige Premium-Model-Set. Deep Think bleibt separat.
 - [ ] Consensus und Differences erscheinen oberhalb der Modellantworten; der
       Reveal scrollt nur dann sanft zum Ergebnis, wenn es außerhalb des
       relevanten Viewports liegt.
