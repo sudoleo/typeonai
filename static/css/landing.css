@@ -250,6 +250,100 @@ img { display: block; max-width: 100%; }
 .lp-hero-proof strong { color: var(--text-primary); font-weight: 600; }
 
 /* --------------------------------------------------------------------------
+   Demo-first hero: headline above a functional-looking input field.
+   The whole field links into /app?demo=1 (demo.js auto-runs the scripted
+   demo there); the Try-the-demo pill sits inside the field, the six provider
+   chips sit directly below it.
+   -------------------------------------------------------------------------- */
+.lp-hero.lp-hero--demo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.lp-hero--demo .lp-hero-copy { max-width: 920px; }
+
+.lp-prompt.lp-hero-prompt {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 22px;
+  width: min(680px, 100%);
+  min-height: 160px;
+  margin: clamp(30px, 4.5vw, 46px) auto 0;
+  padding: 20px;
+  padding-bottom: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+}
+
+.lp-prompt.lp-hero-prompt:hover,
+.lp-prompt.lp-hero-prompt:focus-visible {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--glass-border));
+  box-shadow: var(--liquid-shadow), 0 18px 44px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.lp-prompt.lp-hero-prompt:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.lp-hero-prompt .lp-prompt-text { min-height: 27px; font-size: 1.05rem; }
+.lp-hero-prompt .lp-attach { cursor: inherit; }
+
+.lp-hero-prompt-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  /* Controls sit at the very bottom of the field, like the /app input row. */
+  margin-top: auto;
+}
+
+.lp-demo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 26%, transparent);
+  transition: background-color .2s ease;
+}
+
+.lp-demo-btn svg { width: 15px; height: 15px; }
+.dark-mode .lp-demo-btn { color: #141414; }
+.lp-hero-prompt:hover .lp-demo-btn { background: var(--accent-hover); }
+
+.lp-hero-models { justify-content: center; gap: 8px; margin-top: 20px; }
+
+.lp-hero-note {
+  margin: 16px auto 0;
+  max-width: 56ch;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.lp-hero--demo .lp-hero-actions { justify-content: center; margin-top: 24px; }
+
+@media (max-width: 600px) {
+  .lp-prompt.lp-hero-prompt { padding: 16px; padding-bottom: 12px; gap: 18px; min-height: 140px; }
+  .lp-demo-btn { height: 38px; padding: 0 16px; font-size: 0.9rem; }
+}
+
+/* --------------------------------------------------------------------------
    Liquid-glass product window
    -------------------------------------------------------------------------- */
 .lp-window {
@@ -703,6 +797,13 @@ img { display: block; max-width: 100%; }
 }
 
 .lp-chips img { width: 14px; height: 14px; object-fit: contain; }
+
+/* Monochrome provider marks (ChatGPT, Grok) are black PNGs: invert them in
+   dark mode so they stay visible, matching benchmark.css. */
+.dark-mode .lp-chips img[src*="chatgpt"],
+.dark-mode .lp-chips img[src*="grok"],
+.dark-mode .lp-response small img[src*="chatgpt"],
+.dark-mode .lp-response small img[src*="grok"] { filter: invert(1); }
 
 .lp-pulse { display: flex; gap: 7px; margin-top: 16px; height: 16px; align-items: center; }
 

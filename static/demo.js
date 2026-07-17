@@ -590,6 +590,48 @@ window.runDemoFlow = runDemoFlow;
 window.createStartDemoChip = createStartDemoChip;
 createStartDemoChip();
 
+/* === DEMO: Auto-Start von der Landingpage (/app?demo=1) ================ */
+// Der Hero der Landingpage verlinkt auf /app?demo=1: Die Demo startet dann
+// automatisch in der echten App-Oberfläche, statt auf der Landingpage einen
+// zweiten App-Nachbau zu pflegen. Nach der Demo ist der Nutzer bereits in der
+// App und sieht den bestehenden Post-Demo-Login-Prompt.
+function maybeAutoStartDemo() {
+  let shouldStart = false;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("demo") === "1") {
+      shouldStart = true;
+      // Parameter entfernen, damit Reload/Bookmark die Demo nicht erneut startet.
+      params.delete("demo");
+      const query = params.toString();
+      window.history.replaceState(
+        null, "",
+        window.location.pathname + (query ? "?" + query : "") + window.location.hash
+      );
+    }
+  } catch (e) {
+    return;
+  }
+  if (!shouldStart) return;
+
+  // Auto-Start ersetzt den Chip-Klick: Chip einmalig als erledigt markieren.
+  getDemoStorage()?.setItem("demoChipDismissed", "1");
+
+  const start = () => {
+    document.querySelector(".chat-input-container .demo-chip")?.remove();
+    window.trackAppEvent?.("app_demo_autostart", { source: "landing" });
+    // Kurze Pause: Erst rendert der Hero, dann beginnt die Demo zu tippen.
+    // Das Tippen selbst überbrückt die restliche Initialisierung der App.
+    setTimeout(() => runDemoFlow(), 450);
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
+}
+maybeAutoStartDemo();
+
 document.getElementById("postDemoLoginButton")?.addEventListener("click", () => {
   const modal = document.getElementById("loginModal");
   if (!modal) return;

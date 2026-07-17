@@ -17,7 +17,7 @@
   <meta name="twitter:description" content="See where leading AI answers contradict one another and when their positions change.">
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>Track Where AI Answers Disagree and Change | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260716-observatory1">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260717-demo-hero3">
   <link rel="stylesheet" href="/static/css/benchmark.css?v=20260715-neutral1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -70,27 +70,46 @@
 
   <main>
     <!-- ====================================================== HERO -->
+    <!-- Demo-first hero: the input field IS the primary CTA. Guests cannot ask
+         a real question without an account, so the field starts the interactive
+         demo in /app (?demo=1 -> demo.js auto-runs the scripted flow). -->
     <section class="lp-section lp-section--white lp-section--hero">
-      <div class="lp-shell lp-hero">
+      <div class="lp-shell lp-hero lp-hero--demo">
         <div class="lp-hero-copy">
           <p class="lp-eyebrow">The independent AI answer observatory</p>
           <h1 class="lp-display">AI answers shape what the world believes.<br>We track when they move.</h1>
-          <p class="lp-lead">
-            consens.io independently measures where leading AI models agree,
-            where they contradict one another, and when their positions change.
-          </p>
-          <div class="lp-hero-actions">
-            <a id="ctaButton" href="/app" class="lp-btn lp-btn--primary">Compare AI answers</a>
-            <a href="#product" class="lp-link" data-umami-event="landing_watch_workflow">See how it works</a>
-          </div>
-          <div class="lp-hero-proof" aria-label="What consens.io measures">
-            <span><strong>6 providers</strong>One question, independent answers</span>
-            <span><strong>Contradictions</strong>Made visible, not averaged away</span>
-            <span><strong>Direction</strong>Positions tracked as they change</span>
-          </div>
         </div>
 
-        {% include "partials/product_result_mockup.html" %}
+        <a id="heroDemoField" class="lp-prompt lp-hero-prompt" href="/app?demo=1"
+           data-umami-event="landing_hero_demo_start"
+           aria-label="Start the interactive demo: watch one question run across six AI models">
+          <span class="lp-prompt-text" data-type-loop="Should vegetarians take supplements? If yes, which ones?|Should social media be banned for kids under 16?|Will AI replace software developers?|Is intermittent fasting actually effective?"></span>
+          <span class="lp-hero-prompt-bar">
+            <span class="lp-attach" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </span>
+            <span class="lp-modes"><span class="lp-mode is-on lp-mode--agent"><i class="lp-switch"></i>Agent Mode</span></span>
+            <span class="lp-demo-btn">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
+              Try the demo
+            </span>
+          </span>
+        </a>
+
+        <div class="lp-chips lp-hero-models" aria-label="Providers queried in every run">
+          <span><img src="/static/icons/chat_icons/chatgpt.png" alt="">ChatGPT</span>
+          <span><img src="/static/icons/chat_icons/claude.png" alt="">Claude</span>
+          <span><img src="/static/icons/chat_icons/gemini-icon.png" alt="">Gemini</span>
+          <span><img src="/static/icons/chat_icons/mistral.png" alt="">Mistral</span>
+          <span><img src="/static/icons/chat_icons/deepseek.png" alt="">DeepSeek</span>
+          <span><img src="/static/icons/chat_icons/grok.png" alt="">Grok</span>
+        </div>
+        <p class="lp-hero-note">No account needed. The demo replays a real run: six independent answers, one consensus, contradictions kept visible.</p>
+
+        <div class="lp-hero-actions">
+          <a id="ctaButton" href="/app" class="lp-link">Open the app</a>
+          <a href="#product" class="lp-link" data-umami-event="landing_watch_workflow">See how it works</a>
+        </div>
       </div>
     </section>
 
@@ -608,10 +627,9 @@
         revealItems.forEach(el => observer.observe(el));
       }
 
-      // Scene 01: cycle a few example questions, typed in with a cursor. Loops
-      // gently only while the prompt is in view, so it stays unobtrusive.
-      const typeTarget = document.querySelector(".lp-prompt-text[data-type-loop], .lp-prompt-text[data-type-text]");
-      if (typeTarget) {
+      // Hero + Scene 01: cycle a few example questions, typed in with a cursor.
+      // Each prompt loops gently only while it is in view, so it stays unobtrusive.
+      document.querySelectorAll(".lp-prompt-text[data-type-loop], .lp-prompt-text[data-type-text]").forEach(typeTarget => {
         const list = (typeTarget.dataset.typeLoop || typeTarget.dataset.typeText || "")
           .split("|").map(s => s.trim()).filter(Boolean);
         if (reducedMotion || !("IntersectionObserver" in window) || !list.length) {
@@ -638,9 +656,9 @@
           const typeObserver = new IntersectionObserver(entries => {
             entries.forEach(entry => { visible = entry.isIntersecting; if (visible) loop(); });
           }, { threshold: 0.4 });
-          typeObserver.observe(typeTarget.closest(".lp-window") || typeTarget);
+          typeObserver.observe(typeTarget.closest(".lp-window, .lp-hero-prompt") || typeTarget);
         }
-      }
+      });
 
       // Scene 03 slideshow: cycle through consensus/differences examples.
       // Auto-advances only while in view; any manual interaction stops it.
@@ -685,6 +703,12 @@
           start();
         }
       }
+
+      // Demo field: the app skips its landing redirect and auto-starts the
+      // demo via the ?demo=1 parameter (handled in static/demo.js).
+      document.getElementById("heroDemoField")?.addEventListener("click", () => {
+        sessionStorage.setItem("skipLandingRedirect", "1");
+      });
 
       // Preserve app entry behaviour + analytics on the CTAs.
       ["ctaButton", "navCtaButton"].forEach(id => {

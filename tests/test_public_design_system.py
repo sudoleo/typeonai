@@ -52,8 +52,9 @@ def test_public_styles_share_the_app_aligned_token_layer():
 
 
 def test_product_result_mockup_is_reused_and_public_copy_has_no_em_dash():
+    # The landing hero is demo-first (input field CTA) since 2026-07-17 and no
+    # longer embeds the result mockup; the consensus-engine page still does.
     include = '{% include "partials/product_result_mockup.html" %}'
-    assert include in read("templates/landing.html")
     assert include in read("templates/consensus-engine.html")
 
     for template_name in PUBLIC_TEMPLATES:

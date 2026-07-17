@@ -60,8 +60,11 @@ Template + Firebase-Auth-Modul wie `admin.html`), `share.html` (öffentliche
 Consensus-Seite), `share_unavailable.html`, plus statische Rechts-/SEO-Seiten
 und SEO-Erklärseiten wie `ai-model-comparison.html` / `consensus-engine.html`.
 Alle öffentlichen HTML-Seiten teilen Navigation und Footer über
-`templates/partials/public_nav.html` und `public_footer.html`. Landingpage und
-Consensus-Engine-Seite nutzen zusätzlich dieselbe aktuelle Ergebnisdarstellung
+`templates/partials/public_nav.html` und `public_footer.html`. Der Landing-Hero
+ist seit 2026-07-17 demo-first: Ein klickbares Input-Feld (Look des /app-Inputs,
+"Try the demo"-Pill, Provider-Chips darunter) verlinkt auf `/app?demo=1`;
+`static/demo.js` erkennt den Parameter und startet die Demo automatisch in der
+echten App. Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
 aus `partials/product_result_mockup.html`. Die gemeinsamen, an `/app`
 ausgerichteten Light-/Dark-Tokens liegen in `static/css/public-tokens.css` und
 werden von `landing.css` sowie `public-pages.css` importiert; seitenbezogene
