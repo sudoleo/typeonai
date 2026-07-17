@@ -23,6 +23,9 @@
     window.EARLY_DEFAULT_MODELS = JSON.parse('{{ early_default_models | tojson | safe }}');
     // Consensus-Engine, auf die Deep Think umschaltet (Admin-konfigurierbar).
     window.DEEP_THINK_CONSENSUS_MODEL = JSON.parse('{{ deep_think_consensus_model | tojson | safe }}');
+    // Preset-Ebene des Consensus-Pickers (Fast/Balanced/Thorough + Custom).
+    window.CONSENSUS_PRESETS = JSON.parse('{{ consensus_presets | tojson | safe }}');
+    window.DEFAULT_CONSENSUS_PRESET = JSON.parse('{{ default_consensus_preset | tojson | safe }}');
     // Fallback-Limit für app-init.js (ausgelagertes initApp kann kein Jinja rendern).
     window.FREE_LIMIT = Number('{{ free_limit }}');
 
@@ -56,7 +59,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260716-agent-greeting1">
+  <link rel="stylesheet" href="/static/style.css?v=20260718-presets1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -71,7 +74,7 @@
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
   <script src="/static/js/app-core.js?v=20260716-redesign2" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
-  <script src="/static/js/model-picker.js?v=20260707-fixes1" defer></script>
+  <script src="/static/js/model-picker.js?v=20260718-presets1" defer></script>
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
   <script src="/static/js/markdown-stream.js?v=20260710-judgespeed1" defer></script>
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
@@ -728,7 +731,7 @@
       </div>
     </div>
 
-    <script src="/static/js/app-init.js?v=20260716-copy1" defer></script>
+    <script src="/static/js/app-init.js?v=20260718-presets1" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing

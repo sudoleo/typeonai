@@ -246,6 +246,98 @@
   white-space: nowrap;
 }
 
+/* --- Consensus-Preset-Ebene (Fast/Balanced/Thorough + Custom) ------------ */
+
+.model-picker-preset-option {
+  min-height: 44px;
+  padding-block: 7px;
+}
+
+.model-picker-preset-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.model-picker-preset-name {
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.model-picker-preset-hint {
+  color: var(--sidebar-text-muted);
+  font-size: 0.72rem;
+  font-weight: 450;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-picker-preset-option:disabled .model-picker-preset-hint {
+  color: inherit;
+}
+
+/* "Custom"-Zeile: fuehrt zur vollen Modell-Liste, leichte Trennung oben. */
+.model-picker-custom-option {
+  margin-top: 5px;
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent);
+  border-radius: 0 0 9px 9px;
+}
+
+/* Chevron (›) fuer die Custom-Zeile bzw. (‹) fuer die Back-Zeile. */
+.model-picker-option-chevron {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-right: 2px solid var(--sidebar-text-muted);
+  border-top: 2px solid var(--sidebar-text-muted);
+  transform: rotate(45deg);
+}
+
+.model-picker-option-chevron.is-back {
+  margin-right: 2px;
+  margin-left: 2px;
+  transform: rotate(-135deg);
+}
+
+/* Der aktive Haken (::after) kollidiert mit dem Chevron der Custom-Zeile —
+   dort zeigt allein Hintergrund/Schriftgewicht den aktiven Zustand. */
+.model-picker-custom-option.is-selected {
+  padding-right: 6px;
+}
+
+.model-picker-custom-option.is-selected::after {
+  display: none;
+}
+
+/* Rueckweg aus der Modell-Liste zu den Presets. */
+.model-picker-back-option {
+  min-height: 30px;
+  margin-bottom: 5px;
+  border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent);
+  border-radius: 9px 9px 0 0;
+  color: var(--sidebar-text-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.model-picker-back-option .model-picker-option-label {
+  margin-right: 0;
+}
+
+.model-picker-back-option:hover .model-picker-option-chevron,
+.model-picker-back-option:focus-visible .model-picker-option-chevron {
+  border-color: currentColor;
+}
+
+.dark-mode .model-picker-custom-option,
+.dark-mode .model-picker-back-option {
+  border-color: color-mix(in srgb, var(--sidebar-border) 80%, transparent);
+}
+
 /* Optik kommt zentral von .pro-badge (layout.css) — hier nur Flex/Abstand. */
 .model-picker-pro-badge {
   flex: 0 0 auto;

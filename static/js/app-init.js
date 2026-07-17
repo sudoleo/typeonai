@@ -1064,6 +1064,10 @@
           consensusSelect.addEventListener("change", function () {
             // Speichere die Auswahl im LocalStorage, sobald der User sie ändert
             localStorage.setItem("pref_select_consensus", this.value);
+            // Eine explizite Modellwahl (change-Event) verlaesst die
+            // Preset-Ebene; Preset-Klicks und die temporaere Deep-Think-
+            // Auswahl feuern bewusst KEIN change (siehe model-picker.js).
+            localStorage.setItem("pref_consensus_preset", "custom");
             const selectedLabel = getModelOptionLabel(this.options[this.selectedIndex]) || this.value;
             trackAppEvent("app_consensus_model_changed", { model: selectedLabel });
 
@@ -1166,7 +1170,7 @@
           initCustomModelPicker(select, { externalTrigger: labelText });
         });
 
-        initCustomModelPicker(document.getElementById("consensusModelDropdown"));
+        initCustomModelPicker(document.getElementById("consensusModelDropdown"), { presets: true });
 
 
 

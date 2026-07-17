@@ -1,12 +1,18 @@
 // =====================================================================
 // model-picker.js
 // Modell-Auswahl + Custom-Picker-UI. In eigene IIFE gekapselt.
-// Zwei Teile:
+// Drei Teile:
 //   1) Model-Selection-State: Wiederherstellen/Persistieren der pro-Provider
 //      Auswahl (Dropdown + Ein/Ausschluss-Checkbox), Tier-Defaults, Reorder-
 //      Animation beim Ein-/Ausschliessen.
 //   2) Custom-Model-Picker: das eigene, getunte Listbox-Dropdown, das die
 //      nativen <select> ueberlagert (expandedModelPicker ist modul-privat).
+//   3) Consensus-Presets: der Consensus-Picker zeigt primaer die Presets
+//      Fast/Balanced/Thorough (window.CONSENSUS_PRESETS, tier-bewusst
+//      aufgeloest ueber disabled-Optionen) plus "Custom" fuer die volle
+//      Modell-Liste. Preset-Zustand in localStorage "pref_consensus_preset";
+//      die Preset-Aufloesung setzt den nativen Select OHNE change-Event,
+//      damit pref_select_consensus (explizite Modellwahl) erhalten bleibt.
 // Extrahiert aus templates/index.html (initApp-Closure), verhaltenserhaltend.
 // Exporte:
 //   window.restoreModelSelections, window.syncCustomModelPickers,
@@ -163,18 +169,83 @@
       }
     });
 
-    // --- NEU: Consensus Modell wiederherstellen ---
+    // --- Consensus wiederherstellen: Preset aufloesen oder explizite Wahl ---
     const consensusSelect = document.getElementById("consensusModelDropdown");
-    const savedConsensus = localStorage.getItem("pref_select_consensus"); // Eigener Key
-
-    if (consensusSelect && savedConsensus) {
-      // Prüfen, ob die Option existiert und für den User freigeschaltet ist
-      const option = consensusSelect.querySelector(`option[value="${savedConsensus}"]`);
-      if (option && !option.disabled) {
-        consensusSelect.value = savedConsensus;
+    if (consensusSelect) {
+      const presetId = getActiveConsensusPresetId();
+      if (presetId === "custom") {
+        const savedConsensus = localStorage.getItem("pref_select_consensus"); // Eigener Key
+        if (savedConsensus) {
+          // Prüfen, ob die Option existiert und für den User freigeschaltet ist
+          const option = consensusSelect.querySelector(`option[value="${savedConsensus}"]`);
+          if (option && !option.disabled) {
+            consensusSelect.value = savedConsensus;
+          }
+        }
+      } else {
+        applyConsensusPreset(consensusSelect, presetId);
       }
+      syncCustomModelPicker(consensusSelect);
     }
   };
+
+  // --- CONSENSUS-PRESETS (Fast/Balanced/Thorough + Custom) ---
+
+  const CONSENSUS_PRESET_STORAGE_KEY = "pref_consensus_preset";
+
+  function getConsensusPresets() {
+    return Array.isArray(window.CONSENSUS_PRESETS) ? window.CONSENSUS_PRESETS : [];
+  }
+
+  function getDefaultConsensusPresetId() {
+    const presets = getConsensusPresets();
+    if (!presets.length) return "custom";
+    const configured = window.DEFAULT_CONSENSUS_PRESET;
+    return presets.some(preset => preset.id === configured) ? configured : presets[0].id;
+  }
+
+  function getActiveConsensusPresetId() {
+    const presets = getConsensusPresets();
+    if (!presets.length) return "custom";
+    const stored = localStorage.getItem(CONSENSUS_PRESET_STORAGE_KEY);
+    if (stored === "custom") return "custom";
+    if (stored && presets.some(preset => preset.id === stored)) return stored;
+    // Migration: eine bereits gespeicherte explizite Modellwahl (Bestand vor
+    // den Presets) bleibt als Custom-Auswahl erhalten.
+    if (localStorage.getItem("pref_select_consensus") !== null) return "custom";
+    return getDefaultConsensusPresetId();
+  }
+
+  function resolveConsensusPresetValue(select, presetId) {
+    // Erster Kandidat, dessen Option fuer das aktuelle Tier freigeschaltet
+    // ist (Premium/Early sind via option.disabled gegatet, siehe user-tier.js).
+    const preset = getConsensusPresets().find(entry => entry.id === presetId);
+    if (!preset || !select) return null;
+    for (const candidate of preset.candidates || []) {
+      const option = Array.from(select.options).find(opt => opt.value === candidate);
+      if (option && !option.disabled) return candidate;
+    }
+    return null;
+  }
+
+  function applyConsensusPreset(select, presetId) {
+    // Kein change-Event: die Preset-Aufloesung darf pref_select_consensus
+    // nicht ueberschreiben (gleiches Muster wie die temporaere
+    // Deep-Think-Auswahl in app-init.js).
+    const value = resolveConsensusPresetValue(select, presetId);
+    if (value && select.value !== value) {
+      select.value = value;
+    }
+    return value;
+  }
+
+  function selectConsensusPreset(select, presetId) {
+    localStorage.setItem(CONSENSUS_PRESET_STORAGE_KEY, presetId);
+    applyConsensusPreset(select, presetId);
+    window.App.trackAppEvent("app_consensus_preset_changed", { preset: presetId });
+    collapseExpandedModelPicker(select);
+    syncCustomModelPicker(select);
+  }
 
   // --- CUSTOM MODEL PICKER (eigene Listbox ueber den nativen <select>) ---
 
@@ -191,17 +262,136 @@
     const selectedOption = select.options[select.selectedIndex] || select.options[0];
     const selectedLabel = window.App.getModelOptionLabel(selectedOption);
 
-    if (state.displayButton) {
-      state.displayButton.querySelector(".model-picker-display-text").textContent = selectedLabel;
-      state.displayButton.title = selectedLabel;
+    // Mit Preset-Ebene zeigt der Trigger den Preset-Namen, solange der
+    // Select-Wert der Preset-Aufloesung entspricht. Weicht der Wert ab
+    // (z. B. temporaere Deep-Think-Auswahl), bleibt der echte Modellname.
+    let displayLabel = selectedLabel;
+    let displayTitle = selectedLabel;
+    if (state.presets) {
+      const presetId = getActiveConsensusPresetId();
+      if (presetId !== "custom") {
+        const preset = getConsensusPresets().find(entry => entry.id === presetId);
+        const presetValue = resolveConsensusPresetValue(select, presetId);
+        if (preset && presetValue && select.value === presetValue) {
+          displayLabel = preset.label;
+          displayTitle = `${preset.label} · ${selectedLabel}`;
+        }
+      }
     }
 
-    state.host.setAttribute("aria-label", `Choose model: ${selectedLabel}`);
-    state.menu.querySelectorAll(".model-picker-option").forEach(item => {
+    if (state.displayButton) {
+      state.displayButton.querySelector(".model-picker-display-text").textContent = displayLabel;
+      state.displayButton.title = displayTitle;
+    }
+
+    state.host.setAttribute("aria-label", `Choose model: ${displayLabel}`);
+    state.menu.querySelectorAll(".model-picker-option[data-value]").forEach(item => {
       const isSelected = item.dataset.value === select.value;
       item.classList.toggle("is-selected", isSelected);
       item.setAttribute("aria-selected", String(isSelected));
     });
+  }
+
+  function renderConsensusPresetMenu(select, state) {
+    const activePresetId = getActiveConsensusPresetId();
+
+    getConsensusPresets().forEach(preset => {
+      const resolved = resolveConsensusPresetValue(select, preset.id);
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "model-picker-option model-picker-preset-option";
+      item.dataset.preset = preset.id;
+      item.setAttribute("role", "option");
+      item.disabled = !resolved;
+      const isSelected = preset.id === activePresetId;
+      item.classList.toggle("is-selected", isSelected);
+      item.setAttribute("aria-selected", String(isSelected));
+
+      const label = document.createElement("span");
+      label.className = "model-picker-option-label model-picker-preset-label";
+      const name = document.createElement("span");
+      name.className = "model-picker-preset-name";
+      name.textContent = preset.label;
+      label.appendChild(name);
+      if (preset.hint) {
+        const hint = document.createElement("span");
+        hint.className = "model-picker-preset-hint";
+        hint.textContent = preset.hint;
+        label.appendChild(hint);
+      }
+      item.appendChild(label);
+
+      item.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (item.disabled) return;
+        selectConsensusPreset(select, preset.id);
+      });
+
+      state.menu.appendChild(item);
+    });
+
+    // "Custom" oeffnet die volle Modell-Liste (bewusst ohne Beschreibungen —
+    // wer hier waehlt, kennt die Modelle).
+    const customItem = document.createElement("button");
+    customItem.type = "button";
+    customItem.className = "model-picker-option model-picker-preset-option model-picker-custom-option";
+    customItem.setAttribute("role", "option");
+    const customActive = activePresetId === "custom";
+    customItem.classList.toggle("is-selected", customActive);
+    customItem.setAttribute("aria-selected", String(customActive));
+
+    const customLabel = document.createElement("span");
+    customLabel.className = "model-picker-option-label model-picker-preset-label";
+    const customName = document.createElement("span");
+    customName.className = "model-picker-preset-name";
+    customName.textContent = "Custom";
+    customLabel.appendChild(customName);
+    const customHint = document.createElement("span");
+    customHint.className = "model-picker-preset-hint";
+    const selectedOption = select.options[select.selectedIndex];
+    customHint.textContent = customActive
+      ? window.App.getModelOptionLabel(selectedOption)
+      : "Pick a specific model";
+    customLabel.appendChild(customHint);
+    customItem.appendChild(customLabel);
+
+    const chevron = document.createElement("span");
+    chevron.className = "model-picker-option-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    customItem.appendChild(chevron);
+
+    customItem.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.view = "custom";
+      renderCustomModelPicker(select);
+    });
+
+    state.menu.appendChild(customItem);
+  }
+
+  function renderConsensusBackRow(select, state) {
+    const back = document.createElement("button");
+    back.type = "button";
+    back.className = "model-picker-option model-picker-back-option";
+    const chevron = document.createElement("span");
+    chevron.className = "model-picker-option-chevron is-back";
+    chevron.setAttribute("aria-hidden", "true");
+    back.appendChild(chevron);
+    const label = document.createElement("span");
+    label.className = "model-picker-option-label";
+    label.textContent = "Presets";
+    back.appendChild(label);
+
+    back.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.view = "presets";
+      renderCustomModelPicker(select);
+    });
+
+    state.menu.appendChild(back);
   }
 
   function renderCustomModelPicker(select) {
@@ -209,6 +399,18 @@
     if (!state) return;
 
     state.menu.innerHTML = "";
+
+    // Preset-Ebene: Fast/Balanced/Thorough + Custom statt der Modell-Liste.
+    if (state.presets && state.view !== "custom") {
+      renderConsensusPresetMenu(select, state);
+      syncCustomModelPicker(select);
+      return;
+    }
+
+    if (state.presets) {
+      renderConsensusBackRow(select, state);
+    }
+
     Array.from(select.options).forEach(option => {
       const item = document.createElement("button");
       item.type = "button";
@@ -319,6 +521,12 @@
       collapseExpandedModelPicker(expandedModelPicker);
     }
 
+    // Einstiegs-View: aktive Preset-Nutzer sehen die Presets, Custom-Nutzer
+    // landen ohne Umweg direkt in der vollen Modell-Liste.
+    if (state.presets) {
+      state.view = getActiveConsensusPresetId() === "custom" ? "custom" : "presets";
+    }
+
     renderCustomModelPicker(select);
     state.host.classList.add("is-expanded", "is-open");
     state.host.setAttribute("aria-expanded", "true");
@@ -365,7 +573,15 @@
     }
 
     host.appendChild(menu);
-    select._customModelPicker = { host, menu, displayButton };
+    select._customModelPicker = {
+      host,
+      menu,
+      displayButton,
+      // Preset-Ebene nur fuer den Consensus-Picker (options.presets) und nur,
+      // wenn der Server Presets liefert — sonst unveraendert die Modell-Liste.
+      presets: !!options.presets && getConsensusPresets().length > 0,
+      view: "presets"
+    };
 
     host.addEventListener("click", event => {
       if (menu.contains(event.target) || event.target === displayButton) return;

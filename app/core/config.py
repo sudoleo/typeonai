@@ -196,6 +196,37 @@ UNSUPPORTED_GEMINI_MODELS = {
     "gemini-3-pro-preview",
 }
 
+# Nutzerfreundliche Presets fuer den Consensus-Picker der App: Die primaere
+# Picker-Ebene zeigt Eigenschafts-Optionen (Fast/Balanced/Thorough) statt
+# roher Modellnamen; "Custom" oeffnet weiterhin die volle Engine-Liste.
+# Jedes Preset ist eine geordnete Kandidatenliste ueber Consensus-Werte
+# (Engine-Aliase oder direkte Modell-IDs) — der Client waehlt den ersten
+# Kandidaten, dessen Picker-Option fuer das Tier des Nutzers freigeschaltet
+# ist (Premium-/Early-Optionen sind fuer Free disabled). "balanced" bildet
+# bewusst die bisherigen Tier-Defaults ab (Frontier-Low fuer Early/Pro,
+# sonst Grok), damit sich das Default-Verhalten nicht aendert.
+CONSENSUS_PRESETS = [
+    {
+        "id": "fast",
+        "label": "Fast",
+        "hint": "Quick synthesis for everyday questions",
+        "candidates": ["Gemini", "Mistral", "Grok"],
+    },
+    {
+        "id": "balanced",
+        "label": "Balanced",
+        "hint": "Reliable default for most questions",
+        "candidates": [GEMINI_FRONTIER_LOW_MODEL, "Grok", "OpenAI", "Gemini"],
+    },
+    {
+        "id": "thorough",
+        "label": "Thorough",
+        "hint": "Deeper reasoning, takes longer",
+        "candidates": ["Gemini-Pro", "Anthropic-Pro", "OpenAI-Pro", "DeepSeek", "Anthropic"],
+    },
+]
+DEFAULT_CONSENSUS_PRESET = "balanced"
+
 PRO_USAGE_LIMIT = LIMITS["pro_usage_limit"]
 PRO_DEEP_SEARCH_LIMIT = LIMITS["pro_deep_search_limit"]
 
@@ -530,6 +561,23 @@ def get_consensus_model_badge(model_id: str) -> str:
     if config and config.is_pro and config.internal_id not in EARLY_MODELS:
         badges.append("Pro")
     return " · ".join(dict.fromkeys(badges))
+
+
+def get_consensus_presets() -> list[dict]:
+    """Presets fuer den App-Consensus-Picker, gefiltert auf die aktuell
+    konfigurierte Consensus-Liste (der Admin kann Engines entfernen).
+    Presets ohne verbleibende Kandidaten werden ausgelassen; der Client
+    faellt dann auf die Custom-Liste zurueck."""
+    presets = []
+    for preset in CONSENSUS_PRESETS:
+        candidates = [
+            model for model in preset["candidates"]
+            if model in ALLOWED_CONSENSUS_MODELS
+        ]
+        if not candidates:
+            continue
+        presets.append({**preset, "candidates": candidates})
+    return presets
 
 
 def normalize_consensus_models(models) -> list[str]:

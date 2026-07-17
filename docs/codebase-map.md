@@ -91,7 +91,16 @@ deferred am `</body>` — `app-init.js`.
   einen gekürzten, fragebezogenen Browser-Tab-Titel; `exitHeroMode` schaltet
   Antwortbereich und Input vom zentrierten Leerzustand in den Laufzustand.
 - **`model-picker.js`** — Modellauswahl/Custom-Picker, Default-Modelle, localStorage-
-  Persistenz (`restoreModelSelections`).
+  Persistenz (`restoreModelSelections`). Der Consensus-Picker hat seit 2026-07-18
+  eine Preset-Ebene (Fast/Balanced/Thorough + Custom): Presets kommen aus
+  `window.CONSENSUS_PRESETS` (config.py `CONSENSUS_PRESETS`, gefiltert auf die
+  Admin-Consensus-Liste), werden clientseitig tier-bewusst aufgeloest (erster
+  Kandidat mit nicht-disabled Option) und setzen den nativen Select OHNE
+  change-Event (Muster wie Deep Think). Zustand in localStorage
+  `pref_consensus_preset` ("custom" = explizite Modellwahl, ausgeloest durch
+  jedes change-Event am Dropdown); `pref_select_consensus` bleibt die
+  Custom-Wahl. Bestandsnutzer mit gespeicherter Modellwahl migrieren zu
+  "custom"; die volle Modell-Liste bleibt bewusst ohne Beschreibungen.
 - **Navigation/Settings-Shell** (`templates/index.html`, `layout.css`,
   `components-modals.css`, `app-init.js`, `firebase.js`) — Models,
   Leaderboard und Bookmarks sind ausschließlich Sidebar-Abschnitte mit
@@ -489,7 +498,10 @@ Wichtige Verträge im Backend:
 Modell-IDs/Tier-Zuordnung/Labels: ausschließlich in `app/core/config.py` pflegen
 (`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
 `FREE_DEFAULT_MODEL_BY_PROVIDER`, `EARLY_DEFAULT_MODEL_BY_PROVIDER`,
-Frontier-Low-Mappings, `MODEL_LABEL_OVERRIDES`).
+Frontier-Low-Mappings, `MODEL_LABEL_OVERRIDES`). Ebenfalls dort: die
+Consensus-Picker-Presets `CONSENSUS_PRESETS` (geordnete Kandidatenlisten;
+`get_consensus_presets()` filtert auf die konfigurierte Consensus-Liste,
+kein Firestore-Override).
 
 Early-Gating: `EARLY_MODELS` (Frontier-Low + DeepSeek V4 Pro) sind tag-gated, nicht
 mehr gratis. Zugang via `is_user_early(uid)` (Firestore-Feld `early`/`tier=='early'`);
@@ -665,7 +677,8 @@ keinen Watch-Lauf aus und ändert keinen Zeitplan.
   Markup — der State-Refactor ist bewusst noch nicht passiert.
 - **Jinja↔JS-Brücke**: Config geht nur über den `<head>`-`window.*`-Block
   (`FIREBASE_CONFIG`, `APP_LIMITS`, `FREE_DEFAULT_MODELS`, `PRO_DEFAULT_MODELS`,
-  `FREE_LIMIT`) oder serverseitig gerenderte Template-Optionen wie
+  `CONSENSUS_PRESETS`, `DEFAULT_CONSENSUS_PRESET`, `FREE_LIMIT`) oder
+  serverseitig gerenderte Template-Optionen wie
   `consensus_models` für den Consensus-Picker. `app-init.js` kann kein Jinja
   rendern — neue Server-Werte müssen hier gebridged werden.
 - **CSP** (`CustomSecurityMiddleware` in `security.py`): neue externe Hosts (Skripte,
