@@ -6,11 +6,12 @@ from fastapi.responses import HTMLResponse
 
 from app.core.rate_limit import limiter
 from app.core.security import extract_id_token, is_user_pro, verify_user_token
-from app.services import watch_brief, watch_service
+from app.api.routers.pages import SITE_URL
+from app.services import mailer, watch_brief, watch_followers, watch_service
 
 
 router = APIRouter()
-_STATUS_BY_CODE = {"not_found": 404, "forbidden": 403, "pro_required": 403, "limit_reached": 429, "already_exists": 409, "invalid_token": 400, "expired_token": 410}
+_STATUS_BY_CODE = {"not_found": 404, "forbidden": 403, "pro_required": 403, "limit_reached": 429, "already_exists": 409, "invalid_token": 400, "expired_token": 410, "invalid_email": 400, "not_watched": 404}
 
 
 def _uid(request: Request, data: dict) -> str:
@@ -130,14 +131,73 @@ async def patch_watch_brief(request: Request, data: dict = Body(...)):
     return {"status": "success", "brief": brief}
 
 
-def _unsubscribe_page(heading: str, message: str, status_code: int) -> HTMLResponse:
+def _unsubscribe_page(heading: str, message: str, status_code: int,
+                      link_href: str = "/", link_label: str = "Return to consens.io") -> HTMLResponse:
     content = (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
         "<meta name='robots' content='noindex'><title>Consensus Watch</title></head>"
         "<body style='font-family:system-ui;max-width:640px;margin:12vh auto;padding:24px'>"
-        f"<h1>{html.escape(heading)}</h1><p>{html.escape(message)}</p><p><a href='/'>Return to consens.io</a></p></body></html>"
+        f"<h1>{html.escape(heading)}</h1><p>{html.escape(message)}</p>"
+        f"<p><a href='{html.escape(link_href)}'>{html.escape(link_label)}</a></p></body></html>"
     )
     return HTMLResponse(content, status_code=status_code, headers={"X-Robots-Tag": "noindex, noarchive"})
+
+
+@router.post("/api/share/{share_id}/follow")
+@limiter.limit("3/minute")
+async def follow_share(request: Request, share_id: str, data: dict = Body(default={})):
+    """Besucher-Follow (Double-Opt-in): sendet nur eine Bestätigungs-Mail.
+
+    Bewusst ohne Auth (Besucher!) und ohne IP/UA-Speicherung; persistiert
+    wird erst beim Klick auf den Bestätigungslink. Die Antwort ist immer
+    generisch, damit Adressen nicht enumeriert werden können.
+    """
+    try:
+        pending = watch_followers.request_follow(share_id, data.get("email"))
+    except watch_service.WatchError as exc:
+        _raise(exc)
+    except Exception:
+        logging.exception("follow_share failed")
+        raise HTTPException(status_code=500, detail="Error processing follow request")
+    if pending["token"]:
+        if not mailer.is_configured():
+            raise HTTPException(status_code=503, detail="E-mail delivery is not configured.")
+        share_url = SITE_URL + "/s/" + share_id
+        confirm_url = SITE_URL + "/watch/follow/confirm?token=" + pending["token"]
+        sent = await mailer.send_message(mailer.build_follow_confirm_message(
+            recipient=pending["email"], question=pending["question"],
+            confirm_url=confirm_url, share_url=share_url,
+        ))
+        if not sent:
+            raise HTTPException(status_code=502, detail="Confirmation e-mail could not be sent. Please try again later.")
+    return {"status": "success", "message": "Check your inbox and confirm to start following."}
+
+
+@router.get("/watch/follow/confirm", response_class=HTMLResponse)
+@limiter.limit("20/minute")
+async def follow_confirm(request: Request, token: str = ""):
+    try:
+        result = watch_followers.confirm_follow(token)
+        question = " ".join(str(result.get("question") or "").split())[:120]
+        return _unsubscribe_page(
+            "You're following this question",
+            f"We will e-mail you when the AI consensus on \"{question}\" shifts materially.",
+            200, link_href=result.get("share_path") or "/", link_label="Open the consensus page",
+        )
+    except watch_service.WatchError as exc:
+        return _unsubscribe_page("Unable to confirm", exc.message, _STATUS_BY_CODE.get(exc.code, 400))
+
+
+@router.get("/watch/follow/unsubscribe", response_class=HTMLResponse)
+@limiter.limit("20/minute")
+async def follow_unsubscribe(request: Request, token: str = ""):
+    try:
+        watch_followers.unsubscribe_follow(token)
+        return _unsubscribe_page(
+            "Unfollowed", "You will no longer receive updates for this question.", 200,
+        )
+    except watch_service.WatchError as exc:
+        return _unsubscribe_page("Unable to unfollow", exc.message, _STATUS_BY_CODE.get(exc.code, 400))
 
 
 @router.get("/watch/unsubscribe", response_class=HTMLResponse)

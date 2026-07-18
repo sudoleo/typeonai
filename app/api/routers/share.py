@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 from app.core.rate_limit import limiter
 from app.core.security import verify_user_token, extract_id_token, is_user_admin
 from app.api.routers.pages import SITE_URL
+from app.services import og_image
 from app.services import share_snapshots as snapshots
 from app.services import watch_service
 from app.services.share_snapshots import ShareError
@@ -159,6 +160,46 @@ def _build_watch_page_meta(meta, history_points):
     }
 
 
+def _mini_spark(history_points, width=120, height=34):
+    """Kompakte Sparkline fürs Scoreboard – auf den echten Score-Bereich
+    skaliert (min. 20 Punkte Spanne), sonst wirkt jede Kurve flach."""
+    scores = [p["agreement_score"] for p in history_points][-16:]
+    if len(scores) < 2:
+        return None
+    low, high = min(scores), max(scores)
+    span = max(20, high - low + 10)
+    lo = max(0, min(100 - span, (low + high) / 2 - span / 2))
+    pad = 3
+    step = (width - 2 * pad) / (len(scores) - 1)
+    coords = [
+        (round(pad + index * step, 1),
+         round(pad + (height - 2 * pad) * (1 - (score - lo) / span), 1))
+        for index, score in enumerate(scores)
+    ]
+    path = " ".join(
+        ("M" if index == 0 else "L") + f" {x} {y}" for index, (x, y) in enumerate(coords)
+    )
+    return {"width": width, "height": height, "path": path,
+            "last_x": coords[-1][0], "last_y": coords[-1][1]}
+
+
+def _score_stats(data):
+    """(agreement-dict, model_count, contradiction_count) aus einem Share-Doc."""
+    differences_data = data.get("differences_data")
+    differences_data = differences_data if isinstance(differences_data, dict) else {}
+    agreement = differences_data.get("agreement")
+    agreement = agreement if isinstance(agreement, dict) else {}
+    model_count = (
+        len(differences_data.get("models_compared") or [])
+        or len(data.get("included_models") or [])
+    )
+    contradiction_count = sum(
+        1 for d in (differences_data.get("differences") or [])
+        if isinstance(d, dict) and d.get("type") == "contradiction"
+    )
+    return agreement, model_count, contradiction_count
+
+
 def _require_uid(request, data):
     id_token = extract_id_token(request, data)
     if not id_token:
@@ -225,6 +266,28 @@ async def my_shares(request: Request):
     return {"status": "success", "shares": shares, "site_url": SITE_URL}
 
 
+@router.post("/api/share/{share_id}/indexing-request")
+@limiter.limit("10/minute")
+async def request_indexing(request: Request, share_id: str, data: dict = Body(default={})):
+    """Owner nominiert die eigene öffentliche Seite für den Google-Index.
+
+    Setzt nur ``index_requested`` – die eigentliche Freigabe (``indexed``)
+    bleibt eine Admin-Entscheidung in der Moderations-UI.
+    """
+    uid = _require_uid(request, data)
+    want = data.get("want", True)
+    if not isinstance(want, bool):
+        raise HTTPException(status_code=400, detail="want must be a boolean")
+    try:
+        state = snapshots.request_share_indexing(share_id, uid, want=want)
+    except ShareError as exc:
+        _raise_share_error(exc)
+    except Exception:
+        logging.exception("request_indexing failed")
+        raise HTTPException(status_code=500, detail="Error updating listing request")
+    return {"status": "success", **state}
+
+
 @router.post("/api/share/{share_id}/report")
 @limiter.limit("3/minute")
 async def report_share(request: Request, share_id: str, data: dict = Body(default={})):
@@ -280,6 +343,54 @@ async def sitemap_shares(request: Request):
         content=xml,
         media_type="application/xml",
         headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@router.get("/s/{slug_id}/og.png")
+@limiter.limit("60/minute")
+async def share_og_card(request: Request, slug_id: str):
+    """Generierte Open-Graph-Karte (PNG) einer öffentlichen Share-Seite."""
+    _slug, share_id = snapshots.split_slug_id(slug_id)
+    if not snapshots.is_valid_share_id(share_id) or not og_image.is_available():
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        data = snapshots.get_share_cached(share_id)
+    except Exception:
+        logging.exception("share_og_card lookup failed")
+        raise HTTPException(status_code=500, detail="Error loading share")
+    if (data is None or data.get("status") != "active"
+            or str(data.get("visibility") or "public") == "private"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    agreement, model_count, contradiction_count = _score_stats(data)
+    try:
+        history_points = snapshots.list_watch_history(share_id)
+    except Exception:
+        logging.exception("share_og_card history failed")
+        history_points = []
+    history_scores = [p["agreement_score"] for p in history_points]
+    score = history_scores[-1] if history_scores else agreement.get("score")
+    checked_label = ""
+    if history_points:
+        checked_label = "Tracked since " + history_points[0]["ts"].strftime("%b %Y")
+    png = og_image.share_card_png(
+        share_id,
+        question=str(data.get("question") or ""),
+        score=score if isinstance(score, (int, float)) else None,
+        model_count=model_count,
+        contradiction_count=contradiction_count,
+        history_scores=history_scores,
+        checked_label=checked_label,
+    )
+    if png is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={
+            "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+            "X-Robots-Tag": "noindex",
+        },
     )
 
 
@@ -422,7 +533,63 @@ async def share_page(request: Request, slug_id: str):
     watch_page = _build_watch_page_meta(current_watch_meta, history_points)
 
     date_iso = payload["answered_at"] or payload["created_at"]
-    meta_description = markdown_to_plaintext(payload["consensus_md"], limit=160)
+    # Watch-Seiten sind lebende Dokumente: der letzte Run ist das echte
+    # dateModified (Freshness-Signal für Google), nicht das Erstelldatum.
+    modified_iso = (
+        history_points[-1]["ts"].isoformat() if history_points else date_iso
+    )
+
+    # Verdict-Scoreboard: der datendichte Einstieg über der Konsens-Antwort.
+    agreement_data = differences_data.get("agreement")
+    agreement_data = agreement_data if isinstance(agreement_data, dict) else {}
+    base_score = agreement_data.get("score")
+    latest_score = (
+        watch_history["latest_score"] if watch_history
+        else base_score if isinstance(base_score, (int, float)) else None
+    )
+    scoreboard = {
+        "score": int(latest_score) if isinstance(latest_score, (int, float)) else None,
+        "level": str(agreement_data.get("level") or ""),
+        "model_count": model_count,
+        "contradiction_count": contradiction_count,
+        "source_count": len(sources_view),
+        "checks": len(history_points),
+        "tracked_since": history_points[0]["ts"].strftime("%b %Y") if history_points else "",
+        "last_checked": (
+            history_points[-1]["ts"].strftime("%Y-%m-%d") if history_points
+            else (date_iso[:10] if date_iso else "")
+        ),
+        "spark": _mini_spark(history_points),
+    }
+
+    # Meta-Description datengeführt statt AI-Textanfang: liest sich im SERP
+    # wie ein Datenprodukt, der Konsens-Auszug folgt dahinter.
+    description_bits = []
+    if model_count:
+        description_bits.append(f"{model_count} AI models answered independently")
+    if scoreboard["score"] is not None:
+        description_bits.append(f"agreement {scoreboard['score']}/100")
+    if contradiction_count:
+        description_bits.append(
+            f"{contradiction_count} contradiction{'s' if contradiction_count != 1 else ''}"
+        )
+    if scoreboard["tracked_since"]:
+        description_bits.append(f"tracked since {scoreboard['tracked_since']}")
+    if description_bits:
+        prefix = " · ".join(description_bits) + ". "
+        excerpt = markdown_to_plaintext(
+            payload["consensus_md"], limit=max(40, 160 - len(prefix))
+        )
+        meta_description = prefix + excerpt
+    else:
+        meta_description = markdown_to_plaintext(payload["consensus_md"], limit=160)
+
+    # Generierte OG-Karte (Scoreboard als Bild) statt Favicon, wenn möglich.
+    og_is_card = og_image.is_available() and not is_private
+    og_image_url = (
+        page_url + "/og.png" if og_is_card
+        else SITE_URL + "/static/favicon-square.png"
+    )
 
     jsonld = {
         "@context": "https://schema.org",
@@ -430,7 +597,7 @@ async def share_page(request: Request, slug_id: str):
         "headline": payload["question"][:110],
         "description": meta_description,
         "datePublished": date_iso,
-        "dateModified": date_iso,
+        "dateModified": modified_iso,
         "mainEntityOfPage": {"@type": "WebPage", "@id": page_url},
         "author": {"@type": "Organization", "name": "consens.io", "url": SITE_URL},
         "publisher": {
@@ -441,6 +608,8 @@ async def share_page(request: Request, slug_id: str):
         "citation": [s["url"] for s in sources_view if s["url"]][:10],
         "isAccessibleForFree": True,
     }
+    if og_is_card:
+        jsonld["image"] = og_image_url
     # "</" escapen, damit Snapshot-Inhalte das <script>-Element nie schließen können.
     jsonld_html = json.dumps(jsonld, ensure_ascii=False).replace("</", "<\\/")
 
@@ -456,6 +625,8 @@ async def share_page(request: Request, slug_id: str):
         "has_differences_view": bool(differences or differences_fallback_html or differences_data),
         "model_count": model_count,
         "contradiction_count": contradiction_count,
+        "scoreboard": scoreboard,
+        "can_follow": bool(not is_private and watch_page and watch_page["is_active"]),
         "sources": sources_view,
         "related_shares": related_shares,
         "watch_history": watch_history,
@@ -469,7 +640,8 @@ async def share_page(request: Request, slug_id: str):
         "page_url": page_url,
         "robots_meta": robots_meta,
         "meta_description": meta_description,
-        "og_image": SITE_URL + "/static/favicon-square.png",
+        "og_image": og_image_url,
+        "og_is_card": og_is_card,
         "jsonld": jsonld_html,
         # Zitation immer mit der eigenen URL der Seite (nicht dem Dedup-Canonical).
         "citation_text": snapshots.build_citation(payload, page_url),

@@ -1467,6 +1467,7 @@
                 row.appendChild(link);
 
                 if (share.needs_review) row.appendChild(badge('review', 'needs review'));
+                if (share.index_requested) row.appendChild(badge('review', 'listing requested', 'The owner asked for this page to be indexed on Google.'));
                 if (share.reports_count > 0) {
                     const reasons = Object.entries(share.report_reasons || {})
                         .map(([k, v]) => `${k}: ${v}`).join(', ');

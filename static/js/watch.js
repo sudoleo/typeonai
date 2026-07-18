@@ -707,6 +707,12 @@
     visibility.className = "watch-chip";
     visibility.textContent = watch.visibility === "private" ? "Private" : "Public";
     chips.appendChild(visibility);
+    if (watch.visibility !== "private" && (watch.indexed || watch.index_requested)) {
+      const listing = document.createElement("span");
+      listing.className = "watch-chip" + (watch.indexed ? " watch-chip-listed" : " watch-chip-review");
+      listing.textContent = watch.indexed ? "On Google" : "Listing in review";
+      chips.appendChild(listing);
+    }
     top.append(question, chips);
 
     const bodyRow = document.createElement("div");
@@ -932,9 +938,58 @@
       conditionEditor
     );
     settings.appendChild(grid);
+    if (watch.visibility !== "private" && watch.share_id) {
+      settings.appendChild(buildListingBlock(watch, onListChanged));
+    }
 
     card.append(top, bodyRow, actions, settings);
     return card;
+  }
+
+  // "Google listing": Owner nominiert die eigene öffentliche Watch-Seite für
+  // den Suchindex. Setzt nur ein Anfrage-Flag – gelistet wird erst nach
+  // menschlichem Review (Admin), nie automatisch.
+  function buildListingBlock(watch, onListChanged) {
+    const block = document.createElement("div");
+    block.className = "watch-card-listing";
+    const title = document.createElement("strong");
+    title.className = "watch-listing-title";
+    title.textContent = "Google listing";
+    const note = document.createElement("p");
+    note.className = "watch-listing-note";
+    block.append(title, note);
+
+    async function requestListing(button, want) {
+      button.disabled = true;
+      try {
+        await api("POST", "/api/share/" + encodeURIComponent(watch.share_id) + "/indexing-request", { want: want });
+        window.App?.trackAppEvent?.("app_watch_listing_request", { want: want });
+        popup(want
+          ? "Thanks! Your page is nominated — we review every page before it appears on Google."
+          : "Listing request withdrawn.");
+        onListChanged();
+      } catch (error) {
+        button.disabled = false;
+        popup("Request failed: " + error.message);
+      }
+    }
+
+    if (watch.indexed) {
+      note.textContent = "This page is listed: it appears in Google's index, our sitemap, and “Related questions” on other pages.";
+    } else if (watch.index_requested) {
+      note.textContent = "Listing requested — a human reviews every page before it appears on Google. You can withdraw the request anytime.";
+      block.appendChild(makeButton("Withdraw request", "share-secondary-btn", function () {
+        requestListing(this, false);
+      }));
+    } else {
+      note.textContent = watch.index_eligible
+        ? "Public pages stay unlisted until you nominate them. This page meets the quality bar — a human still reviews it before it goes live on Google."
+        : "Public pages stay unlisted until you nominate them. This page is below the quality bar (needs several models, sources, and a substantial answer), but you can still request a review.";
+      block.appendChild(makeButton("Request Google listing", "share-secondary-btn", function () {
+        requestListing(this, true);
+      }));
+    }
+    return block;
   }
 
   async function renderDashboard() {

@@ -172,6 +172,59 @@ def build_condition_message(*, recipient: str, question: str, condition: str,
     return _base_message(recipient, subject, plain, html_body)
 
 
+def build_follow_confirm_message(*, recipient: str, question: str,
+                                 confirm_url: str, share_url: str) -> EmailMessage:
+    """Double-Opt-in: einmalige Bestätigungs-Mail für Seiten-Follower."""
+    clipped_question = " ".join(str(question or "").split())
+    subject_question = clipped_question[:72] + ("…" if len(clipped_question) > 72 else "")
+    subject = f"Confirm: follow \"{subject_question}\""
+    plain = (
+        "Confirm that you want to follow this question on consens.io.\n\n"
+        f"{clipped_question}\n\n"
+        "You will get one e-mail whenever the AI consensus shifts materially.\n"
+        f"Confirm: {confirm_url}\n\n"
+        f"Page: {share_url}\n"
+        "If you did not request this, simply ignore this e-mail — nothing is stored.\n"
+    )
+    safe = {key: html.escape(str(value)) for key, value in {
+        "question": clipped_question, "confirm": confirm_url, "share": share_url,
+    }.items()}
+    html_body = f"""<!doctype html><html><body style="font-family:Arial,sans-serif;color:#172033;line-height:1.55">
+<div style="max-width:620px;margin:auto;padding:24px"><h1 style="font-size:22px">Follow this question?</h1>
+<p style="font-size:17px;font-weight:600">{safe['question']}</p>
+<p>You will get one e-mail whenever the AI consensus shifts materially — no account needed.</p>
+<p><a href="{safe['confirm']}" style="display:inline-block;background:#335cff;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px">Confirm and follow</a></p>
+<p style="font-size:12px;color:#667085;margin-top:32px">If you did not request this, simply ignore this e-mail — nothing is stored. <a href="{safe['share']}">Open the page</a>.</p>
+</div></body></html>"""
+    return _base_message(recipient, subject, plain, html_body)
+
+
+def build_follower_change_message(*, recipient: str, question: str, old_score,
+                                  new_score, summary: str, share_url: str,
+                                  unsubscribe_url: str) -> EmailMessage:
+    """Änderungs-Mail an bestätigte Seiten-Follower (nicht den Watch-Owner)."""
+    clipped_question = " ".join(str(question or "").split())
+    subject_question = clipped_question[:72] + ("…" if len(clipped_question) > 72 else "")
+    subject = f"The AI consensus shifted: {subject_question}"
+    plain = (
+        f"A question you follow on consens.io changed materially.\n\n{clipped_question}\n"
+        f"Agreement score: {old_score} -> {new_score}\n{summary}\n\n"
+        f"See what changed: {share_url}\nUnfollow: {unsubscribe_url}\n"
+    )
+    safe = {key: html.escape(str(value)) for key, value in {
+        "question": clipped_question, "old": old_score, "new": new_score,
+        "summary": summary, "share": share_url, "unsubscribe": unsubscribe_url,
+    }.items()}
+    html_body = f"""<!doctype html><html><body style="font-family:Arial,sans-serif;color:#172033;line-height:1.55">
+<div style="max-width:620px;margin:auto;padding:24px"><h1 style="font-size:22px">The AI consensus shifted</h1>
+<p style="font-size:17px;font-weight:600">{safe['question']}</p>
+<div style="padding:18px;background:#f3f6fb;border-radius:12px;font-size:20px"><span style="color:#667085">{safe['old']}</span> → <strong>{safe['new']}</strong> agreement</div>
+<p>{safe['summary']}</p><p><a href="{safe['share']}" style="display:inline-block;background:#335cff;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px">See what changed</a></p>
+<p style="font-size:12px;color:#667085;margin-top:32px">You follow this question on consens.io. <a href="{safe['unsubscribe']}">Unfollow</a>.</p>
+</div></body></html>"""
+    return _base_message(recipient, subject, plain, html_body)
+
+
 def build_paused_message(*, recipient: str, question: str, share_url: str,
                          unsubscribe_url: str) -> EmailMessage:
     clipped = " ".join(str(question or "").split())

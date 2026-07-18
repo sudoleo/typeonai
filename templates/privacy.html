@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, noarchive">
   <title>Privacy | consens.io</title>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260716-position-map2">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260718-scoreboard">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -152,6 +152,16 @@
           Repeated failures may also trigger a one-time pause notice. Every watch e-mail includes a signed link that
           pauses the watch without requiring login.
         </p>
+        <p>
+          <strong>Following a public Watch page (visitors):</strong> Visitors can subscribe to change notifications
+          for a public Watch page by entering an e-mail address, without creating an account. The subscription only
+          becomes active after the address is confirmed via a link we send to it (double opt-in); if the link is not
+          used, nothing is stored. For active subscriptions we store only the confirmed e-mail address, the followed
+          page, and the confirmation date, but no IP address or browser data. The address is used exclusively to send
+          notifications about material changes to that page. Every notification includes a signed unsubscribe link
+          that removes the address without requiring login. Follower addresses are deleted immediately when the
+          subscription is cancelled and when the followed page is revoked or deleted.
+        </p>
         <p><strong>Retention and deletion:</strong></p>
         <ul>
           <li>Consensus results that are eligible for sharing are kept server-side for a maximum of
@@ -163,10 +173,13 @@
           <li>When you delete your account, all your watches, watch history, shared pages and pending results are
             deleted as part of the account-deletion process.</li>
           <li>Report counters are deleted together with the page.</li>
+          <li>Follower e-mail addresses are deleted when the subscription is cancelled via the unsubscribe link and
+            when the followed page is revoked or deleted.</li>
         </ul>
         <p class="subtle">
-          Legal bases: Art. 6(1)(b) GDPR for publishing and managing pages you create; Art. 6(1)(f) GDPR for
-          moderation, report handling, and abuse prevention.
+          Legal bases: Art. 6(1)(b) GDPR for publishing and managing pages you create and for delivering follower
+          notifications requested via double opt-in; Art. 6(1)(f) GDPR for moderation, report handling, and abuse
+          prevention.
         </p>
       </section>
 
@@ -257,7 +270,7 @@
     </div>
   </main>
 
-  {% set public_footer_note = "Last updated: 12 July 2026" %}
+  {% set public_footer_note = "Last updated: 18 July 2026" %}
   {% include "partials/public_footer.html" %}
 
   <script>

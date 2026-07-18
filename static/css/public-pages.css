@@ -2154,6 +2154,155 @@ canvas {
   overflow-wrap: anywhere;
 }
 
+/* Verdict-Scoreboard: datendichter Einstieg über der Konsens-Antwort –
+   Score, Sparkline und Kernfakten auf einen Blick statt Textwand. */
+.share-scoreboard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 26px;
+  margin: 18px 0 0;
+  padding: 16px 20px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel-bg) 80%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 50%, transparent);
+}
+
+.share-scoreboard-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.share-scoreboard-score > strong {
+  font-size: 2.5rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--heading);
+  letter-spacing: -0.02em;
+}
+
+.share-scoreboard-scale {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.25;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.share-scoreboard-spark { margin-left: 6px; }
+.share-scoreboard-spark path { fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.share-scoreboard-spark circle { fill: var(--accent); }
+
+.share-scoreboard-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.share-scoreboard-facts li {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.share-scoreboard-facts b {
+  color: var(--heading);
+  font-size: 1.02rem;
+  font-weight: 750;
+  margin-right: 2px;
+}
+
+.share-scoreboard-facts li.is-contradiction b { color: #c0392b; }
+.dark-mode .share-scoreboard-facts li.is-contradiction b { color: #ff8a7a; }
+
+.share-provenance {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.share-provenance a {
+  color: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Inline-Teaser unter der Konsens-Antwort: führt in die Differences-Ansicht. */
+.share-diff-teaser {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  margin: 14px 0 0;
+  padding: 13px 18px;
+  border: 1px solid rgba(220, 60, 60, 0.32);
+  border-radius: var(--radius-sm);
+  background: rgba(220, 60, 60, 0.08);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.share-diff-teaser:hover {
+  background: rgba(220, 60, 60, 0.14);
+  border-color: rgba(220, 60, 60, 0.5);
+}
+
+.share-diff-teaser b { font-weight: 700; }
+.share-diff-teaser-icon { color: #c0392b; font-size: 0.95rem; }
+.dark-mode .share-diff-teaser-icon { color: #ff8a7a; }
+
+/* Follow-CTA: Besucher abonnieren Änderungen einer Watch-Seite per Mail. */
+.share-follow-main p { margin: 6px 0 0; color: var(--muted); }
+
+.share-follow-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0 0;
+}
+
+.share-follow-form input[type="email"] {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+}
+
+.share-follow-form input[type="email"]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 1px;
+}
+
+.share-follow-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.share-follow-done {
+  margin: 12px 0 0;
+  font-weight: 650;
+  color: var(--heading);
+}
+
 /* Modelle (Konsens + konsultierte): je Anbieter ein dezentes Chip mit kleinem
    Logo (analog zum Model-Picker auf /app), bewusst zurückhaltend gehalten. */
 .share-models {

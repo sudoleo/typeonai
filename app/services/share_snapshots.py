@@ -747,9 +747,12 @@ def revoke_share(share_id, uid, is_admin=False, db=None):
         "revoked_at": firestore.SERVER_TIMESTAMP,
     })
     # Scheduler-Metadaten sofort entfernen; kompakte History bleibt bis zum
-    # regulaeren Share-Hard-Delete erhalten.
+    # regulaeren Share-Hard-Delete erhalten. Follower ebenfalls sofort weg –
+    # eine widerrufene Seite darf keine Mails mehr ausloesen.
     from app.services.watch_service import delete_watches_for_share
+    from app.services.watch_followers import delete_followers_for_share
     delete_watches_for_share(share_id, db=db)
+    delete_followers_for_share(share_id, db=db)
     invalidate_share_cache(share_id)
 
 
@@ -794,11 +797,55 @@ def moderate_share(share_id, action=None, indexed=None, db=None):
             raise ShareError("bad_request", "Only active shares can be indexed.")
         updates["indexed"] = bool(indexed)
 
+    # Jede Index-Entscheidung bzw. ein Block erledigt eine offene
+    # Nutzer-Anfrage ("Request Google listing") – Flag zuruecksetzen.
+    if indexed is not None or action == "block":
+        updates["index_requested"] = False
+
     db.collection(SHARES_COLLECTION).document(share_id).update(updates)
     invalidate_share_cache(share_id)
     merged = dict(data)
     merged.update(updates)
     return merged
+
+
+def request_share_indexing(share_id, uid, want=True, db=None):
+    """Selbstbedienung: Owner nominiert die eigene öffentliche Seite für den
+    Google-Index (oder zieht die Anfrage zurück). Setzt NIE ``indexed`` –
+    die Freigabe bleibt eine Admin-Entscheidung in moderate_share()."""
+    db = db if db is not None else db_firestore
+    data = get_share(share_id, db=db)
+    if data is None:
+        raise ShareError("not_found", "Share not found.")
+    if data.get("owner_uid") != uid:
+        raise ShareError("forbidden", "You can only manage your own pages.")
+    state = {
+        "indexed": bool(data.get("indexed")),
+        "index_requested": bool(data.get("index_requested")),
+        "index_eligible": bool(data.get("index_eligible")),
+    }
+    if str(data.get("visibility") or "public") != "public":
+        raise ShareError("bad_request", "Only public pages can be listed on Google.")
+    if data.get("status") != "active":
+        raise ShareError("bad_request", "Only active pages can be listed on Google.")
+    if state["indexed"]:
+        # Bereits gelistet: nichts zu tun, Anfrage-Flag bleibt aus.
+        return state
+
+    updates = {"index_requested": bool(want)}
+    if want:
+        updates["index_requested_at"] = firestore.SERVER_TIMESTAMP
+        updates["needs_review"] = True
+    else:
+        # Zurückgezogen: Review-Priorisierung nur aufheben, wenn sie nicht
+        # von der Report-Schwelle stammt.
+        reports = data.get("reports_count")
+        reports = reports if isinstance(reports, int) and reports > 0 else 0
+        if reports < AUTO_NOINDEX_REPORTS:
+            updates["needs_review"] = False
+    db.collection(SHARES_COLLECTION).document(share_id).update(updates)
+    state["index_requested"] = bool(want)
+    return state
 
 
 def list_shares_for_admin(db=None, only_reported=False, max_items=500):
@@ -831,6 +878,7 @@ def list_shares_for_admin(db=None, only_reported=False, max_items=500):
             "report_reasons": data.get("report_reasons") if isinstance(data.get("report_reasons"), dict) else {},
             "needs_review": bool(data.get("needs_review")),
             "indexed": bool(data.get("indexed")),
+            "index_requested": bool(data.get("index_requested")),
             "visibility": str(data.get("visibility") or "public"),
             "index_eligible": bool(data.get("index_eligible")),
             "created_at": created_at.isoformat() if isinstance(created_at, datetime) else "",
@@ -922,10 +970,14 @@ def list_indexed_share_urls(db=None, max_items=1000):
         if (data.get("status") != "active"
                 or str(data.get("visibility") or "public") != "public"):
             continue
-        created_at = data.get("created_at")
+        # Frische: der letzte Watch-Run zaehlt als inhaltliches Update der
+        # Seite (History/Score aendern sich) – sonst das Erstelldatum.
+        modified = data.get("last_watch_run_at")
+        if not isinstance(modified, datetime):
+            modified = data.get("created_at")
         urls.append({
             "path": share_path(data.get("slug") or "", doc.id),
-            "lastmod": created_at.strftime("%Y-%m-%d") if isinstance(created_at, datetime) else "",
+            "lastmod": modified.strftime("%Y-%m-%d") if isinstance(modified, datetime) else "",
         })
     urls.sort(key=lambda item: item["path"])
     return urls
@@ -1059,6 +1111,9 @@ def list_shares_for_owner(uid, db=None, max_items=200):
             "question": _clip(data.get("question"), 200),
             "status": data.get("status") or "active",
             "visibility": str(data.get("visibility") or "public"),
+            "indexed": bool(data.get("indexed")),
+            "index_requested": bool(data.get("index_requested")),
+            "index_eligible": bool(data.get("index_eligible")),
             "created_at": created_at.isoformat() if isinstance(created_at, datetime) else "",
         })
         if len(shares) >= max_items:

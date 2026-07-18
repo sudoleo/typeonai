@@ -13,7 +13,7 @@ from firebase_admin import auth
 import app.core.config as cfg
 from app.core import security
 from app.api.routers.pages import SITE_URL
-from app.services import mailer, opinion_map, share_snapshots, watch_brief, watch_service
+from app.services import mailer, opinion_map, share_snapshots, watch_brief, watch_followers, watch_service
 from app.services.llm.base import get_system_prompt
 from app.services.llm.citations import result_text
 from app.services.llm.consensus_engine import (
@@ -246,6 +246,48 @@ async def _send_condition_mail(watch_id: str, watch: dict, result: dict):
     ))
 
 
+async def _send_follower_mails(watch_id: str, watch: dict, result: dict) -> int:
+    """Bestätigte Seiten-Follower bei materiellen Änderungen benachrichtigen.
+
+    Unabhängig vom email_mode des Owners; Schwelle ist dieselbe wie bei
+    "changes_only". Best-effort – Fehler je Empfänger brechen nichts ab.
+    """
+    if str(watch.get("visibility") or "public") == "private":
+        return 0
+    if not mailer.is_configured():
+        return 0
+    if not should_notify(
+        watch.get("last_agreement_score"), result.get("agreement_score"),
+        bool(result.get("changed")), result.get("severity") or "minor",
+    ):
+        return 0
+    followers = await asyncio.to_thread(watch_followers.list_followers, watch["share_id"])
+    if not followers:
+        return 0
+    share_url = SITE_URL + share_snapshots.share_path(
+        watch.get("share_slug") or "", watch["share_id"],
+    )
+    summary = result.get("change_summary") or "The agreement score changed materially."
+    sent = 0
+    for follower in followers:
+        try:
+            token = watch_followers.make_follow_unsubscribe_token(
+                watch["share_id"], follower["email"],
+            )
+            message = mailer.build_follower_change_message(
+                recipient=follower["email"], question=watch.get("question") or "",
+                old_score=watch.get("last_agreement_score"),
+                new_score=result["agreement_score"], summary=summary,
+                share_url=share_url,
+                unsubscribe_url=SITE_URL + "/watch/follow/unsubscribe?token=" + token,
+            )
+            if await mailer.send_message(message):
+                sent += 1
+        except Exception:
+            logging.exception("Consensus Watch follower mail failed for %s", watch_id)
+    return sent
+
+
 async def _send_paused_mail(watch_id: str, watch: dict):
     if not mailer.is_configured():
         logging.info("Consensus Watch mail skipped: SMTP_HOST/MAIL_FROM not configured")
@@ -333,6 +375,10 @@ async def run_watch_tick() -> int:
                         # Mail is best-effort and must never turn a completed
                         # LLM run into a scheduler failure/history rollback.
                         logging.exception("Consensus Watch result mail failed for %s", watch_id)
+                try:
+                    await _send_follower_mails(watch_id, claimed, result)
+                except Exception:
+                    logging.exception("Consensus Watch follower mails failed for %s", watch_id)
     finally:
         try:
             await asyncio.to_thread(watch_service.release_worker_lease)

@@ -17,7 +17,7 @@ from app.api.routers import pages as pages_router
 from app.api.routers import watch as watch_router
 from app.core.rate_limit import limiter
 from app.services import watch_service
-from app.services import mailer, opinion_map, watch_brief, watch_scheduler
+from app.services import mailer, opinion_map, watch_brief, watch_followers, watch_scheduler
 from app.services.watch_service import WatchError
 
 
@@ -1253,3 +1253,142 @@ class AdminWatchRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["recipient"], "admin@example.test")
         send.assert_awaited_once()
+
+
+class FollowerTests(unittest.TestCase):
+    """Besucher-Follow (Double-Opt-in) auf öffentlichen Watch-Seiten."""
+
+    def setUp(self):
+        self.db = FakeDb()
+        self.now = datetime(2026, 7, 18, tzinfo=timezone.utc)
+        self.share_id = "F" * 16
+        self.db.stores["shares"][self.share_id] = share(slug="follow-me")
+        self.db.stores["watches"]["w1"] = {
+            "share_id": self.share_id, "status": "active",
+            "created_at": self.now, "interval": "weekly",
+        }
+        self.env = patch.dict(os.environ, {"WATCH_UNSUBSCRIBE_SECRET": "test-secret"})
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+
+    def test_request_confirm_and_unsubscribe_roundtrip(self):
+        pending = watch_followers.request_follow(self.share_id, "Visitor@Example.COM", db=self.db)
+        self.assertTrue(pending["token"])
+        self.assertEqual(pending["email"], "visitor@example.com")
+        # Nichts persistiert, bevor der Bestätigungslink geklickt wurde.
+        self.assertEqual(self.db.stores[watch_followers.FOLLOWERS_COLLECTION], {})
+
+        confirmed = watch_followers.confirm_follow(pending["token"], db=self.db)
+        self.assertEqual(confirmed["share_id"], self.share_id)
+        followers = watch_followers.list_followers(self.share_id, db=self.db)
+        self.assertEqual([f["email"] for f in followers], ["visitor@example.com"])
+
+        # Erneuter Request derselben Adresse: kein neuer Token (keine Mail).
+        again = watch_followers.request_follow(self.share_id, "visitor@example.com", db=self.db)
+        self.assertEqual(again["token"], "")
+
+        token = watch_followers.make_follow_unsubscribe_token(self.share_id, "visitor@example.com")
+        watch_followers.unsubscribe_follow(token, db=self.db)
+        self.assertEqual(watch_followers.list_followers(self.share_id, db=self.db), [])
+
+    def test_confirm_and_unsubscribe_tokens_are_not_interchangeable(self):
+        confirm = watch_followers.make_confirm_token(self.share_id, "a@example.com")
+        unsubscribe = watch_followers.make_follow_unsubscribe_token(self.share_id, "a@example.com")
+        with self.assertRaisesRegex(WatchError, "invalid"):
+            watch_followers.confirm_follow(unsubscribe, db=self.db)
+        with self.assertRaisesRegex(WatchError, "invalid"):
+            watch_followers.unsubscribe_follow(confirm, db=self.db)
+
+    def test_invalid_email_and_unfollowable_pages_rejected(self):
+        with self.assertRaisesRegex(WatchError, "valid e-mail"):
+            watch_followers.request_follow(self.share_id, "not-an-email", db=self.db)
+        private_id = "P" * 16
+        self.db.stores["shares"][private_id] = dict(share(slug="priv"), visibility="private")
+        with self.assertRaisesRegex(WatchError, "cannot be followed"):
+            watch_followers.request_follow(private_id, "a@example.com", db=self.db)
+        unwatched_id = "U" * 16
+        self.db.stores["shares"][unwatched_id] = share(slug="unwatched")
+        with self.assertRaisesRegex(WatchError, "no Consensus Watch"):
+            watch_followers.request_follow(unwatched_id, "a@example.com", db=self.db)
+
+    def test_delete_followers_for_share(self):
+        for email in ("a@example.com", "b@example.com"):
+            token = watch_followers.make_confirm_token(self.share_id, email)
+            watch_followers.confirm_follow(token, db=self.db)
+        self.assertEqual(watch_followers.delete_followers_for_share(self.share_id, db=self.db), 2)
+        self.assertEqual(watch_followers.list_followers(self.share_id, db=self.db), [])
+
+    def test_follower_mails_only_on_material_change(self):
+        token = watch_followers.make_confirm_token(self.share_id, "a@example.com")
+        watch_followers.confirm_follow(token, db=self.db)
+        watch = {
+            "share_id": self.share_id, "share_slug": "follow-me",
+            "visibility": "public", "question": "Q",
+            "last_agreement_score": 60,
+        }
+        original_list_followers = watch_followers.list_followers
+        list_patch = patch.object(
+            watch_scheduler.watch_followers, "list_followers",
+            side_effect=lambda sid: original_list_followers(sid, db=self.db),
+        )
+        with patch.object(watch_scheduler.mailer, "is_configured", return_value=True), \
+                patch.object(watch_scheduler.mailer, "send_message", new_callable=AsyncMock, return_value=True) as send, \
+                list_patch:
+            sent = asyncio.run(watch_scheduler._send_follower_mails(
+                "w1", watch, {"agreement_score": 30, "changed": True, "severity": "major", "change_summary": "Flip."},
+            ))
+            self.assertEqual(sent, 1)
+            send.assert_awaited_once()
+            send.reset_mock()
+            # Kleine Bewegung ohne materiellen Change: keine Mail.
+            sent = asyncio.run(watch_scheduler._send_follower_mails(
+                "w1", watch, {"agreement_score": 62, "changed": False, "severity": "minor"},
+            ))
+            self.assertEqual(sent, 0)
+            send.assert_not_awaited()
+            # Private Seiten benachrichtigen nie Follower.
+            sent = asyncio.run(watch_scheduler._send_follower_mails(
+                "w1", dict(watch, visibility="private"),
+                {"agreement_score": 5, "changed": True, "severity": "major"},
+            ))
+            self.assertEqual(sent, 0)
+
+
+class FollowRouteTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        app = FastAPI()
+        app.state.limiter = limiter
+        app.include_router(watch_router.router)
+        cls.client = TestClient(app)
+
+    def test_follow_route_sends_confirmation_mail(self):
+        pending = {"email": "a@example.com", "question": "Q", "token": "tok123"}
+        with patch.object(watch_router.watch_followers, "request_follow", return_value=pending), \
+                patch.object(watch_router.mailer, "is_configured", return_value=True), \
+                patch.object(watch_router.mailer, "send_message", new_callable=AsyncMock, return_value=True) as send:
+            response = self.client.post("/api/share/%s/follow" % ("F" * 16), json={"email": "a@example.com"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Check your inbox", response.json()["message"])
+        send.assert_awaited_once()
+
+    def test_follow_route_is_generic_for_existing_followers(self):
+        pending = {"email": "a@example.com", "question": "Q", "token": ""}
+        with patch.object(watch_router.watch_followers, "request_follow", return_value=pending), \
+                patch.object(watch_router.mailer, "send_message", new_callable=AsyncMock) as send:
+            response = self.client.post("/api/share/%s/follow" % ("F" * 16), json={"email": "a@example.com"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Check your inbox", response.json()["message"])
+        send.assert_not_awaited()
+
+    def test_follow_confirm_route_renders_page(self):
+        result = {"share_id": "F" * 16, "email": "a@example.com", "question": "Q", "share_path": "/s/q-" + "F" * 16}
+        with patch.object(watch_router.watch_followers, "confirm_follow", return_value=result):
+            response = self.client.get("/watch/follow/confirm?token=x")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("following", response.text)
+        with patch.object(watch_router.watch_followers, "confirm_follow", side_effect=WatchError("invalid_token", "This link is invalid.")):
+            response = self.client.get("/watch/follow/confirm?token=x")
+        self.assertEqual(response.status_code, 400)

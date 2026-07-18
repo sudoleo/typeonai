@@ -14,12 +14,16 @@
   <meta property="og:description" content="{{ meta_description }}">
   <meta property="og:url" content="{{ canonical_url }}">
   <meta property="og:image" content="{{ og_image }}">
-  <meta name="twitter:card" content="summary">
+  {% if og_is_card %}<meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:type" content="image/png">{% endif %}
+  <meta name="twitter:card" content="{% if og_is_card %}summary_large_image{% else %}summary{% endif %}">
   <meta name="twitter:title" content="{{ question[:70] }}">
   <meta name="twitter:description" content="{{ meta_description }}">
+  {% if og_is_card %}<meta name="twitter:image" content="{{ og_image }}">{% endif %}
   <script type="application/ld+json">{{ jsonld | safe }}</script>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260716-position-map2">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260718-scoreboard">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -57,6 +61,30 @@
         </div>
         {% endif %}
       </div>
+      {% if scoreboard and (scoreboard.score is not none or scoreboard.model_count) %}
+      <div class="share-scoreboard" role="group" aria-label="Consensus verdict at a glance">
+        {% if scoreboard.score is not none %}
+        <div class="share-scoreboard-score">
+          <strong>{{ scoreboard.score }}</strong>
+          <span class="share-scoreboard-scale">/100<br>agreement</span>
+          {% if scoreboard.spark %}
+          <svg class="share-scoreboard-spark" viewBox="0 0 {{ scoreboard.spark.width }} {{ scoreboard.spark.height }}"
+               width="{{ scoreboard.spark.width }}" height="{{ scoreboard.spark.height }}" aria-hidden="true">
+            <path d="{{ scoreboard.spark.path }}"></path>
+            <circle cx="{{ scoreboard.spark.last_x }}" cy="{{ scoreboard.spark.last_y }}" r="3"></circle>
+          </svg>
+          {% endif %}
+        </div>
+        {% endif %}
+        <ul class="share-scoreboard-facts">
+          {% if scoreboard.model_count %}<li><b>{{ scoreboard.model_count }}</b> AI models</li>{% endif %}
+          {% if has_differences_view %}<li{% if scoreboard.contradiction_count %} class="is-contradiction"{% endif %}><b>{{ scoreboard.contradiction_count }}</b> contradiction{{ "s" if scoreboard.contradiction_count != 1 }}</li>{% endif %}
+          {% if scoreboard.source_count %}<li><b>{{ scoreboard.source_count }}</b> source{{ "s" if scoreboard.source_count != 1 }}</li>{% endif %}
+          {% if scoreboard.checks > 1 %}<li><b>{{ scoreboard.checks }}</b> checks since {{ scoreboard.tracked_since }}</li>{% endif %}
+        </ul>
+      </div>
+      <p class="share-provenance">Not one AI's answer: {{ scoreboard.model_count or "several" }} models answered independently and were cross-checked by a judge from a different model family. <a href="/consensus-engine">How it works</a></p>
+      {% endif %}
       {% if consensus_model_view or consulted_models %}
       <div class="share-models">
         {% if consensus_model_view %}
@@ -112,6 +140,12 @@
           <h2>Consensus answer</h2>
           <div class="share-md">{{ consensus_html | safe }}</div>
         </section>
+        {% if has_differences_view and contradiction_count %}
+        <button type="button" id="diffTeaser" class="share-diff-teaser" data-umami-event="share_diff_teaser_click">
+          <span class="share-diff-teaser-icon" aria-hidden="true">&#9888;</span>
+          <span>The models don't fully agree here &mdash; {{ contradiction_count }} contradiction{{ "s" if contradiction_count != 1 }} found. <b>See where they disagree &rarr;</b></span>
+        </button>
+        {% endif %}
       </div>
 
       {% if has_differences_view %}
@@ -135,6 +169,23 @@
           {% endif %}
         </section>
       </div>
+      {% endif %}
+
+      {% if can_follow %}
+      <section class="legal-panel share-follow" aria-labelledby="shareFollowHeading">
+        <div class="share-follow-main">
+          <h2 id="shareFollowHeading">Follow this question</h2>
+          <p>This page is re-checked {{ watch_page.interval_label | lower }}. Get one e-mail when the AI consensus shifts &mdash; no account needed.</p>
+        </div>
+        <form id="shareFollowForm" class="share-follow-form">
+          <label class="visually-hidden" for="shareFollowEmail" hidden>E-mail address</label>
+          <input id="shareFollowEmail" type="email" required maxlength="254"
+                 placeholder="you@example.com" autocomplete="email" inputmode="email">
+          <button type="submit" class="button-primary" data-umami-event="share_follow_submit">Follow</button>
+        </form>
+        <p class="share-follow-note">Double opt-in &middot; unsubscribe anytime &middot; your address is only used for these updates.</p>
+        <p id="shareFollowDone" class="share-follow-done" role="status" hidden></p>
+      </section>
       {% endif %}
 
       {% if sources %}
@@ -345,7 +396,47 @@
         const toggle = differencesBtn.closest(".share-toggle");
         if (toggle) toggle.classList.remove("has-cue");
       });
+
+      // Inline-Teaser unter der Konsens-Antwort springt in die Differences-Ansicht.
+      const teaser = document.getElementById("diffTeaser");
+      if (teaser) {
+        teaser.addEventListener("click", function () {
+          differencesBtn.click();
+          differencesView.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }
     })();
+
+    {% if can_follow %}
+    // Follow-Formular: Double-Opt-in-Anfrage, rein serverseitig verarbeitet.
+    (function () {
+      const form = document.getElementById("shareFollowForm");
+      const done = document.getElementById("shareFollowDone");
+      if (!form || !done) return;
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        const email = document.getElementById("shareFollowEmail").value.trim();
+        if (!email) return;
+        const button = form.querySelector("button[type=submit]");
+        button.disabled = true;
+        fetch("/api/share/{{ share_id }}/follow", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email })
+        }).then(function (response) {
+          return response.json().catch(function () { return {}; }).then(function (data) {
+            if (!response.ok) throw new Error(data.detail || ("HTTP " + response.status));
+            form.hidden = true;
+            done.textContent = data.message || "Check your inbox and confirm to start following.";
+            done.hidden = false;
+          });
+        }).catch(function (error) {
+          button.disabled = false;
+          alert("Follow request failed: " + error.message);
+        });
+      });
+    })();
+    {% endif %}
 
     // Lange Quellenlisten: eingeklappt starten, "Show all" klappt auf.
     // Anker-Sprünge aus Inline-Citations (#src-N) klappen automatisch auf.

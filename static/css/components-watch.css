@@ -198,6 +198,20 @@
 }
 .watch-chip-active { color: color-mix(in srgb, #15803d 78%, var(--text-color)); background: color-mix(in srgb, #22c55e 13%, transparent); }
 .watch-chip-paused_error { color: var(--clear-button-text); background: color-mix(in srgb, var(--clear-button-text) 10%, transparent); }
+/* Google-Listing-Status: gelistet = grün (Ampel-Farbe), Review = neutral. */
+.watch-chip-listed { color: color-mix(in srgb, #15803d 78%, var(--text-color)); background: color-mix(in srgb, #22c55e 13%, transparent); text-transform: none; }
+.watch-chip-review { text-transform: none; }
+
+/* "Google listing"-Block in den Karten-Settings (nur öffentliche Seiten). */
+.watch-card-listing {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px dashed color-mix(in srgb, var(--sidebar-border) 78%, transparent);
+  border-radius: var(--radius-md, 12px);
+}
+.watch-listing-title { display: block; font-size: .72rem; font-weight: 700; color: var(--sidebar-text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.watch-listing-note { margin: 6px 0 10px; font-size: .82rem; color: var(--sidebar-text-muted); line-height: 1.5; }
+.watch-card-listing .share-secondary-btn { font-size: .82rem; }
 
 .watch-card-body {
   display: flex;

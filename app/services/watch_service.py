@@ -158,6 +158,10 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
     slug = str(share.get("slug") or data.get("share_slug") or "")
     visibility = str(share.get("visibility") or data.get("visibility") or "public")
     return {
+        # Google-Listing-Status der Seite (Quelle: Share-Doc) fürs Dashboard.
+        "indexed": bool(share.get("indexed")),
+        "index_requested": bool(share.get("index_requested")),
+        "index_eligible": bool(share.get("index_eligible")),
         "id": watch_id,
         "share_id": share_id,
         "share_path": share_snapshots.share_path("" if visibility == "private" else slug, share_id),
@@ -447,15 +451,17 @@ def _unsubscribe_secret() -> bytes:
     return secret.encode("utf-8")
 
 
-def make_unsubscribe_token(watch_id: str, *, now=None, max_age_days=UNSUBSCRIBE_MAX_AGE_DAYS) -> str:
+def sign_token_payload(payload: dict, *, now=None, max_age_days=UNSUBSCRIBE_MAX_AGE_DAYS) -> str:
+    """HMAC-signed, URL-safe token around a small JSON payload (adds ``exp``)."""
     now = now or utcnow()
-    payload = {"wid": watch_id, "exp": int((now + timedelta(days=max_age_days)).timestamp())}
+    payload = dict(payload)
+    payload["exp"] = int((now + timedelta(days=max_age_days)).timestamp())
     encoded = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()).rstrip(b"=")
     signature = hmac.new(_unsubscribe_secret(), encoded, hashlib.sha256).digest()
     return (encoded + b"." + base64.urlsafe_b64encode(signature).rstrip(b"=")).decode("ascii")
 
 
-def parse_unsubscribe_token(token: str, *, now=None) -> str:
+def parse_token_payload(token: str, *, now=None) -> dict:
     try:
         encoded, signature = str(token or "").encode("ascii").split(b".", 1)
         expected = hmac.new(_unsubscribe_secret(), encoded, hashlib.sha256).digest()
@@ -464,12 +470,21 @@ def parse_unsubscribe_token(token: str, *, now=None) -> str:
             raise ValueError("bad signature")
         payload = json.loads(base64.urlsafe_b64decode(encoded + b"=" * (-len(encoded) % 4)))
         if int(payload["exp"]) < int((now or utcnow()).timestamp()):
-            raise WatchError("expired_token", "This unsubscribe link has expired.")
-        return str(payload["wid"])
+            raise WatchError("expired_token", "This link has expired.")
+        return payload
     except WatchError:
         raise
     except Exception as exc:
-        raise WatchError("invalid_token", "This unsubscribe link is invalid.") from exc
+        raise WatchError("invalid_token", "This link is invalid.") from exc
+
+
+def make_unsubscribe_token(watch_id: str, *, now=None, max_age_days=UNSUBSCRIBE_MAX_AGE_DAYS) -> str:
+    return sign_token_payload({"wid": watch_id}, now=now, max_age_days=max_age_days)
+
+
+def parse_unsubscribe_token(token: str, *, now=None) -> str:
+    payload = parse_token_payload(token, now=now)
+    return str(payload.get("wid") or "")
 
 
 def unsubscribe(token: str, db=None) -> dict:
@@ -645,16 +660,20 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
     if condition_status in {"met", "not_met"} and not defer_condition_status:
         watch_updates["last_condition_status"] = condition_status
         watch_updates["last_condition_hash"] = condition_hash(claimed.get("condition") or "")
+    # Frische-Signal für SEO (dateModified/sitemap-lastmod) direkt am Share.
+    share_updates = {"last_watch_run_at": now}
     # History + Scheduler-Fortschritt atomar: ein Restart kann nie einen
     # sichtbaren Punkt ohne vorgeruecktes next_run_at hinterlassen.
     if hasattr(db, "batch"):
         batch = db.batch()
         batch.set(history_ref, history)
         batch.update(watch_ref, watch_updates)
+        batch.update(share_ref, share_updates)
         batch.commit()
     else:  # schlanker Unit-Test-Seam
         history_ref.set(history)
         watch_ref.update(watch_updates)
+        share_ref.update(share_updates)
     return history
 
 

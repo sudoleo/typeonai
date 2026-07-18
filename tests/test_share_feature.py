@@ -681,7 +681,10 @@ class ShareFlowTests(unittest.TestCase):
         shares = snapshots.list_shares_for_owner(self.uid, db=self.db)
         self.assertEqual(len(shares), 1)
         self.assertEqual(shares[0]["share_id"], created["share_id"])
-        self.assertEqual(set(shares[0].keys()), {"share_id", "path", "question", "status", "visibility", "created_at"})
+        self.assertEqual(set(shares[0].keys()), {
+            "share_id", "path", "question", "status", "visibility", "created_at",
+            "indexed", "index_requested", "index_eligible",
+        })
 
 
 class ModerationAndCleanupTests(unittest.TestCase):
@@ -1301,6 +1304,196 @@ class AdminShareRouteTests(unittest.TestCase):
                     "/api/admin/shares/%s/moderate" % self.share_id,
                     json={"action": "block"})
             self.assertEqual(response.status_code, 404)
+
+
+class IndexingRequestTests(unittest.TestCase):
+    """Self-Service-Nominierung fuer den Google-Index (nur Flag, nie indexed)."""
+
+    def setUp(self):
+        self.db = FakeDb()
+        self.uid = "user-1"
+        snapshots.invalidate_share_cache()
+        self.share_id = snapshots.generate_share_id()
+        doc = make_pending(self.uid)
+        doc.update({
+            "status": "active", "slug": "test-slug", "visibility": "public",
+            "indexed": False, "index_eligible": True, "reports_count": 0,
+        })
+        self.db.stores[snapshots.SHARES_COLLECTION][self.share_id] = doc
+
+    def test_owner_can_request_and_withdraw(self):
+        state = snapshots.request_share_indexing(self.share_id, self.uid, want=True, db=self.db)
+        self.assertEqual(state, {"indexed": False, "index_requested": True, "index_eligible": True})
+        stored = self.db.stores[snapshots.SHARES_COLLECTION][self.share_id]
+        self.assertTrue(stored["index_requested"])
+        self.assertTrue(stored["needs_review"])
+        self.assertFalse(stored["indexed"])  # nie automatisch indexieren
+
+        state = snapshots.request_share_indexing(self.share_id, self.uid, want=False, db=self.db)
+        self.assertFalse(state["index_requested"])
+        stored = self.db.stores[snapshots.SHARES_COLLECTION][self.share_id]
+        self.assertFalse(stored["index_requested"])
+        self.assertFalse(stored["needs_review"])
+
+    def test_only_owner_public_active_can_request(self):
+        with self.assertRaisesRegex(ShareError, "own pages"):
+            snapshots.request_share_indexing(self.share_id, "intruder", db=self.db)
+        self.db.stores[snapshots.SHARES_COLLECTION][self.share_id]["visibility"] = "private"
+        with self.assertRaisesRegex(ShareError, "public pages"):
+            snapshots.request_share_indexing(self.share_id, self.uid, db=self.db)
+        self.db.stores[snapshots.SHARES_COLLECTION][self.share_id]["visibility"] = "public"
+        self.db.stores[snapshots.SHARES_COLLECTION][self.share_id]["status"] = "blocked"
+        with self.assertRaisesRegex(ShareError, "active pages"):
+            snapshots.request_share_indexing(self.share_id, self.uid, db=self.db)
+
+    def test_already_indexed_returns_state_without_new_request(self):
+        self.db.stores[snapshots.SHARES_COLLECTION][self.share_id]["indexed"] = True
+        state = snapshots.request_share_indexing(self.share_id, self.uid, want=True, db=self.db)
+        self.assertTrue(state["indexed"])
+        self.assertFalse(state["index_requested"])
+        self.assertNotIn("index_requested", self.db.stores[snapshots.SHARES_COLLECTION][self.share_id])
+
+    def test_moderation_clears_open_request(self):
+        snapshots.request_share_indexing(self.share_id, self.uid, want=True, db=self.db)
+        snapshots.moderate_share(self.share_id, indexed=True, db=self.db)
+        stored = self.db.stores[snapshots.SHARES_COLLECTION][self.share_id]
+        self.assertTrue(stored["indexed"])
+        self.assertFalse(stored["index_requested"])
+
+    def test_indexing_request_route_requires_auth_and_owner(self):
+        app = FastAPI()
+        app.state.limiter = limiter
+        app.include_router(share_router.router)
+        client = TestClient(app)
+        response = client.post("/api/share/%s/indexing-request" % self.share_id, json={})
+        self.assertEqual(response.status_code, 401)
+        with patch.object(share_router, "extract_id_token", return_value="token"), \
+                patch.object(share_router, "verify_user_token", return_value=self.uid), \
+                patch.object(share_router.snapshots, "request_share_indexing",
+                             return_value={"indexed": False, "index_requested": True, "index_eligible": True}) as mocked:
+            response = client.post("/api/share/%s/indexing-request" % self.share_id, json={"want": True})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["index_requested"])
+        mocked.assert_called_once_with(self.share_id, self.uid, want=True)
+
+    def test_sitemap_lastmod_prefers_last_watch_run(self):
+        created = datetime(2026, 6, 1, tzinfo=timezone.utc)
+        run = datetime(2026, 7, 15, tzinfo=timezone.utc)
+        self.db.stores[snapshots.SHARES_COLLECTION][self.share_id].update({
+            "indexed": True, "created_at": created, "last_watch_run_at": run,
+        })
+        urls = snapshots.list_indexed_share_urls(db=self.db)
+        self.assertEqual(urls[0]["lastmod"], "2026-07-15")
+
+
+class ShareSeoEnhancementTests(unittest.TestCase):
+    """Scoreboard, datengeführte Description, dateModified und OG-Karte."""
+
+    @classmethod
+    def setUpClass(cls):
+        app = FastAPI()
+        app.state.limiter = limiter
+        app.include_router(share_router.router)
+        cls.client = TestClient(app)
+        cls.share_id = snapshots.generate_share_id()
+
+    def setUp(self):
+        snapshots.invalidate_share_cache()
+        for name in ("list_related_shares", "list_watch_history"):
+            patcher = patch.object(share_router.snapshots, name, return_value=[])
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        patcher = patch.object(share_router.watch_service, "get_public_watch_meta", return_value=None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _share_doc(self, **overrides):
+        data = make_pending()
+        data.update({
+            "status": "active",
+            "slug": "wie-funktioniert-photosynthese-in-pflanzen",
+            "differences_data": {
+                "claims": [],
+                "differences": [{
+                    "claim": "Widerspruch",
+                    "type": "contradiction",
+                    "positions": [
+                        {"stance": "A", "models": ["OpenAI"], "quote": ""},
+                        {"stance": "B", "models": ["Grok"], "quote": ""},
+                    ],
+                    "verify": "",
+                }],
+                "best_model": "",
+                "models_compared": ["OpenAI", "Gemini", "Grok"],
+                "agreement": {"score": 71, "level": "medium", "model_count": 3,
+                              "major_contradictions": 1, "minor_contradictions": 0, "emphases": 0},
+            },
+        })
+        data.update(overrides)
+        return data
+
+    def _history(self):
+        return [
+            {"ts": datetime(2026, 6, 20, tzinfo=timezone.utc), "agreement_score": 71,
+             "verdict": "", "changed": False, "severity": "", "change_summary": "", "opinion_map": None},
+            {"ts": datetime(2026, 7, 10, 8, 30, tzinfo=timezone.utc), "agreement_score": 55,
+             "verdict": "", "changed": True, "severity": "major", "change_summary": "Flip.", "opinion_map": None},
+        ]
+
+    def test_scoreboard_teaser_and_data_led_description(self):
+        doc = self._share_doc()
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        body = response.text
+        self.assertIn("share-scoreboard", body)
+        self.assertIn("diffTeaser", body)
+        self.assertIn("3 AI models answered independently", body)
+        self.assertIn("agreement 71/100", body)
+        self.assertIn("How it works", body)
+
+    def test_date_modified_uses_last_watch_run(self):
+        doc = self._share_doc()
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router.snapshots, "list_watch_history", return_value=self._history()):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        body = response.text
+        self.assertIn('"dateModified": "2026-07-10T08:30:00+00:00"', body)
+        self.assertIn('"datePublished": "2026-06-11T10:00:00+00:00"', body)
+
+    def test_follow_form_only_on_active_public_watch_pages(self):
+        doc = self._share_doc()
+        meta = {
+            "status": "active", "interval": "weekly", "run_weekday": "", "run_time": "",
+            "timezone": "", "last_run_at": None, "next_run_at": None, "created_at": None,
+        }
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router.snapshots, "list_watch_history", return_value=self._history()), \
+                patch.object(share_router.watch_service, "get_public_watch_meta", return_value=meta):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        self.assertIn("shareFollowForm", response.text)
+
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        self.assertNotIn("shareFollowForm", response.text)
+
+    def test_og_card_route_and_meta(self):
+        if not share_router.og_image.is_available():
+            self.skipTest("Pillow/Font nicht verfuegbar")
+        doc = self._share_doc()
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            page = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+            og = self.client.get("/s/%s-%s/og.png" % (doc["slug"], self.share_id))
+        self.assertIn("/og.png", page.text)
+        self.assertIn("summary_large_image", page.text)
+        self.assertEqual(og.status_code, 200)
+        self.assertEqual(og.headers["content-type"], "image/png")
+        self.assertTrue(og.content.startswith(b"\x89PNG"))
+
+    def test_og_card_404_for_private_pages(self):
+        doc = self._share_doc(visibility="private")
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            response = self.client.get("/s/%s-%s/og.png" % (doc["slug"], self.share_id))
+        self.assertEqual(response.status_code, 404)
 
 
 if __name__ == "__main__":
