@@ -252,6 +252,20 @@ def admin_moderate_share(request: Request, share_id: str, data: dict = Body(...)
     }
 
 
+@router.delete("/api/admin/shares/{share_id}")
+@limiter.limit("10/minute")
+def admin_delete_share(request: Request, share_id: str):
+    _require_admin(request, {})
+    try:
+        deleted = snapshots.hard_delete_share(share_id)
+    except ShareError as exc:
+        raise HTTPException(status_code=_SHARE_ERROR_STATUS.get(exc.code, 400), detail=exc.message)
+    except Exception:
+        logging.exception("admin_delete_share failed")
+        raise HTTPException(status_code=500, detail="Failed to delete share")
+    return {"status": "success", "deleted": deleted}
+
+
 @router.get("/api/admin/benchmark/runs")
 def admin_list_benchmark_runs(request: Request):
     _require_admin(request, {})

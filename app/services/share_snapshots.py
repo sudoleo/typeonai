@@ -890,6 +890,43 @@ def revoke_share(share_id, uid, is_admin=False, db=None):
     invalidate_share_cache(share_id)
 
 
+def hard_delete_share(share_id, db=None):
+    """Permanently delete a share and all share-bound operational data.
+
+    This is intentionally separate from the owner-facing revoke flow. It is
+    only exposed through the admin router because it removes the immutable
+    snapshot immediately instead of retaining it for the regular 30-day
+    cleanup window.
+    """
+    db = db if db is not None else db_firestore
+    data = get_share(share_id, db=db)
+    if data is None:
+        raise ShareError("not_found", "Share not found.")
+
+    # Stop future work and notifications before removing the page itself.
+    from app.services.watch_service import delete_watches_for_share
+    from app.services.watch_followers import delete_followers_for_share
+
+    watches_deleted = delete_watches_for_share(share_id, db=db)
+    followers_deleted = delete_followers_for_share(share_id, db=db)
+
+    share_ref = db.collection(SHARES_COLLECTION).document(share_id)
+    history_deleted = 0
+    # Unit-test doubles may not model subcollections; real Firestore refs do.
+    if hasattr(share_ref, "collection"):
+        for history_doc in share_ref.collection("watch_history").stream():
+            history_doc.reference.delete()
+            history_deleted += 1
+    share_ref.delete()
+    invalidate_share_cache(share_id)
+    return {
+        "share_id": share_id,
+        "watches_deleted": watches_deleted,
+        "followers_deleted": followers_deleted,
+        "history_deleted": history_deleted,
+    }
+
+
 MODERATION_ACTIONS = ("block", "unblock")
 
 

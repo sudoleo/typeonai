@@ -412,6 +412,10 @@
             font-size: 0.85em !important;
             box-shadow: none !important;
         }
+        .share-mod-actions button.danger {
+            border-color: color-mix(in srgb, #dc2626 58%, var(--input-border)) !important;
+            color: #ef4444 !important;
+        }
 
         /* API keys */
         .api-key-form {
@@ -1536,6 +1540,22 @@
             }
         }
 
+        async function deleteShare(shareId, question, statusFn = sharesStatus) {
+            const label = question || shareId;
+            if (!confirm(`Permanently delete "${label}"? The page, its Watch schedule, history, and followers will be removed immediately. This cannot be undone.`)) return;
+            statusFn('Deleting page…', false);
+            try {
+                await shareAdminRequest('DELETE', `/api/admin/shares/${encodeURIComponent(shareId)}`);
+                await Promise.all([
+                    loadShares(currentSharesFilter),
+                    loadPublisherWatches(),
+                    loadAdminWatches()
+                ]);
+            } catch (err) {
+                statusFn(err.message, true);
+            }
+        }
+
         function renderShares(shares, siteUrl) {
             const container = document.getElementById('sharesContainer');
             container.innerHTML = '';
@@ -1591,6 +1611,9 @@
                     actions.appendChild(actionBtn('Mark reviewed', () =>
                         moderateShare(share.share_id, { indexed: !!share.indexed })));
                 }
+                const remove = actionBtn('Delete', () => deleteShare(share.share_id, share.question));
+                remove.className = 'danger';
+                actions.appendChild(remove);
                 row.appendChild(actions);
 
                 const meta = document.createElement('div');
@@ -1683,6 +1706,67 @@
         document.getElementById('publisherWeeklyWatch').addEventListener('change', syncPublisherWatchFields);
         document.getElementById('reloadPublisherConfigBtn').addEventListener('click', loadPublisherConfig);
         document.getElementById('savePublisherConfigBtn').addEventListener('click', savePublisherConfig);
+
+        // === Scheduled Publisher Watch pages ===
+        function publisherWatchesStatus(message, isError) {
+            const el = document.getElementById('publisherWatchesStatus');
+            el.textContent = message || '';
+            el.className = isError ? 'error' : 'success';
+        }
+
+        function renderPublisherWatches(watches) {
+            const container = document.getElementById('publisherWatchesContainer');
+            container.innerHTML = '';
+            const publisherWatches = watches.filter(watch => watch.model_tier === 'free');
+            if (!publisherWatches.length) {
+                container.textContent = 'No automation-created Watch pages found.';
+                return;
+            }
+            publisherWatches.forEach(watch => {
+                const row = document.createElement('div');
+                row.className = 'watch-admin-row';
+
+                const question = document.createElement('a');
+                question.className = 'watch-admin-question';
+                question.href = watch.share_path || '#';
+                question.target = '_blank';
+                question.rel = 'noopener';
+                question.textContent = watch.question || '(untitled)';
+
+                const actions = document.createElement('div');
+                actions.className = 'share-mod-actions';
+                const remove = actionBtn('Delete page', () =>
+                    deleteShare(watch.share_id, watch.question, publisherWatchesStatus));
+                remove.className = 'danger';
+                actions.appendChild(remove);
+
+                const metaLine = document.createElement('div');
+                metaLine.className = 'watch-admin-meta';
+                metaLine.textContent = [
+                    `Watch: ${watch.status}`,
+                    `Listing: ${watch.indexed ? 'indexed' : watch.index_requested ? 'requested' : 'noindex'}`,
+                    `Schedule: ${watch.interval}${watch.run_weekday ? ` on ${watch.run_weekday}` : ''}${watch.run_time ? ` at ${watch.run_time} (${watch.timezone})` : ''}`,
+                    `Next: ${formatAdminTime(watch.next_run_at)}`,
+                    `Last: ${formatAdminTime(watch.last_run_at)}`,
+                    `Share ID: ${watch.share_id}`
+                ].join(' | ');
+                row.append(question, actions, metaLine);
+                container.appendChild(row);
+            });
+        }
+
+        async function loadPublisherWatches() {
+            publisherWatchesStatus('Loading...', false);
+            try {
+                const data = await shareAdminRequest('GET', '/api/admin/watches');
+                renderPublisherWatches(data.watches || []);
+                publisherWatchesStatus('', false);
+            } catch (err) {
+                publisherWatchesStatus(err.message, true);
+            }
+        }
+
+        document.getElementById('reloadPublisherWatchesBtn').addEventListener('click', loadPublisherWatches);
 
         // === Consensus API keys ===
         function apiKeysStatus(message, isError) {
@@ -1914,6 +1998,7 @@
                 const idToken = await user.getIdToken();
                 fetchModels(idToken);
                 loadPublisherConfig();
+                loadPublisherWatches();
                 loadApiKeys();
                 loadShares('reported');
                 loadAdminWatches();
@@ -2146,6 +2231,22 @@
                     <!-- Populated by JavaScript -->
                 </div>
             </div>
+
+            <div class="admin-section">
+                <h3>Automation Watch pages</h3>
+                <p class="section-hint">
+                    Pages created by the Scheduled Consensus Publisher with its permanently pinned
+                    weekly Free-model Watch. Deleting a page also removes its Watch schedule,
+                    Watch history, and follower subscriptions.
+                </p>
+                <div class="watch-admin-toolbar">
+                    <button id="reloadPublisherWatchesBtn" type="button" class="admin-btn secondary">Reload pages</button>
+                    <span id="publisherWatchesStatus" role="status" style="font-size: 0.85em;"></span>
+                </div>
+                <div id="publisherWatchesContainer">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
         </section>
 
         <section id="tab-shares" class="admin-tab-panel" role="tabpanel" hidden>
@@ -2154,6 +2255,7 @@
                 <p class="section-hint">
                     Reported pages first (review-priority, then report count). <strong>Index</strong> puts a page
                     into sitemap-shares.xml and removes its noindex — only do this for eligible pages.
+                    <strong>Delete</strong> permanently removes the page and all Watch-bound data.
                 </p>
                 <div class="shares-toolbar">
                     <button id="loadReportedSharesBtn" type="button" class="admin-btn secondary">Load reported</button>

@@ -752,6 +752,29 @@ class ModerationAndCleanupTests(unittest.TestCase):
         with self.assertRaises(ShareError):
             snapshots.moderate_share(share_id, action="block", db=self.db)
 
+    def test_admin_hard_delete_removes_share_watch_and_followers(self):
+        share_id = self._make_share(indexed=True)
+        self.db.stores["watches"]["watch-1"] = {
+            "share_id": share_id,
+            "owner_uid": self.uid,
+        }
+        self.db.stores["watch_followers"]["follower-1"] = {
+            "share_id": share_id,
+            "email": "reader@example.test",
+        }
+
+        result = snapshots.hard_delete_share(share_id, db=self.db)
+
+        self.assertNotIn(share_id, self.db.stores[snapshots.SHARES_COLLECTION])
+        self.assertNotIn("watch-1", self.db.stores["watches"])
+        self.assertNotIn("follower-1", self.db.stores["watch_followers"])
+        self.assertEqual(result["watches_deleted"], 1)
+        self.assertEqual(result["followers_deleted"], 1)
+
+    def test_admin_hard_delete_rejects_missing_share(self):
+        with self.assertRaisesRegex(ShareError, "not found"):
+            snapshots.hard_delete_share(snapshots.generate_share_id(), db=self.db)
+
     def test_auto_noindex_after_report_threshold(self):
         share_id = self._make_share(indexed=True,
                                     reports_count=snapshots.AUTO_NOINDEX_REPORTS - 1)
@@ -1310,6 +1333,35 @@ class AdminShareRouteTests(unittest.TestCase):
                     "/api/admin/shares/%s/moderate" % self.share_id,
                     json={"action": "block"})
             self.assertEqual(response.status_code, 404)
+
+    def test_delete_requires_admin_and_hard_deletes(self):
+        token_patch, verify_patch, admin_patch = self._admin_patches(is_admin=False)
+        with token_patch, verify_patch, admin_patch:
+            response = self.client.delete("/api/admin/shares/%s" % self.share_id)
+        self.assertEqual(response.status_code, 403)
+
+        token_patch, verify_patch, admin_patch = self._admin_patches()
+        deleted = {
+            "share_id": self.share_id,
+            "watches_deleted": 1,
+            "followers_deleted": 2,
+            "history_deleted": 3,
+        }
+        with token_patch, verify_patch, admin_patch, \
+                patch.object(admin_router.snapshots, "hard_delete_share",
+                             return_value=deleted) as mocked:
+            response = self.client.delete("/api/admin/shares/%s" % self.share_id)
+        self.assertEqual(response.status_code, 200)
+        mocked.assert_called_once_with(self.share_id)
+        self.assertEqual(response.json()["deleted"], deleted)
+
+    def test_delete_maps_missing_share(self):
+        token_patch, verify_patch, admin_patch = self._admin_patches()
+        with token_patch, verify_patch, admin_patch, \
+                patch.object(admin_router.snapshots, "hard_delete_share",
+                             side_effect=ShareError("not_found", "Share not found.")):
+            response = self.client.delete("/api/admin/shares/%s" % self.share_id)
+        self.assertEqual(response.status_code, 404)
 
 
 class IndexingRequestTests(unittest.TestCase):
