@@ -149,7 +149,13 @@ async def delete_account(request: Request, data: dict = Body(default={})):
     #    mit dem Eltern-Dokument entfernt). usage_* ist die persistente Grundlage
     #    fuer den kuenftigen run-basierten Consensus-Endpoint.
     user_ref = db_firestore.collection("users").document(uid)
-    for subcollection in ("bookmarks", "counters", "usage_days", "usage_runs"):
+    for subcollection in (
+        "bookmarks",
+        "counters",
+        "usage_days",
+        "usage_runs",
+        "api_consensus_idempotency",
+    ):
         try:
             for doc in user_ref.collection(subcollection).stream():
                 doc.reference.delete()
@@ -174,6 +180,18 @@ async def delete_account(request: Request, data: dict = Body(default={})):
                 doc.reference.delete()
         except Exception as e:
             logging.error(f"delete_account: {collection_name} cleanup failed for {uid}: {e}")
+            errors.append(collection_name)
+
+    # API-Schluessel und persistente API-Runs sind ebenfalls UID-gebunden.
+    for collection_name in ("api_consensus_keys", "api_consensus_runs"):
+        try:
+            docs = db_firestore.collection(collection_name).where("uid", "==", uid).stream()
+            for doc in docs:
+                doc.reference.delete()
+        except Exception as e:
+            logging.error(
+                f"delete_account: {collection_name} cleanup failed for {uid}: {e}"
+            )
             errors.append(collection_name)
 
     # 3b. Öffentliche Share-Links und zwischengespeicherte Konsens-Ergebnisse

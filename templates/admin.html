@@ -413,6 +413,59 @@
             box-shadow: none !important;
         }
 
+        /* API keys */
+        .api-key-form {
+            display: grid;
+            grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 1fr) auto;
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 18px;
+        }
+        .api-key-field { display: grid; gap: 6px; min-width: 0; }
+        .api-key-field label {
+            color: var(--sidebar-text-muted);
+            font-size: 0.8em;
+            font-weight: 650;
+        }
+        .api-key-field input,
+        .api-key-secret-row input {
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+            padding: 8px 10px;
+            border: 1px solid var(--input-border);
+            border-radius: var(--radius-xs);
+            background: var(--input-bg);
+            color: var(--text-color);
+        }
+        .api-key-secret {
+            margin: 4px 0 18px;
+            padding: 14px;
+            border: 1px solid color-mix(in srgb, var(--accent-secondary) 45%, var(--input-border));
+            border-radius: var(--radius-sm);
+            background: color-mix(in srgb, var(--accent-secondary) 8%, var(--container-bg));
+        }
+        .api-key-secret[hidden] { display: none; }
+        .api-key-secret strong { display: block; margin-bottom: 5px; }
+        .api-key-secret p { margin: 0 0 10px; color: var(--sidebar-text-muted); font-size: 0.84em; }
+        .api-key-secret-row { display: flex; gap: 8px; align-items: center; }
+        .api-key-secret-row input { flex: 1; font-family: monospace; }
+        .api-key-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-bottom: 12px; }
+        .api-key-toolbar .api-key-field { flex: 1 1 260px; }
+        .api-key-row {
+            display: grid;
+            grid-template-columns: minmax(180px, 1fr) auto;
+            gap: 8px 16px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--input-border);
+        }
+        .api-key-row:last-child { border-bottom: none; }
+        .api-key-main { min-width: 0; }
+        .api-key-name { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; font-weight: 650; }
+        .api-key-prefix { font-family: monospace; color: var(--sidebar-text-muted); font-size: 0.9em; }
+        .api-key-meta { margin-top: 5px; color: var(--sidebar-text-muted); font-size: 0.78em; overflow-wrap: anywhere; }
+        .api-key-actions { display: flex; align-items: center; }
+
         /* Consensus Watch diagnostics */
         .watch-admin-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
         .watch-admin-row {
@@ -439,6 +492,9 @@
             .limits-grid { grid-template-columns: 1fr; }
             .limit-row { grid-template-columns: 1fr; }
             .watch-model-grid { grid-template-columns: 1fr; }
+            .api-key-form { grid-template-columns: 1fr; }
+            .api-key-secret-row { align-items: stretch; flex-direction: column; }
+            .api-key-row { grid-template-columns: 1fr; }
             .preset-model-cards { grid-template-columns: 1fr; }
             .watch-model-grid .watch-model-head { display: none; }
             .watch-model-provider { margin-top: 8px; }
@@ -512,9 +568,10 @@
         // ==============================
         // Tabs
         // ==============================
-        const TAB_IDS = ['models', 'consensus', 'limits', 'shares', 'watches'];
+        const TAB_IDS = ['models', 'consensus', 'limits', 'api', 'shares', 'watches'];
         function activateTab(tabId) {
             if (!TAB_IDS.includes(tabId)) tabId = 'models';
+            if (tabId !== 'api') clearIssuedApiKey();
             TAB_IDS.forEach(id => {
                 document.getElementById(`tab-${id}`).hidden = id !== tabId;
                 const btn = document.querySelector(`.admin-tabs button[data-tab="${id}"]`);
@@ -1532,6 +1589,133 @@
         document.getElementById('loadReportedSharesBtn').addEventListener('click', () => loadShares('reported'));
         document.getElementById('loadAllSharesBtn').addEventListener('click', () => loadShares('all'));
 
+        // === Consensus API keys ===
+        function apiKeysStatus(message, isError) {
+            const el = document.getElementById('apiKeysStatus');
+            el.textContent = message || '';
+            el.className = isError ? 'error' : 'success';
+        }
+
+        function clearIssuedApiKey() {
+            const panel = document.getElementById('issuedApiKeyPanel');
+            const input = document.getElementById('issuedApiKeyValue');
+            input.value = '';
+            panel.hidden = true;
+        }
+
+        async function copyIssuedApiKey() {
+            const input = document.getElementById('issuedApiKeyValue');
+            if (!input.value) return;
+            try {
+                await navigator.clipboard.writeText(input.value);
+            } catch (err) {
+                input.focus();
+                input.select();
+                document.execCommand('copy');
+            }
+            apiKeysStatus('API key copied. Store it in your secret manager now.', false);
+        }
+
+        function renderApiKeys(keys) {
+            const container = document.getElementById('apiKeysContainer');
+            container.innerHTML = '';
+            if (!keys.length) {
+                container.textContent = 'No API keys found.';
+                return;
+            }
+            keys.forEach(key => {
+                const row = document.createElement('div');
+                row.className = 'api-key-row';
+
+                const main = document.createElement('div');
+                main.className = 'api-key-main';
+                const name = document.createElement('div');
+                name.className = 'api-key-name';
+                const label = document.createElement('span');
+                label.textContent = key.label || 'Unlabelled key';
+                const prefix = document.createElement('span');
+                prefix.className = 'api-key-prefix';
+                prefix.textContent = `${key.prefix || 'cns_live_'}...`;
+                name.append(label, prefix, chip('', key.status || 'unknown'));
+
+                const metadata = document.createElement('div');
+                metadata.className = 'api-key-meta';
+                metadata.textContent = [
+                    `UID: ${key.uid || 'unknown'}`,
+                    `Created: ${formatAdminTime(key.created_at)}`,
+                    `Last used: ${formatAdminTime(key.last_used_at)}`,
+                    `Key ID: ${key.key_id || 'unknown'}`
+                ].join(' | ');
+                main.append(name, metadata);
+
+                const actions = document.createElement('div');
+                actions.className = 'api-key-actions';
+                if (key.status === 'active') {
+                    const revoke = actionBtn('Revoke', () => revokeApiKey(key));
+                    revoke.className = 'admin-btn secondary';
+                    actions.appendChild(revoke);
+                }
+                row.append(main, actions);
+                container.appendChild(row);
+            });
+        }
+
+        async function loadApiKeys() {
+            const filter = document.getElementById('apiKeyFilterUid').value.trim();
+            apiKeysStatus('Loading...', false);
+            try {
+                const path = '/api/admin/api-keys' + (filter ? `?uid=${encodeURIComponent(filter)}` : '');
+                const data = await shareAdminRequest('GET', path);
+                renderApiKeys(data.keys || []);
+                apiKeysStatus('', false);
+            } catch (err) {
+                apiKeysStatus(err.message, true);
+            }
+        }
+
+        async function issueApiKey() {
+            const uid = document.getElementById('apiKeyUid').value.trim();
+            const label = document.getElementById('apiKeyLabel').value.trim();
+            if (!uid) {
+                apiKeysStatus('Enter the Firebase UID that should own this key.', true);
+                document.getElementById('apiKeyUid').focus();
+                return;
+            }
+            const button = document.getElementById('issueApiKeyBtn');
+            button.disabled = true;
+            clearIssuedApiKey();
+            apiKeysStatus('Issuing key...', false);
+            try {
+                const key = await shareAdminRequest('POST', '/api/admin/api-keys', { uid, label });
+                document.getElementById('issuedApiKeyValue').value = key.api_key;
+                document.getElementById('issuedApiKeyPanel').hidden = false;
+                document.getElementById('apiKeyFilterUid').value = uid;
+                apiKeysStatus('API key issued. This is the only time the full key is available.', false);
+                await loadApiKeys();
+            } catch (err) {
+                apiKeysStatus(err.message, true);
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        async function revokeApiKey(key) {
+            if (!confirm(`Revoke API key "${key.label || key.prefix}"? Existing clients will stop authenticating immediately.`)) return;
+            apiKeysStatus('Revoking key...', false);
+            try {
+                await shareAdminRequest('DELETE', `/api/admin/api-keys/${encodeURIComponent(key.key_id)}`);
+                apiKeysStatus('API key revoked.', false);
+                await loadApiKeys();
+            } catch (err) {
+                apiKeysStatus(err.message, true);
+            }
+        }
+
+        document.getElementById('issueApiKeyBtn').addEventListener('click', issueApiKey);
+        document.getElementById('reloadApiKeysBtn').addEventListener('click', loadApiKeys);
+        document.getElementById('copyIssuedApiKeyBtn').addEventListener('click', copyIssuedApiKey);
+        document.getElementById('dismissIssuedApiKeyBtn').addEventListener('click', clearIssuedApiKey);
+
         // === Consensus Watch diagnostics ===
         function watchesStatus(message, isError) {
             const el = document.getElementById('watchesStatus');
@@ -1631,6 +1815,7 @@
             if (user) {
                 const idToken = await user.getIdToken();
                 fetchModels(idToken);
+                loadApiKeys();
                 loadShares('reported');
                 loadAdminWatches();
             } else {
@@ -1661,6 +1846,7 @@
             <button type="button" data-tab="models" role="tab">Models</button>
             <button type="button" data-tab="consensus" role="tab">Consensus &amp; Deep Think</button>
             <button type="button" data-tab="limits" role="tab">Limits</button>
+            <button type="button" data-tab="api" role="tab">API</button>
             <button type="button" data-tab="shares" role="tab">Shared Pages</button>
             <button type="button" data-tab="watches" role="tab">Consensus Watch</button>
         </nav>
@@ -1758,6 +1944,50 @@
             </p>
             <div id="limitsContainer" class="limits-grid">
                 <!-- Populated by JavaScript -->
+            </div>
+        </section>
+
+        <section id="tab-api" class="admin-tab-panel" role="tabpanel" hidden>
+            <div class="admin-section">
+                <h3>Consensus API keys</h3>
+                <p class="section-hint">
+                    Issue a key for an existing Firebase user. The key inherits that UID's tier and
+                    run limits. Only a SHA-256 hash is stored; the full key is shown exactly once and
+                    should be copied directly into a secret manager.
+                </p>
+                <div class="api-key-form">
+                    <div class="api-key-field">
+                        <label for="apiKeyUid">Owner Firebase UID</label>
+                        <input id="apiKeyUid" type="text" maxlength="128" autocomplete="off" spellcheck="false" placeholder="Firebase UID">
+                    </div>
+                    <div class="api-key-field">
+                        <label for="apiKeyLabel">Label</label>
+                        <input id="apiKeyLabel" type="text" maxlength="80" autocomplete="off" placeholder="Production, CI, local development...">
+                    </div>
+                    <button id="issueApiKeyBtn" type="button" class="admin-btn">Issue API key</button>
+                </div>
+
+                <div id="issuedApiKeyPanel" class="api-key-secret" role="region" aria-live="polite" hidden>
+                    <strong>Copy this key now</strong>
+                    <p>It cannot be retrieved again. Dismissing this notice removes the plaintext key from the page.</p>
+                    <div class="api-key-secret-row">
+                        <input id="issuedApiKeyValue" type="text" readonly autocomplete="off" spellcheck="false" aria-label="New API key">
+                        <button id="copyIssuedApiKeyBtn" type="button" class="admin-btn">Copy</button>
+                        <button id="dismissIssuedApiKeyBtn" type="button" class="admin-btn secondary">Dismiss</button>
+                    </div>
+                </div>
+
+                <div class="api-key-toolbar">
+                    <div class="api-key-field">
+                        <label for="apiKeyFilterUid">Filter by owner UID</label>
+                        <input id="apiKeyFilterUid" type="text" maxlength="128" autocomplete="off" spellcheck="false" placeholder="Leave empty for all keys">
+                    </div>
+                    <button id="reloadApiKeysBtn" type="button" class="admin-btn secondary">Reload keys</button>
+                    <span id="apiKeysStatus" role="status" style="font-size: 0.85em;"></span>
+                </div>
+                <div id="apiKeysContainer">
+                    <!-- Populated by JavaScript -->
+                </div>
             </div>
         </section>
 

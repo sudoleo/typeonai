@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from firebase_admin import auth
 from fastapi import APIRouter, Request, Body, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.security import extract_id_token, verify_user_token, is_user_admin, db_firestore
 import app.core.config as cfg
@@ -9,8 +12,20 @@ from app.core.config import apply_limits, get_limits_config, load_models_from_db
 from app.services import share_snapshots as snapshots
 from app.services import mailer, watch_scheduler, watch_service
 from app.services.share_snapshots import ShareError
+from app.services.api_key_repository import (
+    ApiKeyNotFound,
+    FirestoreApiKeyRepository,
+)
 
 router = APIRouter()
+api_key_repository = FirestoreApiKeyRepository(db_firestore)
+
+
+class AdminIssueApiKeyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    uid: str = Field(min_length=1, max_length=128)
+    label: str = Field(default="", max_length=80)
 
 
 def _require_admin(request, data):
@@ -27,6 +42,47 @@ def _require_admin(request, data):
 
 
 _SHARE_ERROR_STATUS = {"not_found": 404, "bad_request": 400}
+
+
+@router.post("/api/admin/api-keys", status_code=201)
+def admin_issue_api_key(
+    request: Request, data: AdminIssueApiKeyRequest = Body(...)
+):
+    """Issue a user-bound key. The plaintext secret is returned exactly once."""
+    admin_uid = _require_admin(request, {})
+    try:
+        auth.get_user(data.uid.strip())
+        return api_key_repository.issue(
+            data.uid.strip(), label=data.label.strip(), created_by=admin_uid
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except Exception:
+        logging.exception("admin_issue_api_key failed")
+        raise HTTPException(status_code=500, detail="Failed to issue API key")
+
+
+@router.get("/api/admin/api-keys")
+def admin_list_api_keys(request: Request, uid: str | None = None):
+    _require_admin(request, {})
+    try:
+        return {"keys": api_key_repository.list(uid=uid.strip() if uid else None)}
+    except Exception:
+        logging.exception("admin_list_api_keys failed")
+        raise HTTPException(status_code=500, detail="Failed to list API keys")
+
+
+@router.delete("/api/admin/api-keys/{key_id}")
+def admin_revoke_api_key(request: Request, key_id: str):
+    _require_admin(request, {})
+    try:
+        key = api_key_repository.revoke(key_id)
+    except ApiKeyNotFound:
+        raise HTTPException(status_code=404, detail="API key not found") from None
+    except Exception:
+        logging.exception("admin_revoke_api_key failed")
+        raise HTTPException(status_code=500, detail="Failed to revoke API key")
+    return {"key_id": key_id, "status": key["status"]}
 
 
 @router.get("/api/admin/watches")

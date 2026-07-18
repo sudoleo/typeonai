@@ -20,8 +20,9 @@ from app.core.security import CustomSecurityMiddleware
 from app.core.rate_limit import limiter
 
 # Import routers
-from app.api.routers import auth, users, bookmarks, chat, pages, admin, share, watch
+from app.api.routers import auth, users, bookmarks, chat, pages, admin, share, watch, api_v1
 from app.core.config import load_models_from_db
+from app.services.api_consensus_runner import recover_persisted_runs
 from app.services.share_snapshots import cleanup_expired_pending, cleanup_revoked_shares
 from app.services.watch_scheduler import watch_scheduler_loop
 
@@ -41,6 +42,10 @@ async def lifespan(app: FastAPI):
         cleanup_revoked_shares()
     except Exception:
         logging.exception("cleanup_revoked_shares failed on startup")
+    # Reservierte Consensus-API-Runs haben noch keinen Provider gestartet und
+    # koennen nach einem Prozessneustart sicher erneut eingeplant werden. Die
+    # reserved->running-Transaktion garantiert dabei genau einen Gewinner.
+    recover_persisted_runs()
     watch_task = asyncio.create_task(watch_scheduler_loop(), name="consensus-watch-scheduler")
     try:
         yield
@@ -51,7 +56,12 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="consens.io API",
+    version="1.0.0",
+    description="Asynchronous, user-bound Consensus runs.",
+    lifespan=lifespan,
+)
 
 # Add Custom Security Middleware
 app.add_middleware(CustomSecurityMiddleware)
@@ -83,3 +93,4 @@ app.include_router(pages.router)
 app.include_router(admin.router)
 app.include_router(share.router)
 app.include_router(watch.router)
+app.include_router(api_v1.router)

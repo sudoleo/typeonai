@@ -37,8 +37,9 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 **`main.py`** ist der App-Entry: lädt `.env`, setzt `GOOGLE_APPLICATION_CREDENTIALS`,
 fügt `CustomSecurityMiddleware` (CSP etc.) + slowapi-Limiter hinzu, mountet
 `/static`, registriert globale Exception-Handler und inkludiert alle Router.
-Im `lifespan`-Startup: `load_models_from_db()` + Share-Cleanups (siehe §7) und
-ein cancellable asyncio-Task für den 30-Minuten-Consensus-Watch-Tick.
+Im `lifespan`-Startup: `load_models_from_db()` + Share-Cleanups (siehe §7),
+Recovery noch nicht gestarteter Consensus-API-Runs und ein cancellable
+asyncio-Task für den 30-Minuten-Consensus-Watch-Tick.
 
 Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 
@@ -51,7 +52,8 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` zum sicheren Wiederherstellen eines Share-/Watch-fähigen Pending-Snapshots aus einem eigenen Consensus-Bookmark. Beide Save-Endpunkte liefern den vollständig zusammengeführten Bookmark-Datensatz zurück, damit der Client ihn ohne Reload aktualisiert. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. kompakter History je Watch), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH) sowie öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
-| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST), `/api/admin/watches` (Diagnose-Liste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
+| `api_v1.py` | Nutzergebundene asynchrone Consensus-API: `POST /api/v1/consensus/runs` und `GET /api/v1/consensus/runs/{run_id}`. Auth über `X-API-Key`, Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
+| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (Diagnose-Liste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 **Zentrale Templates** (`templates/`, gerendert mit `Jinja2Templates`):
 `landing.html` (Marketing), `index.html` (die App — Haupt-Markup + Script-Tags),
@@ -394,6 +396,39 @@ Whitelist für Bild-MIME-Typen.
   Lauf neu und wählen danach `WATCH_MODELS_BY_TIER` (ein Upgrade wirkt deshalb
   auch auf bereits bestehende Watches nach Ablauf des Tier-Cache).
 
+### Nutzergebundene Consensus-API (v1)
+- Admins stellen über `POST /api/admin/api-keys` einen Schlüssel für eine
+  existierende Firebase-UID aus. Nur die einmalige Antwort enthält den
+  Klartextschlüssel (`cns_live_…`); Firestore speichert ausschließlich dessen
+  SHA-256-Hash als Dokument-ID. Liste und Widerruf laufen über
+  `GET/DELETE /api/admin/api-keys`.
+- `POST /api/v1/consensus/runs` akzeptiert ausschließlich `question` und
+  `deep_think`; unbekannte Felder werden abgelehnt. Der Server wählt die sechs
+  Antwortmodelle aus dem konfigurierten Balanced-Preset, die reguläre
+  Consensus-Engine aus demselben Preset und für Deep Think stattdessen
+  `DEEP_THINK_CONSENSUS_MODEL`. Kosten, Limits, Modelle oder Modellanzahl sind
+  keine Request-Felder.
+- UID + gehashter `Idempotency-Key` zeigen auf genau einen persistenten Run;
+  derselbe Key mit anderem Request ergibt 409. Der API-State folgt
+  `accepted → reserved → running → succeeded|failed`. Der transaktionale
+  `reserved→running`-Claim ist die einzige Berechtigung zum Providerstart.
+  Doppelte HTTP-Requests/Worker können deshalb weder doppelt konsumieren noch
+  den Provider-Fan-out doppelt starten.
+- Die Usage-Reservierung nutzt unverändert `FirestoreUsageRepository`: ein
+  vollständiger Run konsumiert beim Übergang zu `running` genau eine Total-
+  Einheit; Deep Think zusätzlich genau eine Deep-Think-Einheit. Fehler vor
+  Providerstart releasen, Fehler nach Providerstart bleiben konsumiert.
+  Provider- und Engine-Aufrufe liegen immer außerhalb aller Transaktionen.
+- `api_consensus_runner.py` orchestriert parallel die bestehenden Provider-
+  Funktionen und danach unverändert `query_consensus` + `query_differences`;
+  es gibt keine zweite Consensus-Engine. `GET /api/v1/consensus/runs/{run_id}`
+  liefert nur eigene Runs und nach Erfolg das persistierte Ergebnis. Reservierte
+  Runs werden beim Startup sicher neu eingeplant; laufende Runs werden nie
+  wiederholt und nach abgelaufenem Lease als `worker_interrupted` beendet.
+- Der maschinenlesbare Vertrag kommt aus den typisierten FastAPI-Routen unter
+  `/openapi.json` (Security-Scheme `ConsensusApiKey`, Header `X-API-Key` und
+  Pflichtheader `Idempotency-Key`).
+
 ### Sharing
 - `/consensus` legt ein `pending_results`-Dokument an → `result_id`.
 - Consensus-Bookmarks speichern diese ID mit, solange sie gültig ist. Beim
@@ -428,6 +463,7 @@ app/core/
   rate_limit.py              slowapi-Limiter (Client-IP hinter Render-Proxy via XFF)
   state.py                   Kurzlebiger In-Memory-Feedback-Cooldown
 app/api/routers/             siehe §2
+  api_v1.py                  API-Key-authentifizierte POST/GET-Consensus-Runs + OpenAPI-Modelle
 app/services/llm/
   base.py                    System-Prompt, Wortzählung, validate_model
   engines.py                 Provider-Requests (build_provider_payload, query_*)
@@ -438,6 +474,9 @@ app/services/llm/
   attachments.py             Attachment-Validierung/Aufbereitung
 app/services/
   usage_repository.py        Firestore-Usage fuer logische Runs (reserve/consume/release/snapshot)
+  api_key_repository.py      SHA-256-gehashte, UID-gebundene API-Schluessel
+  api_run_repository.py      Idempotenz + persistente API-Run-State-Machine
+  api_consensus_runner.py    Asynchroner At-most-once-Orchestrator auf bestehenden Engines
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
   opinion_map.py             Datenminimierte, mehrdimensionale Provider-Positionen + Direction-Shift-Berechnung
@@ -479,6 +518,17 @@ Wichtige Verträge im Backend:
     kann nicht für einen anderen Run-Typ wiederverwendet werden. Provider-/LLM-
     Aufrufe finden immer außerhalb der Transaktion zwischen Reservierung und
     Abschluss statt. Beim Account-Löschen werden beide Subcollections entfernt.
+  - `api_consensus_idempotency/{sha256(idempotency_key)}` — Mapping von UID +
+    gehashtem HTTP-Idempotency-Key auf `run_id` und kanonischen `request_hash`;
+    verhindert auch bei parallelen POSTs doppelte Runs. Kein Klartext-Key.
+- `api_consensus_keys/{sha256(api_key)}` — admin-ausgegebene API-Schlüssel mit
+  `uid`, nicht-geheimem Präfix/Label, `status=active|revoked` und Audit-
+  Zeitstempeln. Der Klartextschlüssel wird nie gespeichert.
+- `api_consensus_runs/{run_id}` — UID-gebundener v1-API-Run mit serverseitig
+  eingefrorenem Request/Modellplan, `idempotency_hash`, Status und Status-
+  Zeitstempeln, einstündigem Running-Lease sowie terminal `result` oder
+  sanitisiertem `error`. Erlaubte Hauptfolge:
+  `accepted → reserved → running → succeeded|failed`.
 - `app_config/models` — von `load_models_from_db()` gelesen/erzeugt: erlaubte
   Modelle pro Provider, `premium`, `consensus`, `preset_models`, `deep_think_model`,
   `judge_models`, `limits`.
@@ -581,10 +631,14 @@ enthält getrennte `free`-/`pro`-Mappings Provider→Modell; je Tier sind mindes
 Provider nötig, Free wird serverseitig auf Nicht-Premium/Nicht-Early begrenzt.
 `normalize_models_document` erhält die Reihenfolge (kein `sorted` mehr) und validiert
 `defaults`, `preset_models`, `watch_models` + `deep_think_model`.
-Das Admin-UI (Tabs: Models / Consensus & Deep Think / Limits / Shared Pages) bekommt via
+Das Admin-UI (Tabs: Models / Consensus & Deep Think / Limits / API / Shared Pages /
+Consensus Watch) bekommt via
 `GET /api/admin/models` ein `meta`-Objekt (Alias-Auflösung, server-erzwungene Modelle je
 Provider, Early-Set, Labels), mit dem Required-/Early-Badges gerendert werden — die
-ensure/drop-Logik des Servers ist damit im UI sichtbar statt implizit. Ein separater
+ensure/drop-Logik des Servers ist damit im UI sichtbar statt implizit. Der
+„API“-Tab gibt Schlüssel für eine bestehende Firebase-UID aus, zeigt den
+Klartextschlüssel genau einmal zum Kopieren und listet/widerruft danach nur
+Hash-ID, Präfix, Label, UID, Status und Audit-Zeitstempel. Der separate
 „Consensus Watch“-Tab zeigt die Free-/Pro-Watch-Modellmatrix, operative Watch-Metadaten,
 SMTP-Konfigurationsstatus und admin-only Aktionen für eine echte Testmail sowie den sofortigen Start einer aktiven Watch;
 der eigentliche Lauf bleibt im normalen Lease-/Budget-/Scheduler-Pfad. E2E-Zugriff auf
@@ -600,8 +654,8 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **529 passed** (2026-07-18; inklusive
-  run-basierter Usage-Repository-Tests).
+  Letzte bekannte Baseline: **544 passed** (2026-07-18; inklusive
+  run-basierter Usage- sowie Consensus-API-Repository-/Vertragstests).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, kompakte Antwort→Consensus-
