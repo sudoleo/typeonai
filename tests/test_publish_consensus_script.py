@@ -71,6 +71,7 @@ def test_main_runs_publish_and_index_flow_without_topic_call(monkeypatch, capsys
     assert '"indexing_status": "indexed"' in output
     run_call = next(call for call in calls if call[1].endswith("/api/v1/consensus/runs"))
     assert run_call[2]["Idempotency-Key"] == "scheduled-test"
+    assert run_call[2]["X-Consensus-Publisher"] == "true"
     assert any(call[1].endswith("/watch") for call in calls)
     assert calls[-1][3] == {"indexed": True}
 

@@ -122,6 +122,7 @@ class ApiPublisherConfigResponse(BaseModel):
     watch_timezone: str
     watch_interval: Literal["weekly"]
     watch_model_tier: Literal["free"]
+    excluded_providers: list[Literal["deepseek"]]
 
 
 def authenticate_api_identity(api_key: Optional[str], required_scope: str = "consensus:run"):
@@ -223,9 +224,12 @@ def create_consensus_run(
     response: Response,
     api_key: Optional[str] = Security(api_key_header),
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
+    publisher_mode: bool = Header(False, alias="X-Consensus-Publisher"),
 ):
     """Accept and reserve one logical run; provider execution is asynchronous."""
     identity = authenticate_api_identity(api_key)
+    if publisher_mode:
+        _require_api_admin(identity)
     enforce_uid_rate_limit(identity.uid, "create", 10)
     if not idempotency_key.strip():
         raise HTTPException(status_code=400, detail="Missing Idempotency-Key header")
@@ -234,6 +238,8 @@ def create_consensus_run(
     if not question:
         raise HTTPException(status_code=400, detail="Question must not be empty")
     request_payload = {"question": question, "deep_think": payload.deep_think}
+    if publisher_mode:
+        request_payload["publisher_mode"] = True
     try:
         existing = api_run_repository.get_by_idempotency(
             uid=identity.uid,
@@ -270,7 +276,9 @@ def create_consensus_run(
             raise HTTPException(status_code=400, detail=f"Input exceeds word limit of {max_words}")
         try:
             model_plan = build_server_model_plan(
-                deep_think=payload.deep_think, is_pro=is_pro
+                deep_think=payload.deep_think,
+                is_pro=is_pro,
+                excluded_providers=("deepseek",) if publisher_mode else (),
             )
         except HTTPException:
             raise
@@ -519,6 +527,7 @@ def create_api_publisher_watch(
             model_tier="free",
             return_existing=True,
             bypass_active_limit=True,
+            excluded_providers=("deepseek",),
         )
     except HTTPException:
         raise

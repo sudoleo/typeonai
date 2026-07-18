@@ -116,4 +116,5 @@ def public_config(config: dict) -> dict:
         **normalize_config(config),
         "watch_interval": "weekly",
         "watch_model_tier": "free",
+        "excluded_providers": ["deepseek"],
     }

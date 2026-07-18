@@ -1648,7 +1648,7 @@
                 document.getElementById('publisherWatchTime').value = config.watch_time || '09:00';
                 document.getElementById('publisherWatchTimezone').value = config.watch_timezone || 'Europe/Berlin';
                 document.getElementById('publisherWatchProfile').textContent =
-                    `${config.watch_interval || 'weekly'} · ${config.watch_model_tier || 'free'} Watch providers`;
+                    `${config.watch_interval || 'weekly'} · ${config.watch_model_tier || 'free'} Watch providers · DeepSeek excluded`;
                 syncPublisherWatchFields();
                 publisherStatus('', false);
             } catch (err) {
@@ -2054,13 +2054,14 @@
                     checked for a short, single Google search intent before a Consensus run starts.
                     Every generated Watch is weekly and permanently pinned to the configured
                     <strong>Free Watch providers</strong>, regardless of the owner account tier.
+                    DeepSeek is excluded from both the initial Publisher run and every Watch rerun.
                 </p>
                 <div class="publisher-config-grid">
                     <div class="publisher-config-options wide">
                         <label><input id="publisherEnabled" type="checkbox"> Publisher enabled</label>
                         <label><input id="publisherAutoIndex" type="checkbox"> Index eligible pages automatically</label>
                         <label><input id="publisherWeeklyWatch" type="checkbox"> Create weekly Watch</label>
-                        <span id="publisherWatchProfile" class="section-hint">weekly · free Watch providers</span>
+                        <span id="publisherWatchProfile" class="section-hint">weekly · free Watch providers · DeepSeek excluded</span>
                     </div>
                     <div class="api-key-field wide">
                         <label for="publisherTopicBrief">Topic brief</label>
@@ -2098,8 +2099,9 @@
                 <h3>Consensus API keys</h3>
                 <p class="section-hint">
                     Issue a key for an active, e-mail-verified Firebase user. The key inherits that
-                    UID's tier and run limits. Every v1 run uses all six providers, including mandatory
-                    DeepSeek processing in China, and run content expires after 30 days.
+                    UID's tier and run limits. Normal v1 runs use all six providers, including mandatory
+                    DeepSeek processing in China; Scheduled Publisher runs explicitly exclude DeepSeek.
+                    Run content expires after 30 days.
                     Only a SHA-256 hash is stored; the full key is shown exactly once and should be copied directly
                     into a secret manager.
                 </p>

@@ -54,7 +54,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` zum sicheren Wiederherstellen eines Share-/Watch-fähigen Pending-Snapshots aus einem eigenen Consensus-Bookmark. Beide Save-Endpunkte liefern den vollständig zusammengeführten Bookmark-Datensatz zurück, damit der Client ihn ohne Reload aktualisiert. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. kompakter History je Watch), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH) sowie öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
-| `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config` und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
+| `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` ohne DeepSeek und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil und DeepSeek-Ausschluss. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 | `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (Diagnose-Liste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 **Zentrale Templates** (`templates/`, gerendert mit `Jinja2Templates`):
@@ -417,9 +417,13 @@ Whitelist für Bild-MIME-Typen.
   Consensus-Engine aus demselben Preset und für Deep Think stattdessen
   `DEEP_THINK_CONSENSUS_MODEL`. Kosten, Limits, Modelle oder Modellanzahl sind
   keine Request-Felder.
-- API v1 verwendet bewusst immer alle sechs Provider einschließlich DeepSeek;
-  für diesen Vertrag gibt es keinen per-Request Opt-out. Privacy/Terms weisen
-  auf die verpflichtende Verarbeitung durch DeepSeek in China hin.
+- Reguläre API-v1-Runs verwenden bewusst immer alle sechs Provider einschließlich
+  DeepSeek; für API-Kunden gibt es keinen Provider-Opt-out. Nur der admin-only
+  Scheduled Publisher setzt den typisierten Header `X-Consensus-Publisher: true`:
+  Sein persistierter Modellplan und die Ausführung entfernen DeepSeek aus
+  Antwort-Fan-out, Consensus-Engine/Fallback und Differences-Judges. Der Modus
+  wird Teil des Idempotenz-Requests und kann daher nicht mit einem regulären Run
+  unter demselben Key kollidieren. Privacy/Terms beschreiben diese Ausnahme.
 - UID + gehashter `Idempotency-Key` zeigen auf genau einen persistenten Run;
   derselbe Key mit anderem Request ergibt 409. Der API-State folgt
   `accepted → reserved → running → succeeded|failed`. Der transaktionale
@@ -463,7 +467,10 @@ Whitelist für Bild-MIME-Typen.
   das Skript die Admin-Konfiguration aus Firestore über API v1; deaktivierte
   Publisher enden erfolgreich ohne LLM-Call. `.github/workflows/publish-consensus.yml`
   startet ihn wöchentlich oder manuell; Secrets bleiben ausschließlich in
-  GitHub Actions.
+  GitHub Actions. Sowohl der initiale Publisher-Run als auch seine Watch-Runs
+  schließen DeepSeek explizit aus; beim Watch wird dazu
+  `excluded_providers=[deepseek]` persistent gespeichert und der DeepSeek-Key
+  auch für Engine-/Judge-Fallbacks entfernt.
 
 ### Sharing
 - `/consensus` legt ein `pending_results`-Dokument an → `result_id`.
@@ -598,8 +605,8 @@ Wichtige Verträge im Backend:
 - `app_config/scheduled_consensus_publisher` — Admin-Steuerung für den GitHub-
   Publisher: `enabled`, Themen-Brief, automatische Indexfreigabe sowie
   Aktivierung, lokaler Wochentag, Uhrzeit und IANA-Zeitzone des Weekly-Watches.
-  Intervall (`weekly`) und Modellprofil (`free`) sind absichtlich nicht
-  konfigurierbar und werden serverseitig erzwungen.
+  Intervall (`weekly`), Modellprofil (`free`) und der DeepSeek-Ausschluss sind
+  absichtlich nicht konfigurierbar und werden serverseitig erzwungen.
 - `pending_results` — kurzlebige Consensus-Ergebnisse fürs Sharing (TTL/Cleanup).
 - `shares` — unveränderliche Snapshots (Slug, `visibility=public|private`,
   `indexed`, `status`, `owner_uid`, `question_hash`, optional interne
@@ -609,6 +616,7 @@ Wichtige Verträge im Backend:
   Intervall, optionaler `run_weekday` für Weekly sowie lokale `run_time`
   (`HH:MM`) + IANA-`timezone`,
   optional internes `model_tier=free` für Publisher-Watches,
+  optional interne `excluded_providers` (beim Publisher fest `deepseek`),
   `email_mode` = `changes_only|condition|every_run`, private
   `condition`, `last_condition_status`, Status, nächste Ausführung,
   Lease/Fehlerzähler); keine IP-/User-Agent-Daten. Conditions werden nie in

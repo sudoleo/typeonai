@@ -201,16 +201,24 @@ class WatchCrudTests(unittest.TestCase):
     def test_publisher_watch_is_free_pinned_and_idempotent(self):
         created = watch_service.create_watch(
             "u1", share_id=self.share_id, interval="weekly", is_pro=True,
-            model_tier="free", return_existing=True, db=self.db,
+            model_tier="free", return_existing=True,
+            excluded_providers=("deepseek",), db=self.db,
         )
         repeated = watch_service.create_watch(
             "u1", share_id=self.share_id, interval="weekly", is_pro=True,
-            model_tier="free", return_existing=True, db=self.db,
+            model_tier="free", return_existing=True,
+            excluded_providers=("deepseek",), db=self.db,
         )
 
         self.assertEqual(created["id"], repeated["id"])
         self.assertEqual(created["model_tier"], "free")
+        self.assertEqual(created["excluded_providers"], ["deepseek"])
         self.assertEqual(self.db.stores["watches"][created["id"]]["model_tier"], "free")
+        self.db.stores["watches"][created["id"]].pop("excluded_providers")
+        self.assertEqual(
+            watch_service.list_watches("u1", db=self.db)[0]["excluded_providers"],
+            ["deepseek"],
+        )
 
     def test_admin_can_list_and_queue_active_watch(self):
         created = watch_service.create_watch(
@@ -495,6 +503,21 @@ class SchedulerSafetyTests(unittest.TestCase):
         self.assertEqual(dict(selected), configured)
         self.assertEqual(len(selected), 4)
 
+    def test_publisher_watch_excludes_deepseek_even_if_configured_for_free(self):
+        configured = {
+            "openai": cfg.DEFAULT_OPENAI_MODEL,
+            "mistral": cfg.DEFAULT_MISTRAL_MODEL,
+            "deepseek": cfg.DEFAULT_DEEPSEEK_MODEL,
+        }
+        keys = {label: "key" for label in watch_scheduler.PROVIDER_LABELS.values()}
+        with patch.object(cfg, "get_watch_models", return_value=configured):
+            selected = watch_scheduler._selected_models(
+                keys, False, excluded_providers=("deepseek",)
+            )
+
+        self.assertNotIn("deepseek", dict(selected))
+        self.assertEqual(set(dict(selected)), {"openai", "mistral"})
+
 
 class MailerTests(unittest.TestCase):
     def test_change_mail_is_multipart_with_unsubscribe(self):
@@ -745,6 +768,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
         claimed = {
             "owner_uid": "u1", "share_id": "A" * 16, "interval": "weekly",
             "model_tier": "free", "email_mode": "changes_only",
+            "excluded_providers": ["deepseek"],
         }
         result = {
             "consensus": "New consensus", "agreement_score": 61,
@@ -764,6 +788,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             await watch_scheduler.run_watch_tick()
 
         self.assertFalse(execute.call_args.args[-1])
+        self.assertEqual(execute.call_args.kwargs["excluded_providers"], ["deepseek"])
 
 
 class WatchFrontendContractTests(unittest.TestCase):

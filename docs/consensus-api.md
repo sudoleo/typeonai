@@ -64,10 +64,15 @@ Modelle, Modellanzahl, Kosten und Limits werden ausschließlich serverseitig
 bestimmt. Derselbe Idempotency-Key mit identischem Request liefert denselben
 Run. Mit anderem Request folgt HTTP `409`.
 
-Consensus API v1 verwendet für jeden Run die feste serverseitige
+Reguläre Consensus-API-v1-Runs verwenden die feste serverseitige
 Sechs-Provider-Auswahl OpenAI, Mistral, Anthropic, Gemini, DeepSeek und Grok.
-DeepSeek ist in v1 verpflichtend und verarbeitet den Prompt in China; es gibt
-für diesen API-Vertrag keinen per-Request Opt-out.
+DeepSeek ist für API-Kunden verpflichtend und verarbeitet den Prompt in China;
+es gibt keinen allgemeinen per-Request Opt-out. Die einzige Ausnahme ist der
+interne, Admin-only Scheduled Publisher. Sein Skript setzt den typisierten
+Header `X-Consensus-Publisher: true`; der Server prüft erneut die Admin-Rolle
+und entfernt DeepSeek aus Antwortmodellen, Consensus-Engine/Fallbacks und
+Differences-Judges. Dieser Header ist kein Provider-Schalter für normale API-
+Kunden.
 
 ## Status/Ergebnis lesen
 
@@ -157,11 +162,12 @@ Suchindex bleibt Sache der jeweiligen Suchmaschine/Search Console.
 4. die Frage als kurze, einzelne Google-Suchintention prüfen (6–16 Wörter,
    höchstens 110 Zeichen, kein „As of …“, keine verschachtelte Trade-off-Frage)
    und bei Bedarf bis zu zweimal neu generieren,
-5. Consensus-Run starten, pollen und publizieren,
+5. Consensus-Run im Admin-only Publisher-Modus ohne DeepSeek starten, pollen
+   und publizieren,
 6. per `POST /api/v1/shares/{share_id}/watch` idempotent einen wöchentlichen
    Watch anlegen; dieser ist serverseitig dauerhaft auf die in
    `app_config/models.watch_models.free` konfigurierten Free Watch Provider
-   gepinnt,
+   gepinnt, wobei DeepSeek selbst dann explizit ausgeschlossen bleibt,
 7. den geeigneten Share abhängig von der Admin-Konfiguration direkt
    indexierbar schalten.
 
@@ -173,8 +179,9 @@ Die Admin-Steuerung liegt unter `/admin#api` und wird in Firestore als
 - automatische Indexfreigabe,
 - Weekly-Watch an/aus sowie Wochentag, lokale Uhrzeit und IANA-Zeitzone.
 
-Intervall und Provider-Tier des automatisch erzeugten Watches sind bewusst
-nicht editierbar: `weekly` und `free`. Die zugehörigen API-Routen sind Admin-
+Intervall, Provider-Tier und DeepSeek-Ausschluss des automatisch erzeugten
+Watches sind bewusst nicht editierbar: `weekly`, `free`, `exclude deepseek`.
+Die zugehörigen API-Routen sind Admin-
 only und benötigen einen Schlüssel mit `share:write`; die Indexfreigabe
 benötigt zusätzlich weiterhin `share:index`. Diese internen Publisher-Watches
 zählen nicht gegen das persönliche aktive Watch-Limit der Admin-UID, bleiben

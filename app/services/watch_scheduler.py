@@ -56,17 +56,21 @@ def _developer_keys() -> dict:
     return {PROVIDER_LABELS[p]: os.environ.get(env, "").strip() for p, env in PROVIDER_ENV.items()}
 
 
-def _selected_models(keys: dict, is_pro: bool) -> list[tuple[str, str]]:
+def _selected_models(keys: dict, is_pro: bool, excluded_providers=None) -> list[tuple[str, str]]:
     configured = cfg.get_watch_models(is_pro)
+    excluded = {
+        str(provider or "").strip().lower() for provider in (excluded_providers or ())
+    }
     if mock_llm_enabled():
         return [
             (provider, configured[provider])
-            for provider in PROVIDER_ORDER if configured.get(provider)
+            for provider in PROVIDER_ORDER
+            if provider not in excluded and configured.get(provider)
         ]
     adc_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
     return [
         (provider, configured[provider]) for provider in PROVIDER_ORDER
-        if configured.get(provider) and (
+        if provider not in excluded and configured.get(provider) and (
             keys.get(PROVIDER_LABELS[provider])
             or (provider == "gemini" and adc_path and os.path.isfile(adc_path))
         )
@@ -91,10 +95,17 @@ def _provider_answer(provider: str, model: str, question: str, keys: dict, is_pr
 
 
 def execute_watch(question: str, previous_consensus: str, condition: str = "",
-                  previous_opinion_map=None, is_pro: bool = False) -> dict:
+                  previous_opinion_map=None, is_pro: bool = False,
+                  excluded_providers=None) -> dict:
     """Run the configured tier models; never touches usage counters."""
     keys = _developer_keys()
-    selected_models = _selected_models(keys, is_pro)
+    excluded = {
+        str(provider or "").strip().lower() for provider in (excluded_providers or ())
+    }
+    for provider in excluded:
+        if provider in PROVIDER_LABELS:
+            keys[PROVIDER_LABELS[provider]] = ""
+    selected_models = _selected_models(keys, is_pro, excluded)
     if mock_llm_enabled():
         for provider, _model in selected_models:
             keys[PROVIDER_LABELS[provider]] = "mock"
@@ -328,6 +339,9 @@ async def run_watch_tick() -> int:
                 # Admin-configured Free Watch providers. All ordinary watches
                 # continue to follow the owner's live account tier.
                 is_pro = False if claimed.get("model_tier") == "free" else account_is_pro
+                excluded_providers = claimed.get("excluded_providers") or (
+                    ("deepseek",) if claimed.get("model_tier") == "free" else ()
+                )
                 try:
                     history = await asyncio.to_thread(
                         share_snapshots.list_watch_history, claimed["share_id"], max_items=1,
@@ -347,6 +361,7 @@ async def run_watch_tick() -> int:
                     claimed.get("condition") if claimed.get("email_mode") == "condition" else "",
                     previous_position_map,
                     is_pro,
+                    excluded_providers=excluded_providers,
                 )
                 mail_kind = notification_kind(claimed, result)
                 await asyncio.to_thread(

@@ -107,6 +107,10 @@ def test_openapi_contract_declares_api_key_and_idempotency_header():
         param for param in operation["parameters"] if param["name"] == "Idempotency-Key"
     )
     assert idempotency["required"] is True
+    publisher_header = next(
+        param for param in operation["parameters"] if param["name"] == "X-Consensus-Publisher"
+    )
+    assert publisher_header["required"] is False
     request_schema = operation["requestBody"]["content"]["application/json"]["schema"]
     assert request_schema["$ref"].endswith("/ConsensusRunRequest")
     run_path = schema["paths"]["/api/v1/consensus/runs/{run_id}"]
@@ -140,6 +144,7 @@ def test_admin_dashboard_exposes_safe_api_key_management_section():
     assert 'id="publisherEnabled"' in template
     assert 'id="publisherTopicBrief"' in template
     assert "Free Watch providers" in template
+    assert "DeepSeek is excluded from both" in template
     assert "'/api/admin/publisher-config'" in template
 
 
@@ -281,6 +286,64 @@ def test_post_returns_accepted_run_and_duplicate_run_id(monkeypatch):
     assert first.headers["cache-control"] == "private, no-store"
     assert first.headers["pragma"] == "no-cache"
     assert scheduled == ["a" * 32, "a" * 32]
+
+
+def test_admin_publisher_run_excludes_deepseek_from_persisted_plan(monkeypatch):
+    repo, _scheduled = setup_api(monkeypatch)
+    captured = {}
+    monkeypatch.setattr(api_v1, "is_user_admin", lambda uid: True)
+
+    def build_plan(**kwargs):
+        captured.update(kwargs)
+        return {
+            "providers": {"openai": "openai-model", "gemini": "gemini-model"},
+            "consensus_model": "OpenAI",
+            "excluded_providers": ["deepseek"],
+        }
+
+    monkeypatch.setattr(api_v1, "build_server_model_plan", build_plan)
+    client = TestClient(main.app)
+    response = client.post(
+        "/api/v1/consensus/runs",
+        headers={
+            "X-API-Key": "cns_test",
+            "Idempotency-Key": "publisher-no-deepseek",
+            "X-Consensus-Publisher": "true",
+        },
+        json={"question": "Which evidence should be compared?"},
+    )
+
+    assert response.status_code == 202
+    assert captured["excluded_providers"] == ("deepseek",)
+    assert repo.run["request"]["publisher_mode"] is True
+
+
+def test_publisher_mode_requires_admin(monkeypatch):
+    setup_api(monkeypatch)
+    monkeypatch.setattr(api_v1, "is_user_admin", lambda uid: False)
+    client = TestClient(main.app)
+
+    response = client.post(
+        "/api/v1/consensus/runs",
+        headers={
+            "X-API-Key": "cns_test",
+            "Idempotency-Key": "publisher-denied",
+            "X-Consensus-Publisher": "true",
+        },
+        json={"question": "Which evidence should be compared?"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_publisher_model_plan_has_no_deepseek_provider_or_engine():
+    plan = api_consensus_runner.build_server_model_plan(
+        deep_think=False, is_pro=True, excluded_providers=("deepseek",)
+    )
+
+    assert "deepseek" not in plan["providers"]
+    assert plan["excluded_providers"] == ["deepseek"]
+    assert api_consensus_runner._consensus_provider_label(plan["consensus_model"]) != "DeepSeek"
 
 
 def test_terminal_run_can_be_deleted_early(monkeypatch):
@@ -478,6 +541,60 @@ def test_runner_claim_prevents_duplicate_usage_and_provider_start(monkeypatch):
     assert usage_repo.consumed == 1
     assert provider_starts == ["a" * 32]
     assert run_repo.succeeded == 1
+
+
+def test_publisher_pipeline_removes_deepseek_provider_and_judge_key(monkeypatch):
+    provider_calls = []
+    consensus_keys = []
+    differences_keys = []
+    run = {
+        "request": {
+            "question": "Do data centers raise electricity prices?",
+            "deep_think": False,
+            "publisher_mode": True,
+        },
+        "is_pro_at_acceptance": True,
+        "model_plan": {
+            "providers": {
+                "openai": "openai-model",
+                "mistral": "mistral-model",
+                "deepseek": "deepseek-model",
+            },
+            "consensus_model": "OpenAI",
+        },
+    }
+    monkeypatch.setattr(
+        api_consensus_runner,
+        "resolve_developer_api_keys",
+        lambda: {"OpenAI": "o", "Mistral": "m", "DeepSeek": "d"},
+    )
+    monkeypatch.setattr(api_consensus_runner, "mock_llm_enabled", lambda: True)
+    monkeypatch.setattr(
+        api_consensus_runner,
+        "_provider_answer",
+        lambda provider, *args: provider_calls.append(provider) or f"{provider} answer",
+    )
+    monkeypatch.setattr(api_consensus_runner, "result_text", lambda value: value)
+    monkeypatch.setattr(api_consensus_runner, "result_sources", lambda value: [])
+
+    def consensus(*args, **kwargs):
+        consensus_keys.append(args[9])
+        return "Consensus"
+
+    def differences(*args, **kwargs):
+        differences_keys.append(args[7])
+        return "Differences", {"claims": []}
+
+    monkeypatch.setattr(api_consensus_runner, "query_consensus", consensus)
+    monkeypatch.setattr(api_consensus_runner, "query_differences", differences)
+    monkeypatch.setattr(api_consensus_runner, "compute_agreement_score", lambda data: {"score": 75})
+
+    result = api_consensus_runner.execute_consensus_pipeline(run)
+
+    assert provider_calls == ["openai", "mistral"]
+    assert consensus_keys[0]["DeepSeek"] is None
+    assert differences_keys[0]["DeepSeek"] is None
+    assert [item["provider"] for item in result["model_answers"]] == ["OpenAI", "Mistral"]
 
 
 def test_queued_run_rechecks_account_before_provider_start(monkeypatch):
@@ -757,12 +874,14 @@ def test_admin_api_configures_weekly_watch_with_free_provider_tier(monkeypatch):
     assert loaded.status_code == 200
     assert loaded.json()["watch_interval"] == "weekly"
     assert loaded.json()["watch_model_tier"] == "free"
+    assert loaded.json()["excluded_providers"] == ["deepseek"]
     assert watched.status_code == 200
     assert watched.json()["watch"]["model_tier"] == "free"
     assert captured["interval"] == "weekly"
     assert captured["model_tier"] == "free"
     assert captured["return_existing"] is True
     assert captured["bypass_active_limit"] is True
+    assert captured["excluded_providers"] == ("deepseek",)
     assert captured["run_weekday"] == "wednesday"
 
 

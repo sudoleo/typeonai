@@ -117,11 +117,11 @@
           work independently of this choice. See also the <a href="/terms">Terms of Use</a>.
         </p>
         <p>
-          <strong>Consensus API notice:</strong> unlike the interactive web app, Consensus API v1 uses a fixed
-          server-selected six-provider comparison for every run. DeepSeek is therefore a mandatory recipient of
-          every Consensus API prompt and cannot currently be deselected. Do not use this API for content that must
-          not be transferred to or processed in China. By submitting an API run, the API customer expressly requests
-          this six-provider routing, including transmission to DeepSeek.
+          <strong>Consensus API notice:</strong> unlike the interactive web app, regular Consensus API v1 runs use a
+          fixed server-selected six-provider comparison. DeepSeek is therefore a mandatory recipient of regular API
+          prompts and cannot be deselected by API customers. Do not use regular API runs for content that must not be
+          transferred to or processed in China. The admin-controlled Scheduled Publisher is the sole exception: it
+          operates on automatically selected public-interest topics and excludes DeepSeek from initial and Watch runs.
         </p>
         <p class="subtle">
           Necessary infrastructure providers, authentication services, and selected AI providers may still process
@@ -213,8 +213,9 @@
           <li><strong>AI model providers:</strong> the providers selected per query (see section 4).</li>
         </ul>
         <p>
-          Processing may occur outside the EU/EEA, in particular in the USA and, only if you select DeepSeek
-          models, in China. For transfers to the USA we rely on the EU-U.S. Data Privacy Framework and/or Standard
+          Processing may occur outside the EU/EEA, in particular in the USA and, if you select DeepSeek models or
+          submit a regular Consensus API run, in China. Scheduled Publisher runs exclude DeepSeek. For transfers to
+          the USA we rely on the EU-U.S. Data Privacy Framework and/or Standard
           Contractual Clauses; for other transfers on appropriate safeguards under Art. 44 et seq. GDPR or, for
           DeepSeek, on your request to route the query to that provider (Art. 49(1)(b) GDPR).
         </p>

@@ -282,6 +282,7 @@ def main() -> int:
     print(f"Selected question: {question}")
     headers = {
         "X-API-Key": api_key,
+        "X-Consensus-Publisher": "true",
         "Idempotency-Key": idempotency_key(question),
     }
     _status, run = http_json(

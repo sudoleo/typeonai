@@ -94,10 +94,35 @@ _scheduled_run_ids: set[str] = set()
 _retention_backfilled = False
 
 
-def build_server_model_plan(*, deep_think: bool, is_pro: bool) -> dict:
+def build_server_model_plan(*, deep_think: bool, is_pro: bool,
+                            excluded_providers=None) -> dict:
     preset = dict(cfg.CONSENSUS_PRESET_MODELS[cfg.DEFAULT_CONSENSUS_PRESET])
-    providers = {provider: preset[provider] for provider in PROVIDER_ORDER}
+    excluded = {
+        str(provider or "").strip().lower() for provider in (excluded_providers or ())
+    }
+    unknown = excluded.difference(PROVIDER_ORDER)
+    if unknown:
+        raise ValueError("Unknown excluded provider: " + ", ".join(sorted(unknown)))
+    providers = {
+        provider: preset[provider] for provider in PROVIDER_ORDER if provider not in excluded
+    }
+    if len(providers) < 2:
+        raise ValueError("At least two API providers are required")
     consensus_model = cfg.DEEP_THINK_CONSENSUS_MODEL if deep_think else preset["consensus"]
+    excluded_labels = {PROVIDER_LABELS[provider] for provider in excluded}
+    if _consensus_provider_label(consensus_model) in excluded_labels:
+        consensus_model = next(
+            (
+                PROVIDER_LABELS[provider]
+                for provider in PROVIDER_ORDER
+                if provider not in excluded
+                and PROVIDER_LABELS[provider] in cfg.ALLOWED_CONSENSUS_MODELS
+                and (is_pro or not cfg.is_premium_consensus_model(PROVIDER_LABELS[provider]))
+            ),
+            "",
+        )
+        if not consensus_model:
+            raise ValueError("No allowed Consensus engine remains after provider exclusions")
     is_early = bool(is_pro)
     for provider, model in providers.items():
         validate_model(
@@ -116,6 +141,7 @@ def build_server_model_plan(*, deep_think: bool, is_pro: bool) -> dict:
         "providers": providers,
         "consensus_model": consensus_model,
         "deep_think": bool(deep_think),
+        "excluded_providers": sorted(excluded),
     }
 
 
@@ -331,10 +357,16 @@ def execute_consensus_pipeline(run: dict) -> dict:
     deep_think = bool(request.get("deep_think"))
     is_pro = bool(run.get("is_pro_at_acceptance"))
     plan = run.get("model_plan") or {}
-    providers = plan.get("providers") or {}
+    providers = dict(plan.get("providers") or {})
+    if request.get("publisher_mode"):
+        providers.pop("deepseek", None)
     keys = resolve_developer_api_keys()
     if mock_llm_enabled():
         keys = {label: "mock" for label in PROVIDER_LABELS.values()}
+    if request.get("publisher_mode"):
+        # Provider exclusion also applies to consensus fallbacks and Differences
+        # judges, not just the answer fan-out (including MOCK_LLM runs).
+        keys["DeepSeek"] = None
 
     answers: dict[str, dict] = {}
     with ThreadPoolExecutor(max_workers=max(1, len(providers))) as pool:
