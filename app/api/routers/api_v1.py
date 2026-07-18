@@ -1,20 +1,30 @@
 """Versioned, API-key-authenticated asynchronous Consensus API."""
 
-from __future__ import annotations
-
 import logging
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Optional, Union
 
-from fastapi import APIRouter, Header, HTTPException, Response, Security, status
+from fastapi import APIRouter, Header, HTTPException, Request, Response, Security, status
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, ConfigDict, Field
 
 import app.core.config as cfg
 from app.core.security import db_firestore, is_user_pro
+from app.core.rate_limit import (
+    ApiUidRateLimitExceeded,
+    api_key_rate_key,
+    api_uid_limiter,
+    limiter,
+)
+from app.services.api_account_cleanup import (
+    ApiAccountInactive,
+    ApiAccountStatusUnavailable,
+    FirestoreApiAccountCleanup,
+)
 from app.services.api_consensus_runner import (
     api_run_repository,
     build_server_model_plan,
+    fail_expired_run,
     reserve_run,
     schedule_run,
     validate_server_credentials,
@@ -23,13 +33,18 @@ from app.services.api_key_repository import (
     FirestoreApiKeyRepository,
     InvalidApiKey,
 )
-from app.services.api_run_repository import ApiRunConflict, ApiRunNotFound
+from app.services.api_run_repository import (
+    ApiRunConflict,
+    ApiRunNotFound,
+    ApiRunTransitionError,
+)
 from app.services.llm.base import count_words
 from app.services.usage_repository import UsageLimitExceeded, UsageRunConflict
 
 
 router = APIRouter(prefix="/api/v1", tags=["Consensus API"])
 api_key_repository = FirestoreApiKeyRepository(db_firestore)
+api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
 api_key_header = APIKeyHeader(
     name="X-API-Key",
     scheme_name="ConsensusApiKey",
@@ -55,25 +70,52 @@ class ConsensusRunResponse(BaseModel):
     status: Literal["accepted", "reserved", "running", "succeeded", "failed"]
     deep_think: bool
     accepted_at: datetime
-    reserved_at: datetime | None = None
-    running_at: datetime | None = None
-    succeeded_at: datetime | None = None
-    failed_at: datetime | None = None
-    result: dict[str, Any] | None = None
-    error: RunError | None = None
+    expires_at: Optional[datetime] = None
+    reserved_at: Optional[datetime] = None
+    running_at: Optional[datetime] = None
+    succeeded_at: Optional[datetime] = None
+    failed_at: Optional[datetime] = None
+    result: Optional[dict[str, Any]] = None
+    error: Optional[RunError] = None
 
 
 class ApiErrorResponse(BaseModel):
-    error: str | dict[str, Any]
+    error: Union[str, dict[str, Any]]
 
 
-def require_api_identity(api_key: str | None = Security(api_key_header)):
+def authenticate_api_identity(api_key: Optional[str]):
     if not api_key:
         raise HTTPException(status_code=401, detail="Missing X-API-Key header")
     try:
-        return api_key_repository.authenticate(api_key)
+        identity = api_key_repository.authenticate(api_key)
     except InvalidApiKey:
         raise HTTPException(status_code=401, detail="Invalid API key") from None
+    ensure_api_account_active(identity.uid)
+    return identity
+
+
+def ensure_api_account_active(uid: str) -> None:
+    """Fail closed for locally blocked, deleted, disabled or unverified users."""
+    try:
+        api_account_cleanup.ensure_active(uid)
+    except ApiAccountInactive:
+        raise HTTPException(status_code=401, detail="Invalid API key") from None
+    except ApiAccountStatusUnavailable:
+        logging.exception("Consensus API account status is unavailable")
+        raise HTTPException(
+            status_code=503, detail="Consensus API authentication is temporarily unavailable"
+        ) from None
+
+
+def enforce_uid_rate_limit(uid: str, operation: str, limit: int) -> None:
+    try:
+        api_uid_limiter.check(uid, operation, limit)
+    except ApiUidRateLimitExceeded:
+        raise HTTPException(
+            status_code=429,
+            detail="Consensus API rate limit exceeded",
+            headers={"Retry-After": "60"},
+        ) from None
 
 
 @router.post(
@@ -90,13 +132,18 @@ def require_api_identity(api_key: str | None = Security(api_key_header)):
         503: {"model": ApiErrorResponse},
     },
 )
+@limiter.limit("30/minute")
+@limiter.limit("10/minute", key_func=api_key_rate_key)
 def create_consensus_run(
+    request: Request,
     payload: ConsensusRunRequest,
     response: Response,
-    identity=Security(require_api_identity),
+    api_key: Optional[str] = Security(api_key_header),
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
 ):
     """Accept and reserve one logical run; provider execution is asynchronous."""
+    identity = authenticate_api_identity(api_key)
+    enforce_uid_rate_limit(identity.uid, "create", 10)
     if not idempotency_key.strip():
         raise HTTPException(status_code=400, detail="Missing Idempotency-Key header")
 
@@ -116,7 +163,12 @@ def create_consensus_run(
         raise HTTPException(status_code=400, detail=str(exc)) from None
     if existing is not None and existing.get("status") != "accepted":
         if existing.get("status") == "reserved":
-            schedule_run(existing["run_id"])
+            if schedule_run(existing["run_id"]) is False:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Consensus API worker capacity is temporarily exhausted",
+                    headers={"Retry-After": "5"},
+                )
         response.headers["Location"] = f"/api/v1/consensus/runs/{existing['run_id']}"
         response.headers["Retry-After"] = "2"
         return _public_run(existing)
@@ -194,9 +246,12 @@ def create_consensus_run(
             ) from None
 
     if run.get("status") == "reserved":
-        # Duplicate submissions may enqueue more than one local task; the
-        # Firestore reserved->running claim lets exactly one task proceed.
-        schedule_run(run["run_id"])
+        if schedule_run(run["run_id"]) is False:
+            raise HTTPException(
+                status_code=503,
+                detail="Consensus API worker capacity is temporarily exhausted",
+                headers={"Retry-After": "5"},
+            )
 
     response.headers["Location"] = f"/api/v1/consensus/runs/{run['run_id']}"
     response.headers["Retry-After"] = "2"
@@ -208,14 +263,52 @@ def create_consensus_run(
     response_model=ConsensusRunResponse,
     responses={401: {"model": ApiErrorResponse}, 404: {"model": ApiErrorResponse}},
 )
-def get_consensus_run(run_id: str, identity=Security(require_api_identity)):
+@limiter.limit("240/minute")
+@limiter.limit("120/minute", key_func=api_key_rate_key)
+def get_consensus_run(
+    request: Request,
+    run_id: str,
+    api_key: Optional[str] = Security(api_key_header),
+):
+    identity = authenticate_api_identity(api_key)
+    enforce_uid_rate_limit(identity.uid, "get", 120)
     try:
         run = api_run_repository.get_for_uid(run_id, identity.uid)
-        if run.get("status") == "running" and api_run_repository.fail_if_lease_expired(run_id):
+        if run.get("status") == "running" and fail_expired_run(run_id):
             run = api_run_repository.get_for_uid(run_id, identity.uid)
     except ApiRunNotFound:
         raise HTTPException(status_code=404, detail="Run not found") from None
     return _public_run(run)
+
+
+@router.delete(
+    "/consensus/runs/{run_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        401: {"model": ApiErrorResponse},
+        404: {"model": ApiErrorResponse},
+        409: {"model": ApiErrorResponse},
+    },
+)
+@limiter.limit("30/minute")
+@limiter.limit("20/minute", key_func=api_key_rate_key)
+def delete_consensus_run(
+    request: Request,
+    run_id: str,
+    api_key: Optional[str] = Security(api_key_header),
+):
+    """Delete a terminal run and its idempotency mapping before TTL expiry."""
+    identity = authenticate_api_identity(api_key)
+    enforce_uid_rate_limit(identity.uid, "delete", 20)
+    try:
+        deleted = api_run_repository.delete_terminal_for_uid(run_id, identity.uid)
+    except ApiRunNotFound:
+        raise HTTPException(status_code=404, detail="Run not found") from None
+    except ApiRunTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 def _public_run(run: dict) -> dict:
@@ -225,6 +318,7 @@ def _public_run(run: dict) -> dict:
         "status": run["status"],
         "deep_think": bool(request.get("deep_think")),
         "accepted_at": run["accepted_at"],
+        "expires_at": run.get("expires_at"),
         "reserved_at": run.get("reserved_at"),
         "running_at": run.get("running_at"),
         "succeeded_at": run.get("succeeded_at"),

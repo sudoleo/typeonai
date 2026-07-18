@@ -8,7 +8,10 @@ from datetime import timedelta
 import pytest
 
 from app.services.api_run_repository import (
+    API_RUN_RETENTION_DAYS,
     ApiRunConflict,
+    ApiRunNotFound,
+    ApiRunTransitionError,
     FirestoreApiRunRepository,
     idempotency_hash,
 )
@@ -122,6 +125,9 @@ def test_create_is_idempotent_and_never_stores_plaintext_key():
     serialized = repr(db.documents)
     assert "request-123" not in serialized
     assert idempotency_hash("request-123") in serialized
+    assert first["expires_at"] - first["accepted_at"] == timedelta(
+        days=API_RUN_RETENTION_DAYS
+    )
 
 
 def test_same_key_with_different_request_conflicts():
@@ -177,3 +183,25 @@ def test_expired_running_lease_fails_without_requeueing():
     assert failed["status"] == "failed"
     assert failed["error"]["code"] == "worker_interrupted"
     assert repo.fail_if_lease_expired(run["run_id"]) is False
+
+
+def test_only_owner_can_delete_terminal_run_and_mapping():
+    repo, _db = make_repo()
+    run, _ = create(repo)
+    repo.mark_reserved(run["run_id"])
+    repo.claim_running(run["run_id"], "worker")
+
+    with pytest.raises(ApiRunTransitionError):
+        repo.delete_terminal_for_uid(run["run_id"], "user-1")
+
+    repo.succeed(run["run_id"], {"consensus_response": "ok"})
+    with pytest.raises(ApiRunNotFound):
+        repo.delete_terminal_for_uid(run["run_id"], "other-user")
+
+    assert repo.delete_terminal_for_uid(run["run_id"], "user-1") is True
+    with pytest.raises(ApiRunNotFound):
+        repo.get(run["run_id"])
+
+    replacement, created = create(repo)
+    assert created is True
+    assert replacement["run_id"] != run["run_id"]

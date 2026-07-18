@@ -16,13 +16,17 @@ load_dotenv()
 os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", "gen-lang-client-0234219247-53b2b1c0e355.json")
 logging.basicConfig(level=logging.INFO)
 
-from app.core.security import CustomSecurityMiddleware
+from app.core.security import CustomSecurityMiddleware, db_firestore
 from app.core.rate_limit import limiter
 
 # Import routers
 from app.api.routers import auth, users, bookmarks, chat, pages, admin, share, watch, api_v1
 from app.core.config import load_models_from_db
-from app.services.api_consensus_runner import recover_persisted_runs
+from app.services.api_account_cleanup import FirestoreApiAccountCleanup
+from app.services.api_consensus_runner import (
+    api_run_maintenance_loop,
+    recover_persisted_runs,
+)
 from app.services.share_snapshots import cleanup_expired_pending, cleanup_revoked_shares
 from app.services.watch_scheduler import watch_scheduler_loop
 
@@ -42,17 +46,40 @@ async def lifespan(app: FastAPI):
         cleanup_revoked_shares()
     except Exception:
         logging.exception("cleanup_revoked_shares failed on startup")
+    # Fail-closed Account-Tombstones bleiben bestehen; nur ihre idempotente
+    # Datenbereinigung wird nach transienten Firestore-Fehlern wiederholt.
+    api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
+    try:
+        api_account_cleanup.retry_pending()
+    except Exception:
+        logging.exception("Blocked Consensus API account cleanup retry failed")
     # Reservierte Consensus-API-Runs haben noch keinen Provider gestartet und
     # koennen nach einem Prozessneustart sicher erneut eingeplant werden. Die
     # reserved->running-Transaktion garantiert dabei genau einen Gewinner.
     recover_persisted_runs()
     watch_task = asyncio.create_task(watch_scheduler_loop(), name="consensus-watch-scheduler")
+    api_maintenance_task = asyncio.create_task(
+        api_run_maintenance_loop(), name="consensus-api-maintenance"
+    )
+    api_account_cleanup_task = asyncio.create_task(
+        api_account_cleanup.retry_loop(), name="consensus-api-account-cleanup"
+    )
     try:
         yield
     finally:
         watch_task.cancel()
+        api_maintenance_task.cancel()
+        api_account_cleanup_task.cancel()
         try:
             await watch_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await api_account_cleanup_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await api_maintenance_task
         except asyncio.CancelledError:
             pass
 

@@ -38,8 +38,10 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 fügt `CustomSecurityMiddleware` (CSP etc.) + slowapi-Limiter hinzu, mountet
 `/static`, registriert globale Exception-Handler und inkludiert alle Router.
 Im `lifespan`-Startup: `load_models_from_db()` + Share-Cleanups (siehe §7),
-Recovery noch nicht gestarteter Consensus-API-Runs und ein cancellable
-asyncio-Task für den 30-Minuten-Consensus-Watch-Tick.
+Recovery/Retention noch nicht abgeschlossener Consensus-API-Runs und Retry
+blockierter API-Account-Cleanups. Cancellable asyncio-Tasks übernehmen danach
+den 60-Sekunden-API-Maintenance-, 5-Minuten-Account-Cleanup- und
+30-Minuten-Consensus-Watch-Tick.
 
 Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 
@@ -52,7 +54,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` zum sicheren Wiederherstellen eines Share-/Watch-fähigen Pending-Snapshots aus einem eigenen Consensus-Bookmark. Beide Save-Endpunkte liefern den vollständig zusammengeführten Bookmark-Datensatz zurück, damit der Client ihn ohne Reload aktualisiert. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. kompakter History je Watch), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH) sowie öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
-| `api_v1.py` | Nutzergebundene asynchrone Consensus-API: `POST /api/v1/consensus/runs` und `GET /api/v1/consensus/runs/{run_id}`. Auth über `X-API-Key`, Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
+| `api_v1.py` | Nutzergebundene asynchrone Consensus-API: `POST /api/v1/consensus/runs`, `GET /api/v1/consensus/runs/{run_id}` und vorzeitiges Löschen terminaler Runs per `DELETE`. Auth über `X-API-Key`, Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 | `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (Diagnose-Liste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 **Zentrale Templates** (`templates/`, gerendert mit `Jinja2Templates`):
@@ -398,7 +400,7 @@ Whitelist für Bild-MIME-Typen.
 
 ### Nutzergebundene Consensus-API (v1)
 - Admins stellen über `POST /api/admin/api-keys` einen Schlüssel für eine
-  existierende Firebase-UID aus. Nur die einmalige Antwort enthält den
+  aktive, E-Mail-verifizierte Firebase-UID aus. Nur die einmalige Antwort enthält den
   Klartextschlüssel (`cns_live_…`); Firestore speichert ausschließlich dessen
   SHA-256-Hash als Dokument-ID. Liste und Widerruf laufen über
   `GET/DELETE /api/admin/api-keys`.
@@ -408,6 +410,9 @@ Whitelist für Bild-MIME-Typen.
   Consensus-Engine aus demselben Preset und für Deep Think stattdessen
   `DEEP_THINK_CONSENSUS_MODEL`. Kosten, Limits, Modelle oder Modellanzahl sind
   keine Request-Felder.
+- API v1 verwendet bewusst immer alle sechs Provider einschließlich DeepSeek;
+  für diesen Vertrag gibt es keinen per-Request Opt-out. Privacy/Terms weisen
+  auf die verpflichtende Verarbeitung durch DeepSeek in China hin.
 - UID + gehashter `Idempotency-Key` zeigen auf genau einen persistenten Run;
   derselbe Key mit anderem Request ergibt 409. Der API-State folgt
   `accepted → reserved → running → succeeded|failed`. Der transaktionale
@@ -424,7 +429,16 @@ Whitelist für Bild-MIME-Typen.
   es gibt keine zweite Consensus-Engine. `GET /api/v1/consensus/runs/{run_id}`
   liefert nur eigene Runs und nach Erfolg das persistierte Ergebnis. Reservierte
   Runs werden beim Startup sicher neu eingeplant; laufende Runs werden nie
-  wiederholt und nach abgelaufenem Lease als `worker_interrupted` beendet.
+  wiederholt und nach abgelaufenem Lease als `worker_interrupted` beendet. Vor
+  dem Usage-Consume wird der Firebase-/Block-Status erneut geprüft. Eine
+  deduplizierte Queue lässt höchstens 32 aktive/wartende Run-IDs bei zwei
+  parallelen Pipelines zu; der periodische Maintenance-Tick nimmt persistierte
+  Restarbeit wieder auf und reconciled pre-provider Usage-Reservierungen.
+- Run-Inhalt und Idempotenz-Mapping tragen `expires_at` (30 Tage ab Annahme);
+  periodischer Cleanup löscht beide, bestehende v1-Dokumente werden beim
+  ersten Maintenance-Lauf nachmigriert. `DELETE /api/v1/consensus/runs/{run_id}`
+  löscht eigene terminale Runs früher. Alle v1- und Admin-Key-Antworten sind
+  `private, no-store`. Limits greifen vor Auth pro IP/API-Key und danach pro UID.
 - Der maschinenlesbare Vertrag kommt aus den typisierten FastAPI-Routen unter
   `/openapi.json` (Security-Scheme `ConsensusApiKey`, Header `X-API-Key` und
   Pflichtheader `Idempotency-Key`).
@@ -474,6 +488,7 @@ app/services/llm/
   attachments.py             Attachment-Validierung/Aufbereitung
 app/services/
   usage_repository.py        Firestore-Usage fuer logische Runs (reserve/consume/release/snapshot)
+  api_account_cleanup.py     Fail-closed Account-Blocks + retrybare API-Datenlöschung
   api_key_repository.py      SHA-256-gehashte, UID-gebundene API-Schluessel
   api_run_repository.py      Idempotenz + persistente API-Run-State-Machine
   api_consensus_runner.py    Asynchroner At-most-once-Orchestrator auf bestehenden Engines
@@ -524,10 +539,15 @@ Wichtige Verträge im Backend:
 - `api_consensus_keys/{sha256(api_key)}` — admin-ausgegebene API-Schlüssel mit
   `uid`, nicht-geheimem Präfix/Label, `status=active|revoked` und Audit-
   Zeitstempeln. Der Klartextschlüssel wird nie gespeichert.
+- `api_consensus_account_blocks/{uid}` — temporärer fail-closed Tombstone bei
+  Account-Löschung (`blocked`, `cleanup_pending`, Fehler-/Audit-Zeitstempel).
+  Er wird vor jeder Löschkaskade geschrieben, von HTTP und Worker geprüft und
+  nach erfolgreichem Cleanup plus Firebase-Löschung entfernt; transiente
+  Cleanup-Fehler werden periodisch wiederholt.
 - `api_consensus_runs/{run_id}` — UID-gebundener v1-API-Run mit serverseitig
   eingefrorenem Request/Modellplan, `idempotency_hash`, Status und Status-
   Zeitstempeln, einstündigem Running-Lease sowie terminal `result` oder
-  sanitisiertem `error`. Erlaubte Hauptfolge:
+  sanitisiertem `error` und 30-Tage-`expires_at`. Erlaubte Hauptfolge:
   `accepted → reserved → running → succeeded|failed`.
 - `app_config/models` — von `load_models_from_db()` gelesen/erzeugt: erlaubte
   Modelle pro Provider, `premium`, `consensus`, `preset_models`, `deep_think_model`,
@@ -654,7 +674,7 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **544 passed** (2026-07-18; inklusive
+  Letzte bekannte Baseline: **561 passed** (2026-07-18; inklusive
   run-basierter Usage- sowie Consensus-API-Repository-/Vertragstests).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
@@ -696,9 +716,11 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   .\venv\Scripts\python.exe -m uvicorn main:app --reload
   ```
 
-**Cleanup-Jobs** laufen ohne eigenen Scheduler im `lifespan`-Startup von `main.py`
-(getriggert durch den täglichen Render-Restart): `cleanup_expired_pending`,
-`cleanup_revoked_shares`.
+**Cleanup-Jobs**: Share-Cleanups laufen im `lifespan`-Startup von `main.py`
+(zusätzlich durch den täglichen Render-Restart getriggert):
+`cleanup_expired_pending`, `cleanup_revoked_shares`. Consensus-API-Retention,
+Lease-/Queue-Recovery laufen zusätzlich alle 60 Sekunden; fehlgeschlagene
+API-Account-Löschkaskaden alle fünf Minuten.
 
 **Consensus Watch** läuft als eigener asyncio-Lifespan-Task alle 30 Minuten.
 Firestore-Transaktionen claimen einen globalen Worker-Lease, den einzelnen

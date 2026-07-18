@@ -7,12 +7,19 @@ synthesis implementation.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 import app.core.config as cfg
 from app.core.security import db_firestore
+from app.services.api_account_cleanup import (
+    ApiAccountInactive,
+    ApiAccountStatusUnavailable,
+    FirestoreApiAccountCleanup,
+)
 from app.services.api_run_repository import FirestoreApiRunRepository
 from app.services.llm.base import get_system_prompt, validate_model
 from app.services.llm.citations import result_sources, result_text, to_plain
@@ -41,6 +48,8 @@ from app.services.usage_repository import (
     RunStatus,
     UsageLimits,
     UsageRunConflict,
+    UsageRunNotFound,
+    UsageTransitionError,
 )
 
 
@@ -73,7 +82,16 @@ PROVIDER_ALLOWED_ATTR = {
 
 api_run_repository = FirestoreApiRunRepository(db_firestore)
 usage_repository = FirestoreUsageRepository(db_firestore)
-_background_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="consensus-api")
+api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
+API_RUN_WORKERS = 2
+MAX_SCHEDULED_RUNS = 32
+API_MAINTENANCE_INTERVAL_SECONDS = 60
+_background_executor = ThreadPoolExecutor(
+    max_workers=API_RUN_WORKERS, thread_name_prefix="consensus-api"
+)
+_schedule_lock = threading.Lock()
+_scheduled_run_ids: set[str] = set()
+_retention_backfilled = False
 
 
 def build_server_model_plan(*, deep_think: bool, is_pro: bool) -> dict:
@@ -144,17 +162,92 @@ def release_run_reservation(run: dict) -> None:
     usage_repository.release(str(run["uid"]), usage_key_for_run(run))
 
 
-def schedule_run(run_id: str) -> None:
-    _background_executor.submit(execute_persisted_run, run_id)
+def schedule_run(run_id: str) -> bool:
+    """Deduplicate work and bound the shared active-plus-pending queue."""
+    run_id = str(run_id or "").strip()
+    with _schedule_lock:
+        if run_id in _scheduled_run_ids:
+            return True
+        if len(_scheduled_run_ids) >= MAX_SCHEDULED_RUNS:
+            return False
+        _scheduled_run_ids.add(run_id)
+    try:
+        _background_executor.submit(_execute_scheduled_run, run_id)
+    except Exception:
+        with _schedule_lock:
+            _scheduled_run_ids.discard(run_id)
+        raise
+    return True
+
+
+def _execute_scheduled_run(run_id: str) -> None:
+    try:
+        execute_persisted_run(run_id)
+    finally:
+        with _schedule_lock:
+            _scheduled_run_ids.discard(run_id)
+
+
+def fail_expired_run(run_id: str) -> bool:
+    """Fail an expired worker and release only a pre-provider reservation."""
+    try:
+        run = api_run_repository.get(run_id)
+        changed = api_run_repository.fail_if_lease_expired(run_id)
+    except Exception:
+        logging.exception("Consensus API lease check failed: %s", run_id)
+        return False
+    if not changed:
+        return False
+    try:
+        release_run_reservation(run)
+    except (UsageRunNotFound, UsageTransitionError):
+        # Missing is harmless. Consumed/released are terminal: consumed proves
+        # a provider was allowed to start and must remain charged.
+        pass
+    except Exception:
+        logging.exception("Consensus API stale reservation reconciliation failed: %s", run_id)
+    return True
+
+
+def cleanup_expired_runs() -> int:
+    """Hard-delete API content after the fixed 30-day retention window."""
+    deleted = 0
+    try:
+        expired_runs = api_run_repository.list_expired()
+    except Exception:
+        logging.exception("Consensus API retention scan failed")
+        return 0
+    for run in expired_runs:
+        run_id = str(run.get("run_id") or "")
+        try:
+            if run.get("status") in {"accepted", "reserved"}:
+                try:
+                    release_run_reservation(run)
+                except (UsageRunNotFound, UsageTransitionError):
+                    pass
+            elif run.get("status") == "running":
+                fail_expired_run(run_id)
+            if api_run_repository.delete_expired(run_id):
+                deleted += 1
+        except Exception:
+            logging.exception("Consensus API expired run cleanup failed: %s", run_id)
+    return deleted
 
 
 def recover_persisted_runs() -> int:
     """Requeue only pre-provider runs; running work is never replayed."""
+    global _retention_backfilled
     recovered = 0
     try:
+        if not _retention_backfilled:
+            backfill = getattr(api_run_repository, "backfill_retention", None)
+            if backfill is not None:
+                backfill()
+            _retention_backfilled = True
+        cleanup_expired_runs()
         for run in api_run_repository.list_by_status(("reserved",)):
-            schedule_run(run["run_id"])
-            recovered += 1
+            if schedule_run(run["run_id"]):
+                recovered += 1
         for run in api_run_repository.list_by_status(("accepted",)):
             try:
                 reserved, _usage = reserve_run(run)
@@ -165,13 +258,20 @@ def recover_persisted_runs() -> int:
                 )
                 continue
             if reserved.get("status") == "reserved":
-                schedule_run(reserved["run_id"])
-                recovered += 1
+                if schedule_run(reserved["run_id"]):
+                    recovered += 1
         for run in api_run_repository.list_by_status(("running",)):
-            api_run_repository.fail_if_lease_expired(run["run_id"])
+            fail_expired_run(run["run_id"])
     except Exception:
         logging.exception("Consensus API recovery scan failed")
     return recovered
+
+
+async def api_run_maintenance_loop() -> None:
+    """Periodically retry durable work and close expired worker leases."""
+    while True:
+        await asyncio.sleep(API_MAINTENANCE_INTERVAL_SECONDS)
+        await asyncio.to_thread(recover_persisted_runs)
 
 
 def execute_persisted_run(run_id: str) -> None:
@@ -181,6 +281,24 @@ def execute_persisted_run(run_id: str) -> None:
     try:
         run, claimed = api_run_repository.claim_running(run_id, worker_id)
         if not claimed:
+            return
+        try:
+            api_account_cleanup.ensure_active(str(run["uid"]))
+        except ApiAccountInactive:
+            release_run_reservation(run)
+            api_run_repository.fail(
+                run_id,
+                code="account_inactive",
+                message="The account is no longer allowed to use the Consensus API.",
+            )
+            return
+        except ApiAccountStatusUnavailable:
+            release_run_reservation(run)
+            api_run_repository.fail(
+                run_id,
+                code="account_status_unavailable",
+                message="The account status could not be verified before provider start.",
+            )
             return
         # Usage is consumed once, immediately before any provider can start.
         # The usage transaction is separate from the API-run claim transaction.

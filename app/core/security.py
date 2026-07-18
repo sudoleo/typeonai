@@ -32,6 +32,11 @@ class CustomSecurityMiddleware:
             await self.app(scope, receive, send)
             return
 
+        path = str(scope.get("path") or "")
+        sensitive_api_response = path.startswith("/api/v1/") or path.startswith(
+            "/api/admin/api-keys"
+        )
+
         async def send_wrapper(message):
             if message["type"] == "http.response.start":
                 headers = dict(message.get("headers", []))
@@ -67,6 +72,11 @@ class CustomSecurityMiddleware:
                 headers[b"X-Frame-Options"] = b"DENY"
                 headers[b"Strict-Transport-Security"] = b"max-age=31536000; includeSubDomains"
                 headers[b"Referrer-Policy"] = b"no-referrer-when-downgrade"
+                if sensitive_api_response:
+                    headers[b"Cache-Control"] = b"private, no-store"
+                    headers[b"Pragma"] = b"no-cache"
+                    headers[b"Expires"] = b"0"
+                    headers[b"Vary"] = b"X-API-Key, Authorization"
                 message["headers"] = list(headers.items())
             await send(message)
 

@@ -1951,9 +1951,11 @@
             <div class="admin-section">
                 <h3>Consensus API keys</h3>
                 <p class="section-hint">
-                    Issue a key for an existing Firebase user. The key inherits that UID's tier and
-                    run limits. Only a SHA-256 hash is stored; the full key is shown exactly once and
-                    should be copied directly into a secret manager.
+                    Issue a key for an active, e-mail-verified Firebase user. The key inherits that
+                    UID's tier and run limits. Every v1 run uses all six providers, including mandatory
+                    DeepSeek processing in China, and run content expires after 30 days.
+                    Only a SHA-256 hash is stored; the full key is shown exactly once and should be copied directly
+                    into a secret manager.
                 </p>
                 <div class="api-key-form">
                     <div class="api-key-field">

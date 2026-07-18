@@ -1,6 +1,7 @@
 import logging
 from firebase_admin import auth, firestore
 from fastapi import APIRouter, Request, Body, HTTPException
+from fastapi.responses import JSONResponse
 
 from app.core.rate_limit import limiter
 import app.core.config as cfg
@@ -12,9 +13,11 @@ from app.services.usage_repository import (
     UsageRunNotFound,
     UsageTransitionError,
 )
+from app.services.api_account_cleanup import FirestoreApiAccountCleanup
 
 router = APIRouter()
 run_usage_repository = FirestoreUsageRepository(db_firestore)
+api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
 
 
 def _run_limits(is_pro: bool) -> UsageLimits:
@@ -143,7 +146,21 @@ async def delete_account(request: Request, data: dict = Body(default={})):
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed")
 
+    # Persist a fail-closed tombstone before deleting any credential or user
+    # data. Even partial cleanup or a delayed Firebase deletion can therefore
+    # never leave API access active.
+    try:
+        api_account_cleanup.block(uid)
+    except Exception:
+        logging.exception("delete_account: API access block failed for %s", uid)
+        raise HTTPException(
+            status_code=503,
+            detail="Account deletion could not be started safely. Please try again.",
+        ) from None
+
     errors = []
+    api_cleanup_errors = api_account_cleanup.cleanup_uid(uid)
+    errors.extend(api_cleanup_errors)
 
     # 1. Nutzer-Subcollections loeschen (Subcollections werden nicht automatisch
     #    mit dem Eltern-Dokument entfernt). usage_* ist die persistente Grundlage
@@ -154,7 +171,6 @@ async def delete_account(request: Request, data: dict = Body(default={})):
         "counters",
         "usage_days",
         "usage_runs",
-        "api_consensus_idempotency",
     ):
         try:
             for doc in user_ref.collection(subcollection).stream():
@@ -180,18 +196,6 @@ async def delete_account(request: Request, data: dict = Body(default={})):
                 doc.reference.delete()
         except Exception as e:
             logging.error(f"delete_account: {collection_name} cleanup failed for {uid}: {e}")
-            errors.append(collection_name)
-
-    # API-Schluessel und persistente API-Runs sind ebenfalls UID-gebunden.
-    for collection_name in ("api_consensus_keys", "api_consensus_runs"):
-        try:
-            docs = db_firestore.collection(collection_name).where("uid", "==", uid).stream()
-            for doc in docs:
-                doc.reference.delete()
-        except Exception as e:
-            logging.error(
-                f"delete_account: {collection_name} cleanup failed for {uid}: {e}"
-            )
             errors.append(collection_name)
 
     # 3b. Öffentliche Share-Links und zwischengespeicherte Konsens-Ergebnisse
@@ -229,10 +233,32 @@ async def delete_account(request: Request, data: dict = Body(default={})):
         logging.error(f"delete_account: auth deletion failed for {uid}: {e}")
         raise HTTPException(status_code=500, detail="Account deletion failed. Please try again or contact us.")
 
+    if not api_cleanup_errors:
+        try:
+            api_account_cleanup.clear_completed_block(uid)
+        except Exception:
+            # Firebase deletion plus successful credential cleanup already
+            # fail closed; retain the minimal tombstone for periodic retry.
+            logging.exception("delete_account: completed API block cleanup failed for %s", uid)
+            try:
+                api_account_cleanup.mark_cleanup_pending(uid)
+            except Exception:
+                logging.exception("delete_account: API block retry marker failed for %s", uid)
+
     if errors:
         logging.warning(f"delete_account: partial cleanup for {uid}, failed: {errors}")
 
-    return {"status": "deleted"}
+    if api_cleanup_errors:
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": "deleted",
+                "cleanup_pending": True,
+                "message": "Account access is blocked; remaining API data cleanup is queued for retry.",
+            },
+        )
+
+    return {"status": "deleted", "cleanup_pending": False}
 
 
 @router.post("/track-interest")

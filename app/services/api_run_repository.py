@@ -16,6 +16,7 @@ API_RUNS_COLLECTION = "api_consensus_runs"
 API_IDEMPOTENCY_COLLECTION = "api_consensus_idempotency"
 MAX_IDEMPOTENCY_KEY_BYTES = 256
 RUN_LEASE_SECONDS = 60 * 60
+API_RUN_RETENTION_DAYS = 30
 RUN_STATUSES = {"accepted", "reserved", "running", "succeeded", "failed"}
 
 
@@ -76,6 +77,7 @@ class FirestoreApiRunRepository:
         payload_hash = request_hash(request_payload)
         run_id = uuid.uuid4().hex
         now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(days=API_RUN_RETENTION_DAYS)
         mapping_ref = self._idempotency_ref(uid, key_hash)
         run_ref = self._run_ref(run_id)
 
@@ -107,6 +109,7 @@ class FirestoreApiRunRepository:
                 "accepted_at": now,
                 "created_at": now,
                 "updated_at": now,
+                "expires_at": expires_at,
             }
             tx.set(run_ref, run_data)
             tx.set(
@@ -116,6 +119,7 @@ class FirestoreApiRunRepository:
                     "run_id": run_id,
                     "request_hash": payload_hash,
                     "created_at": now,
+                    "expires_at": expires_at,
                 },
             )
             return dict(run_data), True
@@ -201,28 +205,18 @@ class FirestoreApiRunRepository:
         return self._transaction(operation)
 
     def delete_accepted(self, run_id: str) -> bool:
-        run_ref = self._run_ref(run_id)
+        return self._delete(run_id, allowed_statuses={"accepted"})
 
-        def operation(tx):
-            snap = run_ref.get(transaction=tx)
-            if not snap.exists:
-                return False
-            data = snap.to_dict() or {}
-            if data.get("status") != "accepted":
-                return False
-            mapping_ref = self._idempotency_ref(
-                str(data.get("uid") or ""), str(data.get("idempotency_hash") or "")
-            )
-            mapping_snap = mapping_ref.get(transaction=tx)
-            if (
-                mapping_snap.exists
-                and (mapping_snap.to_dict() or {}).get("run_id") == run_id
-            ):
-                tx.delete(mapping_ref)
-            tx.delete(run_ref)
-            return True
+    def delete_terminal_for_uid(self, run_id: str, uid: str) -> bool:
+        return self._delete(
+            run_id,
+            expected_uid=str(uid or "").strip(),
+            allowed_statuses={"succeeded", "failed"},
+            reject_wrong_status=True,
+        )
 
-        return self._transaction(operation)
+    def delete_expired(self, run_id: str, *, now: datetime | None = None) -> bool:
+        return self._delete(run_id, expired_at_or_before=now or datetime.now(timezone.utc))
 
     def get(self, run_id: str) -> dict:
         snap = self._run_ref(_validate_run_id(run_id)).get()
@@ -243,6 +237,74 @@ class FirestoreApiRunRepository:
             filter=FieldFilter("status", "in", list(statuses))
         )
         return [self._with_id(snap) for snap in query.stream()]
+
+    def list_expired(self, *, now: datetime | None = None) -> list[dict]:
+        query = self._db.collection(API_RUNS_COLLECTION).where(
+            filter=FieldFilter("expires_at", "<=", now or datetime.now(timezone.utc))
+        )
+        return [self._with_id(snap) for snap in query.stream()]
+
+    def backfill_retention(self) -> int:
+        """Give pre-retention v1 documents the same 30-day expiry contract."""
+        updated = 0
+        for snap in self._db.collection(API_RUNS_COLLECTION).stream():
+            data = snap.to_dict() or {}
+            if isinstance(data.get("expires_at"), datetime):
+                continue
+            accepted_at = data.get("accepted_at") or data.get("created_at")
+            if not isinstance(accepted_at, datetime):
+                continue
+            expires_at = accepted_at + timedelta(days=API_RUN_RETENTION_DAYS)
+            snap.reference.update({"expires_at": expires_at})
+            mapping_ref = self._idempotency_ref(
+                str(data.get("uid") or ""), str(data.get("idempotency_hash") or "")
+            )
+            mapping_snap = mapping_ref.get()
+            if mapping_snap.exists:
+                mapping_ref.update({"expires_at": expires_at})
+            updated += 1
+        return updated
+
+    def _delete(
+        self,
+        run_id: str,
+        *,
+        expected_uid: str | None = None,
+        allowed_statuses: set[str] | None = None,
+        reject_wrong_status: bool = False,
+        expired_at_or_before: datetime | None = None,
+    ) -> bool:
+        validated_run_id = _validate_run_id(run_id)
+        run_ref = self._run_ref(validated_run_id)
+
+        def operation(tx):
+            snap = run_ref.get(transaction=tx)
+            if not snap.exists:
+                return False
+            data = snap.to_dict() or {}
+            if expected_uid is not None and data.get("uid") != expected_uid:
+                raise ApiRunNotFound("Run not found")
+            if allowed_statuses is not None and data.get("status") not in allowed_statuses:
+                if reject_wrong_status:
+                    raise ApiRunTransitionError("Only terminal runs can be deleted")
+                return False
+            if expired_at_or_before is not None:
+                expires_at = data.get("expires_at")
+                if not isinstance(expires_at, datetime) or expires_at > expired_at_or_before:
+                    return False
+            mapping_ref = self._idempotency_ref(
+                str(data.get("uid") or ""), str(data.get("idempotency_hash") or "")
+            )
+            mapping_snap = mapping_ref.get(transaction=tx)
+            if (
+                mapping_snap.exists
+                and (mapping_snap.to_dict() or {}).get("run_id") == validated_run_id
+            ):
+                tx.delete(mapping_ref)
+            tx.delete(run_ref)
+            return True
+
+        return self._transaction(operation)
 
     def _transition(
         self,

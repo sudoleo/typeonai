@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -13,6 +13,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 API_KEYS_COLLECTION = "api_consensus_keys"
 API_KEY_PREFIX = "cns_live_"
 API_KEY_SECRET_BYTES = 32
+LAST_USED_WRITE_INTERVAL = timedelta(minutes=5)
 
 
 class ApiKeyError(Exception):
@@ -84,12 +85,15 @@ class FirestoreApiKeyRepository:
         uid = str(data.get("uid") or "").strip()
         if data.get("status") != "active" or not uid:
             raise InvalidApiKey("Invalid API key")
-        try:
-            self._ref(key_id).update({"last_used_at": datetime.now(timezone.utc)})
-        except Exception:
-            # Authentication must not fail just because best-effort audit
-            # metadata could not be refreshed.
-            pass
+        now = datetime.now(timezone.utc)
+        last_used_at = data.get("last_used_at")
+        if not isinstance(last_used_at, datetime) or last_used_at < now - LAST_USED_WRITE_INTERVAL:
+            try:
+                self._ref(key_id).update({"last_used_at": now})
+            except Exception:
+                # Authentication must not fail just because best-effort audit
+                # metadata could not be refreshed.
+                pass
         return AuthenticatedApiKey(
             key_id=key_id,
             uid=uid,

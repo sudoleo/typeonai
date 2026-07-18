@@ -106,6 +106,8 @@
           <li>Free usage is subject to quotas and rate limits that we may change at any time. Quotas may reset, for example when the server restarts.</li>
           <li>Features labelled "Pro" or similar are feature previews. No paid services are currently offered, and no feature or quota constitutes a promised entitlement.</li>
           <li>If you store your own provider API keys, they are saved in your browser and transmitted through our server to the respective provider with each request. You are responsible for the costs and the security of your keys.</li>
+          <li>The administrator-issued Consensus API uses a fixed server-selected comparison across OpenAI, Mistral, Anthropic, Google, xAI, and DeepSeek for every run. DeepSeek processing in China is mandatory for Consensus API v1 and cannot be disabled per request. Do not submit content through this API if it must not be transferred to China.</li>
+          <li>Consensus API questions and results are stored for asynchronous retrieval and idempotency for no more than 30 days after acceptance. A client may delete a completed run earlier; deleting a run does not undo processing already performed by model providers.</li>
         </ul>
       </section>
 

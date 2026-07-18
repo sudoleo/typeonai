@@ -1,12 +1,12 @@
-from __future__ import annotations
-
 import asyncio
 import logging
+from typing import Optional
 from firebase_admin import auth
 from fastapi import APIRouter, Request, Body, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.security import extract_id_token, verify_user_token, is_user_admin, db_firestore
+from app.core.rate_limit import limiter
 import app.core.config as cfg
 from app.core.config import apply_limits, get_limits_config, load_models_from_db
 from app.services import share_snapshots as snapshots
@@ -16,9 +16,11 @@ from app.services.api_key_repository import (
     ApiKeyNotFound,
     FirestoreApiKeyRepository,
 )
+from app.services.api_account_cleanup import FirestoreApiAccountCleanup
 
 router = APIRouter()
 api_key_repository = FirestoreApiKeyRepository(db_firestore)
+api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
 
 
 class AdminIssueApiKeyRequest(BaseModel):
@@ -45,16 +47,27 @@ _SHARE_ERROR_STATUS = {"not_found": 404, "bad_request": 400}
 
 
 @router.post("/api/admin/api-keys", status_code=201)
+@limiter.limit("10/minute")
 def admin_issue_api_key(
     request: Request, data: AdminIssueApiKeyRequest = Body(...)
 ):
     """Issue a user-bound key. The plaintext secret is returned exactly once."""
     admin_uid = _require_admin(request, {})
     try:
-        auth.get_user(data.uid.strip())
+        user = auth.get_user(data.uid.strip())
+        if user.disabled:
+            raise HTTPException(status_code=409, detail="Cannot issue a key for a disabled user")
+        if not user.email_verified:
+            raise HTTPException(status_code=409, detail="Cannot issue a key for an unverified user")
+        if api_account_cleanup.is_blocked(data.uid.strip()):
+            raise HTTPException(status_code=409, detail="API access is blocked for this account")
         return api_key_repository.issue(
             data.uid.strip(), label=data.label.strip(), created_by=admin_uid
         )
+    except HTTPException:
+        raise
+    except auth.UserNotFoundError:
+        raise HTTPException(status_code=404, detail="User not found") from None
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
     except Exception:
@@ -63,7 +76,8 @@ def admin_issue_api_key(
 
 
 @router.get("/api/admin/api-keys")
-def admin_list_api_keys(request: Request, uid: str | None = None):
+@limiter.limit("30/minute")
+def admin_list_api_keys(request: Request, uid: Optional[str] = None):
     _require_admin(request, {})
     try:
         return {"keys": api_key_repository.list(uid=uid.strip() if uid else None)}
@@ -73,6 +87,7 @@ def admin_list_api_keys(request: Request, uid: str | None = None):
 
 
 @router.delete("/api/admin/api-keys/{key_id}")
+@limiter.limit("20/minute")
 def admin_revoke_api_key(request: Request, key_id: str):
     _require_admin(request, {})
     try:

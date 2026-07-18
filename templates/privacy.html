@@ -57,7 +57,8 @@
       <section class="legal-panel">
         <h2>2. Purposes and data we process</h2>
         <ul>
-          <li><strong>Prompts and model outputs:</strong> used to provide the service, send requests to selected AI models, and display answers. We do not permanently store prompts or outputs on our servers unless you save them as bookmarks.</li>
+          <li><strong>Prompts and model outputs in the web app:</strong> used to provide the service, send requests to selected AI models, and display answers. We do not permanently store prompts or outputs from ordinary web-app runs unless you save them as bookmarks or explicitly create a shared or watched result.</li>
+          <li><strong>Consensus API runs:</strong> the administrator-issued Consensus API stores the submitted question, server-selected model plan, model outputs, consensus, differences analysis, status, and timestamps in Firestore so clients can retrieve asynchronous results and safely retry requests. API-run content and its idempotency mapping are automatically deleted no later than 30 days after acceptance; clients can delete completed runs earlier. API keys are stored only as a SHA-256 hash plus a short non-secret display prefix and audit timestamps. During account deletion, a minimal UID-bound block record may be retained temporarily if cleanup must be retried.</li>
           <li><strong>Technical logs:</strong> timestamps and basic diagnostics for stability, security, and abuse prevention.</li>
           <li><strong>Account data:</strong> if you sign up, your e-mail address and a user ID are processed via Google Firebase Authentication (including optional Google Sign-In) for access control, quota handling, and related usage features. Your tier and saved bookmarks (query, answers, sources, attachment metadata) are stored in Google Cloud Firestore until you delete them or your account.</li>
           <li><strong>Abuse prevention:</strong> to enforce the one-account-per-person rule, we temporarily process your IP address and match it against the account ID. This mapping is held in volatile server memory only and is not written to a database (legal basis: Art. 6(1)(f) GDPR, prevention of quota abuse).</li>
@@ -114,6 +115,13 @@
           decision. If you select DeepSeek models, your prompt and attachments are transmitted to DeepSeek for
           processing. If you do not want this, deselect DeepSeek models before sending a query; the other models
           work independently of this choice. See also the <a href="/terms">Terms of Use</a>.
+        </p>
+        <p>
+          <strong>Consensus API notice:</strong> unlike the interactive web app, Consensus API v1 uses a fixed
+          server-selected six-provider comparison for every run. DeepSeek is therefore a mandatory recipient of
+          every Consensus API prompt and cannot currently be deselected. Do not use this API for content that must
+          not be transferred to or processed in China. By submitting an API run, the API customer expressly requests
+          this six-provider routing, including transmission to DeepSeek.
         </p>
         <p class="subtle">
           Necessary infrastructure providers, authentication services, and selected AI providers may still process
@@ -216,9 +224,11 @@
         <h2>8. Storage periods</h2>
         <p>
           We retain data only as long as necessary for the stated purposes or as required by law. Technical
-          logs are generally kept short-term. Model content is retained only insofar as needed for stability,
-          abuse defense, or aggregated and anonymized product improvement. For shared pages and pending share
-          results, the specific retention periods in section 5 apply. On request, we will review earlier deletion.
+          logs are generally kept short-term. Consensus API run content is retained for at most 30 days after
+          acceptance and completed API runs can be deleted earlier through the API. Other model content is retained
+          only insofar as needed for stability, abuse defense, or aggregated and anonymized product improvement. For
+          shared pages and pending share results, the specific retention periods in section 5 apply. On request, we
+          will review earlier deletion.
         </p>
       </section>
 

@@ -63,6 +63,9 @@ def test_plaintext_key_is_returned_once_but_never_persisted():
     identity = repo.authenticate(issued["api_key"])
     assert identity.uid == "user-1"
     assert identity.key_id == issued["key_id"]
+    first_last_used = db.documents[issued["key_id"]]["last_used_at"]
+    repo.authenticate(issued["api_key"])
+    assert db.documents[issued["key_id"]]["last_used_at"] == first_last_used
 
 
 def test_revoked_key_cannot_authenticate():
