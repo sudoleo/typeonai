@@ -126,6 +126,32 @@
   window.exitHeroMode = exitHeroMode;
   window.syncHeroResponseAccess = syncHeroResponseAccess;
 
+  // Einziger Renderer fuer die Usage-Zeilen. API-Antworten ohne vollstaendige
+  // Usage-Felder duerfen die zuletzt bekannte Anzeige nicht mit Fallback-Nullen
+  // ueberschreiben. Das <strong>-Element ist zugleich Teil des Layout-Vertrags:
+  // Label links, tabellarischer Wert rechts.
+  function renderUsageDisplay({
+    remaining,
+    deepRemaining,
+    totalLimit = window.currentMaxLimit,
+    deepLimit = window.currentDeepLimit
+  } = {}) {
+    function renderLine(elementId, label, value, limit) {
+      if (value === undefined || value === null) return;
+      if (limit === undefined || limit === null) return;
+
+      const element = document.getElementById(elementId);
+      if (!element) return;
+
+      const strong = document.createElement("strong");
+      strong.textContent = value === "Unlimited" ? "Unlimited" : `${value} / ${limit}`;
+      element.replaceChildren(document.createTextNode(`${label}: `), strong);
+    }
+
+    renderLine("freeUsageDisplay", "Runs", remaining, totalLimit);
+    renderLine("deepUsageDisplay", "Deep Think", deepRemaining, deepLimit);
+  }
+
   // Ein logischer UI-Lauf teilt genau einen serverseitigen Idempotency-Key
   // zwischen /prepare, allen parallelen /ask_* und /consensus. Kosten oder
   // Modellanzahl kommen bewusst nicht aus dem Client.
@@ -175,6 +201,7 @@
     showPopup,
     exitHeroMode,
     syncHeroResponseAccess,
+    renderUsageDisplay,
     usageRun
   });
 })();

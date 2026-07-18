@@ -85,6 +85,40 @@ def test_app_loads_without_console_errors(app_page, get_console_errors):
     assert errors == [], f"Konsolen-Fehler beim Laden: {errors}"
 
 
+def test_usage_display_is_stable_and_keeps_value_layout(app_page):
+    """Parallele Antworten ohne Usage-Metadaten duerfen weder auf 0
+    zurueckfallen noch den rechtsbuendigen, fetten Wert-Wrapper entfernen."""
+    metrics = app_page.evaluate(
+        """() => {
+          window.App.renderUsageDisplay({
+            remaining: 2,
+            deepRemaining: 0,
+            totalLimit: 3,
+            deepLimit: 0,
+          });
+          window.App.renderUsageDisplay({});
+
+          const line = document.getElementById('freeUsageDisplay');
+          const value = line.querySelector('strong');
+          const lineRect = line.getBoundingClientRect();
+          const valueRect = value.getBoundingClientRect();
+          return {
+            text: line.textContent,
+            deepText: document.getElementById('deepUsageDisplay').textContent,
+            valueTag: value.tagName,
+            valueWeight: Number.parseInt(getComputedStyle(value).fontWeight, 10),
+            rightGap: Math.abs(lineRect.right - valueRect.right),
+          };
+        }"""
+    )
+
+    assert metrics["text"] == "Runs: 2 / 3"
+    assert metrics["deepText"] == "Deep Think: 0 / 0"
+    assert metrics["valueTag"] == "STRONG"
+    assert metrics["valueWeight"] >= 600
+    assert metrics["rightGap"] < 1
+
+
 def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
     page_metrics = app_page.evaluate(
         """() => ({

@@ -830,10 +830,12 @@
                 throw new Error(message);
               }
 
-              if (data.free_usage_remaining !== undefined) {
-                const usageEl = $("freeUsageDisplay");
-                if (usageEl) usageEl.innerText = "Runs: " + data.free_usage_remaining + " / " + window.currentMaxLimit;
-              }
+              window.App.renderUsageDisplay({
+                remaining: data.free_usage_remaining,
+                deepRemaining: data.deep_remaining,
+                totalLimit: data.limit ?? window.currentMaxLimit,
+                deepLimit: data.deep_limit ?? window.currentDeepLimit
+              });
 
               renderResolveResult(resultBox, data);
               // Ladezustand beenden und Button entfernen (das [hidden] greift

@@ -559,14 +559,12 @@
           ? data.deep_remaining
           : consensusErrorDetail?.deep_remaining;
 
-      if (freeUsageRemaining !== undefined) {
-        document.getElementById("freeUsageDisplay").innerText =
-          "Runs: " + freeUsageRemaining + " / " + window.currentMaxLimit;
-      }
-      if (deepRemaining !== undefined) {
-        document.getElementById("deepUsageDisplay").innerText =
-          "Deep Think: " + deepRemaining + " / " + window.currentDeepLimit;
-      }
+      window.App.renderUsageDisplay({
+        remaining: freeUsageRemaining,
+        deepRemaining,
+        totalLimit: data?.limit ?? consensusErrorDetail?.limit ?? window.currentMaxLimit,
+        deepLimit: data?.deep_limit ?? consensusErrorDetail?.deep_limit ?? window.currentDeepLimit
+      });
 
       if (consensusRequestResult.ok) {
         // Share-Feature: nur mit result_id aus dem Final-Event ist

@@ -276,8 +276,12 @@
           agent_mode: typeof window.isAgentModeEnabled === "function" && window.isAgentModeEnabled()
         });
         // optional: Free/Deep Counter im Sidebar auf einen sicheren Dummy setzen
-        document.getElementById("freeUsageDisplay").innerHTML = "Runs: 3 / 3";
-        document.getElementById("deepUsageDisplay").innerHTML = "Deep Think: 0 / 0";
+        window.App.renderUsageDisplay({
+          remaining: 3,
+          deepRemaining: 0,
+          totalLimit: 3,
+          deepLimit: 0
+        });
 
         // Spinners zeigen und Demo durchspielen
         await window.runDemoFlow(question);
@@ -464,14 +468,12 @@
         if (normalized.usage_run_status) {
           window.App.usageRun?.mark?.(normalized.usage_run_status);
         }
-        if (normalized.free_usage_remaining !== undefined) {
-          document.getElementById("freeUsageDisplay").innerHTML =
-            "Runs: " + normalized.free_usage_remaining + " / " + window.currentMaxLimit;
-        }
-        if (normalized.deep_remaining !== undefined) {
-          document.getElementById("deepUsageDisplay").innerHTML =
-            "Deep Think: " + normalized.deep_remaining + " / " + window.currentDeepLimit;
-        }
+        window.App.renderUsageDisplay({
+          remaining: normalized.free_usage_remaining,
+          deepRemaining: normalized.deep_remaining,
+          totalLimit: normalized.limit ?? window.currentMaxLimit,
+          deepLimit: normalized.deep_limit ?? window.currentDeepLimit
+        });
         if (normalized.is_pro_user !== undefined) {
           window.updateUserTierUI(normalized.is_pro_user === true, !!window.auth.currentUser);
         }
@@ -860,24 +862,6 @@
               markModelError(outputEl, "Unexpected empty response from server.", data);
             }
 
-            const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
-            const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
-
-            const isProConfirmed = (data.is_pro_user === true);
-
-            // 2. Auth Status prüfen (WICHTIG, damit der 2. Parameter stimmt)
-            const isLoggedIn = !!window.auth.currentUser;
-
-            // 3. UI updaten
-            window.updateUserTierUI(isProConfirmed, isLoggedIn);
-
-            // Text setzen mit den neuen Variablen window.currentMaxLimit und window.currentDeepLimit
-            document.getElementById("freeUsageDisplay").innerHTML =
-              "Runs: " + freeRemaining + " / " + window.currentMaxLimit;
-
-            document.getElementById("deepUsageDisplay").innerHTML =
-              "Deep Think: " + deepRemaining + " / " + window.currentDeepLimit;
-
             checkAllResponses();
           })
           .catch((error) => {
@@ -955,25 +939,6 @@
             } else {
               markModelError(outputEl, "No response received. The model may have timed out. Please try again.", data);
             }
-            // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
-            const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
-            const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
-
-            const isProConfirmed = (data.is_pro_user === true);
-
-            // 2. Auth Status prüfen (WICHTIG, damit der 2. Parameter stimmt)
-            const isLoggedIn = !!window.auth.currentUser;
-
-            // 3. UI updaten
-            window.updateUserTierUI(isProConfirmed, isLoggedIn);
-
-            // Text setzen mit den neuen Variablen window.currentMaxLimit und window.currentDeepLimit
-            document.getElementById("freeUsageDisplay").innerHTML =
-              "Runs: " + freeRemaining + " / " + window.currentMaxLimit;
-
-            document.getElementById("deepUsageDisplay").innerHTML =
-              "Deep Think: " + deepRemaining + " / " + window.currentDeepLimit;
-
             checkAllResponses();
           })
           .catch(error => {
@@ -1044,25 +1009,6 @@
             } else {
               markModelError(outputEl, "No response received. The model may have timed out. Please try again.", data);
             }
-            // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
-            const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
-            const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
-
-            const isProConfirmed = (data.is_pro_user === true);
-
-            // 2. Auth Status prüfen (WICHTIG, damit der 2. Parameter stimmt)
-            const isLoggedIn = !!window.auth.currentUser;
-
-            // 3. UI updaten
-            window.updateUserTierUI(isProConfirmed, isLoggedIn);
-
-            // Text setzen mit den neuen Variablen window.currentMaxLimit und window.currentDeepLimit
-            document.getElementById("freeUsageDisplay").innerHTML =
-              "Runs: " + freeRemaining + " / " + window.currentMaxLimit;
-
-            document.getElementById("deepUsageDisplay").innerHTML =
-              "Deep Think: " + deepRemaining + " / " + window.currentDeepLimit;
-
             checkAllResponses();
           })
           .catch(error => {
@@ -1133,25 +1079,6 @@
             } else {
               markModelError(outputEl, "No response received. The model may have timed out. Please try again.", data);
             }
-            // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
-            const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
-            const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
-
-            const isProConfirmed = (data.is_pro_user === true);
-
-            // 2. Auth Status prüfen (WICHTIG, damit der 2. Parameter stimmt)
-            const isLoggedIn = !!window.auth.currentUser;
-
-            // 3. UI updaten
-            window.updateUserTierUI(isProConfirmed, isLoggedIn);
-
-            // Text setzen mit den neuen Variablen window.currentMaxLimit und window.currentDeepLimit
-            document.getElementById("freeUsageDisplay").innerHTML =
-              "Runs: " + freeRemaining + " / " + window.currentMaxLimit;
-
-            document.getElementById("deepUsageDisplay").innerHTML =
-              "Deep Think: " + deepRemaining + " / " + window.currentDeepLimit;
-
             checkAllResponses();
           })
           .catch(error => {
@@ -1222,25 +1149,6 @@
             } else {
               markModelError(outputEl, "No response received. The model may have timed out. Please try again.", data);
             }
-            // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
-            const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
-            const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
-
-            const isProConfirmed = (data.is_pro_user === true);
-
-            // 2. Auth Status prüfen (WICHTIG, damit der 2. Parameter stimmt)
-            const isLoggedIn = !!window.auth.currentUser;
-
-            // 3. UI updaten
-            window.updateUserTierUI(isProConfirmed, isLoggedIn);
-
-            // Text setzen mit den neuen Variablen window.currentMaxLimit und window.currentDeepLimit
-            document.getElementById("freeUsageDisplay").innerHTML =
-              "Runs: " + freeRemaining + " / " + window.currentMaxLimit;
-
-            document.getElementById("deepUsageDisplay").innerHTML =
-              "Deep Think: " + deepRemaining + " / " + window.currentDeepLimit;
-
             checkAllResponses();
           })
           .catch(error => {
@@ -1310,25 +1218,6 @@
             } else {
               markModelError(outputEl, "No response received. The model may have timed out. Please try again.", data);
             }
-            // Nutze Fallback-Werte, falls data.free_usage_remaining oder data.deep_remaining undefined sind
-            const freeRemaining = (data.free_usage_remaining !== undefined) ? data.free_usage_remaining : 0;
-            const deepRemaining = (data.deep_remaining !== undefined) ? data.deep_remaining : 0;
-
-            const isProConfirmed = (data.is_pro_user === true);
-
-            // 2. Auth Status prüfen (WICHTIG, damit der 2. Parameter stimmt)
-            const isLoggedIn = !!window.auth.currentUser;
-
-            // 3. UI updaten
-            window.updateUserTierUI(isProConfirmed, isLoggedIn);
-
-            // Text setzen mit den neuen Variablen window.currentMaxLimit und window.currentDeepLimit
-            document.getElementById("freeUsageDisplay").innerHTML =
-              "Runs: " + freeRemaining + " / " + window.currentMaxLimit;
-
-            document.getElementById("deepUsageDisplay").innerHTML =
-              "Deep Think: " + deepRemaining + " / " + window.currentDeepLimit;
-
             checkAllResponses();
           })
           .catch(error => {

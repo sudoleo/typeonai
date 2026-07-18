@@ -472,8 +472,19 @@ function fetchUsageData(token) {
         if (Number.isFinite(totalLimit)) window.currentMaxLimit = totalLimit;
         if (Number.isFinite(deepTotalLimit)) window.currentDeepLimit = deepTotalLimit;
       }
-      freeDisplay.innerHTML = 'Runs: <strong>' + data.remaining + ' / ' + window.currentMaxLimit + '</strong>';
-      deepDisplay.innerHTML = 'Deep Think: <strong>' + data.deep_remaining + ' / ' + window.currentDeepLimit + '</strong>';
+      if (typeof window.App?.renderUsageDisplay === "function") {
+        window.App.renderUsageDisplay({
+          remaining: data.remaining,
+          deepRemaining: data.deep_remaining,
+          totalLimit: window.currentMaxLimit,
+          deepLimit: window.currentDeepLimit
+        });
+      } else {
+        // Modul- und defer-Skripte koennen bei kaltem Cache unterschiedlich
+        // schnell eintreffen. Der Fallback bewahrt denselben DOM-Vertrag.
+        freeDisplay.innerHTML = 'Runs: <strong>' + data.remaining + ' / ' + window.currentMaxLimit + '</strong>';
+        deepDisplay.innerHTML = 'Deep Think: <strong>' + data.deep_remaining + ' / ' + window.currentDeepLimit + '</strong>';
+      }
     })
     .catch(err => console.error("Error when retrieving the quota:", err));
 }

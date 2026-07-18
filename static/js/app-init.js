@@ -577,12 +577,12 @@
             const data = await resp.json();
             setCurrentUsageLimits(data.is_pro === true, data);
 
-            // Hier nutzen wir die GLOBALE Variable, die durch checkUserStatusOnLoad korrekt gesetzt wurde
-            document.getElementById("freeUsageDisplay").innerHTML =
-              "Runs: " + data.remaining + " / " + currentMaxLimit;
-
-            document.getElementById("deepUsageDisplay").innerHTML =
-              "Deep Think: " + data.deep_remaining + " / " + currentDeepLimit;
+            window.App.renderUsageDisplay({
+              remaining: data.remaining,
+              deepRemaining: data.deep_remaining,
+              totalLimit: currentMaxLimit,
+              deepLimit: currentDeepLimit
+            });
 
           } catch (e) { console.error(e); }
         }

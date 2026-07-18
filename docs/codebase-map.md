@@ -87,7 +87,10 @@ deferred am `</body>` — `app-init.js`.
 - **`app-core.js`** — MUSS zuerst laden. Definiert `window.App`-Bus, `modelPrefs`
   (zentrales Mapping Provider→DOM-IDs), `deepThinkModelLabels`, gemeinsame Helfer
   (`getModelOptionLabel`, `getSelectedModelCount`, `setAppTitle`, `showPopup`,
-  `trackAppEvent`, `exitHeroMode`) sowie `window.App.usageRun`: ein logischer
+  `trackAppEvent`, `exitHeroMode`) sowie den zentralen
+  `window.App.renderUsageDisplay`-Renderer. Dieser ignoriert fehlende Usage-Felder
+  aus parallelen Antworten und bewahrt den DOM-/Layout-Vertrag (Label links,
+  fetter Wert rechts). `window.App.usageRun` hält einen logischen
   Idempotency-Key pro UI-Lauf, geteilt von `/prepare`, allen `/ask_*` und
   `/consensus`. `setAppTitle` setzt den Standardtitel oder
   einen gekürzten, fragebezogenen Browser-Tab-Titel; `exitHeroMode` schaltet
