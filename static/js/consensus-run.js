@@ -227,6 +227,9 @@
         .trim();
     // Status, ob eigene API Keys genutzt werden sollen
     const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
+    const deepThink = window.App.usageRun?.current?.deepThink
+      ?? (document.getElementById("deepSearchToggle")?.checked === true);
+    const usageRun = window.App.usageRun?.ensure?.(deepThink, useOwnKeys);
 
     let id_token = null;
     if (window.auth && window.auth.currentUser) {
@@ -503,6 +506,8 @@
       const consensusRequestResult = await streamSSERequest("/consensus", {
           id_token: id_token,
           useOwnKeys: useOwnKeys,
+          usage_run_key: usageRun?.key || null,
+          deep_search: deepThink,
           question: question,
           answer_openai: answer_openai,
           answer_mistral: answer_mistral,
@@ -526,6 +531,9 @@
           "differences.delta": differencesPhaseRenderer
         });
       const data = consensusRequestResult.data;
+      if (data?.usage_run_status) {
+        window.App.usageRun?.mark?.(data.usage_run_status);
+      }
       const consensusErrorDetail =
         data?.detail && typeof data.detail === "object"
           ? data.detail
@@ -553,7 +561,7 @@
 
       if (freeUsageRemaining !== undefined) {
         document.getElementById("freeUsageDisplay").innerText =
-          "Requests: " + freeUsageRemaining + " / " + window.currentMaxLimit;
+          "Runs: " + freeUsageRemaining + " / " + window.currentMaxLimit;
       }
       if (deepRemaining !== undefined) {
         document.getElementById("deepUsageDisplay").innerText =

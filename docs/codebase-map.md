@@ -47,7 +47,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin`, `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (Pro, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). |
-| `users.py` | `/user_status`, `/usage`, `/delete_account`, `/track-interest`. |
+| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. |
 | `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` zum sicheren Wiederherstellen eines Share-/Watch-fähigen Pending-Snapshots aus einem eigenen Consensus-Bookmark. Beide Save-Endpunkte liefern den vollständig zusammengeführten Bookmark-Datensatz zurück, damit der Client ihn ohne Reload aktualisiert. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. kompakter History je Watch), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH) sowie öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
@@ -87,7 +87,9 @@ deferred am `</body>` — `app-init.js`.
 - **`app-core.js`** — MUSS zuerst laden. Definiert `window.App`-Bus, `modelPrefs`
   (zentrales Mapping Provider→DOM-IDs), `deepThinkModelLabels`, gemeinsame Helfer
   (`getModelOptionLabel`, `getSelectedModelCount`, `setAppTitle`, `showPopup`,
-  `trackAppEvent`, `exitHeroMode`). `setAppTitle` setzt den Standardtitel oder
+  `trackAppEvent`, `exitHeroMode`) sowie `window.App.usageRun`: ein logischer
+  Idempotency-Key pro UI-Lauf, geteilt von `/prepare`, allen `/ask_*` und
+  `/consensus`. `setAppTitle` setzt den Standardtitel oder
   einen gekürzten, fragebezogenen Browser-Tab-Titel; `exitHeroMode` schaltet
   Antwortbereich und Input vom zentrierten Leerzustand in den Laufzustand.
 - **`model-picker.js`** — Modellauswahl/Custom-Picker, Default-Modelle, localStorage-
@@ -202,15 +204,20 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
 
 ### Anfrage an Modelle (Streaming)
 1. Frontend `sendQuestion` (`query-send.js`) ruft zuerst **`POST /prepare`**:
-   Auth + Usage-Pre-Check und Follow-up-Gate; Antwort: finaler `system_prompt`.
+   Auth + Follow-up-Gate und transaktionale Usage-Reservierung anhand des vom
+   Client erzeugten, kostenfreien `usage_run_key`; Antwort: finaler
+   `system_prompt` + persistenter UTC-Tagesstand.
    Echtzeitdaten holen sich die Modelle selbst über die native Web-Suche in jedem
    Provider-Call (`engines.py`), daher kein Intent-Router/Realtime-Injektion mehr.
 2. Fan-out an die ausgewählten **`/ask_<provider>`**-Endpoints (parallel), je mit
    `stream:true`. Backend prüft Auth, Pro-Status, Deep-Search-Berechtigung,
    Wortlimit (`validate_question_word_limit`) und Modell (`validate_model`),
-   parst Attachments, zählt Usage hoch (`active_count` teilt den Increment:
-   `1/active_count`). Eigene Provider-Keys dürfen nur verifizierte Nutzer
-   verwenden; sie umgehen die Free-Usage-Zählung, aber nicht Auth/Pro-Gates.
+   parst Attachments und konsumiert den reservierten Run idempotent. Alle
+   parallelen Provider teilen denselben Key: der erste `/ask_*`-Aufruf wechselt
+   `reserved→consumed`, alle weiteren sehen `consumed` und kosten nichts
+   zusätzlich. Clientseitige Modellanzahl/Kosten werden nicht akzeptiert.
+   Eigene Provider-Keys dürfen nur verifizierte Nutzer verwenden; sie umgehen
+   die Usage-Zählung, aber nicht Auth/Pro-Gates.
 3. **SSE-Protokoll Modellantwort** (`streaming_model_response` in `streaming.py`):
    `event: delta {text}` … dann `event: final {response, sources,
    free_usage_remaining, deep_remaining, is_pro_user, key_used}`. Bei Fehler kommt
@@ -247,7 +254,8 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   darunter die prüfbare Grundlage.
 - `getConsensus` (`consensus-run.js`) sammelt die vorhandenen Modellantworten +
   `excluded_models` + `consensus_model` und ruft **`POST /consensus`**
-  (`stream:true`).
+  (`stream:true`) mit demselben `usage_run_key`. Der Endpoint validiert/
+  konsumiert den Run idempotent und erzeugt keine zweite Usage-Einheit.
 - Deep Think bleibt ein separater Pro-Laufmodus neben High Quality: Das Preset
   waehlt Premium-Modelle, Deep Think ergaenzt Prompt, Provider-Reasoning,
   hoeheres Tokenbudget und eigenes Kontingent. Deep Think wählt im Frontend
@@ -312,7 +320,7 @@ dem günstigen Judge-Modell seines Providers
 `{decision: maintain|revise, position, reason}`. Aggregiertes Outcome:
 `resolved` (≥1 revidiert, ≥1 bleibt) / `standoff` (alle bleiben) /
 `mutual_revision` (alle revidieren) / `error`. Verifizierter Login nötig,
-kostet 1 regulären Usage-Punkt (außer `useOwnKeys`), Eingaben werden wie bei
+kostet 1 eigenen persistenten Run (außer `useOwnKeys`), Eingaben werden wie bei
 `/consensus` serverseitig gekappt (`normalize_resolve_positions`), Ergebnis
 wird **nicht** persistiert. Frontend: „Resolve with the models"-Button an
 Contradiction-Karten in `consensus-insights.js` (nur bei ≥2 beteiligten
@@ -354,13 +362,27 @@ Whitelist für Bild-MIME-Typen.
   Fehler werden nicht gecacht; `/delete_account` invalidiert via
   `invalidate_tier_cache(uid)`. Manuell vergebene Pro/Early-Tags greifen
   dadurch erst nach ≤60s.
-- **Usage-Zähler liegen In-Memory** (`app/core/state.py`: `usage_counter`,
-  `deep_search_usage`, `last_feedback_time`) — kein Persistieren,
-  Reset beim täglichen Render-Restart ist gewollt. Check + Increment laufen
-  atomar unter einem Lock (`state.py::check_and_increment_usage`), weil die
-  sync-def `/ask_*`-Endpoints beim Fan-out parallel in Threadpool-Workern laufen.
-- Limits/Defaults kommen aus `app/core/config.py` (`get_usage_limit`,
-  `get_word_limit`, `get_output_token_limit`, …) und können per Firestore
+- **Usage ist persistent und run-basiert:**
+  `app/services/usage_repository.py` definiert `UsageRepository` und die
+  Firestore-Implementierung `FirestoreUsageRepository`. Ein kompletter
+  Consensus-Run reserviert genau **einen Integer-Slot**, unabhängig von
+  Modellanzahl oder Provider-Fan-out. Deep Think zählt ebenfalls genau einmal
+  gegen dieses Total und zusätzlich gegen ein separates Deep-Think-Kontingent.
+  `reserve` führt Idempotenzprüfung, Limitprüfung und Reservierung gemeinsam in
+  einer Firestore-Transaktion aus; `consume` und `release` wechseln den Status
+  ebenfalls transaktional, `snapshot` liest das einzelne UTC-Tagesaggregat.
+  Der neue Free-Default ist 3 reguläre Runs pro UTC-Tag
+  (`free_consensus_run_limit`); reguläre und Deep-Think-Run-Limits je Tier sind
+  als vier eigene `app_config/models.limits`-Felder konfigurierbar. `/prepare`
+  reserviert, der erste serverfinanzierte Provider-Aufruf konsumiert, und
+  `/consensus` wiederholt denselben Consume idempotent. `/resolve` erzeugt einen
+  eigenen Run. `/usage` und `/user_status` lesen die Firestore-Tagesbasis;
+  `/usage/run/release` gibt nur noch nicht konsumierte Reservierungen frei.
+  `app/core/state.py` enthält nur noch den kurzlebigen Feedback-Cooldown; die
+  alten Float-/Request-Counter sind entfernt.
+- Limits/Defaults kommen aus `app/core/config.py` (`get_consensus_run_limit`,
+  `get_deep_think_run_limit`, `get_word_limit`, `get_output_token_limit`, …)
+  und können per Firestore
   (`app_config/models.limits`) überschrieben werden.
 - Die Antwortmodell-Picker wenden bei einem Tier-Wechsel die Free-/Early-/Pro-
   Defaults erneut an, solange der Nutzer für den jeweiligen Provider keine
@@ -401,7 +423,7 @@ app/core/
   config.py                  Modell-Kataloge, Tier-Limits, Firestore-Sync (load_models_from_db)
   security.py                Firebase-Init, Token/Tier/Admin-Checks, CSP-Middleware
   rate_limit.py              slowapi-Limiter (Client-IP hinter Render-Proxy via XFF)
-  state.py                   In-Memory-Dicts (Usage, IPs, Feedback-Zeit)
+  state.py                   Kurzlebiger In-Memory-Feedback-Cooldown
 app/api/routers/             siehe §2
 app/services/llm/
   base.py                    System-Prompt, Wortzählung, validate_model
@@ -412,6 +434,7 @@ app/services/llm/
   citations.py               Antwort-Parsing + Quellen (source_response, make_llm_result)
   attachments.py             Attachment-Validierung/Aufbereitung
 app/services/
+  usage_repository.py        Firestore-Usage fuer logische Runs (reserve/consume/release/snapshot)
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
   opinion_map.py             Datenminimierte, mehrdimensionale Provider-Positionen + Direction-Shift-Berechnung
@@ -433,12 +456,33 @@ Wichtige Verträge im Backend:
 ## 6. Datenhaltung / Firebase / Konfiguration
 
 **Firestore-Collections** (verifiziert über Code):
-- `users/{uid}` — `tier`, `role`; Subcollections `bookmarks`, `counters`.
+- `users/{uid}` — `tier`, `role`; Subcollections `bookmarks`, `counters` sowie
+  die produktive run-basierte Usage:
+  - `usage_days/{YYYY-MM-DD}` — UTC-Tagesaggregat mit Schema-Version und den
+    Integer-Zählern `total_reserved`, `total_consumed`,
+    `deep_think_reserved`, `deep_think_consumed`. Reservierte und verbrauchte
+    Slots zählen gegen das jeweilige Tageslimit; jeder Run belegt das Total,
+    Deep Think zusätzlich den Deep-Bucket. Je Bucket gilt `remaining = limit -
+    reserved - consumed` (mindestens 0).
+  - `usage_runs/{sha256(idempotency_key)}` — idempotenter Run je UID + Key; der
+    Klartext-Key wird nicht gespeichert. Enthält `kind=regular|deep_think`, den
+    UTC-Tag der Reservierung, beide serverseitigen Limits zum
+    Reservierungszeitpunkt und
+    `status=reserved|consumed|released`. Erlaubte Übergänge:
+    `reserved → consumed` (der erste begonnene Provider-Aufruf kostet genau
+    eine Run-Einheit) oder
+    `reserved → released` (fehlgeschlagener/abgebrochener Run gibt den Slot
+    frei); beide Zielzustände sind terminal, Wiederholungen idempotent. Der Key
+    kann nicht für einen anderen Run-Typ wiederverwendet werden. Provider-/LLM-
+    Aufrufe finden immer außerhalb der Transaktion zwischen Reservierung und
+    Abschluss statt. Beim Account-Löschen werden beide Subcollections entfernt.
 - `app_config/models` — von `load_models_from_db()` gelesen/erzeugt: erlaubte
   Modelle pro Provider, `premium`, `consensus`, `preset_models`, `deep_think_model`,
   `judge_models`, `limits`.
   **Single Source of Truth für Limits/Modelle in Produktion** (überschreibt die
   `config.py`-Defaults beim Startup). `consensus` steuert den App-Consensus-Picker;
+  Fehlende Limitfelder werden beim Startup normalisiert und per Merge in das
+  Admin-Dokument zurückgeschrieben (Schema-Backfill ohne Verlust vorhandener Werte).
   Werte können historische Engine-Aliase (`Gemini-Pro`) oder direkte Modell-IDs aus
   den Provider-Listen sein. In `/admin` können Provider-Modelle per `Consensus`-
   Checkbox in diese Liste aufgenommen werden. `deep_think_model` ist die
@@ -553,7 +597,8 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **498 passed** (2026-07-18).
+  Letzte bekannte Baseline: **529 passed** (2026-07-18; inklusive
+  run-basierter Usage-Repository-Tests).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, kompakte Antwort→Consensus-
@@ -708,12 +753,12 @@ keinen Watch-Lauf aus und ändert keinen Zeitplan.
 - **Provider-Label-Konvention**: Frontend nutzt teils `Claude`, Backend kanonisch
   `Anthropic`. Beim Verdrahten neuer Modelle Mapping in `app-core.js::modelPrefs`
   und Backend-`normalize_model_name` synchron halten.
-- **Usage ist In-Memory, aber atomar** (`active_count`-Increment `1/n`).
-  Limit-Check + Increment laufen unter einem Lock in
-  `state.py::check_and_increment_usage`; Reads über `get_usage_snapshot`.
-  Die Dicts nie mehr direkt per read-modify-write ändern — beim Ändern der
-  Limit-/Zähl-Logik alle `/ask_*` + `/consensus` + `/resolve` + `/usage` +
-  `/user_status` + `/prepare` konsistent halten.
+- **Usage-Key ist ein Backend-/Frontend-Vertrag.** Ein frischer logischer Lauf
+  nutzt denselben `usage_run_key` in `/prepare`, allen `/ask_*` und
+  `/consensus`; Resolve nutzt einen eigenen Key. Run-Typ (`regular` oder
+  `deep_think`) und Limits werden ausschließlich serverseitig bestimmt. Niemals
+  clientseitige Kosten, Modellanzahl oder Float-Inkremente übernehmen; niemals
+  Provider-Aufrufe in die Firestore-Transaktionsfunktion verschieben.
 - **Datenminimierung ist Designentscheidung**: keine IP-/User-Agent-Speicherung,
   keine Datei-Bytes in Firestore. Nicht „aus Versehen" mitloggen.
 

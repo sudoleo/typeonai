@@ -161,7 +161,7 @@ async def read_root(request: Request):
 
     response = templates.TemplateResponse("index.html", {
         "request": request, 
-        "free_limit": cfg.get_usage_limit(False),
+        "free_limit": cfg.get_consensus_run_limit(False),
         "limits": cfg.get_limits_config(),
         "models": models,
         "default_models": cfg.FREE_DEFAULT_MODEL_BY_PROVIDER,

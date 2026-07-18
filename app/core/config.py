@@ -21,10 +21,13 @@ class ModelConfig:
     request_config: dict[str, Any] = field(default_factory=dict)
 
 DEFAULT_LIMITS = {
-    "free_usage_limit": 25,
-    "pro_usage_limit": 500,
-    "free_deep_search_limit": 0,
-    "pro_deep_search_limit": 50,
+    # Persistente, run-basierte UTC-Tageslimits. Das Total zaehlt jeden
+    # serverfinanzierten logischen Run genau einmal; Deep Think fuehrt
+    # zusaetzlich ein separates Teilkontingent.
+    "free_consensus_run_limit": 3,
+    "pro_consensus_run_limit": 500,
+    "free_deep_think_run_limit": 0,
+    "pro_deep_think_run_limit": 50,
     "free_max_words": 500,
     "pro_max_words": 500,
     "free_deep_search_max_words": 0,
@@ -61,7 +64,6 @@ DEFAULT_LIMITS = {
 
 LIMITS = DEFAULT_LIMITS.copy()
 
-FREE_USAGE_LIMIT = LIMITS["free_usage_limit"]
 MAX_WORDS = LIMITS["free_max_words"]
 DEEP_SEARCH_MAX_WORDS = LIMITS["pro_deep_search_max_words"]
 MAX_TOKENS = LIMITS["pro_max_tokens"]
@@ -268,9 +270,6 @@ CONSENSUS_PRESET_MODELS = {
     for preset_id, models in _BASE_CONSENSUS_PRESET_MODELS.items()
 }
 DEFAULT_CONSENSUS_PRESET = "balanced"
-
-PRO_USAGE_LIMIT = LIMITS["pro_usage_limit"]
-PRO_DEEP_SEARCH_LIMIT = LIMITS["pro_deep_search_limit"]
 
 VALID_LEADERBOARD_MODELS = {
     "OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok",
@@ -958,14 +957,10 @@ def _coerce_limit(value, fallback: int) -> int:
 
 
 def _sync_limit_constants():
-    global FREE_USAGE_LIMIT, PRO_USAGE_LIMIT, PRO_DEEP_SEARCH_LIMIT
     global MAX_WORDS, DEEP_SEARCH_MAX_WORDS, MAX_TOKENS, DEEP_SEARCH_MAX_TOKENS
     global CONSENSUS_MAX_TOKENS, DIFFERENCES_MAX_TOKENS
     global GEMINI_MAX_TOKENS, GEMINI_DEEP_MAX_TOKENS
 
-    FREE_USAGE_LIMIT = LIMITS["free_usage_limit"]
-    PRO_USAGE_LIMIT = LIMITS["pro_usage_limit"]
-    PRO_DEEP_SEARCH_LIMIT = LIMITS["pro_deep_search_limit"]
     MAX_WORDS = LIMITS["free_max_words"]
     DEEP_SEARCH_MAX_WORDS = LIMITS["pro_deep_search_max_words"]
     MAX_TOKENS = LIMITS["pro_max_tokens"]
@@ -991,12 +986,14 @@ def get_limits_config() -> dict:
     return dict(LIMITS)
 
 
-def get_usage_limit(is_pro: bool) -> int:
-    return LIMITS["pro_usage_limit"] if is_pro else LIMITS["free_usage_limit"]
+def get_consensus_run_limit(is_pro: bool) -> int:
+    key = "pro_consensus_run_limit" if is_pro else "free_consensus_run_limit"
+    return LIMITS[key]
 
 
-def get_deep_search_limit(is_pro: bool) -> int:
-    return LIMITS["pro_deep_search_limit"] if is_pro else LIMITS["free_deep_search_limit"]
+def get_deep_think_run_limit(is_pro: bool) -> int:
+    key = "pro_deep_think_run_limit" if is_pro else "free_deep_think_run_limit"
+    return LIMITS[key]
 
 
 def get_word_limit(is_pro: bool, deep_search: bool = False) -> int:
@@ -1140,6 +1137,13 @@ def load_models_from_db():
             apply_watch_models(data.get("watch_models"))
 
             apply_limits(data.get("limits"))
+            # Schema-Backfill: neue Limitfelder (z. B. die run-basierten UTC-
+            # Tageslimits) nicht nur im Prozess defaulten, sondern im Admin-
+            # Dokument persistieren. Bestehende gueltige Adminwerte bleiben
+            # durch apply_limits/get_limits_config erhalten.
+            normalized_limits = get_limits_config()
+            if data.get("limits") != normalized_limits:
+                doc_ref.set({"limits": normalized_limits}, merge=True)
             ensure_default_models_allowed()
             
             # Update ALL_ALLOWED_MODELS

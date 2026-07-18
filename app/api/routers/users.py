@@ -5,9 +5,23 @@ from fastapi import APIRouter, Request, Body, HTTPException
 from app.core.rate_limit import limiter
 import app.core.config as cfg
 from app.core.security import verify_user_token, extract_id_token, is_user_pro, is_user_early, invalidate_tier_cache, db_firestore
-from app.core.state import get_usage_snapshot, reset_usage, last_feedback_time
+from app.core.state import last_feedback_time
+from app.services.usage_repository import (
+    FirestoreUsageRepository,
+    UsageLimits,
+    UsageRunNotFound,
+    UsageTransitionError,
+)
 
 router = APIRouter()
+run_usage_repository = FirestoreUsageRepository(db_firestore)
+
+
+def _run_limits(is_pro: bool) -> UsageLimits:
+    return UsageLimits(
+        total=cfg.get_consensus_run_limit(is_pro),
+        deep_think=cfg.get_deep_think_run_limit(is_pro),
+    )
 
 @router.get("/user_status")
 @limiter.limit("20/minute")
@@ -31,8 +45,8 @@ async def get_user_status(request: Request):
         early_status = pro_status or is_user_early(uid)
 
         # 3. Limits basierend auf Status setzen
-        limit_regular = cfg.get_usage_limit(pro_status)
-        limit_deep = cfg.get_deep_search_limit(pro_status)
+        limit_regular = cfg.get_consensus_run_limit(pro_status)
+        limit_deep = cfg.get_deep_think_run_limit(pro_status)
 
         return {
             "uid": uid,
@@ -50,8 +64,7 @@ async def get_user_status(request: Request):
 @limiter.limit("20/minute")
 async def get_usage_post(request: Request):
     """
-    Liefert die verbleibenden Anfragen dynamisch zurück.
-    Rechnet: (Limit_basierend_auf_Tier) - (Bisherige_Nutzung).
+    Liefert den persistenten Run-Stand des aktuellen UTC-Tags zurück.
     """
     data = await request.json()
     token = data.get("id_token")
@@ -65,22 +78,52 @@ async def get_usage_post(request: Request):
     pro_status = is_user_pro(uid)
 
     # 2. Limits festlegen
-    limit_regular = cfg.get_usage_limit(pro_status)
-    limit_deep = cfg.get_deep_search_limit(pro_status)
+    limits = _run_limits(pro_status)
 
-    # 3. Verbrauch abrufen
-    current_usage, current_deep_usage = get_usage_snapshot(uid)
-
-    # 4. Verbleibend berechnen (verhindert negative Zahlen in der UI, falls mal überzogen wurde)
-    remaining = int(limit_regular - current_usage)
-    deep_remaining = int(limit_deep - current_deep_usage)
+    # 3. Persistenten UTC-Tagesstand abrufen. Ein einzelnes Tagesdokument
+    #    enthaelt Total- und Deep-Think-Bucket konsistent zusammen.
+    snapshot = run_usage_repository.snapshot(uid, limits)
 
     return {
-        "remaining": remaining,
-        "deep_remaining": deep_remaining,
+        "remaining": snapshot.total.remaining,
+        "deep_remaining": snapshot.deep_think.remaining,
         "is_pro": pro_status,
-        "total_limit": limit_regular,
-        "deep_total_limit": limit_deep
+        "total_limit": snapshot.total.limit,
+        "deep_total_limit": snapshot.deep_think.limit,
+        "reserved": snapshot.total.reserved,
+        "consumed": snapshot.total.consumed,
+        "utc_date": snapshot.utc_date,
+    }
+
+
+@router.post("/usage/run/release")
+@limiter.limit("20/minute")
+async def release_usage_run(request: Request, data: dict = Body(...)):
+    token = extract_id_token(request, data)
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    try:
+        uid = verify_user_token(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Authentication failed")
+
+    key = data.get("usage_run_key")
+    if not isinstance(key, str) or not key.strip():
+        raise HTTPException(status_code=400, detail="Missing usage_run_key")
+    try:
+        result = run_usage_repository.release(uid, key.strip())
+    except UsageRunNotFound:
+        raise HTTPException(status_code=404, detail="Usage run not found") from None
+    except UsageTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+
+    return {
+        "status": result.status.value,
+        "remaining": result.snapshot.total.remaining,
+        "deep_remaining": result.snapshot.deep_think.remaining,
+        "total_limit": result.snapshot.total.limit,
+        "deep_total_limit": result.snapshot.deep_think.limit,
+        "utc_date": result.utc_date,
     }
 
 @router.post("/delete_account")
@@ -88,7 +131,7 @@ async def get_usage_post(request: Request):
 async def delete_account(request: Request, data: dict = Body(default={})):
     """
     Löscht den Account vollständig (DSGVO Art. 17): Auth-Account, users-Dokument
-    inkl. Bookmarks, Einträge in pro_waitlist und feedback sowie In-Memory-Zustand.
+    inkl. Bookmarks, Usage-Daten, Einträgen in pro_waitlist und feedback.
     allow_unverified=True, damit auch unbestätigte Accounts gelöscht werden können.
     """
     id_token = extract_id_token(request, data)
@@ -102,19 +145,23 @@ async def delete_account(request: Request, data: dict = Body(default={})):
 
     errors = []
 
-    # 1. Bookmarks-Subcollection löschen (Subcollections werden nicht automatisch
-    #    mit dem Eltern-Dokument entfernt)
-    try:
-        bookmarks_ref = db_firestore.collection("users").document(uid).collection("bookmarks")
-        for doc in bookmarks_ref.stream():
-            doc.reference.delete()
-    except Exception as e:
-        logging.error(f"delete_account: bookmarks cleanup failed for {uid}: {e}")
-        errors.append("bookmarks")
+    # 1. Nutzer-Subcollections loeschen (Subcollections werden nicht automatisch
+    #    mit dem Eltern-Dokument entfernt). usage_* ist die persistente Grundlage
+    #    fuer den kuenftigen run-basierten Consensus-Endpoint.
+    user_ref = db_firestore.collection("users").document(uid)
+    for subcollection in ("bookmarks", "counters", "usage_days", "usage_runs"):
+        try:
+            for doc in user_ref.collection(subcollection).stream():
+                doc.reference.delete()
+        except Exception as e:
+            logging.error(
+                f"delete_account: {subcollection} cleanup failed for {uid}: {e}"
+            )
+            errors.append(subcollection)
 
     # 2. users-Dokument löschen
     try:
-        db_firestore.collection("users").document(uid).delete()
+        user_ref.delete()
     except Exception as e:
         logging.error(f"delete_account: user doc cleanup failed for {uid}: {e}")
         errors.append("profile")
@@ -151,9 +198,8 @@ async def delete_account(request: Request, data: dict = Body(default={})):
         logging.error(f"delete_account: watches cleanup failed for {uid}: {e}")
         errors.append("watches")
 
-    # 4. In-Memory-Zustand bereinigen (inkl. Tier-Flag-Cache, sonst wuerde ein
+    # 4. Feedback-Cooldown bereinigen (inkl. Tier-Flag-Cache, sonst wuerde ein
     #    geloeschter Pro-Account bis zu 60s weiter als Pro gecacht)
-    reset_usage(uid)
     last_feedback_time.pop(uid, None)
     invalidate_tier_cache(uid)
 

@@ -10,12 +10,25 @@ from fastapi.testclient import TestClient
 import app.core.config as cfg
 from app.api.routers import chat as chat_router
 from app.core.rate_limit import limiter
-from app.core.state import usage_counter
+from app.services.usage_repository import RunKind, UsageLimits
 from app.services.llm.resolve_engine import (
     InvalidResolvePayload,
     normalize_resolve_positions,
     run_resolve_round,
 )
+from usage_test_support import make_usage_repository
+
+
+@pytest.fixture(autouse=True)
+def fake_run_usage(monkeypatch):
+    repository, _ = make_usage_repository()
+    monkeypatch.setattr(chat_router, "run_usage_repository", repository)
+    monkeypatch.setattr(
+        chat_router,
+        "get_usage_run_key",
+        lambda data: str(data.get("usage_run_key") or "test-resolve-run"),
+    )
+    yield repository
 
 
 def make_positions():
@@ -188,39 +201,44 @@ def test_resolve_rejects_invalid_positions():
     assert "two positions" in response.json()["detail"]
 
 
-def test_resolve_counts_usage_and_returns_result():
+def test_resolve_counts_usage_and_returns_result(fake_run_usage):
     client = make_client()
     uid = "uid-resolve-usage"
-    usage_counter.pop(uid, None)
     fake_result = {"claim": "Opening year", "outcome": "standoff", "results": []}
-    try:
-        with patch.object(chat_router, "verify_user_token", return_value=uid), \
-             patch.object(chat_router, "is_user_pro", return_value=True), \
-             patch.object(chat_router, "run_resolve_round", return_value=dict(fake_result)) as round_mock:
-            response = client.post("/resolve", headers=AUTH_HEADER, json=resolve_payload())
-        assert response.status_code == 200
-        body = response.json()
-        assert body["outcome"] == "standoff"
-        assert body["is_pro_user"] is True
-        assert usage_counter[uid] == 1
-        # Positionen kommen normalisiert bei der Engine an.
-        _, kwargs_or_args = round_mock.call_args
-        args = round_mock.call_args.args
-        assert args[1] == "Opening year"
-    finally:
-        usage_counter.pop(uid, None)
+    with patch.object(chat_router, "verify_user_token", return_value=uid), \
+         patch.object(chat_router, "is_user_pro", return_value=True), \
+         patch.object(chat_router, "run_resolve_round", return_value=dict(fake_result)) as round_mock:
+        response = client.post("/resolve", headers=AUTH_HEADER, json=resolve_payload())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["outcome"] == "standoff"
+    assert body["is_pro_user"] is True
+    snapshot = fake_run_usage.snapshot(
+        uid,
+        UsageLimits(
+            total=cfg.get_consensus_run_limit(True),
+            deep_think=cfg.get_deep_think_run_limit(True),
+        ),
+    )
+    assert snapshot.total.consumed == 1
+    # Positionen kommen normalisiert bei der Engine an.
+    args = round_mock.call_args.args
+    assert args[1] == "Opening year"
 
 
-def test_resolve_blocks_when_usage_limit_reached():
+def test_resolve_blocks_when_usage_limit_reached(fake_run_usage):
     client = make_client()
     uid = "uid-resolve-limit"
-    usage_counter[uid] = cfg.get_usage_limit(True)
-    try:
-        with patch.object(chat_router, "verify_user_token", return_value=uid), \
-             patch.object(chat_router, "is_user_pro", return_value=True):
-            response = client.post("/resolve", headers=AUTH_HEADER, json=resolve_payload())
-        assert response.status_code == 403
-        # Bare-App ohne main.py-Exception-Handler: detail bleibt verschachtelt.
-        assert response.json()["detail"]["error_code"] == "usage_limit_exceeded"
-    finally:
-        usage_counter.pop(uid, None)
+    limits = UsageLimits(
+        total=cfg.get_consensus_run_limit(True),
+        deep_think=cfg.get_deep_think_run_limit(True),
+    )
+    for index in range(limits.total):
+        key = f"used-{index}"
+        fake_run_usage.reserve(uid, key, RunKind.REGULAR, limits)
+        fake_run_usage.consume(uid, key)
+    with patch.object(chat_router, "verify_user_token", return_value=uid), \
+         patch.object(chat_router, "is_user_pro", return_value=True):
+        response = client.post("/resolve", headers=AUTH_HEADER, json=resolve_payload())
+    assert response.status_code == 403
+    assert response.json()["detail"]["error_code"] == "total_usage_limit_exceeded"

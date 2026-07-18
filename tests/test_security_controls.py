@@ -46,7 +46,6 @@ def test_user_api_key_requests_require_login():
             "question": "hello",
             "api_key": "sk-user-key",
             "model": "gpt-5.4-mini",
-            "active_count": 1,
         },
     )
 

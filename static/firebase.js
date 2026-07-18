@@ -120,12 +120,12 @@ function getConfiguredLimit(key, fallback) {
 // Globale Limits Definition
 window.LIMITS = {
   FREE: {
-    NORMAL: getConfiguredLimit("free_usage_limit", 25),
-    DEEP: getConfiguredLimit("free_deep_search_limit", 12)
+    NORMAL: getConfiguredLimit("free_consensus_run_limit", 3),
+    DEEP: getConfiguredLimit("free_deep_think_run_limit", 0)
   },
   PRO: {
-    NORMAL: getConfiguredLimit("pro_usage_limit", 500),
-    DEEP: getConfiguredLimit("pro_deep_search_limit", 50)
+    NORMAL: getConfiguredLimit("pro_consensus_run_limit", 500),
+    DEEP: getConfiguredLimit("pro_deep_think_run_limit", 50)
   }
 };
 
@@ -472,7 +472,7 @@ function fetchUsageData(token) {
         if (Number.isFinite(totalLimit)) window.currentMaxLimit = totalLimit;
         if (Number.isFinite(deepTotalLimit)) window.currentDeepLimit = deepTotalLimit;
       }
-      freeDisplay.innerHTML = 'Requests: <strong>' + data.remaining + ' / ' + window.currentMaxLimit + '</strong>';
+      freeDisplay.innerHTML = 'Runs: <strong>' + data.remaining + ' / ' + window.currentMaxLimit + '</strong>';
       deepDisplay.innerHTML = 'Deep Think: <strong>' + data.deep_remaining + ' / ' + window.currentDeepLimit + '</strong>';
     })
     .catch(err => console.error("Error when retrieving the quota:", err));

@@ -132,6 +132,26 @@
     let currentQueryRunId = 0;
     let queryRequestRunning = false;
 
+    async function releaseReservedUsageRun() {
+      const run = window.App.usageRun?.current;
+      if (!run?.key || !["new", "reserved"].includes(run.status)) return;
+      // Lokal zuerst entkoppeln: ein spaeter Release-Response darf einen neuen
+      // Lauf nicht ueberschreiben. Der Server lehnt consumed terminal mit 409 ab.
+      window.App.usageRun.clear();
+      try {
+        const token = await window.auth?.currentUser?.getIdToken?.();
+        if (!token) return;
+        await fetch("/usage/run/release", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id_token: token, usage_run_key: run.key }),
+          keepalive: true
+        });
+      } catch (error) {
+        console.warn("Could not release unused run reservation:", error);
+      }
+    }
+
     function setSendButtonRunning(isRunning) {
       const sendButton = document.getElementById("sendButton");
       if (!sendButton) return;
@@ -217,6 +237,7 @@
       finishQueryRun(runId);
       setConsensusGate(true);
       window.hideConsensusOutput?.();
+      releaseReservedUsageRun();
       trackAppEvent("app_query_canceled");
     };
 
@@ -255,8 +276,8 @@
           agent_mode: typeof window.isAgentModeEnabled === "function" && window.isAgentModeEnabled()
         });
         // optional: Free/Deep Counter im Sidebar auf einen sicheren Dummy setzen
-        document.getElementById("freeUsageDisplay").innerHTML = "Free requests: 25 / 25";
-        document.getElementById("deepUsageDisplay").innerHTML = "Deep Think: 12 / 12";
+        document.getElementById("freeUsageDisplay").innerHTML = "Runs: 3 / 3";
+        document.getElementById("deepUsageDisplay").innerHTML = "Deep Think: 0 / 0";
 
         // Spinners zeigen und Demo durchspielen
         await window.runDemoFlow(question);
@@ -342,6 +363,9 @@
 
       const deepSearchFlag = document.getElementById("deepSearchToggle").checked;
 
+      await releaseReservedUsageRun();
+      const usageRun = window.App.usageRun.start(deepSearchFlag, useOwnKeys);
+
       const attachmentsPayload = (typeof window.getAttachmentsPayload === "function")
         ? window.getAttachmentsPayload()
         : [];
@@ -384,6 +408,12 @@
       if (document.getElementById("selectGrok")?.checked) {
         const box = document.getElementById("grokResponse");
         if (box) modelBoxes.push(box);
+      }
+      if (modelBoxes.length === 0) {
+        await releaseReservedUsageRun();
+        finishQueryRun(queryRunId);
+        setConsensusGate(true);
+        return;
       }
 
       // 🔸 PHASE 1: UI Feedback setzen
@@ -431,9 +461,12 @@
 
       function updateUsageDisplayFromData(data) {
         const normalized = unwrapApiError(data);
+        if (normalized.usage_run_status) {
+          window.App.usageRun?.mark?.(normalized.usage_run_status);
+        }
         if (normalized.free_usage_remaining !== undefined) {
           document.getElementById("freeUsageDisplay").innerHTML =
-            "Requests: " + normalized.free_usage_remaining + " / " + window.currentMaxLimit;
+            "Runs: " + normalized.free_usage_remaining + " / " + window.currentMaxLimit;
         }
         if (normalized.deep_remaining !== undefined) {
           document.getElementById("deepUsageDisplay").innerHTML =
@@ -513,6 +546,9 @@
           mode: mode,
           useOwnKeys: useOwnKeys
         };
+        if (usageRun.key) {
+          preparePayload.usage_run_key = usageRun.key;
+        }
 
         // Nur anhängen, wenn wirklich vorhanden
         if (idToken) {
@@ -532,6 +568,7 @@
         const prepareData = await prepareResp.json();
 
         if (prepareResp.ok && prepareData.system_prompt) {
+          updateUsageDisplayFromData(prepareData);
           // ÄNDERUNG: Wir prüfen, ob der neue Prompt ANDERS ist als der alte.
           if (prepareData.system_prompt !== storedSystemPrompt) {
             effectiveSystemPrompt = prepareData.system_prompt;
@@ -547,6 +584,7 @@
             finishQueryRun(queryRunId);
             setAgentModeStatus("error", message);
             setConsensusGate(true);
+            window.App.usageRun?.clear?.();
             return;
           }
           console.warn("No valid system_prompt from /prepare, keeping base.");
@@ -750,13 +788,13 @@
         const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
         const payload = {
           question: question,
-          active_count: 1,
           deep_search: deepSearchFlag,      // oben definiert
           system_prompt: effectiveSystemPrompt,
           mode: mode,
           model: document.getElementById("openaiModelSelect").value,
           id_token: validIdToken,
-          useOwnKeys: useOwnKeys
+          useOwnKeys: useOwnKeys,
+          usage_run_key: usageRun.key
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
         if (followupContext) payload.context = followupContext;
@@ -800,6 +838,7 @@
           })
           .then((data) => {
             if (!isActiveQueryRun(queryRunId)) return;
+            updateUsageDisplayFromData(data);
             const outputEl = document
               .getElementById("openaiResponse")
               .querySelector(".collapsible-content");
@@ -834,7 +873,7 @@
 
             // Text setzen mit den neuen Variablen window.currentMaxLimit und window.currentDeepLimit
             document.getElementById("freeUsageDisplay").innerHTML =
-              "Requests: " + freeRemaining + " / " + window.currentMaxLimit;
+              "Runs: " + freeRemaining + " / " + window.currentMaxLimit;
 
             document.getElementById("deepUsageDisplay").innerHTML =
               "Deep Think: " + deepRemaining + " / " + window.currentDeepLimit;
@@ -860,12 +899,12 @@
         const payload = {
           question: question,
           deep_search: deepSearchFlag,
-          active_count: 1,
           system_prompt: effectiveSystemPrompt,
           mode: mode,
           model: document.getElementById("mistralModelSelect").value,
           id_token: validIdToken,
-          useOwnKeys: useOwnKeys
+          useOwnKeys: useOwnKeys,
+          usage_run_key: usageRun.key
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
         if (followupContext) payload.context = followupContext;
@@ -898,6 +937,7 @@
           .then(({ data }) => data)
           .then(data => {
             if (!isActiveQueryRun(queryRunId)) return;
+            updateUsageDisplayFromData(data);
             let outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
             if (data.response) {
               markModelSuccess(outputEl);
@@ -929,7 +969,7 @@
 
             // Text setzen mit den neuen Variablen window.currentMaxLimit und window.currentDeepLimit
             document.getElementById("freeUsageDisplay").innerHTML =
-              "Requests: " + freeRemaining + " / " + window.currentMaxLimit;
+              "Runs: " + freeRemaining + " / " + window.currentMaxLimit;
 
             document.getElementById("deepUsageDisplay").innerHTML =
               "Deep Think: " + deepRemaining + " / " + window.currentDeepLimit;
@@ -949,12 +989,12 @@
         const payload = {
           question: question,
           deep_search: deepSearchFlag,
-          active_count: 1,
           system_prompt: effectiveSystemPrompt,
           mode: mode,
           model: document.getElementById("claudeModelSelect").value,
           id_token: validIdToken,
-          useOwnKeys: useOwnKeys
+          useOwnKeys: useOwnKeys,
+          usage_run_key: usageRun.key
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
         if (followupContext) payload.context = followupContext;
@@ -987,6 +1027,7 @@
           .then(({ data }) => data)
           .then(data => {
             if (!isActiveQueryRun(queryRunId)) return;
+            updateUsageDisplayFromData(data);
             const outputEl = document.getElementById("claudeResponse").querySelector(".collapsible-content");
             if (data.response) {
               markModelSuccess(outputEl);
@@ -1017,7 +1058,7 @@
 
             // Text setzen mit den neuen Variablen window.currentMaxLimit und window.currentDeepLimit
             document.getElementById("freeUsageDisplay").innerHTML =
-              "Requests: " + freeRemaining + " / " + window.currentMaxLimit;
+              "Runs: " + freeRemaining + " / " + window.currentMaxLimit;
 
             document.getElementById("deepUsageDisplay").innerHTML =
               "Deep Think: " + deepRemaining + " / " + window.currentDeepLimit;
@@ -1036,13 +1077,13 @@
         const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
         const payload = {
           question: question,
-          active_count: 1,
           deep_search: deepSearchFlag,
           system_prompt: effectiveSystemPrompt,
           mode: mode,
           model: document.getElementById("geminiModelSelect").value,
           id_token: validIdToken,
-          useOwnKeys: useOwnKeys
+          useOwnKeys: useOwnKeys,
+          usage_run_key: usageRun.key
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
         if (followupContext) payload.context = followupContext;
@@ -1075,6 +1116,7 @@
           .then(({ data }) => data)
           .then(data => {
             if (!isActiveQueryRun(queryRunId)) return;
+            updateUsageDisplayFromData(data);
             const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
             if (data.response) {
               markModelSuccess(outputEl);
@@ -1105,7 +1147,7 @@
 
             // Text setzen mit den neuen Variablen window.currentMaxLimit und window.currentDeepLimit
             document.getElementById("freeUsageDisplay").innerHTML =
-              "Requests: " + freeRemaining + " / " + window.currentMaxLimit;
+              "Runs: " + freeRemaining + " / " + window.currentMaxLimit;
 
             document.getElementById("deepUsageDisplay").innerHTML =
               "Deep Think: " + deepRemaining + " / " + window.currentDeepLimit;
@@ -1125,12 +1167,12 @@
         const payload = {
           question: question,
           deep_search: deepSearchFlag,
-          active_count: 1,
           system_prompt: effectiveSystemPrompt,
           mode: mode,
           model: document.getElementById("deepseekModelSelect").value,
           id_token: validIdToken,
-          useOwnKeys: useOwnKeys
+          useOwnKeys: useOwnKeys,
+          usage_run_key: usageRun.key
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
         if (followupContext) payload.context = followupContext;
@@ -1163,6 +1205,7 @@
           .then(({ data }) => data)
           .then(data => {
             if (!isActiveQueryRun(queryRunId)) return;
+            updateUsageDisplayFromData(data);
             const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
             if (data.response) {
               markModelSuccess(outputEl);
@@ -1193,7 +1236,7 @@
 
             // Text setzen mit den neuen Variablen window.currentMaxLimit und window.currentDeepLimit
             document.getElementById("freeUsageDisplay").innerHTML =
-              "Requests: " + freeRemaining + " / " + window.currentMaxLimit;
+              "Runs: " + freeRemaining + " / " + window.currentMaxLimit;
 
             document.getElementById("deepUsageDisplay").innerHTML =
               "Deep Think: " + deepRemaining + " / " + window.currentDeepLimit;
@@ -1213,12 +1256,12 @@
         const payload = {
           question: question,
           deep_search: deepSearchFlag,
-          active_count: 1,
           system_prompt: effectiveSystemPrompt,
           mode: mode,
           model: document.getElementById("grokModelSelect").value,
           id_token: validIdToken,
-          useOwnKeys: useOwnKeys
+          useOwnKeys: useOwnKeys,
+          usage_run_key: usageRun.key
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
         if (followupContext) payload.context = followupContext;
@@ -1250,6 +1293,7 @@
           .then(({ data }) => data)
           .then(data => {
             if (!isActiveQueryRun(queryRunId)) return;
+            updateUsageDisplayFromData(data);
             const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
             if (data.response) {
               markModelSuccess(outputEl);
@@ -1280,7 +1324,7 @@
 
             // Text setzen mit den neuen Variablen window.currentMaxLimit und window.currentDeepLimit
             document.getElementById("freeUsageDisplay").innerHTML =
-              "Requests: " + freeRemaining + " / " + window.currentMaxLimit;
+              "Runs: " + freeRemaining + " / " + window.currentMaxLimit;
 
             document.getElementById("deepUsageDisplay").innerHTML =
               "Deep Think: " + deepRemaining + " / " + window.currentDeepLimit;

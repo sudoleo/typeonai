@@ -17,14 +17,21 @@ import app.core.config as cfg
 from app.api.routers import chat as chat_router
 from app.api.routers.chat import normalize_followup_context
 from app.core.rate_limit import limiter
-from app.core.state import usage_counter, deep_search_usage
 from app.services.llm.base import FOLLOWUP_CONTEXT_HEADER, build_followup_system_prompt
+from usage_test_support import make_usage_repository
 
 
 @pytest.fixture(autouse=True)
-def reset_rate_limiter():
+def reset_rate_limiter(monkeypatch):
     limiter.reset()
-    yield
+    repository, _ = make_usage_repository()
+    monkeypatch.setattr(chat_router, "run_usage_repository", repository)
+    monkeypatch.setattr(
+        chat_router,
+        "get_usage_run_key",
+        lambda data: str(data.get("usage_run_key") or "test-run-key"),
+    )
+    yield repository
 
 
 def make_client():
@@ -158,7 +165,6 @@ def test_ask_with_context_is_pro_only():
             json={
                 "question": "and how is it used?",
                 "model": free_model("gemini"),
-                "active_count": 1,
                 "context": VALID_CONTEXT,
             },
         )
@@ -182,7 +188,6 @@ def test_prepare_with_context_is_pro_only():
 def test_ask_injects_capped_context_into_system_prompt_for_pro():
     client = make_client()
     uid = "uid-followup-pro"
-    usage_counter.pop(uid, None)
     captured = {}
 
     def fake_run_ask(provider, **kwargs):
@@ -199,7 +204,6 @@ def test_ask_injects_capped_context_into_system_prompt_for_pro():
                 json={
                     "question": "and how is it used?",
                     "model": free_model("gemini"),
-                    "active_count": 1,
                     "system_prompt": "BASE PROMPT",
                     "context": {
                         "previous_question": "What is quantum entanglement?",
@@ -215,14 +219,12 @@ def test_ask_injects_capped_context_into_system_prompt_for_pro():
         # Der Konsens-Text wurde serverseitig gekappt, nicht 1:1 uebernommen.
         assert len(system_prompt) < len(oversized_consensus)
     finally:
-        usage_counter.pop(uid, None)
-        deep_search_usage.pop(uid, None)
+        pass
 
 
 def test_ask_without_context_leaves_system_prompt_untouched():
     client = make_client()
     uid = "uid-followup-none"
-    usage_counter.pop(uid, None)
     captured = {}
 
     def fake_run_ask(provider, **kwargs):
@@ -238,15 +240,13 @@ def test_ask_without_context_leaves_system_prompt_untouched():
                 json={
                     "question": "hello",
                     "model": free_model("gemini"),
-                    "active_count": 1,
                     "system_prompt": "BASE PROMPT",
                 },
             )
         assert response.status_code == 200
         assert captured["system_prompt"] == "BASE PROMPT"
     finally:
-        usage_counter.pop(uid, None)
-        deep_search_usage.pop(uid, None)
+        pass
 
 
 def test_prepare_validates_but_does_not_inject_context():

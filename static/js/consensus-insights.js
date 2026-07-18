@@ -776,6 +776,10 @@
 
             const question = (window.lastQuestion || $("questionInput")?.value || "").trim();
             const useOwnKeys = !!$("useOwnKeysSwitch")?.checked;
+            const resolveUsageRunKey = useOwnKeys
+              ? null
+              : (globalThis.crypto?.randomUUID?.()
+                || `${Date.now()}-${Math.random().toString(16).slice(2)}`);
             // Nur den Label-Text austauschen; der Pro-Chip bleibt dabei an
             // seinem Platz und der CSS-Spinner kann den Ladezustand anzeigen.
             const labelEl = button.querySelector(".diff-resolve-btn-label");
@@ -796,6 +800,7 @@
                 body: JSON.stringify({
                   id_token: idToken,
                   useOwnKeys: useOwnKeys,
+                  usage_run_key: resolveUsageRunKey,
                   question: question,
                   claim: diff.claim,
                   positions: diff.positions,
@@ -827,7 +832,7 @@
 
               if (data.free_usage_remaining !== undefined) {
                 const usageEl = $("freeUsageDisplay");
-                if (usageEl) usageEl.innerText = "Requests: " + data.free_usage_remaining + " / " + window.currentMaxLimit;
+                if (usageEl) usageEl.innerText = "Runs: " + data.free_usage_remaining + " / " + window.currentMaxLimit;
               }
 
               renderResolveResult(resultBox, data);

@@ -126,6 +126,45 @@
   window.exitHeroMode = exitHeroMode;
   window.syncHeroResponseAccess = syncHeroResponseAccess;
 
+  // Ein logischer UI-Lauf teilt genau einen serverseitigen Idempotency-Key
+  // zwischen /prepare, allen parallelen /ask_* und /consensus. Kosten oder
+  // Modellanzahl kommen bewusst nicht aus dem Client.
+  const usageRun = {
+    current: null,
+    start(deepThink, useOwnKeys) {
+      let key = null;
+      if (!useOwnKeys) {
+        key = globalThis.crypto?.randomUUID?.();
+        if (!key) {
+          key = `${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
+        }
+      }
+      this.current = {
+        key,
+        deepThink: deepThink === true,
+        useOwnKeys: useOwnKeys === true,
+        status: useOwnKeys ? "own_keys" : "new"
+      };
+      return this.current;
+    },
+    ensure(deepThink, useOwnKeys) {
+      if (
+        !this.current
+        || this.current.deepThink !== (deepThink === true)
+        || this.current.useOwnKeys !== (useOwnKeys === true)
+      ) {
+        return this.start(deepThink, useOwnKeys);
+      }
+      return this.current;
+    },
+    mark(status) {
+      if (this.current && status) this.current.status = status;
+    },
+    clear() {
+      this.current = null;
+    }
+  };
+
   Object.assign(window.App, {
     modelPrefs,
     deepThinkModelLabels,
@@ -135,6 +174,7 @@
     trackAppEvent,
     showPopup,
     exitHeroMode,
-    syncHeroResponseAccess
+    syncHeroResponseAccess,
+    usageRun
   });
 })();

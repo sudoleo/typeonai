@@ -455,12 +455,12 @@
         const providers = ['openai', 'mistral', 'anthropic', 'gemini', 'deepseek', 'grok'];
         const limitGroups = [
             {
-                title: 'Usage Limits',
+                title: 'Run Usage Limits (UTC day)',
                 fields: [
-                    ['free_usage_limit', 'Free requests'],
-                    ['pro_usage_limit', 'Pro requests'],
-                    ['free_deep_search_limit', 'Free Deep Think requests'],
-                    ['pro_deep_search_limit', 'Pro Deep Think requests']
+                    ['free_consensus_run_limit', 'Free consensus runs'],
+                    ['pro_consensus_run_limit', 'Pro consensus runs'],
+                    ['free_deep_think_run_limit', 'Free Deep Think runs'],
+                    ['pro_deep_think_run_limit', 'Pro Deep Think runs']
                 ]
             },
             {

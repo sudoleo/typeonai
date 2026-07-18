@@ -68,11 +68,11 @@
   <!-- DOMPurify (HTML Sanitizer) -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260716-navigation-settings1"></script>
+  <script type="module" src="/static/firebase.js?v=20260718-runusage1"></script>
   <script type="module" src="/static/demo.js?v=20260717-demo-autostart1"></script>
   <script src="/static/app-ui.js?v=20260628-prompt-default2" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
-  <script src="/static/js/app-core.js?v=20260716-redesign2" defer></script>
+  <script src="/static/js/app-core.js?v=20260718-runusage1" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
   <script src="/static/js/model-picker.js?v=20260718-grokcleanup1" defer></script>
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
@@ -96,9 +96,9 @@
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260715-redesign1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-insights.js?v=20260716-copy1" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260716-copy1" defer></script>
-  <script src="/static/js/query-send.js?v=20260716-copy1" defer></script>
+  <script src="/static/js/consensus-insights.js?v=20260718-runusage1" defer></script>
+  <script src="/static/js/consensus-run.js?v=20260718-runusage1" defer></script>
+  <script src="/static/js/query-send.js?v=20260718-runusage1" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
@@ -174,7 +174,7 @@
       <div id="usageOptions" style="margin-top: 0;">
         <h2 class="sidebar-static-heading">Usage</h2>
         <div id="usageDisplay">
-          <span id="freeUsageDisplay">Free requests: ...</span><br>
+          <span id="freeUsageDisplay">Runs: ...</span><br>
           <span id="deepUsageDisplay">Deep Think: ...</span><br>
           <span id="countdownDisplay"></span>
         </div>
@@ -278,7 +278,7 @@
           var line = '<i class="skeleton skeleton-line" style="width:54px"></i>';
           var fu = document.getElementById("freeUsageDisplay");
           var du = document.getElementById("deepUsageDisplay");
-          if (fu) fu.innerHTML = "Requests: " + line;
+          if (fu) fu.innerHTML = "Runs: " + line;
           if (du) du.innerHTML = "Deep Think: " + line;
           var bc = document.getElementById("bookmarksContainer");
           if (bc) {
@@ -731,7 +731,7 @@
       </div>
     </div>
 
-    <script src="/static/js/app-init.js?v=20260718-grokcleanup1" defer></script>
+    <script src="/static/js/app-init.js?v=20260718-runusage1" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing

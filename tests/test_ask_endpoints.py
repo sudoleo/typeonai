@@ -14,15 +14,23 @@ from fastapi.testclient import TestClient
 import app.core.config as cfg
 from app.api.routers import chat as chat_router
 from app.core.rate_limit import limiter
-from app.core.state import usage_counter, deep_search_usage
+from app.services.usage_repository import RunKind, UsageLimits
+from usage_test_support import make_usage_repository
 
 
 @pytest.fixture(autouse=True)
-def reset_rate_limiter():
+def reset_rate_limiter(monkeypatch):
     # Die /ask_*-Routen sind mit 3-5/minute limitiert; mehrere Tests teilen
     # sich denselben In-Memory-Limiter (Key: Test-Client-IP).
     limiter.reset()
-    yield
+    repository, _ = make_usage_repository()
+    monkeypatch.setattr(chat_router, "run_usage_repository", repository)
+    monkeypatch.setattr(
+        chat_router,
+        "get_usage_run_key",
+        lambda data: str(data.get("usage_run_key") or "test-run-key"),
+    )
+    yield repository
 
 
 def make_client():
@@ -52,14 +60,14 @@ def test_no_auth_error_is_provider_specific():
 
     response = client.post(
         "/ask_mistral",
-        json={"question": "hello", "model": free_model("mistral"), "active_count": 1},
+        json={"question": "hello", "model": free_model("mistral")},
     )
     assert response.status_code == 400
     assert response.json()["detail"] == "No auth provided."
 
     response = client.post(
         "/ask_gemini",
-        json={"question": "hello", "model": free_model("gemini"), "active_count": 1},
+        json={"question": "hello", "model": free_model("gemini")},
     )
     assert response.status_code == 401
     assert response.json()["detail"] == "Authentication required"
@@ -75,7 +83,6 @@ def test_gemini_own_keys_flag_without_key_is_rejected():
             json={
                 "question": "hello",
                 "model": free_model("gemini"),
-                "active_count": 1,
                 "useOwnKeys": "true",
             },
         )
@@ -93,7 +100,6 @@ def test_deep_search_is_pro_only():
             json={
                 "question": "hello",
                 "model": free_model("grok"),
-                "active_count": 1,
                 "deep_search": "true",
             },
         )
@@ -101,32 +107,30 @@ def test_deep_search_is_pro_only():
     assert "Pro users" in response.json()["detail"]
 
 
-def test_usage_limit_blocks_developer_key_path():
+def test_usage_limit_blocks_developer_key_path(reset_rate_limiter):
     client = make_client()
     uid = "uid-limit-reached"
-    usage_counter[uid] = cfg.get_usage_limit(False)
-    try:
-        p1, p2, p3 = auth_patches(uid=uid)
-        with p1, p2, p3:
-            response = client.post(
-                "/ask_deepseek",
-                headers=AUTH_HEADER,
-                json={"question": "hello", "model": free_model("deepseek"), "active_count": 1},
-            )
-        assert response.status_code == 200
-        body = response.json()
-        assert body["error"] == "Free usage limit reached. Upgrade to Pro."
-        assert body["free_usage_remaining"] == 0
-        # Der abgelehnte Request darf nichts hochzaehlen.
-        assert usage_counter[uid] == cfg.get_usage_limit(False)
-    finally:
-        usage_counter.pop(uid, None)
+    limits = UsageLimits(total=cfg.get_consensus_run_limit(False), deep_think=0)
+    for index in range(limits.total):
+        key = f"used-{index}"
+        reset_rate_limiter.reserve(uid, key, RunKind.REGULAR, limits)
+        reset_rate_limiter.consume(uid, key)
+    p1, p2, p3 = auth_patches(uid=uid)
+    with p1, p2, p3:
+        response = client.post(
+            "/ask_deepseek",
+            headers=AUTH_HEADER,
+            json={"question": "hello", "model": free_model("deepseek")},
+        )
+    assert response.status_code == 403
+    body = response.json()["detail"]
+    assert body["error_code"] == "total_usage_limit_exceeded"
+    assert body["free_usage_remaining"] == 0
 
 
-def test_gemini_developer_path_uses_service_account_and_counts_usage():
+def test_gemini_developer_path_uses_service_account_and_counts_usage(reset_rate_limiter):
     client = make_client()
     uid = "uid-gemini-dev"
-    usage_counter.pop(uid, None)
     captured = {}
 
     def fake_run_ask(provider, **kwargs):
@@ -140,7 +144,7 @@ def test_gemini_developer_path_uses_service_account_and_counts_usage():
             response = client.post(
                 "/ask_gemini",
                 headers=AUTH_HEADER,
-                json={"question": "hello", "model": free_model("gemini"), "active_count": 1},
+                json={"question": "hello", "model": free_model("gemini")},
             )
         assert response.status_code == 200
         assert captured["provider"].label == "Gemini"
@@ -148,16 +152,22 @@ def test_gemini_developer_path_uses_service_account_and_counts_usage():
         # zwischen DEVELOPER_GEMINI_API_KEY und Service Account/ADC.
         assert captured["key"] is None
         assert captured["extras"]["key_used"] == "Service Account"
-        assert usage_counter[uid] == 1.0
+        snapshot = reset_rate_limiter.snapshot(
+            uid,
+            UsageLimits(
+                total=cfg.get_consensus_run_limit(False),
+                deep_think=cfg.get_deep_think_run_limit(False),
+            ),
+        )
+        assert snapshot.total.consumed == 1
+        assert isinstance(snapshot.total.consumed, int)
     finally:
-        usage_counter.pop(uid, None)
-        deep_search_usage.pop(uid, None)
+        pass
 
 
-def test_own_key_path_bypasses_usage_counting():
+def test_own_key_path_bypasses_usage_counting(reset_rate_limiter):
     client = make_client()
     uid = "uid-own-key"
-    usage_counter.pop(uid, None)
     captured = {}
 
     def fake_run_ask(provider, **kwargs):
@@ -173,7 +183,6 @@ def test_own_key_path_bypasses_usage_counting():
                 json={
                     "question": "hello",
                     "model": free_model("anthropic"),
-                    "active_count": 1,
                     "api_key": "sk-user-key",
                 },
             )
@@ -181,9 +190,16 @@ def test_own_key_path_bypasses_usage_counting():
         assert captured["key"] == "sk-user-key"
         assert captured["extras"]["free_usage_remaining"] == "Unlimited"
         assert captured["extras"]["key_used"] == "User API Key"
-        assert uid not in usage_counter
+        snapshot = reset_rate_limiter.snapshot(
+            uid,
+            UsageLimits(
+                total=cfg.get_consensus_run_limit(False),
+                deep_think=cfg.get_deep_think_run_limit(False),
+            ),
+        )
+        assert snapshot.total.consumed == 0
     finally:
-        usage_counter.pop(uid, None)
+        pass
 
 
 def test_own_key_without_login_is_rejected_for_every_provider():
@@ -198,7 +214,6 @@ def test_own_key_without_login_is_rejected_for_every_provider():
             json={
                 "question": "hello",
                 "model": free_model(provider),
-                "active_count": 1,
                 "api_key": "sk-user-key",
             },
         )

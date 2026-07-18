@@ -8,8 +8,13 @@ from fastapi import APIRouter, Request, Body, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.core.rate_limit import limiter
-from app.core.state import check_and_increment_usage, get_usage_snapshot
-from app.core.security import verify_user_token, extract_id_token, is_user_pro, is_user_early
+from app.core.security import (
+    db_firestore,
+    extract_id_token,
+    is_user_early,
+    is_user_pro,
+    verify_user_token,
+)
 import app.core.config as cfg
 from app.services.llm.attachments import parse_attachments
 from app.services.llm.base import (
@@ -52,46 +57,99 @@ from app.services.llm.resolve_engine import (
 )
 from app.services.share_snapshots import persist_pending_result
 from app.services.differences_stats import record_differences_stats
+from app.services.usage_repository import (
+    FirestoreUsageRepository,
+    RunKind,
+    RunStatus,
+    UsageLimitExceeded,
+    UsageLimits,
+    UsageRunConflict,
+    UsageTransitionError,
+)
 
 router = APIRouter()
 
 OWN_KEYS_LOGIN_REQUIRED = "Please log in to use your own API keys."
+run_usage_repository = FirestoreUsageRepository(db_firestore)
 
-def build_usage_limit_detail(message: str, code: str, limit_regular: int, current_usage, limit_deep: int, current_deep_usage):
+
+def get_run_usage_limits(is_pro: bool) -> UsageLimits:
+    return UsageLimits(
+        total=cfg.get_consensus_run_limit(is_pro),
+        deep_think=cfg.get_deep_think_run_limit(is_pro),
+    )
+
+
+def get_usage_run_key(data: dict) -> str:
+    value = data.get("usage_run_key")
+    if not isinstance(value, str) or not value.strip():
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Missing usage_run_key. Start the run via /prepare.",
+                "error_code": "usage_run_key_required",
+            },
+        )
+    return value.strip()
+
+
+def usage_response_fields(snapshot, is_pro: bool) -> dict:
     return {
-        "error": message,
-        "error_code": code,
-        "free_usage_remaining": max(0, int(limit_regular - current_usage)),
-        "deep_remaining": max(0, int(limit_deep - current_deep_usage)),
-        "limit": int(limit_regular),
-        "deep_limit": int(limit_deep),
+        "free_usage_remaining": snapshot.total.remaining,
+        "deep_remaining": snapshot.deep_think.remaining,
+        "limit": snapshot.total.limit,
+        "deep_limit": snapshot.deep_think.limit,
+        "is_pro_user": is_pro,
     }
 
 
+def reserve_usage_run(uid: str, data: dict, *, is_pro: bool, deep_think: bool):
+    key = get_usage_run_key(data)
+    kind = RunKind.DEEP_THINK if deep_think else RunKind.REGULAR
+    try:
+        result = run_usage_repository.reserve(
+            uid, key, kind, get_run_usage_limits(is_pro)
+        )
+    except UsageLimitExceeded as exc:
+        detail = usage_response_fields(exc.snapshot, is_pro)
+        detail.update(
+            {
+                "error": (
+                    "Your Deep Think quota is exhausted for this UTC day."
+                    if exc.limiting_bucket == "deep_think"
+                    else "Your run quota is exhausted for this UTC day."
+                ),
+                "error_code": f"{exc.limiting_bucket}_usage_limit_exceeded",
+            }
+        )
+        raise HTTPException(status_code=403, detail=detail) from None
+    except UsageRunConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": str(exc), "error_code": "usage_run_conflict"},
+        ) from None
+    if result.status is RunStatus.RELEASED:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "This usage run was already released. Start a new run.",
+                "error_code": "usage_run_released",
+            },
+        )
+    return key, result
+
+
+def consume_usage_run(uid: str, key: str, *, is_pro: bool):
+    try:
+        return run_usage_repository.consume(uid, key)
+    except UsageTransitionError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": str(exc), "error_code": "usage_run_transition"},
+        ) from None
+
 def parse_boolean_flag(value) -> bool:
     return str(value).strip().lower() == "true"
-
-
-def get_valid_active_count(data: dict) -> int:
-    raw = data.get("active_count", 1)
-    if isinstance(raw, bool):
-        raise HTTPException(status_code=400, detail="Invalid active_count.")
-
-    try:
-        if isinstance(raw, float) and not raw.is_integer():
-            raise ValueError
-        if isinstance(raw, str):
-            raw = raw.strip()
-            if not raw.isdigit():
-                raise ValueError
-        active_count = int(raw)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="Invalid active_count.")
-
-    if active_count < 1 or active_count > 6:
-        raise HTTPException(status_code=400, detail="active_count must be between 1 and 6.")
-
-    return active_count
 
 
 ENGINE_KEY_FIELDS = {
@@ -109,9 +167,10 @@ def build_engine_api_keys(data: dict, use_own_keys: bool) -> dict:
     die vom Nutzer uebermittelten Keys, sonst Fallback auf die Developer-Keys."""
     api_keys = {}
     for label, (field, env_name) in ENGINE_KEY_FIELDS.items():
-        key = data.get(field)
-        if not use_own_keys:
-            key = key or os.environ.get(env_name)
+        # Bei ausgeschaltetem Own-Key-Modus clientseitig mitgesendete Keys
+        # strikt ignorieren. Sonst wuerde der Run serverseitig berechnet,
+        # koennte aber unbemerkt einen gespeicherten Nutzer-Key verwenden.
+        key = data.get(field) if use_own_keys else os.environ.get(env_name)
         api_keys[label] = key
     return api_keys
 
@@ -314,7 +373,6 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
         is_early=is_early_user,
     )
     attachments = parse_attachments(data, is_pro_user)
-    active_count = get_valid_active_count(data)
     max_tokens = cfg.get_output_token_limit(is_pro_user, deep_search)
 
     # Follow-up-Kontext (Pro): genau eine vorherige Frage/Konsens-Ebene,
@@ -362,38 +420,16 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
             },
         )
 
-    # --- Developer-Key/Service-Account: Usage-Zaehlung fuer eingeloggte Nutzer ---
+    # --- Developer-Key/Service-Account: genau ein persistenter Slot pro Run ---
     if uid:
-        increment = 1.0 / active_count
-        limit_regular = cfg.get_usage_limit(is_pro_user)
-        limit_deep = cfg.get_deep_search_limit(is_pro_user)
-
-        status, current_usage, current_deep_usage = check_and_increment_usage(
-            uid,
-            limit_regular=limit_regular,
-            limit_deep=limit_deep,
-            increment=increment,
-            deep_search=deep_search,
-        )
-
-        if status == "limit_regular":
-            msg = "Pro usage limit reached." if is_pro_user else "Free usage limit reached. Upgrade to Pro."
-            return {
-                "error": msg,
-                "free_usage_remaining": 0,
-                "deep_remaining": int(limit_deep - current_deep_usage),
-            }
-
-        if status == "limit_deep":
-            return {
-                "error": "Your Deep Think quota is exhausted for this period.",
-                "free_usage_remaining": int(limit_regular - current_usage),
-                "deep_remaining": 0,
-            }
-
         developer_key = os.environ.get(provider.developer_key_env) if provider.developer_key_env else None
         if provider.developer_key_env and not developer_key:
             raise HTTPException(status_code=500, detail="Server error: API key missing")
+
+        usage_key, _ = reserve_usage_run(
+            uid, data, is_pro=is_pro_user, deep_think=deep_search
+        )
+        usage_result = consume_usage_run(uid, usage_key, is_pro=is_pro_user)
 
         return _run_ask(
             provider,
@@ -406,9 +442,8 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
             max_tokens=max_tokens,
             attachments=attachments,
             extras={
-                "free_usage_remaining": int(limit_regular - current_usage),
-                "deep_remaining": int(limit_deep - current_deep_usage),
-                "is_pro_user": is_pro_user,
+                **usage_response_fields(usage_result.snapshot, is_pro_user),
+                "usage_run_status": usage_result.status.value,
                 "key_used": provider.developer_key_label,
             },
         )
@@ -463,6 +498,7 @@ async def prepare(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=400, detail="Missing 'question' in request body.")
 
     use_own_keys = parse_boolean_flag(data.get("useOwnKeys", False))
+    deep_think = parse_boolean_flag(data.get("deep_search", False))
     id_token = extract_id_token(request, data)
     if not id_token:
         raise HTTPException(status_code=401, detail="Authentication required to analyze intent.")
@@ -470,21 +506,13 @@ async def prepare(request: Request, data: dict = Body(...)):
     try:
         uid = verify_user_token(id_token)
         is_pro = is_user_pro(uid)
-        limit = cfg.get_usage_limit(is_pro)
-        deep_limit = cfg.get_deep_search_limit(is_pro)
-        current_usage, current_deep_usage = get_usage_snapshot(uid)
-        if not use_own_keys and current_usage >= limit:
-            msg = "Pro usage limit reached." if is_pro else "Free usage limit reached. Upgrade to Pro or use your own API keys."
+        if deep_think and not is_pro:
             raise HTTPException(
                 status_code=403,
-                detail=build_usage_limit_detail(
-                    msg,
-                    "usage_limit_exceeded",
-                    limit,
-                    current_usage,
-                    deep_limit,
-                    current_deep_usage,
-                )
+                detail={
+                    "error": "Deep Think is exclusively available for Pro users.",
+                    "error_code": "pro_required",
+                },
             )
     except HTTPException as he:
         raise he
@@ -506,10 +534,17 @@ async def prepare(request: Request, data: dict = Body(...)):
     # Echtzeitdaten holen sich die Modelle selbst ueber die native Web-Suche,
     # die in jedem Provider-Call aktiv ist (siehe engines.py). Ein vorgeschalteter
     # Intent-Router mit Realtime-Injektion waere nur redundante, serielle Latenz.
-    return {
+    response = {
         "system_prompt": base_system_prompt,
         "sources": []
     }
+    if not use_own_keys:
+        _, reservation = reserve_usage_run(
+            uid, data, is_pro=is_pro, deep_think=deep_think
+        )
+        response.update(usage_response_fields(reservation.snapshot, is_pro))
+        response["usage_run_status"] = reservation.status.value
+    return response
 
 
 @router.post("/consensus")
@@ -517,6 +552,7 @@ async def prepare(request: Request, data: dict = Body(...)):
 def consensus(request: Request, data: dict = Body(...)):
     id_token = extract_id_token(request, data)
     use_own_keys = str(data.get("useOwnKeys", "false")).lower() == "true"
+    deep_think = parse_boolean_flag(data.get("deep_search", False))
     consensus_model = data.get("consensus_model")
     stream_requested = parse_boolean_flag(data.get("stream", False))
     uid = None
@@ -544,37 +580,12 @@ def consensus(request: Request, data: dict = Body(...)):
     if cfg.is_early_consensus_model(consensus_model) and not early_access:
         raise HTTPException(status_code=403, detail="Early access consensus engines are reserved for Early or Pro users.")
 
+    if deep_think and not is_pro:
+        raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
+
     if not use_own_keys:
         if cfg.is_premium_consensus_model(consensus_model) and not is_pro:
             raise HTTPException(status_code=403, detail="Premium consensus engines are reserved for Pro users.")
-
-        # Limits basierend auf Status festlegen
-        limit_regular = cfg.get_usage_limit(is_pro)
-        limit_deep = cfg.get_deep_search_limit(is_pro)
-
-        # Regulaere Usage atomar pruefen + erhoehen (gilt immer fuer Consensus Request)
-        status, current_usage, current_deep_usage = check_and_increment_usage(
-            uid,
-            limit_regular=limit_regular,
-            limit_deep=limit_deep,
-            increment=1,
-        )
-        if status != "ok":
-            msg = "Pro usage limit reached." if is_pro else "Your free quota has been used up. Please store your own API keys or upgrade to Pro."
-            raise HTTPException(
-                status_code=403,
-                detail=build_usage_limit_detail(
-                    msg,
-                    "usage_limit_exceeded",
-                    limit_regular,
-                    current_usage,
-                    limit_deep,
-                    current_deep_usage,
-                )
-            )
-    else:
-        limit_regular = cfg.get_usage_limit(is_pro)
-        limit_deep = cfg.get_deep_search_limit(is_pro)
 
     # Parameter extrahieren. Frage und Antworten kommen als freier Text vom
     # Client und werden serverseitig gekappt: der Consensus-Prompt enthaelt
@@ -705,6 +716,13 @@ def consensus(request: Request, data: dict = Body(...)):
                     detail=f"Missing API key for selected consensus engine: {engine}."
                 )
 
+    usage_result = None
+    if not use_own_keys:
+        usage_key, _ = reserve_usage_run(
+            uid, data, is_pro=is_pro, deep_think=deep_think
+        )
+        usage_result = consume_usage_run(uid, usage_key, is_pro=is_pro)
+
     # Share-Feature: Ergebnis nur für verifizierte Nutzer persistieren.
     share_uid = uid
     model_labels = data.get("model_labels")
@@ -743,11 +761,13 @@ def consensus(request: Request, data: dict = Body(...)):
 
     if stream_requested:
         extra_fields = {}
-        if uid:
-            usage_now, deep_usage_now = get_usage_snapshot(uid)
+        if usage_result is not None:
+            extra_fields = usage_response_fields(usage_result.snapshot, is_pro)
+            extra_fields["usage_run_status"] = usage_result.status.value
+        elif use_own_keys:
             extra_fields = {
-                "free_usage_remaining": max(0, int(cfg.get_usage_limit(is_pro) - usage_now)),
-                "deep_remaining": max(0, int(cfg.get_deep_search_limit(is_pro) - deep_usage_now)),
+                "free_usage_remaining": "Unlimited",
+                "deep_remaining": "Unlimited",
                 "is_pro_user": is_pro,
             }
 
@@ -898,11 +918,13 @@ def consensus(request: Request, data: dict = Body(...)):
         result_id = persist_share_result(consensus_answer, differences_data, differences)
         if result_id:
             response["result_id"] = result_id
-    if uid:
-        usage_now, deep_usage_now = get_usage_snapshot(uid)
+    if usage_result is not None:
+        response.update(usage_response_fields(usage_result.snapshot, is_pro))
+        response["usage_run_status"] = usage_result.status.value
+    elif use_own_keys:
         response.update({
-            "free_usage_remaining": max(0, int(limit_regular - usage_now)),
-            "deep_remaining": max(0, int(limit_deep - deep_usage_now)),
+            "free_usage_remaining": "Unlimited",
+            "deep_remaining": "Unlimited",
             "is_pro_user": is_pro,
         })
     return response
@@ -948,37 +970,23 @@ def resolve(request: Request, data: dict = Body(...)):
     except InvalidResolvePayload as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    limit_regular = cfg.get_usage_limit(is_pro)
-    limit_deep = cfg.get_deep_search_limit(is_pro)
-
+    usage_result = None
     if not use_own_keys:
-        status, current_usage, current_deep_usage = check_and_increment_usage(
-            uid,
-            limit_regular=limit_regular,
-            limit_deep=limit_deep,
-            increment=1,
+        usage_key, _ = reserve_usage_run(
+            uid, data, is_pro=is_pro, deep_think=False
         )
-        if status != "ok":
-            msg = "Pro usage limit reached." if is_pro else "Your free quota has been used up. Please store your own API keys or upgrade to Pro."
-            raise HTTPException(
-                status_code=403,
-                detail=build_usage_limit_detail(
-                    msg,
-                    "usage_limit_exceeded",
-                    limit_regular,
-                    current_usage,
-                    limit_deep,
-                    current_deep_usage,
-                ),
-            )
+        usage_result = consume_usage_run(uid, usage_key, is_pro=is_pro)
 
     api_keys = build_engine_api_keys(data, use_own_keys)
 
     result = run_resolve_round(question, claim, positions, api_keys)
-    usage_now, deep_usage_now = get_usage_snapshot(uid)
-    result.update({
-        "free_usage_remaining": max(0, int(limit_regular - usage_now)),
-        "deep_remaining": max(0, int(limit_deep - deep_usage_now)),
-        "is_pro_user": is_pro,
-    })
+    if usage_result is not None:
+        result.update(usage_response_fields(usage_result.snapshot, is_pro))
+        result["usage_run_status"] = usage_result.status.value
+    else:
+        result.update({
+            "free_usage_remaining": "Unlimited",
+            "deep_remaining": "Unlimited",
+            "is_pro_user": is_pro,
+        })
     return result

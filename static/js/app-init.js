@@ -13,7 +13,7 @@
 // runs after every earlier module in document order.
 //
 // Server config that used to live inline as a Jinja value is now bridged
-// through window.FREE_LIMIT (set in the Jinja <head> config block).
+// through window.FREE_LIMIT (run limit, set in the Jinja <head> config block).
 // =====================================================================
 
       (function () {
@@ -503,12 +503,12 @@
 
         const LIMITS = {
           FREE: {
-            NORMAL: getConfiguredLimit("free_usage_limit", 25),
-            DEEP: getConfiguredLimit("free_deep_search_limit", 12)
+            NORMAL: getConfiguredLimit("free_consensus_run_limit", 3),
+            DEEP: getConfiguredLimit("free_deep_think_run_limit", 0)
           },
           PRO: {
-            NORMAL: getConfiguredLimit("pro_usage_limit", 500),
-            DEEP: getConfiguredLimit("pro_deep_search_limit", 50)
+            NORMAL: getConfiguredLimit("pro_consensus_run_limit", 500),
+            DEEP: getConfiguredLimit("pro_deep_think_run_limit", 50)
           }
         };
         let currentMaxLimit = LIMITS.FREE.NORMAL;
@@ -579,7 +579,7 @@
 
             // Hier nutzen wir die GLOBALE Variable, die durch checkUserStatusOnLoad korrekt gesetzt wurde
             document.getElementById("freeUsageDisplay").innerHTML =
-              "Requests: " + data.remaining + " / " + currentMaxLimit;
+              "Runs: " + data.remaining + " / " + currentMaxLimit;
 
             document.getElementById("deepUsageDisplay").innerHTML =
               "Deep Think: " + data.deep_remaining + " / " + currentDeepLimit;
@@ -761,8 +761,6 @@
         });
 
         const APP_LIMITS = window.APP_LIMITS || {};
-        const FREE_USAGE_LIMIT = APP_LIMITS.free_usage_limit || Number(window.FREE_LIMIT);
-
         function validateInputText() {
           const text = document.getElementById("questionInput").value.trim();
           const wordCount = text.split(/\s+/).filter(word => word.length > 0).length;

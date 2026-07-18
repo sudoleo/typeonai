@@ -25,12 +25,12 @@ function configuredLimit(key, fallback) {
 
 window.LIMITS = {
   FREE: {
-    NORMAL: configuredLimit("free_usage_limit", 25),
-    DEEP: configuredLimit("free_deep_search_limit", 12),
+    NORMAL: configuredLimit("free_consensus_run_limit", 3),
+    DEEP: configuredLimit("free_deep_think_run_limit", 0),
   },
   PRO: {
-    NORMAL: configuredLimit("pro_usage_limit", 500),
-    DEEP: configuredLimit("pro_deep_search_limit", 50),
+    NORMAL: configuredLimit("pro_consensus_run_limit", 500),
+    DEEP: configuredLimit("pro_deep_think_run_limit", 50),
   },
 };
 window.currentMaxLimit = window.LIMITS.FREE.NORMAL;
