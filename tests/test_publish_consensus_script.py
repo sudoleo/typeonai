@@ -1,5 +1,7 @@
 import importlib.util
+import json
 from pathlib import Path
+from urllib.error import HTTPError
 
 
 SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "publish_consensus.py"
@@ -34,6 +36,7 @@ def test_main_runs_publish_and_index_flow_without_topic_call(monkeypatch, capsys
     monkeypatch.setenv("CONSENSUS_IDEMPOTENCY_KEY", "scheduled-test")
     monkeypatch.setenv("CONSENSUS_AUTO_INDEX", "true")
     calls = []
+    notifications = []
 
     def fake_http(method, url, *, headers=None, payload=None, timeout=60):
         calls.append((method, url, headers, payload))
@@ -64,6 +67,11 @@ def test_main_runs_publish_and_index_flow_without_topic_call(monkeypatch, capsys
         raise AssertionError(url)
 
     monkeypatch.setattr(publisher, "http_json", fake_http)
+    monkeypatch.setattr(
+        publisher,
+        "send_telegram_notification",
+        lambda question, share: notifications.append((question, share)) or True,
+    )
 
     assert publisher.main() == 0
     output = capsys.readouterr().out
@@ -74,6 +82,79 @@ def test_main_runs_publish_and_index_flow_without_topic_call(monkeypatch, capsys
     assert run_call[2]["X-Consensus-Publisher"] == "true"
     assert any(call[1].endswith("/watch") for call in calls)
     assert calls[-1][3] == {"indexed": True}
+    assert notifications == [
+        (
+            "Which technologies should be compared?",
+            {
+                "share_id": "B" * 16,
+                "url": "https://consensus.example/s/topic-" + "B" * 16,
+                "indexing_status": "indexed",
+                "in_sitemap": True,
+            },
+        )
+    ]
+
+
+def test_telegram_notification_posts_question_and_share_url(monkeypatch, capsys):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-bot-token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "123456")
+    captured = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"ok":true}'
+
+    def fake_urlopen(request, timeout):
+        captured["request"] = request
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr(publisher, "urlopen", fake_urlopen)
+
+    assert publisher.send_telegram_notification(
+        "Which technologies should be compared?",
+        {"url": "https://consensus.example/s/topic-123"},
+    ) is True
+
+    request = captured["request"]
+    body = json.loads(request.data.decode("utf-8"))
+    assert request.full_url == "https://api.telegram.org/bottest-bot-token/sendMessage"
+    assert captured["timeout"] == 30
+    assert body == {
+        "chat_id": "123456",
+        "text": (
+            "New Consensus published\n\n"
+            "Which technologies should be compared?\n\n"
+            "https://consensus.example/s/topic-123"
+        ),
+    }
+    assert "Telegram notification sent." in capsys.readouterr().out
+
+
+def test_telegram_failure_is_non_fatal_and_does_not_log_token(monkeypatch, capsys):
+    token = "secret-test-token"
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", token)
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "123456")
+
+    def fail_urlopen(request, timeout):
+        raise HTTPError(request.full_url, 400, "Bad Request", {}, None)
+
+    monkeypatch.setattr(publisher, "urlopen", fail_urlopen)
+
+    assert publisher.send_telegram_notification(
+        "Which technologies should be compared?",
+        {"url": "https://consensus.example/s/topic-123"},
+    ) is False
+    captured = capsys.readouterr()
+    assert "HTTP 400" in captured.err
+    assert token not in captured.out
+    assert token not in captured.err
 
 
 def test_topic_selection_uses_web_search_and_recent_question_history(monkeypatch):

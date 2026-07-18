@@ -169,7 +169,17 @@ Suchindex bleibt Sache der jeweiligen Suchmaschine/Search Console.
    `app_config/models.watch_models.free` konfigurierten Free Watch Provider
    gepinnt, wobei DeepSeek selbst dann explizit ausgeschlossen bleibt,
 7. den geeigneten Share abhängig von der Admin-Konfiguration direkt
-   indexierbar schalten.
+   indexierbar schalten,
+8. bei konfiguriertem `TELEGRAM_BOT_TOKEN` und `TELEGRAM_CHAT_ID` die fertige
+   Frage samt Share-URL per Telegram senden. Ein fehlgeschlagener
+   Benachrichtigungsversand wird als Warnung geloggt und macht die bereits
+   erfolgreiche Veröffentlichung nicht nachträglich rot.
+
+Für Telegram muss der Empfänger den Bot zuerst mit `/start` aktivieren. Danach
+werden Bot-Token und numerische Ziel-Chat-ID im Repository unter
+**Settings → Secrets and variables → Actions** als `TELEGRAM_BOT_TOKEN` und
+`TELEGRAM_CHAT_ID` angelegt. Der Bot-Token gehört nie in Workflow-YAML, Logs
+oder Quellcode.
 
 Die Admin-Steuerung liegt unter `/admin#api` und wird in Firestore als
 `app_config/scheduled_consensus_publisher` gespeichert. Änderbar sind:

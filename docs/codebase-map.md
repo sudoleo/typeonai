@@ -463,8 +463,11 @@ Whitelist für Bild-MIME-Typen.
 - `scripts/publish_consensus.py` orchestriert Themenwahl (optional OpenAI
   Responses API + Web Search), einen deterministischen Search-Title-Quality-
   Check mit bis zu drei Auswahlversuchen, Run/Poll, Publish, Weekly-Watch und
-  optionale Indexfreigabe ohne externe Python-Abhängigkeiten. Vor dem Lauf liest
-  das Skript die Admin-Konfiguration aus Firestore über API v1; deaktivierte
+  optionale Indexfreigabe ohne externe Python-Abhängigkeiten. Nach erfolgreicher
+  Veröffentlichung sendet es bei gesetztem `TELEGRAM_BOT_TOKEN` und
+  `TELEGRAM_CHAT_ID` Frage und Share-URL per Telegram; Benachrichtigungsfehler
+  bleiben nicht-fatal und der Token wird nicht in Fehler-URLs geloggt. Vor dem
+  Lauf liest das Skript die Admin-Konfiguration aus Firestore über API v1; deaktivierte
   Publisher enden erfolgreich ohne LLM-Call. `.github/workflows/publish-consensus.yml`
   startet ihn wöchentlich oder manuell; Secrets bleiben ausschließlich in
   GitHub Actions. Sowohl der initiale Publisher-Run als auch seine Watch-Runs

@@ -265,6 +265,60 @@ def write_github_summary(question: str, share: dict, watch: dict | None = None) 
         summary.write("\n".join(lines))
 
 
+def send_telegram_notification(question: str, share: dict) -> bool:
+    """Send the published page to Telegram without failing the publisher run."""
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+    if not bot_token and not chat_id:
+        return False
+    if not bot_token or not chat_id:
+        print(
+            "Warning: Telegram notification skipped because TELEGRAM_BOT_TOKEN "
+            "and TELEGRAM_CHAT_ID must both be configured.",
+            file=sys.stderr,
+        )
+        return False
+
+    url = str(share.get("url") or "").strip()
+    if not url:
+        print(
+            "Warning: Telegram notification skipped because the share URL is missing.",
+            file=sys.stderr,
+        )
+        return False
+
+    message = f"New Consensus published\n\n{question}\n\n{url}"
+    payload = json.dumps(
+        {
+            "chat_id": chat_id,
+            "text": message,
+        }
+    ).encode("utf-8")
+    request = Request(
+        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+        data=payload,
+        headers={"Accept": "application/json", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            response.read()
+    except HTTPError as exc:
+        # Never include the request URL here: it contains the bot token.
+        print(
+            f"Warning: Telegram notification failed with HTTP {exc.code}.",
+            file=sys.stderr,
+        )
+        return False
+    except URLError:
+        # Keep network exception details out of logs in case a runtime embeds the URL.
+        print("Warning: Telegram notification failed with a network error.", file=sys.stderr)
+        return False
+
+    print("Telegram notification sent.")
+    return True
+
+
 def main() -> int:
     api_base = os.environ.get("CONSENSUS_API_BASE_URL", "https://www.consens.io").rstrip("/")
     api_key = os.environ.get("CONSENSUS_API_KEY", "").strip()
@@ -328,6 +382,7 @@ def main() -> int:
         )
     )
     write_github_summary(question, share, watch)
+    send_telegram_notification(question, share)
     return 0
 
 
