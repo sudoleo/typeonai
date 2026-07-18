@@ -41,7 +41,7 @@ from app.services.api_run_repository import (
     ApiRunTransitionError,
 )
 from app.services.llm.base import count_words
-from app.services import share_snapshots
+from app.services import publisher_config, share_snapshots, watch_service
 from app.services.share_snapshots import ShareError
 from app.services.usage_repository import UsageLimitExceeded, UsageRunConflict
 
@@ -112,6 +112,18 @@ class ApiShareListResponse(BaseModel):
     shares: list[ApiShareResponse]
 
 
+class ApiPublisherConfigResponse(BaseModel):
+    enabled: bool
+    topic_brief: str
+    auto_index: bool
+    weekly_watch_enabled: bool
+    watch_weekday: str
+    watch_time: str
+    watch_timezone: str
+    watch_interval: Literal["weekly"]
+    watch_model_tier: Literal["free"]
+
+
 def authenticate_api_identity(api_key: Optional[str], required_scope: str = "consensus:run"):
     if not api_key:
         raise HTTPException(status_code=401, detail="Missing X-API-Key header")
@@ -153,6 +165,39 @@ def enforce_uid_rate_limit(uid: str, operation: str, limit: int) -> None:
             status_code=429,
             detail="Consensus API rate limit exceeded",
             headers={"Retry-After": "60"},
+        ) from None
+
+
+def _require_api_admin(identity) -> None:
+    if not is_user_admin(identity.uid):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "admin_required",
+                "message": "Scheduled Publisher access requires an admin account.",
+            },
+        )
+
+
+@router.get(
+    "/publisher/config",
+    response_model=ApiPublisherConfigResponse,
+    responses={401: {"model": ApiErrorResponse}, 403: {"model": ApiErrorResponse}},
+)
+@limiter.limit("30/minute")
+@limiter.limit("20/minute", key_func=api_key_rate_key)
+def get_api_publisher_config(
+    request: Request,
+    api_key: Optional[str] = Security(api_key_header),
+):
+    identity = authenticate_api_identity(api_key, "share:write")
+    _require_api_admin(identity)
+    try:
+        return publisher_config.public_config(publisher_config.get_config())
+    except Exception:
+        logging.exception("Consensus API publisher configuration failed")
+        raise HTTPException(
+            status_code=503, detail="Publisher configuration is temporarily unavailable"
         ) from None
 
 
@@ -431,6 +476,67 @@ def get_api_share(
     enforce_uid_rate_limit(identity.uid, "share_get", 60)
     share = _owned_api_share(share_id, identity.uid)
     return _public_api_share(share_id, share)
+
+
+@router.post(
+    "/shares/{share_id}/watch",
+    response_model=dict[str, Any],
+    responses={
+        401: {"model": ApiErrorResponse},
+        403: {"model": ApiErrorResponse},
+        404: {"model": ApiErrorResponse},
+        409: {"model": ApiErrorResponse},
+        429: {"model": ApiErrorResponse},
+    },
+)
+@limiter.limit("20/minute")
+@limiter.limit("10/minute", key_func=api_key_rate_key)
+def create_api_publisher_watch(
+    request: Request,
+    share_id: str,
+    api_key: Optional[str] = Security(api_key_header),
+):
+    """Idempotently attach the configured weekly Free-tier Watch to a page."""
+    identity = authenticate_api_identity(api_key, "share:write")
+    _require_api_admin(identity)
+    enforce_uid_rate_limit(identity.uid, "publisher_watch", 10)
+    try:
+        config = publisher_config.get_config()
+        if not config["weekly_watch_enabled"]:
+            raise HTTPException(
+                status_code=409, detail="Weekly watches are disabled in Publisher configuration"
+            )
+        watch = watch_service.create_watch(
+            identity.uid,
+            share_id=share_id,
+            interval="weekly",
+            email_mode="changes_only",
+            visibility="public",
+            run_weekday=config["watch_weekday"],
+            run_time=config["watch_time"],
+            timezone_name=config["watch_timezone"],
+            is_pro=is_user_pro(identity.uid),
+            model_tier="free",
+            return_existing=True,
+            bypass_active_limit=True,
+        )
+    except HTTPException:
+        raise
+    except watch_service.WatchError as exc:
+        status_by_code = {
+            "not_found": 404,
+            "forbidden": 404,
+            "limit_reached": 429,
+            "already_exists": 409,
+        }
+        raise HTTPException(
+            status_code=status_by_code.get(exc.code, 400),
+            detail={"code": exc.code, "message": exc.message},
+        ) from None
+    except Exception:
+        logging.exception("Consensus API publisher Watch creation failed: %s", share_id)
+        raise HTTPException(status_code=500, detail="Failed to create weekly Watch") from None
+    return {"status": "success", "watch": watch}
 
 
 @router.put(

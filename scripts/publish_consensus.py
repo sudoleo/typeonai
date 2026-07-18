@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Choose, run, publish and optionally index one Consensus question.
+"""Choose, run, publish, watch and optionally index one Consensus question.
 
 Designed for cron/GitHub Actions and intentionally uses only the Python
 standard library. Set CONSENSUS_QUESTION to skip the OpenAI topic-selection
@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -21,6 +22,22 @@ from urllib.request import Request, urlopen
 
 class PublisherError(RuntimeError):
     pass
+
+
+DEFAULT_TOPIC_BRIEF = (
+    "Choose one timely, evidence-rich topic that real people are actively searching for "
+    "in science, technology, economics, environment, or society. Favor a specific, "
+    "question-shaped angle with clear search demand and a gap in existing coverage — "
+    "an underserved query rather than a broad, already-saturated subject. Prefer topics "
+    "inside a fresh news or debate window where opinion is still forming.\n\n"
+    "The topic must have a concrete use case: name the reader who would run it and the "
+    "question or decision the answer actually helps them with. It should genuinely "
+    "benefit from comparing multiple AI models — where the models are likely to disagree "
+    "or hedge, so that both the consensus and the dissent are informative — and support "
+    "a substantial answer backed by several credible web sources.\n\n"
+    "Avoid personal medical, legal, or financial advice, sensationalism, pure opinion "
+    "polls, and purely speculative topics with no verifiable grounding."
+)
 
 
 def env_bool(name: str, default: bool) -> bool:
@@ -79,7 +96,18 @@ def recent_questions(api_base: str, api_key: str) -> list[str]:
     ]
 
 
-def choose_question(api_base: str, consensus_key: str) -> str:
+def load_publisher_config(api_base: str, api_key: str) -> dict:
+    _status, payload = http_json(
+        "GET",
+        f"{api_base}/api/v1/publisher/config",
+        headers={"X-API-Key": api_key},
+    )
+    if not isinstance(payload, dict):
+        raise PublisherError("Consensus API returned an invalid Publisher configuration")
+    return payload
+
+
+def choose_question(api_base: str, consensus_key: str, *, topic_brief="") -> str:
     explicit = os.environ.get("CONSENSUS_QUESTION", "").strip()
     if explicit:
         return validate_question(explicit)
@@ -88,43 +116,66 @@ def choose_question(api_base: str, consensus_key: str) -> str:
     if not openai_key:
         raise PublisherError("OPENAI_API_KEY is required when CONSENSUS_QUESTION is empty")
     model = os.environ.get("OPENAI_TOPIC_MODEL", "gpt-5.6-luna").strip()
-    default_brief = (
-        "Choose one timely, evidence-rich public-interest topic in science, technology, "
-        "economics, environment, or society. It should benefit from comparing multiple AI "
-        "models and support a substantial answer with several credible web sources. Avoid "
-        "personal medical, legal, or financial advice, sensationalism, and pure opinion polls."
-    )
-    brief = (os.environ.get("CONSENSUS_TOPIC_BRIEF") or default_brief).strip()
+    brief = (
+        os.environ.get("CONSENSUS_TOPIC_BRIEF") or topic_brief or DEFAULT_TOPIC_BRIEF
+    ).strip()
     previous = recent_questions(api_base, consensus_key)
     avoid = "\n".join(f"- {question}" for question in previous) or "- none"
     today = datetime.now(timezone.utc).date().isoformat()
-    prompt = f"""Today is {today}.
+    feedback = ""
+    last_error = None
+
+    for _attempt in range(3):
+        prompt = f"""Today is {today}.
 
 {brief}
 
 Do not repeat or closely paraphrase these recently published questions:
 {avoid}
 
+Write the final question as a Google-style search query and clickable page title:
+- use 6 to 16 words and no more than 110 characters;
+- express one clear search intent in plain, concrete language;
+- put the main subject and outcome directly in the question;
+- do not begin with a date or "As of";
+- do not combine competing theses, trade-offs, or multiple questions in one sentence;
+- avoid subordinate clauses introduced by when, while, whereas, although, or despite;
+- include a year only when it is essential to identify a policy, event, or product.
+
+For example, prefer "Do AI data centers raise household electricity prices?" over a long
+question that asks whether benefits are justified while also discussing costs and climate goals.
+
 Return exactly one neutral English question, with no quotation marks, preface, markdown, or explanation.
-The question must be 15 to 300 characters long and understandable without additional context."""
-    _status, response = http_json(
-        "POST",
-        "https://api.openai.com/v1/responses",
-        headers={"Authorization": f"Bearer {openai_key}"},
-        payload={
-            "model": model,
-            "input": prompt,
-            "tools": [{"type": "web_search"}],
-            "reasoning": {"effort": "low"},
-            "max_output_tokens": 800,
-        },
-        timeout=180,
-    )
-    return validate_question(response_output_text(response or {}))
+{feedback}"""
+        _status, response = http_json(
+            "POST",
+            "https://api.openai.com/v1/responses",
+            headers={"Authorization": f"Bearer {openai_key}"},
+            payload={
+                "model": model,
+                "input": prompt,
+                "tools": [{"type": "web_search"}],
+                "reasoning": {"effort": "low"},
+                "max_output_tokens": 800,
+            },
+            timeout=180,
+        )
+        try:
+            return validate_search_question(response_output_text(response or {}))
+        except PublisherError as exc:
+            last_error = exc
+            feedback = (
+                f"\nThe previous candidate failed the title check: {exc}. "
+                "Produce a simpler replacement."
+            )
+    raise PublisherError(f"Topic model did not produce a search-ready question: {last_error}")
 
 
 def validate_question(value: str) -> str:
-    question = " ".join(str(value or "").strip().strip('"\'').split())
+    question = str(value or "").strip().strip('"\'')
+    question = re.sub(r"^(?:#{1,6}\s*|[*_`]{1,3})", "", question)
+    question = re.sub(r"(?:[*_`]{1,3})$", "", question)
+    question = " ".join(question.split())
     if len(question) < 15 or len(question) > 300:
         raise PublisherError(
             f"Selected question must contain 15-300 characters; received {len(question)}"
@@ -133,6 +184,31 @@ def validate_question(value: str) -> str:
         question += "?"
     if len(question) > 300:
         raise PublisherError("Selected question exceeds 300 characters after normalization")
+    return question
+
+
+def validate_search_question(value: str) -> str:
+    question = validate_question(value)
+    words = re.findall(r"\b[\w'-]+\b", question, flags=re.UNICODE)
+    issues = []
+    if not 6 <= len(words) <= 16:
+        issues.append("use 6-16 words")
+    if len(question) > 110:
+        issues.append("use at most 110 characters")
+    lowered = question.lower()
+    if lowered.startswith("as of ") or re.match(r"^(?:in|by)\s+20\d{2}\b", lowered):
+        issues.append("do not lead with a date")
+    if any(
+        marker in lowered
+        for marker in (" when ", " while ", " whereas ", " although ", " despite ")
+    ):
+        issues.append("remove subordinate trade-off clauses")
+    if any(mark in question for mark in (";", ":", "—")) or question.count(",") > 1:
+        issues.append("use one simple clause")
+    if question.count("?") != 1:
+        issues.append("ask exactly one question")
+    if issues:
+        raise PublisherError("; ".join(issues))
     return question
 
 
@@ -165,7 +241,7 @@ def wait_for_run(api_base: str, api_key: str, run_id: str) -> dict:
     raise PublisherError(f"Consensus run {run_id} did not finish within {timeout_seconds:.0f}s")
 
 
-def write_github_summary(question: str, share: dict) -> None:
+def write_github_summary(question: str, share: dict, watch: dict | None = None) -> None:
     target = os.environ.get("GITHUB_STEP_SUMMARY", "").strip()
     if not target:
         return
@@ -176,8 +252,15 @@ def write_github_summary(question: str, share: dict) -> None:
         f"- URL: {share.get('url')}",
         f"- Indexing: {share.get('indexing_status')}",
         f"- In sitemap: {share.get('in_sitemap')}",
-        "",
     ]
+    if watch:
+        lines.extend(
+            [
+                f"- Watch: {watch.get('interval')} / {watch.get('model_tier')} models",
+                f"- Next Watch run: {watch.get('next_run_at')}",
+            ]
+        )
+    lines.append("")
     with Path(target).open("a", encoding="utf-8") as summary:
         summary.write("\n".join(lines))
 
@@ -188,7 +271,14 @@ def main() -> int:
     if not api_key:
         raise PublisherError("CONSENSUS_API_KEY is required")
 
-    question = choose_question(api_base, api_key)
+    config = load_publisher_config(api_base, api_key)
+    if not config.get("enabled"):
+        print("Scheduled Consensus Publisher is disabled in Admin; nothing to do.")
+        return 0
+
+    question = choose_question(
+        api_base, api_key, topic_brief=str(config.get("topic_brief") or "")
+    )
     print(f"Selected question: {question}")
     headers = {
         "X-API-Key": api_key,
@@ -213,7 +303,16 @@ def main() -> int:
         f"{api_base}/api/v1/consensus/runs/{run_id}/share",
         headers={"X-API-Key": api_key},
     )
-    if env_bool("CONSENSUS_AUTO_INDEX", True):
+    watch = None
+    if config.get("weekly_watch_enabled"):
+        _status, watch_payload = http_json(
+            "POST",
+            f"{api_base}/api/v1/shares/{share['share_id']}/watch",
+            headers={"X-API-Key": api_key},
+        )
+        watch = (watch_payload or {}).get("watch")
+
+    if env_bool("CONSENSUS_AUTO_INDEX", bool(config.get("auto_index"))):
         _status, share = http_json(
             "PUT",
             f"{api_base}/api/v1/shares/{share['share_id']}/indexing",
@@ -221,8 +320,13 @@ def main() -> int:
             payload={"indexed": True},
         )
 
-    print(json.dumps({"question": question, "run_id": run_id, "share": share}, indent=2))
-    write_github_summary(question, share)
+    print(
+        json.dumps(
+            {"question": question, "run_id": run_id, "share": share, "watch": watch},
+            indent=2,
+        )
+    )
+    write_github_summary(question, share, watch)
     return 0
 
 

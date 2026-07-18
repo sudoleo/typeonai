@@ -113,8 +113,10 @@ def test_openapi_contract_declares_api_key_and_idempotency_header():
     assert "get" in run_path and "delete" in run_path
     assert "post" in schema["paths"]["/api/v1/consensus/runs/{run_id}/share"]
     assert "get" in schema["paths"]["/api/v1/shares"]
+    assert "get" in schema["paths"]["/api/v1/publisher/config"]
     share_path = schema["paths"]["/api/v1/shares/{share_id}"]
     assert "get" in share_path and "delete" in share_path
+    assert "post" in schema["paths"]["/api/v1/shares/{share_id}/watch"]
     assert "put" in schema["paths"]["/api/v1/shares/{share_id}/indexing"]
     response_properties = schema["components"]["schemas"]["ConsensusRunResponse"][
         "properties"
@@ -135,6 +137,40 @@ def test_admin_dashboard_exposes_safe_api_key_management_section():
     assert "`/api/admin/api-keys/${encodeURIComponent(key.key_id)}`" in template
     assert "input.value = '';" in template
     assert "Only a SHA-256 hash is stored" in template
+    assert 'id="publisherEnabled"' in template
+    assert 'id="publisherTopicBrief"' in template
+    assert "Free Watch providers" in template
+    assert "'/api/admin/publisher-config'" in template
+
+
+def test_admin_can_load_and_save_publisher_configuration(monkeypatch):
+    saved = []
+    config = {
+        "enabled": True,
+        "topic_brief": "Choose a useful evidence-rich topic.",
+        "auto_index": True,
+        "weekly_watch_enabled": True,
+        "watch_weekday": "tuesday",
+        "watch_time": "09:00",
+        "watch_timezone": "Europe/Berlin",
+    }
+    monkeypatch.setattr(admin_router, "_require_admin", lambda request, data: "admin-1")
+    monkeypatch.setattr(admin_router.publisher_config, "get_config", lambda: dict(config))
+    monkeypatch.setattr(
+        admin_router.publisher_config,
+        "save_config",
+        lambda data, *, updated_by: saved.append((data, updated_by)) or dict(data),
+    )
+    client = TestClient(main.app)
+
+    loaded = client.get("/api/admin/publisher-config")
+    updated = client.put("/api/admin/publisher-config", json={**config, "enabled": False})
+
+    assert loaded.status_code == 200
+    assert loaded.json()["config"]["watch_model_tier"] == "free"
+    assert updated.status_code == 200
+    assert updated.json()["config"]["enabled"] is False
+    assert saved[0][1] == "admin-1"
 
 
 def test_admin_can_issue_list_and_revoke_api_keys(monkeypatch):
@@ -670,6 +706,64 @@ def test_api_key_can_publish_list_read_and_revoke_own_share(monkeypatch):
     assert deleted.status_code == 204
     assert publication_calls == [("user-publisher", run_id)]
     assert revoked == [(share_id, "user-publisher")]
+
+
+def test_admin_api_configures_weekly_watch_with_free_provider_tier(monkeypatch):
+    identity = SimpleNamespace(
+        uid="admin-publisher",
+        key_id="e" * 64,
+        scopes=("share:write",),
+    )
+    captured = {}
+
+    class PublisherKeyRepo:
+        def authenticate(self, key):
+            return identity
+
+    config = {
+        "enabled": True,
+        "topic_brief": "Choose a useful topic.",
+        "auto_index": True,
+        "weekly_watch_enabled": True,
+        "watch_weekday": "wednesday",
+        "watch_time": "08:30",
+        "watch_timezone": "Europe/Berlin",
+    }
+
+    def create_watch(uid, **kwargs):
+        captured.update(uid=uid, **kwargs)
+        return {
+            "id": "watch-1",
+            "share_id": "C" * 16,
+            "status": "active",
+            "interval": kwargs["interval"],
+            "model_tier": kwargs["model_tier"],
+        }
+
+    monkeypatch.setattr(api_v1, "api_key_repository", PublisherKeyRepo())
+    monkeypatch.setattr(
+        api_v1, "api_account_cleanup", SimpleNamespace(ensure_active=lambda uid: None)
+    )
+    monkeypatch.setattr(api_v1, "is_user_admin", lambda uid: True)
+    monkeypatch.setattr(api_v1, "is_user_pro", lambda uid: True)
+    monkeypatch.setattr(api_v1.publisher_config, "get_config", lambda: dict(config))
+    monkeypatch.setattr(api_v1.watch_service, "create_watch", create_watch)
+    client = TestClient(main.app)
+    headers = {"X-API-Key": "cns_publisher"}
+
+    loaded = client.get("/api/v1/publisher/config", headers=headers)
+    watched = client.post(f"/api/v1/shares/{'C' * 16}/watch", headers=headers)
+
+    assert loaded.status_code == 200
+    assert loaded.json()["watch_interval"] == "weekly"
+    assert loaded.json()["watch_model_tier"] == "free"
+    assert watched.status_code == 200
+    assert watched.json()["watch"]["model_tier"] == "free"
+    assert captured["interval"] == "weekly"
+    assert captured["model_tier"] == "free"
+    assert captured["return_existing"] is True
+    assert captured["bypass_active_limit"] is True
+    assert captured["run_weekday"] == "wednesday"
 
 
 def test_direct_indexing_requires_scope_admin_and_returns_indexed_state(monkeypatch):

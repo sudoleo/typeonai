@@ -10,7 +10,7 @@ from app.core.rate_limit import limiter
 import app.core.config as cfg
 from app.core.config import apply_limits, get_limits_config, load_models_from_db
 from app.services import share_snapshots as snapshots
-from app.services import mailer, watch_scheduler, watch_service
+from app.services import mailer, publisher_config, watch_scheduler, watch_service
 from app.services.share_snapshots import ShareError
 from app.services.api_key_repository import (
     ApiKeyNotFound,
@@ -31,6 +31,20 @@ class AdminIssueApiKeyRequest(BaseModel):
     scopes: list[Literal["consensus:run", "share:write", "share:index"]] = Field(
         default_factory=lambda: ["consensus:run", "share:write"]
     )
+
+
+class AdminPublisherConfigRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    enabled: bool
+    topic_brief: str = Field(min_length=1, max_length=publisher_config.TOPIC_BRIEF_MAX_CHARS)
+    auto_index: bool
+    weekly_watch_enabled: bool
+    watch_weekday: Literal[
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
+    ]
+    watch_time: str = Field(min_length=5, max_length=5)
+    watch_timezone: str = Field(min_length=1, max_length=64)
 
 
 def _require_admin(request, data):
@@ -109,6 +123,33 @@ def admin_revoke_api_key(request: Request, key_id: str):
         logging.exception("admin_revoke_api_key failed")
         raise HTTPException(status_code=500, detail="Failed to revoke API key")
     return {"key_id": key_id, "status": key["status"]}
+
+
+@router.get("/api/admin/publisher-config")
+@limiter.limit("30/minute")
+def admin_get_publisher_config(request: Request):
+    _require_admin(request, {})
+    try:
+        return {"config": publisher_config.public_config(publisher_config.get_config())}
+    except Exception:
+        logging.exception("admin_get_publisher_config failed")
+        raise HTTPException(status_code=500, detail="Failed to load publisher configuration")
+
+
+@router.put("/api/admin/publisher-config")
+@limiter.limit("20/minute")
+def admin_update_publisher_config(
+    request: Request, data: AdminPublisherConfigRequest = Body(...)
+):
+    admin_uid = _require_admin(request, {})
+    try:
+        config = publisher_config.save_config(data.model_dump(), updated_by=admin_uid)
+    except publisher_config.PublisherConfigError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except Exception:
+        logging.exception("admin_update_publisher_config failed")
+        raise HTTPException(status_code=500, detail="Failed to save publisher configuration")
+    return {"status": "success", "config": publisher_config.public_config(config)}
 
 
 @router.get("/api/admin/watches")

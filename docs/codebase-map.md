@@ -54,8 +54,8 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` zum sicheren Wiederherstellen eines Share-/Watch-fähigen Pending-Snapshots aus einem eigenen Consensus-Bookmark. Beide Save-Endpunkte liefern den vollständig zusammengeführten Bookmark-Datensatz zurück, damit der Client ihn ohne Reload aktualisiert. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. kompakter History je Watch), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH) sowie öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
-| `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
-| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (Diagnose-Liste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
+| `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config` und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
+| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (Diagnose-Liste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 **Zentrale Templates** (`templates/`, gerendert mit `Jinja2Templates`):
 `landing.html` (Marketing), `index.html` (die App — Haupt-Markup + Script-Tags),
@@ -394,9 +394,13 @@ Whitelist für Bild-MIME-Typen.
 - Die Antwortmodell-Picker wenden bei einem Tier-Wechsel die Free-/Early-/Pro-
   Defaults erneut an, solange der Nutzer für den jeweiligen Provider keine
   explizite Auswahl (`pref_select_*`) gespeichert hat. Explizite Picker-Werte
-  haben Vorrang. Watch-Runs lesen den aktuellen Pro-Status des Owners bei jedem
-  Lauf neu und wählen danach `WATCH_MODELS_BY_TIER` (ein Upgrade wirkt deshalb
-  auch auf bereits bestehende Watches nach Ablauf des Tier-Cache).
+  haben Vorrang. Normale Watch-Runs lesen den aktuellen Pro-Status des Owners
+  bei jedem Lauf neu und wählen danach `WATCH_MODELS_BY_TIER` (ein Upgrade wirkt
+  deshalb auch auf bereits bestehende Watches nach Ablauf des Tier-Cache).
+  Publisher-Watches tragen dagegen intern `model_tier=free`; der Scheduler
+  behandelt sie unabhängig vom Owner-Tier dauerhaft wie einen Free-Watch.
+  Als interner Content-Betrieb zählen sie nicht gegen das aktive persönliche
+  Watch-Limit der Admin-UID; das globale tägliche Watch-Run-Budget gilt weiter.
 
 ### Nutzergebundene Consensus-API (v1)
 - Admins stellen über `POST /api/admin/api-keys` einen gescopten Schlüssel für eine
@@ -453,9 +457,13 @@ Whitelist für Bild-MIME-Typen.
   `share:index` den Quality-Filter sowie Deduplikation gegen bereits indexierte
   gleiche `question_hash`-Seiten und schreibt API-Key-/Review-Auditfelder.
 - `scripts/publish_consensus.py` orchestriert Themenwahl (optional OpenAI
-  Responses API + Web Search), Run/Poll, Publish und Indexfreigabe ohne externe
-  Python-Abhängigkeiten. `.github/workflows/publish-consensus.yml` startet ihn
-  wöchentlich oder manuell; Secrets bleiben ausschließlich in GitHub Actions.
+  Responses API + Web Search), einen deterministischen Search-Title-Quality-
+  Check mit bis zu drei Auswahlversuchen, Run/Poll, Publish, Weekly-Watch und
+  optionale Indexfreigabe ohne externe Python-Abhängigkeiten. Vor dem Lauf liest
+  das Skript die Admin-Konfiguration aus Firestore über API v1; deaktivierte
+  Publisher enden erfolgreich ohne LLM-Call. `.github/workflows/publish-consensus.yml`
+  startet ihn wöchentlich oder manuell; Secrets bleiben ausschließlich in
+  GitHub Actions.
 
 ### Sharing
 - `/consensus` legt ein `pending_results`-Dokument an → `result_id`.
@@ -508,6 +516,7 @@ app/services/
   api_key_repository.py      SHA-256-gehashte, UID-gebundene API-Schluessel
   api_run_repository.py      Idempotenz + persistente API-Run-State-Machine
   api_consensus_runner.py    Asynchroner At-most-once-Orchestrator auf bestehenden Engines
+  publisher_config.py       Firestore-Steuerung des Scheduled Publishers + Weekly/Free-Watch-Fakten
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
   opinion_map.py             Datenminimierte, mehrdimensionale Provider-Positionen + Direction-Shift-Berechnung
@@ -586,6 +595,11 @@ Wichtige Verträge im Backend:
   laufen unverändert mit effort=low). `judge_families` mappt Engine-Familie →
   bevorzugte Judge-Familie (`apply_judge_families`; nie die eigene Familie,
   ohne Eintrag/Key Auto über `JUDGE_FAMILY_PRIORITY`).
+- `app_config/scheduled_consensus_publisher` — Admin-Steuerung für den GitHub-
+  Publisher: `enabled`, Themen-Brief, automatische Indexfreigabe sowie
+  Aktivierung, lokaler Wochentag, Uhrzeit und IANA-Zeitzone des Weekly-Watches.
+  Intervall (`weekly`) und Modellprofil (`free`) sind absichtlich nicht
+  konfigurierbar und werden serverseitig erzwungen.
 - `pending_results` — kurzlebige Consensus-Ergebnisse fürs Sharing (TTL/Cleanup).
 - `shares` — unveränderliche Snapshots (Slug, `visibility=public|private`,
   `indexed`, `status`, `owner_uid`, `question_hash`, optional interne
@@ -594,6 +608,7 @@ Wichtige Verträge im Backend:
 - `watches` — owner-gebundene Scheduling-Metadaten (`share_id`, `visibility`,
   Intervall, optionaler `run_weekday` für Weekly sowie lokale `run_time`
   (`HH:MM`) + IANA-`timezone`,
+  optional internes `model_tier=free` für Publisher-Watches,
   `email_mode` = `changes_only|condition|every_run`, private
   `condition`, `last_condition_status`, Status, nächste Ausführung,
   Lease/Fehlerzähler); keine IP-/User-Agent-Daten. Conditions werden nie in

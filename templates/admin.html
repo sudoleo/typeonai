@@ -474,6 +474,29 @@
         .api-key-prefix { font-family: monospace; color: var(--sidebar-text-muted); font-size: 0.9em; }
         .api-key-meta { margin-top: 5px; color: var(--sidebar-text-muted); font-size: 0.78em; overflow-wrap: anywhere; }
         .api-key-actions { display: flex; align-items: center; }
+        .publisher-config-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+        .publisher-config-grid .wide { grid-column: 1 / -1; }
+        .publisher-config-grid textarea,
+        .publisher-config-grid input[type="text"],
+        .publisher-config-grid input[type="time"],
+        .publisher-config-grid select {
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid var(--sidebar-border);
+            border-radius: 8px;
+            padding: 9px 10px;
+            color: var(--sidebar-text);
+            background: var(--sidebar-bg);
+        }
+        .publisher-config-grid textarea { min-height: 190px; resize: vertical; line-height: 1.45; }
+        .publisher-config-options { display: flex; flex-wrap: wrap; gap: 14px 22px; }
+        .publisher-config-options label { display: inline-flex; align-items: center; gap: 7px; }
+        .publisher-config-actions { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
 
         /* Consensus Watch diagnostics */
         .watch-admin-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
@@ -504,6 +527,7 @@
             .api-key-form { grid-template-columns: 1fr; }
             .api-key-secret-row { align-items: stretch; flex-direction: column; }
             .api-key-row { grid-template-columns: 1fr; }
+            .publisher-config-grid { grid-template-columns: 1fr; }
             .preset-model-cards { grid-template-columns: 1fr; }
             .watch-model-grid .watch-model-head { display: none; }
             .watch-model-provider { margin-top: 8px; }
@@ -1598,6 +1622,68 @@
         document.getElementById('loadReportedSharesBtn').addEventListener('click', () => loadShares('reported'));
         document.getElementById('loadAllSharesBtn').addEventListener('click', () => loadShares('all'));
 
+        // === Scheduled Consensus Publisher ===
+        function publisherStatus(message, isError) {
+            const el = document.getElementById('publisherConfigStatus');
+            el.textContent = message || '';
+            el.className = isError ? 'error' : 'success';
+        }
+
+        function syncPublisherWatchFields() {
+            const enabled = document.getElementById('publisherWeeklyWatch').checked;
+            ['publisherWatchWeekday', 'publisherWatchTime', 'publisherWatchTimezone']
+                .forEach(id => { document.getElementById(id).disabled = !enabled; });
+        }
+
+        async function loadPublisherConfig() {
+            publisherStatus('Loading...', false);
+            try {
+                const data = await shareAdminRequest('GET', '/api/admin/publisher-config');
+                const config = data.config || {};
+                document.getElementById('publisherEnabled').checked = !!config.enabled;
+                document.getElementById('publisherTopicBrief').value = config.topic_brief || '';
+                document.getElementById('publisherAutoIndex').checked = !!config.auto_index;
+                document.getElementById('publisherWeeklyWatch').checked = !!config.weekly_watch_enabled;
+                document.getElementById('publisherWatchWeekday').value = config.watch_weekday || 'tuesday';
+                document.getElementById('publisherWatchTime').value = config.watch_time || '09:00';
+                document.getElementById('publisherWatchTimezone').value = config.watch_timezone || 'Europe/Berlin';
+                document.getElementById('publisherWatchProfile').textContent =
+                    `${config.watch_interval || 'weekly'} · ${config.watch_model_tier || 'free'} Watch providers`;
+                syncPublisherWatchFields();
+                publisherStatus('', false);
+            } catch (err) {
+                publisherStatus(err.message, true);
+            }
+        }
+
+        async function savePublisherConfig() {
+            const button = document.getElementById('savePublisherConfigBtn');
+            button.disabled = true;
+            publisherStatus('Saving...', false);
+            try {
+                const payload = {
+                    enabled: document.getElementById('publisherEnabled').checked,
+                    topic_brief: document.getElementById('publisherTopicBrief').value.trim(),
+                    auto_index: document.getElementById('publisherAutoIndex').checked,
+                    weekly_watch_enabled: document.getElementById('publisherWeeklyWatch').checked,
+                    watch_weekday: document.getElementById('publisherWatchWeekday').value,
+                    watch_time: document.getElementById('publisherWatchTime').value,
+                    watch_timezone: document.getElementById('publisherWatchTimezone').value.trim()
+                };
+                await shareAdminRequest('PUT', '/api/admin/publisher-config', payload);
+                publisherStatus('Publisher configuration saved.', false);
+                await loadPublisherConfig();
+            } catch (err) {
+                publisherStatus(err.message, true);
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        document.getElementById('publisherWeeklyWatch').addEventListener('change', syncPublisherWatchFields);
+        document.getElementById('reloadPublisherConfigBtn').addEventListener('click', loadPublisherConfig);
+        document.getElementById('savePublisherConfigBtn').addEventListener('click', savePublisherConfig);
+
         // === Consensus API keys ===
         function apiKeysStatus(message, isError) {
             const el = document.getElementById('apiKeysStatus');
@@ -1827,6 +1913,7 @@
             if (user) {
                 const idToken = await user.getIdToken();
                 fetchModels(idToken);
+                loadPublisherConfig();
                 loadApiKeys();
                 loadShares('reported');
                 loadAdminWatches();
@@ -1960,6 +2047,53 @@
         </section>
 
         <section id="tab-api" class="admin-tab-panel" role="tabpanel" hidden>
+            <div class="admin-section">
+                <h3>Scheduled Consensus Publisher</h3>
+                <p class="section-hint">
+                    Controls the GitHub Actions publishing run from Firestore. Generated titles are
+                    checked for a short, single Google search intent before a Consensus run starts.
+                    Every generated Watch is weekly and permanently pinned to the configured
+                    <strong>Free Watch providers</strong>, regardless of the owner account tier.
+                </p>
+                <div class="publisher-config-grid">
+                    <div class="publisher-config-options wide">
+                        <label><input id="publisherEnabled" type="checkbox"> Publisher enabled</label>
+                        <label><input id="publisherAutoIndex" type="checkbox"> Index eligible pages automatically</label>
+                        <label><input id="publisherWeeklyWatch" type="checkbox"> Create weekly Watch</label>
+                        <span id="publisherWatchProfile" class="section-hint">weekly · free Watch providers</span>
+                    </div>
+                    <div class="api-key-field wide">
+                        <label for="publisherTopicBrief">Topic brief</label>
+                        <textarea id="publisherTopicBrief" maxlength="6000" spellcheck="true"></textarea>
+                    </div>
+                    <div class="api-key-field">
+                        <label for="publisherWatchWeekday">Watch weekday</label>
+                        <select id="publisherWatchWeekday">
+                            <option value="monday">Monday</option>
+                            <option value="tuesday">Tuesday</option>
+                            <option value="wednesday">Wednesday</option>
+                            <option value="thursday">Thursday</option>
+                            <option value="friday">Friday</option>
+                            <option value="saturday">Saturday</option>
+                            <option value="sunday">Sunday</option>
+                        </select>
+                    </div>
+                    <div class="api-key-field">
+                        <label for="publisherWatchTime">Watch time</label>
+                        <input id="publisherWatchTime" type="time" value="09:00">
+                    </div>
+                    <div class="api-key-field">
+                        <label for="publisherWatchTimezone">IANA timezone</label>
+                        <input id="publisherWatchTimezone" type="text" maxlength="64" value="Europe/Berlin" spellcheck="false">
+                    </div>
+                </div>
+                <div class="publisher-config-actions">
+                    <button id="savePublisherConfigBtn" type="button" class="admin-btn">Save Publisher</button>
+                    <button id="reloadPublisherConfigBtn" type="button" class="admin-btn secondary">Reload</button>
+                    <span id="publisherConfigStatus" role="status" style="font-size: 0.85em;"></span>
+                </div>
+            </div>
+
             <div class="admin-section">
                 <h3>Consensus API keys</h3>
                 <p class="section-hint">

@@ -149,12 +149,36 @@ Suchindex bleibt Sache der jeweiligen Suchmaschine/Search Console.
 
 `scripts/publish_consensus.py` bildet den kompletten Ablauf ab:
 
-1. letzte eigene Share-Fragen laden,
-2. optional per OpenAI Responses API + Web Search eine neue, nicht redundante
+1. Admin-Konfiguration über `GET /api/v1/publisher/config` laden und bei
+   `enabled=false` ohne LLM-Call erfolgreich beenden,
+2. letzte eigene Share-Fragen laden,
+3. optional per OpenAI Responses API + Web Search eine neue, nicht redundante
    Frage wählen,
-3. Consensus-Run starten und pollen,
-4. Run publizieren,
-5. geeigneten Share direkt indexierbar schalten.
+4. die Frage als kurze, einzelne Google-Suchintention prüfen (6–16 Wörter,
+   höchstens 110 Zeichen, kein „As of …“, keine verschachtelte Trade-off-Frage)
+   und bei Bedarf bis zu zweimal neu generieren,
+5. Consensus-Run starten, pollen und publizieren,
+6. per `POST /api/v1/shares/{share_id}/watch` idempotent einen wöchentlichen
+   Watch anlegen; dieser ist serverseitig dauerhaft auf die in
+   `app_config/models.watch_models.free` konfigurierten Free Watch Provider
+   gepinnt,
+7. den geeigneten Share abhängig von der Admin-Konfiguration direkt
+   indexierbar schalten.
+
+Die Admin-Steuerung liegt unter `/admin#api` und wird in Firestore als
+`app_config/scheduled_consensus_publisher` gespeichert. Änderbar sind:
+
+- Publisher an/aus,
+- Topic Brief,
+- automatische Indexfreigabe,
+- Weekly-Watch an/aus sowie Wochentag, lokale Uhrzeit und IANA-Zeitzone.
+
+Intervall und Provider-Tier des automatisch erzeugten Watches sind bewusst
+nicht editierbar: `weekly` und `free`. Die zugehörigen API-Routen sind Admin-
+only und benötigen einen Schlüssel mit `share:write`; die Indexfreigabe
+benötigt zusätzlich weiterhin `share:index`. Diese internen Publisher-Watches
+zählen nicht gegen das persönliche aktive Watch-Limit der Admin-UID, bleiben
+aber Teil des globalen täglichen Watch-Run-Budgets.
 
 Der Workflow `.github/workflows/publish-consensus.yml` läuft standardmäßig
 dienstags um 07:15 UTC und kann manuell mit einer festen Frage gestartet werden.
@@ -164,7 +188,8 @@ Im GitHub-Repository werden folgende Actions-Secrets benötigt:
 - `OPENAI_API_KEY`: nur für die automatische Themenwahl; bei manueller Frage
   wird kein OpenAI-Call ausgeführt.
 
-Optionale Repository-Variablen: `CONSENSUS_API_BASE_URL`,
-`OPENAI_TOPIC_MODEL` (Default `gpt-5.6-luna`) und `CONSENSUS_TOPIC_BRIEF`.
+Optionale Repository-Variablen: `CONSENSUS_API_BASE_URL` und
+`OPENAI_TOPIC_MODEL` (Default `gpt-5.6-luna`). Topic Brief und Index-Schalter
+kommen im normalen Actions-Lauf aus Firestore statt aus GitHub-Variablen.
 Der Workflow verwendet eine Run-stabile Idempotency-Key-ID; ein Retry kann
 deshalb keinen zweiten Consensus-Run für denselben Workflow-Lauf starten.

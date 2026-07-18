@@ -167,6 +167,7 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         "share_path": share_snapshots.share_path("" if visibility == "private" else slug, share_id),
         "question": str(share.get("question") or data.get("question") or "")[:200],
         "interval": data.get("interval") or "weekly",
+        "model_tier": "free" if data.get("model_tier") == "free" else "account",
         "run_weekday": str(data.get("run_weekday") or ""),
         "run_time": str(data.get("run_time") or ""),
         "timezone": str(data.get("timezone") or ""),
@@ -206,7 +207,8 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
                  condition="", visibility="public", run_time="", timezone_name="",
                  run_weekday="",
                  result_id=None,
-                 share_id=None, db=None) -> dict:
+                 share_id=None, model_tier="", return_existing=False,
+                 bypass_active_limit=False, db=None) -> dict:
     db = db if db is not None else db_firestore
     interval = validate_interval(interval, is_pro)
     email_mode = validate_email_mode(email_mode)
@@ -217,7 +219,9 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
         visibility = share_snapshots.validate_share_visibility(visibility)
     except share_snapshots.ShareError as exc:
         raise WatchError(exc.code, exc.message) from exc
-    _check_active_limit(uid, is_pro, db)
+    normalized_model_tier = str(model_tier or "").strip().lower()
+    if normalized_model_tier not in {"", "free"}:
+        raise WatchError("invalid_model_tier", "Only the Free Watch model tier can be pinned.")
     if bool(result_id) == bool(share_id):
         raise WatchError("invalid_request", "Provide exactly one of result_id or share_id.")
     if result_id:
@@ -235,8 +239,27 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
     if share_visibility != visibility:
         raise WatchError("invalid_visibility", "The selected page visibility does not match this page.")
     for existing in db.collection(WATCHES_COLLECTION).where("owner_uid", "==", uid).stream():
-        if (existing.to_dict() or {}).get("share_id") == share_id:
+        existing_data = existing.to_dict() or {}
+        if existing_data.get("share_id") == share_id:
+            if return_existing:
+                if normalized_model_tier == "free":
+                    managed_updates = {
+                        "model_tier": "free",
+                        "interval": "weekly",
+                        "run_weekday": run_weekday,
+                        "run_time": run_time,
+                        "timezone": timezone_name,
+                    }
+                    if any(existing_data.get(key) != value for key, value in managed_updates.items()):
+                        managed_updates["next_run_at"] = next_scheduled_run(
+                            "weekly", run_time, timezone_name, run_weekday, now=utcnow()
+                        )
+                        existing.reference.update(managed_updates)
+                        existing_data.update(managed_updates)
+                return _serialize_watch(existing.id, existing_data, share)
             raise WatchError("already_exists", "This consensus is already watched.")
+    if not bypass_active_limit:
+        _check_active_limit(uid, is_pro, db)
 
     watch_id = _watch_id()
     now = utcnow()
@@ -247,6 +270,7 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
         "share_id": share_id,
         "question_hash": share.get("question_hash") or share_snapshots.question_hash(share.get("question")),
         "interval": interval,
+        "model_tier": normalized_model_tier,
         "run_weekday": run_weekday,
         "run_time": run_time,
         "timezone": timezone_name,
@@ -369,6 +393,13 @@ def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) 
             "invalid_request",
             "Only interval, status, email_mode, condition, run_weekday, run_time, and timezone can be changed.",
         )
+    if data.get("model_tier") == "free" and any(
+        key in changes for key in {"interval", "run_weekday", "run_time", "timezone"}
+    ):
+        raise WatchError(
+            "managed_watch",
+            "Scheduled Publisher Watch timing is managed from the Admin Publisher configuration.",
+        )
     updates = {}
     now = utcnow()
     effective_interval = data.get("interval") or "weekly"
@@ -419,7 +450,8 @@ def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) 
         if status not in WATCH_STATUSES:
             raise WatchError("invalid_status", "Status must be active or paused.")
         if status == "active" and data.get("status") != "active":
-            _check_active_limit(uid, is_pro, db, excluding_id=watch_id)
+            if data.get("model_tier") != "free":
+                _check_active_limit(uid, is_pro, db, excluding_id=watch_id)
             interval = updates.get("interval") or data.get("interval") or "weekly"
             validate_interval(interval, is_pro)
             run_time = updates.get("run_time", data.get("run_time") or "")

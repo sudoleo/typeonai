@@ -321,7 +321,13 @@ async def run_watch_tick() -> int:
                     raise RuntimeError("Watch share is unavailable.")
                 claimed["question"] = share.get("question") or ""
                 claimed["share_slug"] = share.get("slug") or ""
-                is_pro = await asyncio.to_thread(security.is_user_pro, claimed["owner_uid"])
+                account_is_pro = await asyncio.to_thread(
+                    security.is_user_pro, claimed["owner_uid"]
+                )
+                # Scheduled Publisher pages are deliberately pinned to the
+                # Admin-configured Free Watch providers. All ordinary watches
+                # continue to follow the owner's live account tier.
+                is_pro = False if claimed.get("model_tier") == "free" else account_is_pro
                 try:
                     history = await asyncio.to_thread(
                         share_snapshots.list_watch_history, claimed["share_id"], max_items=1,

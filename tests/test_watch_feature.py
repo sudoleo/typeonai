@@ -198,6 +198,20 @@ class WatchCrudTests(unittest.TestCase):
         with self.assertRaisesRegex(WatchError, "already watched"):
             watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", is_pro=True, db=self.db)
 
+    def test_publisher_watch_is_free_pinned_and_idempotent(self):
+        created = watch_service.create_watch(
+            "u1", share_id=self.share_id, interval="weekly", is_pro=True,
+            model_tier="free", return_existing=True, db=self.db,
+        )
+        repeated = watch_service.create_watch(
+            "u1", share_id=self.share_id, interval="weekly", is_pro=True,
+            model_tier="free", return_existing=True, db=self.db,
+        )
+
+        self.assertEqual(created["id"], repeated["id"])
+        self.assertEqual(created["model_tier"], "free")
+        self.assertEqual(self.db.stores["watches"][created["id"]]["model_tier"], "free")
+
     def test_admin_can_list_and_queue_active_watch(self):
         created = watch_service.create_watch(
             "u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db
@@ -726,6 +740,30 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(execute.call_args_list[0].args[-1])
         self.assertTrue(execute.call_args_list[1].args[-1])
+
+    async def test_publisher_watch_stays_on_free_tier_for_pro_owner(self):
+        claimed = {
+            "owner_uid": "u1", "share_id": "A" * 16, "interval": "weekly",
+            "model_tier": "free", "email_mode": "changes_only",
+        }
+        result = {
+            "consensus": "New consensus", "agreement_score": 61,
+            "changed": False, "severity": "minor", "change_summary": "",
+        }
+        share_data = {"status": "active", "slug": "q", "question": "Q", "consensus_md": "Old"}
+        with (
+            patch.object(watch_service, "acquire_worker_lease", return_value=True),
+            patch.object(watch_service, "release_worker_lease"),
+            patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
+            patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
+            patch.object(watch_scheduler.security, "is_user_pro", return_value=True),
+            patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
+            patch.object(watch_scheduler, "execute_watch", return_value=result) as execute,
+            patch.object(watch_service, "complete_watch_run"),
+        ):
+            await watch_scheduler.run_watch_tick()
+
+        self.assertFalse(execute.call_args.args[-1])
 
 
 class WatchFrontendContractTests(unittest.TestCase):
