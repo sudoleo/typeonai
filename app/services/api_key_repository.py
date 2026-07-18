@@ -14,6 +14,8 @@ API_KEYS_COLLECTION = "api_consensus_keys"
 API_KEY_PREFIX = "cns_live_"
 API_KEY_SECRET_BYTES = 32
 LAST_USED_WRITE_INTERVAL = timedelta(minutes=5)
+API_KEY_SCOPES = frozenset({"consensus:run", "share:write", "share:index"})
+DEFAULT_API_KEY_SCOPES = ("consensus:run", "share:write")
 
 
 class ApiKeyError(Exception):
@@ -33,6 +35,10 @@ class AuthenticatedApiKey:
     key_id: str
     uid: str
     label: str
+    scopes: tuple[str, ...]
+
+    def has_scope(self, scope: str) -> bool:
+        return scope in self.scopes
 
 
 def hash_api_key(api_key: str) -> str:
@@ -46,11 +52,19 @@ class FirestoreApiKeyRepository:
     def __init__(self, db):
         self._db = db
 
-    def issue(self, uid: str, *, label: str = "", created_by: str = "") -> dict:
+    def issue(
+        self,
+        uid: str,
+        *,
+        label: str = "",
+        created_by: str = "",
+        scopes: list[str] | tuple[str, ...] | None = None,
+    ) -> dict:
         uid = str(uid or "").strip()
         if not uid:
             raise ValueError("uid must not be empty")
         clean_label = str(label or "").strip()[:80]
+        clean_scopes = normalize_api_key_scopes(scopes)
         plaintext = API_KEY_PREFIX + secrets.token_urlsafe(API_KEY_SECRET_BYTES)
         key_id = hash_api_key(plaintext)
         now = datetime.now(timezone.utc)
@@ -61,6 +75,7 @@ class FirestoreApiKeyRepository:
                 "label": clean_label,
                 "prefix": plaintext[:18],
                 "status": "active",
+                "scopes": list(clean_scopes),
                 "created_at": now,
                 "created_by": str(created_by or "").strip(),
                 "updated_at": now,
@@ -73,6 +88,7 @@ class FirestoreApiKeyRepository:
             "label": clean_label,
             "prefix": plaintext[:18],
             "status": "active",
+            "scopes": list(clean_scopes),
             "created_at": now,
         }
 
@@ -98,6 +114,9 @@ class FirestoreApiKeyRepository:
             key_id=key_id,
             uid=uid,
             label=str(data.get("label") or ""),
+            # Legacy v1 keys predate scopes. They keep the two capabilities
+            # they were intended to have, but never gain direct indexing.
+            scopes=normalize_api_key_scopes(data.get("scopes")),
         )
 
     def revoke(self, key_id: str) -> dict:
@@ -137,3 +156,20 @@ def _validate_key_id(key_id: str) -> str:
     if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
         raise ApiKeyNotFound("API key not found")
     return value
+
+
+def normalize_api_key_scopes(scopes) -> tuple[str, ...]:
+    if scopes is None:
+        return DEFAULT_API_KEY_SCOPES
+    if not isinstance(scopes, (list, tuple, set, frozenset)):
+        raise ValueError("scopes must be a list")
+    normalized = []
+    for scope in scopes:
+        value = str(scope or "").strip()
+        if value not in API_KEY_SCOPES:
+            raise ValueError(f"Unknown API key scope: {value or '(empty)'}")
+        if value not in normalized:
+            normalized.append(value)
+    if not normalized:
+        raise ValueError("At least one API key scope is required")
+    return tuple(sorted(normalized))

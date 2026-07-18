@@ -89,10 +89,11 @@ _SOURCE_ID_RE = re.compile(r"^S?(\d{1,4})$", re.IGNORECASE)
 class ShareError(Exception):
     """Fehler mit stabilem Code, den der Router auf HTTP-Status mappt."""
 
-    def __init__(self, code, message):
+    def __init__(self, code, message, details=None):
         super().__init__(message)
         self.code = code
         self.message = message
+        self.details = details if isinstance(details, dict) else {}
 
 
 def _utcnow():
@@ -108,6 +109,25 @@ def _clip(value, limit):
 
 def generate_share_id():
     return "".join(secrets.choice(_ID_ALPHABET) for _ in range(SHARE_ID_LENGTH))
+
+
+def share_id_for_api_run(run_id):
+    """Stable, non-reversible public ID for one API run.
+
+    The run ID itself stays private. Modulo 62^16 retains the same roughly
+    95-bit public-ID space as randomly generated browser shares.
+    """
+    value = str(run_id or "").strip().lower()
+    if len(value) != 32 or any(char not in "0123456789abcdef" for char in value):
+        raise ShareError("not_found", "Run not found.")
+    number = int.from_bytes(
+        hashlib.sha256(("api-run-share:" + value).encode("ascii")).digest(), "big"
+    ) % (len(_ID_ALPHABET) ** SHARE_ID_LENGTH)
+    chars = []
+    for _ in range(SHARE_ID_LENGTH):
+        number, remainder = divmod(number, len(_ID_ALPHABET))
+        chars.append(_ID_ALPHABET[remainder])
+    return "".join(reversed(chars))
 
 
 def is_valid_share_id(share_id):
@@ -640,6 +660,136 @@ def validate_share_visibility(value):
     return visibility
 
 
+def _build_share_document(
+    uid,
+    payload,
+    *,
+    visibility,
+    source_result_id="",
+    source_api_run_id="",
+):
+    question = payload.get("question") or ""
+    consensus_md = payload.get("consensus_md") or ""
+    sources = payload.get("sources") or []
+    included_models = payload.get("included_models") or []
+    document = {
+        "schema_version": 1,
+        "slug": slugify_question(question),
+        "status": "active",
+        "question": question,
+        "consensus_md": consensus_md,
+        "differences_data": payload.get("differences_data"),
+        "differences_text": payload.get("differences_text") or "",
+        "sources": sources,
+        "included_models": included_models,
+        "consensus_model": payload.get("consensus_model") or "",
+        "answered_at": payload.get("answered_at") or "",
+        "created_at": firestore.SERVER_TIMESTAMP,
+        "question_hash": question_hash(question),
+        "owner_uid": uid,
+        "visibility": visibility,
+        "index_eligible": compute_index_eligible(
+            question, consensus_md, sources, included_models
+        ),
+        "indexed": False,
+        "reports_count": 0,
+    }
+    if source_result_id:
+        document["source_result_id"] = source_result_id
+    if source_api_run_id:
+        document["source_api_run_id"] = source_api_run_id
+    return document
+
+
+def create_share_from_api_run(uid, run, db=None, consume_quota=None):
+    """Publish one succeeded API run as an immutable public share.
+
+    The share ID is deterministic per API run, making sequential retries
+    idempotent without extending the browser pending-result retention window.
+    """
+    db = db if db is not None else db_firestore
+    if not isinstance(run, dict) or run.get("uid") != uid:
+        raise ShareError("not_found", "Run not found.")
+    if run.get("status") != "succeeded":
+        raise ShareError("run_not_succeeded", "Only succeeded runs can be published.")
+    result = run.get("result")
+    if not isinstance(result, dict):
+        raise ShareError("bad_result", "The run has no publishable result.")
+
+    run_id = str(run.get("run_id") or "")
+    share_id = share_id_for_api_run(run_id)
+    existing = get_share(share_id, db=db)
+    if existing is not None:
+        if existing.get("owner_uid") != uid or existing.get("source_api_run_id") != run_id:
+            raise ShareError("conflict", "The publication ID is already in use.")
+        if existing.get("status") != "active":
+            raise ShareError(
+                "share_not_active",
+                "This run's published page is no longer active.",
+            )
+        return {
+            "share_id": share_id,
+            "slug": existing.get("slug") or "",
+            "created": False,
+            "visibility": "public",
+        }
+
+    answers = result.get("model_answers")
+    answers = answers if isinstance(answers, list) else []
+    included_providers = []
+    model_labels = {}
+    model_sources = {}
+    for answer in answers:
+        if not isinstance(answer, dict):
+            continue
+        provider = str(answer.get("provider") or "").strip()
+        if provider not in PROVIDER_ORDER or provider in included_providers:
+            continue
+        included_providers.append(provider)
+        model_labels[provider] = str(answer.get("model") or provider)
+        sources = answer.get("sources")
+        model_sources[provider] = sources if isinstance(sources, list) else []
+
+    request = run.get("request") if isinstance(run.get("request"), dict) else {}
+    plan = run.get("model_plan") if isinstance(run.get("model_plan"), dict) else {}
+    payload = build_pending_result(
+        uid,
+        request.get("question"),
+        result.get("consensus_response"),
+        result.get("differences_data"),
+        result.get("differences"),
+        model_sources,
+        included_providers,
+        model_labels,
+        plan.get("consensus_model"),
+    )
+    if payload is None:
+        raise ShareError("bad_result", "The run has no publishable result.")
+    succeeded_at = run.get("succeeded_at")
+    if isinstance(succeeded_at, datetime):
+        payload["answered_at"] = succeeded_at.isoformat()
+
+    if consume_quota is None:
+        def consume_quota():
+            return consume_daily_share_quota(uid, db=db)
+    if not consume_quota():
+        raise ShareError("quota_exceeded", "Daily share limit reached. Please try again tomorrow.")
+
+    share_doc = _build_share_document(
+        uid,
+        payload,
+        visibility="public",
+        source_api_run_id=run_id,
+    )
+    db.collection(SHARES_COLLECTION).document(share_id).set(share_doc)
+    return {
+        "share_id": share_id,
+        "slug": share_doc["slug"],
+        "created": True,
+        "visibility": "public",
+    }
+
+
 def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
                               visibility="public"):
     """Kopiert ein Pending-Ergebnis in einen unveränderlichen Share-Snapshot.
@@ -693,34 +843,13 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
     if not consume_quota():
         raise ShareError("quota_exceeded", "Daily share limit reached. Please try again tomorrow.")
 
-    question = pending.get("question") or ""
-    consensus_md = pending.get("consensus_md") or ""
-    sources = pending.get("sources") or []
-    included_models = pending.get("included_models") or []
     share_id = generate_share_id()
-    slug = slugify_question(question)
-
-    share_doc = {
-        "schema_version": 1,
-        "slug": slug,
-        "status": "active",
-        "question": question,
-        "consensus_md": consensus_md,
-        "differences_data": pending.get("differences_data"),
-        "differences_text": pending.get("differences_text") or "",
-        "sources": sources,
-        "included_models": included_models,
-        "consensus_model": pending.get("consensus_model") or "",
-        "answered_at": pending.get("answered_at") or "",
-        "created_at": firestore.SERVER_TIMESTAMP,
-        "question_hash": question_hash(question),
-        "owner_uid": uid,
-        "source_result_id": result_id,
-        "visibility": visibility,
-        "index_eligible": compute_index_eligible(question, consensus_md, sources, included_models),
-        "indexed": False,
-        "reports_count": 0,
-    }
+    share_doc = _build_share_document(
+        uid,
+        pending,
+        visibility=visibility,
+        source_result_id=result_id,
+    )
     db.collection(SHARES_COLLECTION).document(share_id).set(share_doc)
 
     try:
@@ -731,7 +860,12 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
     except Exception:
         logging.exception("pending_result share_id backlink failed")
 
-    return {"share_id": share_id, "slug": slug, "created": True, "visibility": visibility}
+    return {
+        "share_id": share_id,
+        "slug": share_doc["slug"],
+        "created": True,
+        "visibility": visibility,
+    }
 
 
 def revoke_share(share_id, uid, is_admin=False, db=None):
@@ -759,7 +893,16 @@ def revoke_share(share_id, uid, is_admin=False, db=None):
 MODERATION_ACTIONS = ("block", "unblock")
 
 
-def moderate_share(share_id, action=None, indexed=None, db=None):
+def moderate_share(
+    share_id,
+    action=None,
+    indexed=None,
+    db=None,
+    *,
+    actor_uid="",
+    actor_key_id="",
+    source="",
+):
     """Admin-Moderation: Status blocken/freigeben und/oder ``indexed`` setzen.
 
     ``indexed`` wird ausschließlich hier (also durch den Admin) auf True
@@ -779,6 +922,12 @@ def moderate_share(share_id, action=None, indexed=None, db=None):
 
     status = data.get("status")
     updates = {"needs_review": False, "reviewed_at": firestore.SERVER_TIMESTAMP}
+    if actor_uid:
+        updates["reviewed_by"] = _clip(actor_uid, 128)
+    if actor_key_id:
+        updates["reviewed_by_api_key_id"] = _clip(actor_key_id, 64)
+    if source:
+        updates["review_source"] = _clip(source, 40)
     if action == "block":
         if status == "revoked":
             raise ShareError("bad_request", "Share is already revoked.")
@@ -796,6 +945,7 @@ def moderate_share(share_id, action=None, indexed=None, db=None):
         if bool(indexed) and status != "active":
             raise ShareError("bad_request", "Only active shares can be indexed.")
         updates["indexed"] = bool(indexed)
+        updates["indexed_at"] = firestore.SERVER_TIMESTAMP if indexed else None
 
     # Jede Index-Entscheidung bzw. ein Block erledigt eine offene
     # Nutzer-Anfrage ("Request Google listing") – Flag zuruecksetzen.
@@ -807,6 +957,53 @@ def moderate_share(share_id, action=None, indexed=None, db=None):
     merged = dict(data)
     merged.update(updates)
     return merged
+
+
+def set_api_share_indexing(
+    share_id,
+    uid,
+    *,
+    indexed,
+    actor_key_id,
+    db=None,
+):
+    """Admin-automation gate for direct index/noindex decisions."""
+    db = db if db is not None else db_firestore
+    data = get_share(share_id, db=db)
+    if data is None or data.get("owner_uid") != uid:
+        raise ShareError("not_found", "Share not found.")
+    if str(data.get("visibility") or "public") != "public":
+        raise ShareError("bad_request", "Only public pages can be indexed.")
+    if data.get("status") != "active":
+        raise ShareError("share_not_active", "Only active pages can be indexed.")
+    if bool(indexed) and bool(data.get("indexed")):
+        return data
+    if bool(indexed) and not bool(data.get("index_eligible")):
+        raise ShareError(
+            "index_quality_failed",
+            "This page does not meet the automatic indexing quality gate.",
+        )
+    if bool(indexed) and data.get("question_hash"):
+        canonical = find_canonical_share(data["question_hash"], db=db)
+        if canonical and canonical.get("share_id") != share_id:
+            raise ShareError(
+                "duplicate",
+                "An indexed canonical page already exists for this question.",
+                details={
+                    "canonical_share_id": canonical.get("share_id"),
+                    "canonical_path": share_path(
+                        canonical.get("slug") or "", canonical.get("share_id") or ""
+                    ),
+                },
+            )
+    return moderate_share(
+        share_id,
+        indexed=bool(indexed),
+        db=db,
+        actor_uid=uid,
+        actor_key_id=actor_key_id,
+        source="consensus_api",
+    )
 
 
 def request_share_indexing(share_id, uid, want=True, db=None):

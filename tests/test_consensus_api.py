@@ -111,6 +111,11 @@ def test_openapi_contract_declares_api_key_and_idempotency_header():
     assert request_schema["$ref"].endswith("/ConsensusRunRequest")
     run_path = schema["paths"]["/api/v1/consensus/runs/{run_id}"]
     assert "get" in run_path and "delete" in run_path
+    assert "post" in schema["paths"]["/api/v1/consensus/runs/{run_id}/share"]
+    assert "get" in schema["paths"]["/api/v1/shares"]
+    share_path = schema["paths"]["/api/v1/shares/{share_id}"]
+    assert "get" in share_path and "delete" in share_path
+    assert "put" in schema["paths"]["/api/v1/shares/{share_id}/indexing"]
     response_properties = schema["components"]["schemas"]["ConsensusRunResponse"][
         "properties"
     ]
@@ -125,6 +130,7 @@ def test_admin_dashboard_exposes_safe_api_key_management_section():
     assert 'id="apiKeyUid"' in template
     assert 'id="issuedApiKeyPanel"' in template
     assert 'id="issuedApiKeyValue"' in template
+    assert 'id="apiKeyDirectIndex"' in template
     assert "'/api/admin/api-keys'" in template
     assert "`/api/admin/api-keys/${encodeURIComponent(key.key_id)}`" in template
     assert "input.value = '';" in template
@@ -135,8 +141,8 @@ def test_admin_can_issue_list_and_revoke_api_keys(monkeypatch):
     calls = []
 
     class AdminKeyRepo:
-        def issue(self, uid, *, label, created_by):
-            calls.append(("issue", uid, label, created_by))
+        def issue(self, uid, *, label, created_by, scopes):
+            calls.append(("issue", uid, label, created_by, scopes))
             return {
                 "key_id": "f" * 64,
                 "api_key": "cns_live_once",
@@ -144,6 +150,7 @@ def test_admin_can_issue_list_and_revoke_api_keys(monkeypatch):
                 "label": label,
                 "prefix": "cns_live_once",
                 "status": "active",
+                "scopes": list(scopes),
                 "created_at": NOW,
             }
 
@@ -184,10 +191,38 @@ def test_admin_can_issue_list_and_revoke_api_keys(monkeypatch):
     assert listed.json()["keys"][0]["uid"] == "user-1"
     assert revoked.json() == {"key_id": "f" * 64, "status": "revoked"}
     assert calls == [
-        ("issue", "user-1", "Production", "admin-1"),
+        ("issue", "user-1", "Production", "admin-1", ["consensus:run", "share:write"]),
         ("list", "user-1"),
         ("revoke", "f" * 64),
     ]
+
+
+def test_admin_cannot_issue_direct_index_scope_to_non_admin_uid(monkeypatch):
+    monkeypatch.setattr(admin_router, "_require_admin", lambda request, data: "admin-1")
+    monkeypatch.setattr(
+        admin_router.auth,
+        "get_user",
+        lambda uid: SimpleNamespace(uid=uid, disabled=False, email_verified=True),
+    )
+    monkeypatch.setattr(
+        admin_router,
+        "api_account_cleanup",
+        SimpleNamespace(is_blocked=lambda uid: False),
+    )
+    monkeypatch.setattr(admin_router, "is_user_admin", lambda uid: False)
+    client = TestClient(main.app)
+
+    response = client.post(
+        "/api/admin/api-keys",
+        json={
+            "uid": "regular-user",
+            "label": "unsafe",
+            "scopes": ["consensus:run", "share:write", "share:index"],
+        },
+    )
+
+    assert response.status_code == 409
+    assert "admin UID" in response.text
 
 
 def test_post_returns_accepted_run_and_duplicate_run_id(monkeypatch):
@@ -559,3 +594,139 @@ def test_expired_post_provider_worker_keeps_consumed_usage(monkeypatch):
     monkeypatch.setattr(api_consensus_runner, "usage_repository", UsageRepo())
 
     assert api_consensus_runner.fail_expired_run(run["run_id"]) is True
+
+
+def test_api_key_can_publish_list_read_and_revoke_own_share(monkeypatch):
+    share_id = "A" * 16
+    run_id = "a" * 32
+    share_doc = {
+        "owner_uid": "user-publisher",
+        "slug": "evidence-question",
+        "question": "Which evidence should be compared?",
+        "status": "active",
+        "visibility": "public",
+        "index_eligible": True,
+        "indexed": False,
+    }
+    publication_calls = []
+    revoked = []
+
+    class PublishKeyRepo:
+        def authenticate(self, key):
+            assert key == "cns_publish_test"
+            return SimpleNamespace(
+                uid="user-publisher",
+                key_id="f" * 64,
+                scopes=("consensus:run", "share:write"),
+            )
+
+    class PublishRunRepo:
+        def get_for_uid(self, requested_run_id, uid):
+            assert (requested_run_id, uid) == (run_id, "user-publisher")
+            return {"run_id": run_id, "uid": uid, "status": "succeeded"}
+
+    monkeypatch.setattr(api_v1, "api_key_repository", PublishKeyRepo())
+    monkeypatch.setattr(
+        api_v1, "api_account_cleanup", SimpleNamespace(ensure_active=lambda uid: None)
+    )
+    monkeypatch.setattr(api_v1, "api_run_repository", PublishRunRepo())
+    monkeypatch.setattr(
+        api_v1.share_snapshots,
+        "create_share_from_api_run",
+        lambda uid, run: publication_calls.append((uid, run["run_id"])) or {
+            "share_id": share_id,
+            "slug": share_doc["slug"],
+            "created": True,
+        },
+    )
+    monkeypatch.setattr(
+        api_v1.share_snapshots,
+        "get_share",
+        lambda requested: dict(share_doc) if requested == share_id else None,
+    )
+    monkeypatch.setattr(
+        api_v1.share_snapshots,
+        "list_shares_for_owner",
+        lambda uid, max_items: [{"share_id": share_id}],
+    )
+    monkeypatch.setattr(
+        api_v1.share_snapshots,
+        "revoke_share",
+        lambda requested, uid: revoked.append((requested, uid)),
+    )
+    client = TestClient(main.app)
+    headers = {"X-API-Key": "cns_publish_test"}
+
+    published = client.post(f"/api/v1/consensus/runs/{run_id}/share", headers=headers)
+    fetched = client.get(f"/api/v1/shares/{share_id}", headers=headers)
+    listed = client.get("/api/v1/shares?limit=10", headers=headers)
+    deleted = client.delete(f"/api/v1/shares/{share_id}", headers=headers)
+
+    assert published.status_code == 201
+    assert published.json()["url"].endswith(f"/s/evidence-question-{share_id}")
+    assert published.json()["indexing_status"] == "noindex"
+    assert fetched.status_code == 200
+    assert listed.json()["shares"][0]["share_id"] == share_id
+    assert deleted.status_code == 204
+    assert publication_calls == [("user-publisher", run_id)]
+    assert revoked == [(share_id, "user-publisher")]
+
+
+def test_direct_indexing_requires_scope_admin_and_returns_indexed_state(monkeypatch):
+    share_id = "B" * 16
+    identity = SimpleNamespace(
+        uid="admin-publisher",
+        key_id="e" * 64,
+        scopes=("consensus:run", "share:write", "share:index"),
+    )
+
+    class IndexKeyRepo:
+        def authenticate(self, key):
+            return identity
+
+    monkeypatch.setattr(api_v1, "api_key_repository", IndexKeyRepo())
+    monkeypatch.setattr(
+        api_v1, "api_account_cleanup", SimpleNamespace(ensure_active=lambda uid: None)
+    )
+    monkeypatch.setattr(api_v1, "is_user_admin", lambda uid: True)
+    monkeypatch.setattr(
+        api_v1.share_snapshots,
+        "set_api_share_indexing",
+        lambda requested, uid, *, indexed, actor_key_id: {
+            "owner_uid": uid,
+            "slug": "indexed-page",
+            "question": "An indexable question?",
+            "status": "active",
+            "visibility": "public",
+            "index_eligible": True,
+            "indexed": indexed,
+        },
+    )
+    client = TestClient(main.app)
+    response = client.put(
+        f"/api/v1/shares/{share_id}/indexing",
+        headers={"X-API-Key": "cns_index_test"},
+        json={"indexed": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["indexing_status"] == "indexed"
+    assert response.json()["robots"] == "index, follow"
+    assert response.json()["in_sitemap"] is True
+
+    identity.scopes = ("share:write",)
+    denied_scope = client.put(
+        f"/api/v1/shares/{share_id}/indexing",
+        headers={"X-API-Key": "cns_index_test"},
+        json={"indexed": True},
+    )
+    assert denied_scope.status_code == 403
+
+    identity.scopes = ("share:index",)
+    monkeypatch.setattr(api_v1, "is_user_admin", lambda uid: False)
+    denied_admin = client.put(
+        f"/api/v1/shares/{share_id}/indexing",
+        headers={"X-API-Key": "cns_index_test"},
+        json={"indexed": True},
+    )
+    assert denied_admin.status_code == 403

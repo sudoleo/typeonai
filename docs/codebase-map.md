@@ -54,7 +54,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` zum sicheren Wiederherstellen eines Share-/Watch-fähigen Pending-Snapshots aus einem eigenen Consensus-Bookmark. Beide Save-Endpunkte liefern den vollständig zusammengeführten Bookmark-Datensatz zurück, damit der Client ihn ohne Reload aktualisiert. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. kompakter History je Watch), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH) sowie öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
-| `api_v1.py` | Nutzergebundene asynchrone Consensus-API: `POST /api/v1/consensus/runs`, `GET /api/v1/consensus/runs/{run_id}` und vorzeitiges Löschen terminaler Runs per `DELETE`. Auth über `X-API-Key`, Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
+| `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 | `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `/api/admin/models` (GET/POST), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (Diagnose-Liste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 **Zentrale Templates** (`templates/`, gerendert mit `Jinja2Templates`):
@@ -399,10 +399,13 @@ Whitelist für Bild-MIME-Typen.
   auch auf bereits bestehende Watches nach Ablauf des Tier-Cache).
 
 ### Nutzergebundene Consensus-API (v1)
-- Admins stellen über `POST /api/admin/api-keys` einen Schlüssel für eine
+- Admins stellen über `POST /api/admin/api-keys` einen gescopten Schlüssel für eine
   aktive, E-Mail-verifizierte Firebase-UID aus. Nur die einmalige Antwort enthält den
   Klartextschlüssel (`cns_live_…`); Firestore speichert ausschließlich dessen
-  SHA-256-Hash als Dokument-ID. Liste und Widerruf laufen über
+  SHA-256-Hash als Dokument-ID. Defaults sind `consensus:run` + `share:write`;
+  `share:index` ist nur für Admin-UIDs ausstellbar und wird am Index-Endpoint
+  zusammen mit der aktuellen Admin-Rolle erneut geprüft. Legacy-Keys erhalten
+  nur die sicheren Defaults. Liste und Widerruf laufen über
   `GET/DELETE /api/admin/api-keys`.
 - `POST /api/v1/consensus/runs` akzeptiert ausschließlich `question` und
   `deep_think`; unbekannte Felder werden abgelehnt. Der Server wählt die sechs
@@ -442,9 +445,22 @@ Whitelist für Bild-MIME-Typen.
 - Der maschinenlesbare Vertrag kommt aus den typisierten FastAPI-Routen unter
   `/openapi.json` (Security-Scheme `ConsensusApiKey`, Header `X-API-Key` und
   Pflichtheader `Idempotency-Key`).
+- Erfolgreiche eigene Runs werden per `POST .../{run_id}/share` direkt (ohne
+  24h-Pending-Zwischenschritt) in einen unveränderlichen Public-Snapshot
+  überführt. Eine deterministisch aus der privaten Run-ID abgeleitete 95-Bit-
+  Share-ID macht Retries idempotent; `GET /api/v1/shares` liefert Resume-/
+  Themenhistorie, `DELETE` widerruft. `PUT .../indexing` erzwingt neben
+  `share:index` den Quality-Filter sowie Deduplikation gegen bereits indexierte
+  gleiche `question_hash`-Seiten und schreibt API-Key-/Review-Auditfelder.
+- `scripts/publish_consensus.py` orchestriert Themenwahl (optional OpenAI
+  Responses API + Web Search), Run/Poll, Publish und Indexfreigabe ohne externe
+  Python-Abhängigkeiten. `.github/workflows/publish-consensus.yml` startet ihn
+  wöchentlich oder manuell; Secrets bleiben ausschließlich in GitHub Actions.
 
 ### Sharing
 - `/consensus` legt ein `pending_results`-Dokument an → `result_id`.
+- Die Consensus-API publiziert dagegen direkt aus ihrem 30-Tage-Run-Snapshot;
+  `source_api_run_id` bleibt serverintern und wird nie Teil der Public-Payload.
 - Consensus-Bookmarks speichern diese ID mit, solange sie gültig ist. Beim
   Teilen/Watchen eines älteren, geöffneten Bookmarks erzeugt
   `POST /bookmark/consensus/share-result` aus dem serverseitigen Bookmark
@@ -477,7 +493,7 @@ app/core/
   rate_limit.py              slowapi-Limiter (Client-IP hinter Render-Proxy via XFF)
   state.py                   Kurzlebiger In-Memory-Feedback-Cooldown
 app/api/routers/             siehe §2
-  api_v1.py                  API-Key-authentifizierte POST/GET-Consensus-Runs + OpenAPI-Modelle
+  api_v1.py                  Gescopte Run-, Publish-, Share-Lifecycle- und Indexing-API + OpenAPI-Modelle
 app/services/llm/
   base.py                    System-Prompt, Wortzählung, validate_model
   engines.py                 Provider-Requests (build_provider_payload, query_*)
@@ -537,8 +553,9 @@ Wichtige Verträge im Backend:
     gehashtem HTTP-Idempotency-Key auf `run_id` und kanonischen `request_hash`;
     verhindert auch bei parallelen POSTs doppelte Runs. Kein Klartext-Key.
 - `api_consensus_keys/{sha256(api_key)}` — admin-ausgegebene API-Schlüssel mit
-  `uid`, nicht-geheimem Präfix/Label, `status=active|revoked` und Audit-
-  Zeitstempeln. Der Klartextschlüssel wird nie gespeichert.
+  `uid`, nicht-geheimem Präfix/Label, `status=active|revoked`, den Scopes
+  `consensus:run|share:write|share:index` und Audit-Zeitstempeln. Der
+  Klartextschlüssel wird nie gespeichert.
 - `api_consensus_account_blocks/{uid}` — temporärer fail-closed Tombstone bei
   Account-Löschung (`blocked`, `cleanup_pending`, Fehler-/Audit-Zeitstempel).
   Er wird vor jeder Löschkaskade geschrieben, von HTTP und Worker geprüft und
@@ -571,7 +588,8 @@ Wichtige Verträge im Backend:
   ohne Eintrag/Key Auto über `JUDGE_FAMILY_PRIORITY`).
 - `pending_results` — kurzlebige Consensus-Ergebnisse fürs Sharing (TTL/Cleanup).
 - `shares` — unveränderliche Snapshots (Slug, `visibility=public|private`,
-  `indexed`, `status`, `owner_uid`, `question_hash`, …). Public-Shares sind per
+  `indexed`, `status`, `owner_uid`, `question_hash`, optional interne
+  `source_api_run_id` und Index-Review-Auditfelder, …). Public-Shares sind per
   Link lesbar; private Watch-Snapshots ausschließlich mit Eigentümer-Session.
 - `watches` — owner-gebundene Scheduling-Metadaten (`share_id`, `visibility`,
   Intervall, optionaler `run_weekday` für Weekly sowie lokale `run_time`
@@ -674,8 +692,9 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **561 passed** (2026-07-18; inklusive
-  run-basierter Usage- sowie Consensus-API-Repository-/Vertragstests).
+  Letzte bekannte Baseline: **572 passed** (2026-07-18; inklusive
+  run-basierter Usage-, Consensus-API-Publishing-/Scope-/Vertrags- sowie
+  Scheduled-Publisher-Tests).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, kompakte Antwort→Consensus-

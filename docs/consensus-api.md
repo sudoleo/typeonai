@@ -30,6 +30,23 @@ Schlüssel werden nur für aktive, E-Mail-verifizierte Firebase-Nutzer
 ausgegeben. Gelöschte, deaktivierte oder lokal zur Löschung gesperrte Accounts
 können keinen API-Schlüssel mehr verwenden.
 
+Jeder Schlüssel trägt explizite Scopes:
+
+- `consensus:run`: Runs starten, lesen und löschen.
+- `share:write`: eigene erfolgreiche Runs publizieren sowie eigene Shares
+  auflisten, lesen und widerrufen.
+- `share:index`: eigene geeignete Shares direkt indexierbar bzw. wieder auf
+  `noindex` setzen. Dieser Scope kann ausschließlich für eine Admin-UID
+  ausgegeben werden und der Endpoint prüft die Admin-Rolle erneut.
+
+Neue Schlüssel erhalten standardmäßig `consensus:run` und `share:write`.
+Legacy-Schlüssel ohne gespeichertes Scope-Feld erhalten dieselben sicheren
+Defaults, aber niemals rückwirkend `share:index`.
+Für den Scheduled Publisher muss im Admin-Dashboard „Direct indexing“ aktiviert
+werden; äquivalent kann die Ausgabe mit
+`{"uid":"<admin-uid>","label":"scheduled-publisher","scopes":["consensus:run","share:write","share:index"]}`
+erfolgen.
+
 ## Run starten
 
 ```http
@@ -82,3 +99,72 @@ Erfolg liefert HTTP `204`. Noch laufende bzw. reservierte Runs liefern `409`,
 damit Usage- und Provider-Lifecycle nicht durch eine Lösch-Race entkoppelt
 werden. Nach der Löschung kann derselbe Idempotency-Key wieder für einen neuen
 logischen Run verwendet werden.
+
+## Erfolgreichen Run publizieren
+
+```http
+POST /api/v1/consensus/runs/{run_id}/share
+X-API-Key: cns_live_…
+```
+
+Der Run muss `succeeded` sein und derselben UID wie der Schlüssel gehören.
+Der Endpoint erzeugt direkt einen unveränderlichen, öffentlichen Share-Snapshot
+und liefert `share_id`, kanonische absolute `url`, `index_eligible`,
+`indexing_status`, `robots` und `in_sitemap`. Wiederholungen für denselben Run
+liefern denselben Link (`200` statt initial `201`) und verbrauchen keine weitere
+Share-Quote. API-Publikationen verwenden nicht das kurzlebige Browser-
+`pending_results`-Zwischenformat; sie bleiben dadurch während der Run-Retention
+publizierbar.
+
+Status und Lifecycle:
+
+```http
+GET    /api/v1/shares?limit=20
+GET    /api/v1/shares/{share_id}
+DELETE /api/v1/shares/{share_id}
+```
+
+`DELETE` widerruft die Seite wie der bestehende Browser-Flow, setzt sie sofort
+auf `noindex` und liefert `204`.
+
+## Seite indexierbar schalten
+
+```http
+PUT /api/v1/shares/{share_id}/indexing
+X-API-Key: cns_live_…
+Content-Type: application/json
+
+{"indexed":true}
+```
+
+Hierfür sind Scope `share:index` **und** eine aktuell aktive Admin-Rolle nötig.
+Automatische Freigabe ist nur möglich, wenn der bestehende Share-Quality-Filter
+erfüllt ist. Existiert bereits eine indexierte Seite mit demselben normalisierten
+Frage-Hash, antwortet die API mit `409 duplicate` samt Canonical-Ziel. Nach
+Erfolg liefert die Seite `index, follow` und ist in `sitemap-shares.xml` enthalten.
+Das macht die URL indexierbar; die tatsächliche Aufnahme in einen externen
+Suchindex bleibt Sache der jeweiligen Suchmaschine/Search Console.
+
+## Geplanter Publisher via GitHub Actions
+
+`scripts/publish_consensus.py` bildet den kompletten Ablauf ab:
+
+1. letzte eigene Share-Fragen laden,
+2. optional per OpenAI Responses API + Web Search eine neue, nicht redundante
+   Frage wählen,
+3. Consensus-Run starten und pollen,
+4. Run publizieren,
+5. geeigneten Share direkt indexierbar schalten.
+
+Der Workflow `.github/workflows/publish-consensus.yml` läuft standardmäßig
+dienstags um 07:15 UTC und kann manuell mit einer festen Frage gestartet werden.
+Im GitHub-Repository werden folgende Actions-Secrets benötigt:
+
+- `CONSENSUS_API_KEY`: Key einer Admin-UID mit allen drei Scopes.
+- `OPENAI_API_KEY`: nur für die automatische Themenwahl; bei manueller Frage
+  wird kein OpenAI-Call ausgeführt.
+
+Optionale Repository-Variablen: `CONSENSUS_API_BASE_URL`,
+`OPENAI_TOPIC_MODEL` (Default `gpt-5.6-luna`) und `CONSENSUS_TOPIC_BRIEF`.
+Der Workflow verwendet eine Run-stabile Idempotency-Key-ID; ein Retry kann
+deshalb keinen zweiten Consensus-Run für denselben Workflow-Lauf starten.

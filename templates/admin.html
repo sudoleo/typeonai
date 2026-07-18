@@ -438,6 +438,15 @@
             background: var(--input-bg);
             color: var(--text-color);
         }
+        .api-key-scope-options {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 16px;
+            color: var(--sidebar-text-muted);
+            font-size: 0.82em;
+        }
+        .api-key-scope-options label { display: inline-flex; align-items: center; gap: 6px; }
         .api-key-secret {
             margin: 4px 0 18px;
             padding: 14px;
@@ -1642,6 +1651,7 @@
                 metadata.className = 'api-key-meta';
                 metadata.textContent = [
                     `UID: ${key.uid || 'unknown'}`,
+                    `Scopes: ${(key.scopes || []).join(', ') || 'legacy defaults'}`,
                     `Created: ${formatAdminTime(key.created_at)}`,
                     `Last used: ${formatAdminTime(key.last_used_at)}`,
                     `Key ID: ${key.key_id || 'unknown'}`
@@ -1676,6 +1686,8 @@
         async function issueApiKey() {
             const uid = document.getElementById('apiKeyUid').value.trim();
             const label = document.getElementById('apiKeyLabel').value.trim();
+            const scopes = ['consensus:run', 'share:write'];
+            if (document.getElementById('apiKeyDirectIndex').checked) scopes.push('share:index');
             if (!uid) {
                 apiKeysStatus('Enter the Firebase UID that should own this key.', true);
                 document.getElementById('apiKeyUid').focus();
@@ -1686,7 +1698,7 @@
             clearIssuedApiKey();
             apiKeysStatus('Issuing key...', false);
             try {
-                const key = await shareAdminRequest('POST', '/api/admin/api-keys', { uid, label });
+                const key = await shareAdminRequest('POST', '/api/admin/api-keys', { uid, label, scopes });
                 document.getElementById('issuedApiKeyValue').value = key.api_key;
                 document.getElementById('issuedApiKeyPanel').hidden = false;
                 document.getElementById('apiKeyFilterUid').value = uid;
@@ -1967,6 +1979,13 @@
                         <input id="apiKeyLabel" type="text" maxlength="80" autocomplete="off" placeholder="Production, CI, local development...">
                     </div>
                     <button id="issueApiKeyBtn" type="button" class="admin-btn">Issue API key</button>
+                    <div class="api-key-scope-options">
+                        <span>Included: Consensus runs, publish/list/revoke own shares.</span>
+                        <label title="Only an admin UID may receive this scope. It can make eligible public pages indexable without another UI review.">
+                            <input id="apiKeyDirectIndex" type="checkbox">
+                            Direct indexing (admin UID only)
+                        </label>
+                    </div>
                 </div>
 
                 <div id="issuedApiKeyPanel" class="api-key-secret" role="region" aria-live="polite" hidden>

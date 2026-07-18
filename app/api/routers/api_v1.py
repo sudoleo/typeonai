@@ -4,12 +4,13 @@ import logging
 from datetime import datetime
 from typing import Any, Literal, Optional, Union
 
-from fastapi import APIRouter, Header, HTTPException, Request, Response, Security, status
+from fastapi import APIRouter, Header, HTTPException, Query, Request, Response, Security, status
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, ConfigDict, Field
 
 import app.core.config as cfg
-from app.core.security import db_firestore, is_user_pro
+from app.core.security import db_firestore, is_user_admin, is_user_pro
+from app.api.routers.pages import SITE_URL
 from app.core.rate_limit import (
     ApiUidRateLimitExceeded,
     api_key_rate_key,
@@ -30,6 +31,7 @@ from app.services.api_consensus_runner import (
     validate_server_credentials,
 )
 from app.services.api_key_repository import (
+    DEFAULT_API_KEY_SCOPES,
     FirestoreApiKeyRepository,
     InvalidApiKey,
 )
@@ -39,6 +41,8 @@ from app.services.api_run_repository import (
     ApiRunTransitionError,
 )
 from app.services.llm.base import count_words
+from app.services import share_snapshots
+from app.services.share_snapshots import ShareError
 from app.services.usage_repository import UsageLimitExceeded, UsageRunConflict
 
 
@@ -83,7 +87,32 @@ class ApiErrorResponse(BaseModel):
     error: Union[str, dict[str, Any]]
 
 
-def authenticate_api_identity(api_key: Optional[str]):
+class ShareIndexingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    indexed: bool
+
+
+class ApiShareResponse(BaseModel):
+    share_id: str
+    url: str
+    path: str
+    question: str
+    status: str
+    visibility: Literal["public", "private"]
+    index_eligible: bool
+    indexed: bool
+    indexing_status: Literal["noindex", "requested", "indexed"]
+    robots: Literal["noindex, nofollow", "noindex, follow", "index, follow"]
+    in_sitemap: bool
+    created: Optional[bool] = None
+
+
+class ApiShareListResponse(BaseModel):
+    shares: list[ApiShareResponse]
+
+
+def authenticate_api_identity(api_key: Optional[str], required_scope: str = "consensus:run"):
     if not api_key:
         raise HTTPException(status_code=401, detail="Missing X-API-Key header")
     try:
@@ -91,6 +120,15 @@ def authenticate_api_identity(api_key: Optional[str]):
     except InvalidApiKey:
         raise HTTPException(status_code=401, detail="Invalid API key") from None
     ensure_api_account_active(identity.uid)
+    scopes = tuple(getattr(identity, "scopes", DEFAULT_API_KEY_SCOPES))
+    if required_scope not in scopes:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "insufficient_scope",
+                "message": f"API key requires scope: {required_scope}",
+            },
+        )
     return identity
 
 
@@ -309,6 +347,246 @@ def delete_consensus_run(
     if not deleted:
         raise HTTPException(status_code=404, detail="Run not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/consensus/runs/{run_id}/share",
+    response_model=ApiShareResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        401: {"model": ApiErrorResponse},
+        403: {"model": ApiErrorResponse},
+        404: {"model": ApiErrorResponse},
+        409: {"model": ApiErrorResponse},
+        429: {"model": ApiErrorResponse},
+    },
+)
+@limiter.limit("20/minute")
+@limiter.limit("10/minute", key_func=api_key_rate_key)
+def publish_consensus_run(
+    request: Request,
+    run_id: str,
+    response: Response,
+    api_key: Optional[str] = Security(api_key_header),
+):
+    """Publish one succeeded owned run as a public immutable share."""
+    identity = authenticate_api_identity(api_key, "share:write")
+    enforce_uid_rate_limit(identity.uid, "share_create", 10)
+    try:
+        run = api_run_repository.get_for_uid(run_id, identity.uid)
+        publication = share_snapshots.create_share_from_api_run(identity.uid, run)
+        share = share_snapshots.get_share(publication["share_id"])
+    except ApiRunNotFound:
+        raise HTTPException(status_code=404, detail="Run not found") from None
+    except ShareError as exc:
+        _raise_api_share_error(exc)
+    except Exception:
+        logging.exception("Consensus API publication failed: %s", run_id)
+        raise HTTPException(status_code=500, detail="Publication failed") from None
+    if not publication["created"]:
+        response.status_code = status.HTTP_200_OK
+    response.headers["Location"] = publication["path"] if "path" in publication else (
+        share_snapshots.share_path(publication["slug"], publication["share_id"])
+    )
+    return _public_api_share(publication["share_id"], share or {}, created=publication["created"])
+
+
+@router.get(
+    "/shares",
+    response_model=ApiShareListResponse,
+    responses={401: {"model": ApiErrorResponse}, 403: {"model": ApiErrorResponse}},
+)
+@limiter.limit("60/minute")
+@limiter.limit("30/minute", key_func=api_key_rate_key)
+def list_api_shares(
+    request: Request,
+    limit: int = Query(default=20, ge=1, le=200),
+    api_key: Optional[str] = Security(api_key_header),
+):
+    identity = authenticate_api_identity(api_key, "share:write")
+    enforce_uid_rate_limit(identity.uid, "share_list", 30)
+    # The repository sorts after its bounded Firestore scan; scan the full API
+    # maximum first so `limit=20` actually means the 20 newest rows.
+    rows = share_snapshots.list_shares_for_owner(identity.uid, max_items=200)[:limit]
+    return {"shares": [_public_api_share_row(row) for row in rows]}
+
+
+@router.get(
+    "/shares/{share_id}",
+    response_model=ApiShareResponse,
+    responses={
+        401: {"model": ApiErrorResponse},
+        403: {"model": ApiErrorResponse},
+        404: {"model": ApiErrorResponse},
+    },
+)
+@limiter.limit("120/minute")
+@limiter.limit("60/minute", key_func=api_key_rate_key)
+def get_api_share(
+    request: Request,
+    share_id: str,
+    api_key: Optional[str] = Security(api_key_header),
+):
+    identity = authenticate_api_identity(api_key, "share:write")
+    enforce_uid_rate_limit(identity.uid, "share_get", 60)
+    share = _owned_api_share(share_id, identity.uid)
+    return _public_api_share(share_id, share)
+
+
+@router.put(
+    "/shares/{share_id}/indexing",
+    response_model=ApiShareResponse,
+    responses={
+        401: {"model": ApiErrorResponse},
+        403: {"model": ApiErrorResponse},
+        404: {"model": ApiErrorResponse},
+        409: {"model": ApiErrorResponse},
+        422: {"model": ApiErrorResponse},
+    },
+)
+@limiter.limit("20/minute")
+@limiter.limit("10/minute", key_func=api_key_rate_key)
+def set_api_share_indexing(
+    request: Request,
+    share_id: str,
+    payload: ShareIndexingRequest,
+    api_key: Optional[str] = Security(api_key_header),
+):
+    identity = authenticate_api_identity(api_key, "share:index")
+    enforce_uid_rate_limit(identity.uid, "share_index", 10)
+    if not is_user_admin(identity.uid):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "admin_required",
+                "message": "Direct indexing requires an admin account.",
+            },
+        )
+    try:
+        share = share_snapshots.set_api_share_indexing(
+            share_id,
+            identity.uid,
+            indexed=payload.indexed,
+            actor_key_id=identity.key_id,
+        )
+    except ShareError as exc:
+        _raise_api_share_error(exc)
+    return _public_api_share(share_id, share)
+
+
+@router.delete(
+    "/shares/{share_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        401: {"model": ApiErrorResponse},
+        403: {"model": ApiErrorResponse},
+        404: {"model": ApiErrorResponse},
+    },
+)
+@limiter.limit("20/minute")
+@limiter.limit("10/minute", key_func=api_key_rate_key)
+def delete_api_share(
+    request: Request,
+    share_id: str,
+    api_key: Optional[str] = Security(api_key_header),
+):
+    identity = authenticate_api_identity(api_key, "share:write")
+    enforce_uid_rate_limit(identity.uid, "share_delete", 10)
+    try:
+        share_snapshots.revoke_share(share_id, identity.uid)
+    except ShareError as exc:
+        _raise_api_share_error(exc)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _owned_api_share(share_id: str, uid: str) -> dict:
+    share = share_snapshots.get_share(share_id)
+    if share is None or share.get("owner_uid") != uid:
+        raise HTTPException(status_code=404, detail="Share not found")
+    return share
+
+
+def _public_api_share(share_id: str, share: dict, *, created: Optional[bool] = None) -> dict:
+    slug = str(share.get("slug") or "")
+    visibility = str(share.get("visibility") or "public")
+    path = share_snapshots.share_path("" if visibility == "private" else slug, share_id)
+    indexed = (
+        visibility == "public"
+        and bool(share.get("indexed"))
+        and share.get("status") == "active"
+    )
+    requested = bool(share.get("index_requested")) and not indexed
+    indexing_status = "indexed" if indexed else "requested" if requested else "noindex"
+    result = {
+        "share_id": share_id,
+        "url": SITE_URL + path,
+        "path": path,
+        "question": str(share.get("question") or ""),
+        "status": str(share.get("status") or "active"),
+        "visibility": visibility,
+        "index_eligible": bool(share.get("index_eligible")),
+        "indexed": indexed,
+        "indexing_status": indexing_status,
+        "robots": (
+            "index, follow"
+            if indexed
+            else "noindex, nofollow"
+            if visibility == "private"
+            else "noindex, follow"
+        ),
+        "in_sitemap": indexed,
+    }
+    if created is not None:
+        result["created"] = created
+    return result
+
+
+def _public_api_share_row(row: dict) -> dict:
+    share_id = str(row.get("share_id") or "")
+    visibility = str(row.get("visibility") or "public")
+    indexed = (
+        visibility == "public"
+        and bool(row.get("indexed"))
+        and row.get("status") == "active"
+    )
+    requested = bool(row.get("index_requested")) and not indexed
+    path = str(row.get("path") or share_snapshots.share_path("", share_id))
+    return {
+        "share_id": share_id,
+        "url": SITE_URL + path,
+        "path": path,
+        "question": str(row.get("question") or ""),
+        "status": str(row.get("status") or "active"),
+        "visibility": visibility,
+        "index_eligible": bool(row.get("index_eligible")),
+        "indexed": indexed,
+        "indexing_status": "indexed" if indexed else "requested" if requested else "noindex",
+        "robots": (
+            "index, follow"
+            if indexed
+            else "noindex, nofollow"
+            if visibility == "private"
+            else "noindex, follow"
+        ),
+        "in_sitemap": indexed,
+    }
+
+
+def _raise_api_share_error(exc: ShareError):
+    status_by_code = {
+        "not_found": 404,
+        "forbidden": 404,
+        "quota_exceeded": 429,
+        "run_not_succeeded": 409,
+        "share_not_active": 409,
+        "conflict": 409,
+        "duplicate": 409,
+        "bad_result": 422,
+        "index_quality_failed": 422,
+        "bad_request": 400,
+    }
+    detail = {"code": exc.code, "message": exc.message, **exc.details}
+    raise HTTPException(status_code=status_by_code.get(exc.code, 400), detail=detail)
 
 
 def _public_run(run: dict) -> dict:

@@ -1287,7 +1287,13 @@ class AdminShareRouteTests(unittest.TestCase):
                 "/api/admin/shares/%s/moderate" % self.share_id,
                 json={"action": "block"})
         self.assertEqual(response.status_code, 200)
-        mocked.assert_called_once_with(self.share_id, action="block", indexed=None)
+        mocked.assert_called_once_with(
+            self.share_id,
+            action="block",
+            indexed=None,
+            actor_uid="admin-1",
+            source="admin_ui",
+        )
         self.assertEqual(response.json()["share"]["share_status"], "blocked")
 
     def test_moderate_validates_indexed_type_and_maps_errors(self):
@@ -1384,6 +1390,131 @@ class IndexingRequestTests(unittest.TestCase):
         })
         urls = snapshots.list_indexed_share_urls(db=self.db)
         self.assertEqual(urls[0]["lastmod"], "2026-07-15")
+
+
+class ApiRunPublishingServiceTests(unittest.TestCase):
+    def setUp(self):
+        self.db = FakeDb()
+        self.uid = "admin-1"
+        snapshots.invalidate_share_cache()
+
+    def _run(self, **overrides):
+        run = {
+            "run_id": "a" * 32,
+            "uid": self.uid,
+            "status": "succeeded",
+            "request": {
+                "question": "Which energy storage technologies are most viable for a renewable electricity grid?"
+            },
+            "model_plan": {"consensus_model": "OpenAI"},
+            "succeeded_at": datetime(2026, 7, 18, 10, 0, tzinfo=timezone.utc),
+            "result": {
+                "consensus_response": "Evidence-backed consensus. [S1] " + "x" * 650,
+                "differences": "Minor differences.",
+                "differences_data": {"claims": [], "differences": []},
+                "model_answers": [
+                    {
+                        "provider": "OpenAI",
+                        "model": "gpt-test",
+                        "sources": [{"id": "S1", "title": "A", "url": "https://example.org/a"}],
+                    },
+                    {
+                        "provider": "Anthropic",
+                        "model": "claude-test",
+                        "sources": [{"id": "S2", "title": "B", "url": "https://example.org/b"}],
+                    },
+                    {"provider": "Gemini", "model": "gemini-test", "sources": []},
+                ],
+            },
+        }
+        run.update(overrides)
+        return run
+
+    def test_api_run_publication_is_idempotent_and_skips_pending_results(self):
+        run = self._run()
+        first = snapshots.create_share_from_api_run(
+            self.uid, run, db=self.db, consume_quota=lambda: True
+        )
+        second = snapshots.create_share_from_api_run(
+            self.uid, run, db=self.db, consume_quota=lambda: self.fail("quota consumed twice")
+        )
+
+        self.assertTrue(first["created"])
+        self.assertFalse(second["created"])
+        self.assertEqual(first["share_id"], second["share_id"])
+        self.assertTrue(snapshots.is_valid_share_id(first["share_id"]))
+        share = self.db.stores[snapshots.SHARES_COLLECTION][first["share_id"]]
+        self.assertEqual(share["source_api_run_id"], run["run_id"])
+        self.assertEqual(share["visibility"], "public")
+        self.assertTrue(share["index_eligible"])
+        self.assertFalse(self.db.stores[snapshots.PENDING_COLLECTION])
+
+    def test_api_run_requires_ownership_and_success(self):
+        with self.assertRaisesRegex(ShareError, "Run not found"):
+            snapshots.create_share_from_api_run(
+                "other", self._run(), db=self.db, consume_quota=lambda: True
+            )
+        with self.assertRaisesRegex(ShareError, "Only succeeded"):
+            snapshots.create_share_from_api_run(
+                self.uid,
+                self._run(status="running"),
+                db=self.db,
+                consume_quota=lambda: True,
+            )
+
+    def test_api_indexing_enforces_quality_dedup_and_audit(self):
+        published = snapshots.create_share_from_api_run(
+            self.uid, self._run(), db=self.db, consume_quota=lambda: True
+        )
+        share_id = published["share_id"]
+        indexed = snapshots.set_api_share_indexing(
+            share_id,
+            self.uid,
+            indexed=True,
+            actor_key_id="f" * 64,
+            db=self.db,
+        )
+        self.assertTrue(indexed["indexed"])
+        self.assertEqual(indexed["review_source"], "consensus_api")
+        self.assertEqual(indexed["reviewed_by_api_key_id"], "f" * 64)
+
+        snapshots.set_api_share_indexing(
+            share_id,
+            self.uid,
+            indexed=False,
+            actor_key_id="f" * 64,
+            db=self.db,
+        )
+        self.db.stores[snapshots.SHARES_COLLECTION][share_id]["index_eligible"] = False
+        with self.assertRaisesRegex(ShareError, "quality gate"):
+            snapshots.set_api_share_indexing(
+                share_id,
+                self.uid,
+                indexed=True,
+                actor_key_id="f" * 64,
+                db=self.db,
+            )
+
+        current = self.db.stores[snapshots.SHARES_COLLECTION][share_id]
+        current["index_eligible"] = True
+        canonical_id = snapshots.generate_share_id()
+        self.db.stores[snapshots.SHARES_COLLECTION][canonical_id] = {
+            **current,
+            "slug": "canonical",
+            "indexed": True,
+            "created_at": datetime(2026, 7, 1, tzinfo=timezone.utc),
+            "source_api_run_id": "b" * 32,
+        }
+        with self.assertRaises(ShareError) as raised:
+            snapshots.set_api_share_indexing(
+                share_id,
+                self.uid,
+                indexed=True,
+                actor_key_id="f" * 64,
+                db=self.db,
+            )
+        self.assertEqual(raised.exception.code, "duplicate")
+        self.assertEqual(raised.exception.details["canonical_share_id"], canonical_id)
 
 
 class ShareSeoEnhancementTests(unittest.TestCase):

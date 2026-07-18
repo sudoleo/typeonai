@@ -1,0 +1,49 @@
+name: Publish scheduled Consensus
+
+on:
+  workflow_dispatch:
+    inputs:
+      question:
+        description: Optional fixed question; leave empty to let the topic model choose
+        required: false
+        type: string
+      auto_index:
+        description: Make an eligible page indexable immediately
+        required: true
+        default: true
+        type: boolean
+  schedule:
+    - cron: "15 7 * * 2"
+
+concurrency:
+  group: scheduled-consensus-publisher
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      CONSENSUS_API_BASE_URL: ${{ vars.CONSENSUS_API_BASE_URL || 'https://www.consens.io' }}
+      CONSENSUS_API_KEY: ${{ secrets.CONSENSUS_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_TOPIC_MODEL: ${{ vars.OPENAI_TOPIC_MODEL || 'gpt-5.6-luna' }}
+      CONSENSUS_TOPIC_BRIEF: ${{ vars.CONSENSUS_TOPIC_BRIEF }}
+      CONSENSUS_QUESTION: ${{ inputs.question }}
+      CONSENSUS_AUTO_INDEX: ${{ github.event_name == 'schedule' || inputs.auto_index }}
+      CONSENSUS_IDEMPOTENCY_KEY: scheduled-publisher-${{ github.run_id }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Choose, run and publish Consensus
+        run: python scripts/publish_consensus.py

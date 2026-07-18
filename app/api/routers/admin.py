@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Optional
+from typing import Literal, Optional
 from firebase_admin import auth
 from fastapi import APIRouter, Request, Body, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -28,6 +28,9 @@ class AdminIssueApiKeyRequest(BaseModel):
 
     uid: str = Field(min_length=1, max_length=128)
     label: str = Field(default="", max_length=80)
+    scopes: list[Literal["consensus:run", "share:write", "share:index"]] = Field(
+        default_factory=lambda: ["consensus:run", "share:write"]
+    )
 
 
 def _require_admin(request, data):
@@ -61,8 +64,16 @@ def admin_issue_api_key(
             raise HTTPException(status_code=409, detail="Cannot issue a key for an unverified user")
         if api_account_cleanup.is_blocked(data.uid.strip()):
             raise HTTPException(status_code=409, detail="API access is blocked for this account")
+        if "share:index" in data.scopes and not is_user_admin(data.uid.strip()):
+            raise HTTPException(
+                status_code=409,
+                detail="Direct indexing scope can only be issued to an admin UID",
+            )
         return api_key_repository.issue(
-            data.uid.strip(), label=data.label.strip(), created_by=admin_uid
+            data.uid.strip(),
+            label=data.label.strip(),
+            created_by=admin_uid,
+            scopes=data.scopes,
         )
     except HTTPException:
         raise
@@ -171,13 +182,19 @@ def snapshots_site_url():
 
 @router.post("/api/admin/shares/{share_id}/moderate")
 def admin_moderate_share(request: Request, share_id: str, data: dict = Body(...)):
-    _require_admin(request, data)
+    admin_uid = _require_admin(request, data)
     action = data.get("action")
     indexed = data.get("indexed")
     if indexed is not None and not isinstance(indexed, bool):
         raise HTTPException(status_code=400, detail="indexed must be a boolean")
     try:
-        result = snapshots.moderate_share(share_id, action=action, indexed=indexed)
+        result = snapshots.moderate_share(
+            share_id,
+            action=action,
+            indexed=indexed,
+            actor_uid=admin_uid,
+            source="admin_ui",
+        )
     except ShareError as exc:
         raise HTTPException(status_code=_SHARE_ERROR_STATUS.get(exc.code, 400), detail=exc.message)
     except Exception:
