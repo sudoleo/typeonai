@@ -53,6 +53,7 @@ class SeoBasicsTests(unittest.TestCase):
         self.assertIn(f"<loc>{SITE_URL}/</loc>", content)
         self.assertIn(f"<loc>{SITE_URL}/ai-model-comparison</loc>", content)
         self.assertIn(f"<loc>{SITE_URL}/consensus-engine</loc>", content)
+        self.assertIn(f"<loc>{SITE_URL}/questions</loc>", content)
         self.assertIn(f"<loc>{SITE_URL}/about</loc>", content)
         self.assertNotIn(f"<loc>{SITE_URL}/app</loc>", content)
         self.assertNotIn(f"<loc>{SITE_URL}/privacy</loc>", content)
@@ -80,6 +81,23 @@ class SeoBasicsTests(unittest.TestCase):
         self.assertIn('<link rel="canonical" href="https://www.consens.io/consensus-engine">', template)
         self.assertIn("Consensus Engine", template)
         self.assertIn('"@type": "FAQPage"', template)
+
+    def test_questions_hub_template_has_seo_metadata(self):
+        template = (ROOT / "templates" / "questions.html").read_text(encoding="utf-8")
+
+        self.assertIn('<link rel="canonical" href="https://www.consens.io/questions">', template)
+        self.assertIn('<meta name="robots" content="index, follow">', template)
+        self.assertIn('property="og:title"', template)
+        self.assertIn('type="application/ld+json"', template)
+
+    def test_public_nav_and_footer_link_to_questions_hub(self):
+        # SEO-Kern des Hubs: indexierte Shares hängen nicht mehr nur in der
+        # Sitemap, sondern sind aus Nav + Footer jeder Public-Seite erreichbar.
+        nav = (ROOT / "templates" / "partials" / "public_nav.html").read_text(encoding="utf-8")
+        footer = (ROOT / "templates" / "partials" / "public_footer.html").read_text(encoding="utf-8")
+
+        self.assertIn('href="/questions"', nav)
+        self.assertIn('href="/questions"', footer)
 
     def test_app_template_is_noindex(self):
         template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")

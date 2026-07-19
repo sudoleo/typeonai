@@ -3057,3 +3057,230 @@ canvas {
   .watch-meta-compact > span { flex: 1 1 auto; }
   .watch-meta-compact > span + span { border-left: 0; }
 }
+
+/* ==========================================================================
+   Questions hub (/questions): flache Liste aller indexierten Share-Seiten
+   ========================================================================== */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.hub-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.hub-toolbar input,
+.hub-toolbar select {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+.hub-toolbar input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.hub-toolbar select {
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
+.hub-toolbar input:focus,
+.hub-toolbar select:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.hub-toolbar input::placeholder {
+  color: var(--muted);
+}
+
+.hub-count {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+  font-weight: 550;
+  color: var(--muted);
+}
+
+/* Flache Liste mit Trennlinien statt Karten (Design-Vorgabe). */
+.hub-list {
+  list-style: none;
+  margin: 0 0 26px;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.hub-item {
+  border-bottom: 1px solid var(--border);
+}
+
+.hub-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 13px 8px;
+  border-radius: var(--radius-sm, 8px);
+  transition: background-color .14s ease;
+}
+
+.hub-row:hover,
+.hub-row:focus-visible {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  color: var(--text);
+  outline: none;
+}
+
+/* Agreement-Score als Ampel-Badge: der schnellste Scan-Anker der Zeile. */
+.hub-score {
+  min-width: 58px;
+  padding: 5px 8px;
+  border-radius: var(--radius-pill);
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
+}
+
+.hub-score small {
+  font-size: 0.62rem;
+  font-weight: 650;
+  opacity: 0.75;
+}
+
+.hub-score.is-high {
+  color: color-mix(in srgb, var(--accent-secondary) 62%, var(--text));
+  background: color-mix(in srgb, var(--accent-secondary) 14%, transparent);
+}
+
+.hub-score.is-mid {
+  color: color-mix(in srgb, var(--accent-tertiary) 66%, var(--text));
+  background: color-mix(in srgb, var(--accent-tertiary) 15%, transparent);
+}
+
+.hub-score.is-low {
+  color: color-mix(in srgb, #c25555 68%, var(--text));
+  background: color-mix(in srgb, #c25555 13%, transparent);
+}
+
+.dark-mode .hub-score.is-low {
+  color: color-mix(in srgb, #e08a8a 74%, var(--text));
+}
+
+.hub-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.hub-question {
+  font-size: 0.96rem;
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--heading);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.hub-row:hover .hub-question {
+  color: var(--accent);
+}
+
+.hub-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 550;
+  color: var(--muted);
+}
+
+.hub-meta > span + span::before {
+  content: "\00B7";
+  margin-right: 6px;
+  opacity: 0.7;
+}
+
+.hub-meta-contradiction {
+  color: color-mix(in srgb, var(--accent-tertiary) 70%, var(--text));
+}
+
+.hub-meta-watch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: color-mix(in srgb, var(--accent-secondary) 62%, var(--text));
+}
+
+.hub-meta-watch i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.hub-arrow {
+  color: var(--muted);
+  font-weight: 650;
+  transition: transform .14s ease, color .14s ease;
+}
+
+.hub-row:hover .hub-arrow {
+  color: var(--accent);
+  transform: translateX(3px);
+}
+
+.hub-empty {
+  margin: 0 0 26px;
+  padding: 26px 8px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.hub-cta h2 {
+  margin-top: 0;
+}
+
+@media (max-width: 700px) {
+  .hub-toolbar {
+    flex-direction: column;
+  }
+
+  .hub-row {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 12px;
+    padding-inline: 4px;
+  }
+
+  .hub-arrow {
+    display: none;
+  }
+
+  .hub-score {
+    min-width: 52px;
+    font-size: 0.82rem;
+  }
+}

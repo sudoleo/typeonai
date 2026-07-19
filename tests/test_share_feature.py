@@ -845,6 +845,37 @@ class ModerationAndCleanupTests(unittest.TestCase):
         self.assertIn(indexed, urls[0]["path"])
         self.assertEqual(urls[0]["lastmod"], "2026-06-01")
 
+    def test_list_hub_shares_filters_and_enriches(self):
+        tracked = self._make_share(
+            indexed=True,
+            question="Is coffee healthy?",
+            differences_data={
+                "agreement": {"score": 62},
+                "differences": [{"type": "contradiction"}, {"type": "emphasis"}],
+                "models_compared": ["a", "b", "c"],
+            },
+            last_watch_run_at=datetime(2026, 7, 2, tzinfo=timezone.utc),
+        )
+        plain = self._make_share(indexed=True, question="What is RAM?")
+        self._make_share(indexed=False)                      # nicht indexiert
+        self._make_share(indexed=True, status="blocked")     # gesperrt
+        self._make_share(indexed=True, visibility="private")  # privat
+
+        entries = snapshots.list_hub_shares(db=self.db)
+        self.assertEqual(len(entries), 2)
+        # Letzter Watch-Run zählt als Aktualisierung -> tracked zuerst.
+        first, second = entries
+        self.assertIn(tracked, first["path"])
+        self.assertEqual(first["score"], 62)
+        self.assertEqual(first["contradiction_count"], 1)
+        self.assertEqual(first["model_count"], 3)
+        self.assertTrue(first["is_watch"])
+        self.assertEqual(first["sort_date"], "2026-07-02")
+        self.assertIn(plain, second["path"])
+        self.assertIsNone(second["score"])
+        self.assertFalse(second["is_watch"])
+        self.assertEqual(second["sort_date"], "2026-06-01")
+
     def test_list_related_shares_only_indexed_active_and_excludes_self(self):
         current = self._make_share(indexed=True,
                                    question="Wie funktioniert Photosynthese in Pflanzen?")
@@ -1194,6 +1225,35 @@ class SharePageRouteTests(unittest.TestCase):
         body = response.text
         self.assertIn("<loc>%s/s/frage-eins-abc</loc>" % share_router.SITE_URL, body)
         self.assertIn("<lastmod>2026-06-10</lastmod>", body)
+
+    def test_questions_hub_lists_indexed_shares(self):
+        entries = [{
+            "path": "/s/frage-eins-abc",
+            "question": "Frage eins?",
+            "score": 82,
+            "model_count": 5,
+            "contradiction_count": 1,
+            "is_watch": True,
+            "date_display": "Jul 2026",
+            "sort_date": "2026-07-02",
+        }]
+        with patch.object(share_router.snapshots, "list_hub_shares", return_value=entries):
+            response = self.client.get("/questions")
+        self.assertEqual(response.status_code, 200)
+        body = response.text
+        self.assertIn('href="/s/frage-eins-abc"', body)
+        self.assertIn("Frage eins?", body)
+        self.assertIn('content="index, follow"', body)
+        self.assertIn('rel="canonical" href="https://www.consens.io/questions"', body)
+        self.assertIn('"@type": "CollectionPage"', body)
+        self.assertIn("1 tracked over time", body)
+
+    def test_questions_hub_survives_backend_failure(self):
+        with patch.object(share_router.snapshots, "list_hub_shares",
+                          side_effect=RuntimeError("firestore down")):
+            response = self.client.get("/questions")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Nothing here yet", response.text)
 
     def test_report_endpoint_maps_share_errors(self):
         with patch.object(share_router.snapshots, "report_share", return_value=1) as mocked:

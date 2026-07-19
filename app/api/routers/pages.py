@@ -27,6 +27,7 @@ SITEMAP_URLS = (
     {"loc": f"{SITE_URL}/", "lastmod": "2026-06-03", "changefreq": "weekly", "priority": "1.0"},
     {"loc": f"{SITE_URL}/ai-model-comparison", "lastmod": "2026-06-03", "changefreq": "monthly", "priority": "0.8"},
     {"loc": f"{SITE_URL}/consensus-engine", "lastmod": "2026-07-09", "changefreq": "monthly", "priority": "0.8"},
+    {"loc": f"{SITE_URL}/questions", "lastmod": "2026-07-19", "changefreq": "weekly", "priority": "0.8"},
     {"loc": f"{SITE_URL}/benchmark", "lastmod": "2026-06-30", "changefreq": "monthly", "priority": "0.7"},
     {"loc": f"{SITE_URL}/about", "lastmod": "2026-06-03", "changefreq": "monthly", "priority": "0.6"},
 )

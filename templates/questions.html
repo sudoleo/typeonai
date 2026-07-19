@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Browse questions answered by multiple AI models independently – cross-checked, scored for agreement, and tracked over time.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://www.consens.io/questions">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="consens.io">
+  <meta property="og:title" content="AI Consensus Library">
+  <meta property="og:description" content="Questions answered by multiple AI models independently – cross-checked, scored for agreement, and tracked over time.">
+  <meta property="og:url" content="https://www.consens.io/questions">
+  <meta property="og:image" content="https://www.consens.io/static/favicon-square.png">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="AI Consensus Library">
+  <meta name="twitter:description" content="Questions answered by multiple AI models independently – cross-checked and scored for agreement.">
+  <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
+  <title>AI Consensus Library | consens.io</title>
+  <script type="application/ld+json">{{ jsonld | safe }}</script>
+  <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260719-hub">
+  <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
+  <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
+  <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
+  <script>
+    (function () {
+      const savedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
+        document.documentElement.classList.add("dark-mode");
+      }
+    })();
+  </script>
+  <!-- Umami Cloud Tracking -->
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
+</head>
+<body>
+  {% include "partials/public_nav.html" %}
+
+  <main class="page-shell">
+    <header class="page-header">
+      <p class="eyebrow">Consensus Library</p>
+      <h1>Questions, answered by AI consensus</h1>
+      <p class="lead">
+        Every page below is one question answered by several AI models independently,
+        cross-checked by a judge from a different model family, and scored for agreement.
+        Some are re-checked on a schedule, so you can watch the answer evolve.
+        <a href="/consensus-engine">How it works</a>
+      </p>
+    </header>
+
+    <div class="page-content">
+      {% if entries %}
+      <div class="hub-toolbar" role="search">
+        <label class="visually-hidden" for="hubSearch">Filter questions</label>
+        <input id="hubSearch" type="search" placeholder="Filter {{ total_count }} question{{ 's' if total_count != 1 }}&hellip;" autocomplete="off">
+        <label class="visually-hidden" for="hubSort">Sort by</label>
+        <select id="hubSort" aria-label="Sort questions">
+          <option value="newest" selected>Newest first</option>
+          <option value="disputed">Most disputed</option>
+          <option value="agreement">Highest agreement</option>
+        </select>
+      </div>
+      <p id="hubCount" class="hub-count" aria-live="polite">
+        {{ total_count }} question{{ "s" if total_count != 1 }}{% if watch_count %} &middot; {{ watch_count }} tracked over time{% endif %}
+      </p>
+
+      <ol id="hubList" class="hub-list">
+        {% for entry in entries %}
+        <li class="hub-item"
+            data-q="{{ entry.question | lower }}"
+            data-date="{{ entry.sort_date }}"
+            data-score="{{ entry.score if entry.score is not none else -1 }}"
+            data-contradictions="{{ entry.contradiction_count }}">
+          <a href="{{ entry.path }}" class="hub-row" data-umami-event="hub_question_click">
+            <span class="hub-score{% if entry.score is none %} is-empty{% elif entry.score >= 75 %} is-high{% elif entry.score >= 50 %} is-mid{% else %} is-low{% endif %}"
+                  aria-label="{% if entry.score is not none %}Agreement {{ entry.score }} out of 100{% else %}No agreement score{% endif %}">
+              {% if entry.score is not none %}{{ entry.score }}<small>/100</small>{% else %}&mdash;{% endif %}
+            </span>
+            <span class="hub-main">
+              <span class="hub-question">{{ entry.question }}</span>
+              <span class="hub-meta">
+                {% if entry.model_count %}<span>{{ entry.model_count }} model{{ "s" if entry.model_count != 1 }}</span>{% endif %}
+                {% if entry.contradiction_count %}<span class="hub-meta-contradiction">{{ entry.contradiction_count }} contradiction{{ "s" if entry.contradiction_count != 1 }}</span>{% endif %}
+                {% if entry.is_watch %}<span class="hub-meta-watch"><i aria-hidden="true"></i>Tracked</span>{% endif %}
+                {% if entry.date_display %}<span>{{ entry.date_display }}</span>{% endif %}
+              </span>
+            </span>
+            <span class="hub-arrow" aria-hidden="true">&rarr;</span>
+          </a>
+        </li>
+        {% endfor %}
+      </ol>
+      <p id="hubEmpty" class="hub-empty" hidden>No questions match your filter.</p>
+      {% else %}
+      <section class="legal-panel">
+        <h2>Nothing here yet</h2>
+        <p>The first curated consensus answers will appear here soon.</p>
+      </section>
+      {% endif %}
+
+      <section class="legal-panel notice hub-cta">
+        <h2>Your question isn't here?</h2>
+        <p>Ask it yourself &ndash; consens.io sends it to several AI models at once and shows you where they agree and where they don't.</p>
+        <div class="links">
+          <a href="/app" class="button-primary" data-umami-event="hub_cta_ask">Ask your own question</a>
+          <a href="/benchmark" class="button-secondary">See how well consensus performs</a>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  {% include "partials/public_footer.html" %}
+
+  <script>
+    // Filter + Sortierung rein clientseitig auf der server-gerenderten Liste –
+    // keine weiteren Requests, die Seite bleibt ohne JS voll lesbar.
+    (function () {
+      const list = document.getElementById("hubList");
+      const search = document.getElementById("hubSearch");
+      const sort = document.getElementById("hubSort");
+      const count = document.getElementById("hubCount");
+      const empty = document.getElementById("hubEmpty");
+      if (!list || !search || !sort) return;
+
+      const items = Array.prototype.slice.call(list.children);
+      const totalLabel = count ? count.textContent : "";
+
+      function applyFilter() {
+        const term = search.value.trim().toLowerCase();
+        let visible = 0;
+        items.forEach(function (item) {
+          const match = !term || (item.dataset.q || "").indexOf(term) !== -1;
+          item.hidden = !match;
+          if (match) visible += 1;
+        });
+        if (empty) empty.hidden = visible > 0;
+        if (count) {
+          count.textContent = term
+            ? visible + " of " + items.length + " questions"
+            : totalLabel;
+        }
+      }
+
+      function applySort() {
+        const mode = sort.value;
+        const sorted = items.slice().sort(function (a, b) {
+          if (mode === "disputed") {
+            // Meiste Widersprüche zuerst, bei Gleichstand niedrigste Übereinstimmung.
+            return (Number(b.dataset.contradictions) - Number(a.dataset.contradictions))
+              || (Number(a.dataset.score) - Number(b.dataset.score));
+          }
+          if (mode === "agreement") {
+            return Number(b.dataset.score) - Number(a.dataset.score);
+          }
+          return (b.dataset.date || "").localeCompare(a.dataset.date || "");
+        });
+        sorted.forEach(function (item) { list.appendChild(item); });
+      }
+
+      search.addEventListener("input", applyFilter);
+      sort.addEventListener("change", applySort);
+    })();
+  </script>
+</body>
+</html>

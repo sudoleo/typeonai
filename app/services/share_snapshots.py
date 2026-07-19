@@ -630,6 +630,9 @@ _canonical_cache = TTLCache(maxsize=1024, ttl=SHARE_CACHE_TTL_SECONDS)
 # dem selten wechselnden Index-Set gespeist; bei Moderation mit-invalidiert.
 RELATED_CACHE_TTL_SECONDS = 900
 _related_cache = TTLCache(maxsize=512, ttl=RELATED_CACHE_TTL_SECONDS)
+# Öffentliche /questions-Hub-Seite: eine Liste für alle Besucher, daher ein
+# einzelner Cache-Eintrag; bei Moderation mit-invalidiert.
+_hub_cache = TTLCache(maxsize=1, ttl=RELATED_CACHE_TTL_SECONDS)
 
 
 def get_share_cached(share_id, db=None):
@@ -648,6 +651,7 @@ def invalidate_share_cache(share_id=None):
         _share_cache.pop(share_id, None)
     _canonical_cache.clear()
     _related_cache.clear()
+    _hub_cache.clear()
 
 
 SHARE_VISIBILITIES = {"public", "private"}
@@ -1282,6 +1286,69 @@ def list_related_shares(exclude_share_id, question, db=None, limit=4, scan_limit
     if use_cache:
         _related_cache[exclude_share_id] = related
     return related
+
+
+def list_hub_shares(db=None, max_items=1000):
+    """Einträge für die öffentliche /questions-Hub-Seite.
+
+    Exakt dasselbe Set wie sitemap-shares.xml (nur indexed + active + public),
+    damit die Hub-Seite genau die Seiten intern verlinkt, die auch indexiert
+    werden sollen. Angereichert um die Verdict-Daten fürs Listing. Read-only,
+    ein Cache-Eintrag für alle Besucher.
+    """
+    use_cache = db is None
+    if use_cache and "hub" in _hub_cache:
+        return _hub_cache["hub"]
+
+    db = db if db is not None else db_firestore
+    docs = (
+        db.collection(SHARES_COLLECTION)
+        .where("indexed", "==", True)
+        .limit(max_items)
+        .stream()
+    )
+
+    entries = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        if (data.get("status") != "active"
+                or str(data.get("visibility") or "public") != "public"):
+            continue
+
+        differences_data = data.get("differences_data")
+        differences_data = differences_data if isinstance(differences_data, dict) else {}
+        agreement = differences_data.get("agreement")
+        agreement = agreement if isinstance(agreement, dict) else {}
+        score = agreement.get("score")
+        contradictions = sum(
+            1 for d in (differences_data.get("differences") or [])
+            if isinstance(d, dict) and d.get("type") == "contradiction"
+        )
+        model_count = (
+            len(differences_data.get("models_compared") or [])
+            or len(data.get("included_models") or [])
+        )
+
+        created_at = data.get("created_at")
+        modified = data.get("last_watch_run_at")
+        if not isinstance(modified, datetime):
+            modified = created_at
+        entries.append({
+            "path": share_path(data.get("slug") or "", doc.id),
+            "question": _clip(data.get("question"), 300),
+            "score": int(score) if isinstance(score, (int, float)) else None,
+            "model_count": model_count,
+            "contradiction_count": contradictions,
+            "is_watch": isinstance(data.get("last_watch_run_at"), datetime),
+            "date_display": modified.strftime("%b %Y") if isinstance(modified, datetime) else "",
+            "sort_date": modified.strftime("%Y-%m-%d") if isinstance(modified, datetime) else "",
+        })
+
+    # Neueste zuerst (letzter Watch-Run zählt als Aktualisierung).
+    entries.sort(key=lambda item: item["sort_date"], reverse=True)
+    if use_cache:
+        _hub_cache["hub"] = entries
+    return entries
 
 
 REPORT_REASONS = ("inaccurate", "harmful", "spam", "copyright", "other")

@@ -346,6 +346,59 @@ async def sitemap_shares(request: Request):
     )
 
 
+@router.get("/questions", response_class=HTMLResponse)
+@limiter.limit("30/minute")
+async def questions_hub(request: Request):
+    """Öffentliche Hub-Seite: verlinkt alle indexierten Share-Seiten intern.
+
+    SEO-Zweck: indexierte Shares hingen bisher nur in der Sitemap ("verwaiste
+    Seiten") – der Hub gibt ihnen einen Crawl-Pfad aus der Hauptnavigation.
+    """
+    try:
+        entries = snapshots.list_hub_shares()
+    except Exception:
+        logging.exception("list_hub_shares failed")
+        entries = []
+
+    watch_count = sum(1 for e in entries if e["is_watch"])
+    jsonld = {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "@id": SITE_URL + "/questions",
+        "url": SITE_URL + "/questions",
+        "name": "AI Consensus Library",
+        "description": (
+            "Questions answered by multiple AI models independently, "
+            "cross-checked and scored for agreement."
+        ),
+        "isPartOf": {"@type": "WebSite", "name": "consens.io", "url": SITE_URL + "/"},
+        "mainEntity": {
+            "@type": "ItemList",
+            "numberOfItems": len(entries),
+            "itemListElement": [
+                {
+                    "@type": "ListItem",
+                    "position": index + 1,
+                    "name": entry["question"][:110],
+                    "url": SITE_URL + entry["path"],
+                }
+                for index, entry in enumerate(entries[:50])
+            ],
+        },
+    }
+    jsonld_html = json.dumps(jsonld, ensure_ascii=False).replace("</", "<\\/")
+
+    response = templates.TemplateResponse("questions.html", {
+        "request": request,
+        "entries": entries,
+        "total_count": len(entries),
+        "watch_count": watch_count,
+        "jsonld": jsonld_html,
+    })
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return response
+
+
 @router.get("/s/{slug_id}/og.png")
 @limiter.limit("60/minute")
 async def share_og_card(request: Request, slug_id: str):
