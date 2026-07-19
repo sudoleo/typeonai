@@ -1424,7 +1424,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 }
 
 .consensus-section {
-  margin-top: 28px;
+  margin-top: 16px;
 }
 
 .consensus-wrapper {

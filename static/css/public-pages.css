@@ -2932,6 +2932,7 @@ canvas {
 .watch-position-cluster { padding: 11px 12px; border-left: 3px solid var(--accent-secondary); background: color-mix(in srgb, var(--glass-bg-strong) 72%, transparent); }
 .watch-position-cluster:nth-child(even) { border-left-color: var(--accent-tertiary); }
 .watch-position-cluster p { margin: 0; color: var(--text); font-size: .8rem; line-height: 1.45; }
+.watch-position-cluster .watch-position-supported { color: var(--muted); font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .watch-position-cluster ul { display: flex; flex-wrap: wrap; gap: 5px; margin: 9px 0 0; padding: 0; list-style: none; }
 .watch-position-cluster li { padding: 3px 7px; border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--muted); font-size: .65rem; }
 .watch-agreement-heading { margin: 0 0 8px; }

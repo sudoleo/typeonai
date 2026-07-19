@@ -59,7 +59,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260718-listing1">
+  <link rel="stylesheet" href="/static/style.css?v=20260719-notes1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -80,7 +80,7 @@
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
   <script src="/static/js/sources.js?v=20260626-extract1" defer></script>
   <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
-  <script src="/static/js/attachments.js?v=20260718-deepseek-pause1" defer></script>
+  <script src="/static/js/attachments.js?v=20260719-notes1" defer></script>
   <!-- Agent Mode (aus index.html ausgelagert) -->
   <script src="/static/js/agent-mode.js?v=20260716-consensus-progress1" defer></script>
   <!-- Kompakte Zwei-Phasen-Anzeige fuer regulaere Laeufe (ohne Agent Mode). -->
@@ -350,7 +350,7 @@
             <span>Upload document</span>
             <span class="pro-badge attach-pro-badge model-picker-pro-badge">Pro</span>
           </button>
-          <div class="attach-menu-hint">PDF, PNG, JPG, WebP &middot; max 5 MB &middot; up to 2 files</div>
+          <div class="attach-menu-hint">PDF, Word, TXT/MD/CSV, PNG, JPG, WebP &middot; max 5 MB &middot; up to 2 files</div>
           <div class="attach-menu-divider"></div>
           <!-- Deep Think lebt jetzt im (+)-Kontextmenü -->
           <label class="attach-menu-toggle" for="deepSearchToggle" title="Deep Think">
@@ -369,7 +369,7 @@
             </span>
           </label>
         </div>
-        <input type="file" id="attachFileInput" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp" multiple hidden>
+        <input type="file" id="attachFileInput" accept=".pdf,.docx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,image/png,image/jpeg,image/webp" multiple hidden>
         <!-- Container für beide Schalter -->
         <div class="consensus-switch-container"
           style="position: absolute; bottom: 10px; left: 10px; display: flex; align-items: center; gap: 20px;">

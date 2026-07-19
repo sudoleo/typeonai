@@ -1,11 +1,16 @@
 import base64
+import io
 import unittest
+import zipfile
 
 from fastapi import HTTPException
 
 from app.services.llm.attachments import (
+    DOCX_MIME,
     MAX_ATTACHMENT_BYTES,
     MAX_ATTACHMENTS,
+    TEXT_MIME,
+    extract_docx_text,
     parse_attachments,
 )
 from app.services.llm.engines import build_provider_payload
@@ -15,6 +20,23 @@ PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
 JPEG_BYTES = b"\xff\xd8\xff\xe0" + b"\x00" * 32
 WEBP_BYTES = b"RIFF" + b"\x00\x00\x00\x00" + b"WEBP" + b"\x00" * 32
 PDF_BYTES = b"%PDF-1.7\n%fake-pdf-for-tests\n" + b"\x00" * 32
+TXT_BYTES = "Notes: hello wörld\nSecond line".encode("utf-8")
+
+
+def make_docx(paragraphs):
+    body = "".join(f"<w:p><w:r><w:t>{p}</w:t></w:r></w:p>" for p in paragraphs)
+    xml = (
+        '<?xml version="1.0"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        f"<w:body>{body}</w:body></w:document>"
+    )
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("word/document.xml", xml)
+    return buffer.getvalue()
+
+
+DOCX_BYTES = make_docx(["First paragraph.", "Second paragraph."])
 
 
 def b64(raw: bytes) -> str:
@@ -39,6 +61,8 @@ class ParseAttachmentsTests(unittest.TestCase):
     def test_valid_types_are_sniffed_from_magic_bytes(self):
         cases = [
             ("doc.pdf", PDF_BYTES, "application/pdf"),
+            ("doc.docx", DOCX_BYTES, DOCX_MIME),
+            ("notes.txt", TXT_BYTES, TEXT_MIME),
             ("img.png", PNG_BYTES, "image/png"),
             ("img.jpg", JPEG_BYTES, "image/jpeg"),
             ("img.webp", WEBP_BYTES, "image/webp"),
@@ -56,6 +80,21 @@ class ParseAttachmentsTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as ctx:
             parse_attachments(data, is_pro=True)
         self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_generic_zip_is_not_accepted_as_docx(self):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("other.xml", "<x/>")
+        data = {"attachments": [make_attachment("fake.docx", buffer.getvalue())]}
+        with self.assertRaises(HTTPException) as ctx:
+            parse_attachments(data, is_pro=True)
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_docx_text_extraction_joins_paragraphs(self):
+        self.assertEqual(
+            extract_docx_text(DOCX_BYTES),
+            "First paragraph.\nSecond paragraph.",
+        )
 
     def test_invalid_base64_is_rejected(self):
         data = {"attachments": [{"name": "x.png", "data": "not base64!!"}]}
@@ -164,6 +203,20 @@ class AttachmentPayloadTests(unittest.TestCase):
                 payload_text = str(request["payload"])
                 self.assertIn("img.png", payload_text)
                 self.assertNotIn(b64(PNG_BYTES), payload_text)
+
+    def test_docx_and_text_fall_back_to_extracted_text_for_all_providers(self):
+        request = build_provider_payload(
+            "openai",
+            question="summarize",
+            system_prompt="system",
+            max_output_tokens=128,
+            attachments=self.parsed(DOCX_BYTES, "doc.docx") + self.parsed(TXT_BYTES, "notes.txt"),
+        )
+        # Kein nativer Content-Block: alles landet als Text-Suffix in der Frage.
+        payload_input = request["payload"]["input"]
+        self.assertIsInstance(payload_input, str)
+        self.assertIn("First paragraph.", payload_input)
+        self.assertIn("Second line", payload_input)
 
     def test_no_attachments_keeps_payload_shape_unchanged(self):
         request = build_provider_payload(

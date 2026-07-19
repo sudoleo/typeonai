@@ -1,9 +1,11 @@
-"""Validierung und Aufbereitung von Datei-Anhängen (PDF/Bilder) für die Provider-Requests."""
+"""Validierung und Aufbereitung von Datei-Anhängen (PDF/Word/Text/Bilder) für die Provider-Requests."""
 from __future__ import annotations
 
 import base64
 import io
 import logging
+import xml.etree.ElementTree as ET
+import zipfile
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
@@ -11,15 +13,23 @@ logger = logging.getLogger(__name__)
 MAX_ATTACHMENTS = 2
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024  # 5 MB pro Datei
 MAX_PDF_EXTRACT_CHARS = 24000
+MAX_TEXT_EXTRACT_CHARS = 24000
+
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+TEXT_MIME = "text/plain"
 
 ALLOWED_ATTACHMENT_MIMES = {
     "application/pdf",
+    DOCX_MIME,
+    TEXT_MIME,
     "image/png",
     "image/jpeg",
     "image/webp",
 }
 
 IMAGE_MIMES = {"image/png", "image/jpeg", "image/webp"}
+
+ATTACHMENT_TYPES_LABEL = "PDF, Word (.docx), text (.txt/.md/.csv), PNG, JPG, WebP"
 
 # Provider, die Bilder bzw. PDFs nativ als Content-Block verarbeiten können.
 # Alle anderen erhalten einen Text-Fallback (PDF-Extraktion bzw. Hinweis).
@@ -36,7 +46,32 @@ def _sniff_mime(raw: bytes) -> str | None:
         return "image/jpeg"
     if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
         return "image/webp"
+    if raw.startswith(b"PK\x03\x04") and _is_docx(raw):
+        return DOCX_MIME
+    if _looks_like_text(raw):
+        return TEXT_MIME
     return None
+
+
+def _is_docx(raw: bytes) -> bool:
+    """DOCX ist ein ZIP mit word/document.xml — andere ZIPs (xlsx, pptx, ...)
+    werden bewusst nicht akzeptiert."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            return "word/document.xml" in archive.namelist()
+    except Exception:
+        return False
+
+
+def _looks_like_text(raw: bytes) -> bool:
+    """UTF-8-dekodierbar und ohne Null-Bytes: deckt .txt/.md/.csv ab."""
+    if not raw.strip() or b"\x00" in raw:
+        return False
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
 
 
 def parse_attachments(data: dict, is_pro: bool) -> list[dict]:
@@ -91,7 +126,7 @@ def parse_attachments(data: dict, is_pro: bool) -> list[dict]:
         if mime is None or mime not in ALLOWED_ATTACHMENT_MIMES:
             raise HTTPException(
                 status_code=400,
-                detail=f"Attachment '{name}' has an unsupported file type. Allowed: PDF, PNG, JPG, WebP.",
+                detail=f"Attachment '{name}' has an unsupported file type. Allowed: {ATTACHMENT_TYPES_LABEL}.",
             )
 
         parsed.append({
@@ -133,10 +168,66 @@ def extract_pdf_text(raw: bytes) -> str | None:
         return None
 
 
+def extract_docx_text(raw: bytes) -> str | None:
+    """Extrahiert den Absatztext aus word/document.xml (kein python-docx nötig)."""
+    W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            document_xml = archive.read("word/document.xml")
+        root = ET.fromstring(document_xml)
+        paragraphs = []
+        total = 0
+        for paragraph in root.iter(f"{W_NS}p"):
+            runs = [node.text for node in paragraph.iter(f"{W_NS}t") if node.text]
+            if not runs:
+                continue
+            text = "".join(runs)
+            paragraphs.append(text)
+            total += len(text)
+            if total >= MAX_TEXT_EXTRACT_CHARS:
+                break
+        combined = "\n".join(paragraphs).strip()
+        if not combined:
+            return None
+        return combined[:MAX_TEXT_EXTRACT_CHARS]
+    except Exception as exc:
+        logger.warning("DOCX text extraction failed: %s", exc)
+        return None
+
+
 def attachment_fallback_text(attachment: dict, *, include_images_note: bool = True) -> str:
     """Baut den Text-Fallback für einen Anhang (für Provider ohne native Unterstützung)."""
     name = attachment.get("name", "attachment")
     mime = attachment.get("mime", "")
+
+    if mime == DOCX_MIME:
+        text = extract_docx_text(attachment.get("raw", b""))
+        if text:
+            return (
+                f"--- Attached document: {name} (extracted text) ---\n"
+                f"{text}\n"
+                f"--- End of document: {name} ---"
+            )
+        return (
+            f"[The user attached the Word document '{name}', but its text could not be extracted. "
+            "Mention that you could not read the document if it is relevant to the question.]"
+        )
+
+    if mime == TEXT_MIME:
+        raw = attachment.get("raw", b"")
+        try:
+            text = raw.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            text = ""
+        if text:
+            return (
+                f"--- Attached file: {name} ---\n"
+                f"{text[:MAX_TEXT_EXTRACT_CHARS]}\n"
+                f"--- End of file: {name} ---"
+            )
+        return (
+            f"[The user attached the file '{name}', but it appears to be empty.]"
+        )
 
     if mime == "application/pdf":
         text = extract_pdf_text(attachment.get("raw", b""))

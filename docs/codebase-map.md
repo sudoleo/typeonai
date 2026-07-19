@@ -345,7 +345,10 @@ Auto-Consensus-Kopplung zu deaktivieren.
 
 ### Attachments (Pro)
 Frontend `attachments.js` baut Payload; Backend `app/services/llm/attachments.py`
-validiert: max **2** Dateien, je **5 MB**, MIMEs PDF/PNG/JPEG/WebP. Bild-Support:
+validiert: max **2** Dateien, je **5 MB**, MIMEs PDF/DOCX/TXT/PNG/JPEG/WebP
+(TXT umfasst auch die UI-Endungen MD und CSV). Word- und Textdateien werden
+serverseitig als begrenzter Text extrahiert und als Text-Fallback an alle
+Provider angehängt. Bild-Support:
 openai/anthropic/gemini/grok; PDF-Support: openai/anthropic/gemini (sonst
 Text-Fallback/PDF-Extraktion). **In Firestore landen nie Datei-Bytes**, nur
 Metadaten (Name/Typ/Größe) — siehe `bookmarks.py::sanitize_attachment_meta`.

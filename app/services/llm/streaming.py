@@ -30,6 +30,7 @@ from app.services.llm.engines import (
     _log_model_selection,
     _mistral_builtin_tools_unsupported,
     _mistral_headers,
+    _responses_empty_result,
     build_provider_payload,
     query_mistral,
 )
@@ -169,7 +170,13 @@ def _stream_openai_responses(*, api_key: str, base_url: str, payload: dict, prov
 
     if final_response is None:
         raise RuntimeError("Stream ended before a completed response was received.")
-    yield {"type": "final", "result": parse_openai_response(final_response, provider=provider)}
+    result = parse_openai_response(final_response, provider=provider)
+    if not result_text(result):
+        # response.incomplete ohne Text (z. B. Budget im Reasoning verbraucht)
+        # als echten Fehler melden statt als leere Antwort.
+        yield {"type": "final", "result": _responses_empty_result(final_response, provider)}
+        return
+    yield {"type": "final", "result": result}
 
 
 def _stream_anthropic_messages(*, api_key: str, payload: dict) -> Generator[StreamEvent, None, None]:
@@ -473,12 +480,19 @@ def stream_grok_query(
             attachments=attachments,
         )
         _log_model_selection("Grok", request_data["api_model"], deep_search, model_override)
-        yield from _stream_openai_responses(
+        # Non-Reasoning-Varianten: xAI streamt trotzdem Reasoning-Items —
+        # die Marker unterdrücken, sonst zeigt das Frontend "Reasoning"
+        # für ein Modell, das laut Label gar nicht denkt.
+        suppress_reasoning = bool(request_data.get("is_non_reasoning"))
+        for item in _stream_openai_responses(
             api_key=api_key,
             base_url="https://api.x.ai/v1",
             payload=request_data["payload"],
             provider="grok",
-        )
+        ):
+            if suppress_reasoning and item.get("type") == "reasoning":
+                continue
+            yield item
     except Exception as e:
         yield {"type": "final", "result": _error("Grok", str(e))}
 

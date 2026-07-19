@@ -23,7 +23,7 @@
   {% if og_is_card %}<meta name="twitter:image" content="{{ og_image }}">{% endif %}
   <script type="application/ld+json">{{ jsonld | safe }}</script>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260719-hub">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260719-notes1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -283,7 +283,13 @@
               <div class="watch-position-clusters">
                 {% for position in dimension.positions %}
                 <div class="watch-position-cluster">
+                  {# Beim einstimmigen Claim-Fallback ist die Haltung identisch mit dem
+                     Claim selbst - den Satz nicht doppelt zeigen, nur die Traeger. #}
+                  {% if position.stance and position.stance != dimension.label %}
                   <p>{{ position.stance }}</p>
+                  {% else %}
+                  <p class="watch-position-supported">Supported by</p>
+                  {% endif %}
                   <ul>{% for model in position.models %}<li>{{ model }}</li>{% endfor %}</ul>
                 </div>
                 {% endfor %}

@@ -52,6 +52,33 @@ def _error(provider: str, error: Exception | str):
     }
 
 
+def _responses_empty_result(data: dict, provider: str) -> dict:
+    """Fehler-Result für eine Responses-API-Antwort ohne Ausgabetext.
+
+    Ohne diese Auswertung landet ein leeres `response` beim Frontend, das dann
+    nur den irreführenden Generik-Text "No response received / timed out"
+    zeigen kann. Der häufigste echte Grund ist `incomplete_details.reason ==
+    "max_output_tokens"`: Reasoning-Tokens zählen bei der Responses API gegen
+    max_output_tokens, das Budget kann komplett im Denken aufgehen."""
+    status = data.get("status")
+    reason = str((data.get("incomplete_details") or {}).get("reason") or "")
+    logger.warning(
+        "%s Responses API returned no output text (status=%s, reason=%s, model=%s)",
+        provider, status, reason, data.get("model"),
+    )
+    if reason == "max_output_tokens":
+        message = ("The model used up its output token budget before writing an answer "
+                   "(often on internal reasoning). Please try again or simplify the question.")
+        code = "max_output_tokens"
+    elif reason == "content_filter":
+        message = "The provider's content filter stopped this response. Please rephrase the question."
+        code = "content_filter"
+    else:
+        message = "The model returned no answer. Please try again."
+        code = "empty_response"
+    return {"text": "", "sources": [], "error": message, "error_code": code}
+
+
 def _log_model_selection(provider: str, api_model: str, deep_search: bool, model_override: str | None):
     logger.info(
         "Provider model selected: %s -> %s | deep_search=%s | override=%s",
@@ -156,7 +183,11 @@ def _openai_responses_call(
     )
     if resp.status_code >= 400:
         raise RuntimeError(f"{resp.status_code} - {resp.text}")
-    return parse_openai_response(resp.json(), provider=provider)
+    data = resp.json()
+    result = parse_openai_response(data, provider=provider)
+    if not result_text(result):
+        return _responses_empty_result(data, provider)
+    return result
 
 
 def _merge_nested_config(payload: dict, config: dict | None):
@@ -373,12 +404,22 @@ def build_provider_payload(
             native_attachments=native_attachments,
             benchmark_mode=benchmark_mode,
         )
+        # Non-Reasoning-Varianten: xAI streamt trotzdem Reasoning-Items
+        # (leere Platzhalter). Das Flag lässt den Stream-Wrapper die Marker
+        # unterdrücken, damit das Frontend nicht "Reasoning" anzeigt.
+        reasoning_config = request_config.get("reasoning") if isinstance(request_config, dict) else None
+        is_non_reasoning = (
+            (isinstance(reasoning_config, dict) and reasoning_config.get("effort") == "none")
+            or "non-reasoning" in str(internal_model)
+            or "no-reasoning" in str(internal_model)
+        )
         return {
             "provider": "grok",
             "endpoint": "responses",
             "internal_model": internal_model,
             "api_model": api_model,
             "is_low_reasoning": bool(model_config and model_config.is_low_reasoning) if not deep_search else True,
+            "is_non_reasoning": is_non_reasoning and not deep_search,
             "payload": payload,
         }
 
@@ -654,7 +695,26 @@ def query_deepseek(
         )
         _log_model_selection("DeepSeek", request_data["api_model"], deep_search, model_override)
         response = client.chat.completions.create(**request_data["payload"])
-        return response.choices[0].message.content.strip()
+        choice = response.choices[0]
+        content = (choice.message.content or "").strip()
+        if not content:
+            # Reasoning-Modelle können das Token-Budget komplett im Denken
+            # verbrauchen; ohne diese Auswertung zeigt das Frontend nur den
+            # irreführenden Generik-Text "No response received".
+            finish_reason = getattr(choice, "finish_reason", None)
+            logger.warning(
+                "DeepSeek returned no content (finish_reason=%s, model=%s)",
+                finish_reason, request_data["api_model"],
+            )
+            if finish_reason == "length":
+                message = ("The model ran out of output tokens while reasoning and never "
+                           "produced an answer. Please try again or simplify the question.")
+                code = "empty_reasoning_response"
+            else:
+                message = "The model returned no answer. Please try again."
+                code = "empty_response"
+            return {"text": "", "sources": [], "error": message, "error_code": code}
+        return content
     except Exception as e:
         return _error("DeepSeek", e)
     

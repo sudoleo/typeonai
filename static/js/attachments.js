@@ -21,7 +21,9 @@
   // --- ATTACHMENTS (Pro Feature) ---
   const ATTACH_MAX_FILES = 2;
   const ATTACH_MAX_BYTES = 5 * 1024 * 1024;
-  const ATTACH_ALLOWED_MIMES = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
+  const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const ATTACH_ALLOWED_MIMES = ["application/pdf", DOCX_MIME, "text/plain", "text/markdown", "text/csv", "image/png", "image/jpeg", "image/webp"];
+  const ATTACH_TYPES_LABEL = "PDF, Word (.docx), TXT, MD, CSV, PNG, JPG, WebP";
   const DEEPSEEK_ATTACHMENT_MESSAGE = "DeepSeek is paused for this question because its API cannot read attachments. Remove the files to use DeepSeek again.";
   window.pendingAttachments = [];
 
@@ -158,9 +160,21 @@
         notice.className = "attachment-viewer-notice";
         const icon = document.createElement("span");
         icon.className = "attachment-chip-icon";
-        icon.textContent = att.mime === "application/pdf" ? "PDF" : "IMG";
+        icon.textContent = chipIconLabel(att.mime);
         const text = document.createElement("p");
         text.textContent = "This file was attached to the saved chat. To keep storage light, only the file name is stored – not the file itself.";
+        notice.appendChild(icon);
+        notice.appendChild(text);
+        viewerBody.appendChild(notice);
+      } else if (att.mime === DOCX_MIME) {
+        // Browser können DOCX nicht inline rendern – nur Hinweis zeigen.
+        const notice = document.createElement("div");
+        notice.className = "attachment-viewer-notice";
+        const icon = document.createElement("span");
+        icon.className = "attachment-chip-icon";
+        icon.textContent = "DOC";
+        const text = document.createElement("p");
+        text.textContent = "Word documents cannot be previewed here. The extracted text is sent to the models with your question.";
         notice.appendChild(icon);
         notice.appendChild(text);
         viewerBody.appendChild(notice);
@@ -245,7 +259,7 @@
           const icon = document.createElement("span");
           icon.className = "attachment-chip-icon";
           if (att.mime.indexOf("image/") === 0) icon.classList.add("is-image");
-          icon.textContent = att.mime.indexOf("image/") === 0 ? "IMG" : "PDF";
+          icon.textContent = chipIconLabel(att.mime);
           chip.appendChild(icon);
         }
 
@@ -315,10 +329,19 @@
       if (ATTACH_ALLOWED_MIMES.indexOf(file.type) !== -1) return file.type;
       const name = (file.name || "").toLowerCase();
       if (name.endsWith(".pdf")) return "application/pdf";
+      if (name.endsWith(".docx")) return DOCX_MIME;
+      if (name.endsWith(".txt") || name.endsWith(".md") || name.endsWith(".markdown") || name.endsWith(".csv")) return "text/plain";
       if (name.endsWith(".png")) return "image/png";
       if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
       if (name.endsWith(".webp")) return "image/webp";
       return null;
+    }
+
+    function chipIconLabel(mime) {
+      if (mime.indexOf("image/") === 0) return "IMG";
+      if (mime === DOCX_MIME) return "DOC";
+      if (mime.indexOf("text/") === 0) return "TXT";
+      return "PDF";
     }
 
     function imageExtension(mime) {
@@ -355,7 +378,7 @@
           if (!unsupportedShown) {
             alert(imagesOnly
               ? "Only PNG, JPG, and WebP images can be pasted or dropped here."
-              : "'" + (file.name || "This file") + "' is not supported. Allowed: PDF, PNG, JPG, WebP.");
+              : "'" + (file.name || "This file") + "' is not supported. Allowed: " + ATTACH_TYPES_LABEL + ".");
             unsupportedShown = true;
           }
           return;

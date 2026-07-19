@@ -9,8 +9,10 @@ from types import SimpleNamespace
 from app.services.llm.citations import make_llm_result
 from app.services.llm.streaming import (
     _stream_chat_completions,
+    _stream_openai_responses,
     iter_sse_events,
     sse_pack,
+    stream_grok_query,
     streaming_model_response,
 )
 from app.services.llm.consensus_engine import (
@@ -175,6 +177,82 @@ class ChatCompletionsStreamTests(unittest.TestCase):
         result = events[-1]["result"]
         self.assertEqual(result["error_code"], "empty_reasoning_response")
         self.assertIn("no answer", result["error"])
+
+
+def _responses_sse(events) -> str:
+    return "".join(f"data: {json.dumps(evt)}\n\n" for evt in events)
+
+
+class FakeResponsesHTTP(FakeSSEResponse):
+    status_code = 200
+    text = ""
+
+
+class ResponsesStreamTests(unittest.TestCase):
+    """Responses-API-Stream (OpenAI/Grok): leere finale Antworten müssen als
+    echter Fehler gemeldet werden, sonst zeigt das Frontend nur den
+    irreführenden Generik-Text 'No response received / timed out'."""
+
+    def _run(self, events):
+        fake = FakeResponsesHTTP(_responses_sse(events))
+        with mock.patch("app.services.llm.streaming.requests.post", return_value=fake):
+            return list(_stream_openai_responses(
+                api_key="k", base_url="https://api.x.ai/v1", payload={"model": "m"}, provider="grok",
+            ))
+
+    def test_incomplete_without_text_yields_max_tokens_error(self):
+        events = self._run([
+            {"type": "response.output_item.added", "item": {"type": "reasoning"}},
+            {"type": "response.incomplete", "response": {
+                "status": "incomplete",
+                "incomplete_details": {"reason": "max_output_tokens"},
+                "output": [],
+            }},
+        ])
+        self.assertEqual([e["type"] for e in events], ["reasoning", "final"])
+        result = events[-1]["result"]
+        self.assertEqual(result["error_code"], "max_output_tokens")
+        self.assertIn("output token budget", result["error"])
+
+    def test_completed_with_text_stays_untouched(self):
+        events = self._run([
+            {"type": "response.output_text.delta", "delta": "Hi"},
+            {"type": "response.completed", "response": {
+                "status": "completed",
+                "output": [{"type": "message", "content": [{"type": "output_text", "text": "Hi"}]}],
+            }},
+        ])
+        self.assertEqual(events[-1]["result"]["text"], "Hi")
+        self.assertNotIn("error", events[-1]["result"])
+
+
+class GrokReasoningMarkerTests(unittest.TestCase):
+    """Non-Reasoning-Grok-Varianten dürfen keine Reasoning-Marker durchreichen
+    (xAI streamt trotzdem Reasoning-Items) — das Frontend zeigte sonst
+    'Reasoning' für ein Modell mit dem Label 'No reasoning'."""
+
+    GROK_EVENTS = [
+        {"type": "response.output_item.added", "item": {"type": "reasoning"}},
+        {"type": "response.output_text.delta", "delta": "Hi"},
+        {"type": "response.completed", "response": {
+            "status": "completed",
+            "output": [{"type": "message", "content": [{"type": "output_text", "text": "Hi"}]}],
+        }},
+    ]
+
+    def _run(self, model_override):
+        fake = FakeResponsesHTTP(_responses_sse(self.GROK_EVENTS))
+        with mock.patch("app.services.llm.streaming.requests.post", return_value=fake):
+            return list(stream_grok_query("Q?", "key", model_override=model_override))
+
+    def test_non_reasoning_model_suppresses_reasoning_markers(self):
+        events = self._run("grok-4.20-non-reasoning")
+        self.assertEqual([e["type"] for e in events], ["delta", "final"])
+        self.assertEqual(events[-1]["result"]["text"], "Hi")
+
+    def test_reasoning_model_keeps_reasoning_markers(self):
+        events = self._run("grok-4.3")
+        self.assertEqual([e["type"] for e in events], ["reasoning", "delta", "final"])
 
 
 class ConsensusStreamTests(unittest.TestCase):
