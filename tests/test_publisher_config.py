@@ -74,3 +74,14 @@ def test_saved_publisher_configuration_is_normalized():
     assert saved["enabled"] is False
     assert saved["watch_weekday"] == "friday"
     assert db.store["scheduled_consensus_publisher"]["updated_by"] == "admin-1"
+
+
+def test_legacy_default_topic_brief_migrates_to_ai_search_strategy():
+    config = publisher_config.normalize_config({
+        **publisher_config.DEFAULT_CONFIG,
+        "topic_brief": publisher_config.LEGACY_DEFAULT_TOPIC_BRIEF,
+    })
+
+    assert config["topic_brief"] == publisher_config.DEFAULT_TOPIC_BRIEF
+    assert "highly current" in config["topic_brief"]
+    assert "AI topic" in config["topic_brief"]

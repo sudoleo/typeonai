@@ -472,7 +472,11 @@ Whitelist für Bild-MIME-Typen.
   bleiben nicht-fatal und der Token wird nicht in Fehler-URLs geloggt. Vor dem
   Lauf liest das Skript die Admin-Konfiguration aus Firestore über API v1; deaktivierte
   Publisher enden erfolgreich ohne LLM-Call. `.github/workflows/publish-consensus.yml`
-  startet ihn wöchentlich oder manuell; Secrets bleiben ausschließlich in
+  startet ihn montags, mittwochs und freitags um 07:15 UTC oder manuell. Die
+  Themenauswahl priorisiert anhand einer Websuche hochaktuelle, eng benannte
+  KI-Produkt-/Modellfragen mit jungem Suchfenster und geringer Konkurrenz im
+  exakten Suchintent; Policy-/Regulierungsfragen werden für automatisch gewählte
+  Titel hart ausgeschlossen. Secrets bleiben ausschließlich in
   GitHub Actions. Sowohl der initiale Publisher-Run als auch seine Watch-Runs
   schließen DeepSeek explizit aus; beim Watch wird dazu
   `excluded_providers=[deepseek]` persistent gespeichert und der DeepSeek-Key
@@ -725,7 +729,7 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **591 passed** (2026-07-19; inklusive
+  Letzte bekannte Baseline: **606 passed** (2026-07-19; inklusive
   run-basierter Usage-, Consensus-API-Publishing-/Scope-/Vertrags- sowie
   Scheduled-Publisher-Tests).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):

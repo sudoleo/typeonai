@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 from urllib.error import HTTPError
 
+import pytest
+
 
 SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "publish_consensus.py"
 SPEC = importlib.util.spec_from_file_location("publish_consensus", SCRIPT_PATH)
@@ -177,7 +179,7 @@ def test_topic_selection_uses_web_search_and_recent_question_history(monkeypatch
                     "content": [
                         {
                             "type": "output_text",
-                            "text": "Which grid technologies best support renewable energy?",
+                            "text": "Is Google's Gemini 3.5 Pro available yet?",
                         }
                     ],
                 }
@@ -192,8 +194,34 @@ def test_topic_selection_uses_web_search_and_recent_question_history(monkeypatch
     assert captured["payload"]["model"] == "gpt-5.6-luna"
     assert captured["payload"]["tools"] == [{"type": "web_search"}]
     assert "What was already published?" in captured["payload"]["input"]
-    assert "timely, evidence-rich topic" in captured["payload"]["input"]
+    assert "highly current, evidence-rich AI topic" in captured["payload"]["input"]
     assert "Google-style search query and clickable page title" in captured["payload"]["input"]
+    assert "compare at least five candidate queries" in captured["payload"]["input"]
+    assert "low exact-intent competition" in captured["payload"]["input"]
+
+
+def test_generated_topic_rejects_government_policy_queries():
+    with pytest.raises(publisher.PublisherError, match="AI product/news"):
+        publisher.validate_generated_question(
+            "Can political appointees veto federal science grants?"
+        )
+
+    assert publisher.validate_generated_question(
+        "Is Claude Fable 5 real or just a rumor?"
+    ) == "Is Claude Fable 5 real or just a rumor?"
+
+    with pytest.raises(publisher.PublisherError, match="specific AI model"):
+        publisher.validate_generated_question(
+            "Which grid technologies best support renewable energy?"
+        )
+
+
+def test_scheduled_publisher_runs_three_times_per_week():
+    workflow = (
+        Path(__file__).parents[1] / ".github" / "workflows" / "publish-consensus.yml"
+    ).read_text(encoding="utf-8")
+
+    assert 'cron: "15 7 * * 1,3,5"' in workflow
 
 
 def test_topic_selection_retries_a_long_multi_clause_title(monkeypatch):

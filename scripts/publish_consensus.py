@@ -25,18 +25,38 @@ class PublisherError(RuntimeError):
 
 
 DEFAULT_TOPIC_BRIEF = (
-    "Choose one timely, evidence-rich topic that real people are actively searching for "
-    "in science, technology, economics, environment, or society. Favor a specific, "
-    "question-shaped angle with clear search demand and a gap in existing coverage — "
-    "an underserved query rather than a broad, already-saturated subject. Prefer topics "
-    "inside a fresh news or debate window where opinion is still forming.\n\n"
-    "The topic must have a concrete use case: name the reader who would run it and the "
-    "question or decision the answer actually helps them with. It should genuinely "
-    "benefit from comparing multiple AI models — where the models are likely to disagree "
-    "or hedge, so that both the consensus and the dissent are informative — and support "
-    "a substantial answer backed by several credible web sources.\n\n"
-    "Avoid personal medical, legal, or financial advice, sensationalism, pure opinion "
-    "polls, and purely speculative topics with no verifiable grounding."
+    "Choose one highly current, evidence-rich AI topic that people are beginning to search "
+    "for now. Focus on named AI models, products, features, subscriptions, developer tools, "
+    "release timing, availability, surprising product behavior, or a credible emerging "
+    "rumor. Favor a narrow exact-intent query while the news window is still young and "
+    "dedicated coverage is sparse.\n\n"
+    "The question should help someone verify a claim, understand what just changed, or "
+    "decide whether to wait for or use a specific AI product. It must benefit from comparing "
+    "multiple AI models and support a substantial answer from several credible web sources. "
+    "Careful speculation is welcome only when it is clearly framed and anchored in official "
+    "announcements, documentation, changelogs, observed product behavior, or credible reporting.\n\n"
+    "Avoid government policy, regulation, legislation, elections, broad evergreen explainers, "
+    "generic AI trend pieces, personal medical/legal/financial advice, sensationalism, and "
+    "unsupported rumors."
+)
+
+
+# These requirements are appended even when an older Admin topic brief is still stored.
+# They encode the Search Console pattern behind the publisher's current acquisition strategy.
+SEARCH_OPPORTUNITY_RULES = (
+    "Search-opportunity requirements:\n"
+    "- Work in the high-current AI product/news lane. Prefer a named model, company, feature, "
+    "plan, coding tool, release, leak, or rumor with a new signal from roughly the last seven days.\n"
+    "- Favor queries shaped like release/availability checks, rumor verification, product-name "
+    "clarification, or what a just-announced change means for users.\n"
+    "- Use web search to compare at least five candidate queries before choosing. Reject a "
+    "candidate when its exact search intent is already answered by many established, high-ranking "
+    "news, government, legal, or corporate explainer pages. Choose the candidate with the best "
+    "combination of freshness, plausible search demand, low exact-intent competition, and sources.\n"
+    "- Do not select government policy, grants, federal/state law, regulation, enforcement, "
+    "elections, or broad societal impact as the main intent.\n"
+    "- Do not invent a release or rumor. A speculative question needs at least one current, "
+    "checkable signal and must make uncertainty explicit."
 )
 
 
@@ -130,6 +150,8 @@ def choose_question(api_base: str, consensus_key: str, *, topic_brief="") -> str
 
 {brief}
 
+{SEARCH_OPPORTUNITY_RULES}
+
 Do not repeat or closely paraphrase these recently published questions:
 {avoid}
 
@@ -161,7 +183,7 @@ Return exactly one neutral English question, with no quotation marks, preface, m
             timeout=180,
         )
         try:
-            return validate_search_question(response_output_text(response or {}))
+            return validate_generated_question(response_output_text(response or {}))
         except PublisherError as exc:
             last_error = exc
             feedback = (
@@ -209,6 +231,32 @@ def validate_search_question(value: str) -> str:
         issues.append("ask exactly one question")
     if issues:
         raise PublisherError("; ".join(issues))
+    return question
+
+
+def validate_generated_question(value: str) -> str:
+    """Apply hard topic exclusions to automatically selected search titles."""
+    question = validate_search_question(value)
+    lowered = question.lower()
+    excluded_patterns = (
+        r"\bpolitical appointees?\b",
+        r"\bfederal\b",
+        r"\bstate (?:chatbot |ai )?laws?\b",
+        r"\bgovernment (?:policy|rule|regulation)s?\b",
+        r"\b(?:ftc|fcc|sec|congress)\b",
+        r"\b(?:legislation|regulatory|regulation|election)s?\b",
+    )
+    if any(re.search(pattern, lowered) for pattern in excluded_patterns):
+        raise PublisherError("choose a current AI product/news query, not government policy")
+    ai_signal = re.search(
+        r"\b(?:ai|artificial intelligence|llms?|large language models?|chatbots?|"
+        r"openai|chatgpt|gpt|anthropic|claude|google gemini|gemini|mistral|le chat|"
+        r"deepseek|grok|xai|cursor|copilot|perplexity|hugging face|midjourney|"
+        r"runway|sora)\b",
+        lowered,
+    )
+    if not ai_signal:
+        raise PublisherError("name a specific AI model, product, company, or tool")
     return question
 
 

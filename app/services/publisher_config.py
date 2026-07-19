@@ -12,7 +12,7 @@ CONFIG_COLLECTION = "app_config"
 CONFIG_DOCUMENT = "scheduled_consensus_publisher"
 TOPIC_BRIEF_MAX_CHARS = 6_000
 
-DEFAULT_TOPIC_BRIEF = (
+LEGACY_DEFAULT_TOPIC_BRIEF = (
     "Choose one timely, evidence-rich topic that real people are actively searching for "
     "in science, technology, economics, environment, or society. Favor a specific, "
     "question-shaped angle with clear search demand and a gap in existing coverage — "
@@ -25,6 +25,22 @@ DEFAULT_TOPIC_BRIEF = (
     "a substantial answer backed by several credible web sources.\n\n"
     "Avoid personal medical, legal, or financial advice, sensationalism, pure opinion "
     "polls, and purely speculative topics with no verifiable grounding."
+)
+
+DEFAULT_TOPIC_BRIEF = (
+    "Choose one highly current, evidence-rich AI topic that people are beginning to search "
+    "for now. Focus on named AI models, products, features, subscriptions, developer tools, "
+    "release timing, availability, surprising product behavior, or a credible emerging "
+    "rumor. Favor a narrow exact-intent query while the news window is still young and "
+    "dedicated coverage is sparse.\n\n"
+    "The question should help someone verify a claim, understand what just changed, or "
+    "decide whether to wait for or use a specific AI product. It must benefit from comparing "
+    "multiple AI models and support a substantial answer from several credible web sources. "
+    "Careful speculation is welcome only when it is clearly framed and anchored in official "
+    "announcements, documentation, changelogs, observed product behavior, or credible reporting.\n\n"
+    "Avoid government policy, regulation, legislation, elections, broad evergreen explainers, "
+    "generic AI trend pieces, personal medical/legal/financial advice, sensationalism, and "
+    "unsupported rumors."
 )
 
 DEFAULT_CONFIG = {
@@ -56,6 +72,8 @@ def normalize_config(data: dict | None) -> dict:
             config[field] = incoming[field]
 
     brief = str(incoming.get("topic_brief", config["topic_brief"]) or "").strip()
+    if brief == LEGACY_DEFAULT_TOPIC_BRIEF:
+        brief = DEFAULT_TOPIC_BRIEF
     if not brief:
         raise PublisherConfigError("topic_brief must not be empty")
     if len(brief) > TOPIC_BRIEF_MAX_CHARS:

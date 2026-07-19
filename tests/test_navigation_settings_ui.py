@@ -61,6 +61,14 @@ def test_light_input_is_white_and_account_popup_uses_opaque_surfaces():
     assert "emailPopup.hidden = !isOpen" in firebase
 
 
+def test_chat_textarea_does_not_keep_the_generic_inset_frame():
+    input_css = read("static/css/components-input.css")
+    chat_rule = input_css.split(".chat-input-container .input-field {", 1)[1].split("}", 1)[0]
+
+    assert "border: none;" in chat_rule
+    assert "box-shadow: none;" in chat_rule
+
+
 def test_hero_greeting_requires_agent_mode_and_available_space():
     template = read("templates/index.html")
     input_css = read("static/css/components-input.css")

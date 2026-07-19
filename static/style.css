@@ -7,7 +7,7 @@
 @import url('./css/base.css?v=20260718-layoutfix1');
 @import url('./css/layout.css?v=20260716-navigation-settings1');
 /* components.css was split by section into the files below (same cascade order). */
-@import url('./css/components-input.css?v=20260719-notes1');
+@import url('./css/components-input.css?v=20260719-inputframe1');
 @import url('./css/components-attachment-viewer.css?v=20260715-neutral2');
 @import url('./css/components-consensus.css?v=20260719-notes1');
 @import url('./css/components-controls.css?v=20260715-redesign1');
