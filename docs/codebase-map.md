@@ -55,7 +55,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. kompakter History je Watch), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH) sowie öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` ohne DeepSeek und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil und DeepSeek-Ausschluss. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
-| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (Diagnose-Liste; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
+| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (Diagnose-Liste; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo`, sanitisierten Live-Check `POST /api/admin/seo/check` + manueller Search-Console-Lauf `POST /api/admin/seo/collect`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 **Zentrale Templates** (`templates/`, gerendert mit `Jinja2Templates`):
 `landing.html` (Marketing), `index.html` (die App — Haupt-Markup + Script-Tags),
@@ -508,6 +508,30 @@ Whitelist für Bild-MIME-Typen.
   werden zugehörige Watch-Scheduler-Daten, Watch-History und Follower entfernt.
   Sonst erfolgt der 30-Tage-Hard-Delete widerrufener Shares via `cleanup_revoked_shares`.
 
+### SEO-Leistungsdaten (Search Console, v1)
+- Der manuelle admin-only Lauf `POST /api/admin/seo/collect` übernimmt exakt die
+  statischen URLs aus `pages.py::SITEMAP_URLS` sowie aktive, öffentliche,
+  indexierte Shares aus `list_indexed_share_urls`; er verändert weder diese
+  Seiten noch Indexierungs-, Publisher- oder Robots-Zustände.
+- `google_search_console.py` nutzt ausschließlich den Scope
+  `webmasters.readonly` über `google-auth` + autorisiertes HTTP. Search Analytics
+  fragt `page,date` mit `dataState=final`, Pagination, maximal 31 Tagen pro
+  Teilabfrage und einem harten Seitenlimit ab. Der letzte erfasste Tag liegt drei
+  UTC-Tage zurück; pro neu/missing URL-Tag werden beim ersten Lauf bis zu 90 Tage
+  zurück aufgefüllt, danach nur fehlende finale Tage.
+- `POST /api/admin/seo/check` prüft per read-only `sites.get` live, ob das
+  Service Account auf die konfigurierte Property zugreifen kann. Die Antwort
+  enthält nur einen sanitisierten Status und niemals Credential-Dateipfad,
+  Credential-Felder oder Google-Response-Body.
+- `seo_data.py` filtert GSC-Zeilen auf das aktuelle indexierbare URL-Set und
+  schreibt fehlende URL-/Tageswerte idempotent. `GET /api/admin/seo` aggregiert
+  Klicks, Impressions, CTR und impressionsgewichtete Position über 7/28 Tage
+  und klassifiziert transparent als `insufficient_data`, `emerging`, `winner`,
+  `opportunity`, `declining` oder `invisible`. Keine LLM-, Umami-, GA4-, URL-
+  Inspection- oder automatische SEO-Aktion gehört zu diesem Flow. GSC-Zeilen
+  können unvollständig sein und treffen zeitverzögert ein; die Admin-Ansicht
+  weist darauf hin.
+
 ---
 
 ## 5. Backend-Struktur
@@ -536,6 +560,9 @@ app/services/
   api_run_repository.py      Idempotenz + persistente API-Run-State-Machine
   api_consensus_runner.py    Asynchroner At-most-once-Orchestrator auf bestehenden Engines
   publisher_config.py       Firestore-Steuerung des Scheduled Publishers + Weekly/Free-Watch-Fakten
+  google_search_console.py  Read-only Search-Analytics-HTTP-Client + sichere Config-Fehler
+  seo_repository.py         Firestore-Modell fuer SEO-Seiten, Tagesmetriken und Collection-Runs
+  seo_data.py               URL-Discovery, inkrementelle Collection, 7/28-Tage-Aggregation + Statusregeln
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
   opinion_map.py             Datenminimierte, mehrdimensionale Provider-Positionen + Direction-Shift-Berechnung
@@ -648,6 +675,22 @@ Wichtige Verträge im Backend:
 - `benchmark_runs` — admin-only Benchmark-Dashboard-Snapshots aus lokalen Runs:
   `manifest`, `results`, `audits`, abgeleitete Fragenmatrix; **keine**
   `calls.jsonl`-Rohantworten, Prompts oder Request-Payloads.
+- `seo_pages/{sha256(url)}` — eine aktuell oder historisch beobachtete
+  indexierbare Seite mit `url`, `origin=static_page|share`, optionaler
+  `share_id`, `active`, `indexable` sowie First-/Last-Seen-Zeitstempeln.
+  Untercollection `daily_metrics/{YYYY-MM-DD}` ist die idempotente URL-/Tag-
+  Einheit mit `url`, `date`, `clicks`, `impressions`, `ctr`, `position`,
+  `collected_at`, `source=google_search_console`, `origin` und optionaler
+  `share_id`. Es werden keine Queries, Länder, Geräte oder personenbezogenen
+  Search-Console-Dimensionen gespeichert. Ein fehlender GSC-Row wird für die
+  aktuelle indexierbare URL als Nulltag (Position `null`) persistiert, weil GSC
+  Zeilen auslassen kann — aber nur nach einer vollständig paginierten Abfrage;
+  bei erreichtem Request-Cap bleiben ausgelassene URL-/Tage für einen Retry offen.
+- `seo_collection_runs/{run_id}` — Audit eines manuellen Laufs mit Status,
+  Start/Ende, finalisiertem Datumsfenster, URL-/Tages-/Zeilen-/Request-Zählern,
+  Truncation-Flag und ausschließlich sanitisierten Fehlertexten. Credential-
+  Dateipfad/-Inhalte, insbesondere `private_key`, und Google-Response-Bodies
+  werden weder gespeichert, geloggt noch über Admin-Endpunkte ausgegeben.
 - `differences_stats` — anonyme Differences-Telemetrie (Schema v3): pro erfolgreichem
   Consensus-Lauf ein Dokument mit Zähl-/Strukturdaten (Agreement-Score,
   Widersprüche mit Severity und beteiligten Providern, Modell-Metadaten,
@@ -673,6 +716,15 @@ Wichtige Verträge im Backend:
   `DEVELOPER_DEEPSEEK_API_KEY`, `DEVELOPER_GROK_API_KEY`.
 - Consensus-Watch-Mail/Abmeldung: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`,
   `SMTP_PASSWORD`, `MAIL_FROM`, `WATCH_UNSUBSCRIBE_SECRET`.
+- Search Console (nur serverseitig): `GSC_SITE_URL` (URL-Prefix- oder
+  `sc-domain:`-Property) und `GSC_SERVICE_ACCOUNT_JSON` (**ausschließlich ein
+  Dateipfad**, trotz Variablennamen). Relative Pfade werden gegen den Repository-
+  Root aufgelöst, absolute Pfade (z. B. Render Secret Files unter `/etc/secrets`)
+  direkt verwendet. Verwendet ausschließlich
+  `https://www.googleapis.com/auth/webmasters.readonly`; fehlende/ungültige
+  Werte bleiben für normale App-Flows nicht-fatal und erscheinen sanitisiert im
+  Admin-SEO-Tab. `GOOGLE_APPLICATION_CREDENTIALS` bleibt davon unabhängig und
+  weiterhin für Gemini reserviert.
 
 Modell-IDs/Tier-Zuordnung/Labels: ausschließlich in `app/core/config.py` pflegen
 (`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
@@ -705,7 +757,7 @@ Provider nötig, Free wird serverseitig auf Nicht-Premium/Nicht-Early begrenzt.
 `normalize_models_document` erhält die Reihenfolge (kein `sorted` mehr) und validiert
 `defaults`, `preset_models`, `watch_models` + `deep_think_model`.
 Das Admin-UI (Tabs: Models / Consensus & Deep Think / Limits / API / Shared Pages /
-Consensus Watch) bekommt via
+Consensus Watch / SEO) bekommt via
 `GET /api/admin/models` ein `meta`-Objekt (Alias-Auflösung, server-erzwungene Modelle je
 Provider, Early-Set, Labels), mit dem Required-/Early-Badges gerendert werden — die
 ensure/drop-Logik des Servers ist damit im UI sichtbar statt implizit. Der
@@ -725,11 +777,12 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
 
 - **Backend-Tests** (`tests/`, pytest): `test_attachments`, `test_streaming`,
   `test_share_feature`, `test_differences_schema`, `test_frontier_model_payloads`,
-  `test_rate_limit`, `test_seo_basics`. Lauf:
+  `test_rate_limit`, `test_seo_basics`, `test_seo_data`. Lauf:
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **606 passed** (2026-07-19; inklusive
+  Letzte bekannte Baseline: **621 passed** (2026-07-20; inklusive der neuen
+  Search-Console-/SEO-Persistenz-, Datums-, Idempotenz- und Admin-Schutztests sowie
   run-basierter Usage-, Consensus-API-Publishing-/Scope-/Vertrags- sowie
   Scheduled-Publisher-Tests).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):

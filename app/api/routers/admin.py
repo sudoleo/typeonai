@@ -10,7 +10,7 @@ from app.core.rate_limit import limiter
 import app.core.config as cfg
 from app.core.config import apply_limits, get_limits_config, load_models_from_db
 from app.services import share_snapshots as snapshots
-from app.services import mailer, publisher_config, watch_scheduler, watch_service
+from app.services import mailer, publisher_config, seo_data, watch_scheduler, watch_service
 from app.services.share_snapshots import ShareError
 from app.services.api_key_repository import (
     ApiKeyNotFound,
@@ -21,6 +21,7 @@ from app.services.api_account_cleanup import FirestoreApiAccountCleanup
 router = APIRouter()
 api_key_repository = FirestoreApiKeyRepository(db_firestore)
 api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
+seo_data_service = seo_data.SeoDataService(db_firestore)
 
 
 class AdminIssueApiKeyRequest(BaseModel):
@@ -61,6 +62,41 @@ def _require_admin(request, data):
 
 
 _SHARE_ERROR_STATUS = {"not_found": 404, "bad_request": 400}
+
+
+@router.get("/api/admin/seo")
+async def admin_get_seo_overview(request: Request):
+    _require_admin(request, {})
+    try:
+        return await asyncio.to_thread(seo_data_service.overview)
+    except Exception:
+        logging.exception("admin_get_seo_overview failed")
+        raise HTTPException(status_code=500, detail="Failed to load SEO data")
+
+
+@router.post("/api/admin/seo/check")
+async def admin_check_seo_connection(request: Request, data: dict = Body(default={})):
+    _require_admin(request, data)
+    try:
+        return await asyncio.to_thread(seo_data_service.check_connection)
+    except Exception:
+        # Do not include exception details here: configuration failures may
+        # originate while opening the secret file. The admin receives only the
+        # stable sanitized error below.
+        logging.error("admin_check_seo_connection failed safely")
+        raise HTTPException(status_code=500, detail="Search Console connection check failed safely")
+
+
+@router.post("/api/admin/seo/collect")
+async def admin_collect_seo_data(request: Request, data: dict = Body(default={})):
+    _require_admin(request, data)
+    try:
+        return await asyncio.to_thread(seo_data_service.collect)
+    except seo_data.CollectionAlreadyRunning:
+        raise HTTPException(status_code=409, detail="SEO collection is already running")
+    except Exception:
+        logging.exception("admin_collect_seo_data failed")
+        raise HTTPException(status_code=500, detail="SEO collection failed safely")
 
 
 @router.post("/api/admin/api-keys", status_code=201)

@@ -518,6 +518,19 @@
         .watch-model-provider { font-size: 0.84em; font-weight: 650; text-transform: capitalize; }
         .watch-model-select { width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid var(--input-border); border-radius: var(--radius-xs); background: var(--input-bg); color: var(--text-color); }
 
+        /* Read-only SEO overview */
+        .seo-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+        .seo-summary-card { padding: 14px; border: var(--card-border); border-radius: var(--radius-md); background: var(--chip-bg); }
+        .seo-summary-card span { display: block; color: var(--sidebar-text-muted); font-size: 0.78em; }
+        .seo-summary-card strong { display: block; margin-top: 5px; font-size: 1.05em; overflow-wrap: anywhere; }
+        .seo-table-wrap { overflow-x: auto; }
+        .seo-table { width: 100%; border-collapse: collapse; font-size: 0.84em; }
+        .seo-table th, .seo-table td { padding: 10px 8px; border-bottom: 1px solid var(--input-border); text-align: right; white-space: nowrap; }
+        .seo-table th:first-child, .seo-table td:first-child { min-width: 260px; text-align: left; white-space: normal; }
+        .seo-table a { color: var(--text-color); overflow-wrap: anywhere; }
+        .seo-status { display: inline-block; padding: 3px 8px; border: 1px solid var(--chip-border); border-radius: var(--radius-pill); }
+        .seo-rules { margin: 14px 0 0; color: var(--sidebar-text-muted); font-size: 0.8em; }
+
         .admin-tab-panel[hidden] { display: none; }
 
         @media (max-width: 820px) {
@@ -536,6 +549,7 @@
             .watch-model-grid .watch-model-head { display: none; }
             .watch-model-provider { margin-top: 8px; }
             .admin-savebar { top: 58px; flex-wrap: wrap; }
+            .seo-summary-grid { grid-template-columns: 1fr; }
         }
     </style>
     <script type="module">
@@ -605,7 +619,7 @@
         // ==============================
         // Tabs
         // ==============================
-        const TAB_IDS = ['models', 'consensus', 'limits', 'api', 'shares', 'watches'];
+        const TAB_IDS = ['models', 'consensus', 'limits', 'api', 'shares', 'watches', 'seo'];
         function activateTab(tabId) {
             if (!TAB_IDS.includes(tabId)) tabId = 'models';
             if (tabId !== 'api') clearIssuedApiKey();
@@ -1993,6 +2007,138 @@
             }
         });
 
+        // === Read-only SEO data foundation ===
+        function seoStatus(message, isError) {
+            const el = document.getElementById('seoStatus');
+            el.textContent = message || '';
+            el.className = isError ? 'error' : 'success';
+        }
+
+        function formatSeoNumber(value) {
+            const number = Number(value || 0);
+            return Number.isInteger(number)
+                ? number.toLocaleString()
+                : number.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        }
+
+        function formatSeoMetric(metric, key) {
+            if (key === 'ctr') return `${(Number(metric.ctr || 0) * 100).toFixed(2)}%`;
+            if (key === 'position') return metric.position == null ? '–' : Number(metric.position).toFixed(1);
+            return formatSeoNumber(metric[key]);
+        }
+
+        function renderSeoOverview(data) {
+            const config = data.configuration || {};
+            const configState = document.getElementById('seoConfigState');
+            configState.textContent = config.configured
+                ? 'configured'
+                : config.status === 'not_configured' ? 'not configured' : (config.status || 'not configured');
+            configState.title = config.message || '';
+            document.getElementById('seoConfigMessage').textContent = config.message || '';
+            document.getElementById('seoCapturedCount').textContent = `${data.captured_urls || 0} / ${data.eligible_urls || 0}`;
+            const run = data.last_run || {};
+            document.getElementById('seoLastRun').textContent = run.started_at
+                ? `${run.status || 'unknown'} · ${new Date(run.started_at).toLocaleString()}`
+                    + (run.metrics_written != null ? ` · ${run.metrics_written} daily rows` : '')
+                : 'No collection run yet';
+            document.getElementById('seoLastRun').title = run.message || '';
+            document.getElementById('seoLastRunMessage').textContent = run.message || '';
+            document.getElementById('seoFinalDate').textContent = data.final_date || '–';
+            document.getElementById('seoDisclaimer').textContent = data.disclaimer || '';
+
+            const body = document.getElementById('seoTableBody');
+            body.textContent = '';
+            (data.rows || []).forEach(row => {
+                const tr = document.createElement('tr');
+                const pageCell = document.createElement('td');
+                const link = document.createElement('a');
+                link.href = row.url;
+                link.target = '_blank';
+                link.rel = 'noopener';
+                link.textContent = row.url;
+                pageCell.appendChild(link);
+                const origin = document.createElement('div');
+                origin.className = 'section-hint';
+                origin.textContent = row.origin + (row.share_id ? ` · ${row.share_id}` : '');
+                pageCell.appendChild(origin);
+                tr.appendChild(pageCell);
+                ['clicks', 'impressions', 'ctr', 'position'].forEach(key => {
+                    const td = document.createElement('td');
+                    td.textContent = formatSeoMetric(row.metrics_7d || {}, key);
+                    tr.appendChild(td);
+                });
+                ['clicks', 'impressions', 'ctr', 'position'].forEach(key => {
+                    const td = document.createElement('td');
+                    td.textContent = formatSeoMetric(row.metrics_28d || {}, key);
+                    tr.appendChild(td);
+                });
+                const statusCell = document.createElement('td');
+                const status = document.createElement('span');
+                status.className = 'seo-status';
+                status.textContent = row.status || 'insufficient_data';
+                status.title = (data.status_rules || {})[row.status] || '';
+                statusCell.appendChild(status);
+                tr.appendChild(statusCell);
+                body.appendChild(tr);
+            });
+            document.getElementById('seoEmptyState').hidden = (data.rows || []).length > 0;
+            document.getElementById('seoRules').textContent = Object.entries(data.status_rules || {})
+                .map(([name, definition]) => `${name}: ${definition}`).join(' · ');
+        }
+
+        function renderSeoConnection(result) {
+            const state = document.getElementById('seoConnectionState');
+            state.textContent = result.connected ? 'connected' : (result.status || 'connection failed').replaceAll('_', ' ');
+            state.title = result.message || '';
+            document.getElementById('seoConnectionMessage').textContent = result.message || '';
+        }
+
+        async function loadSeoOverview() {
+            seoStatus('Loading…', false);
+            try {
+                const data = await shareAdminRequest('GET', '/api/admin/seo');
+                renderSeoOverview(data);
+                // A successful admin-only request is the visibility gate for
+                // controls that can make server-side Search Console requests.
+                document.getElementById('collectSeoBtn').hidden = false;
+                document.getElementById('checkSeoConnectionBtn').hidden = false;
+                seoStatus('', false);
+            } catch (err) {
+                document.getElementById('collectSeoBtn').hidden = true;
+                document.getElementById('checkSeoConnectionBtn').hidden = true;
+                seoStatus(err.message, true);
+            }
+        }
+
+        document.getElementById('reloadSeoBtn').addEventListener('click', loadSeoOverview);
+        document.getElementById('checkSeoConnectionBtn').addEventListener('click', async function () {
+            this.disabled = true;
+            seoStatus('Checking Search Console connection…', false);
+            try {
+                const result = await shareAdminRequest('POST', '/api/admin/seo/check', {});
+                renderSeoConnection(result);
+                seoStatus(result.message || result.status, !result.connected);
+            } catch (err) {
+                renderSeoConnection({ connected: false, status: 'connection_failed', message: err.message });
+                seoStatus(err.message, true);
+            } finally {
+                this.disabled = false;
+            }
+        });
+        document.getElementById('collectSeoBtn').addEventListener('click', async function () {
+            this.disabled = true;
+            seoStatus('Collecting finalized Search Console data…', false);
+            try {
+                const result = await shareAdminRequest('POST', '/api/admin/seo/collect', {});
+                seoStatus(result.message || result.status || 'Collection finished.', result.status === 'error');
+                await loadSeoOverview();
+            } catch (err) {
+                seoStatus(err.message, true);
+            } finally {
+                this.disabled = false;
+            }
+        });
+
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 const idToken = await user.getIdToken();
@@ -2002,6 +2148,7 @@
                 loadApiKeys();
                 loadShares('reported');
                 loadAdminWatches();
+                loadSeoOverview();
             } else {
                 setStatus('Please log in to access the admin panel.', true);
                 window.location.href = '/';
@@ -2033,6 +2180,7 @@
             <button type="button" data-tab="api" role="tab">API</button>
             <button type="button" data-tab="shares" role="tab">Shared Pages</button>
             <button type="button" data-tab="watches" role="tab">Consensus Watch</button>
+            <button type="button" data-tab="seo" role="tab">SEO</button>
         </nav>
 
         <div id="adminSavebar" class="admin-savebar">
@@ -2288,6 +2436,49 @@
                 <div id="watchesContainer">
                     <!-- Populated by JavaScript -->
                 </div>
+            </div>
+        </section>
+
+        <section id="tab-seo" class="admin-tab-panel" role="tabpanel" hidden>
+            <div class="admin-section">
+                <h3>Search Console performance</h3>
+                <p class="section-hint">
+                    Read-only performance for public, indexable static pages and active indexed shares.
+                    This section never changes indexing, pages, robots directives, or publisher settings.
+                </p>
+                <div class="watch-admin-toolbar">
+                    <button id="checkSeoConnectionBtn" type="button" class="admin-btn secondary" hidden>Check Search Console connection</button>
+                    <button id="collectSeoBtn" type="button" class="admin-btn" hidden>Collect Search Console data now</button>
+                    <button id="reloadSeoBtn" type="button" class="admin-btn secondary">Reload</button>
+                    <span id="seoStatus" role="status" style="font-size: 0.85em;"></span>
+                </div>
+                <div class="seo-summary-grid">
+                    <div class="seo-summary-card"><span>Configuration</span><strong id="seoConfigState">unknown</strong><span id="seoConfigMessage"></span></div>
+                    <div class="seo-summary-card"><span>Connection</span><strong id="seoConnectionState">not checked</strong><span id="seoConnectionMessage"></span></div>
+                    <div class="seo-summary-card"><span>Captured / eligible URLs</span><strong id="seoCapturedCount">0 / 0</strong></div>
+                    <div class="seo-summary-card"><span>Latest collection run</span><strong id="seoLastRun">No collection run yet</strong><span id="seoLastRunMessage"></span></div>
+                </div>
+                <p class="section-hint">Latest finalized date: <strong id="seoFinalDate">–</strong></p>
+                <p id="seoDisclaimer" class="section-hint"></p>
+                <div class="seo-table-wrap">
+                    <table class="seo-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2">Page</th>
+                                <th colspan="4">7 days</th>
+                                <th colspan="4">28 days</th>
+                                <th rowspan="2">Status</th>
+                            </tr>
+                            <tr>
+                                <th>Clicks</th><th>Impr.</th><th>CTR</th><th>Pos.</th>
+                                <th>Clicks</th><th>Impr.</th><th>CTR</th><th>Pos.</th>
+                            </tr>
+                        </thead>
+                        <tbody id="seoTableBody"></tbody>
+                    </table>
+                </div>
+                <p id="seoEmptyState" class="section-hint">No SEO metrics collected yet.</p>
+                <p id="seoRules" class="seo-rules"></p>
             </div>
         </section>
     </div>
