@@ -198,7 +198,13 @@ zählen nicht gegen das persönliche aktive Watch-Limit der Admin-UID, bleiben
 aber Teil des globalen täglichen Watch-Run-Budgets.
 
 Der Workflow `.github/workflows/publish-consensus.yml` läuft standardmäßig
-dienstags um 07:15 UTC und kann manuell mit einer festen Frage gestartet werden.
+montags, mittwochs und freitags um 07:15 UTC und kann manuell mit einer festen
+Frage gestartet werden. Bei der automatischen Themenwahl priorisieren die
+`Search-opportunity requirements` neben frischen AI-Produktnachrichten besonders
+AI-Memes und zynische oder ironische X-Narrative, deren Breakout-Signal ungefähr
+aus den letzten zwölf Stunden stammt und deren Verbreitung noch sichtbar
+beschleunigt. Originalposts belegen Ursprung und Momentum; belastbare externe
+Quellen verifizieren den sachlichen Kontext.
 Im GitHub-Repository werden folgende Actions-Secrets benötigt:
 
 - `CONSENSUS_API_KEY`: Key einer Admin-UID mit allen drei Scopes.

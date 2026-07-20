@@ -66,6 +66,16 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. kompakter History je Watch), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` ohne DeepSeek und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil und DeepSeek-Ausschluss. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
+
+Der Scheduled Publisher läuft per GitHub Actions montags, mittwochs und freitags.
+Seine angehängten `Search-opportunity requirements` priorisieren neben frischen
+AI-Produkt-/News-Signalen besonders erklärungsbedürftige AI-Memes sowie zynische
+oder ironische X-Narrative: Breakout ungefähr innerhalb der letzten zwölf Stunden,
+sichtbar weiter beschleunigte Verbreitung und eine noch laufende virale Welle.
+Originalposts dienen als Primärbeleg für Ursprung/Momentum; externe Quellen
+verifizieren Behauptung und Kontext. Die identische Regel steht wegen der
+Standalone-Ausführung bewusst in `scripts/publish_consensus.py` und als sichtbarer
+Produktfakt in `app/services/publisher_config.py`.
 | `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (Diagnose-Liste; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo`, sanitisierten Live-Check `POST /api/admin/seo/check`, manueller Search-Console-Lauf `POST /api/admin/seo/collect` sowie speicherbare read-only Judgements per `POST /api/admin/seo/pages/{page_id}/recommendation` und optional `.../content-judge`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 Weekly-SEO-Admin-Erweiterung: `GET /api/admin/seo/review`, `PUT

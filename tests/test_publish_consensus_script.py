@@ -5,6 +5,8 @@ from urllib.error import HTTPError
 
 import pytest
 
+from app.services import publisher_config
+
 
 SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "publish_consensus.py"
 SPEC = importlib.util.spec_from_file_location("publish_consensus", SCRIPT_PATH)
@@ -220,6 +222,14 @@ def test_topic_selection_uses_web_search_and_recent_question_history(monkeypatch
     assert "Google-style search query and clickable page title" in captured["payload"]["input"]
     assert "compare at least five candidate queries" in captured["payload"]["input"]
     assert "low exact-intent competition" in captured["payload"]["input"]
+    assert "within roughly the last 12 hours" in captured["payload"]["input"]
+    assert "viral wave is still rolling" in captured["payload"]["input"]
+    assert "Le Chaton Fat" in captured["payload"]["input"]
+    assert "The Jacobian Conjecture is False Per Anthropic" in captured["payload"]["input"]
+
+
+def test_search_opportunity_rules_match_backend_product_fact():
+    assert publisher.SEARCH_OPPORTUNITY_RULES == publisher_config.SEARCH_OPPORTUNITY_RULES
 
 
 def test_generated_topic_rejects_government_policy_queries():
