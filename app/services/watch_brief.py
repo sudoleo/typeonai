@@ -76,7 +76,9 @@ def get_brief(uid: str, db=None) -> dict:
 
 def has_watches(uid: str, db=None) -> bool:
     db = db if db is not None else db_firestore
-    for _doc in db.collection(watch_service.WATCHES_COLLECTION).where("owner_uid", "==", uid).stream():
+    for _doc in watch_service._where_equal(
+        db.collection(watch_service.WATCHES_COLLECTION), "owner_uid", uid
+    ).stream():
         return True
     return False
 
@@ -153,7 +155,9 @@ def list_due_brief_uids(*, now=None, db=None, max_items=200) -> list[str]:
     db = db if db is not None else db_firestore
     now = now or utcnow()
     due = []
-    for doc in db.collection(BRIEFS_COLLECTION).where("enabled", "==", True).stream():
+    for doc in watch_service._where_equal(
+        db.collection(BRIEFS_COLLECTION), "enabled", True
+    ).stream():
         data = doc.to_dict() or {}
         if isinstance(data.get("next_send_at"), datetime) and data["next_send_at"] <= now:
             due.append(doc.id)
