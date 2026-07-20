@@ -60,3 +60,10 @@ def test_product_result_mockup_is_reused_and_public_copy_has_no_em_dash():
     for template_name in PUBLIC_TEMPLATES:
         assert "—" not in read(f"templates/{template_name}")
     assert "—" not in read("templates/partials/product_result_mockup.html")
+
+
+def test_share_page_loads_the_common_math_renderer():
+    template = read("templates/share.html")
+    assert "katex@0.17.0/dist/katex.min.js" in template
+    assert "/static/js/math-render.js?v=20260720-math1" in template
+    assert '<main class="page-shell" data-math-render>' in template

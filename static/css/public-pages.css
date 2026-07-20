@@ -2475,6 +2475,12 @@ canvas {
 .share-md pre { overflow-x: auto; padding: 12px; border-radius: var(--radius-sm); background: rgba(0, 0, 0, 0.06); }
 .dark-mode .share-md pre { background: rgba(255, 255, 255, 0.08); }
 .share-md code { font-size: 0.9em; }
+.share-md .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.12em;
+}
 .share-md table { border-collapse: collapse; display: block; overflow-x: auto; }
 .share-md th, .share-md td { border: 1px solid color-mix(in srgb, var(--border) 86%, transparent); padding: 6px 10px; text-align: left; }
 .share-md blockquote { border-left: 3px solid color-mix(in srgb, var(--accent) 38%, var(--border)); padding-left: 12px; color: var(--muted); }

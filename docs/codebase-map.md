@@ -25,8 +25,9 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 - **Frontend**: kein Framework. Jinja2-Templates + Vanilla-JS-Module unter
   `static/js/`, geladen als klassische `<script defer>`-Tags. Übergangs-State-Bus
   ist `window.App` plus zahlreiche `window.*`-Globals (siehe §8).
-- **Markdown**: `marked` + `DOMPurify` (CDN) clientseitig; serverseitig für
-  Share-Seiten in `app/services/public_markdown.py`.
+- **Markdown/Mathematik**: `marked` + `DOMPurify` clientseitig und
+  `markdown-it-py` + `nh3` für Share-Seiten; KaTeX setzt in beiden Ansichten
+  LaTeX-Ausdrücke nach dem sanitisierten Markdown-Rendern.
 - **Hosting**: Render. Täglicher Render-Restart wird bewusst als Reset für
   In-Memory-State und als Trigger für Cleanup-Jobs genutzt (siehe §7).
 
@@ -94,9 +95,9 @@ Layouts bleiben in diesen beiden Dateien bzw. in `benchmark.css` und
 ## 3. Frontend-Architektur
 
 Geladen werden (Reihenfolge ist Vertrag, siehe §8): zuerst CDN-Libs
-(`marked`, `DOMPurify`), dann `firebase.js` + `demo.js` (ES-Module), `app-ui.js`,
-dann die Feature-Module unter `static/js/` in fester Reihenfolge, zuletzt —
-deferred am `</body>` — `app-init.js`.
+(`marked`, `DOMPurify`, KaTeX + Auto-Render), dann `firebase.js` + `demo.js`
+(ES-Module), `app-ui.js`, dann die Feature-Module unter `static/js/` in fester
+Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
 
 **Modul-Verantwortlichkeiten** (alle in `static/js/` außer markiert):
 
@@ -135,8 +136,12 @@ deferred am `</body>` — `app-init.js`.
   das Avatar-Menü mit deckender Light-/Dark-Fläche zeigt. Settings sind in
   Experience, Connections, Model behavior und Account gruppiert; die
   bestehenden Control-IDs bleiben der JavaScript-Vertrag.
+- **`math-render.js`** — gemeinsame KaTeX-Brücke für App und öffentliche
+  Share-/Watch-Seiten. Bewahrt `\[...\]`/`\(...\)` durch den Markdown-Pass und
+  exponiert `window.ConsensusMath.{prepareMarkdown,render}`.
 - **`markdown-stream.js`** — Markdown-Rendering (`injectMarkdown`) + SSE-Helfer
-  (`createStreamRenderer`, `streamSSERequest`).
+  (`createStreamRenderer`, `streamSSERequest`); setzt LaTeX nach jedem
+  gedrosselten Streaming-Render über `window.ConsensusMath`.
 - **`sources.js`** — Quellen/Evidence-Mapping; nutzt DOM-Datasets
   `dataset.consensusAnswer` / `dataset.consensusSources`; `window.currentEvidenceSources`.
 - **`attachments.js`** — Attachment-UI/Payload (Pro), inklusive Bild-Paste im
@@ -514,6 +519,8 @@ Whitelist für Bild-MIME-Typen.
 - `POST /api/share` (`share.py` → `share_snapshots.create_share_from_pending`)
   macht daraus einen unveränderlichen Share-Snapshot (`shares`-Collection) mit Slug.
 - **`GET /s/{slug_id}`** rendert read-only aus dem Snapshot (keine LLM-Calls).
+  `public_markdown.py` erhält LaTeX-Delimiter im serverseitigen HTML; die
+  Share-Seite setzt sie anschließend mit derselben KaTeX-Brücke wie die App.
   Public-Snapshots enthalten JSON-LD, Canonical-Dedup über `question_hash` und
   „verwandte Fragen"; **Indexierung (`index, follow`) nur wenn der Admin `indexed`
   setzt** — nie automatisch; sonst `noindex`. Private Watch-Snapshots werden am
@@ -1006,6 +1013,8 @@ keinen Watch-Lauf aus und ändert keinen Zeitplan.
 
 - **Script-Ladereihenfolge in `templates/index.html` ist ein Vertrag.**
   `app-core.js` definiert `window.App` und muss vor allen Feature-Modulen laufen;
+  KaTeX + Auto-Render müssen vor `math-render.js`, dieses wiederum vor
+  `markdown-stream.js` geladen werden;
   `app-init.js` läuft als letztes (deferred am `</body>`) und verdrahtet das DOM.
   Reihenfolge umstellen oder ein Modul rausnehmen ⇒ `ReferenceError` /
   `window.X is not a function`.
@@ -1021,7 +1030,7 @@ keinen Watch-Lauf aus und ändert keinen Zeitplan.
   `window.lastShareResultId`, `window.currentBookmarkShareResultContext`,
   `window.currentBookmarkShareResultPromise`,
   `window.resolveCurrentShareResultId`, `window.clearPreparedBookmarkShareResult`,
-  `window.isUserPro`, `window.pendingAttachments`.
+  `window.isUserPro`, `window.pendingAttachments`, `window.ConsensusMath`.
 - **`window.App.followup`** (definiert in `consensus-run.js`) ist der
   Follow-up-Kontext-State (`offer/arm/discard/consume/reset/render`).
   `query-send.js` (consume beim Senden), `app-init.js` (reset in

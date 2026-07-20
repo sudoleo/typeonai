@@ -85,6 +85,31 @@ def test_app_loads_without_console_errors(app_page, get_console_errors):
     assert errors == [], f"Konsolen-Fehler beim Laden: {errors}"
 
 
+def test_latex_is_typeset_after_markdown_rendering(app_page):
+    result = app_page.evaluate(
+        r"""() => {
+          const host = document.createElement("div");
+          document.body.appendChild(host);
+          window.injectMarkdown(
+            host,
+            String.raw`\[ \det(DF)\equiv -2 \] and \(F:\mathbb C^3\to\mathbb C^3\)`
+          );
+          const result = {
+            displays: host.querySelectorAll(".katex-display").length,
+            expressions: host.querySelectorAll(".katex").length,
+            errors: host.querySelectorAll(".katex-error").length,
+            fontFamily: getComputedStyle(host.querySelector(".katex")).fontFamily,
+          };
+          host.remove();
+          return result;
+        }"""
+    )
+    assert result["displays"] == 1
+    assert result["expressions"] == 2
+    assert result["errors"] == 0
+    assert "KaTeX" in result["fontFamily"]
+
+
 def test_usage_display_is_stable_and_keeps_value_layout(app_page):
     """Parallele Antworten ohne Usage-Metadaten duerfen weder auf 0
     zurueckfallen noch den rechtsbuendigen, fetten Wert-Wrapper entfernen."""

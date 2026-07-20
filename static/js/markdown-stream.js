@@ -4,13 +4,21 @@
 // Extrahiert aus templates/index.html (initApp-Closure).
 // Exporte: window.injectMarkdown, window.createStreamRenderer,
 // window.streamSSERequest. (readSSEStream bleibt modul-privat.)
-// Call-time-Abhaengigkeiten: DOMPurify, marked (CDN), window.addCopyButtons,
-// window.addNewTabToLinks, window.linkifySourceTags, window.currentEvidenceSources.
+// Call-time-Abhaengigkeiten: DOMPurify, marked (CDN), window.ConsensusMath,
+// window.addCopyButtons, window.addNewTabToLinks, window.linkifySourceTags,
+// window.currentEvidenceSources.
 // =====================================================================
+
+function renderMarkdownHtml(md) {
+  const prepared = window.ConsensusMath
+    ? window.ConsensusMath.prepareMarkdown(md)
+    : (md || "");
+  return DOMPurify.sanitize(marked.parse(prepared));
+}
 
 // Utils: Markdown → HTML (sanitised) + deine Addons
 function injectMarkdown(el, md) {
-  el.innerHTML = DOMPurify.sanitize(marked.parse(md || ""));
+  el.innerHTML = renderMarkdownHtml(md);
 
   if (window.addCopyButtons) window.addCopyButtons(el);
   if (window.addNewTabToLinks) window.addNewTabToLinks(el);
@@ -18,6 +26,8 @@ function injectMarkdown(el, md) {
   if (window.currentEvidenceSources && window.currentEvidenceSources.length && window.linkifySourceTags) {
     window.linkifySourceTags(el, window.currentEvidenceSources);
   }
+
+  if (window.ConsensusMath) window.ConsensusMath.render(el);
 }
 
 window.injectMarkdown = injectMarkdown;
@@ -35,7 +45,8 @@ function createStreamRenderer(outputEl, isActiveFn) {
     renderTimer = null;
     if (isActiveFn && !isActiveFn()) return;
     lastRenderAt = Date.now();
-    outputEl.innerHTML = DOMPurify.sanitize(marked.parse(text || ""));
+    outputEl.innerHTML = renderMarkdownHtml(text);
+    if (window.ConsensusMath) window.ConsensusMath.render(outputEl);
   }
 
   return {

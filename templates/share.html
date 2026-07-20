@@ -23,7 +23,8 @@
   {% if og_is_card %}<meta name="twitter:image" content="{{ og_image }}">{% endif %}
   <script type="application/ld+json">{{ jsonld | safe }}</script>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260719-notes1">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260720-math1">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -36,6 +37,9 @@
       }
     })();
   </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.js" integrity="sha384-AtrdNsnxl/75rvBneBVH7DtOvCxSVahR2zWqle1coBKd8DEmLoviqNeJSx64gNAs" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"></script>
+  <script defer src="/static/js/math-render.js?v=20260720-math1"></script>
   {% if not is_private %}<!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>{% endif %}
   <!-- Share-Seiten-Styles liegen konsolidiert in public-pages.css (Abschnitt "Share page") -->
@@ -46,7 +50,7 @@
   {% set public_nav_event = "share_page_cta" %}
   {% include "partials/public_nav.html" %}
 
-  <main class="page-shell">
+  <main class="page-shell" data-math-render>
     <header class="page-header share-header">
       <p class="eyebrow">{% if watch_page %}Consensus Watch{% else %}Shared consensus{% endif %}{% if is_private %} · Private{% endif %}</p>
       <h1 class="share-question{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}">{{ question }}</h1>

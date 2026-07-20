@@ -492,6 +492,18 @@ class PublicMarkdownTests(unittest.TestCase):
         html = render_public_markdown("| a | b |\n| --- | --- |\n| 1 | 2 |")
         self.assertIn("<table>", html)
 
+    def test_latex_delimiters_survive_markdown_for_katex(self):
+        html = render_public_markdown(
+            r"\[ \det(DF)\equiv -2 \] and \(F:\mathbb C^3\to\mathbb C^3\)"
+        )
+        self.assertIn(r"\[ \det(DF)\equiv -2 \]", html)
+        self.assertIn(r"\(F:\mathbb C^3\to\mathbb C^3\)", html)
+
+    def test_latex_delimiters_in_code_stay_literal(self):
+        html = render_public_markdown(r"`\[ literal \]`")
+        self.assertIn(r"<code>\[ literal \]</code>", html)
+        self.assertNotIn(r"<code>\\[ literal \\]</code>", html)
+
     def test_plaintext_strips_and_clips(self):
         text = markdown_to_plaintext("# Titel\n\nEin **fetter** Satz.", limit=15)
         self.assertNotIn("<", text)
@@ -1002,6 +1014,20 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn('content="noindex, follow"', body)
         self.assertIn("Ask your own question", body)
         self.assertNotIn("user-1", body)  # owner_uid darf nie im HTML landen
+
+    def test_active_share_preserves_latex_and_loads_katex_renderer(self):
+        doc = self._share_doc(
+            consensus_md=r"The map \(F:\mathbb C^3\to\mathbb C^3\) has \(\det(DF)=-2\)."
+        )
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+
+        body = response.text
+        self.assertIn(r"\(F:\mathbb C^3\to\mathbb C^3\)", body)
+        self.assertIn(r"\(\det(DF)=-2\)", body)
+        self.assertIn("katex@0.17.0/dist/katex.min.js", body)
+        self.assertIn("/static/js/math-render.js?v=20260720-math1", body)
+        self.assertIn('class="page-shell" data-math-render', body)
 
     def test_private_share_requires_owner_and_is_never_publicly_cached(self):
         doc = self._share_doc(visibility="private", owner_uid="owner-1")

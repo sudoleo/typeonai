@@ -811,6 +811,14 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   text-align: left;
 }
 
+.response-box .katex-display,
+.consensus-box .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.12em;
+}
+
 .consensus-main {
   /* Redesign 2026-07: breitere Differences-Spalte (~1/3) als Ausgangswert;
      der Spalten-Balancer (consensus-insights.js) feinjustiert zur Laufzeit. */

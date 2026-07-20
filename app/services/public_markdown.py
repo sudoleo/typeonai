@@ -35,6 +35,9 @@ _LINK_REL = "nofollow noopener noreferrer"
 _SOURCE_RUN_RE = re.compile(r"\[((?:S?\d+)(?:\s*,\s*S?\d+)*)\]", re.IGNORECASE)
 # Fenced-Code-Blöcke und Inline-Code: dort keine Quellen-Tags ersetzen.
 _CODE_SEGMENT_RE = re.compile(r"(```.*?(?:```|$)|`[^`\n]*`)", re.DOTALL)
+# Markdown interpretiert die LaTeX-Delimiter \[, \], \( und \) als Escapes.
+# Verdoppeln erhaelt sie im HTML, damit KaTeX sie auf Share-Seiten findet.
+_MATH_DELIMITER_RE = re.compile(r"\\([\[\]()])")
 
 # Second-Level-Suffixe wie in getSourceSiteName() im Frontend (z. B. bbc.co.uk).
 _SLD_SUFFIXES = {"co", "com", "org", "net", "ac", "gov"}
@@ -98,12 +101,21 @@ def _link_source_tags(md_text, labels):
     )
 
 
+def _preserve_math_delimiters(md_text):
+    parts = _CODE_SEGMENT_RE.split(md_text)
+    return "".join(
+        part if index % 2 else _MATH_DELIMITER_RE.sub(r"\\\\\1", part)
+        for index, part in enumerate(parts)
+    )
+
+
 def render_public_markdown(md_text, sources=None):
     """Markdown → sanitisiertes HTML (sicher für `| safe` im Template)."""
     text = str(md_text or "")
     labels = _source_labels(sources)
     if labels:
         text = _link_source_tags(text, labels)
+    text = _preserve_math_delimiters(text)
     html = _MD.render(text)
     return nh3.clean(html, url_schemes=_URL_SCHEMES, link_rel=_LINK_REL)
 
