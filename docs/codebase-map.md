@@ -39,7 +39,12 @@ fügt `CustomSecurityMiddleware` (CSP etc.) + slowapi-Limiter hinzu, mountet
 `/static`, registriert globale Exception-Handler und inkludiert alle Router.
 Im `lifespan`-Startup: `load_models_from_db()` + Share-Cleanups (siehe §7),
 Recovery/Retention noch nicht abgeschlossener Consensus-API-Runs und Retry
-blockierter API-Account-Cleanups. Cancellable asyncio-Tasks übernehmen danach
+blockierter API-Account-Cleanups. Diese synchronen Firestore-Jobs laufen
+sequenziell in einem Worker-Thread unter einem gemeinsamen, standardmäßig
+15-sekündigen Readiness-Budget; bei Firestore-Störungen startet die App mit
+Code-Defaults und die regulären Maintenance-Loops übernehmen Retries, statt den
+Web-Event-Loop dauerhaft zu blockieren. Der Modell-Config-Read selbst deaktiviert
+den langen SDK-Retry und bricht nach fünf Sekunden ab. Cancellable asyncio-Tasks übernehmen danach
 den 60-Sekunden-API-Maintenance-, 5-Minuten-Account-Cleanup- und
 30-Minuten-Consensus-Watch-Tick.
 
@@ -56,6 +61,13 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. kompakter History je Watch), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH) sowie öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` ohne DeepSeek und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil und DeepSeek-Ausschluss. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 | `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (Diagnose-Liste; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo`, sanitisierten Live-Check `POST /api/admin/seo/check`, manueller Search-Console-Lauf `POST /api/admin/seo/collect` sowie speicherbare read-only Judgements per `POST /api/admin/seo/pages/{page_id}/recommendation` und optional `.../content-judge`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
+
+Weekly-SEO-Admin-Erweiterung: `GET /api/admin/seo/review`, `PUT
+/api/admin/seo/review/config` und `POST /api/admin/seo/review/run` liefern bzw.
+steuern Status, Zeitplan und manuellen Start. Gruppen-Vorschau/-Ausführung laufen
+über `POST /api/admin/seo/reviews/{run_id}/preview|apply`; der optionale Topic
+Brief wird ausschließlich per `POST .../{run_id}/topic-brief/accept` angenommen.
+Alle Endpunkte sind admin-only.
 
 **Zentrale Templates** (`templates/`, gerendert mit `Jinja2Templates`):
 `landing.html` (Marketing), `index.html` (die App — Haupt-Markup + Script-Tags),
@@ -481,6 +493,12 @@ Whitelist für Bild-MIME-Typen.
   schließen DeepSeek explizit aus; beim Watch wird dazu
   `excluded_providers=[deepseek]` persistent gespeichert und der DeepSeek-Key
   auch für Engine-/Judge-Fallbacks entfernt.
+- Nur ein API-Run mit persistiertem `request.publisher_mode=true` markiert den
+  erzeugten Share als `publication_source=scheduled_publisher`; normale API-
+  und Nutzer-Shares erhalten diese Lineage nicht. Neue Publisher-Watches sind
+  auf maximal 12 aktive (im Publisher-Config-Dokument konfigurierbar) begrenzt.
+  Volle Kapazität liefert `watch_skipped_capacity`, lässt die Veröffentlichung
+  erfolgreich und pausiert/löscht keine bestehenden Watches.
 
 ### Sharing
 - `/consensus` legt ein `pending_results`-Dokument an → `result_id`.
@@ -550,6 +568,36 @@ Whitelist für Bild-MIME-Typen.
   können unvollständig sein und treffen zeitverzögert ein; die Admin-Ansicht
   weist darauf hin.
 
+### Wöchentlicher SEO-Portfolio-Review
+- `seo_weekly_review.py` wird alle 15 Minuten vom eigenen Lifespan-Task geprüft
+  (Defaultintervall sieben Tage, Defaultzeit 09:00 Europe/Berlin) und kann im
+  SEO-Admin per „Run now“ gestartet
+  werden. Ein transaktionaler, 45 Minuten gültiger Lease in
+  `app_config/seo_weekly_review` verhindert prozessübergreifende Doppelläufe.
+- Jeder Lauf aktualisiert zuerst Search Console und erzeugt dann für alle
+  aktuell oder historisch in `seo_pages` erfassten Seiten die bestehende
+  deterministische Empfehlung (die normale Admin-Tabelle bleibt active-only).
+  Der Portfolio-Lauf ist vor den teuren Unterabfragen auf 100 Seiten begrenzt
+  und verwendet die vom Overview bereits geladenen Seiten-, 28-Tage- und
+  Query-Daten für die Recommendation erneut; pro Seite gibt es keinen zweiten
+  Firestore-Metrikscan.
+  Erst danach darf genau ein
+  optionaler Portfolio-Judge-Call erfolgen; bei vollständig fehlgeschlagener
+  Collection gibt es keinen Call. Unvollständige Query-Daten dürfen im Bericht
+  stehen, blockieren aber serverseitig Noindex und Delete.
+- Die sieben Gruppen sind `keep_indexed`, `pause_watch_only`, `resume_watch`,
+  `noindex_only`, `noindex_and_pause_watch`, `delete_candidate` und
+  `manual_improvement`. Gespeicherte Vorschläge mutieren nichts. Preview/Apply
+  prüfen Lineage, Index-/Watch-Zustand, Recommendation-Fingerprint und Noindex-
+  Safeguards erneut; kombinierte Aktionen protokollieren beide Teilergebnisse.
+  Watch-Pause/Resume ändern nie `indexed`, Noindex nie implizit den Watch.
+  `Apply all` schließt Hard-Delete serverseitig aus; Noindex/Delete-Bulk ist nur
+  für Shares mit `publication_source=scheduled_publisher` erlaubt.
+- Der Judge darf bei mindestens drei reifen Seiten optional einen Topic Brief
+  vorschlagen. Die Admin-Annahme vergleicht den damaligen mit dem aktuellen
+  Brief und speichert nur `topic_brief` über `publisher_config.save_config`;
+  automatische Prompt- oder Action-Übernahmen existieren nicht.
+
 ---
 
 ## 5. Backend-Struktur
@@ -583,6 +631,7 @@ app/services/
   seo_dossier.py            Minimierte statische/Share-Seitendossiers ohne UID/Secrets
   seo_data.py               URL-Discovery, inkrementelle Collection, Query-Snapshots + Statusregeln
   seo_recommendation.py     Deterministische Regeln + optionaler strukturierter Content-Judge
+  seo_weekly_review.py      Leased Portfolio-Review, Gruppen/Actions + optionaler Topic-Brief-Vorschlag
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
   opinion_map.py             Datenminimierte, mehrdimensionale Provider-Positionen + Direction-Shift-Berechnung
@@ -665,16 +714,24 @@ Wichtige Verträge im Backend:
   Publisher: `enabled`, Themen-Brief, automatische Indexfreigabe sowie
   Aktivierung, lokaler Wochentag, Uhrzeit und IANA-Zeitzone des Weekly-Watches.
   Intervall (`weekly`), Modellprofil (`free`) und der DeepSeek-Ausschluss sind
-  absichtlich nicht konfigurierbar und werden serverseitig erzwungen.
+  absichtlich nicht konfigurierbar und werden serverseitig erzwungen;
+  `max_active_publisher_watches` begrenzt neue aktive Watches (Default 12).
+- `app_config/seo_weekly_review` — `enabled`, `interval_days` (Default 7),
+  lokale `run_time` + IANA-`timezone`, `last_run_at`, `next_run_at` sowie
+  kurzlebiger `lease_run_id`/`lease_until`.
 - `pending_results` — kurzlebige Consensus-Ergebnisse fürs Sharing (TTL/Cleanup).
 - `shares` — unveränderliche Snapshots (Slug, `visibility=public|private`,
   `indexed`, `status`, `owner_uid`, `question_hash`, optional interne
-  `source_api_run_id` und Index-Review-Auditfelder, …). Public-Shares sind per
+  `source_api_run_id`, `publication_source=scheduled_publisher` und Index-
+  Review-Auditfelder, …). `publication_source` existiert nur bei explizitem
+  Publisher-Modus. Public-Shares sind per
   Link lesbar; private Watch-Snapshots ausschließlich mit Eigentümer-Session.
 - `watches` — owner-gebundene Scheduling-Metadaten (`share_id`, `visibility`,
   Intervall, optionaler `run_weekday` für Weekly sowie lokale `run_time`
   (`HH:MM`) + IANA-`timezone`,
   optional internes `model_tier=free` für Publisher-Watches,
+  denormalisierte `publication_source` für begrenzte Publisher-Kapazitätschecks
+  ohne N+1-Reads der Share-Dokumente,
   optional interne `excluded_providers` (beim Publisher fest `deepseek`),
   `email_mode` = `changes_only|condition|every_run`, private
   `condition`, `last_condition_status`, Status, nächste Ausführung,
@@ -699,6 +756,14 @@ Wichtige Verträge im Backend:
   indexierbare Seite mit `url`, `origin=static_page|share`, optionaler
   `share_id`, `active`, `indexable`, First-/Last-Seen-Zeitstempeln und dem
   minimierten `dossier` (Share-Inhaltsrepräsentation hart auf 3200 Zeichen begrenzt).
+  `metrics_coverage_start|end` markieren ein nachweislich lückenlos
+  persistiertes finales Tagesfenster. Folgeläufe lesen dadurch nicht erneut
+  alle 90 Tagesdokumente je URL, sondern prüfen nur noch Tage außerhalb dieses
+  Wasserstands; alte Datensätze ohne Marker werden einmalig per Dokumentabgleich
+  migriert. Mehrseitige Tagesfenster werden über begrenzte Firestore-`get_all`-
+  Pakete statt einer seriellen Subcollection-Query pro URL geladen; Page-Sync
+  und Coverage-Wasserstände werden ebenfalls gesammelt per Write-Batch
+  persistiert.
   Untercollection `daily_metrics/{YYYY-MM-DD}` ist die idempotente URL-/Tag-
   Einheit mit `url`, `date`, `clicks`, `impressions`, `ctr`, `position`,
   `collected_at`, `source=google_search_console`, `origin` und optionaler
@@ -720,6 +785,11 @@ Wichtige Verträge im Backend:
   validierter LLM-Auswertung und nullable `user_feedback`. Deterministische
   Retries verwenden denselben Hash und überschreiben keinen Eintrag; Admin-UID,
   Secrets und vollständige Share-Inhalte werden nicht gespeichert.
+- `seo_weekly_reviews/{run_id}` — kompakter Portfolio-Snapshot mit Status,
+  Collection-Ergebnis, Summary/Findings, Gruppen, begrenzten Seitenempfehlungen
+  und Fingerprints, damaligem/optional vorgeschlagenem Topic Brief sowie den
+  letzten 50 Action-Audits. Keine Secrets, Owner-UIDs oder vollständigen
+  Share-Inhalte.
 - `differences_stats` — anonyme Differences-Telemetrie (Schema v3): pro erfolgreichem
   Consensus-Lauf ein Dokument mit Zähl-/Strukturdaten (Agreement-Score,
   Widersprüche mit Severity und beteiligten Providern, Modell-Metadaten,
@@ -757,6 +827,11 @@ Wichtige Verträge im Backend:
 - Optionaler SEO-Content-Judge: `SEO_CONTENT_JUDGE_MODEL`; ohne explizites
   Modell bleibt er aus. Bei Aktivierung nutzt er serverseitig
   `DEVELOPER_OPENAI_API_KEY`; der deterministische Judge benötigt beides nicht.
+- Optionaler Portfolio-Judge: `SEO_PORTFOLIO_JUDGE_MODEL` (Fallback auf
+  `SEO_CONTENT_JUDGE_MODEL`) plus `DEVELOPER_OPENAI_API_KEY`; ohne Konfiguration
+  bleibt der Weekly Review vollständig deterministisch.
+- Optional `STARTUP_JOB_TIMEOUT_SECONDS` (Default 15, Clamp 5–60): gemeinsames
+  Readiness-Zeitbudget für die blockierenden Firestore-Startup-Jobs.
 
 Modell-IDs/Tier-Zuordnung/Labels: ausschließlich in `app/core/config.py` pflegen
 (`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
@@ -813,8 +888,9 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **632 passed** (2026-07-20; inklusive der neuen
+  Letzte bekannte Baseline: **647 passed** (2026-07-20; inklusive der neuen
   Search-Console-/SEO-Dossier-, Query-, Recommendation-, LLM-Schema-,
+  Weekly-Portfolio-Review-, Action-, Publisher-Lineage-/Watch-Capacity-,
   Idempotenz- und Admin-Schutztests sowie
   run-basierter Usage-, Consensus-API-Publishing-/Scope-/Vertrags- sowie
   Scheduled-Publisher-Tests).
@@ -863,6 +939,17 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
 `cleanup_expired_pending`, `cleanup_revoked_shares`. Consensus-API-Retention,
 Lease-/Queue-Recovery laufen zusätzlich alle 60 Sekunden; fehlgeschlagene
 API-Account-Löschkaskaden alle fünf Minuten.
+
+**Weekly SEO Review** läuft in einem eigenen Lifespan-Task mit 15-minütigem
+Fälligkeitscheck; `next_run_at` wird aus Intervall, lokaler Uhrzeit und Zeitzone
+DST-fest berechnet. Das persistente Config-/Lease-Dokument ist unabhängig vom
+30-Minuten-Watch-Worker; ein Review führt keine Empfehlung automatisch aus.
+Die synchrone Pipeline läuft außerhalb des asyncio-Event-Loops. Manueller
+Collector und Weekly Review teilen zusätzlich eine prozessweite Nonblocking-
+Sperre, damit ihre GSC-/Firestore-Arbeit nicht parallel denselben Webprozess
+belastet. Latest-Run, Latest-Review und Latest-Query-Snapshot werden in
+Firestore jeweils per sortiertem `limit(1)` statt durch vollständige
+Historien-Scans gelesen.
 
 **Consensus Watch** läuft als eigener asyncio-Lifespan-Task alle 30 Minuten.
 Firestore-Transaktionen claimen einen globalen Worker-Lease, den einzelnen

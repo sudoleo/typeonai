@@ -885,6 +885,32 @@ def test_admin_api_configures_weekly_watch_with_free_provider_tier(monkeypatch):
     assert captured["run_weekday"] == "wednesday"
 
 
+def test_publisher_watch_capacity_returns_successful_skip(monkeypatch):
+    identity = SimpleNamespace(uid="admin-publisher", key_id="e" * 64, scopes=("share:write",))
+    monkeypatch.setattr(
+        api_v1, "api_key_repository",
+        SimpleNamespace(authenticate=lambda key: identity),
+    )
+    monkeypatch.setattr(api_v1, "api_account_cleanup", SimpleNamespace(ensure_active=lambda uid: None))
+    monkeypatch.setattr(api_v1, "is_user_admin", lambda uid: True)
+    monkeypatch.setattr(api_v1.publisher_config, "get_config", lambda: {
+        **api_v1.publisher_config.DEFAULT_CONFIG,
+        "max_active_publisher_watches": 12,
+    })
+    monkeypatch.setattr(api_v1.watch_service, "publisher_watch_counts", lambda: {"active": 12, "paused": 3})
+    monkeypatch.setattr(api_v1.watch_service, "find_watch_for_share", lambda share_id: None)
+    monkeypatch.setattr(
+        api_v1.watch_service, "create_watch",
+        lambda *args, **kwargs: pytest.fail("capacity skip must not create a Watch"),
+    )
+    response = TestClient(main.app).post(
+        f"/api/v1/shares/{'C' * 16}/watch", headers={"X-API-Key": "cns_publisher"}
+    )
+    assert response.status_code == 200
+    assert response.json()["watch_status"] == "watch_skipped_capacity"
+    assert response.json()["watch"] is None
+
+
 def test_direct_indexing_requires_scope_admin_and_returns_indexed_state(monkeypatch):
     share_id = "B" * 16
     identity = SimpleNamespace(

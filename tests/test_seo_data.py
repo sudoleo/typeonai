@@ -65,9 +65,15 @@ class FakeCollection:
 class FakeFirestore:
     def __init__(self):
         self.documents = {}
+        self.get_all_calls = []
 
     def collection(self, name):
         return FakeCollection(self, (name,))
+
+    def get_all(self, references):
+        references = list(references)
+        self.get_all_calls.append(len(references))
+        return [reference.get() for reference in references]
 
 
 class FakeSearchConsoleClient:
@@ -205,14 +211,22 @@ def test_collection_is_idempotent_and_skips_already_finalized_days():
 
     first = service.collect()
     calls_after_first = list(client.calls)
+    batch_reads_after_first = list(db.get_all_calls)
+    service.repository.existing_metric_dates = lambda *args, **kwargs: (_ for _ in ()).throw(
+        AssertionError("coverage watermark should avoid rescanning daily metrics")
+    )
     second = service.collect()
 
     assert first["metrics_written"] == 90
     assert second["metrics_written"] == 0
     assert second["days_collected"] == 0
     assert client.calls == calls_after_first
+    assert db.get_all_calls == batch_reads_after_first
     metric_paths = [path for path in db.documents if "daily_metrics" in path]
     assert len(metric_paths) == 90
+    page = db.documents[("seo_pages", page_id_for_url(PAGE_URL))]
+    assert page["metrics_coverage_start"] == "2026-04-19"
+    assert page["metrics_coverage_end"] == "2026-07-17"
 
 
 def test_truncated_ranges_do_not_persist_omitted_rows_as_zeroes():
@@ -406,8 +420,17 @@ def test_admin_endpoints_require_admin(monkeypatch):
         def ask_content_judge(self, page_id):
             return {"page_id": page_id, "recommendation": "monitor", "llm_evaluation": {}}
 
+    class StubWeeklyReviewService:
+        def status(self): return {"config": {"enabled": True, "interval_days": 7}}
+        def save_config(self, **kwargs): return self.status()
+        def run(self, **kwargs): return {"status": "completed", "run_id": "a" * 32}
+        def preview(self, run_id, **kwargs): return {"run_id": run_id, "pages": []}
+        def apply(self, run_id, **kwargs): return {"run_id": run_id, "results": []}
+        def accept_topic_brief(self, run_id, **kwargs): return {"status": "success"}
+
     monkeypatch.setattr(admin_router, "seo_data_service", StubSeoService())
     monkeypatch.setattr(admin_router, "seo_recommendation_service", StubRecommendationService())
+    monkeypatch.setattr(admin_router, "seo_weekly_review_service", StubWeeklyReviewService())
     monkeypatch.setattr(admin_router, "verify_user_token", lambda token: "uid-1")
     monkeypatch.setattr(admin_router, "is_user_admin", lambda uid: False)
     app = FastAPI()
@@ -418,6 +441,12 @@ def test_admin_endpoints_require_admin(monkeypatch):
     assert client.get("/api/admin/seo", headers={"Authorization": "Bearer token"}).status_code == 403
     assert client.post("/api/admin/seo/check", headers={"Authorization": "Bearer token"}).status_code == 403
     assert client.post("/api/admin/seo/collect", headers={"Authorization": "Bearer token"}).status_code == 403
+    assert client.get("/api/admin/seo/review", headers={"Authorization": "Bearer token"}).status_code == 403
+    assert client.put("/api/admin/seo/review/config", headers={"Authorization": "Bearer token"}, json={"enabled": True, "interval_days": 7}).status_code == 403
+    assert client.post("/api/admin/seo/review/run", headers={"Authorization": "Bearer token"}).status_code == 403
+    assert client.post(f"/api/admin/seo/reviews/{'a' * 32}/preview", headers={"Authorization": "Bearer token"}, json={}).status_code == 403
+    assert client.post(f"/api/admin/seo/reviews/{'a' * 32}/apply", headers={"Authorization": "Bearer token"}, json={}).status_code == 403
+    assert client.post(f"/api/admin/seo/reviews/{'a' * 32}/topic-brief/accept", headers={"Authorization": "Bearer token"}).status_code == 403
     page_id = "a" * 64
     assert client.post(
         f"/api/admin/seo/pages/{page_id}/recommendation",
@@ -432,6 +461,12 @@ def test_admin_endpoints_require_admin(monkeypatch):
     assert client.get("/api/admin/seo", headers={"Authorization": "Bearer token"}).status_code == 200
     assert client.post("/api/admin/seo/check", headers={"Authorization": "Bearer token"}).status_code == 200
     assert client.post("/api/admin/seo/collect", headers={"Authorization": "Bearer token"}).status_code == 200
+    assert client.get("/api/admin/seo/review", headers={"Authorization": "Bearer token"}).status_code == 200
+    assert client.put("/api/admin/seo/review/config", headers={"Authorization": "Bearer token"}, json={"enabled": True, "interval_days": 7}).status_code == 200
+    assert client.post("/api/admin/seo/review/run", headers={"Authorization": "Bearer token"}).status_code == 200
+    assert client.post(f"/api/admin/seo/reviews/{'a' * 32}/preview", headers={"Authorization": "Bearer token"}, json={}).status_code == 200
+    assert client.post(f"/api/admin/seo/reviews/{'a' * 32}/apply", headers={"Authorization": "Bearer token"}, json={}).status_code == 200
+    assert client.post(f"/api/admin/seo/reviews/{'a' * 32}/topic-brief/accept", headers={"Authorization": "Bearer token"}).status_code == 200
     assert client.post(
         f"/api/admin/seo/pages/{page_id}/recommendation",
         headers={"Authorization": "Bearer token"},
@@ -455,6 +490,16 @@ def test_admin_seo_collect_action_is_hidden_until_admin_request_succeeds():
     assert "Generate recommendation" in template
     assert "Ask content judge" in template
     assert "/api/admin/seo/pages/${encodeURIComponent(pageId)}/${suffix}" in template
+    assert 'id="runSeoReviewBtn"' in template
+    assert "'/api/admin/seo/review/run'" in template
+    assert "/api/admin/seo/reviews/${encodeURIComponent(runId)}/preview" in template
+    assert "/api/admin/seo/reviews/${encodeURIComponent(runId)}/apply" in template
+    assert "Apply all safe recommendations" in template
+    assert "Accept suggested Topic Brief" in template
+    assert 'id="seoReviewTime" type="time"' in template
+    assert 'id="seoReviewTimezone"' in template
+    assert "Completed in this review" in template
+    assert "This only records that you reviewed these pages" in template
     assert 'os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", "gen-lang-client-0234219247-53b2b1c0e355.json")' in main_source
     assert "GSC_SERVICE_ACCOUNT_JSON" not in main_source
 
@@ -687,6 +732,26 @@ def test_journal_generation_is_idempotent_and_append_only():
     assert len(journal_paths) == 1
     assert db.documents[journal_paths[0]]["user_feedback"] is None
     assert "content_representation" not in db.documents[journal_paths[0]]["dossier_summary"]
+
+
+def test_weekly_review_can_generate_for_historically_captured_inactive_pages():
+    db = FakeFirestore()
+    page_id = page_id_for_url(PAGE_URL)
+    page = recommendation_page()
+    page["active"] = False
+    db.documents[("seo_pages", page_id)] = page
+    service = seo_recommendation.SeoRecommendationService(
+        repository=FirestoreSeoRepository(db), clock=lambda: NOW,
+    )
+
+    try:
+        service.generate(page_id)
+        assert False, "normal per-page admin generation should remain active-only"
+    except seo_recommendation.SeoRecommendationError as exc:
+        assert exc.code == "not_found"
+
+    result = service.generate(page_id, include_inactive=True)
+    assert result["recommendation"] in seo_recommendation.RECOMMENDATIONS
 
 
 def test_llm_json_validation_is_strict_and_cannot_bypass_noindex_safeguards():

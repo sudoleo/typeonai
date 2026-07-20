@@ -22,6 +22,7 @@ from urllib.parse import urlsplit
 
 from cachetools import TTLCache
 from firebase_admin import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 import app.core.config as cfg
 from app.core.security import db_firestore
@@ -29,6 +30,14 @@ from app.services import opinion_map
 
 PENDING_COLLECTION = "pending_results"
 SHARES_COLLECTION = "shares"
+
+
+def _where(collection, field: str, operator: str, value):
+    """Use keyword filters without breaking lightweight Firestore doubles."""
+    try:
+        return collection.where(filter=FieldFilter(field, operator, value))
+    except TypeError:
+        return collection.where(field, operator, value)
 
 # Hinweis Betrieb: Für pending_results sollte zusätzlich eine Firestore-
 # TTL-Policy auf dem Feld "expires_at" konfiguriert werden; bis dahin räumt
@@ -671,6 +680,7 @@ def _build_share_document(
     visibility,
     source_result_id="",
     source_api_run_id="",
+    publication_source="",
 ):
     question = payload.get("question") or ""
     consensus_md = payload.get("consensus_md") or ""
@@ -702,6 +712,8 @@ def _build_share_document(
         document["source_result_id"] = source_result_id
     if source_api_run_id:
         document["source_api_run_id"] = source_api_run_id
+    if publication_source:
+        document["publication_source"] = _clip(publication_source, 40)
     return document
 
 
@@ -784,6 +796,10 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
         payload,
         visibility="public",
         source_api_run_id=run_id,
+        publication_source=(
+            "scheduled_publisher"
+            if bool((run.get("request") or {}).get("publisher_mode")) else ""
+        ),
     )
     db.collection(SHARES_COLLECTION).document(share_id).set(share_doc)
     return {
@@ -1136,8 +1152,7 @@ def cleanup_revoked_shares(db=None, max_docs=500):
     db = db if db is not None else db_firestore
     cutoff = _utcnow() - timedelta(days=REVOKED_RETENTION_DAYS)
     docs = (
-        db.collection(SHARES_COLLECTION)
-        .where("status", "==", "revoked")
+        _where(db.collection(SHARES_COLLECTION), "status", "==", "revoked")
         .limit(max_docs)
         .stream()
     )
@@ -1170,8 +1185,7 @@ def find_canonical_share(question_hash_value, db=None, max_candidates=50):
         return _canonical_cache[question_hash_value]
     db = db if db is not None else db_firestore
     docs = (
-        db.collection(SHARES_COLLECTION)
-        .where("question_hash", "==", question_hash_value)
+        _where(db.collection(SHARES_COLLECTION), "question_hash", "==", question_hash_value)
         .stream()
     )
     best = None
@@ -1197,8 +1211,7 @@ def list_indexed_share_urls(db=None, max_items=1000):
     """URLs für sitemap-shares.xml: nur indexed == True und status == active."""
     db = db if db is not None else db_firestore
     docs = (
-        db.collection(SHARES_COLLECTION)
-        .where("indexed", "==", True)
+        _where(db.collection(SHARES_COLLECTION), "indexed", "==", True)
         .limit(max_items)
         .stream()
     )
@@ -1251,8 +1264,7 @@ def list_related_shares(exclude_share_id, question, db=None, limit=4, scan_limit
     db = db if db is not None else db_firestore
     query_tokens = _question_tokens(question)
     docs = (
-        db.collection(SHARES_COLLECTION)
-        .where("indexed", "==", True)
+        _where(db.collection(SHARES_COLLECTION), "indexed", "==", True)
         .limit(scan_limit)
         .stream()
     )
@@ -1302,8 +1314,7 @@ def list_hub_shares(db=None, max_items=1000):
 
     db = db if db is not None else db_firestore
     docs = (
-        db.collection(SHARES_COLLECTION)
-        .where("indexed", "==", True)
+        _where(db.collection(SHARES_COLLECTION), "indexed", "==", True)
         .limit(max_items)
         .stream()
     )
@@ -1398,7 +1409,7 @@ def report_share(share_id, reason, db=None):
 
 def list_shares_for_owner(uid, db=None, max_items=200):
     db = db if db is not None else db_firestore
-    docs = db.collection(SHARES_COLLECTION).where("owner_uid", "==", uid).stream()
+    docs = _where(db.collection(SHARES_COLLECTION), "owner_uid", "==", uid).stream()
     shares = []
     for doc in docs:
         data = doc.to_dict() or {}
@@ -1500,8 +1511,7 @@ def cleanup_expired_pending(db=None, max_docs=500):
     """Aufräum-Fallback beim App-Start (zusätzlich zur Firestore-TTL-Policy)."""
     db = db if db is not None else db_firestore
     docs = (
-        db.collection(PENDING_COLLECTION)
-        .where("expires_at", "<", _utcnow())
+        _where(db.collection(PENDING_COLLECTION), "expires_at", "<", _utcnow())
         .limit(max_docs)
         .stream()
     )

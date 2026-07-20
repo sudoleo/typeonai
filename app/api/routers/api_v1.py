@@ -514,6 +514,17 @@ def create_api_publisher_watch(
             raise HTTPException(
                 status_code=409, detail="Weekly watches are disabled in Publisher configuration"
             )
+        counts = watch_service.publisher_watch_counts()
+        limit = int(config.get("max_active_publisher_watches") or 12)
+        existing = watch_service.find_watch_for_share(share_id)
+        if counts["active"] >= limit and not existing:
+            return {
+                "status": "success",
+                "watch": None,
+                "watch_status": "watch_skipped_capacity",
+                "active_publisher_watches": counts["active"],
+                "watch_limit": limit,
+            }
         watch = watch_service.create_watch(
             identity.uid,
             share_id=share_id,
@@ -545,7 +556,7 @@ def create_api_publisher_watch(
     except Exception:
         logging.exception("Consensus API publisher Watch creation failed: %s", share_id)
         raise HTTPException(status_code=500, detail="Failed to create weekly Watch") from None
-    return {"status": "success", "watch": watch}
+    return {"status": "success", "watch": watch, "watch_status": "watch_created"}
 
 
 @router.put(

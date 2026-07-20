@@ -259,6 +259,7 @@
             font-weight: 600;
         }
         .admin-btn.secondary:hover { color: var(--text-color) !important; }
+        .admin-btn.danger { border-color: #b84848; color: #ffb2b2; background: rgba(184, 72, 72, 0.12); }
 
         /* Consensus-Tab */
         .deepthink-card { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
@@ -537,6 +538,16 @@
         .seo-history { margin-top: 7px; font-size: 0.9em; }
         .seo-history summary { cursor: pointer; color: var(--sidebar-text-muted); }
         .seo-query-list { margin-top: 5px; font-size: 0.78em; color: var(--sidebar-text-muted); }
+        .seo-review-panel { margin: 18px 0; padding: 16px; border: var(--card-border); border-radius: var(--radius-md); background: var(--chip-bg); }
+        .seo-review-groups { display: grid; gap: 12px; margin-top: 14px; }
+        .seo-review-group { padding: 12px; border: 1px solid var(--input-border); border-radius: var(--radius-sm); background: var(--input-bg); }
+        .seo-review-group-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+        .seo-review-pages { display: grid; gap: 7px; margin-top: 9px; }
+        .seo-review-page { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 8px; align-items: start; font-size: 0.84em; }
+        .seo-review-page small { grid-column: 2; color: var(--sidebar-text-muted); overflow-wrap: anywhere; }
+        .seo-topic-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+        .seo-topic-diff pre { margin: 5px 0; padding: 10px; max-height: 260px; overflow: auto; white-space: pre-wrap; border: 1px solid var(--input-border); border-radius: var(--radius-sm); font: inherit; font-size: 0.78em; }
+        .seo-review-completed-list { display: grid; gap: 6px; margin-top: 8px; font-size: 0.82em; color: var(--sidebar-text-muted); }
 
         .admin-tab-panel[hidden] { display: none; }
 
@@ -557,6 +568,7 @@
             .watch-model-provider { margin-top: 8px; }
             .admin-savebar { top: 58px; flex-wrap: wrap; }
             .seo-summary-grid { grid-template-columns: 1fr; }
+            .seo-topic-diff { grid-template-columns: 1fr; }
         }
     </style>
     <script type="module">
@@ -1691,6 +1703,7 @@
                 document.getElementById('publisherWatchWeekday').value = config.watch_weekday || 'tuesday';
                 document.getElementById('publisherWatchTime').value = config.watch_time || '09:00';
                 document.getElementById('publisherWatchTimezone').value = config.watch_timezone || 'Europe/Berlin';
+                document.getElementById('publisherWatchLimit').value = config.max_active_publisher_watches || 12;
                 document.getElementById('publisherWatchProfile').textContent =
                     `${config.watch_interval || 'weekly'} · ${config.watch_model_tier || 'free'} Watch providers · DeepSeek excluded`;
                 syncPublisherWatchFields();
@@ -1712,7 +1725,8 @@
                     weekly_watch_enabled: document.getElementById('publisherWeeklyWatch').checked,
                     watch_weekday: document.getElementById('publisherWatchWeekday').value,
                     watch_time: document.getElementById('publisherWatchTime').value,
-                    watch_timezone: document.getElementById('publisherWatchTimezone').value.trim()
+                    watch_timezone: document.getElementById('publisherWatchTimezone').value.trim(),
+                    max_active_publisher_watches: Number(document.getElementById('publisherWatchLimit').value || 12)
                 };
                 await shareAdminRequest('PUT', '/api/admin/publisher-config', payload);
                 publisherStatus('Publisher configuration saved.', false);
@@ -2056,6 +2070,7 @@
             const judgeState = document.getElementById('seoContentJudgeState');
             judgeState.textContent = judge.configured ? 'configured' : 'not configured';
             judgeState.title = judge.message || '';
+            renderSeoWeeklyReview(data.weekly_review || {});
 
             const body = document.getElementById('seoTableBody');
             body.textContent = '';
@@ -2169,6 +2184,250 @@
             document.getElementById('seoRules').textContent = Object.entries(data.status_rules || {})
                 .map(([name, definition]) => `${name}: ${definition}`).join(' · ');
         }
+
+        const SEO_GROUP_LABELS = {
+            keep_indexed: 'Keep indexed',
+            pause_watch_only: 'Pause Watch only',
+            resume_watch: 'Resume Watch',
+            noindex_only: 'Noindex only',
+            noindex_and_pause_watch: 'Noindex and pause Watch',
+            delete_candidate: 'Delete candidate',
+            manual_improvement: 'Manual improvement'
+        };
+        const SEO_GROUP_BUTTONS = {
+            keep_indexed: 'Mark selected reviewed',
+            pause_watch_only: 'Pause selected Watches',
+            resume_watch: 'Resume selected Watches',
+            noindex_only: 'Set selected noindex',
+            noindex_and_pause_watch: 'Noindex + pause selected',
+            delete_candidate: 'Delete selected candidates',
+            manual_improvement: 'Mark selected reviewed'
+        };
+        const SEO_SAFE_APPLY_GROUPS = new Set([
+            'keep_indexed', 'pause_watch_only', 'resume_watch',
+            'noindex_only', 'noindex_and_pause_watch'
+        ]);
+
+        function appendSeoText(parent, tag, text, className) {
+            const node = document.createElement(tag);
+            node.textContent = text || '';
+            if (className) node.className = className;
+            parent.appendChild(node);
+            return node;
+        }
+
+        function formatSeoScheduleTime(value, timezone) {
+            if (!value) return '';
+            try {
+                return `${new Date(value).toLocaleString(undefined, { timeZone: timezone })} (${timezone})`;
+            } catch (_err) {
+                return new Date(value).toLocaleString();
+            }
+        }
+
+        function renderSeoWeeklyReview(status) {
+            const config = status.config || {};
+            const review = status.latest_review || {};
+            const watches = status.publisher_watches || {};
+            document.getElementById('seoReviewEnabled').checked = !!config.enabled;
+            document.getElementById('seoReviewInterval').value = config.interval_days || 7;
+            document.getElementById('seoReviewTime').value = config.run_time || '09:00';
+            document.getElementById('seoReviewTimezone').value = config.timezone || 'Europe/Berlin';
+            document.getElementById('seoReviewLast').textContent = config.last_run_at
+                ? formatSeoScheduleTime(config.last_run_at, config.timezone || 'Europe/Berlin') : 'never';
+            document.getElementById('seoReviewNext').textContent = config.next_run_at
+                ? formatSeoScheduleTime(config.next_run_at, config.timezone || 'Europe/Berlin') : 'not scheduled';
+            document.getElementById('seoPortfolioJudge').textContent = (status.judge || {}).configured
+                ? `configured${status.judge.model ? ` (${status.judge.model})` : ''}` : 'not configured';
+            document.getElementById('seoPublisherWatchCount').textContent =
+                `${watches.active || 0} active / ${watches.paused || 0} paused / limit ${watches.limit || 12}`;
+            document.getElementById('seoSearchRules').textContent = status.search_opportunity_rules || '';
+            document.getElementById('runSeoReviewBtn').disabled = !!status.running;
+            document.getElementById('seoReviewSummary').textContent = review.summary || 'No weekly review yet.';
+            const groupsContainer = document.getElementById('seoReviewGroups');
+            groupsContainer.textContent = '';
+            const pages = new Map((review.pages || []).map(page => [page.page_id, page]));
+            const completed = new Map();
+            (review.applied_actions || []).forEach(action => {
+                (action.results || []).forEach(result => {
+                    if (result.status === 'success') {
+                        completed.set(result.page_id, { result, applied_at: action.applied_at, group: action.group });
+                    }
+                });
+            });
+            let pendingSafeCount = 0;
+            let pendingSafeOnlyReviews = true;
+            Object.entries(SEO_GROUP_LABELS).forEach(([group, label]) => {
+                const ids = ((review.groups || {})[group] || []).filter(id => !completed.has(id));
+                if (!ids.length) return;
+                if (SEO_SAFE_APPLY_GROUPS.has(group)) {
+                    pendingSafeCount += ids.length;
+                    if (group !== 'keep_indexed') pendingSafeOnlyReviews = false;
+                }
+                const box = document.createElement('div');
+                box.className = 'seo-review-group';
+                const head = document.createElement('div');
+                head.className = 'seo-review-group-head';
+                appendSeoText(head, 'strong', `${label} (${ids.length})`);
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = group === 'delete_candidate' ? 'admin-btn danger' : 'admin-btn secondary';
+                button.textContent = SEO_GROUP_BUTTONS[group] || label;
+                button.addEventListener('click', () => applySeoReviewGroup(review.run_id, group, box, button));
+                head.appendChild(button);
+                box.appendChild(head);
+                const list = document.createElement('div');
+                list.className = 'seo-review-pages';
+                ids.forEach(id => {
+                    const page = pages.get(id) || {};
+                    const row = document.createElement('label');
+                    row.className = 'seo-review-page';
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.checked = true;
+                    checkbox.dataset.pageId = id;
+                    row.appendChild(checkbox);
+                    appendSeoText(row, 'span', page.title || page.url || id);
+                    appendSeoText(
+                        row, 'small',
+                        `${page.indexed ? 'indexed' : 'noindex'} · Watch ${page.watch_status || 'none'} · ${page.recommendation || ''}`
+                    );
+                    list.appendChild(row);
+                });
+                box.appendChild(list);
+                groupsContainer.appendChild(box);
+            });
+            const applyAll = document.getElementById('applyAllSeoReviewBtn');
+            applyAll.hidden = !review.run_id || pendingSafeCount === 0;
+            applyAll.dataset.runId = review.run_id || '';
+            applyAll.textContent = pendingSafeOnlyReviews
+                ? `Mark ${pendingSafeCount} pages reviewed`
+                : `Apply ${pendingSafeCount} safe recommendations`;
+            document.getElementById('seoReviewProgress').textContent = review.run_id
+                ? `${pendingSafeCount} safe actions still open · ${completed.size} pages completed in this review.`
+                : 'No review progress yet.';
+            const completedPanel = document.getElementById('seoReviewCompleted');
+            const completedList = document.getElementById('seoReviewCompletedList');
+            completedList.textContent = '';
+            completedPanel.hidden = completed.size === 0;
+            completed.forEach((entry, id) => {
+                const page = pages.get(id) || {};
+                const row = appendSeoText(
+                    completedList, 'div',
+                    `✓ ${page.title || page.url || id} · ${SEO_GROUP_LABELS[page.group] || page.group || 'completed'}`,
+                    'seo-review-page'
+                );
+                row.title = entry.applied_at ? new Date(entry.applied_at).toLocaleString() : '';
+            });
+            renderSeoTopicBrief(review, pages);
+        }
+
+        function renderSeoTopicBrief(review, pages) {
+            const panel = document.getElementById('seoTopicBriefPanel');
+            const proposed = review.proposed_topic_brief || '';
+            panel.hidden = !proposed;
+            if (!proposed) return;
+            document.getElementById('seoCurrentTopicBrief').textContent = review.current_topic_brief || '';
+            document.getElementById('seoProposedTopicBrief').textContent = proposed;
+            document.getElementById('seoTopicBriefReason').textContent = review.topic_brief_reason || '';
+            document.getElementById('seoTopicBriefEvidence').textContent = (review.topic_brief_evidence_page_ids || [])
+                .map(id => (pages.get(id) || {}).title || (pages.get(id) || {}).url || id).join(' · ');
+            document.getElementById('acceptSeoTopicBriefBtn').disabled = !!review.topic_brief_accepted_at;
+            document.getElementById('acceptSeoTopicBriefBtn').dataset.runId = review.run_id || '';
+        }
+
+        async function previewAndApplySeoReview(runId, payload, confirmDelete) {
+            const preview = await shareAdminRequest('POST', `/api/admin/seo/reviews/${encodeURIComponent(runId)}/preview`, payload);
+            const lines = (preview.pages || []).map(page =>
+                `• ${page.title || page.url}\n  index: ${page.current_indexed ? 'indexed' : 'noindex'}; Watch: ${page.current_watch_status}; planned: ${page.planned_action}`
+            );
+            const warning = confirmDelete
+                ? '\n\nDeleting affects the Share, Watch, history, and followers and cannot be undone.' : '';
+            const reviewOnly = (preview.pages || []).every(page => page.planned_action === 'mark_reviewed');
+            const explanation = reviewOnly
+                ? '\n\nThis only records that you reviewed these pages. Indexing, Watches, and content remain unchanged.'
+                : '';
+            if (!lines.length || !confirm(`Apply these actions?\n\n${lines.join('\n')}${explanation}${warning}`)) return null;
+            return shareAdminRequest('POST', `/api/admin/seo/reviews/${encodeURIComponent(runId)}/apply`, {
+                ...payload,
+                confirm_delete: !!confirmDelete
+            });
+        }
+
+        async function applySeoReviewGroup(runId, group, box, button) {
+            const pageIds = [...box.querySelectorAll('input[data-page-id]:checked')].map(input => input.dataset.pageId);
+            if (!pageIds.length) return;
+            button.disabled = true;
+            try {
+                const result = await previewAndApplySeoReview(runId, { group, page_ids: pageIds, apply_all: false }, group === 'delete_candidate');
+                if (result) {
+                    const failed = (result.results || []).filter(item => item.status !== 'success');
+                    seoStatus(`Weekly review action finished: ${(result.results || []).length - failed.length} succeeded, ${failed.length} failed.`, failed.length > 0);
+                    await loadSeoOverview();
+                }
+            } catch (err) {
+                seoStatus(err.message, true);
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        document.getElementById('saveSeoReviewConfigBtn').addEventListener('click', async function () {
+            this.disabled = true;
+            try {
+                await shareAdminRequest('PUT', '/api/admin/seo/review/config', {
+                    enabled: document.getElementById('seoReviewEnabled').checked,
+                    interval_days: Number(document.getElementById('seoReviewInterval').value || 7),
+                    run_time: document.getElementById('seoReviewTime').value || '09:00',
+                    timezone: document.getElementById('seoReviewTimezone').value.trim() || 'Europe/Berlin'
+                });
+                seoStatus('Weekly review configuration saved.', false);
+                await loadSeoOverview();
+            } catch (err) {
+                seoStatus(err.message, true);
+            } finally { this.disabled = false; }
+        });
+
+        document.getElementById('runSeoReviewBtn').addEventListener('click', async function () {
+            if (!confirm('Run Search Console collection and the weekly portfolio review now? At most one portfolio Judge call may be made.')) return;
+            this.disabled = true;
+            seoStatus('Running weekly SEO review…', false);
+            try {
+                const result = await shareAdminRequest('POST', '/api/admin/seo/review/run', {});
+                seoStatus(result.summary || result.status, result.status === 'error' || result.status === 'collection_failed');
+                await loadSeoOverview();
+            } catch (err) {
+                seoStatus(err.message, true);
+            } finally { this.disabled = false; }
+        });
+
+        document.getElementById('applyAllSeoReviewBtn').addEventListener('click', async function () {
+            const runId = this.dataset.runId || '';
+            if (!runId) return;
+            this.disabled = true;
+            try {
+                const result = await previewAndApplySeoReview(runId, { apply_all: true, page_ids: [] }, false);
+                if (result) {
+                    const failed = (result.results || []).filter(item => item.status !== 'success');
+                    seoStatus(`Safe recommendations: ${(result.results || []).length - failed.length} succeeded, ${failed.length} failed.`, failed.length > 0);
+                    await loadSeoOverview();
+                }
+            } catch (err) { seoStatus(err.message, true); }
+            finally { this.disabled = false; }
+        });
+
+        document.getElementById('acceptSeoTopicBriefBtn').addEventListener('click', async function () {
+            const runId = this.dataset.runId;
+            if (!runId || !confirm('Replace only the current Topic Brief with this suggestion? Other Publisher settings stay unchanged.')) return;
+            this.disabled = true;
+            try {
+                await shareAdminRequest('POST', `/api/admin/seo/reviews/${encodeURIComponent(runId)}/topic-brief/accept`, {});
+                seoStatus('Suggested Topic Brief accepted.', false);
+                await loadPublisherConfig();
+                await loadSeoOverview();
+            } catch (err) { seoStatus(err.message, true); }
+            finally { this.disabled = false; }
+        });
 
         async function runSeoRecommendation(pageId, useContentJudge, button) {
             button.disabled = true;
@@ -2423,6 +2682,10 @@
                         <label for="publisherWatchTimezone">IANA timezone</label>
                         <input id="publisherWatchTimezone" type="text" maxlength="64" value="Europe/Berlin" spellcheck="false">
                     </div>
+                    <div class="api-key-field">
+                        <label for="publisherWatchLimit">Maximum active Publisher Watches</label>
+                        <input id="publisherWatchLimit" type="number" min="1" max="100" value="12">
+                    </div>
                 </div>
                 <div class="publisher-config-actions">
                     <button id="savePublisherConfigBtn" type="button" class="admin-btn">Save Publisher</button>
@@ -2562,6 +2825,49 @@
                 </div>
                 <p class="section-hint">Latest finalized date: <strong id="seoFinalDate">–</strong> · Optional content judge: <strong id="seoContentJudgeState">unknown</strong></p>
                 <p id="seoDisclaimer" class="section-hint"></p>
+                <div class="seo-review-panel">
+                    <div class="seo-review-group-head">
+                        <div>
+                            <h3 style="margin: 0 0 5px;">Weekly portfolio review</h3>
+                            <p class="section-hint" style="margin: 0;">No action or Topic Brief change is automatic. Indexing and Watch status stay independent.</p>
+                        </div>
+                        <div class="watch-admin-toolbar" style="margin: 0;">
+                            <label><input id="seoReviewEnabled" type="checkbox"> enabled</label>
+                            <label>Every <input id="seoReviewInterval" type="number" min="1" max="90" value="7" style="width: 62px;"> days</label>
+                            <label>at <input id="seoReviewTime" type="time" value="09:00"></label>
+                            <label>timezone <input id="seoReviewTimezone" type="text" maxlength="64" value="Europe/Berlin" style="width: 130px;" spellcheck="false"></label>
+                            <button id="saveSeoReviewConfigBtn" type="button" class="admin-btn secondary">Save schedule</button>
+                            <button id="runSeoReviewBtn" type="button" class="admin-btn">Run now</button>
+                        </div>
+                    </div>
+                    <div class="seo-summary-grid">
+                        <div class="seo-summary-card"><span>Last review</span><strong id="seoReviewLast">never</strong><span>Next: <span id="seoReviewNext">not scheduled</span></span></div>
+                        <div class="seo-summary-card"><span>Portfolio Judge</span><strong id="seoPortfolioJudge">unknown</strong></div>
+                        <div class="seo-summary-card"><span>Publisher Watches</span><strong id="seoPublisherWatchCount">0 / 12</strong></div>
+                        <div class="seo-summary-card"><span>Assessment at run time</span><strong id="seoReviewSummary">No weekly review yet.</strong></div>
+                    </div>
+                    <p id="seoReviewProgress" class="section-hint">No review progress yet.</p>
+                    <button id="applyAllSeoReviewBtn" type="button" class="admin-btn" hidden>Apply all safe recommendations</button>
+                    <div id="seoReviewGroups" class="seo-review-groups"></div>
+                    <details id="seoReviewCompleted" hidden style="margin-top: 12px;">
+                        <summary>Completed in this review</summary>
+                        <div id="seoReviewCompletedList" class="seo-review-completed-list"></div>
+                    </details>
+                    <div id="seoTopicBriefPanel" class="seo-review-panel" hidden>
+                        <h4 style="margin-top: 0;">Suggested Publisher Topic Brief</h4>
+                        <p id="seoTopicBriefReason" class="section-hint"></p>
+                        <p class="section-hint"><strong>Evidence:</strong> <span id="seoTopicBriefEvidence"></span></p>
+                        <div class="seo-topic-diff">
+                            <div><strong>Current</strong><pre id="seoCurrentTopicBrief"></pre></div>
+                            <div><strong>Proposed</strong><pre id="seoProposedTopicBrief"></pre></div>
+                        </div>
+                        <button id="acceptSeoTopicBriefBtn" type="button" class="admin-btn">Accept suggested Topic Brief</button>
+                    </div>
+                    <details style="margin-top: 12px;">
+                        <summary>Read-only hard-coded search opportunity rules</summary>
+                        <p id="seoSearchRules" class="section-hint"></p>
+                    </details>
+                </div>
                 <div class="seo-table-wrap">
                     <table class="seo-table">
                         <thead>

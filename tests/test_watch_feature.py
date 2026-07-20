@@ -199,6 +199,7 @@ class WatchCrudTests(unittest.TestCase):
             watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", is_pro=True, db=self.db)
 
     def test_publisher_watch_is_free_pinned_and_idempotent(self):
+        self.db.stores["shares"][self.share_id]["publication_source"] = "scheduled_publisher"
         created = watch_service.create_watch(
             "u1", share_id=self.share_id, interval="weekly", is_pro=True,
             model_tier="free", return_existing=True,
@@ -214,6 +215,14 @@ class WatchCrudTests(unittest.TestCase):
         self.assertEqual(created["model_tier"], "free")
         self.assertEqual(created["excluded_providers"], ["deepseek"])
         self.assertEqual(self.db.stores["watches"][created["id"]]["model_tier"], "free")
+        self.assertEqual(
+            self.db.stores["watches"][created["id"]]["publication_source"],
+            "scheduled_publisher",
+        )
+        self.assertEqual(
+            watch_service.publisher_watch_counts(db=self.db),
+            {"active": 1, "paused": 0},
+        )
         self.db.stores["watches"][created["id"]].pop("excluded_providers")
         self.assertEqual(
             watch_service.list_watches("u1", db=self.db)[0]["excluded_providers"],
@@ -701,6 +710,10 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
             patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
             patch.object(watch_scheduler.security, "is_user_pro", return_value=False),
+            patch.object(watch_scheduler.share_snapshots, "get_share", return_value={
+                "status": "active", "slug": "q", "question": "Q", "consensus_md": "Old",
+            }),
+            patch.object(watch_scheduler.share_snapshots, "list_watch_history", return_value=[]),
             patch.object(watch_scheduler, "execute_watch", side_effect=RuntimeError("provider failed")),
             patch.object(watch_service, "fail_watch_run", side_effect=[False, False, True]),
             patch.object(watch_scheduler, "_send_paused_mail", new_callable=AsyncMock) as send_paused,
@@ -727,6 +740,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
             patch.object(watch_scheduler.security, "is_user_pro", return_value=True) as pro_check,
             patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
+            patch.object(watch_scheduler.share_snapshots, "list_watch_history", return_value=[]),
             patch.object(watch_scheduler, "execute_watch", return_value=result),
             patch.object(watch_service, "complete_watch_run"),
             patch.object(watch_scheduler, "_send_run_mail", new_callable=AsyncMock) as send_run,
@@ -755,6 +769,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             patch.object(watch_service, "claim_watch", return_value=(dict(claimed), "claimed")),
             patch.object(watch_scheduler.security, "is_user_pro", side_effect=[False, True]),
             patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
+            patch.object(watch_scheduler.share_snapshots, "list_watch_history", return_value=[]),
             patch.object(watch_scheduler, "execute_watch", return_value=result) as execute,
             patch.object(watch_service, "complete_watch_run"),
         ):
@@ -782,6 +797,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
             patch.object(watch_scheduler.security, "is_user_pro", return_value=True),
             patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
+            patch.object(watch_scheduler.share_snapshots, "list_watch_history", return_value=[]),
             patch.object(watch_scheduler, "execute_watch", return_value=result) as execute,
             patch.object(watch_service, "complete_watch_run"),
         ):

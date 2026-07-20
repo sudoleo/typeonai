@@ -15,6 +15,7 @@ from app.services import (
     publisher_config,
     seo_data,
     seo_recommendation,
+    seo_weekly_review,
     watch_scheduler,
     watch_service,
 )
@@ -30,6 +31,7 @@ api_key_repository = FirestoreApiKeyRepository(db_firestore)
 api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
 seo_data_service = seo_data.SeoDataService(db_firestore)
 seo_recommendation_service = seo_recommendation.SeoRecommendationService(db_firestore)
+seo_weekly_review_service = seo_weekly_review.default_service
 
 
 class AdminIssueApiKeyRequest(BaseModel):
@@ -54,6 +56,28 @@ class AdminPublisherConfigRequest(BaseModel):
     ]
     watch_time: str = Field(min_length=5, max_length=5)
     watch_timezone: str = Field(min_length=1, max_length=64)
+    max_active_publisher_watches: int = Field(default=12, ge=1, le=100)
+
+
+class AdminSeoReviewConfigRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    enabled: bool
+    interval_days: int = Field(default=7, ge=1, le=90)
+    run_time: str = Field(default="09:00", min_length=5, max_length=5)
+    timezone: str = Field(default="Europe/Berlin", min_length=1, max_length=64)
+
+
+class AdminSeoReviewActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    group: Optional[Literal[
+        "keep_indexed", "pause_watch_only", "resume_watch", "noindex_only",
+        "noindex_and_pause_watch", "delete_candidate", "manual_improvement",
+    ]] = None
+    page_ids: list[str] = Field(default_factory=list, max_length=100)
+    apply_all: bool = False
+    confirm_delete: bool = False
 
 
 def _require_admin(request, data):
@@ -78,6 +102,7 @@ async def admin_get_seo_overview(request: Request):
     try:
         result = await asyncio.to_thread(seo_data_service.overview)
         result["content_judge"] = seo_recommendation_service.content_judge.status()
+        result["weekly_review"] = await asyncio.to_thread(seo_weekly_review_service.status)
         return result
     except Exception:
         logging.exception("admin_get_seo_overview failed")
@@ -123,6 +148,110 @@ def _raise_seo_recommendation_error(exc):
         status_code=_SEO_RECOMMENDATION_STATUS.get(exc.code, 400),
         detail=exc.safe_message,
     )
+
+
+def _raise_seo_review_error(exc):
+    status = {
+        "not_found": 404,
+        "delete_confirmation_required": 409,
+        "topic_brief_changed": 409,
+        "state_changed": 409,
+        "recommendation_stale": 409,
+    }.get(exc.code, 400)
+    raise HTTPException(status_code=status, detail=exc.safe_message)
+
+
+@router.get("/api/admin/seo/review")
+async def admin_get_seo_weekly_review(request: Request):
+    _require_admin(request, {})
+    try:
+        return await asyncio.to_thread(seo_weekly_review_service.status)
+    except Exception:
+        logging.exception("admin_get_seo_weekly_review failed")
+        raise HTTPException(status_code=500, detail="Failed to load weekly SEO review")
+
+
+@router.put("/api/admin/seo/review/config")
+async def admin_save_seo_weekly_review_config(
+    request: Request, data: AdminSeoReviewConfigRequest = Body(...)
+):
+    _require_admin(request, {})
+    try:
+        return await asyncio.to_thread(
+            seo_weekly_review_service.save_config,
+            enabled=data.enabled,
+            interval_days=data.interval_days,
+            run_time=data.run_time,
+            timezone_name=data.timezone,
+        )
+    except seo_weekly_review.ReviewError as exc:
+        _raise_seo_review_error(exc)
+    except Exception:
+        logging.exception("admin_save_seo_weekly_review_config failed")
+        raise HTTPException(status_code=500, detail="Failed to save weekly SEO review configuration")
+
+
+@router.post("/api/admin/seo/review/run")
+@limiter.limit("3/minute")
+async def admin_run_seo_weekly_review(request: Request, data: dict = Body(default={})):
+    _require_admin(request, data)
+    try:
+        return await asyncio.to_thread(seo_weekly_review_service.run, force=True)
+    except seo_weekly_review.ReviewAlreadyRunning:
+        raise HTTPException(status_code=409, detail="A weekly SEO review is already running")
+    except Exception:
+        logging.exception("admin_run_seo_weekly_review failed")
+        raise HTTPException(status_code=500, detail="Weekly SEO review failed safely")
+
+
+@router.post("/api/admin/seo/reviews/{run_id}/preview")
+async def admin_preview_seo_review_actions(
+    request: Request, run_id: str, data: AdminSeoReviewActionRequest = Body(...)
+):
+    _require_admin(request, {})
+    try:
+        return await asyncio.to_thread(
+            seo_weekly_review_service.preview,
+            run_id,
+            group=data.group,
+            page_ids=data.page_ids,
+            apply_all=data.apply_all,
+        )
+    except seo_weekly_review.ReviewError as exc:
+        _raise_seo_review_error(exc)
+
+
+@router.post("/api/admin/seo/reviews/{run_id}/apply")
+@limiter.limit("10/minute")
+async def admin_apply_seo_review_actions(
+    request: Request, run_id: str, data: AdminSeoReviewActionRequest = Body(...)
+):
+    admin_uid = _require_admin(request, {})
+    try:
+        return await asyncio.to_thread(
+            seo_weekly_review_service.apply,
+            run_id,
+            admin_uid=admin_uid,
+            group=data.group,
+            page_ids=data.page_ids,
+            apply_all=data.apply_all,
+            confirm_delete=data.confirm_delete,
+        )
+    except seo_weekly_review.ReviewError as exc:
+        _raise_seo_review_error(exc)
+
+
+@router.post("/api/admin/seo/reviews/{run_id}/topic-brief/accept")
+async def admin_accept_seo_review_topic_brief(
+    request: Request, run_id: str, data: dict = Body(default={})
+):
+    admin_uid = _require_admin(request, data)
+    try:
+        return await asyncio.to_thread(
+            seo_weekly_review_service.accept_topic_brief, run_id, admin_uid=admin_uid
+        )
+    except seo_weekly_review.ReviewError as exc:
+        _raise_seo_review_error(exc)
 
 
 @router.post("/api/admin/seo/pages/{page_id}/recommendation")

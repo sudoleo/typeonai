@@ -29,35 +29,62 @@ from app.services.api_consensus_runner import (
 )
 from app.services.share_snapshots import cleanup_expired_pending, cleanup_revoked_shares
 from app.services.watch_scheduler import watch_scheduler_loop
+from app.services.seo_weekly_review import seo_review_scheduler_loop
+
+
+def _startup_job_timeout_seconds() -> int:
+    try:
+        configured = int(os.environ.get("STARTUP_JOB_TIMEOUT_SECONDS", "15"))
+    except (TypeError, ValueError):
+        configured = 15
+    return max(5, min(configured, 60))
+
+
+STARTUP_JOB_TIMEOUT_SECONDS = _startup_job_timeout_seconds()
+
+
+def _run_startup_jobs_blocking(jobs):
+    for name, func in jobs:
+        try:
+            func()
+        except Exception:
+            logging.exception("%s failed on startup", name)
+
+
+async def _run_startup_jobs(jobs):
+    """Bound all blocking Firestore startup work by one readiness deadline."""
+    try:
+        await asyncio.wait_for(
+            asyncio.to_thread(_run_startup_jobs_blocking, jobs),
+            timeout=STARTUP_JOB_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        logging.error(
+            "Firestore startup maintenance timed out after %ss; "
+            "startup continues with safe defaults",
+            STARTUP_JOB_TIMEOUT_SECONDS,
+        )
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Load models from db on startup
-    load_models_from_db()
-    # Abgelaufene pending_results aufräumen (Fallback zur Firestore-TTL-Policy;
-    # der tägliche Render-Restart triggert das regelmäßig)
-    try:
-        cleanup_expired_pending()
-    except Exception:
-        logging.exception("cleanup_expired_pending failed on startup")
-    # 30-Tage-Hard-Delete für widerrufene Shares (gleicher Mechanismus,
-    # kein eigener Scheduler)
-    try:
-        cleanup_revoked_shares()
-    except Exception:
-        logging.exception("cleanup_revoked_shares failed on startup")
     # Fail-closed Account-Tombstones bleiben bestehen; nur ihre idempotente
     # Datenbereinigung wird nach transienten Firestore-Fehlern wiederholt.
     api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
-    try:
-        api_account_cleanup.retry_pending()
-    except Exception:
-        logging.exception("Blocked Consensus API account cleanup retry failed")
-    # Reservierte Consensus-API-Runs haben noch keinen Provider gestartet und
-    # koennen nach einem Prozessneustart sicher erneut eingeplant werden. Die
-    # reserved->running-Transaktion garantiert dabei genau einen Gewinner.
-    recover_persisted_runs()
+    await _run_startup_jobs((
+        # Modell-Defaults bleiben bei einem Timeout aktiv.
+        ("load_models_from_db", load_models_from_db),
+        # TTL-Fallbacks; der tägliche Render-Restart triggert sie regelmäßig.
+        ("cleanup_expired_pending", cleanup_expired_pending),
+        ("cleanup_revoked_shares", cleanup_revoked_shares),
+        ("blocked Consensus API account cleanup retry", api_account_cleanup.retry_pending),
+        # reserved->running bleibt transaktional und wird zusätzlich vom
+        # 60-Sekunden-Maintenance-Loop wieder aufgenommen.
+        ("recover_persisted_runs", recover_persisted_runs),
+    ))
     watch_task = asyncio.create_task(watch_scheduler_loop(), name="consensus-watch-scheduler")
+    seo_review_task = asyncio.create_task(
+        seo_review_scheduler_loop(), name="seo-weekly-review-scheduler"
+    )
     api_maintenance_task = asyncio.create_task(
         api_run_maintenance_loop(), name="consensus-api-maintenance"
     )
@@ -68,10 +95,15 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         watch_task.cancel()
+        seo_review_task.cancel()
         api_maintenance_task.cancel()
         api_account_cleanup_task.cancel()
         try:
             await watch_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await seo_review_task
         except asyncio.CancelledError:
             pass
         try:

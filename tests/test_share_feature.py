@@ -1561,6 +1561,21 @@ class ApiRunPublishingServiceTests(unittest.TestCase):
         self.assertTrue(share["index_eligible"])
         self.assertFalse(self.db.stores[snapshots.PENDING_COLLECTION])
 
+    def test_only_publisher_mode_api_runs_receive_publisher_lineage(self):
+        publisher_run = self._run(request={"question": "Why?", "publisher_mode": True})
+        published = snapshots.create_share_from_api_run(
+            self.uid, publisher_run, db=self.db, consume_quota=lambda: True
+        )
+        publisher_share = self.db.stores[snapshots.SHARES_COLLECTION][published["share_id"]]
+        self.assertEqual(publisher_share["publication_source"], "scheduled_publisher")
+
+        normal_run = self._run(run_id="d" * 32, request={"question": "Why?"})
+        normal = snapshots.create_share_from_api_run(
+            self.uid, normal_run, db=self.db, consume_quota=lambda: True
+        )
+        normal_share = self.db.stores[snapshots.SHARES_COLLECTION][normal["share_id"]]
+        self.assertNotIn("publication_source", normal_share)
+
     def test_api_run_requires_ownership_and_success(self):
         with self.assertRaisesRegex(ShareError, "Run not found"):
             snapshots.create_share_from_api_run(

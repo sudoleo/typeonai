@@ -1043,7 +1043,10 @@ def load_models_from_db():
     from app.core.security import db_firestore
     try:
         doc_ref = db_firestore.collection("app_config").document("models")
-        doc = doc_ref.get()
+        # Model defaults are already present in code. On quota exhaustion we
+        # must fail fast instead of letting Firestore's default retry policy
+        # hold application startup for up to five minutes.
+        doc = doc_ref.get(timeout=5.0, retry=None)
         if doc.exists:
             data = doc.to_dict()
             
@@ -1143,7 +1146,10 @@ def load_models_from_db():
             # durch apply_limits/get_limits_config erhalten.
             normalized_limits = get_limits_config()
             if data.get("limits") != normalized_limits:
-                doc_ref.set({"limits": normalized_limits}, merge=True)
+                doc_ref.set(
+                    {"limits": normalized_limits}, merge=True,
+                    timeout=5.0, retry=None,
+                )
             ensure_default_models_allowed()
             
             # Update ALL_ALLOWED_MODELS
@@ -1173,7 +1179,7 @@ def load_models_from_db():
                     tier: dict(models) for tier, models in WATCH_MODELS_BY_TIER.items()
                 },
                 "limits": get_limits_config()
-            })
+            }, timeout=5.0, retry=None)
             rebuild_model_configs()
             logging.info("Created default models configuration in Firestore.")
     except Exception as e:

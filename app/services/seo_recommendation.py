@@ -325,11 +325,13 @@ class SeoRecommendationService:
         self.content_judge = content_judge or SeoContentJudge()
         self.clock = clock or _utcnow
 
-    def _context(self, page_id: str) -> tuple[dict, list[dict], dict | None, date]:
+    def _context(
+        self, page_id: str, *, include_inactive: bool = False
+    ) -> tuple[dict, list[dict], dict | None, date]:
         if not re.fullmatch(r"[0-9a-f]{64}", str(page_id or "")):
             raise SeoRecommendationError("not_found", "SEO page not found.")
         page = self.repository.get_page(page_id)
-        if not page or not page.get("active", False):
+        if not page or (not include_inactive and not page.get("active", False)):
             raise SeoRecommendationError("not_found", "SEO page not found.")
         _, final_date = seo_data.date_window(self.clock())
         start = final_date - timedelta(days=27)
@@ -346,8 +348,38 @@ class SeoRecommendationService:
         result["created"] = created
         return result
 
-    def generate(self, page_id: str) -> dict:
-        page, metrics, query_snapshot, final_date = self._context(page_id)
+    def generate(self, page_id: str, *, include_inactive: bool = False) -> dict:
+        page, metrics, query_snapshot, final_date = self._context(
+            page_id, include_inactive=include_inactive
+        )
+        return self.generate_from_context(
+            page_id,
+            page=page,
+            metrics=metrics,
+            query_snapshot=query_snapshot,
+            final_date=final_date,
+        )
+
+    def generate_from_context(
+        self,
+        page_id: str,
+        *,
+        page: dict,
+        metrics: list[dict],
+        query_snapshot: dict | None,
+        final_date: date,
+    ) -> dict:
+        """Persist a recommendation from already loaded SEO data.
+
+        Portfolio reviews already need the page, its 28-day metrics and its
+        query snapshot for the overview. Reusing that exact snapshot avoids a
+        second set of Firestore reads per page and keeps the recommendation
+        fingerprint tied to the displayed portfolio data.
+        """
+        if not re.fullmatch(r"[0-9a-f]{64}", str(page_id or "")):
+            raise SeoRecommendationError("not_found", "SEO page not found.")
+        if not page:
+            raise SeoRecommendationError("not_found", "SEO page not found.")
         now = self.clock()
         result = deterministic_recommendation(
             page, metrics, query_snapshot, final_date=final_date, now=now

@@ -11,6 +11,7 @@ import re
 import secrets
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 import app.core.config as cfg
 from app.core.security import db_firestore
@@ -36,6 +37,14 @@ WORKER_LEASE_MINUTES = 29
 RUNTIME_COLLECTION = "watch_runtime"
 WATCH_HISTORY_POINTS = 16
 WATCH_INTERNAL_EXCLUDED_PROVIDERS = {"deepseek"}
+
+
+def _where_equal(collection, field: str, value):
+    """Use the current Firestore filter API with mock-compatible fallback."""
+    try:
+        return collection.where(filter=FieldFilter(field, "==", value))
+    except TypeError:
+        return collection.where(field, "==", value)
 
 
 class WatchError(Exception):
@@ -204,7 +213,7 @@ def _owned_active_share(uid: str, share_id: str, db) -> dict:
 
 def _check_active_limit(uid: str, is_pro: bool, db, *, excluding_id: str | None = None):
     count = 0
-    for doc in db.collection(WATCHES_COLLECTION).where("owner_uid", "==", uid).stream():
+    for doc in _where_equal(db.collection(WATCHES_COLLECTION), "owner_uid", uid).stream():
         if doc.id == excluding_id:
             continue
         if (doc.to_dict() or {}).get("status") == "active":
@@ -254,13 +263,16 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
     share_visibility = str(share.get("visibility") or "public")
     if share_visibility != visibility:
         raise WatchError("invalid_visibility", "The selected page visibility does not match this page.")
-    for existing in db.collection(WATCHES_COLLECTION).where("owner_uid", "==", uid).stream():
+    for existing in _where_equal(db.collection(WATCHES_COLLECTION), "owner_uid", uid).stream():
         existing_data = existing.to_dict() or {}
         if existing_data.get("share_id") == share_id:
             if return_existing:
                 if normalized_model_tier == "free":
                     managed_updates = {
                         "model_tier": "free",
+                        "publication_source": str(
+                            share.get("publication_source") or ""
+                        )[:40],
                         "interval": "weekly",
                         "run_weekday": run_weekday,
                         "run_time": run_time,
@@ -285,6 +297,9 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
     doc = {
         "owner_uid": uid,
         "share_id": share_id,
+        # Denormalized so SEO/admin capacity checks do not have to fetch every
+        # referenced share. The share remains authoritative for all mutations.
+        "publication_source": str(share.get("publication_source") or "")[:40],
         "question_hash": share.get("question_hash") or share_snapshots.question_hash(share.get("question")),
         "interval": interval,
         "model_tier": normalized_model_tier,
@@ -330,7 +345,7 @@ def serialize_history_points(points, max_items=WATCH_HISTORY_POINTS) -> list[dic
 def list_watches(uid: str, db=None, include_history=False) -> list[dict]:
     db = db if db is not None else db_firestore
     items = []
-    for doc in db.collection(WATCHES_COLLECTION).where("owner_uid", "==", uid).stream():
+    for doc in _where_equal(db.collection(WATCHES_COLLECTION), "owner_uid", uid).stream():
         data = doc.to_dict() or {}
         share_id = str(data.get("share_id") or "")
         share = share_snapshots.get_share(share_id, db=db) or {}
@@ -367,6 +382,84 @@ def list_watches_for_admin(db=None) -> list[dict]:
         items.append(item)
     items.sort(key=lambda item: item["created_at"], reverse=True)
     return items
+
+
+def publisher_watch_counts(db=None) -> dict:
+    """Count only watches whose share has explicit scheduled-publisher lineage."""
+    db = db if db is not None else db_firestore
+    active = paused = 0
+    # Publisher watches are the only watches pinned to the internal Free model
+    # tier. Query that bounded subset instead of scanning every user watch and
+    # issuing one additional share read for each result.
+    docs = _where_equal(
+        db.collection(WATCHES_COLLECTION), "model_tier", "free"
+    ).stream()
+    for doc in docs:
+        data = doc.to_dict() or {}
+        publication_source = str(data.get("publication_source") or "")
+        if publication_source != "scheduled_publisher":
+            # Compatibility for Publisher watches created before the
+            # denormalized lineage field existed. The candidate set is capped
+            # by the Publisher Watch limit, rather than all application watches.
+            share = share_snapshots.get_share(
+                str(data.get("share_id") or ""), db=db
+            ) or {}
+            publication_source = str(share.get("publication_source") or "")
+        if publication_source != "scheduled_publisher":
+            continue
+        if data.get("status") == "active":
+            active += 1
+        elif data.get("status") in {"paused", "paused_error"}:
+            paused += 1
+    return {"active": active, "paused": paused}
+
+
+def find_watch_for_share(share_id: str, db=None, *, share=None) -> dict | None:
+    db = db if db is not None else db_firestore
+    for doc in _where_equal(db.collection(WATCHES_COLLECTION), "share_id", share_id).stream():
+        data = doc.to_dict() or {}
+        resolved_share = (
+            share if isinstance(share, dict)
+            else share_snapshots.get_share(share_id, db=db) or {}
+        )
+        return {
+            **_serialize_watch(doc.id, data, resolved_share),
+            "owner_uid": data.get("owner_uid") or "",
+        }
+    return None
+
+
+def set_watch_status_admin(watch_id: str, status: str, *, db=None) -> dict:
+    """Admin-only service primitive; deliberately changes no share/index fields."""
+    db = db if db is not None else db_firestore
+    ref = db.collection(WATCHES_COLLECTION).document(watch_id)
+    snap = ref.get()
+    data = snap.to_dict() if snap.exists else None
+    if not data:
+        raise WatchError("not_found", "Watch not found.")
+    requested = str(status or "").strip().lower()
+    if requested not in {"active", "paused"}:
+        raise WatchError("invalid_status", "Status must be active or paused.")
+    if data.get("status") == requested:
+        share = share_snapshots.get_share(str(data.get("share_id") or ""), db=db) or {}
+        return _serialize_watch(watch_id, data, share)
+    updates = {"status": requested, "claimed_until": None}
+    if requested == "active":
+        now = utcnow()
+        updates.update(
+            next_run_at=next_scheduled_run(
+                data.get("interval") or "weekly",
+                data.get("run_time") or "",
+                data.get("timezone") or "",
+                data.get("run_weekday") or "",
+                now=now,
+            ),
+            consecutive_failures=0,
+        )
+    ref.update(updates)
+    data.update(updates)
+    share = share_snapshots.get_share(str(data.get("share_id") or ""), db=db) or {}
+    return _serialize_watch(watch_id, data, share)
 
 
 def queue_watch_run(watch_id: str, *, now=None, db=None) -> dict:
@@ -552,7 +645,7 @@ def unsubscribe(token: str, db=None) -> dict:
 def delete_watches_for_share(share_id: str, db=None) -> int:
     db = db if db is not None else db_firestore
     deleted = 0
-    for doc in db.collection(WATCHES_COLLECTION).where("share_id", "==", share_id).stream():
+    for doc in _where_equal(db.collection(WATCHES_COLLECTION), "share_id", share_id).stream():
         doc.reference.delete()
         deleted += 1
     return deleted
@@ -562,7 +655,7 @@ def get_public_watch_meta(share_id: str, db=None) -> dict | None:
     """Public, text-free status metadata for a share's current watch."""
     db = db if db is not None else db_firestore
     candidates = []
-    for doc in db.collection(WATCHES_COLLECTION).where("share_id", "==", share_id).stream():
+    for doc in _where_equal(db.collection(WATCHES_COLLECTION), "share_id", share_id).stream():
         data = doc.to_dict() or {}
         if data.get("status") not in {"active", "paused", "paused_error"}:
             continue
@@ -635,7 +728,7 @@ def list_due_watch_ids(*, now=None, db=None, max_items=200) -> list[str]:
     db = db if db is not None else db_firestore
     now = now or utcnow()
     result = []
-    for doc in db.collection(WATCHES_COLLECTION).where("status", "==", "active").stream():
+    for doc in _where_equal(db.collection(WATCHES_COLLECTION), "status", "active").stream():
         data = doc.to_dict() or {}
         if isinstance(data.get("next_run_at"), datetime) and data["next_run_at"] <= now:
             result.append(doc.id)

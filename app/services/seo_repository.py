@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Iterable
 
 from google.api_core.exceptions import AlreadyExists
@@ -33,19 +33,22 @@ class FirestoreSeoRepository:
     def sync_pages(self, pages: list[dict], now: datetime) -> list[dict]:
         incoming_ids = {page_id_for_url(page["url"]) for page in pages}
         collection = self.db.collection(SEO_PAGES_COLLECTION)
+        existing_by_id = {}
+        writes = []
         for snapshot in collection.stream():
             data = snapshot.to_dict() or {}
+            existing_by_id[snapshot.id] = data
             if snapshot.id not in incoming_ids and data.get("active", True):
-                snapshot.reference.set(
-                    {"active": False, "last_seen_at": now, "updated_at": now}, merge=True
-                )
+                writes.append((
+                    snapshot.reference,
+                    {"active": False, "last_seen_at": now, "updated_at": now},
+                ))
 
         normalized = []
         for page in pages:
             page_id = page_id_for_url(page["url"])
             ref = collection.document(page_id)
-            existing = ref.get()
-            existing_data = existing.to_dict() if existing.exists else {}
+            existing_data = existing_by_id.get(page_id, {})
             record = {
                 "schema_version": 2,
                 "url": page["url"],
@@ -57,12 +60,60 @@ class FirestoreSeoRepository:
                 "last_seen_at": now,
                 "updated_at": now,
             }
+            for field in ("metrics_coverage_start", "metrics_coverage_end"):
+                if existing_data.get(field):
+                    record[field] = existing_data[field]
             dossier = page.get("dossier")
             if isinstance(dossier, dict):
                 record["dossier"] = dossier
-            ref.set(record, merge=True)
+            writes.append((ref, record))
             normalized.append({**record, "page_id": page_id})
+        if hasattr(self.db, "batch"):
+            for offset in range(0, len(writes), 400):
+                batch = self.db.batch()
+                for ref, data in writes[offset:offset + 400]:
+                    batch.set(ref, data, merge=True)
+                batch.commit()
+        else:
+            for ref, data in writes:
+                ref.set(data, merge=True)
         return normalized
+
+    def set_metric_coverage(
+        self, page_id: str, start_date: date, end_date: date, now: datetime
+    ) -> None:
+        """Persist a contiguous finalized-metrics coverage watermark."""
+        self.db.collection(SEO_PAGES_COLLECTION).document(page_id).set(
+            {
+                "metrics_coverage_start": start_date.isoformat(),
+                "metrics_coverage_end": end_date.isoformat(),
+                "metrics_coverage_updated_at": now,
+            },
+            merge=True,
+        )
+
+    def set_metric_coverages(
+        self, page_ids: Iterable[str], start_date: date, end_date: date, now: datetime
+    ) -> None:
+        """Persist the same contiguous coverage watermark with bounded batches."""
+        page_ids = list(dict.fromkeys(page_ids))
+        if not page_ids:
+            return
+        payload = {
+            "metrics_coverage_start": start_date.isoformat(),
+            "metrics_coverage_end": end_date.isoformat(),
+            "metrics_coverage_updated_at": now,
+        }
+        if hasattr(self.db, "batch"):
+            for offset in range(0, len(page_ids), 400):
+                batch = self.db.batch()
+                for page_id in page_ids[offset:offset + 400]:
+                    ref = self.db.collection(SEO_PAGES_COLLECTION).document(page_id)
+                    batch.set(ref, payload, merge=True)
+                batch.commit()
+            return
+        for page_id in page_ids:
+            self.set_metric_coverage(page_id, start_date, end_date, now)
 
     def list_pages(self, *, active_only: bool = False) -> list[dict]:
         pages = []
@@ -95,6 +146,54 @@ class FirestoreSeoRepository:
             if start_date.isoformat() <= value <= end_date.isoformat():
                 dates.add(value)
         return dates
+
+    def existing_metric_dates_for_pages(
+        self, page_ids: Iterable[str], start_date: date, end_date: date
+    ) -> dict[str, set[str]]:
+        """Batch-read exact daily documents for several pages when supported."""
+        page_ids = list(dict.fromkeys(page_ids))
+        result = {page_id: set() for page_id in page_ids}
+        if not page_ids:
+            return result
+        if not hasattr(self.db, "get_all"):
+            return {
+                page_id: self.existing_metric_dates(page_id, start_date, end_date)
+                for page_id in page_ids
+            }
+        dates = []
+        current = start_date
+        while current <= end_date:
+            dates.append(current.isoformat())
+            current += timedelta(days=1)
+        refs = []
+        page_by_ref_path = {}
+        for page_id in page_ids:
+            for day in dates:
+                ref = (
+                    self.db.collection(SEO_PAGES_COLLECTION)
+                    .document(page_id)
+                    .collection(DAILY_METRICS_SUBCOLLECTION)
+                    .document(day)
+                )
+                refs.append(ref)
+                page_by_ref_path[str(getattr(ref, "path", ""))] = page_id
+        for offset in range(0, len(refs), 400):
+            for snapshot in self.db.get_all(refs[offset:offset + 400]):
+                if not snapshot.exists:
+                    continue
+                data = snapshot.to_dict() or {}
+                page_id = str(data.get("page_id") or page_by_ref_path.get(
+                    str(getattr(snapshot.reference, "path", "")), ""
+                ))
+                if not page_id:
+                    try:
+                        page_id = snapshot.reference.parent.parent.id
+                    except AttributeError:
+                        page_id = ""
+                day = str(data.get("date") or snapshot.id)
+                if page_id in result and start_date.isoformat() <= day <= end_date.isoformat():
+                    result[page_id].add(day)
+        return result
 
     def upsert_metrics(self, metrics: Iterable[dict]) -> int:
         prepared = list(metrics)
@@ -145,6 +244,55 @@ class FirestoreSeoRepository:
         metrics.sort(key=lambda item: item.get("date") or "")
         return metrics
 
+    def list_metrics_for_pages(
+        self, page_ids: Iterable[str], start_date: date, end_date: date
+    ) -> dict[str, list[dict]]:
+        """Load exact 28-day documents in bounded BatchGet requests."""
+        page_ids = list(dict.fromkeys(page_ids))
+        result = {page_id: [] for page_id in page_ids}
+        if not page_ids:
+            return result
+        if not hasattr(self.db, "get_all"):
+            return {
+                page_id: self.list_metrics(page_id, start_date, end_date)
+                for page_id in page_ids
+            }
+        dates = []
+        current = start_date
+        while current <= end_date:
+            dates.append(current.isoformat())
+            current += timedelta(days=1)
+        refs = []
+        page_by_ref_path = {}
+        for page_id in page_ids:
+            for day in dates:
+                ref = (
+                    self.db.collection(SEO_PAGES_COLLECTION)
+                    .document(page_id)
+                    .collection(DAILY_METRICS_SUBCOLLECTION)
+                    .document(day)
+                )
+                refs.append(ref)
+                page_by_ref_path[str(getattr(ref, "path", ""))] = page_id
+        for offset in range(0, len(refs), 400):
+            for snapshot in self.db.get_all(refs[offset:offset + 400]):
+                if not snapshot.exists:
+                    continue
+                data = snapshot.to_dict() or {}
+                page_id = str(data.get("page_id") or page_by_ref_path.get(
+                    str(getattr(snapshot.reference, "path", "")), ""
+                ))
+                if not page_id:
+                    try:
+                        page_id = snapshot.reference.parent.parent.id
+                    except AttributeError:
+                        page_id = ""
+                if page_id in result:
+                    result[page_id].append(data)
+        for metrics in result.values():
+            metrics.sort(key=lambda item: item.get("date") or "")
+        return result
+
     def has_metrics(self, page_id: str) -> bool:
         collection = (
             self.db.collection(SEO_PAGES_COLLECTION)
@@ -182,6 +330,18 @@ class FirestoreSeoRepository:
             .document(page_id)
             .collection(QUERY_SNAPSHOTS_SUBCOLLECTION)
         )
+        if hasattr(collection, "order_by"):
+            stream = (
+                collection.order_by("period_end", direction=Query.DESCENDING)
+                .limit(1)
+                .stream()
+            )
+            snapshot = next(iter(stream), None)
+            if snapshot is None:
+                return None
+            return {**(snapshot.to_dict() or {}), "snapshot_id": snapshot.id}
+
+        # Lightweight unit-test doubles do not expose Firestore query methods.
         snapshots = []
         for snapshot in collection.stream():
             data = snapshot.to_dict() or {}
@@ -213,22 +373,36 @@ class FirestoreSeoRepository:
         self.db.collection(SEO_RUNS_COLLECTION).document(run_id).set(data, merge=True)
 
     def last_run(self) -> dict | None:
-        runs = []
-        for snapshot in self.db.collection(SEO_RUNS_COLLECTION).stream():
-            data = snapshot.to_dict() or {}
-            runs.append({**data, "run_id": snapshot.id})
-        if not runs:
-            return None
-        def sort_key(item):
-            value = item.get("started_at")
-            if not isinstance(value, datetime):
-                return float("-inf")
-            if value.tzinfo is None:
-                return value.replace(tzinfo=timezone.utc).timestamp()
-            return value.timestamp()
+        collection = self.db.collection(SEO_RUNS_COLLECTION)
+        if hasattr(collection, "order_by"):
+            stream = (
+                collection.order_by("started_at", direction=Query.DESCENDING)
+                .limit(1)
+                .stream()
+            )
+            snapshot = next(iter(stream), None)
+            if snapshot is None:
+                return None
+            run = {**(snapshot.to_dict() or {}), "run_id": snapshot.id}
+        else:
+            # Lightweight unit-test doubles do not expose Firestore query methods.
+            runs = []
+            for snapshot in collection.stream():
+                data = snapshot.to_dict() or {}
+                runs.append({**data, "run_id": snapshot.id})
+            if not runs:
+                return None
 
-        runs.sort(key=sort_key, reverse=True)
-        run = dict(runs[0])
+            def sort_key(item):
+                value = item.get("started_at")
+                if not isinstance(value, datetime):
+                    return float("-inf")
+                if value.tzinfo is None:
+                    return value.replace(tzinfo=timezone.utc).timestamp()
+                return value.timestamp()
+
+            runs.sort(key=sort_key, reverse=True)
+            run = dict(runs[0])
         for field in ("started_at", "finished_at"):
             run[field] = _iso_datetime(run.get(field))
         return run

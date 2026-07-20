@@ -414,6 +414,8 @@ def main() -> int:
             headers={"X-API-Key": api_key},
         )
         watch = (watch_payload or {}).get("watch")
+        if (watch_payload or {}).get("watch_status") == "watch_skipped_capacity":
+            watch = {"status": "watch_skipped_capacity"}
 
     if env_bool("CONSENSUS_AUTO_INDEX", bool(config.get("auto_index"))):
         _status, share = http_json(

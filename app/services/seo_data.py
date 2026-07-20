@@ -30,6 +30,9 @@ class CollectionAlreadyRunning(Exception):
     pass
 
 
+_COLLECTION_LOCK = threading.Lock()
+
+
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -204,7 +207,10 @@ class SeoDataService:
         self.client_factory = client_factory or gsc.GoogleSearchConsoleClient.from_env
         self.page_discovery = page_discovery or discover_indexable_pages
         self.clock = clock or utcnow
-        self._collection_lock = threading.Lock()
+        # The admin collector and weekly review use separate service instances
+        # in the same web process. A module-level lock prevents them from
+        # launching the same expensive GSC/Firestore collection concurrently.
+        self._collection_lock = _COLLECTION_LOCK
 
     def check_connection(self) -> dict:
         return gsc.connection_status()
@@ -234,12 +240,40 @@ class SeoDataService:
             pages = self.repository.sync_pages(self.page_discovery(), started_at)
             all_days = set(_dates_between(start_date, end_date))
             missing_by_page: dict[str, set[date]] = {}
+            known_by_page: dict[str, set[date]] = {}
+            coverage_by_page = {}
+            pages_needing_metric_scan = []
             for page in pages:
-                existing = self.repository.existing_metric_dates(
-                    page["page_id"], start_date, end_date
-                )
+                try:
+                    coverage_start = date.fromisoformat(
+                        str(page.get("metrics_coverage_start") or "")
+                    )
+                    coverage_end = date.fromisoformat(
+                        str(page.get("metrics_coverage_end") or "")
+                    )
+                except ValueError:
+                    coverage_start = coverage_end = None
+                coverage_by_page[page["page_id"]] = (coverage_start, coverage_end)
+                if not (coverage_start and coverage_end and coverage_start <= start_date):
+                    pages_needing_metric_scan.append(page["page_id"])
+            existing_by_page = self.repository.existing_metric_dates_for_pages(
+                pages_needing_metric_scan, start_date, end_date
+            )
+            for page in pages:
+                coverage_start, coverage_end = coverage_by_page[page["page_id"]]
+                if coverage_start and coverage_end and coverage_start <= start_date:
+                    # A successful earlier collection explicitly persisted one
+                    # row (including zeroes) for every URL/day through this
+                    # watermark. Only dates after it can still be missing.
+                    existing_days = {day for day in all_days if day <= coverage_end}
+                else:
+                    existing = existing_by_page.get(page["page_id"], set())
+                    existing_days = {
+                        day for day in all_days if day.isoformat() in existing
+                    }
+                known_by_page[page["page_id"]] = existing_days
                 missing_by_page[page["page_id"]] = {
-                    day for day in all_days if day.isoformat() not in existing
+                    day for day in all_days if day not in existing_days
                 }
             missing_days = set().union(*missing_by_page.values()) if missing_by_page else set()
 
@@ -304,6 +338,26 @@ class SeoDataService:
                         "share_id": page.get("share_id"),
                     })
             written = self.repository.upsert_metrics(metrics)
+            written_days_by_page: dict[str, set[date]] = {}
+            for metric in metrics:
+                try:
+                    metric_day = date.fromisoformat(str(metric.get("date") or ""))
+                except ValueError:
+                    continue
+                written_days_by_page.setdefault(metric["page_id"], set()).add(metric_day)
+            coverage_updates = []
+            for page in pages:
+                page_id = page["page_id"]
+                covered = known_by_page[page_id] | written_days_by_page.get(page_id, set())
+                already_covered = (
+                    str(page.get("metrics_coverage_start") or "") <= start_date.isoformat()
+                    and str(page.get("metrics_coverage_end") or "") >= end_date.isoformat()
+                )
+                if all_days.issubset(covered) and not already_covered:
+                    coverage_updates.append(page_id)
+            self.repository.set_metric_coverages(
+                coverage_updates, start_date, end_date, collected_at
+            )
             query_start = end_date - timedelta(days=27)
             query_pages_collected = 0
             query_pages_skipped = 0
@@ -425,36 +479,62 @@ class SeoDataService:
         self.repository.update_run(run_id, {**result, "finished_at": self.clock()})
         return result
 
-    def overview(self) -> dict:
+    def overview(
+        self,
+        *,
+        active_only: bool = True,
+        max_pages: int | None = None,
+        include_analysis_context: bool = False,
+    ) -> dict:
         now = self.clock()
         _, final_date = date_window(now)
         start_28 = final_date - timedelta(days=27)
         start_7 = final_date - timedelta(days=6)
-        pages = self.repository.list_pages(active_only=True)
+        pages = self.repository.list_pages(active_only=active_only)
+        if max_pages is not None:
+            pages = pages[:max(0, int(max_pages))]
         histories = self.repository.list_judgments(
             [page["page_id"] for page in pages], max_per_page=3
+        )
+        metrics_by_page = self.repository.list_metrics_for_pages(
+            [page["page_id"] for page in pages], start_28, final_date
         )
         rows = []
         captured = 0
         for page in pages:
-            metrics = self.repository.list_metrics(page["page_id"], start_28, final_date)
-            if metrics or self.repository.has_metrics(page["page_id"]):
+            metrics = metrics_by_page.get(page["page_id"], [])
+            if (
+                metrics
+                or page.get("metrics_coverage_start")
+                or self.repository.has_metrics(page["page_id"])
+            ):
                 captured += 1
             metrics_7 = [
                 item for item in metrics if str(item.get("date") or "") >= start_7.isoformat()
             ]
-            rows.append({
+            query_snapshot = self.repository.latest_query_snapshot(page["page_id"])
+            row = {
                 "page_id": page.get("page_id"),
                 "url": page.get("url"),
                 "origin": page.get("origin"),
                 "share_id": page.get("share_id"),
                 "dossier": seo_dossier.journal_summary(page),
-                "query_data": self.repository.latest_query_snapshot(page["page_id"]),
+                "query_data": query_snapshot,
                 "metrics_7d": aggregate_metrics(metrics_7),
                 "metrics_28d": aggregate_metrics(metrics),
                 "status": classify_status(metrics, final_date),
                 "recommendation_history": histories.get(page["page_id"], []),
-            })
+            }
+            if include_analysis_context:
+                # Internal-only context for the weekly review. Public/admin
+                # overview responses keep their existing compact contract.
+                row["_analysis_context"] = {
+                    "page": page,
+                    "metrics": metrics,
+                    "query_snapshot": query_snapshot,
+                    "final_date": final_date,
+                }
+            rows.append(row)
         rows.sort(key=lambda item: (-item["metrics_28d"]["clicks"], item["url"] or ""))
         return {
             "configuration": gsc.configuration_status(),

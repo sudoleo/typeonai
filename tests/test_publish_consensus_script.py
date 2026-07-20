@@ -97,6 +97,28 @@ def test_main_runs_publish_and_index_flow_without_topic_call(monkeypatch, capsys
     ]
 
 
+def test_watch_capacity_skip_keeps_publisher_run_successful(monkeypatch, capsys):
+    monkeypatch.setenv("CONSENSUS_API_KEY", "cns_test")
+    monkeypatch.setenv("CONSENSUS_QUESTION", "Which technologies should be compared?")
+    monkeypatch.setenv("CONSENSUS_AUTO_INDEX", "false")
+    def fake_http(method, url, **kwargs):
+        if url.endswith("/publisher/config"):
+            return 200, {"enabled": True, "weekly_watch_enabled": True, "auto_index": False}
+        if url.endswith("/consensus/runs"):
+            return 202, {"run_id": "a" * 32}
+        if url.endswith("/" + "a" * 32):
+            return 200, {"status": "succeeded"}
+        if url.endswith("/share"):
+            return 201, {"share_id": "B" * 16, "url": "https://example/s/x"}
+        if url.endswith("/watch"):
+            return 200, {"status": "success", "watch": None, "watch_status": "watch_skipped_capacity"}
+        raise AssertionError(url)
+    monkeypatch.setattr(publisher, "http_json", fake_http)
+    monkeypatch.setattr(publisher, "send_telegram_notification", lambda *args: True)
+    assert publisher.main() == 0
+    assert "watch_skipped_capacity" in capsys.readouterr().out
+
+
 def test_telegram_notification_posts_question_and_share_url(monkeypatch, capsys):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-bot-token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "123456")

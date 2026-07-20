@@ -11,6 +11,26 @@ from app.services import watch_service
 CONFIG_COLLECTION = "app_config"
 CONFIG_DOCUMENT = "scheduled_consensus_publisher"
 TOPIC_BRIEF_MAX_CHARS = 6_000
+DEFAULT_MAX_ACTIVE_PUBLISHER_WATCHES = 12
+
+# Kept here as a read-only product fact for the Admin SEO review. The standalone
+# publisher script intentionally carries the same constant because it has no
+# application-package dependency at runtime.
+SEARCH_OPPORTUNITY_RULES = (
+    "Search-opportunity requirements:\n"
+    "- Work in the high-current AI product/news lane. Prefer a named model, company, feature, "
+    "plan, coding tool, release, leak, or rumor with a new signal from roughly the last seven days.\n"
+    "- Favor queries shaped like release/availability checks, rumor verification, product-name "
+    "clarification, or what a just-announced change means for users.\n"
+    "- Use web search to compare at least five candidate queries before choosing. Reject a "
+    "candidate when its exact search intent is already answered by many established, high-ranking "
+    "news, government, legal, or corporate explainer pages. Choose the candidate with the best "
+    "combination of freshness, plausible search demand, low exact-intent competition, and sources.\n"
+    "- Do not select government policy, grants, federal/state law, regulation, enforcement, "
+    "elections, or broad societal impact as the main intent.\n"
+    "- Do not invent a release or rumor. A speculative question needs at least one current, "
+    "checkable signal and must make uncertainty explicit."
+)
 
 LEGACY_DEFAULT_TOPIC_BRIEF = (
     "Choose one timely, evidence-rich topic that real people are actively searching for "
@@ -51,6 +71,7 @@ DEFAULT_CONFIG = {
     "watch_weekday": "tuesday",
     "watch_time": "09:00",
     "watch_timezone": "Europe/Berlin",
+    "max_active_publisher_watches": DEFAULT_MAX_ACTIVE_PUBLISHER_WATCHES,
 }
 
 
@@ -81,6 +102,16 @@ def normalize_config(data: dict | None) -> dict:
             f"topic_brief must contain at most {TOPIC_BRIEF_MAX_CHARS} characters"
         )
     config["topic_brief"] = brief
+
+    try:
+        max_watches = int(incoming.get(
+            "max_active_publisher_watches", config["max_active_publisher_watches"]
+        ))
+    except (TypeError, ValueError):
+        raise PublisherConfigError("max_active_publisher_watches must be an integer") from None
+    if not 1 <= max_watches <= 100:
+        raise PublisherConfigError("max_active_publisher_watches must be between 1 and 100")
+    config["max_active_publisher_watches"] = max_watches
 
     weekday = str(incoming.get("watch_weekday", config["watch_weekday"]) or "").strip().lower()
     run_time = str(incoming.get("watch_time", config["watch_time"]) or "").strip()
@@ -135,4 +166,5 @@ def public_config(config: dict) -> dict:
         "watch_interval": "weekly",
         "watch_model_tier": "free",
         "excluded_providers": ["deepseek"],
+        "search_opportunity_rules": SEARCH_OPPORTUNITY_RULES,
     }

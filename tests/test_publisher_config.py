@@ -52,6 +52,7 @@ def test_default_publisher_configuration_is_persisted_and_free_pinned():
 
     assert config["enabled"] is True
     assert config["weekly_watch_enabled"] is True
+    assert config["max_active_publisher_watches"] == 12
     assert db.store["scheduled_consensus_publisher"]["topic_brief"] == (
         publisher_config.DEFAULT_TOPIC_BRIEF
     )
