@@ -80,6 +80,17 @@ class AdminSeoReviewActionRequest(BaseModel):
     confirm_delete: bool = False
 
 
+class AdminSeoEditorialDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    page_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    decision: Literal[
+        "keep_as_is", "create_successor", "investigate", "noindex", "delete",
+        "edit_static_page",
+    ]
+    note: str = Field(default="", max_length=500)
+
+
 def _require_admin(request, data):
     id_token = extract_id_token(request, data)
     if not id_token:
@@ -249,6 +260,37 @@ async def admin_accept_seo_review_topic_brief(
     try:
         return await asyncio.to_thread(
             seo_weekly_review_service.accept_topic_brief, run_id, admin_uid=admin_uid
+        )
+    except seo_weekly_review.ReviewError as exc:
+        _raise_seo_review_error(exc)
+
+
+@router.post("/api/admin/seo/reviews/{run_id}/topic-brief/reject")
+async def admin_reject_seo_review_topic_brief(
+    request: Request, run_id: str, data: dict = Body(default={})
+):
+    admin_uid = _require_admin(request, data)
+    try:
+        return await asyncio.to_thread(
+            seo_weekly_review_service.reject_topic_brief, run_id, admin_uid=admin_uid
+        )
+    except seo_weekly_review.ReviewError as exc:
+        _raise_seo_review_error(exc)
+
+
+@router.post("/api/admin/seo/reviews/{run_id}/editorial-decision")
+async def admin_record_seo_editorial_decision(
+    request: Request, run_id: str, data: AdminSeoEditorialDecisionRequest = Body(...)
+):
+    admin_uid = _require_admin(request, {})
+    try:
+        return await asyncio.to_thread(
+            seo_weekly_review_service.record_editorial_decision,
+            run_id,
+            page_id=data.page_id,
+            decision=data.decision,
+            note=data.note,
+            admin_uid=admin_uid,
         )
     except seo_weekly_review.ReviewError as exc:
         _raise_seo_review_error(exc)

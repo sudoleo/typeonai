@@ -545,6 +545,8 @@
         .seo-review-pages { display: grid; gap: 7px; margin-top: 9px; }
         .seo-review-page { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 8px; align-items: start; font-size: 0.84em; }
         .seo-review-page small { grid-column: 2; color: var(--sidebar-text-muted); overflow-wrap: anywhere; }
+        .seo-editorial-controls { grid-column: 2; display: grid; grid-template-columns: minmax(150px, auto) minmax(180px, 1fr) auto; gap: 7px; margin-top: 5px; }
+        .seo-editorial-controls select, .seo-editorial-controls input { min-width: 0; padding: 7px 9px; border: 1px solid var(--input-border); border-radius: var(--radius-xs); background: var(--input-bg); color: var(--text-color); }
         .seo-topic-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
         .seo-topic-diff pre { margin: 5px 0; padding: 10px; max-height: 260px; overflow: auto; white-space: pre-wrap; border: 1px solid var(--input-border); border-radius: var(--radius-sm); font: inherit; font-size: 0.78em; }
         .seo-review-completed-list { display: grid; gap: 6px; margin-top: 8px; font-size: 0.82em; color: var(--sidebar-text-muted); }
@@ -568,6 +570,7 @@
             .watch-model-provider { margin-top: 8px; }
             .admin-savebar { top: 58px; flex-wrap: wrap; }
             .seo-summary-grid { grid-template-columns: 1fr; }
+            .seo-editorial-controls { grid-template-columns: 1fr; }
             .seo-topic-diff { grid-template-columns: 1fr; }
         }
     </style>
@@ -2192,7 +2195,7 @@
             noindex_only: 'Noindex only',
             noindex_and_pause_watch: 'Noindex and pause Watch',
             delete_candidate: 'Delete candidate',
-            manual_improvement: 'Manual improvement'
+            manual_improvement: 'Editorial decision required'
         };
         const SEO_GROUP_BUTTONS = {
             keep_indexed: 'Mark selected reviewed',
@@ -2201,7 +2204,15 @@
             noindex_only: 'Set selected noindex',
             noindex_and_pause_watch: 'Noindex + pause selected',
             delete_candidate: 'Delete selected candidates',
-            manual_improvement: 'Mark selected reviewed'
+            manual_improvement: 'Record editorial decisions below'
+        };
+        const SEO_EDITORIAL_DECISION_LABELS = {
+            keep_as_is: 'Keep unchanged',
+            create_successor: 'Create improved successor snapshot',
+            investigate: 'Investigate before changing',
+            noindex: 'Review for noindex',
+            delete: 'Review for deletion',
+            edit_static_page: 'Edit existing static page'
         };
         const SEO_SAFE_APPLY_GROUPS = new Set([
             'keep_indexed', 'pause_watch_only', 'resume_watch',
@@ -2255,6 +2266,13 @@
                     }
                 });
             });
+            Object.entries(review.editorial_decisions || {}).forEach(([id, decision]) => {
+                completed.set(id, {
+                    editorialDecision: decision,
+                    applied_at: decision.decided_at,
+                    group: 'manual_improvement'
+                });
+            });
             let pendingSafeCount = 0;
             let pendingSafeOnlyReviews = true;
             Object.entries(SEO_GROUP_LABELS).forEach(([group, label]) => {
@@ -2273,25 +2291,61 @@
                 button.type = 'button';
                 button.className = group === 'delete_candidate' ? 'admin-btn danger' : 'admin-btn secondary';
                 button.textContent = SEO_GROUP_BUTTONS[group] || label;
-                button.addEventListener('click', () => applySeoReviewGroup(review.run_id, group, box, button));
-                head.appendChild(button);
+                if (group !== 'manual_improvement') {
+                    button.addEventListener('click', () => applySeoReviewGroup(review.run_id, group, box, button));
+                    head.appendChild(button);
+                }
                 box.appendChild(head);
                 const list = document.createElement('div');
                 list.className = 'seo-review-pages';
                 ids.forEach(id => {
                     const page = pages.get(id) || {};
-                    const row = document.createElement('label');
+                    const editorial = group === 'manual_improvement';
+                    const row = document.createElement(editorial ? 'div' : 'label');
                     row.className = 'seo-review-page';
-                    const checkbox = document.createElement('input');
-                    checkbox.type = 'checkbox';
-                    checkbox.checked = true;
-                    checkbox.dataset.pageId = id;
-                    row.appendChild(checkbox);
+                    if (editorial) {
+                        appendSeoText(row, 'span', 'Decision');
+                    } else {
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.checked = true;
+                        checkbox.dataset.pageId = id;
+                        row.appendChild(checkbox);
+                    }
                     appendSeoText(row, 'span', page.title || page.url || id);
+                    const template = page.editorial_decision_template || {};
+                    const judgeReason = ((page.portfolio_judge || {}).reason || '').trim();
                     appendSeoText(
                         row, 'small',
                         `${page.indexed ? 'indexed' : 'noindex'} · Watch ${page.watch_status || 'none'} · ${page.recommendation || ''}`
+                            + (template.immutable_snapshot ? ' · immutable snapshot' : '')
+                            + (judgeReason ? ` · Terra: ${judgeReason}` : '')
                     );
+                    if (editorial) {
+                        const controls = document.createElement('div');
+                        controls.className = 'seo-editorial-controls';
+                        const select = document.createElement('select');
+                        (template.options || ['keep_as_is', 'investigate']).forEach(value => {
+                            const option = document.createElement('option');
+                            option.value = value;
+                            option.textContent = SEO_EDITORIAL_DECISION_LABELS[value] || value;
+                            select.appendChild(option);
+                        });
+                        select.value = template.suggested_decision || 'keep_as_is';
+                        const note = document.createElement('input');
+                        note.type = 'text';
+                        note.maxLength = 500;
+                        note.placeholder = template.explanation || 'Optional note';
+                        const save = document.createElement('button');
+                        save.type = 'button';
+                        save.className = 'admin-btn secondary';
+                        save.textContent = 'Confirm decision';
+                        save.addEventListener('click', () => saveSeoEditorialDecision(
+                            review.run_id, id, select.value, note.value, save
+                        ));
+                        controls.append(select, note, save);
+                        row.appendChild(controls);
+                    }
                     list.appendChild(row);
                 });
                 box.appendChild(list);
@@ -2304,7 +2358,7 @@
                 ? `Mark ${pendingSafeCount} pages reviewed`
                 : `Apply ${pendingSafeCount} safe recommendations`;
             document.getElementById('seoReviewProgress').textContent = review.run_id
-                ? `${pendingSafeCount} safe actions still open · ${completed.size} pages completed in this review.`
+                ? `${pendingSafeCount} safe actions still open · ${((review.groups || {}).manual_improvement || []).filter(id => !completed.has(id)).length} editorial decisions open · ${completed.size} pages completed · Telegram ${(review.telegram_notification || {}).status || 'pending'}.`
                 : 'No review progress yet.';
             const completedPanel = document.getElementById('seoReviewCompleted');
             const completedList = document.getElementById('seoReviewCompletedList');
@@ -2314,7 +2368,9 @@
                 const page = pages.get(id) || {};
                 const row = appendSeoText(
                     completedList, 'div',
-                    `✓ ${page.title || page.url || id} · ${SEO_GROUP_LABELS[page.group] || page.group || 'completed'}`,
+                    `✓ ${page.title || page.url || id} · ${entry.editorialDecision
+                        ? (SEO_EDITORIAL_DECISION_LABELS[entry.editorialDecision.decision] || entry.editorialDecision.decision)
+                        : (SEO_GROUP_LABELS[page.group] || page.group || 'completed')}`,
                     'seo-review-page'
                 );
                 row.title = entry.applied_at ? new Date(entry.applied_at).toLocaleString() : '';
@@ -2332,8 +2388,14 @@
             document.getElementById('seoTopicBriefReason').textContent = review.topic_brief_reason || '';
             document.getElementById('seoTopicBriefEvidence').textContent = (review.topic_brief_evidence_page_ids || [])
                 .map(id => (pages.get(id) || {}).title || (pages.get(id) || {}).url || id).join(' · ');
-            document.getElementById('acceptSeoTopicBriefBtn').disabled = !!review.topic_brief_accepted_at;
+            const decision = review.topic_brief_decision
+                || (review.topic_brief_accepted_at ? 'accepted' : 'pending');
+            const pending = decision === 'pending';
+            document.getElementById('seoTopicBriefDecision').textContent = `Decision: ${decision}`;
+            document.getElementById('acceptSeoTopicBriefBtn').disabled = !pending;
+            document.getElementById('rejectSeoTopicBriefBtn').disabled = !pending;
             document.getElementById('acceptSeoTopicBriefBtn').dataset.runId = review.run_id || '';
+            document.getElementById('rejectSeoTopicBriefBtn').dataset.runId = review.run_id || '';
         }
 
         async function previewAndApplySeoReview(runId, payload, confirmDelete) {
@@ -2368,6 +2430,23 @@
             } catch (err) {
                 seoStatus(err.message, true);
             } finally {
+                button.disabled = false;
+            }
+        }
+
+        async function saveSeoEditorialDecision(runId, pageId, decision, note, button) {
+            if (!confirm(`Record the decision “${SEO_EDITORIAL_DECISION_LABELS[decision] || decision}”? This records the follow-up but does not mutate an immutable snapshot.`)) return;
+            button.disabled = true;
+            try {
+                await shareAdminRequest('POST', `/api/admin/seo/reviews/${encodeURIComponent(runId)}/editorial-decision`, {
+                    page_id: pageId,
+                    decision,
+                    note: note || ''
+                });
+                seoStatus('Editorial decision recorded.', false);
+                await loadSeoOverview();
+            } catch (err) {
+                seoStatus(err.message, true);
                 button.disabled = false;
             }
         }
@@ -2424,6 +2503,18 @@
                 await shareAdminRequest('POST', `/api/admin/seo/reviews/${encodeURIComponent(runId)}/topic-brief/accept`, {});
                 seoStatus('Suggested Topic Brief accepted.', false);
                 await loadPublisherConfig();
+                await loadSeoOverview();
+            } catch (err) { seoStatus(err.message, true); }
+            finally { this.disabled = false; }
+        });
+
+        document.getElementById('rejectSeoTopicBriefBtn').addEventListener('click', async function () {
+            const runId = this.dataset.runId;
+            if (!runId || !confirm('Reject this Publisher Topic Brief suggestion and keep the current prompt unchanged?')) return;
+            this.disabled = true;
+            try {
+                await shareAdminRequest('POST', `/api/admin/seo/reviews/${encodeURIComponent(runId)}/topic-brief/reject`, {});
+                seoStatus('Suggested Topic Brief rejected.', false);
                 await loadSeoOverview();
             } catch (err) { seoStatus(err.message, true); }
             finally { this.disabled = false; }
@@ -2854,14 +2945,19 @@
                         <div id="seoReviewCompletedList" class="seo-review-completed-list"></div>
                     </details>
                     <div id="seoTopicBriefPanel" class="seo-review-panel" hidden>
-                        <h4 style="margin-top: 0;">Suggested Publisher Topic Brief</h4>
+                        <h4 style="margin-top: 0;">Publisher prompt decision</h4>
+                        <p class="section-hint">Terra proposed a Topic Brief change from the collected SEO portfolio data. It is never applied automatically.</p>
                         <p id="seoTopicBriefReason" class="section-hint"></p>
                         <p class="section-hint"><strong>Evidence:</strong> <span id="seoTopicBriefEvidence"></span></p>
                         <div class="seo-topic-diff">
                             <div><strong>Current</strong><pre id="seoCurrentTopicBrief"></pre></div>
                             <div><strong>Proposed</strong><pre id="seoProposedTopicBrief"></pre></div>
                         </div>
-                        <button id="acceptSeoTopicBriefBtn" type="button" class="admin-btn">Accept suggested Topic Brief</button>
+                        <div class="publisher-config-actions">
+                            <button id="acceptSeoTopicBriefBtn" type="button" class="admin-btn">Accept suggested Topic Brief</button>
+                            <button id="rejectSeoTopicBriefBtn" type="button" class="admin-btn secondary">Reject and keep current</button>
+                            <span id="seoTopicBriefDecision" class="section-hint">Decision: pending</span>
+                        </div>
                     </div>
                     <details style="margin-top: 12px;">
                         <summary>Read-only hard-coded search opportunity rules</summary>

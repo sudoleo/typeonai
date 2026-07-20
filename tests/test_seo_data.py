@@ -427,6 +427,8 @@ def test_admin_endpoints_require_admin(monkeypatch):
         def preview(self, run_id, **kwargs): return {"run_id": run_id, "pages": []}
         def apply(self, run_id, **kwargs): return {"run_id": run_id, "results": []}
         def accept_topic_brief(self, run_id, **kwargs): return {"status": "success"}
+        def reject_topic_brief(self, run_id, **kwargs): return {"status": "success"}
+        def record_editorial_decision(self, run_id, **kwargs): return {"status": "success"}
 
     monkeypatch.setattr(admin_router, "seo_data_service", StubSeoService())
     monkeypatch.setattr(admin_router, "seo_recommendation_service", StubRecommendationService())
@@ -447,6 +449,12 @@ def test_admin_endpoints_require_admin(monkeypatch):
     assert client.post(f"/api/admin/seo/reviews/{'a' * 32}/preview", headers={"Authorization": "Bearer token"}, json={}).status_code == 403
     assert client.post(f"/api/admin/seo/reviews/{'a' * 32}/apply", headers={"Authorization": "Bearer token"}, json={}).status_code == 403
     assert client.post(f"/api/admin/seo/reviews/{'a' * 32}/topic-brief/accept", headers={"Authorization": "Bearer token"}).status_code == 403
+    assert client.post(f"/api/admin/seo/reviews/{'a' * 32}/topic-brief/reject", headers={"Authorization": "Bearer token"}).status_code == 403
+    assert client.post(
+        f"/api/admin/seo/reviews/{'a' * 32}/editorial-decision",
+        headers={"Authorization": "Bearer token"},
+        json={"page_id": "b" * 64, "decision": "keep_as_is"},
+    ).status_code == 403
     page_id = "a" * 64
     assert client.post(
         f"/api/admin/seo/pages/{page_id}/recommendation",
@@ -467,6 +475,12 @@ def test_admin_endpoints_require_admin(monkeypatch):
     assert client.post(f"/api/admin/seo/reviews/{'a' * 32}/preview", headers={"Authorization": "Bearer token"}, json={}).status_code == 200
     assert client.post(f"/api/admin/seo/reviews/{'a' * 32}/apply", headers={"Authorization": "Bearer token"}, json={}).status_code == 200
     assert client.post(f"/api/admin/seo/reviews/{'a' * 32}/topic-brief/accept", headers={"Authorization": "Bearer token"}).status_code == 200
+    assert client.post(f"/api/admin/seo/reviews/{'a' * 32}/topic-brief/reject", headers={"Authorization": "Bearer token"}).status_code == 200
+    assert client.post(
+        f"/api/admin/seo/reviews/{'a' * 32}/editorial-decision",
+        headers={"Authorization": "Bearer token"},
+        json={"page_id": "b" * 64, "decision": "keep_as_is"},
+    ).status_code == 200
     assert client.post(
         f"/api/admin/seo/pages/{page_id}/recommendation",
         headers={"Authorization": "Bearer token"},
@@ -496,6 +510,8 @@ def test_admin_seo_collect_action_is_hidden_until_admin_request_succeeds():
     assert "/api/admin/seo/reviews/${encodeURIComponent(runId)}/apply" in template
     assert "Apply all safe recommendations" in template
     assert "Accept suggested Topic Brief" in template
+    assert "Reject and keep current" in template
+    assert "Confirm decision" in template
     assert 'id="seoReviewTime" type="time"' in template
     assert 'id="seoReviewTimezone"' in template
     assert "Completed in this review" in template

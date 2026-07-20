@@ -29,6 +29,7 @@ from app.services.api_consensus_runner import (
 )
 from app.services.share_snapshots import cleanup_expired_pending, cleanup_revoked_shares
 from app.services.watch_scheduler import watch_scheduler_loop
+from app.services.watch_service import backfill_publisher_watch_lineage
 from app.services.seo_weekly_review import seo_review_scheduler_loop
 
 
@@ -81,6 +82,10 @@ async def lifespan(app: FastAPI):
         # 60-Sekunden-Maintenance-Loop wieder aufgenommen.
         ("recover_persisted_runs", recover_persisted_runs),
     ))
+    lineage_backfill_task = asyncio.create_task(
+        asyncio.to_thread(backfill_publisher_watch_lineage),
+        name="publisher-watch-lineage-backfill",
+    )
     watch_task = asyncio.create_task(watch_scheduler_loop(), name="consensus-watch-scheduler")
     seo_review_task = asyncio.create_task(
         seo_review_scheduler_loop(), name="seo-weekly-review-scheduler"
@@ -98,6 +103,7 @@ async def lifespan(app: FastAPI):
         seo_review_task.cancel()
         api_maintenance_task.cancel()
         api_account_cleanup_task.cancel()
+        lineage_backfill_task.cancel()
         try:
             await watch_task
         except asyncio.CancelledError:
@@ -112,6 +118,10 @@ async def lifespan(app: FastAPI):
             pass
         try:
             await api_maintenance_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await lineage_backfill_task
         except asyncio.CancelledError:
             pass
 

@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.security import db_firestore
 from app.services import publisher_config, seo_data, seo_recommendation
-from app.services import share_snapshots, watch_service
+from app.services import share_snapshots, telegram_notifier, watch_service
 from app.services.seo_repository import FirestoreSeoRepository
 
 
@@ -34,6 +34,11 @@ LEASE_MINUTES = 45
 SCHEDULER_TICK_SECONDS = 15 * 60
 MAX_REVIEW_PAGES = 100
 MAX_PORTFOLIO_PROMPT_CHARS = 40_000
+DEFAULT_PORTFOLIO_JUDGE_MODEL = "gpt-5.6-terra"
+EDITORIAL_DECISIONS = {
+    "keep_as_is", "create_successor", "investigate", "noindex", "delete",
+    "edit_static_page",
+}
 
 GROUPS = (
     "keep_indexed",
@@ -52,7 +57,6 @@ GROUP_ACTIONS = {
     "noindex_only": "noindex",
     "noindex_and_pause_watch": "noindex_and_pause_watch",
     "delete_candidate": "delete",
-    "manual_improvement": "mark_reviewed",
 }
 
 
@@ -177,6 +181,7 @@ class SeoPortfolioJudge:
         self.model = model if model is not None else (
             os.environ.get("SEO_PORTFOLIO_JUDGE_MODEL")
             or os.environ.get("SEO_CONTENT_JUDGE_MODEL")
+            or DEFAULT_PORTFOLIO_JUDGE_MODEL
         )
         self.caller = caller
 
@@ -246,6 +251,7 @@ class SeoPortfolioJudge:
             client = openai.OpenAI(api_key=self.api_key, timeout=60)
             response = client.chat.completions.create(
                 model=self.model,
+                reasoning_effort="medium",
                 messages=[
                     {"role": "system", "content": "You are a conservative SEO portfolio reviewer."},
                     {"role": "user", "content": prompt},
@@ -453,6 +459,7 @@ class SeoWeeklyReviewService:
         data_service=None,
         recommendation_service=None,
         judge=None,
+        notifier=None,
         clock=None,
     ):
         self.db = db if db is not None else db_firestore
@@ -461,6 +468,7 @@ class SeoWeeklyReviewService:
         self.data_service = data_service or seo_data.SeoDataService(self.db)
         self.recommendation_service = recommendation_service or seo_recommendation.SeoRecommendationService(self.db)
         self.judge = judge or SeoPortfolioJudge()
+        self.notifier = notifier or telegram_notifier.send_seo_review_notification
         self.clock = clock or utcnow
 
     def status(self) -> dict:
@@ -468,6 +476,9 @@ class SeoWeeklyReviewService:
         config = self.repository.get_config(now)
         publisher = publisher_config.get_config(db=self.db)
         counts = watch_service.publisher_watch_counts(db=self.db)
+        latest_review = self.repository.latest_review()
+        if latest_review:
+            self._attach_editorial_templates(latest_review.get("pages") or [])
         return _json_safe({
             "config": {
                 key: config.get(key)
@@ -481,7 +492,7 @@ class SeoWeeklyReviewService:
                 and config["lease_until"] > now
             ),
             "judge": self.judge.status(),
-            "latest_review": self.repository.latest_review(),
+            "latest_review": latest_review,
             "publisher_watches": {
                 **counts,
                 "limit": int(publisher.get("max_active_publisher_watches") or 12),
@@ -516,6 +527,7 @@ class SeoWeeklyReviewService:
             "started_at": now,
             "trigger": "manual" if force else "scheduler",
             "applied_actions": [],
+            "editorial_decisions": {},
         })
         try:
             collection = self.data_service.collect()
@@ -530,8 +542,7 @@ class SeoWeeklyReviewService:
                     "pages": [],
                     "judge_called": False,
                 }
-                self.repository.update_review(run_id, result)
-                return _json_safe({**result, "run_id": run_id})
+                return self._persist_terminal_review(run_id, result)
 
             overview = self.data_service.overview(
                 active_only=False,
@@ -549,6 +560,7 @@ class SeoWeeklyReviewService:
                     groups = self._merge_safe_judge_groups(groups, pages, judge_result)
                 except ReviewError as exc:
                     judge_error = exc.safe_message
+            self._attach_editorial_templates(pages)
             mature_count = sum(
                 1 for page in pages
                 if int((page.get("data_window") or {}).get("finalized_days") or 0) >= 28
@@ -584,13 +596,13 @@ class SeoWeeklyReviewService:
                     if proposed else ""
                 ),
                 "topic_brief_evidence_page_ids": evidence_ids if proposed else [],
+                "topic_brief_decision": "pending" if proposed else "not_proposed",
                 "topic_brief_accepted_at": None,
             }
-            self.repository.update_review(run_id, result)
-            return _json_safe({**result, "run_id": run_id})
+            return self._persist_terminal_review(run_id, result)
         except Exception:
             finished = self.clock()
-            self.repository.update_review(run_id, {
+            self._persist_terminal_review(run_id, {
                 "status": "error",
                 "finished_at": finished,
                 "summary": "Weekly SEO review failed safely. Check server diagnostics.",
@@ -604,6 +616,19 @@ class SeoWeeklyReviewService:
                 config.get("run_time") or DEFAULT_RUN_TIME,
                 config.get("timezone") or DEFAULT_TIMEZONE,
             )
+
+    def _persist_terminal_review(self, run_id: str, result: dict) -> dict:
+        self.repository.update_review(run_id, result)
+        payload = {**result, "run_id": run_id}
+        try:
+            notification = self.notifier(_json_safe(payload))
+            if not isinstance(notification, dict):
+                notification = {"status": "unknown"}
+        except Exception:
+            logging.exception("SEO review Telegram notification failed safely")
+            notification = {"status": "failed_internal"}
+        self.repository.update_review(run_id, {"telegram_notification": notification})
+        return _json_safe({**payload, "telegram_notification": notification})
 
     def _build_page(self, row: dict, now: datetime) -> dict:
         page_id = row["page_id"]
@@ -715,6 +740,10 @@ class SeoWeeklyReviewService:
                 if not page or not self._judge_group_allowed(page, group):
                     continue
                 assigned[page_id] = group
+                page["portfolio_judge"] = {
+                    "group": group,
+                    "reason": str(proposal.get("reason") or "")[:400],
+                }
         if not assigned:
             return groups
         merged = {name: [] for name in GROUPS}
@@ -723,6 +752,45 @@ class SeoWeeklyReviewService:
             page["group"] = group
             merged[group].append(page["page_id"])
         return merged
+
+    @staticmethod
+    def _attach_editorial_templates(pages: list[dict]) -> None:
+        """Persist actionable choices without mutating immutable snapshots."""
+        for page in pages:
+            if page.get("group") != "manual_improvement":
+                page.pop("editorial_decision_template", None)
+                continue
+            recommendation = str(page.get("recommendation") or "")
+            immutable = page.get("page_type") == "share"
+            if immutable and recommendation in {"refresh_title_and_intro", "refresh_content"}:
+                suggested = "create_successor"
+                explanation = (
+                    "This Share is an immutable snapshot. Confirm a successor page instead of editing it in place."
+                )
+            elif not immutable and recommendation in {"refresh_title_and_intro", "refresh_content"}:
+                suggested = "edit_static_page"
+                explanation = "Confirm an editorial update to the existing static page."
+            elif recommendation == "noindex_candidate":
+                suggested = "noindex"
+                explanation = "Review the evidence before separately changing index visibility."
+            elif recommendation == "investigate_decline":
+                suggested = "investigate"
+                explanation = "Confirm a diagnosis task before changing content or index visibility."
+            else:
+                suggested = "keep_as_is"
+                explanation = "Record an explicit editorial decision; no content change is automatic."
+            options = ["keep_as_is", "investigate"]
+            if immutable:
+                options.extend(["create_successor", "noindex", "delete"])
+            else:
+                options.append("edit_static_page")
+            page["editorial_decision_template"] = {
+                "immutable_snapshot": immutable,
+                "suggested_decision": suggested,
+                "options": options,
+                "explanation": explanation,
+                "requires_human_approval": True,
+            }
 
     @staticmethod
     def _judge_group_allowed(page: dict, group: str) -> bool:
@@ -744,7 +812,7 @@ class SeoWeeklyReviewService:
     def _fallback_summary(pages: list[dict], groups: dict) -> str:
         return (
             f"Reviewed {len(pages)} SEO pages. "
-            f"{len(groups['manual_improvement'])} need manual improvement; "
+            f"{len(groups['manual_improvement'])} need an editorial decision; "
             f"{len(groups['pause_watch_only'])} watches can be paused; "
             f"{len(groups['noindex_only']) + len(groups['noindex_and_pause_watch'])} "
             "publisher pages passed all deterministic noindex safeguards."
@@ -939,6 +1007,39 @@ class SeoWeeklyReviewService:
             if index_changed and (action == "delete" or share.get("indexed")):
                 raise ReviewError("state_changed", "The index status changed after the review.")
 
+    def record_editorial_decision(
+        self, run_id: str, *, page_id: str, decision: str,
+        admin_uid: str, note: str = "",
+    ) -> dict:
+        review = self._review(run_id)
+        page = next(
+            (item for item in (review.get("pages") or []) if item.get("page_id") == page_id),
+            None,
+        )
+        if not page or page.get("group") != "manual_improvement":
+            raise ReviewError("not_found", "Editorial decision candidate not found in this review.")
+        normalized = str(decision or "").strip()
+        template = page.get("editorial_decision_template") or {}
+        allowed = set(template.get("options") or EDITORIAL_DECISIONS)
+        if normalized not in EDITORIAL_DECISIONS or normalized not in allowed:
+            raise ReviewError("invalid_decision", "This editorial decision is not valid for the selected page.")
+        decided_at = self.clock()
+        entry = {
+            "page_id": page_id,
+            "decision": normalized,
+            "note": str(note or "").strip()[:500],
+            "decided_at": decided_at,
+            "decided_by": str(admin_uid or "")[:128],
+            "recommendation": str(page.get("recommendation") or ""),
+            "requires_follow_up": normalized not in {"keep_as_is"},
+            "executed": False,
+        }
+        decisions = dict(review.get("editorial_decisions") or {})
+        decisions[page_id] = entry
+        self.repository.update_review(run_id, {"editorial_decisions": decisions})
+        self.repository.mark_page_reviewed(page_id, admin_uid, decided_at)
+        return _json_safe({"status": "success", "run_id": run_id, "decision": entry})
+
     def accept_topic_brief(self, run_id: str, *, admin_uid: str) -> dict:
         review = self._review(run_id)
         proposed = str(review.get("proposed_topic_brief") or "").strip()
@@ -952,10 +1053,27 @@ class SeoWeeklyReviewService:
         )
         accepted_at = self.clock()
         self.repository.update_review(run_id, {
+            "topic_brief_decision": "accepted",
             "topic_brief_accepted_at": accepted_at,
             "topic_brief_accepted_by": str(admin_uid or "")[:128],
+            "topic_brief_decided_at": accepted_at,
+            "topic_brief_decided_by": str(admin_uid or "")[:128],
         })
         return _json_safe({"status": "success", "config": publisher_config.public_config(saved)})
+
+    def reject_topic_brief(self, run_id: str, *, admin_uid: str) -> dict:
+        review = self._review(run_id)
+        if not str(review.get("proposed_topic_brief") or "").strip():
+            raise ReviewError("no_topic_brief", "This review has no Topic Brief suggestion.")
+        if review.get("topic_brief_decision") == "accepted":
+            raise ReviewError("topic_brief_decided", "This Topic Brief suggestion was already accepted.")
+        decided_at = self.clock()
+        self.repository.update_review(run_id, {
+            "topic_brief_decision": "rejected",
+            "topic_brief_decided_at": decided_at,
+            "topic_brief_decided_by": str(admin_uid or "")[:128],
+        })
+        return _json_safe({"status": "success", "decision": "rejected"})
 
 
 default_service = SeoWeeklyReviewService(db_firestore)

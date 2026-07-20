@@ -45,7 +45,9 @@ sequenziell in einem Worker-Thread unter einem gemeinsamen, standardmäßig
 15-sekündigen Readiness-Budget; bei Firestore-Störungen startet die App mit
 Code-Defaults und die regulären Maintenance-Loops übernehmen Retries, statt den
 Web-Event-Loop dauerhaft zu blockieren. Der Modell-Config-Read selbst deaktiviert
-den langen SDK-Retry und bricht nach fünf Sekunden ab. Cancellable asyncio-Tasks übernehmen danach
+den langen SDK-Retry und bricht nach fünf Sekunden ab. Ein separater, nicht die
+Readiness blockierender Einmal-Task verifiziert und ergänzt fehlende Publisher-
+Lineage bei alten Free-Publisher-Watches. Cancellable asyncio-Tasks übernehmen danach
 den 60-Sekunden-API-Maintenance-, 5-Minuten-Account-Cleanup- und
 30-Minuten-Consensus-Watch-Tick.
 
@@ -66,9 +68,11 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 Weekly-SEO-Admin-Erweiterung: `GET /api/admin/seo/review`, `PUT
 /api/admin/seo/review/config` und `POST /api/admin/seo/review/run` liefern bzw.
 steuern Status, Zeitplan und manuellen Start. Gruppen-Vorschau/-Ausführung laufen
-über `POST /api/admin/seo/reviews/{run_id}/preview|apply`; der optionale Topic
-Brief wird ausschließlich per `POST .../{run_id}/topic-brief/accept` angenommen.
-Alle Endpunkte sind admin-only.
+über `POST /api/admin/seo/reviews/{run_id}/preview|apply`. Redaktionelle
+Snapshot-Entscheidungen werden per `POST .../{run_id}/editorial-decision`
+gespeichert; ein vom Portfolio-Judge vorgeschlagener Publisher Topic Brief wird
+explizit per `POST .../{run_id}/topic-brief/accept|reject` entschieden. Alle
+Endpunkte sind admin-only.
 
 **Zentrale Templates** (`templates/`, gerendert mit `Jinja2Templates`):
 `landing.html` (Marketing), `index.html` (die App — Haupt-Markup + Script-Tags),
@@ -502,6 +506,10 @@ Whitelist für Bild-MIME-Typen.
   erzeugten Share als `publication_source=scheduled_publisher`; normale API-
   und Nutzer-Shares erhalten diese Lineage nicht. Neue Publisher-Watches sind
   auf maximal 12 aktive (im Publisher-Config-Dokument konfigurierbar) begrenzt.
+  Für Kapazität/Admin-Zähler gilt das ausschließlich vom Admin-Publisher
+  gesetzte `model_tier=free` als Legacy-Marker; ein Hintergrund-Backfill ergänzt
+  fehlende explizite Lineage nur nach Verifikation des ursprünglichen
+  `request.publisher_mode`.
   Volle Kapazität liefert `watch_skipped_capacity`, lässt die Veröffentlichung
   erfolgreich und pausiert/löscht keine bestehenden Watches.
 
@@ -588,13 +596,17 @@ Whitelist für Bild-MIME-Typen.
   und verwendet die vom Overview bereits geladenen Seiten-, 28-Tage- und
   Query-Daten für die Recommendation erneut; pro Seite gibt es keinen zweiten
   Firestore-Metrikscan.
-  Erst danach darf genau ein
-  optionaler Portfolio-Judge-Call erfolgen; bei vollständig fehlgeschlagener
-  Collection gibt es keinen Call. Unvollständige Query-Daten dürfen im Bericht
+  Erst danach darf genau ein Portfolio-Judge-Call mit GPT-5.6 Terra und
+  mittlerem Reasoning erfolgen, sofern der Server-OpenAI-Key gesetzt ist; bei
+  vollständig fehlgeschlagener Collection gibt es keinen Call. Unvollständige Query-Daten dürfen im Bericht
   stehen, blockieren aber serverseitig Noindex und Delete.
 - Die sieben Gruppen sind `keep_indexed`, `pause_watch_only`, `resume_watch`,
   `noindex_only`, `noindex_and_pause_watch`, `delete_candidate` und
-  `manual_improvement`. Gespeicherte Vorschläge mutieren nichts. Preview/Apply
+  `manual_improvement` (im Admin als „Editorial decision required“). Für diese
+  Gruppe speichert der Run eine seitenbezogene Entscheidungsvorlage; immutable
+  Share-Snapshots schlagen einen neuen Nachfolger statt einer In-place-Änderung
+  vor. Bestätigungen speichern nur Entscheidung/Follow-up und mutieren den
+  Snapshot nicht. Gespeicherte Vorschläge mutieren nichts. Preview/Apply
   prüfen Lineage, Index-/Watch-Zustand, Recommendation-Fingerprint und Noindex-
   Safeguards erneut; kombinierte Aktionen protokollieren beide Teilergebnisse.
   Watch-Pause/Resume ändern nie `indexed`, Noindex nie implizit den Watch.
@@ -638,7 +650,8 @@ app/services/
   seo_dossier.py            Minimierte statische/Share-Seitendossiers ohne UID/Secrets
   seo_data.py               URL-Discovery, inkrementelle Collection, Query-Snapshots + Statusregeln
   seo_recommendation.py     Deterministische Regeln + optionaler strukturierter Content-Judge
-  seo_weekly_review.py      Leased Portfolio-Review, Gruppen/Actions + optionaler Topic-Brief-Vorschlag
+  seo_weekly_review.py      Leased Terra-Portfolio-Review, Gruppen/Entscheidungen + Topic-Brief-Vorschlag
+  telegram_notifier.py      Best-effort Telegram-Statusmeldungen nach jedem terminalen SEO-Review
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
   opinion_map.py             Datenminimierte, mehrdimensionale Provider-Positionen + Direction-Shift-Berechnung
@@ -794,9 +807,10 @@ Wichtige Verträge im Backend:
   Secrets und vollständige Share-Inhalte werden nicht gespeichert.
 - `seo_weekly_reviews/{run_id}` — kompakter Portfolio-Snapshot mit Status,
   Collection-Ergebnis, Summary/Findings, Gruppen, begrenzten Seitenempfehlungen
-  und Fingerprints, damaligem/optional vorgeschlagenem Topic Brief sowie den
-  letzten 50 Action-Audits. Keine Secrets, Owner-UIDs oder vollständigen
-  Share-Inhalte.
+  und Fingerprints, redaktionellen Entscheidungsvorlagen/-bestätigungen,
+  damaligem/optional vorgeschlagenem Topic Brief samt Pending/Accepted/Rejected-
+  Entscheidung, Telegram-Versandstatus sowie den letzten 50 Action-Audits. Keine
+  Secrets, Owner-UIDs oder vollständigen Share-Inhalte.
 - `differences_stats` — anonyme Differences-Telemetrie (Schema v3): pro erfolgreichem
   Consensus-Lauf ein Dokument mit Zähl-/Strukturdaten (Agreement-Score,
   Widersprüche mit Severity und beteiligten Providern, Modell-Metadaten,
@@ -834,9 +848,14 @@ Wichtige Verträge im Backend:
 - Optionaler SEO-Content-Judge: `SEO_CONTENT_JUDGE_MODEL`; ohne explizites
   Modell bleibt er aus. Bei Aktivierung nutzt er serverseitig
   `DEVELOPER_OPENAI_API_KEY`; der deterministische Judge benötigt beides nicht.
-- Optionaler Portfolio-Judge: `SEO_PORTFOLIO_JUDGE_MODEL` (Fallback auf
-  `SEO_CONTENT_JUDGE_MODEL`) plus `DEVELOPER_OPENAI_API_KEY`; ohne Konfiguration
-  bleibt der Weekly Review vollständig deterministisch.
+- Portfolio-Judge: `SEO_PORTFOLIO_JUDGE_MODEL` (Fallback auf
+  `SEO_CONTENT_JUDGE_MODEL`, danach `gpt-5.6-terra`) plus
+  `DEVELOPER_OPENAI_API_KEY`; ohne Server-Key bleibt der Weekly Review
+  vollständig deterministisch.
+- SEO-Review-Telegram: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` und optional
+  `SEO_ADMIN_URL` (Default `https://www.consens.io/admin#seo`). Jeder terminale
+  Review versucht genau eine nicht-fatale Nachricht; Ergebnis/Skip wird im Run
+  gespeichert.
 - Optional `STARTUP_JOB_TIMEOUT_SECONDS` (Default 15, Clamp 5–60): gemeinsames
   Readiness-Zeitbudget für die blockierenden Firestore-Startup-Jobs.
 
@@ -895,7 +914,7 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **647 passed** (2026-07-20; inklusive der neuen
+  Letzte bekannte Baseline: **655 passed** (2026-07-20; inklusive der neuen
   Search-Console-/SEO-Dossier-, Query-, Recommendation-, LLM-Schema-,
   Weekly-Portfolio-Review-, Action-, Publisher-Lineage-/Watch-Capacity-,
   Idempotenz- und Admin-Schutztests sowie
@@ -951,6 +970,9 @@ API-Account-Löschkaskaden alle fünf Minuten.
 Fälligkeitscheck; `next_run_at` wird aus Intervall, lokaler Uhrzeit und Zeitzone
 DST-fest berechnet. Das persistente Config-/Lease-Dokument ist unabhängig vom
 30-Minuten-Watch-Worker; ein Review führt keine Empfehlung automatisch aus.
+Jeder terminale Lauf (auch Collection-Fehler) versucht anschließend eine
+Telegram-Nachricht mit Ergebnis, offenen redaktionellen Entscheidungen,
+Topic-Brief-Entscheidungsbedarf und Admin-Link; Versandfehler bleiben nicht-fatal.
 Die synchrone Pipeline läuft außerhalb des asyncio-Event-Loops. Manueller
 Collector und Weekly Review teilen zusätzlich eine prozessweite Nonblocking-
 Sperre, damit ihre GSC-/Firestore-Arbeit nicht parallel denselben Webprozess

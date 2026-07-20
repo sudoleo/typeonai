@@ -179,6 +179,55 @@ def test_review_uses_at_most_one_portfolio_judge_call(monkeypatch):
     assert result["judge_called"] is True
 
 
+def test_portfolio_judge_defaults_to_gpt_5_6_terra(monkeypatch):
+    monkeypatch.delenv("SEO_PORTFOLIO_JUDGE_MODEL", raising=False)
+    monkeypatch.delenv("SEO_CONTENT_JUDGE_MODEL", raising=False)
+    judge = weekly.SeoPortfolioJudge(api_key="test-key")
+    assert judge.model == "gpt-5.6-terra"
+    assert judge.status()["configured"] is True
+
+
+def test_portfolio_judge_sends_terra_with_medium_reasoning(monkeypatch):
+    captured = {}
+
+    class Completions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            message = type("Message", (), {"content": (
+                '{"summary":"Stable","positive_patterns":[],"negative_patterns":[],'
+                '"grouped_recommendations":[],"proposed_topic_brief":null,'
+                '"topic_brief_reason":null,"topic_brief_evidence_page_ids":[]}'
+            )})()
+            return type("Response", (), {"choices": [type("Choice", (), {"message": message})()]})()
+
+    class Client:
+        def __init__(self, **kwargs):
+            self.chat = type("Chat", (), {"completions": Completions()})()
+
+    monkeypatch.setattr(weekly.openai, "OpenAI", Client)
+    judge = weekly.SeoPortfolioJudge(api_key="test-key", model="gpt-5.6-terra")
+    assert judge.ask([], "Current brief")["summary"] == "Stable"
+    assert captured["model"] == "gpt-5.6-terra"
+    assert captured["reasoning_effort"] == "medium"
+    assert captured["response_format"]["type"] == "json_schema"
+
+
+def test_every_terminal_review_attempts_telegram_notification(monkeypatch):
+    service, _repo, _judge = build_run_service(monkeypatch)
+    notifications = []
+    service.notifier = lambda review: notifications.append(review) or {"status": "sent"}
+    result = service.run(force=True)
+    assert len(notifications) == 1
+    assert notifications[0]["status"] == "completed"
+    assert result["telegram_notification"]["status"] == "sent"
+
+    service, _repo, _judge = build_run_service(monkeypatch, "error")
+    service.notifier = lambda review: notifications.append(review) or {"status": "sent"}
+    result = service.run(force=True)
+    assert notifications[-1]["status"] == "collection_failed"
+    assert result["telegram_notification"]["status"] == "sent"
+
+
 def test_review_reuses_overview_context_without_second_metric_scan(monkeypatch):
     service, _repo, _judge = build_run_service(monkeypatch)
     page_id = "b" * 64
@@ -275,6 +324,20 @@ def test_deterministic_recommendations_are_grouped_without_llm_override():
     assert groups["keep_indexed"] == ["1"]
     assert groups["pause_watch_only"] == ["2"]
     assert groups["manual_improvement"] == ["3"]
+
+
+def test_manual_improvement_gets_snapshot_decision_template():
+    pages = [{
+        "page_id": PAGE_ID,
+        "group": "manual_improvement",
+        "page_type": "share",
+        "recommendation": "refresh_title_and_intro",
+    }]
+    weekly.SeoWeeklyReviewService._attach_editorial_templates(pages)
+    template = pages[0]["editorial_decision_template"]
+    assert template["immutable_snapshot"] is True
+    assert template["suggested_decision"] == "create_successor"
+    assert "edit_static_page" not in template["options"]
 
 
 class ActionRepo(RunRepo):
@@ -405,3 +468,33 @@ def test_topic_brief_accept_preserves_other_config_and_detects_manual_change(mon
     current["topic_brief"] = "Manual edit"
     with pytest.raises(weekly.ReviewError, match="changed"):
         service.accept_topic_brief(RUN_ID, admin_uid="admin")
+
+
+def test_editorial_decision_and_topic_brief_rejection_are_persisted():
+    page = action_page("manual_improvement", source="")
+    page["editorial_decision_template"] = {
+        "options": ["keep_as_is", "create_successor"],
+        "suggested_decision": "create_successor",
+    }
+    repo = ActionRepo(page)
+    repo.reviews[RUN_ID].update(
+        current_topic_brief="Old",
+        proposed_topic_brief="New",
+        topic_brief_decision="pending",
+    )
+    service = weekly.SeoWeeklyReviewService(
+        Db(), repository=repo, notifier=lambda review: {"status": "sent"}, clock=lambda: NOW
+    )
+    result = service.record_editorial_decision(
+        RUN_ID,
+        page_id=PAGE_ID,
+        decision="create_successor",
+        admin_uid="admin",
+        note="Publish a replacement after review.",
+    )
+    assert result["decision"]["executed"] is False
+    assert repo.reviews[RUN_ID]["editorial_decisions"][PAGE_ID]["decision"] == "create_successor"
+
+    rejected = service.reject_topic_brief(RUN_ID, admin_uid="admin")
+    assert rejected["decision"] == "rejected"
+    assert repo.reviews[RUN_ID]["topic_brief_decision"] == "rejected"

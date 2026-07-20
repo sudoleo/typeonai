@@ -229,6 +229,30 @@ class WatchCrudTests(unittest.TestCase):
             ["deepseek"],
         )
 
+    def test_legacy_free_watch_counts_and_verified_lineage_is_backfilled(self):
+        run_id = "r" * 32
+        self.db.stores["shares"][self.share_id]["source_api_run_id"] = run_id
+        self.db.stores["api_consensus_runs"][run_id] = {
+            "request": {"publisher_mode": True}
+        }
+        created = watch_service.create_watch(
+            "u1", share_id=self.share_id, interval="weekly", is_pro=True,
+            model_tier="free", return_existing=True, db=self.db,
+        )
+        self.db.stores["watches"][created["id"]].pop("publication_source", None)
+
+        self.assertEqual(
+            watch_service.publisher_watch_counts(db=self.db),
+            {"active": 1, "paused": 0},
+        )
+        result = watch_service.backfill_publisher_watch_lineage(db=self.db)
+        self.assertEqual(result["updated_watches"], 1)
+        self.assertEqual(result["updated_shares"], 1)
+        self.assertEqual(
+            self.db.stores["shares"][self.share_id]["publication_source"],
+            "scheduled_publisher",
+        )
+
     def test_admin_can_list_and_queue_active_watch(self):
         created = watch_service.create_watch(
             "u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db
