@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from firebase_admin import auth
 from google.cloud.firestore_v1.base_query import FieldFilter
 
+from app.services import telegram_watch
+
 
 API_ACCOUNT_BLOCKS_COLLECTION = "api_consensus_account_blocks"
 API_IDEMPOTENCY_COLLECTION = "api_consensus_idempotency"
@@ -95,6 +97,12 @@ class FirestoreApiAccountCleanup:
             except Exception:
                 logging.exception("%s cleanup failed for blocked UID %s", collection_name, uid)
                 errors.append(collection_name)
+
+        try:
+            telegram_watch.delete_user_data(uid, db=self._db)
+        except Exception:
+            logging.exception("Telegram cleanup failed for blocked UID %s", uid)
+            errors.append("telegram")
 
         now = datetime.now(timezone.utc)
         self._block_ref(uid).set(

@@ -103,7 +103,8 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       nächstem Lauf und Änderungen der letzten 7 Tage; pro Watch eine Karte mit
       Frage, Status-/Sichtbarkeits-Chip, Agreement-Score + Delta,
       History-Sparkline, letzter Änderung und nächstem Lauf. „Settings“ klappt
-      Intervall/Uhrzeit/Mailmodus/Condition auf; Pause/Resume und Delete
+      Intervall/Uhrzeit/Alert-Regel/Condition sowie E-Mail-/Telegram-Kanäle auf;
+      Pause/Resume und Delete
       funktionieren. Delete lässt bereits vorhandene Share-History bestehen.
       „← Back to app“ und ESC führen zurück. Light/Dark und Mobile ohne Overflow.
 - [ ] Morning Brief (Karte im Dashboard): Toggle aktiviert die tägliche
@@ -129,6 +130,17 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       erneut bei weiter bestehendem `met`; `unknown` löst nicht aus. Die Mail enthält
       Condition, Begründung und neuen Consensus.
       Abmelde-Link pausiert ohne Login.
+- [ ] Mit gesetztem `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` und
+      `TELEGRAM_WEBHOOK_SECRET`: „Connect Telegram“ öffnet den Bot, `/start`
+      verbindet ausschließlich den eingeloggten Account und das Dashboard zeigt
+      danach Identität, „Send test“ und „Disconnect“. Abgelaufene oder erneut
+      verwendete Deep-Links werden abgelehnt.
+- [ ] Telegram lässt sich beim Erstellen und je Watch an-/abschalten; mindestens
+      E-Mail oder Telegram bleibt aktiv. Ein materieller Change erzeugt genau
+      eine Telegram-Nachricht mit Score/Änderung und Buttons. „Mute 24h“
+      unterdrückt weitere Telegram-Alerts, „Pause“ verlangt eine zweite
+      Bestätigung und pausiert nur die eigene Watch. Ein erneuter Scheduler-
+      Versuch für dieselbe Run-ID verschickt kein Duplikat.
 
 ## Modelle / Picker
 - [ ] Custom Model Picker öffnet/wählt, sichtbarer Name aktualisiert.

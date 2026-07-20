@@ -31,6 +31,7 @@ from app.services.share_snapshots import cleanup_expired_pending, cleanup_revoke
 from app.services.watch_scheduler import watch_scheduler_loop
 from app.services.watch_service import backfill_publisher_watch_lineage
 from app.services.seo_weekly_review import seo_review_scheduler_loop
+from app.services.telegram_watch import run_startup_maintenance as telegram_startup_maintenance
 
 
 def _startup_job_timeout_seconds() -> int:
@@ -86,6 +87,10 @@ async def lifespan(app: FastAPI):
         asyncio.to_thread(backfill_publisher_watch_lineage),
         name="publisher-watch-lineage-backfill",
     )
+    telegram_webhook_task = asyncio.create_task(
+        asyncio.to_thread(telegram_startup_maintenance),
+        name="telegram-watch-startup-maintenance",
+    )
     watch_task = asyncio.create_task(watch_scheduler_loop(), name="consensus-watch-scheduler")
     seo_review_task = asyncio.create_task(
         seo_review_scheduler_loop(), name="seo-weekly-review-scheduler"
@@ -104,6 +109,7 @@ async def lifespan(app: FastAPI):
         api_maintenance_task.cancel()
         api_account_cleanup_task.cancel()
         lineage_backfill_task.cancel()
+        telegram_webhook_task.cancel()
         try:
             await watch_task
         except asyncio.CancelledError:
@@ -122,6 +128,10 @@ async def lifespan(app: FastAPI):
             pass
         try:
             await lineage_backfill_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await telegram_webhook_task
         except asyncio.CancelledError:
             pass
 

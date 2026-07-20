@@ -13,6 +13,65 @@ from urllib.request import Request, urlopen
 DEFAULT_ADMIN_URL = "https://www.consens.io/admin#seo"
 
 
+def bot_token() -> str:
+    return str(os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+
+
+def call_bot_api(method: str, payload: dict, *, timeout: int = 30) -> dict:
+    """Call one Telegram Bot API method without leaking credentials.
+
+    The structured result lets user-facing notification flows distinguish a
+    blocked bot (HTTP 403) from temporary network failures. Maintenance
+    notifications keep their existing best-effort semantics.
+    """
+    token = bot_token()
+    attempted_at = datetime.now(timezone.utc).isoformat()
+    if not token:
+        return {"status": "skipped_not_configured", "attempted_at": attempted_at}
+    request = Request(
+        f"https://api.telegram.org/bot{token}/{method}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Accept": "application/json", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            raw = response.read()
+        decoded = json.loads(raw or b"{}")
+    except HTTPError as exc:
+        logging.warning("Telegram Bot API %s failed with HTTP %s", method, exc.code)
+        return {
+            "status": "failed_http", "http_status": int(exc.code),
+            "attempted_at": attempted_at,
+        }
+    except (URLError, TimeoutError, OSError, ValueError):
+        logging.warning("Telegram Bot API %s failed with a network/response error", method)
+        return {"status": "failed_network", "attempted_at": attempted_at}
+    if decoded.get("ok") is False:
+        return {
+            "status": "failed_api",
+            "error_code": decoded.get("error_code"),
+            "retry_after": ((decoded.get("parameters") or {}).get("retry_after")),
+            "attempted_at": attempted_at,
+        }
+    return {
+        "status": "sent", "attempted_at": attempted_at,
+        "sent_at": datetime.now(timezone.utc).isoformat(),
+        "result": decoded.get("result"),
+    }
+
+
+def send_bot_message(chat_id, text: str, *, reply_markup: dict | None = None) -> dict:
+    payload = {
+        "chat_id": str(chat_id),
+        "text": str(text or "")[:4096],
+        "disable_web_page_preview": True,
+    }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    return call_bot_api("sendMessage", payload)
+
+
 def _group_count(review: dict, name: str) -> int:
     return len(((review.get("groups") or {}).get(name) or []))
 
@@ -45,44 +104,20 @@ def _review_message(review: dict) -> str:
 
 def send_seo_review_notification(review: dict) -> dict:
     """Notify after every terminal SEO review without failing the review itself."""
-    bot_token = str(os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    configured_token = bot_token()
     chat_id = str(os.environ.get("TELEGRAM_CHAT_ID") or "").strip()
     attempted_at = datetime.now(timezone.utc).isoformat()
-    if not bot_token or not chat_id:
+    if not configured_token or not chat_id:
         return {
             "status": "skipped_not_configured",
             "attempted_at": attempted_at,
         }
 
-    payload = json.dumps({
+    payload = {
         "chat_id": chat_id,
         "text": _review_message(review),
         "disable_web_page_preview": True,
-    }).encode("utf-8")
-    request = Request(
-        f"https://api.telegram.org/bot{bot_token}/sendMessage",
-        data=payload,
-        headers={"Accept": "application/json", "Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urlopen(request, timeout=30) as response:
-            response.read()
-    except HTTPError as exc:
-        logging.warning("SEO review Telegram notification failed with HTTP %s", exc.code)
-        return {
-            "status": "failed_http",
-            "http_status": int(exc.code),
-            "attempted_at": attempted_at,
-        }
-    except (URLError, TimeoutError, OSError):
-        logging.warning("SEO review Telegram notification failed with a network error")
-        return {
-            "status": "failed_network",
-            "attempted_at": attempted_at,
-        }
-    return {
-        "status": "sent",
-        "attempted_at": attempted_at,
-        "sent_at": datetime.now(timezone.utc).isoformat(),
     }
+    result = call_bot_api("sendMessage", payload)
+    result.pop("result", None)
+    return result

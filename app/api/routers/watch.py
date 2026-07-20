@@ -1,3 +1,4 @@
+import asyncio
 import html
 import logging
 
@@ -7,11 +8,17 @@ from fastapi.responses import HTMLResponse
 from app.core.rate_limit import limiter
 from app.core.security import extract_id_token, is_user_pro, verify_user_token
 from app.api.routers.pages import SITE_URL
-from app.services import mailer, watch_brief, watch_followers, watch_service
+from app.services import mailer, telegram_watch, watch_brief, watch_followers, watch_service
 
 
 router = APIRouter()
-_STATUS_BY_CODE = {"not_found": 404, "forbidden": 403, "pro_required": 403, "limit_reached": 429, "already_exists": 409, "invalid_token": 400, "expired_token": 410, "invalid_email": 400, "not_watched": 404}
+_STATUS_BY_CODE = {
+    "not_found": 404, "forbidden": 403, "pro_required": 403,
+    "limit_reached": 429, "already_exists": 409, "invalid_token": 400,
+    "expired_token": 410, "invalid_email": 400, "not_watched": 404,
+    "telegram_not_configured": 503, "telegram_not_linked": 409,
+    "telegram_already_linked": 409, "telegram_delivery_failed": 502,
+}
 
 
 def _uid(request: Request, data: dict) -> str:
@@ -34,11 +41,15 @@ async def create_watch(request: Request, data: dict = Body(...)):
     uid = _uid(request, data)
     if "visibility" not in data:
         raise HTTPException(status_code=400, detail="Choose whether the watch page is private or public.")
+    if data.get("telegram_enabled") is True and not telegram_watch.get_connection(uid).get("connected"):
+        raise HTTPException(status_code=409, detail="Connect Telegram before enabling it for a watch.")
     try:
         watch = watch_service.create_watch(
             uid,
             interval=data.get("interval"),
             email_mode=data.get("email_mode", "changes_only"),
+            email_enabled=data.get("email_enabled", True),
+            telegram_enabled=data.get("telegram_enabled", False),
             condition=data.get("condition", ""),
             visibility=data.get("visibility", "public"),
             run_weekday=data.get("run_weekday", ""),
@@ -71,14 +82,83 @@ async def my_watches(request: Request):
 @limiter.limit("10/minute")
 async def patch_watch(request: Request, watch_id: str, data: dict = Body(...)):
     uid = _uid(request, data)
+    changes = {key: value for key, value in data.items() if key != "id_token"}
+    if changes.get("telegram_enabled") is True and not telegram_watch.get_connection(uid).get("connected"):
+        raise HTTPException(status_code=409, detail="Connect Telegram before enabling it for a watch.")
     try:
-        watch = watch_service.update_watch(uid, watch_id, data, is_user_pro(uid))
+        watch = watch_service.update_watch(uid, watch_id, changes, is_user_pro(uid))
     except watch_service.WatchError as exc:
         _raise(exc)
     except Exception:
         logging.exception("patch_watch failed")
         raise HTTPException(status_code=500, detail="Error updating watch")
     return {"status": "success", "watch": watch}
+
+
+@router.get("/api/my/telegram")
+@limiter.limit("20/minute")
+async def my_telegram(request: Request):
+    uid = _uid(request, {})
+    try:
+        return {"status": "success", "telegram": telegram_watch.get_connection(uid)}
+    except Exception:
+        logging.exception("my_telegram failed")
+        raise HTTPException(status_code=500, detail="Error loading Telegram connection")
+
+
+@router.post("/api/my/telegram/link")
+@limiter.limit("5/minute")
+async def create_telegram_link(request: Request, data: dict = Body(default={})):
+    uid = _uid(request, data)
+    try:
+        link = telegram_watch.create_link(uid)
+    except watch_service.WatchError as exc:
+        _raise(exc)
+    except Exception:
+        logging.exception("create_telegram_link failed")
+        raise HTTPException(status_code=500, detail="Error creating Telegram link")
+    return {"status": "success", **link}
+
+
+@router.post("/api/my/telegram/test")
+@limiter.limit("3/minute")
+async def test_telegram(request: Request, data: dict = Body(default={})):
+    uid = _uid(request, data)
+    try:
+        result = await asyncio.to_thread(telegram_watch.send_test, uid)
+    except watch_service.WatchError as exc:
+        _raise(exc)
+    except Exception:
+        logging.exception("test_telegram failed")
+        raise HTTPException(status_code=500, detail="Error testing Telegram connection")
+    return {"status": "success", "delivery": result}
+
+
+@router.delete("/api/my/telegram")
+@limiter.limit("5/minute")
+async def disconnect_telegram(request: Request, data: dict = Body(default={})):
+    uid = _uid(request, data)
+    try:
+        state = telegram_watch.disconnect(uid)
+    except Exception:
+        logging.exception("disconnect_telegram failed")
+        raise HTTPException(status_code=500, detail="Error disconnecting Telegram")
+    return {"status": "success", "telegram": state}
+
+
+@router.post("/api/telegram/webhook")
+async def telegram_webhook(request: Request, data: dict = Body(default={})):
+    if not telegram_watch.verify_webhook_secret(
+        request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    ):
+        raise HTTPException(status_code=403, detail="Invalid Telegram webhook secret")
+    try:
+        await asyncio.to_thread(telegram_watch.handle_update, data)
+    except Exception:
+        # Return 200 so one malformed update cannot create an endless Telegram
+        # retry loop; action-level errors are acknowledged inside the handler.
+        logging.exception("telegram_webhook update failed")
+    return {"ok": True}
 
 
 @router.delete("/api/watch/{watch_id}")

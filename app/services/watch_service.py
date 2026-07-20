@@ -83,6 +83,12 @@ def validate_email_mode(value) -> str:
     return normalized
 
 
+def validate_notification_channel(value, name: str) -> bool:
+    if not isinstance(value, bool):
+        raise WatchError("invalid_notification_channel", f"{name} must be true or false.")
+    return value
+
+
 def validate_condition(value, *, required=False) -> str:
     condition = " ".join(str(value or "").split()).strip()
     if required and not condition:
@@ -196,6 +202,10 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         "run_time": str(data.get("run_time") or ""),
         "timezone": str(data.get("timezone") or ""),
         "email_mode": data.get("email_mode") or "changes_only",
+        # Legacy watches predate channel switches and remain e-mail enabled.
+        "email_enabled": data.get("email_enabled") is not False,
+        "telegram_enabled": data.get("telegram_enabled") is True,
+        "telegram_muted_until": iso(data.get("telegram_muted_until")),
         "condition": str(data.get("condition") or ""),
         "last_condition_status": data.get("last_condition_status"),
         "visibility": visibility,
@@ -228,6 +238,7 @@ def _check_active_limit(uid: str, is_pro: bool, db, *, excluding_id: str | None 
 
 
 def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
+                 email_enabled=True, telegram_enabled=False,
                  condition="", visibility="public", run_time="", timezone_name="",
                  run_weekday="",
                  result_id=None,
@@ -236,6 +247,10 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
     db = db if db is not None else db_firestore
     interval = validate_interval(interval, is_pro)
     email_mode = validate_email_mode(email_mode)
+    email_enabled = validate_notification_channel(email_enabled, "email_enabled")
+    telegram_enabled = validate_notification_channel(telegram_enabled, "telegram_enabled")
+    if not email_enabled and not telegram_enabled:
+        raise WatchError("notification_channel_required", "Enable e-mail or Telegram notifications.")
     condition = validate_condition(condition, required=email_mode == "condition")
     run_time, timezone_name = validate_run_schedule(run_time, timezone_name)
     run_weekday = validate_run_weekday(run_weekday, interval, has_run_time=bool(run_time))
@@ -313,6 +328,9 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
         "run_time": run_time,
         "timezone": timezone_name,
         "email_mode": email_mode,
+        "email_enabled": email_enabled,
+        "telegram_enabled": telegram_enabled,
+        "telegram_muted_until": None,
         "condition": condition,
         "last_condition_status": None,
         "last_condition_hash": None,
@@ -537,12 +555,13 @@ def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) 
     db = db if db is not None else db_firestore
     ref, data = _owned_watch(uid, watch_id, db)
     allowed_changes = {
-        "interval", "status", "email_mode", "condition", "run_weekday", "run_time", "timezone",
+        "interval", "status", "email_mode", "email_enabled", "telegram_enabled",
+        "condition", "run_weekday", "run_time", "timezone",
     }
     if not changes or any(key not in allowed_changes for key in changes):
         raise WatchError(
             "invalid_request",
-            "Only interval, status, email_mode, condition, run_weekday, run_time, and timezone can be changed.",
+            "Only interval, status, alert rule, channels, condition, run day, run time, and timezone can be changed.",
         )
     if data.get("model_tier") == "free" and any(
         key in changes for key in {"interval", "run_weekday", "run_time", "timezone"}
@@ -584,6 +603,13 @@ def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) 
         )
     if "email_mode" in changes:
         updates["email_mode"] = validate_email_mode(changes["email_mode"])
+    for channel in ("email_enabled", "telegram_enabled"):
+        if channel in changes:
+            updates[channel] = validate_notification_channel(changes[channel], channel)
+    effective_email = updates.get("email_enabled", data.get("email_enabled") is not False)
+    effective_telegram = updates.get("telegram_enabled", data.get("telegram_enabled") is True)
+    if not effective_email and not effective_telegram:
+        raise WatchError("notification_channel_required", "Keep at least one notification channel enabled.")
     if "condition" in changes:
         updates["condition"] = validate_condition(changes["condition"])
         if updates["condition"] != str(data.get("condition") or ""):
@@ -625,6 +651,16 @@ def delete_watch(uid: str, watch_id: str, db=None):
     db = db if db is not None else db_firestore
     ref, _ = _owned_watch(uid, watch_id, db)
     ref.delete()
+
+
+def pause_watch(uid: str, watch_id: str, db=None) -> dict:
+    """Pause an owned watch from a signed-in surface or Telegram callback."""
+    db = db if db is not None else db_firestore
+    ref, data = _owned_watch(uid, watch_id, db)
+    ref.update({"status": "paused", "claimed_until": None})
+    data.update({"status": "paused", "claimed_until": None})
+    share = share_snapshots.get_share(str(data.get("share_id") or ""), db=db) or {}
+    return _serialize_watch(watch_id, data, share)
 
 
 def _unsubscribe_secret() -> bytes:

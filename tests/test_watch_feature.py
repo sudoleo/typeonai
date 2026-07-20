@@ -16,7 +16,7 @@ from app.api.routers import admin as admin_router
 from app.api.routers import pages as pages_router
 from app.api.routers import watch as watch_router
 from app.core.rate_limit import limiter
-from app.services import watch_service
+from app.services import telegram_watch, watch_service
 from app.services import mailer, opinion_map, watch_brief, watch_followers, watch_scheduler
 from app.services.watch_service import WatchError
 
@@ -129,6 +129,8 @@ class WatchCrudTests(unittest.TestCase):
         created = watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db)
         self.assertEqual(created["status"], "active")
         self.assertEqual(created["email_mode"], "changes_only")
+        self.assertTrue(created["email_enabled"])
+        self.assertFalse(created["telegram_enabled"])
         self.assertEqual(created["last_agreement_score"], 60)
         self.assertEqual(len(watch_service.list_watches("u1", db=self.db)), 1)
 
@@ -138,6 +140,23 @@ class WatchCrudTests(unittest.TestCase):
         self.assertEqual(monthly["interval"], "monthly")
         watch_service.delete_watch("u1", created["id"], db=self.db)
         self.assertEqual(watch_service.list_watches("u1", db=self.db), [])
+
+    def test_watch_requires_one_notification_channel(self):
+        with self.assertRaisesRegex(WatchError, "e-mail or Telegram"):
+            watch_service.create_watch(
+                "u1", share_id=self.share_id, interval="weekly", is_pro=False,
+                email_enabled=False, telegram_enabled=False, db=self.db,
+            )
+        created = watch_service.create_watch(
+            "u1", share_id=self.share_id, interval="weekly", is_pro=False,
+            email_enabled=False, telegram_enabled=True, db=self.db,
+        )
+        self.assertFalse(created["email_enabled"])
+        self.assertTrue(created["telegram_enabled"])
+        with self.assertRaisesRegex(WatchError, "at least one"):
+            watch_service.update_watch(
+                "u1", created["id"], {"telegram_enabled": False}, False, db=self.db,
+            )
 
     def test_every_run_email_mode_can_be_created_and_changed(self):
         created = watch_service.create_watch(
@@ -776,6 +795,38 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
         send_run.assert_awaited_once_with("w1", claimed, result)
         send_change.assert_not_awaited()
 
+    async def test_telegram_only_watch_reuses_notification_rule_without_mail(self):
+        claimed = {
+            "owner_uid": "u1", "share_id": "A" * 16, "interval": "weekly",
+            "email_mode": "changes_only", "email_enabled": False,
+            "telegram_enabled": True, "last_agreement_score": 60,
+            "current_run_id": "run1", "visibility": "private",
+        }
+        result = {
+            "consensus": "New consensus", "agreement_score": 30,
+            "changed": True, "severity": "major", "change_summary": "Conclusion changed.",
+        }
+        share_data = {"status": "active", "slug": "q", "question": "Q", "consensus_md": "Old"}
+        with (
+            patch.object(watch_service, "acquire_worker_lease", return_value=True),
+            patch.object(watch_service, "release_worker_lease"),
+            patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
+            patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
+            patch.object(watch_scheduler.security, "is_user_pro", return_value=False),
+            patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
+            patch.object(watch_scheduler.share_snapshots, "list_watch_history", return_value=[]),
+            patch.object(watch_scheduler, "execute_watch", return_value=result),
+            patch.object(watch_service, "complete_watch_run"),
+            patch.object(watch_scheduler, "_send_change_mail", new_callable=AsyncMock) as send_mail,
+            patch.object(watch_scheduler.telegram_watch, "send_watch_notification", return_value=True) as send_telegram,
+        ):
+            completed = await watch_scheduler.run_watch_tick()
+        self.assertEqual(completed, 1)
+        send_mail.assert_not_awaited()
+        send_telegram.assert_called_once_with(
+            "w1", "run1", "change", claimed, result,
+        )
+
     async def test_each_watch_run_uses_the_owners_current_tier(self):
         claimed = {
             "owner_uid": "u1", "share_id": "A" * 16, "interval": "weekly",
@@ -831,6 +882,127 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(execute.call_args.kwargs["excluded_providers"], ["deepseek"])
 
 
+class TelegramWatchTests(unittest.TestCase):
+    def setUp(self):
+        self.db = FakeDb()
+        self.now = datetime(2026, 7, 20, 12, tzinfo=timezone.utc)
+        self.env = patch.dict(os.environ, {
+            "TELEGRAM_BOT_TOKEN": "bot-token",
+            "TELEGRAM_BOT_USERNAME": "consens_test_bot",
+            "TELEGRAM_WEBHOOK_SECRET": "test-webhook-secret",
+        })
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+
+    def test_one_time_deep_link_connects_and_disconnects_private_chat(self):
+        link = telegram_watch.create_link("u1", now=self.now, db=self.db)
+        token = link["url"].split("start=", 1)[1]
+        connected = telegram_watch.consume_link(
+            token,
+            {"id": 123, "type": "private"},
+            {"id": 123, "username": "alice", "first_name": "Alice"},
+            now=self.now,
+            db=self.db,
+        )
+        self.assertTrue(connected["connected"])
+        self.assertEqual(connected["telegram_username"], "alice")
+        self.assertTrue(telegram_watch.get_connection("u1", db=self.db)["connected"])
+        with self.assertRaisesRegex(WatchError, "invalid"):
+            telegram_watch.consume_link(
+                token, {"id": 123, "type": "private"}, {"id": 123},
+                now=self.now, db=self.db,
+            )
+        self.assertFalse(telegram_watch.disconnect("u1", db=self.db)["connected"])
+
+    def test_startup_registers_secret_header_webhook(self):
+        with patch.object(
+            telegram_watch.telegram_notifier, "call_bot_api",
+            return_value={"status": "sent"},
+        ) as call:
+            result = telegram_watch.ensure_webhook_configured()
+        self.assertEqual(result["status"], "sent")
+        method, payload = call.call_args.args
+        self.assertEqual(method, "setWebhook")
+        self.assertEqual(payload["url"], "https://www.consens.io/api/telegram/webhook")
+        self.assertEqual(payload["secret_token"], "test-webhook-secret")
+
+    def test_watch_delivery_is_deduplicated_and_contains_actions(self):
+        self.db.stores[telegram_watch.CONNECTIONS_COLLECTION]["u1"] = {
+            "uid": "u1", "chat_id": "123", "telegram_user_id": "123", "enabled": True,
+        }
+        watch = {
+            "owner_uid": "u1", "share_id": "A" * 16, "share_slug": "question",
+            "visibility": "public", "question": "Will this change?",
+            "last_agreement_score": 60, "telegram_enabled": True,
+        }
+        result = {"agreement_score": 40, "change_summary": "The conclusion flipped."}
+        with patch.object(
+            telegram_watch.telegram_notifier, "send_bot_message",
+            return_value={"status": "sent"},
+        ) as send:
+            self.assertTrue(telegram_watch.send_watch_notification(
+                "w1", "run1", "change", watch, result, now=self.now, db=self.db,
+            ))
+            self.assertFalse(telegram_watch.send_watch_notification(
+                "w1", "run1", "change", watch, result, now=self.now, db=self.db,
+            ))
+        send.assert_called_once()
+        markup = send.call_args.kwargs["reply_markup"]
+        callbacks = [button.get("callback_data") for row in markup["inline_keyboard"] for button in row]
+        self.assertIn("wm:w1", callbacks)
+        self.assertIn("wp:w1", callbacks)
+        self.assertEqual(len(self.db.stores[telegram_watch.DELIVERIES_COLLECTION]), 1)
+
+    def test_mute_and_confirmed_pause_actions_are_owner_scoped(self):
+        share_id = "A" * 16
+        self.db.stores["shares"][share_id] = share()
+        self.db.stores["watches"]["w1"] = {
+            "owner_uid": "u1", "share_id": share_id, "status": "active",
+        }
+        self.db.stores[telegram_watch.CONNECTIONS_COLLECTION]["u1"] = {
+            "uid": "u1", "chat_id": "123", "telegram_user_id": "123", "enabled": True,
+        }
+        self.db.stores[telegram_watch.CHATS_COLLECTION][telegram_watch._digest("123")] = {
+            "uid": "u1", "chat_id": "123",
+        }
+        update = {"callback_query": {
+            "id": "cb1", "data": "wm:w1", "from": {"id": 123},
+            "message": {"chat": {"id": 123, "type": "private"}},
+        }}
+        with patch.object(telegram_watch.telegram_notifier, "call_bot_api", return_value={"status": "sent"}), \
+                patch.object(telegram_watch.telegram_notifier, "send_bot_message", return_value={"status": "sent"}) as send:
+            telegram_watch.handle_update(update, db=self.db)
+            self.assertGreater(
+                self.db.stores["watches"]["w1"]["telegram_muted_until"],
+                datetime.now(timezone.utc),
+            )
+            update["callback_query"].update(id="cb2", data="wp:w1")
+            telegram_watch.handle_update(update, db=self.db)
+            self.assertIn("Confirm pause", send.call_args.kwargs["reply_markup"]["inline_keyboard"][0][0]["text"])
+            self.assertEqual(self.db.stores["watches"]["w1"]["status"], "active")
+            update["callback_query"].update(id="cb3", data="wpc:w1")
+            telegram_watch.handle_update(update, db=self.db)
+        self.assertEqual(self.db.stores["watches"]["w1"]["status"], "paused")
+
+    def test_account_cleanup_removes_connection_links_and_deliveries(self):
+        chat_key = telegram_watch._digest("123")
+        self.db.stores[telegram_watch.CONNECTIONS_COLLECTION]["u1"] = {
+            "uid": "u1", "chat_id": "123", "enabled": True,
+        }
+        self.db.stores[telegram_watch.CHATS_COLLECTION][chat_key] = {
+            "uid": "u1", "chat_id": "123",
+        }
+        self.db.stores[telegram_watch.LINKS_COLLECTION]["link"] = {"uid": "u1"}
+        self.db.stores[telegram_watch.DELIVERIES_COLLECTION]["delivery"] = {"uid": "u1"}
+        telegram_watch.delete_user_data("u1", db=self.db)
+        self.assertEqual(self.db.stores[telegram_watch.CONNECTIONS_COLLECTION], {})
+        self.assertEqual(self.db.stores[telegram_watch.CHATS_COLLECTION], {})
+        self.assertEqual(self.db.stores[telegram_watch.LINKS_COLLECTION], {})
+        self.assertEqual(self.db.stores[telegram_watch.DELIVERIES_COLLECTION], {})
+
+
 class WatchFrontendContractTests(unittest.TestCase):
     def test_user_menu_places_watched_after_shared_links(self):
         source = Path("static/firebase.js").read_text(encoding="utf-8")
@@ -847,6 +1019,9 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn('id="watchWeekday"', source)
         self.assertIn("run_weekday", source)
         self.assertIn("resolvedOptions().timeZone", source)
+        self.assertIn('id="watchTelegramEnabled"', source)
+        self.assertIn('"/api/my/telegram/link"', source)
+        self.assertIn('"telegram_enabled"', source)
 
     def test_watch_modal_has_one_scroll_area_and_locks_background(self):
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
@@ -1248,6 +1423,44 @@ class WatchRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["watch"]["run_weekday"], "friday")
         self.assertEqual(create.call_args.kwargs["run_weekday"], "friday")
+
+    def test_telegram_must_be_connected_before_enabling_watch_channel(self):
+        with (
+            patch.object(watch_router, "extract_id_token", return_value="tok"),
+            patch.object(watch_router, "verify_user_token", return_value="u1"),
+            patch.object(watch_router.telegram_watch, "get_connection", return_value={"connected": False}),
+            patch.object(watch_router.watch_service, "create_watch") as create,
+        ):
+            response = self.client.post("/api/watch", json={
+                "result_id": "result-1", "interval": "weekly", "visibility": "private",
+                "telegram_enabled": True,
+            })
+        self.assertEqual(response.status_code, 409)
+        create.assert_not_called()
+
+    def test_telegram_connection_routes_and_webhook_secret(self):
+        auth_patches = (
+            patch.object(watch_router, "extract_id_token", return_value="tok"),
+            patch.object(watch_router, "verify_user_token", return_value="u1"),
+        )
+        with auth_patches[0], auth_patches[1], \
+                patch.object(watch_router.telegram_watch, "get_connection", return_value={"connected": True}):
+            response = self.client.get("/api/my/telegram")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["telegram"]["connected"])
+
+        with patch.object(watch_router.telegram_watch, "verify_webhook_secret", return_value=False):
+            response = self.client.post("/api/telegram/webhook", json={})
+        self.assertEqual(response.status_code, 403)
+
+        with patch.object(watch_router.telegram_watch, "verify_webhook_secret", return_value=True), \
+                patch.object(watch_router.telegram_watch, "handle_update") as handle:
+            response = self.client.post(
+                "/api/telegram/webhook", json={"update_id": 1},
+                headers={"X-Telegram-Bot-Api-Secret-Token": "secret"},
+            )
+        self.assertEqual(response.status_code, 200)
+        handle.assert_called_once_with({"update_id": 1})
 
 
 class BriefRouteTests(unittest.TestCase):

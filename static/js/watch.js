@@ -6,6 +6,7 @@
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
   ];
   let featureNudgeTimer = null;
+  let telegramState = null;
 
   function featureNudgeWasDismissed() {
     try {
@@ -116,6 +117,39 @@
     return data;
   }
 
+  async function loadTelegramState(force) {
+    if (telegramState && !force) return telegramState;
+    const data = await api("GET", "/api/my/telegram");
+    telegramState = data.telegram || { configured: false, connected: false };
+    return telegramState;
+  }
+
+  async function connectTelegram(onConnected) {
+    let pendingWindow = null;
+    try {
+      pendingWindow = window.open("about:blank", "_blank");
+      if (pendingWindow) pendingWindow.opener = null;
+      const data = await api("POST", "/api/my/telegram/link", {});
+      if (pendingWindow) pendingWindow.location = data.url;
+      else window.location.href = data.url;
+      popup("Start the bot in Telegram. This page will detect the connection automatically.");
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const state = await loadTelegramState(true);
+        if (state.connected) {
+          popup("Telegram connected.");
+          onConnected?.(state);
+          return state;
+        }
+      }
+      popup("Connection not detected yet. Finish /start in Telegram, then refresh this page.");
+    } catch (error) {
+      try { pendingWindow?.close(); } catch (_) { /* ignored */ }
+      popup("Telegram connection failed: " + error.message);
+    }
+    return null;
+  }
+
   function escapeHtml(value) {
     return String(value || "")
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -174,7 +208,7 @@
     return `<div id="watchConditionWrap" hidden>
       <label class="watch-interval-label" for="watchCondition">Condition</label>
       <textarea id="watchCondition" class="watch-condition-input" maxlength="500" rows="3" placeholder="Example: An official launch date for Germany is announced." aria-describedby="watchConditionNote watchConditionError">${escapeHtml(value)}</textarea>
-      <p id="watchConditionNote" class="watch-data-note">The condition is checked against each new consensus. You receive one e-mail when it changes from not met to met.</p>
+      <p id="watchConditionNote" class="watch-data-note">The condition is checked against each new consensus. You receive one alert when it changes from not met to met.</p>
       <p id="watchConditionError" class="watch-field-error" role="alert" hidden></p>
     </div>`;
   }
@@ -256,7 +290,7 @@
     if (!body) return;
     title.textContent = "Watch this consensus";
     body.innerHTML = `
-      <p class="watch-config-intro">Schedule automatic reruns of the <strong>original question</strong> and choose when we should e-mail you.</p>
+      <p class="watch-config-intro">Schedule automatic reruns of the <strong>original question</strong> and choose when we should alert you.</p>
       <div class="watch-config-field">
         <label class="watch-interval-label" for="watchVisibility">Page visibility</label>
         <select id="watchVisibility" class="watch-interval-select" required aria-describedby="watchVisibilityNote watchVisibilityError">
@@ -284,10 +318,20 @@
         </div>
       </div>
       <div class="watch-config-field">
-        <label class="watch-interval-label" for="watchEmailMode">E-mail notifications</label>
+        <label class="watch-interval-label" for="watchEmailMode">Alert rule</label>
         <select id="watchEmailMode" class="watch-interval-select watch-email-select">${emailModeOptions("changes_only")}</select>
         <p class="watch-data-note">“Every new consensus” includes the full generated answer.</p>
         ${conditionField("")}
+      </div>
+      <div class="watch-config-field">
+        <span class="watch-interval-label">Delivery channels</span>
+        <div class="watch-channel-options">
+          <label class="watch-channel-option"><input type="checkbox" id="watchEmailEnabled" checked> E-mail</label>
+          <label class="watch-channel-option"><input type="checkbox" id="watchTelegramEnabled" disabled> Telegram</label>
+          <button type="button" id="watchTelegramConnect" class="share-link-btn">Connect Telegram</button>
+        </div>
+        <p id="watchTelegramNote" class="watch-data-note">Checking Telegram connection…</p>
+        <p id="watchChannelsError" class="watch-field-error" role="alert" hidden></p>
       </div>
       <p class="watch-config-assurance"><span aria-hidden="true">✓</span> Attachments and follow-up context are never resent.</p>
       <div class="share-modal-actions">
@@ -312,6 +356,28 @@
     const visibilitySelect = document.getElementById("watchVisibility");
     const runTimeInput = document.getElementById("watchRunTime");
     const conditionInput = document.getElementById("watchCondition");
+    const emailEnabledInput = document.getElementById("watchEmailEnabled");
+    const telegramEnabledInput = document.getElementById("watchTelegramEnabled");
+    const telegramConnect = document.getElementById("watchTelegramConnect");
+    const telegramNote = document.getElementById("watchTelegramNote");
+    const channelsError = document.getElementById("watchChannelsError");
+    function syncTelegram(state) {
+      telegramEnabledInput.disabled = !state.connected;
+      telegramConnect.hidden = !!state.connected || !state.configured;
+      telegramNote.textContent = !state.configured
+        ? "Telegram notifications are not available yet."
+        : state.connected
+          ? `Connected${state.telegram_username ? " as @" + state.telegram_username : ""}.`
+          : "Connect Telegram to enable this channel.";
+    }
+    loadTelegramState().then(syncTelegram).catch(() => {
+      syncTelegram({ configured: false, connected: false });
+    });
+    telegramConnect.addEventListener("click", () => connectTelegram(syncTelegram));
+    [emailEnabledInput, telegramEnabledInput].forEach(input => input.addEventListener("change", () => {
+      channelsError.hidden = true;
+      channelsError.textContent = "";
+    }));
     bindWatchFieldErrorReset(visibilitySelect, "change");
     bindWatchFieldErrorReset(runTimeInput, "input");
     bindWatchFieldErrorReset(conditionInput, "input");
@@ -350,6 +416,11 @@
         setWatchFieldError(conditionInput, "Enter the condition you want to monitor.");
         invalidFields.push(conditionInput);
       }
+      if (!emailEnabledInput.checked && !telegramEnabledInput.checked) {
+        channelsError.textContent = "Keep at least one delivery channel enabled.";
+        channelsError.hidden = false;
+        invalidFields.push(emailEnabledInput);
+      }
       if (invalidFields.length) {
         focusWatchField(invalidFields[0]);
         return;
@@ -363,6 +434,8 @@
           run_weekday: document.getElementById("watchInterval").value === "weekly"
             ? document.getElementById("watchWeekday").value : "",
           email_mode: emailMode,
+          email_enabled: emailEnabledInput.checked,
+          telegram_enabled: telegramEnabledInput.checked,
           condition: condition,
           visibility: visibility,
           run_time: runTime,
@@ -395,6 +468,11 @@
       : watch.email_mode === "condition"
         ? "You will be notified when your condition becomes true."
         : "You will be notified only after a material change.";
+    const channels = [watch.email_enabled ? "e-mail" : "", watch.telegram_enabled ? "Telegram" : ""]
+      .filter(Boolean).join(" and ");
+    document.getElementById("watchMailSummary").appendChild(
+      document.createTextNode(` Delivery: ${channels}.`)
+    );
     body.querySelector("p").appendChild(document.createTextNode(
       watch.visibility === "private" ? " The history page is private." : " The history page is public."
     ));
@@ -686,7 +764,76 @@
     });
   }
 
-  function renderWatchCard(watch, onListChanged) {
+  function renderTelegramCard(container, state, onChanged) {
+    const card = document.createElement("div");
+    card.className = "watch-telegram-card";
+    const identity = state.telegram_username
+      ? "@" + state.telegram_username
+      : (state.telegram_first_name || "your Telegram account");
+    card.innerHTML = `
+      <div class="watch-telegram-main">
+        <strong class="watch-telegram-title">Telegram alerts</strong>
+        <p class="watch-telegram-note"></p>
+      </div>
+      <div class="watch-telegram-actions"></div>`;
+    const note = card.querySelector(".watch-telegram-note");
+    const actions = card.querySelector(".watch-telegram-actions");
+    if (!state.configured) {
+      card.classList.add("is-disabled");
+      note.textContent = state.linked
+        ? "Telegram is linked, but notifications are temporarily unavailable on this consens.io deployment."
+        : "Telegram notifications are not configured on this consens.io deployment.";
+      if (state.linked) {
+        actions.appendChild(makeButton("Disconnect", "share-link-btn", async function () {
+          this.disabled = true;
+          try {
+            await api("DELETE", "/api/my/telegram", {});
+            telegramState = null;
+            onChanged();
+          } catch (error) {
+            this.disabled = false;
+            popup("Disconnect failed: " + error.message);
+          }
+        }));
+      }
+    } else if (state.connected) {
+      note.textContent = `Connected to ${identity}. Enable Telegram separately on each watch below.`;
+      actions.appendChild(makeButton("Send test", "share-secondary-btn", async function () {
+        this.disabled = true;
+        try {
+          await api("POST", "/api/my/telegram/test", {});
+          popup("Test message sent to Telegram.");
+        } catch (error) {
+          popup("Test failed: " + error.message);
+        } finally { this.disabled = false; }
+      }));
+      actions.appendChild(makeButton("Disconnect", "share-link-btn", async function () {
+        if (!confirm("Disconnect Telegram? Watches keep their channel preference but cannot deliver there until you reconnect.")) return;
+        this.disabled = true;
+        try {
+          await api("DELETE", "/api/my/telegram", {});
+          telegramState = null;
+          onChanged();
+        } catch (error) {
+          this.disabled = false;
+          popup("Disconnect failed: " + error.message);
+        }
+      }));
+    } else {
+      note.textContent = "Connect once, then choose Telegram as a delivery channel for any Consensus Watch.";
+      actions.appendChild(makeButton("Connect Telegram", "share-primary-btn", async function () {
+        this.disabled = true;
+        await connectTelegram(() => {
+          telegramState = null;
+          onChanged();
+        });
+        if (this.isConnected) this.disabled = false;
+      }));
+    }
+    container.appendChild(card);
+  }
+
+  function renderWatchCard(watch, onListChanged, telegram) {
     const card = document.createElement("li");
     card.className = "watch-card";
 
@@ -707,6 +854,12 @@
     visibility.className = "watch-chip";
     visibility.textContent = watch.visibility === "private" ? "Private" : "Public";
     chips.appendChild(visibility);
+    if (watch.telegram_enabled) {
+      const telegramChip = document.createElement("span");
+      telegramChip.className = "watch-chip watch-chip-telegram";
+      telegramChip.textContent = "Telegram";
+      chips.appendChild(telegramChip);
+    }
     if (watch.visibility !== "private" && (watch.indexed || watch.index_requested)) {
       const listing = document.createElement("span");
       listing.className = "watch-chip" + (watch.indexed ? " watch-chip-listed" : " watch-chip-review");
@@ -757,6 +910,9 @@
       const state = watch.last_condition_status === "met" ? "met"
         : watch.last_condition_status === "not_met" ? "not met" : "not evaluated yet";
       metaLines.push(`Condition (${escapeHtml(state)}): ${escapeHtml(watch.condition)}`);
+    }
+    if (watch.telegram_muted_until && new Date(watch.telegram_muted_until).getTime() > Date.now()) {
+      metaLines.push(`Telegram muted until ${escapeHtml(formatDateTime(watch.telegram_muted_until))}.`);
     }
     meta.innerHTML = metaLines.join("<br>");
     bodyRow.appendChild(meta);
@@ -923,18 +1079,63 @@
       try {
         await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), { email_mode: emailSelect.value });
         watch.email_mode = emailSelect.value;
-        popup("Watch e-mail preference updated.");
+        popup("Watch alert rule updated.");
       } catch (error) {
         popup("Update failed: " + error.message);
         emailSelect.value = watch.email_mode || "changes_only";
       } finally { emailSelect.disabled = false; }
     });
 
+    const channelOptions = document.createElement("div");
+    channelOptions.className = "watch-channel-options is-compact";
+    const emailChannel = document.createElement("input");
+    emailChannel.type = "checkbox";
+    emailChannel.checked = watch.email_enabled !== false;
+    const telegramChannel = document.createElement("input");
+    telegramChannel.type = "checkbox";
+    telegramChannel.checked = watch.telegram_enabled === true;
+    telegramChannel.disabled = !telegram?.connected;
+    const emailLabel = document.createElement("label");
+    emailLabel.className = "watch-channel-option";
+    emailLabel.append(emailChannel, document.createTextNode(" E-mail"));
+    const telegramLabel = document.createElement("label");
+    telegramLabel.className = "watch-channel-option";
+    telegramLabel.title = telegram?.connected ? "" : "Connect Telegram in the notification card above.";
+    telegramLabel.append(telegramChannel, document.createTextNode(" Telegram"));
+    channelOptions.append(emailLabel, telegramLabel);
+
+    async function saveChannel(input, fieldName) {
+      const previous = !input.checked;
+      if (!emailChannel.checked && !telegramChannel.checked) {
+        input.checked = previous;
+        popup("Keep at least one notification channel enabled.");
+        return;
+      }
+      emailChannel.disabled = telegramChannel.disabled = true;
+      try {
+        const data = await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), {
+          [fieldName]: input.checked
+        });
+        watch.email_enabled = data.watch.email_enabled;
+        watch.telegram_enabled = data.watch.telegram_enabled;
+        popup("Watch delivery channels updated.");
+        onListChanged();
+      } catch (error) {
+        input.checked = previous;
+        popup("Update failed: " + error.message);
+        emailChannel.disabled = false;
+        telegramChannel.disabled = !telegram?.connected;
+      }
+    }
+    emailChannel.addEventListener("change", () => saveChannel(emailChannel, "email_enabled"));
+    telegramChannel.addEventListener("change", () => saveChannel(telegramChannel, "telegram_enabled"));
+
     grid.append(
       field("Interval", select),
       weekdayField,
       field("Run time", timeInput),
-      field("E-mail notifications", emailSelect),
+      field("Alert rule", emailSelect),
+      field("Delivery channels", channelOptions),
       conditionEditor
     );
     settings.appendChild(grid);
@@ -998,13 +1199,17 @@
     body.innerHTML = '<p class="watch-dash-loading">Loading your watches…</p>';
     let watches = [];
     let brief = {};
+    let telegram = { configured: false, connected: false };
     try {
-      const [watchData, briefData] = await Promise.all([
+      const [watchData, briefData, telegramData] = await Promise.all([
         api("GET", "/api/my/watches"),
-        api("GET", "/api/my/watch-brief").catch(() => ({ brief: {} }))
+        api("GET", "/api/my/watch-brief").catch(() => ({ brief: {} })),
+        api("GET", "/api/my/telegram").catch(() => ({ telegram: {} }))
       ]);
       watches = watchData.watches || [];
       brief = briefData.brief || {};
+      telegram = telegramData.telegram || telegram;
+      telegramState = telegram;
     } catch (error) {
       body.innerHTML = "";
       const failed = document.createElement("p");
@@ -1016,6 +1221,12 @@
     body.innerHTML = "";
 
     renderDashboardStats(body, watches);
+
+    const notificationTitle = document.createElement("h3");
+    notificationTitle.className = "watch-dash-section-title";
+    notificationTitle.textContent = "Notifications";
+    body.appendChild(notificationTitle);
+    renderTelegramCard(body, telegram, renderDashboard);
 
     const briefTitle = document.createElement("h3");
     briefTitle.className = "watch-dash-section-title";
@@ -1038,7 +1249,7 @@
     }
     const list = document.createElement("ul");
     list.className = "watch-dash-list";
-    watches.forEach(watch => list.appendChild(renderWatchCard(watch, renderDashboard)));
+    watches.forEach(watch => list.appendChild(renderWatchCard(watch, renderDashboard, telegram)));
     body.appendChild(list);
   }
 

@@ -152,13 +152,25 @@
           If you enable Consensus Watch, we periodically rerun only the original question using a limited set of
           models. We store compact history points (date, agreement score, verdict, and a short change summary) next
           to the selected public or private Watch page, but not the full rerun model responses. You can choose service
-          e-mails for material changes, for every successful new consensus, or when a condition you enter is met.
+          notifications for material changes, for every successful new consensus, or when a condition you enter is met.
           The selected local run time and time zone are stored with the Watch schedule. Conditions are stored with
           the private Watch settings and evaluated against each newly generated consensus
           by an AI judge; they are not displayed on public pages. A condition notification is sent when the result
-          changes to “met”, not repeatedly while it remains met. Result e-mails include the generated consensus text.
+          changes to “met”, not repeatedly while it remains met. Result notifications may include the generated consensus text.
           Repeated failures may also trigger a one-time pause notice. Every watch e-mail includes a signed link that
           pauses the watch without requiring login.
+        </p>
+        <p>
+          <strong>Optional Telegram delivery:</strong> Signed-in users may voluntarily connect a private Telegram chat
+          and enable Telegram separately for individual Watches. For this purpose we store the Telegram chat and user
+          identifiers, the public Telegram username/first name supplied by Telegram, connection status and minimal
+          delivery metadata. The one-time account-link token expires after ten minutes; expired token records are
+          removed by regular maintenance. Telegram receives the alert text required for delivery (question, agreement
+          score and change summary or generated consensus) and callback data for actions such as mute or pause. We do
+          not read unrelated Telegram chats or use Telegram data for model training. Disconnecting removes the account
+          mapping; account deletion also removes pending links and delivery metadata. Delivery metadata is otherwise
+          automatically removed after 90 days. Telegram's own processing is governed by its
+          <a href="https://telegram.org/privacy" rel="noopener noreferrer">privacy policy</a>.
         </p>
         <p>
           <strong>Following a public Watch page (visitors):</strong> Visitors can subscribe to change notifications
@@ -178,8 +190,8 @@
           <li>When you revoke a shared page, it immediately becomes unavailable to the public and is
             <strong>permanently deleted within 30 days</strong>. Copies cached by browsers or search engines for a
             short period are outside our control.</li>
-          <li>When you delete your account, all your watches, watch history, shared pages and pending results are
-            deleted as part of the account-deletion process.</li>
+          <li>When you delete your account, all your watches, watch history, shared pages, pending results and Telegram
+            connection/delivery metadata are deleted as part of the account-deletion process.</li>
           <li>Report counters are deleted together with the page.</li>
           <li>Follower e-mail addresses are deleted when the subscription is cancelled via the unsubscribe link and
             when the followed page is revoked or deleted.</li>
@@ -211,6 +223,9 @@
           <li><strong>Authentication and database:</strong> Google Firebase Authentication and Google Cloud Firestore (Google Ireland Ltd. / Google LLC, USA) for accounts, tier status, and bookmarks.</li>
           <li><strong>Analytics:</strong> Umami Cloud (see section 3).</li>
           <li><strong>AI model providers:</strong> the providers selected per query (see section 4).</li>
+          <li><strong>Optional notifications:</strong> Telegram Messenger Inc. via the Telegram Bot API, only after you
+            connect Telegram and enable that delivery channel. Telegram receives the notification content described
+            in section 5.</li>
         </ul>
         <p>
           Processing may occur outside the EU/EEA, in particular in the USA and, if you select DeepSeek models or
@@ -243,7 +258,8 @@
         </ul>
         <p>
           You can delete your account yourself at any time in the app settings ("Delete account"). This removes
-          your authentication account, profile data, bookmarks, watches, watch history, shared pages and pending share results, and
+          your authentication account, profile data, bookmarks, watches, watch history, shared pages, pending share results,
+          Telegram connection/delivery metadata, and
           entries you created in the feedback and Pro-interest lists. For anything else, contact us at the
           address above.
         </p>
