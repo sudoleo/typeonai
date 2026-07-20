@@ -1,4 +1,4 @@
-"""Firestore persistence for SEO pages, daily metrics, and collection runs."""
+"""Firestore persistence for SEO pages, metrics, queries, runs, and judgements."""
 
 from __future__ import annotations
 
@@ -6,12 +6,16 @@ import hashlib
 from datetime import date, datetime, timezone
 from typing import Iterable
 
+from google.api_core.exceptions import AlreadyExists
+from google.cloud.firestore_v1 import Query
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 
 SEO_PAGES_COLLECTION = "seo_pages"
 SEO_RUNS_COLLECTION = "seo_collection_runs"
 DAILY_METRICS_SUBCOLLECTION = "daily_metrics"
+QUERY_SNAPSHOTS_SUBCOLLECTION = "query_snapshots"
+SEO_JUDGMENTS_COLLECTION = "seo_judgements"
 
 
 def page_id_for_url(url: str) -> str:
@@ -43,7 +47,7 @@ class FirestoreSeoRepository:
             existing = ref.get()
             existing_data = existing.to_dict() if existing.exists else {}
             record = {
-                "schema_version": 1,
+                "schema_version": 2,
                 "url": page["url"],
                 "origin": page["origin"],
                 "share_id": page.get("share_id"),
@@ -53,6 +57,9 @@ class FirestoreSeoRepository:
                 "last_seen_at": now,
                 "updated_at": now,
             }
+            dossier = page.get("dossier")
+            if isinstance(dossier, dict):
+                record["dossier"] = dossier
             ref.set(record, merge=True)
             normalized.append({**record, "page_id": page_id})
         return normalized
@@ -66,6 +73,12 @@ class FirestoreSeoRepository:
             pages.append({**data, "page_id": snapshot.id})
         pages.sort(key=lambda item: item.get("url") or "")
         return pages
+
+    def get_page(self, page_id: str) -> dict | None:
+        snapshot = self.db.collection(SEO_PAGES_COLLECTION).document(page_id).get()
+        if not snapshot.exists:
+            return None
+        return {**(snapshot.to_dict() or {}), "page_id": snapshot.id}
 
     def existing_metric_dates(
         self, page_id: str, start_date: date, end_date: date
@@ -142,6 +155,45 @@ class FirestoreSeoRepository:
             return any(collection.limit(1).stream())
         return any(collection.stream())
 
+    def get_query_snapshot(self, page_id: str, final_date: date | str) -> dict | None:
+        snapshot = (
+            self.db.collection(SEO_PAGES_COLLECTION)
+            .document(page_id)
+            .collection(QUERY_SNAPSHOTS_SUBCOLLECTION)
+            .document(str(final_date))
+            .get()
+        )
+        if not snapshot.exists:
+            return None
+        return {**(snapshot.to_dict() or {}), "snapshot_id": snapshot.id}
+
+    def save_query_snapshot(self, page_id: str, final_date: date | str, data: dict) -> None:
+        (
+            self.db.collection(SEO_PAGES_COLLECTION)
+            .document(page_id)
+            .collection(QUERY_SNAPSHOTS_SUBCOLLECTION)
+            .document(str(final_date))
+            .set(data)
+        )
+
+    def latest_query_snapshot(self, page_id: str) -> dict | None:
+        collection = (
+            self.db.collection(SEO_PAGES_COLLECTION)
+            .document(page_id)
+            .collection(QUERY_SNAPSHOTS_SUBCOLLECTION)
+        )
+        snapshots = []
+        for snapshot in collection.stream():
+            data = snapshot.to_dict() or {}
+            snapshots.append({**data, "snapshot_id": snapshot.id})
+        if not snapshots:
+            return None
+        snapshots.sort(
+            key=lambda item: str(item.get("period_end") or item.get("snapshot_id") or ""),
+            reverse=True,
+        )
+        return snapshots[0]
+
     @staticmethod
     def _metric_range_stream(collection, start_date: date, end_date: date):
         """Use a bounded Firestore query, with a small mock-compatible fallback."""
@@ -180,3 +232,54 @@ class FirestoreSeoRepository:
         for field in ("started_at", "finished_at"):
             run[field] = _iso_datetime(run.get(field))
         return run
+
+    def append_judgment(self, judgment_id: str, data: dict) -> tuple[dict, bool]:
+        """Create one immutable journal entry and return an existing retry unchanged."""
+        ref = self.db.collection(SEO_JUDGMENTS_COLLECTION).document(judgment_id)
+        existing = ref.get()
+        if existing.exists:
+            return {**(existing.to_dict() or {}), "judgment_id": judgment_id}, False
+        try:
+            if hasattr(ref, "create"):
+                ref.create(data)
+            else:
+                ref.set(data)
+        except AlreadyExists:
+            existing = ref.get()
+            return {**(existing.to_dict() or {}), "judgment_id": judgment_id}, False
+        return {**data, "judgment_id": judgment_id}, True
+
+    def list_judgments(
+        self, page_ids: Iterable[str], *, max_per_page: int = 3, max_scan: int = 1000
+    ) -> dict[str, list[dict]]:
+        wanted = set(page_ids)
+        grouped = {page_id: [] for page_id in wanted}
+        collection = self.db.collection(SEO_JUDGMENTS_COLLECTION)
+        if hasattr(collection, "order_by"):
+            stream = (
+                collection.order_by("created_at", direction=Query.DESCENDING)
+                .limit(max_scan)
+                .stream()
+            )
+        else:
+            stream = collection.stream()
+        for snapshot in stream:
+            data = snapshot.to_dict() or {}
+            page_id = str(data.get("page_id") or "")
+            if page_id in wanted:
+                grouped[page_id].append({**data, "judgment_id": snapshot.id})
+
+        def timestamp(item):
+            value = item.get("created_at")
+            if isinstance(value, datetime):
+                if value.tzinfo is None:
+                    value = value.replace(tzinfo=timezone.utc)
+                return value.timestamp()
+            return float("-inf")
+
+        for page_id, entries in grouped.items():
+            entries.sort(key=timestamp, reverse=True)
+            del entries[max_per_page:]
+            for entry in entries:
+                entry["created_at"] = _iso_datetime(entry.get("created_at"))
+        return grouped

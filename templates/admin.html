@@ -530,6 +530,13 @@
         .seo-table a { color: var(--text-color); overflow-wrap: anywhere; }
         .seo-status { display: inline-block; padding: 3px 8px; border: 1px solid var(--chip-border); border-radius: var(--radius-pill); }
         .seo-rules { margin: 14px 0 0; color: var(--sidebar-text-muted); font-size: 0.8em; }
+        .seo-action-stack { display: grid; gap: 6px; min-width: 160px; }
+        .seo-action-stack .admin-btn { padding: 7px 9px; font-size: 0.78em; }
+        .seo-recommendation { min-width: 210px; white-space: normal; text-align: left; }
+        .seo-recommendation .section-hint { margin-top: 5px; }
+        .seo-history { margin-top: 7px; font-size: 0.9em; }
+        .seo-history summary { cursor: pointer; color: var(--sidebar-text-muted); }
+        .seo-query-list { margin-top: 5px; font-size: 0.78em; color: var(--sidebar-text-muted); }
 
         .admin-tab-panel[hidden] { display: none; }
 
@@ -2045,6 +2052,10 @@
             document.getElementById('seoLastRunMessage').textContent = run.message || '';
             document.getElementById('seoFinalDate').textContent = data.final_date || '–';
             document.getElementById('seoDisclaimer').textContent = data.disclaimer || '';
+            const judge = data.content_judge || {};
+            const judgeState = document.getElementById('seoContentJudgeState');
+            judgeState.textContent = judge.configured ? 'configured' : 'not configured';
+            judgeState.title = judge.message || '';
 
             const body = document.getElementById('seoTableBody');
             body.textContent = '';
@@ -2061,6 +2072,24 @@
                 origin.className = 'section-hint';
                 origin.textContent = row.origin + (row.share_id ? ` · ${row.share_id}` : '');
                 pageCell.appendChild(origin);
+                const dossier = row.dossier || {};
+                if (dossier.title) {
+                    const title = document.createElement('div');
+                    title.className = 'section-hint';
+                    title.textContent = dossier.title;
+                    pageCell.appendChild(title);
+                }
+                const queryData = row.query_data || {};
+                const queries = (queryData.top_queries || []).slice(0, 3);
+                if (queries.length || queryData.period_end) {
+                    const queryList = document.createElement('div');
+                    queryList.className = 'seo-query-list';
+                    const partial = queryData.partial ? ' · partial' : '';
+                    queryList.textContent = queries.length
+                        ? `Top queries${partial}: ${queries.map(item => item.query).join(', ')}`
+                        : `Query snapshot ${queryData.period_end || ''}${partial}: no rows`;
+                    pageCell.appendChild(queryList);
+                }
                 tr.appendChild(pageCell);
                 ['clicks', 'impressions', 'ctr', 'position'].forEach(key => {
                     const td = document.createElement('td');
@@ -2079,11 +2108,84 @@
                 status.title = (data.status_rules || {})[row.status] || '';
                 statusCell.appendChild(status);
                 tr.appendChild(statusCell);
+
+                const history = row.recommendation_history || [];
+                const latest = history[0] || {};
+                const recommendationCell = document.createElement('td');
+                recommendationCell.className = 'seo-recommendation';
+                const recommendation = document.createElement('span');
+                recommendation.className = 'seo-status';
+                recommendation.textContent = latest.recommendation || 'not generated';
+                recommendation.title = (latest.evidence || []).join(' ');
+                recommendationCell.appendChild(recommendation);
+                if (latest.recommendation) {
+                    const confidence = document.createElement('div');
+                    confidence.className = 'section-hint';
+                    confidence.textContent = `${Math.round(Number(latest.confidence || 0) * 100)}% confidence`
+                        + (latest.llm_evaluation ? ` · content judge: ${latest.llm_evaluation.recommendation}` : '');
+                    recommendationCell.appendChild(confidence);
+                }
+                if (history.length) {
+                    const details = document.createElement('details');
+                    details.className = 'seo-history';
+                    const summary = document.createElement('summary');
+                    summary.textContent = `History (${history.length})`;
+                    details.appendChild(summary);
+                    history.forEach(item => {
+                        const entry = document.createElement('div');
+                        const timestamp = item.created_at ? new Date(item.created_at).toLocaleString() : 'unknown time';
+                        entry.textContent = `${timestamp} · ${item.recommendation}`
+                            + (item.llm_evaluation ? ` / ${item.llm_evaluation.recommendation}` : '');
+                        details.appendChild(entry);
+                    });
+                    recommendationCell.appendChild(details);
+                }
+                tr.appendChild(recommendationCell);
+
+                const actionCell = document.createElement('td');
+                const actions = document.createElement('div');
+                actions.className = 'seo-action-stack';
+                const generate = document.createElement('button');
+                generate.type = 'button';
+                generate.className = 'admin-btn secondary';
+                generate.textContent = 'Generate recommendation';
+                generate.addEventListener('click', () => runSeoRecommendation(row.page_id, false, generate));
+                actions.appendChild(generate);
+                const judgeApplicable = ['opportunity', 'declining'].includes(row.status)
+                    || latest.recommendation === 'noindex_candidate';
+                if (judge.configured && judgeApplicable) {
+                    const ask = document.createElement('button');
+                    ask.type = 'button';
+                    ask.className = 'admin-btn secondary';
+                    ask.textContent = 'Ask content judge';
+                    ask.addEventListener('click', () => runSeoRecommendation(row.page_id, true, ask));
+                    actions.appendChild(ask);
+                }
+                actionCell.appendChild(actions);
+                tr.appendChild(actionCell);
                 body.appendChild(tr);
             });
             document.getElementById('seoEmptyState').hidden = (data.rows || []).length > 0;
             document.getElementById('seoRules').textContent = Object.entries(data.status_rules || {})
                 .map(([name, definition]) => `${name}: ${definition}`).join(' · ');
+        }
+
+        async function runSeoRecommendation(pageId, useContentJudge, button) {
+            button.disabled = true;
+            seoStatus(useContentJudge ? 'Asking the optional content judge…' : 'Generating recommendation…', false);
+            const suffix = useContentJudge ? 'content-judge' : 'recommendation';
+            try {
+                const result = await shareAdminRequest('POST', `/api/admin/seo/pages/${encodeURIComponent(pageId)}/${suffix}`, {});
+                const label = result.llm_evaluation
+                    ? `${result.recommendation} / content judge: ${result.llm_evaluation.recommendation}`
+                    : result.recommendation;
+                seoStatus(`Saved read-only recommendation: ${label}.`, false);
+                await loadSeoOverview();
+            } catch (err) {
+                seoStatus(err.message, true);
+            } finally {
+                button.disabled = false;
+            }
         }
 
         function renderSeoConnection(result) {
@@ -2458,7 +2560,7 @@
                     <div class="seo-summary-card"><span>Captured / eligible URLs</span><strong id="seoCapturedCount">0 / 0</strong></div>
                     <div class="seo-summary-card"><span>Latest collection run</span><strong id="seoLastRun">No collection run yet</strong><span id="seoLastRunMessage"></span></div>
                 </div>
-                <p class="section-hint">Latest finalized date: <strong id="seoFinalDate">–</strong></p>
+                <p class="section-hint">Latest finalized date: <strong id="seoFinalDate">–</strong> · Optional content judge: <strong id="seoContentJudgeState">unknown</strong></p>
                 <p id="seoDisclaimer" class="section-hint"></p>
                 <div class="seo-table-wrap">
                     <table class="seo-table">
@@ -2468,6 +2570,8 @@
                                 <th colspan="4">7 days</th>
                                 <th colspan="4">28 days</th>
                                 <th rowspan="2">Status</th>
+                                <th rowspan="2">Recommendation</th>
+                                <th rowspan="2">Read-only analysis</th>
                             </tr>
                             <tr>
                                 <th>Clicks</th><th>Impr.</th><th>CTR</th><th>Pos.</th>

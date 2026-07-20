@@ -29,6 +29,7 @@ SEARCH_ANALYTICS_URL = (
 SITE_DETAILS_URL = "https://searchconsole.googleapis.com/webmasters/v3/sites/{site_url}"
 DEFAULT_ROW_LIMIT = 25_000
 DEFAULT_MAX_PAGES = 10
+MAX_TOP_QUERY_ROWS = 100
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -168,6 +169,69 @@ class GoogleSearchConsoleClient:
             truncated = True
 
         return {"rows": rows, "requests": requests_made, "truncated": truncated}
+
+    def query_page_queries(
+        self, start_date: date, end_date: date, page_url: str, *, limit: int = 20
+    ) -> dict[str, Any]:
+        """Return a bounded top-query sample for one exact page.
+
+        Search Console can suppress anonymized queries. ``coverage`` therefore
+        remains explicit even when the row cap was not reached.
+        """
+        if start_date > end_date:
+            return {
+                "rows": [], "requests": 0, "truncated": False,
+                "coverage": "top_queries_only",
+            }
+        limit = max(1, min(int(limit), MAX_TOP_QUERY_ROWS))
+        endpoint = SEARCH_ANALYTICS_URL.format(
+            site_url=quote(self.config.site_url, safe="")
+        )
+        payload = {
+            "startDate": start_date.isoformat(),
+            "endDate": end_date.isoformat(),
+            "dimensions": ["query"],
+            "dimensionFilterGroups": [{
+                "groupType": "and",
+                "filters": [{
+                    "dimension": "page",
+                    "operator": "equals",
+                    "expression": str(page_url),
+                }],
+            }],
+            "type": "web",
+            "dataState": "final",
+            # Ask for one sentinel row so the stored snapshot can distinguish
+            # a complete short list from a response cut at our own limit.
+            "rowLimit": min(limit + 1, MAX_TOP_QUERY_ROWS + 1),
+            "startRow": 0,
+        }
+        try:
+            response = self._session.post(endpoint, json=payload, timeout=30)
+        except Exception:
+            raise SearchConsoleError(
+                "request_failed", "The Search Console query request failed."
+            ) from None
+        status = int(getattr(response, "status_code", 0))
+        if status != 200:
+            raise SearchConsoleError(
+                "request_failed",
+                f"Search Console returned HTTP {status or 'error'} for query data.",
+            )
+        try:
+            body = response.json()
+        except Exception:
+            raise SearchConsoleError(
+                "invalid_response", "Search Console returned an invalid query response."
+            ) from None
+        rows = body.get("rows") if isinstance(body, dict) else None
+        rows = [row for row in (rows or []) if isinstance(row, dict)]
+        return {
+            "rows": rows[:limit],
+            "requests": 1,
+            "truncated": len(rows) > limit,
+            "coverage": "top_queries_only",
+        }
 
     def check_connection(self) -> dict[str, Any]:
         """Verify credentials and property access without returning site data."""

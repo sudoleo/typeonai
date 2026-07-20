@@ -10,7 +10,14 @@ from app.core.rate_limit import limiter
 import app.core.config as cfg
 from app.core.config import apply_limits, get_limits_config, load_models_from_db
 from app.services import share_snapshots as snapshots
-from app.services import mailer, publisher_config, seo_data, watch_scheduler, watch_service
+from app.services import (
+    mailer,
+    publisher_config,
+    seo_data,
+    seo_recommendation,
+    watch_scheduler,
+    watch_service,
+)
 from app.services.share_snapshots import ShareError
 from app.services.api_key_repository import (
     ApiKeyNotFound,
@@ -22,6 +29,7 @@ router = APIRouter()
 api_key_repository = FirestoreApiKeyRepository(db_firestore)
 api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
 seo_data_service = seo_data.SeoDataService(db_firestore)
+seo_recommendation_service = seo_recommendation.SeoRecommendationService(db_firestore)
 
 
 class AdminIssueApiKeyRequest(BaseModel):
@@ -68,7 +76,9 @@ _SHARE_ERROR_STATUS = {"not_found": 404, "bad_request": 400}
 async def admin_get_seo_overview(request: Request):
     _require_admin(request, {})
     try:
-        return await asyncio.to_thread(seo_data_service.overview)
+        result = await asyncio.to_thread(seo_data_service.overview)
+        result["content_judge"] = seo_recommendation_service.content_judge.status()
+        return result
     except Exception:
         logging.exception("admin_get_seo_overview failed")
         raise HTTPException(status_code=500, detail="Failed to load SEO data")
@@ -97,6 +107,53 @@ async def admin_collect_seo_data(request: Request, data: dict = Body(default={})
     except Exception:
         logging.exception("admin_collect_seo_data failed")
         raise HTTPException(status_code=500, detail="SEO collection failed safely")
+
+
+_SEO_RECOMMENDATION_STATUS = {
+    "not_found": 404,
+    "llm_not_configured": 409,
+    "content_judge_not_applicable": 409,
+    "invalid_llm_response": 502,
+    "unsafe_llm_response": 502,
+}
+
+
+def _raise_seo_recommendation_error(exc):
+    raise HTTPException(
+        status_code=_SEO_RECOMMENDATION_STATUS.get(exc.code, 400),
+        detail=exc.safe_message,
+    )
+
+
+@router.post("/api/admin/seo/pages/{page_id}/recommendation")
+async def admin_generate_seo_recommendation(
+    request: Request, page_id: str, data: dict = Body(default={})
+):
+    _require_admin(request, data)
+    try:
+        return await asyncio.to_thread(seo_recommendation_service.generate, page_id)
+    except seo_recommendation.SeoRecommendationError as exc:
+        _raise_seo_recommendation_error(exc)
+    except Exception:
+        logging.exception("admin_generate_seo_recommendation failed")
+        raise HTTPException(status_code=500, detail="SEO recommendation failed safely")
+
+
+@router.post("/api/admin/seo/pages/{page_id}/content-judge")
+@limiter.limit("5/minute")
+async def admin_ask_seo_content_judge(
+    request: Request, page_id: str, data: dict = Body(default={})
+):
+    _require_admin(request, data)
+    try:
+        return await asyncio.to_thread(
+            seo_recommendation_service.ask_content_judge, page_id
+        )
+    except seo_recommendation.SeoRecommendationError as exc:
+        _raise_seo_recommendation_error(exc)
+    except Exception:
+        logging.exception("admin_ask_seo_content_judge failed")
+        raise HTTPException(status_code=500, detail="SEO content judge failed safely")
 
 
 @router.post("/api/admin/api-keys", status_code=201)

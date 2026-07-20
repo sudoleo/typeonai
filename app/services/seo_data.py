@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import threading
 import uuid
+import re
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlsplit, urlunsplit
 
 from app.services import google_search_console as gsc
+from app.services import seo_dossier
 from app.services import share_snapshots
 from app.services.seo_repository import FirestoreSeoRepository
 
@@ -15,6 +17,8 @@ from app.services.seo_repository import FirestoreSeoRepository
 FINALIZATION_LAG_DAYS = 3
 HISTORY_DAYS = 90
 MAX_QUERY_RANGE_DAYS = 31
+TOP_QUERIES_PER_PAGE = 20
+MAX_QUERY_PAGES_PER_RUN = 100
 DATA_SOURCE = "google_search_console"
 DISCLAIMER = (
     "Search Console rows can be incomplete and arrive with a delay; only final data "
@@ -43,10 +47,12 @@ def discover_indexable_pages() -> list[dict]:
     # service import while keeping SITEMAP_URLS the single static-page source.
     from app.api.routers.pages import SITE_URL, SITEMAP_URLS
 
-    pages = [
-        {"url": normalize_url(item["loc"]), "origin": "static_page", "share_id": None}
-        for item in SITEMAP_URLS
-    ]
+    pages = [{
+        "url": normalize_url(item["loc"]),
+        "origin": "static_page",
+        "share_id": None,
+        "dossier": seo_dossier.build_static_dossier(item["loc"], item.get("lastmod")),
+    } for item in SITEMAP_URLS]
     for item in share_snapshots.list_indexed_share_urls():
         path = str(item.get("path") or "")
         share_id = path.rsplit("-", 1)[-1] if path else None
@@ -54,6 +60,7 @@ def discover_indexable_pages() -> list[dict]:
             "url": normalize_url(SITE_URL + path),
             "origin": "share",
             "share_id": share_id,
+            "dossier": seo_dossier.build_share_dossier(share_id) if share_id else {},
         })
     deduplicated = {page["url"]: page for page in pages if page["url"]}
     return [deduplicated[url] for url in sorted(deduplicated)]
@@ -93,6 +100,22 @@ def _coerce_number(value, default=0.0) -> float:
         return max(0.0, float(value))
     except (TypeError, ValueError):
         return default
+
+
+_EMAIL_RE = re.compile(r"\b[^\s@]+@[^\s@]+\.[^\s@]+\b", re.IGNORECASE)
+_PHONE_RE = re.compile(r"(?<!\w)(?:\+?\d[\d\s().-]{7,}\d)(?!\w)")
+_IP_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+
+
+def sanitize_query_text(value) -> str | None:
+    """Drop query rows that look like personal/contact identifiers."""
+    text = re.sub(r"[\x00-\x1f\x7f]+", " ", str(value or ""))
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text or len(text) > 160:
+        return None
+    if _EMAIL_RE.search(text) or _PHONE_RE.search(text) or _IP_RE.search(text):
+        return None
+    return text
 
 
 def aggregate_metrics(metrics: list[dict]) -> dict:
@@ -281,7 +304,78 @@ class SeoDataService:
                         "share_id": page.get("share_id"),
                     })
             written = self.repository.upsert_metrics(metrics)
-            status = "partial" if truncated else "success"
+            query_start = end_date - timedelta(days=27)
+            query_pages_collected = 0
+            query_pages_skipped = 0
+            query_failures = 0
+            query_partial_pages = 0
+            query_supported = hasattr(client, "query_page_queries")
+            for page in pages:
+                if not query_supported:
+                    break
+                if self.repository.get_query_snapshot(page["page_id"], end_date):
+                    continue
+                if query_pages_collected >= MAX_QUERY_PAGES_PER_RUN:
+                    query_pages_skipped += 1
+                    continue
+                try:
+                    query_result = client.query_page_queries(
+                        query_start, end_date, page["url"], limit=TOP_QUERIES_PER_PAGE
+                    )
+                    requests_made += int(query_result.get("requests") or 0)
+                except gsc.SearchConsoleError:
+                    query_failures += 1
+                    continue
+
+                top_queries = []
+                redacted_queries = 0
+                for row in query_result.get("rows") or []:
+                    keys = row.get("keys") if isinstance(row.get("keys"), list) else []
+                    query_text = sanitize_query_text(keys[0] if keys else "")
+                    if not query_text:
+                        redacted_queries += 1
+                        continue
+                    clicks = _coerce_number(row.get("clicks"))
+                    impressions = _coerce_number(row.get("impressions"))
+                    position = row.get("position")
+                    top_queries.append({
+                        "query": query_text,
+                        "clicks": clicks,
+                        "impressions": impressions,
+                        "ctr": _coerce_number(
+                            row.get("ctr"), clicks / impressions if impressions else 0.0
+                        ),
+                        "position": _coerce_number(position) if position is not None else None,
+                    })
+                partial_reasons = []
+                if query_result.get("truncated"):
+                    partial_reasons.append("row_cap")
+                if redacted_queries:
+                    partial_reasons.append("privacy_filter")
+                is_partial = bool(partial_reasons)
+                if is_partial:
+                    query_partial_pages += 1
+                self.repository.save_query_snapshot(page["page_id"], end_date, {
+                    "schema_version": 1,
+                    "period_start": query_start.isoformat(),
+                    "period_end": end_date.isoformat(),
+                    "data_state": "final",
+                    "coverage": query_result.get("coverage") or "top_queries_only",
+                    "row_limit": TOP_QUERIES_PER_PAGE,
+                    "top_queries": top_queries[:TOP_QUERIES_PER_PAGE],
+                    "partial": is_partial,
+                    "complete": not is_partial,
+                    "partial_reasons": partial_reasons,
+                    "redacted_query_rows": redacted_queries,
+                    "collected_at": collected_at,
+                    "source": DATA_SOURCE,
+                })
+                query_pages_collected += 1
+
+            collection_partial = bool(
+                truncated or query_pages_skipped or query_failures or query_partial_pages
+            )
+            status = "partial" if collection_partial else "success"
             result = {
                 "status": status,
                 "run_id": run_id,
@@ -294,8 +388,12 @@ class SeoDataService:
                 "gsc_rows_matched": gsc_rows,
                 "requests_made": requests_made,
                 "truncated": truncated,
-                "message": "Collection completed with the configured request cap."
-                if truncated else "Collection completed.",
+                "query_pages_collected": query_pages_collected,
+                "query_pages_skipped": query_pages_skipped,
+                "query_failures": query_failures,
+                "query_partial_pages": query_partial_pages,
+                "message": "Collection completed with explicitly marked partial data."
+                if collection_partial else "Collection completed.",
             }
             self.repository.update_run(run_id, {**result, "finished_at": collected_at})
             return result
@@ -333,6 +431,9 @@ class SeoDataService:
         start_28 = final_date - timedelta(days=27)
         start_7 = final_date - timedelta(days=6)
         pages = self.repository.list_pages(active_only=True)
+        histories = self.repository.list_judgments(
+            [page["page_id"] for page in pages], max_per_page=3
+        )
         rows = []
         captured = 0
         for page in pages:
@@ -343,12 +444,16 @@ class SeoDataService:
                 item for item in metrics if str(item.get("date") or "") >= start_7.isoformat()
             ]
             rows.append({
+                "page_id": page.get("page_id"),
                 "url": page.get("url"),
                 "origin": page.get("origin"),
                 "share_id": page.get("share_id"),
+                "dossier": seo_dossier.journal_summary(page),
+                "query_data": self.repository.latest_query_snapshot(page["page_id"]),
                 "metrics_7d": aggregate_metrics(metrics_7),
                 "metrics_28d": aggregate_metrics(metrics),
                 "status": classify_status(metrics, final_date),
+                "recommendation_history": histories.get(page["page_id"], []),
             })
         rows.sort(key=lambda item: (-item["metrics_28d"]["clicks"], item["url"] or ""))
         return {

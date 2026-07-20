@@ -55,7 +55,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. kompakter History je Watch), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH) sowie öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` ohne DeepSeek und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil und DeepSeek-Ausschluss. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
-| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (Diagnose-Liste; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo`, sanitisierten Live-Check `POST /api/admin/seo/check` + manueller Search-Console-Lauf `POST /api/admin/seo/collect`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
+| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (Diagnose-Liste; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo`, sanitisierten Live-Check `POST /api/admin/seo/check`, manueller Search-Console-Lauf `POST /api/admin/seo/collect` sowie speicherbare read-only Judgements per `POST /api/admin/seo/pages/{page_id}/recommendation` und optional `.../content-judge`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 **Zentrale Templates** (`templates/`, gerendert mit `Jinja2Templates`):
 `landing.html` (Marketing), `index.html` (die App — Haupt-Markup + Script-Tags),
@@ -508,7 +508,7 @@ Whitelist für Bild-MIME-Typen.
   werden zugehörige Watch-Scheduler-Daten, Watch-History und Follower entfernt.
   Sonst erfolgt der 30-Tage-Hard-Delete widerrufener Shares via `cleanup_revoked_shares`.
 
-### SEO-Leistungsdaten (Search Console, v1)
+### SEO-Leistungsdaten und Recommendation Judge (Search Console, v2)
 - Der manuelle admin-only Lauf `POST /api/admin/seo/collect` übernimmt exakt die
   statischen URLs aus `pages.py::SITEMAP_URLS` sowie aktive, öffentliche,
   indexierte Shares aus `list_indexed_share_urls`; er verändert weder diese
@@ -527,8 +527,26 @@ Whitelist für Bild-MIME-Typen.
   schreibt fehlende URL-/Tageswerte idempotent. `GET /api/admin/seo` aggregiert
   Klicks, Impressions, CTR und impressionsgewichtete Position über 7/28 Tage
   und klassifiziert transparent als `insufficient_data`, `emerging`, `winner`,
-  `opportunity`, `declining` oder `invisible`. Keine LLM-, Umami-, GA4-, URL-
-  Inspection- oder automatische SEO-Aktion gehört zu diesem Flow. GSC-Zeilen
+  `opportunity`, `declining` oder `invisible`. Zusätzlich wird pro Seite ein
+  minimiertes Dossier (First-Seen/Publish-/Änderungszeit, Titel, Description,
+  begrenzte Inhaltszusammenfassung sowie Quellen-/Watch-Frische) gepflegt. Für
+  die letzten 28 finalisierten Tage werden maximal 20 Top-Queries mit Klicks,
+  Impressions, CTR und Position als eigener Snapshot gesammelt; höchstens 100
+  noch fehlende Seiten-Snapshots pro Lauf. Row-Cap und aus Datenschutzgründen
+  verworfene Kontakt-/Identifier-Queries werden als `partial` markiert.
+- `seo_recommendation.py` erzeugt aus Status, Dossier, finalen Daten und
+  Query-Abdeckung deterministisch `wait|monitor|protect_winner|refresh_title_and_intro|
+  refresh_content|investigate_decline|noindex_candidate`. Letzteres verlangt
+  gleichzeitig mindestens 60 Beobachtungstage, 28 finale Tageszeilen, praktisch
+  keine Sichtbarkeit, keinen positiven Trend und keinerlei technische/Query-
+  Unklarheit; `invisible` allein reicht nie. Ergebnisse landen idempotent und
+  append-only im Journal. Der separate Content-Judge wird nur durch den Admin-
+  Button für `opportunity`, `declining` oder bereits abgesicherte
+  `noindex_candidate`-Fälle aufgerufen, validiert ein striktes JSON-Schema und
+  kann den Noindex-Schutz nicht überstimmen. Er ist nur mit explizitem Modell
+  aktiv. Keine Empfehlung mutiert Seiten, Indexierungs-, Robots-, Redirect-
+  oder Publisher-Zustände. Umami-, GA4- und URL-Inspection gehören weiterhin
+  nicht zum Flow. GSC-Zeilen
   können unvollständig sein und treffen zeitverzögert ein; die Admin-Ansicht
   weist darauf hin.
 
@@ -561,8 +579,10 @@ app/services/
   api_consensus_runner.py    Asynchroner At-most-once-Orchestrator auf bestehenden Engines
   publisher_config.py       Firestore-Steuerung des Scheduled Publishers + Weekly/Free-Watch-Fakten
   google_search_console.py  Read-only Search-Analytics-HTTP-Client + sichere Config-Fehler
-  seo_repository.py         Firestore-Modell fuer SEO-Seiten, Tagesmetriken und Collection-Runs
-  seo_data.py               URL-Discovery, inkrementelle Collection, 7/28-Tage-Aggregation + Statusregeln
+  seo_repository.py         Firestore-Modell fuer SEO-Seiten, Tages-/Query-Metriken, Runs + Judgement-Journal
+  seo_dossier.py            Minimierte statische/Share-Seitendossiers ohne UID/Secrets
+  seo_data.py               URL-Discovery, inkrementelle Collection, Query-Snapshots + Statusregeln
+  seo_recommendation.py     Deterministische Regeln + optionaler strukturierter Content-Judge
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
   opinion_map.py             Datenminimierte, mehrdimensionale Provider-Positionen + Direction-Shift-Berechnung
@@ -677,12 +697,15 @@ Wichtige Verträge im Backend:
   `calls.jsonl`-Rohantworten, Prompts oder Request-Payloads.
 - `seo_pages/{sha256(url)}` — eine aktuell oder historisch beobachtete
   indexierbare Seite mit `url`, `origin=static_page|share`, optionaler
-  `share_id`, `active`, `indexable` sowie First-/Last-Seen-Zeitstempeln.
+  `share_id`, `active`, `indexable`, First-/Last-Seen-Zeitstempeln und dem
+  minimierten `dossier` (Share-Inhaltsrepräsentation hart auf 3200 Zeichen begrenzt).
   Untercollection `daily_metrics/{YYYY-MM-DD}` ist die idempotente URL-/Tag-
   Einheit mit `url`, `date`, `clicks`, `impressions`, `ctr`, `position`,
   `collected_at`, `source=google_search_console`, `origin` und optionaler
-  `share_id`. Es werden keine Queries, Länder, Geräte oder personenbezogenen
-  Search-Console-Dimensionen gespeichert. Ein fehlender GSC-Row wird für die
+  `share_id`. Untercollection `query_snapshots/{final_date}` enthält das finale
+  28-Tage-Fenster, maximal 20 Top-Query-Zeilen, Coverage-/Partial-Metadaten und
+  keine Länder/Geräte/UIDs; Query-Zeilen mit E-Mail-, Telefon- oder IP-Mustern
+  werden nicht gespeichert. Ein fehlender GSC-Row wird für die
   aktuelle indexierbare URL als Nulltag (Position `null`) persistiert, weil GSC
   Zeilen auslassen kann — aber nur nach einer vollständig paginierten Abfrage;
   bei erreichtem Request-Cap bleiben ausgelassene URL-/Tage für einen Retry offen.
@@ -691,6 +714,12 @@ Wichtige Verträge im Backend:
   Truncation-Flag und ausschließlich sanitisierten Fehlertexten. Credential-
   Dateipfad/-Inhalte, insbesondere `private_key`, und Google-Response-Bodies
   werden weder gespeichert, geloggt noch über Admin-Endpunkte ausgegeben.
+- `seo_judgements/{det-hash|llm-uuid}` — append-only Journal mit `page_id`,
+  Zeitpunkt, Regelversion, Datenfenster, raw-content-freier Dossier-Summary,
+  Empfehlung, Konfidenz, Evidenz, Review-Frist, Schutzflags, optionaler strikt
+  validierter LLM-Auswertung und nullable `user_feedback`. Deterministische
+  Retries verwenden denselben Hash und überschreiben keinen Eintrag; Admin-UID,
+  Secrets und vollständige Share-Inhalte werden nicht gespeichert.
 - `differences_stats` — anonyme Differences-Telemetrie (Schema v3): pro erfolgreichem
   Consensus-Lauf ein Dokument mit Zähl-/Strukturdaten (Agreement-Score,
   Widersprüche mit Severity und beteiligten Providern, Modell-Metadaten,
@@ -725,6 +754,9 @@ Wichtige Verträge im Backend:
   Werte bleiben für normale App-Flows nicht-fatal und erscheinen sanitisiert im
   Admin-SEO-Tab. `GOOGLE_APPLICATION_CREDENTIALS` bleibt davon unabhängig und
   weiterhin für Gemini reserviert.
+- Optionaler SEO-Content-Judge: `SEO_CONTENT_JUDGE_MODEL`; ohne explizites
+  Modell bleibt er aus. Bei Aktivierung nutzt er serverseitig
+  `DEVELOPER_OPENAI_API_KEY`; der deterministische Judge benötigt beides nicht.
 
 Modell-IDs/Tier-Zuordnung/Labels: ausschließlich in `app/core/config.py` pflegen
 (`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
@@ -781,8 +813,9 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **621 passed** (2026-07-20; inklusive der neuen
-  Search-Console-/SEO-Persistenz-, Datums-, Idempotenz- und Admin-Schutztests sowie
+  Letzte bekannte Baseline: **632 passed** (2026-07-20; inklusive der neuen
+  Search-Console-/SEO-Dossier-, Query-, Recommendation-, LLM-Schema-,
+  Idempotenz- und Admin-Schutztests sowie
   run-basierter Usage-, Consensus-API-Publishing-/Scope-/Vertrags- sowie
   Scheduled-Publisher-Tests).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
