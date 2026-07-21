@@ -668,25 +668,67 @@
     return chip;
   }
 
+  function latestHistoryPoint(watch) {
+    const history = watch.history || [];
+    return history.length ? history[history.length - 1] : null;
+  }
+
+  function driftState(watch) {
+    const point = latestHistoryPoint(watch);
+    if (!point) return { key: "baseline", label: "Awaiting first check", summary: "Baseline ready" };
+    const changed = point.trigger === "changed" || point.changed;
+    return {
+      key: changed ? "changed" : "stable",
+      label: changed ? "Changed" : "Stable",
+      summary: point.change_summary || (changed
+        ? "Material movement detected in the latest check."
+        : "No material movement in the latest check."),
+      point: point
+    };
+  }
+
   function renderDashboardStats(container, watches) {
     const active = watches.filter(watch => watch.status === "active");
     const nextRuns = active.map(watch => watch.next_run_at).filter(Boolean).sort();
     const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
     let recentChanges = 0;
+    let recentChecks = 0;
     watches.forEach(watch => (watch.history || []).forEach(point => {
-      if (point.changed && point.ts && new Date(point.ts).getTime() >= weekAgo) recentChanges += 1;
+      if (!point.ts || new Date(point.ts).getTime() < weekAgo) return;
+      recentChecks += 1;
+      if (point.trigger === "changed" || point.changed) recentChanges += 1;
     }));
     const stats = document.createElement("div");
     stats.className = "watch-dash-stats";
-    const chunks = [
-      `<span class="watch-dash-stat"><strong>${active.length}</strong> active · ${watches.length - active.length} paused</span>`
-    ];
-    if (nextRuns.length) {
-      chunks.push(`<span class="watch-dash-stat">Next check <strong>${escapeHtml(formatDateTime(nextRuns[0]))}</strong></span>`);
-    }
-    chunks.push(`<span class="watch-dash-stat"><strong>${recentChanges}</strong> change${recentChanges === 1 ? "" : "s"} in the last 7 days</span>`);
-    stats.innerHTML = chunks.join("");
+    stats.innerHTML = `
+      <article class="watch-dash-stat"><span>Active monitors</span><strong>${active.length}</strong><small>${watches.length - active.length} paused</small></article>
+      <article class="watch-dash-stat is-drift"><span>Changes · 7 days</span><strong>${recentChanges}</strong><small>material movements</small></article>
+      <article class="watch-dash-stat"><span>Checks · 7 days</span><strong>${recentChecks}</strong><small>successful runs</small></article>
+      <article class="watch-dash-stat"><span>Next check</span><strong class="is-date">${nextRuns.length ? escapeHtml(relativeTime(nextRuns[0])) : "—"}</strong><small>${nextRuns.length ? escapeHtml(formatDateTime(nextRuns[0])) : "No active schedule"}</small></article>`;
     container.appendChild(stats);
+
+    const changes = watches
+      .map(watch => ({ watch: watch, state: driftState(watch) }))
+      .filter(item => item.state.key === "changed")
+      .sort((a, b) => new Date(b.state.point.ts || 0) - new Date(a.state.point.ts || 0))
+      .slice(0, 3);
+    if (changes.length) {
+      const panel = document.createElement("section");
+      panel.className = "watch-drift-feed";
+      panel.innerHTML = `<div class="watch-drift-feed-head"><div><span class="watch-kicker">Needs attention</span><h2>Recent consensus movement</h2></div><span>${changes.length} latest change${changes.length === 1 ? "" : "s"}</span></div>`;
+      const list = document.createElement("div");
+      list.className = "watch-drift-feed-list";
+      changes.forEach(({ watch, state }) => {
+        const item = document.createElement("a");
+        item.href = watch.share_path || "#";
+        item.target = "_blank";
+        item.rel = "noopener";
+        item.innerHTML = `<span class="watch-drift-feed-dot" aria-hidden="true"></span><span><strong>${escapeHtml(watch.question || "Untitled watch")}</strong><small>${escapeHtml(state.summary)}</small></span><time>${escapeHtml(relativeTime(state.point.ts))}</time>`;
+        list.appendChild(item);
+      });
+      panel.appendChild(list);
+      container.appendChild(panel);
+    }
   }
 
   function renderBriefCard(container, brief, hasWatches) {
@@ -833,9 +875,40 @@
     container.appendChild(card);
   }
 
+  function renderNotificationsPanel(container, telegram, brief, hasWatches) {
+    const storageKey = "consensus_watch_notifications_open";
+    let isOpen = false;
+    try { isOpen = window.localStorage.getItem(storageKey) === "true"; } catch (_) {}
+
+    const panel = document.createElement("details");
+    panel.className = "watch-notifications";
+    panel.open = isOpen;
+    const telegramStatus = telegram.configured
+      ? (telegram.connected ? "Telegram connected" : "Telegram not connected")
+      : "Telegram unavailable";
+    const briefStatus = hasWatches && brief.enabled ? "Morning brief on" : "Morning brief off";
+    panel.innerHTML = `
+      <summary>
+        <span class="watch-notifications-title">Notifications</span>
+        <span class="watch-notifications-summary">${telegramStatus} · ${briefStatus}</span>
+      </summary>
+      <div class="watch-notifications-content"></div>`;
+    panel.addEventListener("toggle", () => {
+      try { window.localStorage.setItem(storageKey, String(panel.open)); } catch (_) {}
+    });
+
+    const content = panel.querySelector(".watch-notifications-content");
+    renderTelegramCard(content, telegram, renderDashboard);
+    renderBriefCard(content, brief, hasWatches);
+    container.appendChild(panel);
+  }
+
   function renderWatchCard(watch, onListChanged, telegram) {
     const card = document.createElement("li");
     card.className = "watch-card";
+    const state = driftState(watch);
+    card.dataset.drift = state.key;
+    card.dataset.status = watch.status || "paused";
 
     const top = document.createElement("div");
     top.className = "watch-card-top";
@@ -871,6 +944,14 @@
     const bodyRow = document.createElement("div");
     bodyRow.className = "watch-card-body";
     const history = watch.history || [];
+    const drift = document.createElement("div");
+    drift.className = "watch-card-drift is-" + state.key;
+    const shiftScore = state.point?.opinion_map?.shift_score;
+    drift.innerHTML = `
+      <span class="watch-card-drift-dot" aria-hidden="true"></span>
+      <span class="watch-card-drift-copy"><strong>${escapeHtml(state.label)}</strong><small>${escapeHtml(state.summary)}</small></span>
+      ${typeof shiftScore === "number" ? `<span class="watch-card-shift"><strong>${Math.round(shiftScore)}</strong><small>/100 shift</small></span>` : ""}`;
+    bodyRow.appendChild(drift);
     const score = document.createElement("div");
     score.className = "watch-card-score";
     if (typeof watch.last_agreement_score === "number") {
@@ -892,7 +973,9 @@
     const meta = document.createElement("div");
     meta.className = "watch-card-meta";
     const metaLines = [];
-    const lastEvent = [...history].reverse().find(point => point.changed && point.change_summary);
+    const lastEvent = [...history].reverse().find(point =>
+      (point.trigger === "changed" || point.changed) && point.change_summary
+    );
     if (lastEvent) {
       metaLines.push(
         `<span class="watch-meta-change${lastEvent.severity === "major" ? " major" : ""}">` +
@@ -928,7 +1011,7 @@
     openBtn.href = watch.share_path || "#";
     openBtn.target = "_blank";
     openBtn.rel = "noopener";
-    openBtn.textContent = "Open history page";
+    openBtn.textContent = "Open monitor";
     const spacer = document.createElement("span");
     spacer.className = "watch-card-spacer";
     const active = watch.status === "active";
@@ -1221,22 +1304,11 @@
     body.innerHTML = "";
 
     renderDashboardStats(body, watches);
-
-    const notificationTitle = document.createElement("h3");
-    notificationTitle.className = "watch-dash-section-title";
-    notificationTitle.textContent = "Notifications";
-    body.appendChild(notificationTitle);
-    renderTelegramCard(body, telegram, renderDashboard);
-
-    const briefTitle = document.createElement("h3");
-    briefTitle.className = "watch-dash-section-title";
-    briefTitle.textContent = "Daily digest";
-    body.appendChild(briefTitle);
-    renderBriefCard(body, brief, watches.length > 0);
+    renderNotificationsPanel(body, telegram, brief, watches.length > 0);
 
     const listTitle = document.createElement("h3");
     listTitle.className = "watch-dash-section-title";
-    listTitle.textContent = "Watched questions";
+    listTitle.textContent = "Consensus monitors";
     body.appendChild(listTitle);
 
     if (!watches.length) {
@@ -1250,6 +1322,37 @@
     const list = document.createElement("ul");
     list.className = "watch-dash-list";
     watches.forEach(watch => list.appendChild(renderWatchCard(watch, renderDashboard, telegram)));
+    const filterBar = document.createElement("div");
+    filterBar.className = "watch-filter-bar";
+    const filterDefinitions = [
+      ["all", "All", watches.length],
+      ["changed", "Changed", watches.filter(watch => driftState(watch).key === "changed").length],
+      ["stable", "Stable", watches.filter(watch => driftState(watch).key === "stable").length],
+      ["paused", "Paused", watches.filter(watch => watch.status !== "active").length]
+    ];
+    filterDefinitions.forEach(([key, label, count], index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "watch-filter" + (index === 0 ? " is-active" : "");
+      button.dataset.filter = key;
+      button.setAttribute("aria-pressed", String(index === 0));
+      button.innerHTML = `${escapeHtml(label)} <span>${count}</span>`;
+      button.addEventListener("click", () => {
+        filterBar.querySelectorAll(".watch-filter").forEach(item => {
+          const active = item === button;
+          item.classList.toggle("is-active", active);
+          item.setAttribute("aria-pressed", String(active));
+        });
+        list.querySelectorAll(".watch-card").forEach(card => {
+          card.hidden = key === "changed" ? card.dataset.drift !== "changed"
+            : key === "stable" ? card.dataset.drift !== "stable"
+              : key === "paused" ? card.dataset.status === "active"
+                : false;
+        });
+      });
+      filterBar.appendChild(button);
+    });
+    body.appendChild(filterBar);
     body.appendChild(list);
   }
 

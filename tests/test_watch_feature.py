@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -541,6 +541,71 @@ class SchedulerSafetyTests(unittest.TestCase):
         self.assertIn("Mock consensus", result["consensus"])
         self.assertIsInstance(result["agreement_score"], int)
         self.assertFalse(result["changed"])
+        self.assertIsInstance(result["differences_data"], dict)
+        self.assertGreaterEqual(len(result["included_models"]), 2)
+
+    def test_watch_pipeline_tracks_previous_and_original_baseline_separately(self):
+        comparisons = []
+
+        def compare(old, new, keys, engine, condition=""):
+            comparisons.append((old, new, condition))
+            return {
+                "changed": old == "Original baseline",
+                "severity": "major" if old == "Original baseline" else "minor",
+                "change_summary": "Moved since tracking began." if old == "Original baseline" else "Stable now.",
+            }
+
+        with patch.dict(os.environ, {"MOCK_LLM": "1"}), \
+                patch.object(watch_scheduler, "query_consensus_change", side_effect=compare):
+            result = watch_scheduler.execute_watch(
+                "When was the Eiffel Tower completed?",
+                "Previous version",
+                baseline_consensus="Original baseline",
+            )
+        self.assertEqual([item[0] for item in comparisons], ["Previous version", "Original baseline"])
+        self.assertFalse(result["changed"])
+        self.assertTrue(result["baseline_changed"])
+        self.assertEqual(result["baseline_summary"], "Moved since tracking began.")
+
+    def test_complete_run_persists_full_version_and_simple_event_type(self):
+        db = MagicMock()
+        share_ref = MagicMock()
+        history_ref = MagicMock()
+        watch_ref = MagicMock()
+        share_ref.collection.return_value.document.return_value = history_ref
+        db.collection.side_effect = lambda name: (
+            MagicMock(document=MagicMock(return_value=share_ref))
+            if name == "shares"
+            else MagicMock(document=MagicMock(return_value=watch_ref))
+        )
+        batch = db.batch.return_value
+        claimed = {
+            "share_id": "A" * 16,
+            "current_run_id": "run12345678",
+            "interval": "weekly",
+            "last_agreement_score": 70,
+        }
+        result = {
+            "consensus": "The current consensus.",
+            "agreement_score": 68,
+            "changed": True,
+            "severity": "minor",
+            "change_summary": "A qualification was added.",
+            "differences_data": {"agreement": {"score": 68}},
+            "included_models": ["OpenAI", "Google Gemini"],
+            "consensus_model": "OpenAI",
+        }
+        with patch.object(watch_service.share_snapshots, "invalidate_share_cache"):
+            history = watch_service.complete_watch_run(
+                "w1", claimed, result,
+                now=datetime(2026, 7, 21, tzinfo=timezone.utc), db=db,
+            )
+        self.assertEqual(history["consensus_md"], "The current consensus.")
+        self.assertEqual(history["event_type"], "watch.changed")
+        self.assertEqual(history["trigger"], "changed")
+        batch.set.assert_called_once_with(history_ref, history)
+        share_updates = batch.update.call_args_list[1].args[1]
+        self.assertEqual(share_updates["latest_watch_run_id"], "run12345678")
 
     def test_watch_uses_all_configured_models_for_the_selected_tier(self):
         configured = {
@@ -1056,6 +1121,8 @@ class WatchFrontendContractTests(unittest.TestCase):
         # Morning-Brief-Toggle nutzt denselben switch/slider wie das Input-Feld.
         self.assertIn('class="switch watch-brief-switch"', js_source)
         self.assertIn('<span class="slider">', js_source)
+        self.assertIn("renderNotificationsPanel", js_source)
+        self.assertIn('className = "watch-notifications"', js_source)
         # Der View-Switch ist immer sichtbar (auch ausgeloggt): kein hidden im
         # Markup, firebase.js blendet ihn nicht mehr um.
         self.assertNotIn('id="viewSwitch" class="view-switch" hidden', html_source)

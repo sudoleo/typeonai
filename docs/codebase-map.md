@@ -188,11 +188,13 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   `window.openWatchDashboard` (eigene Seite `/app/watches`: Vollbild-View
   `#watchDashboard` unter dem fixen View-Switch, Styles in
   `static/css/components-watch.css`; URL-Sync via pushState/popstate, Deep-Link
-  wartet auf den asynchronen Firebase-Auth-Status): Karten je Watch mit
-  Score/Delta/History-Sparkline, letzter Änderung, nächstem Lauf und
+  wartet auf den asynchronen Firebase-Auth-Status): Dashboard-KPIs für aktive
+  Monitore, Checks/Changes der letzten sieben Tage und nächsten Lauf, ein
+  Recent-Movement-Feed, All/Changed/Stable/Paused-Filter sowie Karten je Watch mit
+  Driftstatus/-Summary, Direction Shift, Score/Delta/History-Sparkline und
   Inline-Settings (Intervall/Uhrzeit/Alert-Regel/Condition, E-Mail-/Telegram-
-  Kanäle, Pause/Delete), eine Telegram-Verbindungskarte mit Deep-Link/Test sowie
-  die Morning-Brief-Karte (`/api/my/watch-brief`, Toggle im selben
+  Kanäle, Pause/Delete). Telegram-Verbindungskarte mit Deep-Link/Test und
+  Morning-Brief-Karte (`/api/my/watch-brief`, Toggle im selben
   `.switch`/`.slider`-Stil wie das Input-Feld). Ohne vorhandene Watch ist der
   Toggle erklärend deaktiviert; das Backend erzwingt dasselbe Gate und schaltet
   den Brief beim Löschen der letzten Watch ab. `openWatchDialog("list")`
@@ -205,6 +207,8 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Browser-IANA-Zeitzone wird zusammen mit `HH:MM` an das Backend gesendet.
   Weekly-Watches senden zusätzlich den gewählten lokalen Wochentag
   (`run_weekday`) und können ihn im Dashboard nachträglich ändern.
+  Der gemeinsame Notifications-Bereich ist ein einklappbares `<details>`-Panel;
+  dessen lokaler Offen-/Zu-Zustand liegt in `consensus_watch_notifications_open`.
 - **`user-tier.js`** — Free/Pro-UI, Premium-Modellstatus (`updateUserTierUI`,
   `updatePremiumModelsState`) und Plan-Label im Sidebar-Account-Footer.
 - **`consensus-insights.js`** — strukturierte Auswertung: Claim-Badges,
@@ -944,12 +948,12 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **655 passed** (2026-07-20; inklusive der neuen
+  Letzte bekannte Baseline: **672 passed** (2026-07-21; inklusive der neuen
   Search-Console-/SEO-Dossier-, Query-, Recommendation-, LLM-Schema-,
   Weekly-Portfolio-Review-, Action-, Publisher-Lineage-/Watch-Capacity-,
   Idempotenz- und Admin-Schutztests sowie
   run-basierter Usage-, Consensus-API-Publishing-/Scope-/Vertrags- sowie
-  Scheduled-Publisher-Tests).
+  Scheduled-Publisher- sowie versionierten Watch-/Drift-Tests).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, kompakte Antwort→Consensus-
@@ -1017,8 +1021,17 @@ strikt sequenziell. Die Reruns ermitteln den aktuellen Pro-Status des Eigentüme
 nutzen das entsprechende `WATCH_MODELS_BY_TIER`-Mapping aus Firestore `watch_models`;
 je konfiguriertem Provider läuft genau ein Modell (mindestens zwei), deren Antwort-Calls
 laufen innerhalb des einzelnen Watch-Runs parallel. Keine Attachments/Follow-ups und keine
-In-Memory-Usage-Zähler. Jeder erfolgreiche Lauf schreibt genau einen kompakten
-History-Punkt; nach drei Fehlern pausiert die Watch.
+In-Memory-Usage-Zähler. Jeder erfolgreiche Lauf schreibt unter
+`shares/{share_id}/watch_history/{run_id}` genau eine unveränderliche Version:
+kompakte Drift-/Score-Felder plus aktuellen Consensus, Differences, Quellen- und
+Modellmetadaten. Das Share-Dokument bleibt der unveränderliche Original-Baseline-
+Snapshot und erhält nur `latest_watch_run_id`/`last_watch_run_at`; nach drei
+Fehlern pausiert die Watch. Alerts vergleichen Previous → Current, während ein
+zweiter Change-Judge-Vergleich Original → Current den kumulativen Baseline-Drift
+liefert. Alte kompakte History bleibt lesbar; beim nächsten erfolgreichen Lauf
+wechselt eine Legacy-Watch automatisch in den versionierten Flow. Die bewusst
+groben Event-Typen für spätere Webhooks sind `watch.checked`, `watch.changed`,
+`watch.condition_met` und `watch.run_failed`.
 Die kanalneutrale Alert-Regel ist pro Watch änderbar (persistiert weiterhin im
 Legacy-Feld `email_mode`): `changes_only` nutzt die bestehende
 Major-/Score-Delta-Schwelle, `condition` lässt den bestehenden Change-Judge eine
@@ -1041,7 +1054,12 @@ Fehler-Retries und Resume bei. Weekly-Watches können einen lokalen Wochentag w�
 Legacy-Watches ohne Wochentag bzw. Zeitfelder nutzen weiter die bisherige reine
 Intervalladdition.
 Watch-Seiten zeigen für aktuelle oder historische Watches eine kompakte Metazeile
-mit Intervall sowie letztem und ggf. nächstem Fragenlauf.
+mit Intervall sowie letztem und ggf. nächstem Fragenlauf. Die normale Watch-URL
+rendert serverseitig die neueste Vollversion über dem unveränderten Share-Baseline-
+Dokument; `?version=<run_id>` öffnet eine immutable historische Vollversion und
+`?version=original` den Ausgangs-Consensus. Shared Pages ohne Watch behalten ihr
+bisheriges Snapshot-Verhalten. Der Drift-Header trennt Direction Shift und
+Agreement Change und stellt Stable/Changed sowie den Change-Summary vor den Text.
 Die öffentliche Watch-History rendert zusätzlich eine **Position Map**: statt
 einer universellen Ja/Nein-Achse zeigt sie frage-spezifische Standpunkt-
 Dimensionen, Provider-Bewegungen über die Läufe und den gemeinsamen

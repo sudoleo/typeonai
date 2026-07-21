@@ -56,7 +56,16 @@ def _build_watch_history_view(points):
         y = top + plot_h * (100 - point["agreement_score"]) / 100
         previous_score = points[index - 1]["agreement_score"] if index else None
         score_event = previous_score is not None and abs(point["agreement_score"] - previous_score) >= 15
-        coords.append({**point, "x": round(x, 1), "y": round(y, 1), "score_event": score_event})
+        trigger = point.get("trigger")
+        if trigger not in {"stable", "changed"}:
+            trigger = "changed" if point.get("changed") or score_event else "stable"
+        coords.append({
+            **point,
+            "trigger": trigger,
+            "x": round(x, 1),
+            "y": round(y, 1),
+            "score_event": score_event,
+        })
     path = " ".join(
         ("M" if index == 0 else "L") + f" {point['x']} {point['y']}"
         for index, point in enumerate(coords)
@@ -105,6 +114,80 @@ def _build_watch_history_view(points):
         "latest_score": points[-1]["agreement_score"],
         "position_map": position_view,
     }
+
+
+def _build_watch_drift_view(history_points, selected_run_id=""):
+    """Human-readable drift state for the current or selected Watch version."""
+    if selected_run_id == "original":
+        return {
+            "trigger": "stable",
+            "label": "Original baseline",
+            "summary": "This is the consensus captured when tracking started.",
+            "score_delta": None,
+            "direction_shift": None,
+            "baseline_summary": "",
+        }
+    if not history_points:
+        return {
+            "trigger": "stable",
+            "label": "Baseline established",
+            "summary": "The next check will show whether the consensus moved.",
+            "score_delta": None,
+            "direction_shift": None,
+            "baseline_summary": "",
+        }
+    index = len(history_points) - 1
+    if selected_run_id:
+        for candidate, point in enumerate(history_points):
+            if point.get("run_id") == selected_run_id:
+                index = candidate
+                break
+    point = history_points[index]
+    previous_score = history_points[index - 1]["agreement_score"] if index else None
+    score = point.get("agreement_score")
+    score_delta = (
+        int(score) - int(previous_score)
+        if isinstance(score, (int, float)) and isinstance(previous_score, (int, float))
+        else None
+    )
+    trigger = point.get("trigger")
+    if trigger not in {"stable", "changed"}:
+        trigger = "changed" if point.get("changed") or (
+            score_delta is not None and abs(score_delta) >= 15
+        ) else "stable"
+    position = point.get("opinion_map") or {}
+    return {
+        "trigger": trigger,
+        "label": "Changed since last check" if trigger == "changed" else "Stable since last check",
+        "summary": (
+            point.get("change_summary")
+            or ("The consensus moved materially." if trigger == "changed"
+                else "No material change was detected in the latest check.")
+        ),
+        "score_delta": score_delta,
+        "direction_shift": position.get("shift_score"),
+        "direction_label": position.get("shift_label") or "",
+        "baseline_summary": point.get("baseline_summary") or "",
+        "baseline_changed": bool(point.get("baseline_changed")),
+        "checked_at": point.get("ts"),
+    }
+
+
+def _build_watch_versions_view(history_points, selected_id, latest_id, page_path):
+    versions = []
+    for point in reversed(history_points):
+        run_id = str(point.get("run_id") or "")
+        if not run_id or not point.get("has_snapshot"):
+            continue
+        versions.append({
+            "run_id": run_id,
+            "date": point["ts"].strftime("%Y-%m-%d %H:%M UTC"),
+            "url": f"{page_path}?version={run_id}",
+            "trigger": point.get("trigger") or ("changed" if point.get("changed") else "stable"),
+            "is_selected": run_id == selected_id,
+            "is_current": run_id == latest_id,
+        })
+    return versions
 
 
 def _watch_datetime_view(value, timezone_name=""):
@@ -494,8 +577,60 @@ async def share_page(request: Request, slug_id: str):
             url=snapshots.share_path(canonical_slug, share_id), status_code=301
         )
 
-    payload = snapshots.public_share_payload(data)
-    page_url = SITE_URL + snapshots.share_path("" if is_private else canonical_slug, share_id)
+    page_path = snapshots.share_path("" if is_private else canonical_slug, share_id)
+    page_url = SITE_URL + page_path
+
+    # Shared Pages stay immutable. Only a page with Watch metadata overlays an
+    # immutable version snapshot at render time; the underlying Share document
+    # remains the original baseline and keeps its existing API semantics.
+    try:
+        history_points = snapshots.list_watch_history(share_id)
+    except Exception:
+        logging.exception("list_watch_history failed")
+        history_points = []
+    try:
+        current_watch_meta = watch_service.get_public_watch_meta(share_id)
+    except Exception:
+        logging.exception("get_public_watch_meta failed")
+        current_watch_meta = None
+    watch_page = _build_watch_page_meta(current_watch_meta, history_points)
+
+    requested_version = str(request.query_params.get("version") or "").strip()
+    selected_version = None
+    latest_run_id = str(
+        (current_watch_meta or {}).get("last_successful_run_id")
+        or data.get("latest_watch_run_id")
+        or ""
+    )
+    selected_run_id = "original" if requested_version == "original" else ""
+    if watch_page and requested_version and requested_version != "original":
+        if not re.fullmatch(r"[A-Za-z0-9]{8,64}", requested_version):
+            return _unavailable_response(
+                request, 404, "Version not found",
+                "This Consensus Watch version does not exist.",
+            )
+        try:
+            selected_version = snapshots.get_watch_version(share_id, requested_version)
+        except Exception:
+            logging.exception("get_watch_version failed")
+            selected_version = None
+        if selected_version is None:
+            return _unavailable_response(
+                request, 404, "Version not found",
+                "This Consensus Watch version does not exist.",
+            )
+        selected_run_id = requested_version
+    elif watch_page and not requested_version and latest_run_id:
+        try:
+            selected_version = snapshots.get_watch_version(share_id, latest_run_id)
+        except Exception:
+            logging.exception("get current Watch version failed")
+            selected_version = None
+        if selected_version:
+            selected_run_id = latest_run_id
+
+    display_data = {**data, **selected_version} if selected_version else data
+    payload = snapshots.public_share_payload(display_data)
     consensus_html = render_public_markdown(payload["consensus_md"], payload["sources"])
 
     # Indexierung: nur wenn der Admin "indexed" gesetzt hat (nie automatisch).
@@ -572,20 +707,19 @@ async def share_page(request: Request, slug_id: str):
         except Exception:
             logging.exception("list_related_shares failed")
 
-    try:
-        history_points = snapshots.list_watch_history(share_id)
-    except Exception:
-        logging.exception("list_watch_history failed")
-        history_points = []
     watch_history = _build_watch_history_view(history_points)
-    try:
-        current_watch_meta = watch_service.get_public_watch_meta(share_id)
-    except Exception:
-        logging.exception("get_public_watch_meta failed")
-        current_watch_meta = None
-    watch_page = _build_watch_page_meta(current_watch_meta, history_points)
+    watch_drift = _build_watch_drift_view(
+        history_points,
+        selected_run_id,
+    ) if watch_page else None
+    watch_versions = _build_watch_versions_view(
+        history_points, selected_run_id, latest_run_id, page_path,
+    ) if watch_page else []
 
     date_iso = payload["answered_at"] or payload["created_at"]
+    published_iso = data.get("answered_at") or (
+        data.get("created_at").isoformat() if isinstance(data.get("created_at"), datetime) else ""
+    )
     # Watch-Seiten sind lebende Dokumente: der letzte Run ist das echte
     # dateModified (Freshness-Signal für Google), nicht das Erstelldatum.
     modified_iso = (
@@ -649,7 +783,7 @@ async def share_page(request: Request, slug_id: str):
         "@type": "Article",
         "headline": payload["question"][:110],
         "description": meta_description,
-        "datePublished": date_iso,
+        "datePublished": published_iso or date_iso,
         "dateModified": modified_iso,
         "mainEntityOfPage": {"@type": "WebPage", "@id": page_url},
         "author": {"@type": "Organization", "name": "consens.io", "url": SITE_URL},
@@ -684,6 +818,18 @@ async def share_page(request: Request, slug_id: str):
         "related_shares": related_shares,
         "watch_history": watch_history,
         "watch_page": watch_page,
+        "watch_drift": watch_drift,
+        "watch_versions": watch_versions,
+        "watch_selected_version": {
+            "id": selected_run_id or latest_run_id or "original",
+            "is_original": selected_run_id == "original" or not selected_version,
+            "is_current": bool(
+                selected_version and selected_run_id == latest_run_id and not requested_version
+            ),
+            "is_historical": bool(requested_version),
+            "current_url": page_path,
+            "original_url": page_path + "?version=original",
+        } if watch_page else None,
         "included_models": payload["included_models"],
         "consulted_models": snapshots.consulted_models_view(payload["included_models"]),
         "consensus_model": payload["consensus_model"],
@@ -697,8 +843,20 @@ async def share_page(request: Request, slug_id: str):
         "og_is_card": og_is_card,
         "jsonld": jsonld_html,
         # Zitation immer mit der eigenen URL der Seite (nicht dem Dedup-Canonical).
-        "citation_text": snapshots.build_citation(payload, page_url),
+        "citation_text": snapshots.build_citation(
+            payload,
+            page_url + (f"?version={selected_run_id}" if requested_version else ""),
+        ),
     })
     response.headers["X-Robots-Tag"] = robots_meta
-    response.headers["Cache-Control"] = "private, no-store" if is_private else SHARE_CACHE_CONTROL
+    if is_private:
+        response.headers["Cache-Control"] = "private, no-store"
+    elif watch_page and requested_version:
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif watch_page:
+        response.headers["Cache-Control"] = (
+            "public, max-age=60, s-maxage=300, stale-while-revalidate=300"
+        )
+    else:
+        response.headers["Cache-Control"] = SHARE_CACHE_CONTROL
     return response

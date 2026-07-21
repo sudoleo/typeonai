@@ -37,6 +37,10 @@ WORKER_LEASE_MINUTES = 29
 RUNTIME_COLLECTION = "watch_runtime"
 WATCH_HISTORY_POINTS = 16
 WATCH_INTERNAL_EXCLUDED_PROVIDERS = {"deepseek"}
+WATCH_EVENT_CHECKED = "watch.checked"
+WATCH_EVENT_CHANGED = "watch.changed"
+WATCH_EVENT_CONDITION_MET = "watch.condition_met"
+WATCH_EVENT_RUN_FAILED = "watch.run_failed"
 PUBLISHER_SOURCE = "scheduled_publisher"
 API_RUNS_COLLECTION = "api_consensus_runs"
 
@@ -213,6 +217,11 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         "next_run_at": iso(data.get("next_run_at")),
         "last_run_at": iso(data.get("last_run_at")),
         "last_agreement_score": data.get("last_agreement_score"),
+        "last_successful_run_id": str(data.get("last_successful_run_id") or ""),
+        "last_trigger": "changed" if data.get("last_trigger") == "changed" else "stable",
+        "last_change_summary": str(data.get("last_change_summary") or "")[:400],
+        "last_drift_score": data.get("last_drift_score"),
+        "last_event_type": str(data.get("last_event_type") or ""),
         "created_at": iso(data.get("created_at")),
     }
 
@@ -344,6 +353,11 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
         "created_at": now,
         "last_run_at": None,
         "last_agreement_score": score if isinstance(score, (int, float)) else None,
+        "last_successful_run_id": "",
+        "last_trigger": "stable",
+        "last_change_summary": "",
+        "last_drift_score": None,
+        "last_event_type": "",
     }
     db.collection(WATCHES_COLLECTION).document(watch_id).set(doc)
     return _serialize_watch(watch_id, doc, share)
@@ -355,11 +369,18 @@ def serialize_history_points(points, max_items=WATCH_HISTORY_POINTS) -> list[dic
     for point in points[-max_items:]:
         ts = point.get("ts")
         serialized.append({
+            "run_id": str(point.get("run_id") or ""),
             "ts": ts.isoformat() if isinstance(ts, datetime) else "",
             "agreement_score": point.get("agreement_score"),
             "changed": bool(point.get("changed")),
             "severity": str(point.get("severity") or ""),
             "change_summary": str(point.get("change_summary") or ""),
+            "trigger": "changed" if point.get("trigger") == "changed" else "stable",
+            "event_type": str(point.get("event_type") or ""),
+            "baseline_changed": bool(point.get("baseline_changed")),
+            "baseline_severity": str(point.get("baseline_severity") or ""),
+            "baseline_summary": str(point.get("baseline_summary") or ""),
+            "has_snapshot": bool(point.get("has_snapshot")),
             "opinion_map": opinion_map.sanitize_opinion_map(point.get("opinion_map")),
         })
     return serialized
@@ -752,6 +773,11 @@ def get_public_watch_meta(share_id: str, db=None) -> dict | None:
         "last_run_at": data.get("last_run_at"),
         "next_run_at": data.get("next_run_at"),
         "created_at": data.get("created_at"),
+        "last_successful_run_id": str(data.get("last_successful_run_id") or ""),
+        "last_trigger": "changed" if data.get("last_trigger") == "changed" else "stable",
+        "last_change_summary": str(data.get("last_change_summary") or "")[:400],
+        "last_drift_score": data.get("last_drift_score"),
+        "last_event_type": str(data.get("last_event_type") or ""),
     }
 
 
@@ -845,17 +871,43 @@ def release_worker_lease(*, db=None):
 
 def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
                        db=None, defer_condition_status=False):
-    """Persist one compact history point, then advance the schedule."""
+    """Persist one immutable Watch version, then advance the live pointer."""
     db = db if db is not None else db_firestore
     now = now or utcnow()
     interval = claimed.get("interval") if claimed.get("interval") in WATCH_INTERVALS else "weekly"
+    previous_score = claimed.get("last_agreement_score")
+    try:
+        score_delta = abs(float(result["agreement_score"]) - float(previous_score))
+    except (TypeError, ValueError):
+        score_delta = 0
+    trigger = "changed" if bool(result.get("changed")) or score_delta >= 15 else "stable"
     history = {
+        "schema_version": 2,
         "ts": now,
         "agreement_score": int(result["agreement_score"]),
         "verdict": str(result.get("verdict") or "")[:80],
         "changed": bool(result.get("changed")),
         "severity": str(result.get("severity") or "minor")[:10],
         "change_summary": str(result.get("change_summary") or "")[:400],
+        # Wenige, eindeutige Trigger fuer spaetere Webhooks: ein erfolgreicher
+        # Lauf ist entweder stable oder changed. Bedingungen/Fehler bleiben
+        # getrennte Delivery-Ereignisse und werden nicht semantisch ausgedeutet.
+        "trigger": trigger,
+        "event_type": WATCH_EVENT_CHANGED if trigger == "changed" else WATCH_EVENT_CHECKED,
+        "baseline_changed": bool(result.get("baseline_changed")),
+        "baseline_severity": str(result.get("baseline_severity") or "minor")[:10],
+        "baseline_summary": str(result.get("baseline_summary") or "")[:400],
+        "previous_run_id": str(claimed.get("last_successful_run_id") or ""),
+        "consensus_md": str(result.get("consensus") or "")[:share_snapshots.MAX_CONSENSUS_CHARS],
+        "differences_data": share_snapshots.sanitize_differences_data(
+            result.get("differences_data")
+        ),
+        "differences_text": str(result.get("differences_text") or "")[
+            :share_snapshots.MAX_DIFFERENCES_TEXT_CHARS
+        ],
+        "sources": share_snapshots.sanitize_sources(result.get("sources")),
+        "included_models": list(result.get("included_models") or [])[:6],
+        "consensus_model": str(result.get("consensus_model") or "")[:80],
     }
     position_map = opinion_map.sanitize_opinion_map(result.get("opinion_map"))
     if position_map:
@@ -874,13 +926,24 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
         "consecutive_failures": 0,
         "last_run_at": now,
         "last_agreement_score": history["agreement_score"],
+        "last_successful_run_id": str(claimed["current_run_id"]),
+        "last_trigger": trigger,
+        "last_drift_score": (
+            position_map.get("shift_score") if isinstance(position_map, dict) else None
+        ),
+        "last_event_type": WATCH_EVENT_CHANGED if trigger == "changed" else WATCH_EVENT_CHECKED,
     }
+    if trigger == "changed":
+        watch_updates["last_change_summary"] = history["change_summary"]
     condition_status = str(result.get("condition_status") or "unknown")
     if condition_status in {"met", "not_met"} and not defer_condition_status:
         watch_updates["last_condition_status"] = condition_status
         watch_updates["last_condition_hash"] = condition_hash(claimed.get("condition") or "")
     # Frische-Signal für SEO (dateModified/sitemap-lastmod) direkt am Share.
-    share_updates = {"last_watch_run_at": now}
+    share_updates = {
+        "last_watch_run_at": now,
+        "latest_watch_run_id": str(claimed["current_run_id"]),
+    }
     # History + Scheduler-Fortschritt atomar: ein Restart kann nie einen
     # sichtbaren Punkt ohne vorgeruecktes next_run_at hinterlassen.
     if hasattr(db, "batch"):
@@ -893,6 +956,7 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
         history_ref.set(history)
         watch_ref.update(watch_updates)
         share_ref.update(share_updates)
+    share_snapshots.invalidate_share_cache(claimed["share_id"])
     return history
 
 
@@ -904,6 +968,7 @@ def set_condition_status(watch_id: str, status: str, condition: str, db=None):
     db.collection(WATCHES_COLLECTION).document(watch_id).update({
         "last_condition_status": status,
         "last_condition_hash": condition_hash(condition),
+        "last_event_type": WATCH_EVENT_CONDITION_MET if status == "met" else WATCH_EVENT_CHECKED,
     })
 
 
@@ -925,5 +990,6 @@ def fail_watch_run(watch_id: str, claimed: dict, *, now=None, db=None) -> bool:
         "current_run_id": None,
         "consecutive_failures": failures,
         "last_run_at": now,
+        "last_event_type": WATCH_EVENT_RUN_FAILED,
     })
     return paused

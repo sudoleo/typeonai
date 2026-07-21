@@ -1175,6 +1175,42 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("<b>Next</b>", body)
         self.assertIn("Original consensus", body)
 
+    def test_watch_page_renders_latest_version_without_mutating_shared_baseline(self):
+        doc = self._share_doc(consensus_md="Original immutable answer.")
+        now = datetime(2026, 7, 21, 8, 0, tzinfo=timezone.utc)
+        run_id = "abcdef1234567890"
+        points = [{
+            "run_id": run_id, "ts": now, "agreement_score": 82,
+            "changed": True, "severity": "major", "trigger": "changed",
+            "change_summary": "The recommendation changed.", "has_snapshot": True,
+            "baseline_changed": True, "baseline_summary": "The recommendation changed.",
+            "opinion_map": None,
+        }]
+        version = {
+            "run_id": run_id, "ts": now, "consensus_md": "Latest watched answer.",
+            "differences_data": {"agreement": {"score": 82}},
+            "differences_text": "", "sources": [], "included_models": ["OpenAI", "Google Gemini"],
+            "consensus_model": "OpenAI", "answered_at": now.isoformat(),
+        }
+        meta = {
+            "status": "active", "interval": "weekly", "last_run_at": now,
+            "next_run_at": now + timedelta(days=7), "last_successful_run_id": run_id,
+        }
+        path = "/s/%s-%s" % (doc["slug"], self.share_id)
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router.snapshots, "list_watch_history", return_value=points), \
+                patch.object(share_router.watch_service, "get_public_watch_meta", return_value=meta), \
+                patch.object(share_router.snapshots, "get_watch_version", return_value=version):
+            current = self.client.get(path)
+            original = self.client.get(path + "?version=original")
+        self.assertIn("Latest watched answer.", current.text)
+        self.assertNotIn("Original immutable answer.", current.text)
+        self.assertIn("Changed since last check", current.text)
+        self.assertIn("Original immutable answer.", original.text)
+        self.assertNotIn("Latest watched answer.", original.text)
+        self.assertIn("max-age=60", current.headers["Cache-Control"])
+        self.assertEqual(doc["consensus_md"], "Original immutable answer.")
+
     def test_watch_page_shows_selected_local_run_time(self):
         doc = self._share_doc()
         next_run = datetime(2026, 7, 19, 7, 0, tzinfo=timezone.utc)

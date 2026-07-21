@@ -18,7 +18,7 @@ from app.services import (
     watch_followers, watch_service,
 )
 from app.services.llm.base import get_system_prompt
-from app.services.llm.citations import result_text
+from app.services.llm.citations import result_sources, result_text
 from app.services.llm.consensus_engine import (
     compute_agreement_score,
     is_consensus_error_text,
@@ -99,7 +99,7 @@ def _provider_answer(provider: str, model: str, question: str, keys: dict, is_pr
 
 def execute_watch(question: str, previous_consensus: str, condition: str = "",
                   previous_opinion_map=None, is_pro: bool = False,
-                  excluded_providers=None) -> dict:
+                  excluded_providers=None, baseline_consensus: str = "") -> dict:
     """Run the configured tier models; never touches usage counters."""
     keys = _developer_keys()
     excluded = {
@@ -113,6 +113,7 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
         for provider, _model in selected_models:
             keys[PROVIDER_LABELS[provider]] = "mock"
     answers = {}
+    model_sources = {}
     with ThreadPoolExecutor(max_workers=max(1, len(selected_models))) as pool:
         futures = {
             provider: pool.submit(_provider_answer, provider, model, question, keys, is_pro)
@@ -129,6 +130,9 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
             text = result_text(result).strip()
             if text and not text.lower().startswith("error") and not (isinstance(result, dict) and result.get("error")):
                 answers[provider] = text
+                sources = result_sources(result)
+                if sources:
+                    model_sources[PROVIDER_LABELS[provider]] = sources
     if len(answers) < 2:
         raise RuntimeError("Fewer than two provider answers completed.")
 
@@ -139,6 +143,7 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
     consensus = query_consensus(
         question, slots["openai"], slots["mistral"], slots["anthropic"],
         slots["gemini"], slots["deepseek"], slots["grok"], excluded, engine, keys,
+        model_sources=model_sources,
     )
     if is_consensus_error_text(consensus):
         raise RuntimeError("Consensus synthesis failed.")
@@ -154,11 +159,31 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
     change = query_consensus_change(
         previous_consensus, consensus, keys, engine, condition=condition,
     )
+    baseline = str(baseline_consensus or previous_consensus or "")
+    if baseline.strip() and baseline.strip() != str(previous_consensus or "").strip():
+        baseline_change = query_consensus_change(baseline, consensus, keys, engine)
+    else:
+        baseline_change = change
+    included_providers = [PROVIDER_LABELS[provider] for provider in answers]
+    model_labels = {
+        PROVIDER_LABELS[provider]: model for provider, model in selected_models
+        if provider in answers
+    }
     return {
         "consensus": consensus,
         "agreement_score": agreement["score"],
         "verdict": agreement.get("level") or "",
         "opinion_map": position_map,
+        "differences_data": differences,
+        "differences_text": "",
+        "sources": share_snapshots.sanitize_sources(model_sources),
+        "included_models": share_snapshots.build_included_models(
+            included_providers, model_labels,
+        ),
+        "consensus_model": engine,
+        "baseline_changed": bool(baseline_change.get("changed")),
+        "baseline_severity": baseline_change.get("severity") or "minor",
+        "baseline_summary": baseline_change.get("change_summary") or "",
         **change,
     }
 
@@ -359,12 +384,31 @@ async def run_watch_tick() -> int:
                     history[-1].get("opinion_map") if history
                     else opinion_map.build_opinion_map(share.get("differences_data") or {})
                 )
+                previous_version = None
+                previous_run_id = str(claimed.get("last_successful_run_id") or "")
+                try:
+                    if previous_run_id:
+                        previous_version = await asyncio.to_thread(
+                            share_snapshots.get_watch_version,
+                            claimed["share_id"], previous_run_id,
+                        )
+                except Exception:
+                    logging.warning(
+                        "Consensus Watch text baseline unavailable for %s",
+                        watch_id, exc_info=True,
+                    )
+                original_consensus = share.get("consensus_md") or ""
+                previous_consensus = (
+                    previous_version.get("consensus_md")
+                    if previous_version else original_consensus
+                )
                 result = await asyncio.to_thread(
-                    execute_watch, claimed["question"], share.get("consensus_md") or "",
+                    execute_watch, claimed["question"], previous_consensus,
                     claimed.get("condition") if claimed.get("email_mode") == "condition" else "",
                     previous_position_map,
                     is_pro,
                     excluded_providers=excluded_providers,
+                    baseline_consensus=original_consensus,
                 )
                 mail_kind = notification_kind(claimed, result)
                 run_id = str(claimed.get("current_run_id") or "")

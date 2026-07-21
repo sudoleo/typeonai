@@ -113,23 +113,46 @@
 .watch-page-back:hover { color: var(--text-color); text-decoration: underline; text-underline-offset: 3px; }
 
 .watch-dash-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 16px 0 4px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0 4px;
 }
 .watch-dash-stat {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 7px 12px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--glass-bg-strong, var(--input-bg)) 55%, transparent);
-  font-size: .8rem;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 78%, transparent);
+  border-radius: var(--radius-md, 12px);
+  background: color-mix(in srgb, var(--glass-bg-strong, var(--input-bg)) 68%, transparent);
   color: var(--sidebar-text-muted);
 }
-.watch-dash-stat strong { color: var(--text-color); font-size: .86rem; }
+.watch-dash-stat > span { font-size: .68rem; font-weight: 750; letter-spacing: .045em; text-transform: uppercase; }
+.watch-dash-stat strong { color: var(--text-color); font-size: 1.55rem; line-height: 1.05; }
+.watch-dash-stat strong.is-date { overflow: hidden; font-size: 1rem; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.watch-dash-stat small { overflow: hidden; font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
+.watch-dash-stat.is-drift { border-color: color-mix(in srgb, #f59e0b 34%, var(--sidebar-border)); background: color-mix(in srgb, #f59e0b 6%, var(--container-bg)); }
+
+.watch-drift-feed {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, #f59e0b 34%, var(--sidebar-border));
+  border-radius: var(--radius-md, 12px);
+  background: color-mix(in srgb, #f59e0b 5%, var(--container-bg));
+}
+.watch-drift-feed-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.watch-drift-feed-head h2 { margin: 2px 0 0; font-size: 1rem; }
+.watch-drift-feed-head > span { color: var(--sidebar-text-muted); font-size: .72rem; }
+.watch-kicker { color: #b45309; font-size: .64rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.watch-drift-feed-list { display: grid; gap: 2px; margin-top: 10px; }
+.watch-drift-feed-list a { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 8px; border-radius: var(--radius-sm); color: inherit; text-decoration: none; }
+.watch-drift-feed-list a:hover { background: color-mix(in srgb, #f59e0b 8%, transparent); }
+.watch-drift-feed-list strong, .watch-drift-feed-list small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watch-drift-feed-list strong { font-size: .82rem; }
+.watch-drift-feed-list small, .watch-drift-feed-list time { color: var(--sidebar-text-muted); font-size: .7rem; }
+.watch-drift-feed-dot { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 0 4px color-mix(in srgb, #f59e0b 14%, transparent); }
 
 .watch-dash-section-title {
   margin: 26px 0 10px;
@@ -139,6 +162,44 @@
   text-transform: uppercase;
   color: var(--sidebar-text-muted);
 }
+
+/* --- Collapsible notification controls --- */
+.watch-notifications {
+  margin-top: 24px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 78%, transparent);
+  border-radius: var(--radius-md, 12px);
+  background: color-mix(in srgb, var(--container-bg) 86%, transparent);
+  overflow: hidden;
+}
+.watch-notifications > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 52px;
+  padding: 0 16px;
+  color: var(--sidebar-text-muted);
+  cursor: pointer;
+  list-style: none;
+}
+.watch-notifications > summary::-webkit-details-marker { display: none; }
+.watch-notifications > summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  margin-right: 3px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  color: var(--sidebar-text-muted);
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform .18s ease;
+}
+.watch-notifications[open] > summary { border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 72%, transparent); }
+.watch-notifications[open] > summary::after { transform: translateY(2px) rotate(225deg); }
+.watch-notifications-title { color: var(--sidebar-text-muted); font-size: .78rem; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+.watch-notifications-summary { overflow: hidden; margin-left: auto; font-size: .75rem; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.watch-notifications-content { display: grid; gap: 10px; padding: 12px; }
 
 /* --- Morning Brief card --- */
 .watch-brief-card {
@@ -254,6 +315,18 @@
   gap: 12px 22px;
   margin-top: 12px;
 }
+.watch-card-drift { display: flex; flex: 1 1 100%; align-items: center; gap: 10px; min-width: 0; padding: 10px 12px; border-radius: var(--radius-sm); background: color-mix(in srgb, #22c55e 5%, var(--input-bg)); }
+.watch-card-drift.is-changed { background: color-mix(in srgb, #f59e0b 7%, var(--input-bg)); }
+.watch-card-drift-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: #22c55e; }
+.watch-card-drift.is-changed .watch-card-drift-dot { background: #f59e0b; box-shadow: 0 0 0 4px color-mix(in srgb, #f59e0b 13%, transparent); }
+.watch-card-drift.is-baseline .watch-card-drift-dot { background: var(--sidebar-text-muted); }
+.watch-card-drift-copy { min-width: 0; flex: 1; }
+.watch-card-drift-copy strong, .watch-card-drift-copy small { display: block; }
+.watch-card-drift-copy strong { font-size: .82rem; }
+.watch-card-drift-copy small { margin-top: 2px; overflow: hidden; color: var(--sidebar-text-muted); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+.watch-card-shift { display: flex; flex: 0 0 auto; align-items: baseline; gap: 3px; color: var(--sidebar-text-muted); }
+.watch-card-shift strong { color: var(--text-color); font-size: 1rem; }
+.watch-card-shift small { font-size: .66rem; }
 .watch-card-score { display: flex; align-items: baseline; gap: 8px; min-width: 150px; }
 .watch-card-score strong { font-size: 1.45rem; line-height: 1; }
 .watch-card-score .watch-score-max { color: var(--sidebar-text-muted); font-size: .8rem; font-weight: 600; }
@@ -315,8 +388,58 @@
 
 .watch-dash-loading { padding: 24px 0; color: var(--sidebar-text-muted); font-size: .9rem; }
 
+.watch-filter-bar {
+  display: inline-flex;
+  max-width: 100%;
+  margin: 0 0 8px;
+  gap: 3px;
+}
+.watch-filter {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sidebar-text-muted);
+  font: inherit;
+  font-size: .71rem;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+.watch-filter span {
+  color: inherit;
+  font-size: .66rem;
+  font-variant-numeric: tabular-nums;
+  opacity: .62;
+}
+.watch-filter:hover { background: color-mix(in srgb, var(--text-color) 4%, transparent); color: var(--text-color); }
+.watch-filter.is-active {
+  background: color-mix(in srgb, var(--text-color) 7%, transparent);
+  color: var(--text-color);
+  font-weight: 700;
+}
+.watch-filter:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent); outline-offset: 2px; }
+.watch-card[hidden] { display: none; }
+
 @media (max-width: 640px) {
   .watch-page-inner { padding: 14px 12px 40px; }
+  .watch-dash-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .watch-card-body { gap: 10px 14px; }
-  .watch-card-chips { flex-wrap: wrap; }
+  /* Die Frage bleibt die erste Zeile; Status- und Kanal-Chips bekommen ihre
+     eigene Zeile, statt sie auf schmale Textspalten zusammenzudrücken. */
+  .watch-card-top { display: block; }
+  .watch-card-chips { flex-wrap: wrap; margin-top: 8px; gap: 5px; }
+  .watch-filter-bar { display: flex; width: 100%; box-sizing: border-box; }
+  .watch-filter { min-width: 0; flex: 1 1 0; padding: 0 5px; }
+  .watch-drift-feed-list time { display: none; }
+  .watch-notifications > summary { min-height: 50px; padding: 0 13px; }
+  .watch-notifications-summary { max-width: 180px; }
 }

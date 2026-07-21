@@ -99,10 +99,14 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       auf Mobile icon-only) und „Watched“ im Nutzericon-Menü; aktiver Pill-Zustand,
       Browser-Back/Forward
       und Deep-Link/Reload auf `/app/watches` funktionieren (vor dem Login
-      erscheint ein Hinweis statt Daten). Kopfzeile mit aktiv/pausiert-Zählung,
-      nächstem Lauf und Änderungen der letzten 7 Tage; pro Watch eine Karte mit
-      Frage, Status-/Sichtbarkeits-Chip, Agreement-Score + Delta,
-      History-Sparkline, letzter Änderung und nächstem Lauf. „Settings“ klappt
+      erscheint ein Hinweis statt Daten). KPI-Karten zeigen aktive Monitore,
+      Checks/Änderungen der letzten sieben Tage und den nächsten Lauf; ein
+      „Needs attention“-Feed bündelt die neuesten Changes. All/Changed/Stable/Paused
+      filtern die Karten. Pro Watch zeigt die Karte Driftstatus/-Summary,
+      Direction Shift, Agreement-Score + Delta, History-Sparkline und nächsten Lauf.
+      Der Notifications-Bereich klappt Telegram und Morning Brief gemeinsam ein und
+      aus; sein Zustand bleibt beim erneuten Öffnen des Dashboards erhalten.
+      „Settings“ klappt
       Intervall/Uhrzeit/Alert-Regel/Condition sowie E-Mail-/Telegram-Kanäle auf;
       Pause/Resume und Delete
       funktionieren. Delete lässt bereits vorhandene Share-History bestehen.
@@ -118,7 +122,11 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       Löschen der letzten Watch ist ein zuvor aktiver Brief ausgeschaltet.
 - [ ] Aktive Watch-Seite zeigt bereits vor dem ersten History-Punkt in einer
       kompakten Metazeile Status, Intervall, letzten und nächsten Lauf. Mit History rendert
-      sie zusätzlich SVG-Linie/Punkte und Change-Liste in Light/Dark ohne Mobile-Overflow.
+      sie den neuesten gespeicherten Consensus statt des ursprünglichen Texts,
+      einen Stable/Changed-Drift-Header, SVG-Linie/Punkte und Change-Liste in
+      Light/Dark ohne Mobile-Overflow. Jede neue Vollversion ist über „Browse saved
+      consensus versions“ erreichbar; `?version=original` zeigt unverändert die
+      Ausgangsversion. Eine normale Shared Page ohne Watch bleibt unverändert.
       Neue History zeigt davor die mehrdimensionale Position Map mit Provider-
       Trajektorien, aktuellen Standpunkt-Gruppen und Direction Shift; alte
       Punkte ohne `opinion_map` degradieren auf den Agreement-Chart.
@@ -130,6 +138,10 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       erneut bei weiter bestehendem `met`; `unknown` löst nicht aus. Die Mail enthält
       Condition, Begründung und neuen Consensus.
       Abmelde-Link pausiert ohne Login.
+- [ ] Zwei aufeinanderfolgende Watch-Runs vergleichen Previous → Current für
+      Benachrichtigungen; Original → Current bleibt als langfristiger Baseline-
+      Drift erhalten. Persistierte Ereignisse bleiben grob und eindeutig:
+      `watch.checked`, `watch.changed`, `watch.condition_met`, `watch.run_failed`.
 - [ ] Mit gesetztem `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` und
       `TELEGRAM_WEBHOOK_SECRET`: „Connect Telegram“ öffnet den Bot, `/start`
       verbindet ausschließlich den eingeloggten Account und das Dashboard zeigt

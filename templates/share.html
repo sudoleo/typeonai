@@ -23,7 +23,7 @@
   {% if og_is_card %}<meta name="twitter:image" content="{{ og_image }}">{% endif %}
   <script type="application/ld+json">{{ jsonld | safe }}</script>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260720-math1">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260721-header1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -55,7 +55,7 @@
       <p class="eyebrow">{% if watch_page %}Consensus Watch{% else %}Shared consensus{% endif %}{% if is_private %} · Private{% endif %}</p>
       <h1 class="share-question{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}">{{ question }}</h1>
       <div class="share-meta">
-        {% if date_display %}<span>{% if watch_page %}Original consensus {% endif %}{{ date_display }}</span>{% endif %}
+        {% if date_display %}<span>{% if watch_page %}{% if watch_selected_version.is_original %}Original consensus {% elif watch_selected_version.is_historical %}Historical consensus {% else %}Current consensus {% endif %}{% endif %}{{ date_display }}</span>{% endif %}
         {% if watch_page %}
         <div class="watch-meta-compact is-{{ watch_page.status }}" aria-label="Consensus Watch status">
           <span class="watch-meta-state"><i aria-hidden="true"></i>{{ watch_page.status_label }}</span>
@@ -65,6 +65,41 @@
         </div>
         {% endif %}
       </div>
+      {% if watch_page and watch_drift %}
+      <section class="watch-drift-hero is-{{ watch_drift.trigger }}" aria-labelledby="watchDriftHeading">
+        <div class="watch-drift-status">
+          <span class="watch-drift-pulse" aria-hidden="true"></span>
+          <div>
+            <p class="eyebrow">Latest movement</p>
+            <h2 id="watchDriftHeading">{{ watch_drift.label }}</h2>
+          </div>
+        </div>
+        <p class="watch-drift-summary">{{ watch_drift.summary }}</p>
+        <dl class="watch-drift-metrics">
+          <div>
+            <dt>Direction shift</dt>
+            <dd>{% if watch_drift.direction_shift is not none %}{{ watch_drift.direction_shift }}<span>/100</span>{% else %}&mdash;{% endif %}</dd>
+          </div>
+          <div>
+            <dt>Agreement change</dt>
+            <dd>{% if watch_drift.score_delta is not none %}{% if watch_drift.score_delta > 0 %}+{% endif %}{{ watch_drift.score_delta }}<span> pts</span>{% else %}&mdash;{% endif %}</dd>
+          </div>
+          <div>
+            <dt>Compared with</dt>
+            <dd class="is-text">Previous check</dd>
+          </div>
+        </dl>
+        {% if watch_drift.baseline_changed and watch_drift.baseline_summary %}
+        <p class="watch-drift-baseline"><strong>Since tracking began:</strong> {{ watch_drift.baseline_summary }}</p>
+        {% endif %}
+        {% if watch_selected_version.is_historical %}
+        <div class="watch-version-banner">
+          <span>You are viewing {% if watch_selected_version.is_original %}the original baseline{% else %}a historical version{% endif %}.</span>
+          <a href="{{ watch_selected_version.current_url }}">Return to current consensus</a>
+        </div>
+        {% endif %}
+      </section>
+      {% endif %}
       {% if scoreboard and (scoreboard.score is not none or scoreboard.model_count) %}
       <div class="share-scoreboard" role="group" aria-label="Consensus verdict at a glance">
         {% if scoreboard.score is not none %}
@@ -117,8 +152,8 @@
       {% endif %}
       {% if has_differences_view %}
       <div class="share-toggle has-cue" role="group" aria-label="Switch between consensus and differences">
-        <button type="button" id="toggleConsensusView" aria-pressed="true">Consensus</button>
-        <button type="button" id="toggleDifferencesView" aria-pressed="false">Differences</button>
+        <button type="button" id="toggleConsensusView" aria-pressed="true">{% if watch_page %}Current consensus{% else %}Consensus{% endif %}</button>
+        <button type="button" id="toggleDifferencesView" aria-pressed="false">{% if watch_page %}Model differences{% else %}Differences{% endif %}</button>
       </div>
       {% endif %}
     </header>
@@ -141,7 +176,7 @@
     <div class="page-content">
       <div id="consensusView" class="share-view">
         <section class="legal-panel">
-          <h2>Consensus answer</h2>
+          <h2>{% if watch_page %}{% if watch_selected_version.is_original %}Original consensus{% elif watch_selected_version.is_historical %}Consensus at this check{% else %}Current consensus{% endif %}{% else %}Consensus answer{% endif %}</h2>
           <div class="share-md">{{ consensus_html | safe }}</div>
         </section>
         {% if has_differences_view and contradiction_count %}
@@ -334,9 +369,30 @@
             <strong>{{ event.agreement_score }}/100</strong>
             {% if event.severity == "major" %}<span class="watch-event-major">Major</span>{% endif %}
             {% if event.change_summary %}<p>{{ event.change_summary }}</p>{% endif %}
+            {% if event.has_snapshot and event.run_id %}<a class="watch-version-link" href="{{ watch_selected_version.current_url }}?version={{ event.run_id }}">View consensus</a>{% endif %}
           </li>
           {% endfor %}
         </ol>
+        {% endif %}
+        {% if watch_versions %}
+        <details class="watch-versions">
+          <summary>Browse {{ watch_versions | length }} saved consensus version{{ "s" if watch_versions | length != 1 }}</summary>
+          <ol>
+            {% for version in watch_versions %}
+            <li{% if version.is_selected %} class="is-selected"{% endif %}>
+              <span class="watch-version-state is-{{ version.trigger }}">{{ version.trigger }}</span>
+              <time>{{ version.date }}</time>
+              {% if version.is_current %}<strong>Current</strong>{% endif %}
+              <a href="{{ version.url }}">Open version</a>
+            </li>
+            {% endfor %}
+            <li{% if watch_selected_version.is_original %} class="is-selected"{% endif %}>
+              <span class="watch-version-state">baseline</span>
+              <span>Tracking start</span>
+              <a href="{{ watch_selected_version.original_url }}">Open original</a>
+            </li>
+          </ol>
+        </details>
         {% endif %}
       </section>
       {% endif %}

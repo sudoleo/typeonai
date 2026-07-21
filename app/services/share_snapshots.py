@@ -1438,7 +1438,9 @@ def list_watch_history(share_id, db=None, max_items=100):
     """Whitelist compact public history; never expose rerun consensus or raw answers.
 
     ``opinion_map`` contains only capped stance labels and provider grouping
-    derived from structured Differences data.
+    derived from structured Differences data. Full version snapshots are read
+    separately through :func:`get_watch_version`, so dashboard/history callers
+    keep receiving a compact payload.
     """
     db = db if db is not None else db_firestore
     ref = db.collection(SHARES_COLLECTION).document(share_id).collection("watch_history")
@@ -1451,16 +1453,78 @@ def list_watch_history(share_id, db=None, max_items=100):
         if not isinstance(ts, datetime) or not isinstance(score, (int, float)):
             continue
         points.append({
+            "run_id": str(doc.id),
             "ts": ts,
             "agreement_score": max(0, min(100, int(score))),
             "verdict": _clip(data.get("verdict"), 80),
             "changed": bool(data.get("changed")),
             "severity": _clip(data.get("severity"), 10),
             "change_summary": _clip(data.get("change_summary"), 400),
+            "trigger": "changed" if data.get("trigger") == "changed" else "stable",
+            "event_type": _clip(data.get("event_type"), 40),
+            "baseline_changed": bool(data.get("baseline_changed")),
+            "baseline_severity": _clip(data.get("baseline_severity"), 10),
+            "baseline_summary": _clip(data.get("baseline_summary"), 400),
+            "has_snapshot": bool(data.get("consensus_md")),
             "opinion_map": opinion_map.sanitize_opinion_map(data.get("opinion_map")),
         })
     points.sort(key=lambda item: item["ts"])
     return points
+
+
+def _watch_version_payload(run_id, data):
+    """Whitelist one immutable Watch version for server-side page rendering."""
+    if not isinstance(data, dict) or not data.get("consensus_md"):
+        return None
+    ts = data.get("ts")
+    return {
+        "run_id": str(run_id or ""),
+        "ts": ts,
+        "consensus_md": _clip(data.get("consensus_md"), MAX_CONSENSUS_CHARS),
+        "differences_data": sanitize_differences_data(data.get("differences_data")),
+        "differences_text": _clip(data.get("differences_text"), MAX_DIFFERENCES_TEXT_CHARS),
+        "sources": sanitize_sources(data.get("sources")),
+        "included_models": _sanitize_str_list(data.get("included_models"), 160, 6),
+        "consensus_model": _clip(data.get("consensus_model"), 80),
+        "answered_at": ts.isoformat() if isinstance(ts, datetime) else "",
+        "agreement_score": data.get("agreement_score"),
+        "changed": bool(data.get("changed")),
+        "severity": _clip(data.get("severity"), 10),
+        "change_summary": _clip(data.get("change_summary"), 400),
+        "trigger": "changed" if data.get("trigger") == "changed" else "stable",
+        "event_type": _clip(data.get("event_type"), 40),
+        "baseline_changed": bool(data.get("baseline_changed")),
+        "baseline_severity": _clip(data.get("baseline_severity"), 10),
+        "baseline_summary": _clip(data.get("baseline_summary"), 400),
+        "opinion_map": opinion_map.sanitize_opinion_map(data.get("opinion_map")),
+    }
+
+
+def get_watch_version(share_id, run_id, db=None):
+    """Return one full, public-safe Watch version by its immutable run id."""
+    db = db if db is not None else db_firestore
+    run_id = str(run_id or "").strip()
+    if not run_id:
+        return None
+    snap = (
+        db.collection(SHARES_COLLECTION).document(share_id)
+        .collection("watch_history").document(run_id).get()
+    )
+    if not snap.exists:
+        return None
+    return _watch_version_payload(run_id, snap.to_dict() or {})
+
+
+def get_latest_watch_version(share_id, db=None, max_items=20):
+    """Find the newest full snapshot, skipping legacy compact history points."""
+    db = db if db is not None else db_firestore
+    ref = db.collection(SHARES_COLLECTION).document(share_id).collection("watch_history")
+    docs = ref.order_by("ts", direction=firestore.Query.DESCENDING).limit(max_items).stream()
+    for doc in docs:
+        version = _watch_version_payload(doc.id, doc.to_dict() or {})
+        if version:
+            return version
+    return None
 
 
 def public_share_payload(data):

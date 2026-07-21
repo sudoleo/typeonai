@@ -2108,7 +2108,7 @@ canvas {
    ========================================================================== */
 
 .share-header {
-  max-width: 920px;
+  max-width: var(--maxw);
 }
 
 /* Lange Fragen/Prompts: Schrift skaliert herunter statt das Layout zu brechen */
@@ -2818,6 +2818,57 @@ canvas {
 }
 
 /* Consensus Watch history: server-rendered SVG, no chart dependency. */
+.watch-drift-hero {
+  margin: 22px 0 8px;
+  padding: clamp(18px, 3vw, 26px);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--accent) 13%, transparent), transparent 42%),
+    color-mix(in srgb, var(--accent) 5%, var(--panel-bg));
+  text-align: left;
+  box-shadow: 0 16px 38px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* Frage, Drift und Scoreboard teilen dieselbe Inhaltsbreite, damit die
+   Watch-Seite als zusammenhängendes Dashboard lesbar bleibt. */
+.share-header .watch-drift-hero {
+  box-sizing: border-box;
+  width: min(var(--maxw), calc(100vw - 40px));
+}
+
+.share-header .share-scoreboard {
+  box-sizing: border-box;
+  width: min(var(--maxw), calc(100vw - 40px));
+}
+
+.watch-drift-hero.is-changed {
+  border-color: color-mix(in srgb, #d97706 48%, var(--border));
+  background:
+    radial-gradient(circle at 100% 0, color-mix(in srgb, #f59e0b 15%, transparent), transparent 42%),
+    color-mix(in srgb, #f59e0b 5%, var(--panel-bg));
+}
+
+.watch-drift-status { display: flex; align-items: center; gap: 13px; }
+.watch-drift-status .eyebrow { margin: 0 0 3px; }
+.watch-drift-status h2 { margin: 0; color: var(--heading); font-size: clamp(1.15rem, 3vw, 1.5rem); }
+.watch-drift-pulse { width: 13px; height: 13px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 6px color-mix(in srgb, #22c55e 14%, transparent); }
+.watch-drift-hero.is-changed .watch-drift-pulse { background: #f59e0b; box-shadow: 0 0 0 6px color-mix(in srgb, #f59e0b 16%, transparent); }
+.watch-drift-summary { max-width: 70ch; margin: 14px 0 0; color: var(--text); font-size: .96rem; line-height: 1.6; }
+
+.watch-drift-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 20px 0 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--border); }
+.watch-drift-metrics > div { min-width: 0; padding: 12px 14px; background: color-mix(in srgb, var(--panel-bg) 88%, transparent); }
+.watch-drift-metrics dt { color: var(--muted); font-size: .66rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.watch-drift-metrics dd { margin: 5px 0 0; color: var(--heading); font-size: 1.15rem; font-weight: 750; }
+.watch-drift-metrics dd span { color: var(--muted); font-size: .68rem; font-weight: 600; }
+.watch-drift-metrics dd.is-text { font-size: .84rem; }
+.watch-drift-baseline { margin: 14px 0 0; padding-top: 13px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8rem; line-height: 1.5; }
+.watch-drift-baseline strong { color: var(--heading); }
+
+.watch-version-banner { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 18px; margin: 16px -2px -4px; padding-top: 13px; border-top: 1px solid var(--border); color: var(--muted); font-size: .78rem; }
+.watch-version-banner a, .watch-version-link, .watch-versions a { color: var(--accent); font-weight: 650; text-decoration: none; }
+.watch-version-banner a:hover, .watch-version-link:hover, .watch-versions a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
 .watch-history-heading {
   display: flex;
   align-items: flex-start;
@@ -2952,12 +3003,23 @@ canvas {
 .watch-chart-point.is-change { fill: var(--accent-secondary); stroke: var(--panel-bg); stroke-width: 2; }
 
 .watch-events { list-style: none; margin: 18px 0 0; padding: 0; border-top: 1px solid var(--border); }
-.watch-events li { display: grid; grid-template-columns: auto auto auto 1fr; gap: 8px 12px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.watch-events li { display: grid; grid-template-columns: auto auto auto 1fr auto; gap: 8px 12px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--border); }
 .watch-events time { color: var(--muted); font-size: .8rem; }
 .watch-events strong { font-size: .86rem; color: var(--heading); }
 .watch-events p { grid-column: 4; margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .watch-event-major { padding: 2px 7px; border-radius: var(--radius-pill); background: color-mix(in srgb, #dc2626 12%, transparent); color: #b91c1c; font-size: .68rem; font-weight: 750; text-transform: uppercase; }
 .dark-mode .watch-event-major { color: #fca5a5; }
+.watch-version-link { font-size: .72rem; white-space: nowrap; }
+
+.watch-versions { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px; }
+.watch-versions summary { color: var(--heading); font-size: .8rem; font-weight: 700; cursor: pointer; }
+.watch-versions ol { margin: 10px 0 0; padding: 0; list-style: none; }
+.watch-versions li { display: grid; grid-template-columns: 74px minmax(0, 1fr) auto auto; gap: 8px 12px; align-items: center; padding: 9px 10px; border-radius: var(--radius-sm); color: var(--muted); font-size: .74rem; }
+.watch-versions li:nth-child(odd) { background: color-mix(in srgb, var(--glass-bg-strong) 58%, transparent); }
+.watch-versions li.is-selected { box-shadow: inset 3px 0 0 var(--accent); }
+.watch-versions li strong { color: var(--accent); font-size: .65rem; text-transform: uppercase; }
+.watch-version-state { justify-self: start; padding: 2px 7px; border-radius: var(--radius-pill); background: color-mix(in srgb, #22c55e 12%, transparent); color: color-mix(in srgb, #15803d 80%, var(--text)); font-size: .62rem; font-weight: 750; text-transform: uppercase; }
+.watch-version-state.is-changed { background: color-mix(in srgb, #f59e0b 14%, transparent); color: color-mix(in srgb, #b45309 86%, var(--text)); }
 
 /* Report-Bereich */
 .share-report {
@@ -3057,6 +3119,12 @@ canvas {
 
   .watch-events li { grid-template-columns: auto auto 1fr; }
   .watch-events p { grid-column: 1 / -1; }
+  .watch-events .watch-version-link { grid-column: 1 / -1; }
+  .watch-drift-metrics { grid-template-columns: 1fr; }
+  .share-header .watch-drift-hero,
+  .share-header .share-scoreboard { width: 100%; }
+  .watch-versions li { grid-template-columns: 68px minmax(0, 1fr) auto; }
+  .watch-versions li strong { display: none; }
   .watch-position-intro { flex-direction: column; }
   .watch-direction-score { align-items: flex-start; text-align: left; }
   .watch-position-clusters { grid-template-columns: 1fr; }
