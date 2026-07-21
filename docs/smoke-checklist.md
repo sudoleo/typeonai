@@ -88,20 +88,32 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       zum ersten Fehler. Der Dialog bleibt auf iPhone-Größen vollständig im sichtbaren
       Bereich. Private Seiten sind in einem fremden oder ausgeloggten Browser nicht lesbar.
 - [ ] Lokale Run-Uhrzeit ist bei Erstellung wählbar und zeigt die erkannte Zeitzone;
-      Weekly bietet auch Free-Nutzern einen Wochentag-Picker. „Watched“ erlaubt eine
+      Weekly bietet auch Free-Nutzern einen Wochentag-Picker und startet standardmäßig
+      am morgigen Wochentag statt erst nach einer vollen Woche. „Watched“ erlaubt eine
       spätere Änderung von Tag und Uhrzeit. `next_run_at` entspricht dem gewählten
       lokalen Wochentag und der Uhrzeit (mit bis zu 30 Minuten Scheduler-Toleranz),
       auch über einen Sommer-/Winterzeitwechsel hinweg.
 - [ ] Free: Daily ist als Pro markiert/gesperrt und das aktive Limit öffnet den
-      bestehenden Pro-Teaser. Pro: Daily und bis zu fünf aktive Watches funktionieren.
+      bestehenden Pro-Teaser. Dashboard und Create-Dialog zeigen vorher den
+      autoritativen Plan, „aktiv von Limit“ und freie Plätze; pausierte Watches
+      sind ausdrücklich als nicht mitgezählt erklärt. Bei 1/1 (Free) bzw. 5/5
+      (Pro) ist die Erstellung bereits vor dem Request gesperrt. Pro: Daily und
+      bis zu fünf aktive Watches funktionieren.
 - [ ] Das Watch-Dashboard ist eine eigene Seite `/app/watches`: erreichbar über
       den schwebenden View-Switch „Consensus | Watches“ (nur eingeloggt, Watches
       auf Mobile icon-only) und „Watched“ im Nutzericon-Menü; aktiver Pill-Zustand,
       Browser-Back/Forward
       und Deep-Link/Reload auf `/app/watches` funktionieren (vor dem Login
-      erscheint ein Hinweis statt Daten). KPI-Karten zeigen aktive Monitore,
+      erscheint ein Hinweis statt Daten). Ohne Watch zeigt die Seite statt Null-
+      KPIs einen Ask→Check→Alert-Empty-State mit optionalen Beispielfragen; der
+      Query-first-Dialog nutzt private/wöchentliche/Changes-only-Defaults, hält
+      E-Mail und Telegram sichtbar und legt Zeitplan/Sichtbarkeit/Condition unter
+      „Customize schedule and alerts“. Die Vorschlags-Chips bleiben optisch sekundär;
+      Empty-State und Überschrift haben auf Desktop und Mobile ausreichend Luft. Ein
+      Klick auf den Dialog-Backdrop schließt den Watch-Dialog nicht, X/Cancel/Back
+      und Escape weiterhin schon. KPI-Karten zeigen sonst aktive Watches,
       Checks/Änderungen der letzten sieben Tage und den nächsten Lauf; ein
-      „Needs attention“-Feed bündelt die neuesten Changes. All/Changed/Stable/Paused
+      „Recent movement“-Feed bündelt die neuesten Changes. All/Changed/Stable/Paused
       filtern die Karten. Pro Watch zeigt die Karte Driftstatus/-Summary,
       Direction Shift, Agreement-Score + Delta, History-Sparkline und nächsten Lauf.
       Der Notifications-Bereich klappt Telegram und Morning Brief gemeinsam ein und
@@ -111,6 +123,9 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       Pause/Resume und Delete
       funktionieren. Delete lässt bereits vorhandene Share-History bestehen.
       „← Back to app“ und ESC führen zurück. Light/Dark und Mobile ohne Overflow.
+- [ ] Der Watches-Schalter pulsiert als neuer, unbestätigter Einstieg nur zweimal
+      dezent, stoppt nach dem ersten Öffnen dauerhaft und ist bei reduzierter Bewegung
+      still. Er konkurriert nicht mit dem resultatspezifischen Watch-Hinweis.
 - [ ] Morning Brief (Karte im Dashboard): Toggle aktiviert die tägliche
       Digest-Mail mit Uhrzeit (Browser-Zeitzone) und Modus „Every morning“ /
       „Only when something changed“; Einstellungen überleben ein erneutes

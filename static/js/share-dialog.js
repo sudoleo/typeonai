@@ -272,7 +272,9 @@
     const closeBtn = document.getElementById("closeShareModal");
     if (closeBtn) closeBtn.addEventListener("click", closeShareDialog);
     window.addEventListener("click", (event) => {
-      if (event.target === modal) closeShareDialog();
+      if (event.target === modal && !modal.classList.contains("is-watch-dialog")) {
+        closeShareDialog();
+      }
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && modal.style.display === "flex") {

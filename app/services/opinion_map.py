@@ -205,32 +205,11 @@ def _match_dimensions(current: list[dict], previous: list[dict]) -> list[tuple[d
     return matches
 
 
-def build_opinion_map(differences_data: dict, previous=None) -> dict | None:
-    """Build a multidimensional map and compare it with the previous map.
-
-    Movement uses a conservative lexical comparison of each provider's stance
-    on matched dimensions. This avoids counting a provider as moved merely
-    because another provider joined or left its cluster, and avoids inventing a
-    universal yes/no axis while still yielding a shared 0-100 Direction Shift
-    score.
-    """
-    if not isinstance(differences_data, dict):
-        return None
-    dimensions = _dimensions(differences_data)
-    if not dimensions:
-        dimensions = _claim_dimensions(differences_data)
-    if not dimensions:
-        return None
-
+def _movement_view(dimensions: list[dict], previous=None, *, consensus_changed=None):
     providers = [
         provider for provider in PROVIDERS
         if any(_position_for(dimension, provider) for dimension in dimensions)
     ]
-    center = []
-    for dimension in dimensions:
-        dominant = max(dimension["positions"], key=lambda item: len(item["models"]))
-        center.append(dominant["stance"])
-
     previous = sanitize_opinion_map(previous)
     previous_dimensions = previous.get("dimensions") if previous else []
     matches = _match_dimensions(dimensions, previous_dimensions)
@@ -269,20 +248,32 @@ def build_opinion_map(differences_data: dict, previous=None) -> dict | None:
     if previous:
         if matches and all_movements:
             shift_score = round(sum(all_movements) / len(all_movements))
-        elif previous_dimensions:
-            # The set of answer dimensions was completely reframed.
-            shift_score = 100
+        # A completely reframed set of generated labels is not proof that all
+        # providers reversed position. Leave it unscored instead of inventing
+        # a 100/100 shift.
+        if consensus_changed is False:
+            shift_score = 0
             for item in model_views:
-                item["movement_score"] = 100
-                item["moved"] = True
+                item.update(movement_score=0, moved=False, summary="")
     if shift_score is None:
-        shift_label = "New baseline"
+        shift_label = "Not comparable" if previous and previous_dimensions else "New baseline"
     elif shift_score <= 15:
         shift_label = "Stable"
     elif shift_score <= 45:
         shift_label = "Evolving"
     else:
         shift_label = "Turning"
+    return model_views, shift_score, shift_label
+
+
+def _map_from_dimensions(dimensions: list[dict], previous=None, *, consensus_changed=None):
+    model_views, shift_score, shift_label = _movement_view(
+        dimensions, previous, consensus_changed=consensus_changed,
+    )
+    center = []
+    for dimension in dimensions:
+        dominant = max(dimension["positions"], key=lambda item: len(item["models"]))
+        center.append(dominant["stance"])
     return {
         "schema_version": SCHEMA_VERSION,
         "dimensions": dimensions,
@@ -291,3 +282,40 @@ def build_opinion_map(differences_data: dict, previous=None) -> dict | None:
         "shift_label": shift_label,
         "center": center,
     }
+
+
+def build_opinion_map(differences_data: dict, previous=None, *, consensus_changed=None) -> dict | None:
+    """Build a multidimensional map and compare it with the previous map.
+
+    Movement uses a conservative lexical comparison of each provider's stance
+    on matched dimensions. ``consensus_changed=False`` is an explicit guard
+    from the Change Judge: a stable consensus cannot become a synthetic
+    100/100 Direction Shift because generated dimension labels were rephrased.
+    """
+    if not isinstance(differences_data, dict):
+        return None
+    dimensions = _dimensions(differences_data)
+    if not dimensions:
+        dimensions = _claim_dimensions(differences_data)
+    if not dimensions:
+        return None
+    return _map_from_dimensions(
+        dimensions, previous, consensus_changed=consensus_changed,
+    )
+
+
+def recalculate_opinion_map(value, previous=None, *, consensus_changed=None) -> dict | None:
+    """Re-score a persisted map against its real predecessor on read.
+
+    This fixes legacy history points produced by the former fallback that
+    treated non-matching generated dimension labels as a certain 100/100 turn.
+    """
+    current = sanitize_opinion_map(value)
+    if not current:
+        return None
+    dimensions = current.get("dimensions") or []
+    if not dimensions:
+        return current
+    return _map_from_dimensions(
+        dimensions, previous, consensus_changed=consensus_changed,
+    )

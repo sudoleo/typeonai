@@ -914,6 +914,69 @@ img { display: block; max-width: 100%; }
 .lp-scene-01 .lp-window { max-width: 620px; }
 .lp-scene-03 .lp-scene-visual { margin-top: clamp(40px, 5vw, 60px); }
 
+/* --------------------------------------------------------------------------
+   Scene 04 — Consensus Watch: one compact change story, not another text wall
+   -------------------------------------------------------------------------- */
+.lp-watch-story {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, .65fr);
+  align-items: center;
+  gap: clamp(18px, 4vw, 44px);
+  margin-top: clamp(36px, 5vw, 56px);
+  padding: clamp(18px, 3vw, 30px);
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 72%, transparent);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 82% 18%, color-mix(in srgb, #229ed9 9%, transparent), transparent 34%),
+    color-mix(in srgb, var(--glass-bg-strong) 82%, var(--bg-white));
+  box-shadow: 0 20px 60px rgba(25, 27, 30, .08), inset 0 1px 0 var(--glass-highlight);
+}
+.lp-watch-card {
+  min-width: 0;
+  padding: clamp(17px, 2.5vw, 24px);
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 76%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--container-bg) 90%, transparent);
+  box-shadow: 0 10px 30px rgba(24, 25, 27, .06);
+}
+.lp-watch-card-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.lp-watch-card-head > span:first-child { display: inline-flex; align-items: center; gap: 8px; color: var(--text-primary); font-size: .78rem; font-weight: 700; }
+.lp-watch-card-head img { width: 18px; filter: invert(1); }
+.dark-mode .lp-watch-card-head img { filter: none; }
+.lp-watch-active { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px; background: color-mix(in srgb, #22c55e 12%, transparent); color: color-mix(in srgb, #15803d 78%, var(--text-primary)); font-size: .68rem; font-weight: 700; }
+.lp-watch-active i { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; }
+.lp-watch-card h3 { max-width: 32ch; margin: 20px 0 0; color: var(--text-primary); font-size: clamp(1.05rem, 2vw, 1.3rem); line-height: 1.35; }
+.lp-watch-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 13px; }
+.lp-watch-meta span { padding: 4px 8px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--text-secondary); font-size: .67rem; font-weight: 650; }
+.lp-watch-timeline { position: relative; display: grid; gap: 0; margin-top: 22px; }
+.lp-watch-timeline::before { content: ""; position: absolute; top: 22px; bottom: 22px; left: 72px; width: 1px; background: color-mix(in srgb, var(--accent) 22%, var(--sidebar-border)); }
+.lp-watch-point { position: relative; display: grid; grid-template-columns: 58px 12px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 54px; }
+.lp-watch-date { color: var(--text-secondary); font-size: .7rem; font-variant-numeric: tabular-nums; }
+.lp-watch-point > i { position: relative; z-index: 1; width: 9px; height: 9px; border: 2px solid var(--container-bg); border-radius: 50%; background: var(--text-secondary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-secondary) 24%, transparent); }
+.lp-watch-point.is-change > i { background: #f59e0b; box-shadow: 0 0 0 4px color-mix(in srgb, #f59e0b 13%, transparent); }
+.lp-watch-point strong, .lp-watch-point small { display: block; }
+.lp-watch-point strong { color: var(--text-primary); font-size: .79rem; }
+.lp-watch-point small { margin-top: 2px; color: var(--text-secondary); font-size: .7rem; line-height: 1.4; }
+.lp-watch-movement { color: #b45309; font-size: .68rem; font-weight: 700; white-space: nowrap; }
+.lp-watch-notification {
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, #229ed9 30%, var(--sidebar-border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, #229ed9 6%, var(--container-bg));
+  box-shadow: 0 16px 38px rgba(34, 158, 217, .1);
+  transform: translateY(10px);
+}
+.lp-watch-notification-head { display: flex; align-items: center; gap: 10px; }
+.lp-watch-telegram { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: 10px; background: #229ed9; color: #fff; }
+.lp-watch-telegram svg { width: 18px; height: 18px; }
+.lp-watch-notification-head strong, .lp-watch-notification-head small { display: block; }
+.lp-watch-notification-head strong { font-size: .86rem; }
+.lp-watch-notification-head small { margin-top: 2px; color: var(--text-secondary); font-size: .68rem; }
+.lp-watch-notification p { margin: 15px 0 0; color: var(--text-secondary); font-size: .79rem; line-height: 1.48; }
+.lp-watch-notification a { display: inline-flex; align-items: center; gap: 5px; margin-top: 16px; color: var(--accent); font-size: .79rem; font-weight: 650; }
+.lp-watch-notification a span { font-size: 1.2em; transition: transform .18s ease; }
+.lp-watch-notification a:hover span { transform: translateX(3px); }
+
 /* Verdict bar (full width, above the box) — neutral glass bar like the /app:
    the semantics live in the score ring (plus a 3–4% wash), text stays in the
    normal text colour. */
@@ -1673,6 +1736,8 @@ img { display: block; max-width: 100%; }
   .lp-responses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lp-card-grid { grid-template-columns: 1fr; gap: 14px; }
   .lp-logos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lp-watch-story { grid-template-columns: 1fr; }
+  .lp-watch-notification { width: min(100%, 430px); justify-self: end; margin-top: -12px; transform: none; }
 
   /* Scene 03: stack panels, consensus first */
   .consensus-box { flex-direction: column; gap: 10px; }
@@ -1750,6 +1815,12 @@ img { display: block; max-width: 100%; }
   .consensus-differences { padding: 14px 16px 8px; }
   .consensus-main > h2 { padding: 0 56px; }
   .lp-footer-inner { flex-direction: column; align-items: flex-start; }
+  .lp-watch-story { padding: 12px; }
+  .lp-watch-card { padding: 15px; }
+  .lp-watch-point { grid-template-columns: 46px 12px minmax(0, 1fr); gap: 7px; }
+  .lp-watch-timeline::before { left: 58px; }
+  .lp-watch-movement { grid-column: 3; margin-top: -5px; }
+  .lp-watch-notification { width: 100%; margin-top: 0; }
 
   /* Phone input row: tighter spacing so attach + 3 icon buttons + actions fit */
   .lp-prompt { min-height: 116px; padding: 16px; padding-bottom: 58px; }

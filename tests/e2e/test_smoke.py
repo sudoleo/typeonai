@@ -262,9 +262,9 @@ def test_agent_mode_can_reveal_hidden_model_answers_on_mobile(app_page):
     expect(app_page.locator("#openaiResponse")).to_be_hidden()
 
 
-def test_watch_dialog_requires_visibility_and_reveals_condition(app_page):
-    """Watch-Erstellung zeigt die explizite Public/Private-Wahl und blendet
-    das Condition-Feld nur für den entsprechenden Mailmodus ein."""
+def test_watch_dialog_uses_safe_defaults_keeps_telegram_visible_and_reveals_condition(app_page):
+    """Watch-Erstellung startet kompakt mit sicheren Defaults, hält Telegram
+    sichtbar und blendet erweiterte Felder nur bei Bedarf ein."""
     _send_question(app_page)
     _wait_for_all_final_answers(app_page)
     expect(app_page.locator("#consensusResponse")).to_contain_text("Mock consensus", timeout=30000)
@@ -274,14 +274,30 @@ def test_watch_dialog_requires_visibility_and_reveals_condition(app_page):
     app_page.evaluate("() => { window.lastShareResultId = 'e2e-watch-validation'; }")
     app_page.set_viewport_size({"width": 390, "height": 844})
     app_page.click("#consensusWatchButton")
-    expect(app_page.locator("#watchVisibility")).to_be_visible()
+    app_page.locator("#shareModal").click(position={"x": 2, "y": 2})
+    expect(app_page.locator("#watchConfirmBtn")).to_be_visible()
+    expect(app_page.locator(".watch-delivery-field")).to_be_visible()
+    expect(app_page.locator("#watchTelegramEnabled")).to_be_visible()
+    expect(app_page.locator("#watchTelegramConnect")).to_be_visible()
+    expect(app_page.locator("#watchAdvancedSettings")).not_to_have_attribute("open", "")
+    expect(app_page.locator("#watchVisibility")).to_be_hidden()
     dialog_box = app_page.locator("#shareModal .share-modal-content").bounding_box()
     assert dialog_box is not None
     assert dialog_box["y"] >= 0
     assert dialog_box["y"] + dialog_box["height"] <= 844.5
-    assert app_page.locator("#watchVisibility").input_value() == ""
+    assert app_page.locator("#watchVisibility").input_value() == "private"
+    expect(app_page.locator("#watchVisibilitySummary")).to_have_text("Private page")
+    app_page.click("#watchAdvancedSettings > summary")
+    expect(app_page.locator("#watchVisibility")).to_be_visible()
     expect(app_page.locator("#watchRunTime")).to_have_value("09:00")
     expect(app_page.locator("#watchWeekdayWrap")).to_be_visible()
+    tomorrow_weekday = app_page.evaluate("""() => {
+      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return days[tomorrow.getDay()];
+    }""")
+    expect(app_page.locator("#watchWeekday")).to_have_value(tomorrow_weekday)
     app_page.select_option("#watchWeekday", "friday")
     expect(app_page.locator("#watchWeekday")).to_have_value("friday")
     app_page.select_option("#watchInterval", "monthly")
@@ -292,14 +308,8 @@ def test_watch_dialog_requires_visibility_and_reveals_condition(app_page):
     assert app_page.locator("#watchTimezoneLabel").text_content()
     expect(app_page.locator("#watchConditionWrap")).to_be_hidden()
 
-    app_page.click("#watchConfirmBtn")
-    expect(app_page.locator("#watchVisibilityError")).to_have_text(
-        "Choose whether this page should be private or public."
-    )
-    expect(app_page.locator("#watchVisibility")).to_have_attribute("aria-invalid", "true")
-
-    app_page.select_option("#watchVisibility", "private")
-    expect(app_page.locator("#watchVisibilityError")).to_be_hidden()
+    app_page.select_option("#watchVisibility", "public")
+    expect(app_page.locator("#watchVisibilitySummary")).to_have_text("Public page")
 
     app_page.fill("#watchRunTime", "")
     app_page.click("#watchConfirmBtn")
@@ -317,6 +327,124 @@ def test_watch_dialog_requires_visibility_and_reveals_condition(app_page):
         "Enter the condition you want to monitor."
     )
     expect(app_page.locator("#watchCondition")).to_have_attribute("aria-invalid", "true")
+
+
+def test_query_first_watch_guides_question_then_configuration(app_page):
+    """Das Watch-Dashboard startet einen Query-first-Flow, ohne vorherigen
+    Consensus, und bewahrt die Frage beim Zuruecknavigieren."""
+    app_page.route(
+        "**/api/my/watches",
+        lambda route: route.fulfill(
+            status=200, content_type="application/json",
+            body='{"status":"success","watches":[],"limits":{"plan":"free","active_count":0,"active_limit":1,"remaining":1,"paused_count":0,"daily_available":false}}',
+        ),
+    )
+    app_page.route(
+        "**/api/my/watch-brief",
+        lambda route: route.fulfill(
+            status=200, content_type="application/json",
+            body='{"status":"success","brief":{}}',
+        ),
+    )
+    app_page.route(
+        "**/api/my/telegram",
+        lambda route: route.fulfill(
+            status=200, content_type="application/json",
+            body='{"status":"success","telegram":{"configured":false,"connected":false}}',
+        ),
+    )
+
+    app_page.click("#viewSwitchWatches")
+    expect(app_page.locator("#watchDashCreate")).to_be_visible()
+    expect(app_page.locator("#watchDashLimit")).to_contain_text("Free plan")
+    expect(app_page.locator("#watchDashLimit")).to_contain_text("0 of 1 active")
+    expect(app_page.locator("#watchDashLimit")).to_contain_text("Paused Watches do not count")
+
+    empty_box = app_page.locator(".watch-dash-empty").bounding_box()
+    empty_copy_box = app_page.locator(".watch-dash-empty > p").bounding_box()
+    empty_cta_box = app_page.locator(".watch-empty-actions > .share-primary-btn").bounding_box()
+    assert empty_box is not None and empty_copy_box is not None and empty_cta_box is not None
+    assert empty_cta_box["y"] >= empty_copy_box["y"] + empty_copy_box["height"] + 8
+    assert abs(
+        (empty_cta_box["x"] + empty_cta_box["width"] / 2)
+        - (empty_box["x"] + empty_box["width"] / 2)
+    ) < 2
+    example_chips = app_page.locator(".watch-example-chip")
+    assert example_chips.count() == 3
+    first_example_box = example_chips.first.bounding_box()
+    assert first_example_box is not None and first_example_box["height"] <= 27
+
+    app_page.set_viewport_size({"width": 390, "height": 844})
+    title_box = app_page.locator("#watchDashTitle").bounding_box()
+    header_cta_box = app_page.locator("#watchDashCreate").bounding_box()
+    mobile_subtitle_box = app_page.locator(".watch-dash-subtitle").bounding_box()
+    mobile_empty_box = app_page.locator(".watch-dash-empty").bounding_box()
+    assert title_box is not None and header_cta_box is not None
+    assert mobile_subtitle_box is not None and mobile_empty_box is not None
+    assert header_cta_box["y"] > title_box["y"]
+    assert header_cta_box["x"] + header_cta_box["width"] <= 378.5
+    assert mobile_empty_box["y"] >= mobile_subtitle_box["y"] + mobile_subtitle_box["height"] + 20
+
+    app_page.click("#watchDashCreate")
+    expect(app_page.locator("#watchQuestion")).to_be_visible()
+    expect(app_page.locator("#watchDialogLimit")).to_contain_text("1 slot available")
+    expect(app_page.locator("#watchQuestionNext")).to_have_text("Continue to schedule")
+    expect(app_page.locator("#shareModalBody")).to_contain_text(
+        "No model run starts until the Watch reaches its scheduled check."
+    )
+
+    app_page.fill("#watchQuestion", "Short")
+    app_page.click("#watchQuestionNext")
+    expect(app_page.locator("#watchQuestionError")).to_be_visible()
+
+    question = "Has the EU guidance for general-purpose AI models changed?"
+    app_page.fill("#watchQuestion", question)
+    app_page.click("#watchQuestionNext")
+    expect(app_page.locator(".watch-question-preview strong")).to_have_text(question)
+    expect(app_page.locator(".watch-setup-summary")).to_be_visible()
+    expect(app_page.locator(".watch-delivery-field")).to_be_visible()
+    expect(app_page.locator("#watchTelegramEnabled")).to_be_visible()
+    expect(app_page.locator("#watchVisibility")).to_be_hidden()
+    expect(app_page.locator("#watchVisibility")).to_have_value("private")
+    expect(app_page.locator("#watchCancelBtn")).to_have_text("Back")
+
+    app_page.click("#watchCancelBtn")
+    expect(app_page.locator("#watchQuestion")).to_have_value(question)
+
+
+def test_watch_limit_is_explained_before_creation(app_page):
+    app_page.route(
+        "**/api/my/watches",
+        lambda route: route.fulfill(
+            status=200, content_type="application/json",
+            body='{"status":"success","watches":[],"limits":{"plan":"free","active_count":1,"active_limit":1,"remaining":0,"paused_count":0,"daily_available":false}}',
+        ),
+    )
+    app_page.route(
+        "**/api/my/watch-brief",
+        lambda route: route.fulfill(
+            status=200, content_type="application/json",
+            body='{"status":"success","brief":{}}',
+        ),
+    )
+    app_page.route(
+        "**/api/my/telegram",
+        lambda route: route.fulfill(
+            status=200, content_type="application/json",
+            body='{"status":"success","telegram":{"configured":false,"connected":false}}',
+        ),
+    )
+
+    app_page.click("#viewSwitchWatches")
+    expect(app_page.locator("#watchDashLimit")).to_contain_text("1 of 1 active")
+    expect(app_page.locator("#watchDashLimit")).to_contain_text("Limit reached")
+
+    app_page.click("#watchDashCreate")
+    expect(app_page.locator("#watchDialogLimit")).to_contain_text(
+        "Pro includes 5 active Watches and daily checks"
+    )
+    expect(app_page.locator("#watchQuestionNext")).to_be_disabled()
+    expect(app_page.locator("#watchQuestionNext")).to_have_text("Watch limit reached")
 
 
 def test_exclude_model_toggles_excluded_class(app_page):

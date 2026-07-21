@@ -67,3 +67,14 @@ def test_share_page_loads_the_common_math_renderer():
     assert "katex@0.17.0/dist/katex.min.js" in template
     assert "/static/js/math-render.js?v=20260720-math1" in template
     assert '<main class="page-shell" data-math-render>' in template
+
+
+def test_landing_explains_consensus_watch_as_fourth_product_step():
+    landing = read("templates/landing.html")
+    navigation = read("templates/partials/public_nav.html")
+
+    assert 'id="watch"' in landing
+    assert "04 · Monitor" in landing
+    assert "Know when the answer changes." in landing
+    assert 'href="/app/watches"' in landing
+    assert 'href="/#watch">Watches</a>' in navigation

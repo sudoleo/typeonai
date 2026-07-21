@@ -31,6 +31,7 @@
 .view-switch[hidden] { display: none; }
 
 .view-switch-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -54,6 +55,20 @@
   cursor: default;
 }
 .view-switch-btn svg { width: 15px; height: 15px; flex: 0 0 auto; }
+#viewSwitchWatches.has-watch-pulse::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  border-radius: 999px;
+  pointer-events: none;
+  animation: watchSwitchPulse 1.8s ease-out 2;
+}
+@keyframes watchSwitchPulse {
+  0% { opacity: 0; transform: scale(.94); }
+  18% { opacity: .48; }
+  100% { opacity: 0; transform: scale(1.22); }
+}
 
 @media (max-width: 640px) {
   /* Mobil kompakter: Watches nur als Auge-Icon. */
@@ -88,6 +103,8 @@
 }
 
 .watch-dash-header { text-align: left; }
+.watch-dash-heading-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
+.watch-dash-heading-row > div { min-width: 0; }
 .watch-dash-header h1 {
   margin: 10px 0 0;
   font-size: 1.5rem;
@@ -95,6 +112,63 @@
   text-align: left;
 }
 .watch-dash-subtitle { margin: 6px 0 0; color: var(--sidebar-text-muted); font-size: .88rem; }
+.watch-limit-summary {
+  display: block;
+  max-width: 650px;
+  margin-top: 11px;
+  color: var(--sidebar-text-muted);
+  font-size: .71rem;
+  line-height: 1.35;
+}
+.watch-limit-summary[hidden] { display: none; }
+.watch-limit-main,
+.watch-limit-detail { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 8px; }
+.watch-limit-main strong { color: var(--text-color); font-size: .74rem; }
+.watch-limit-plan {
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--sidebar-border));
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--accent) 72%, var(--text-color));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  font-weight: 750;
+}
+.watch-limit-meter {
+  width: 64px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sidebar-border) 78%, transparent);
+}
+.watch-limit-meter i { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+.watch-limit-detail { margin-top: 4px; opacity: .9; }
+.watch-limit-detail span + span::before { content: "·"; margin-right: 8px; }
+.watch-limit-upgrade {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.watch-limit-summary.is-full .watch-limit-plan {
+  border-color: color-mix(in srgb, #d97706 35%, var(--sidebar-border));
+  color: color-mix(in srgb, #d97706 78%, var(--text-color));
+  background: color-mix(in srgb, #d97706 9%, transparent);
+}
+.watch-limit-summary.is-full .watch-limit-meter i { background: #d97706; }
+.watch-limit-summary.is-dialog {
+  max-width: none;
+  margin: -2px 0 13px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 72%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--container-bg) 72%, transparent);
+}
+.watch-dash-heading-row > .share-primary-btn { flex: 0 0 auto; min-height: 38px; }
 
 .watch-page-back {
   display: inline-flex;
@@ -116,7 +190,7 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
-  margin: 18px 0 4px;
+  margin: 28px 0 4px;
 }
 .watch-dash-stat {
   display: flex;
@@ -377,7 +451,8 @@
 .watch-card-settings-grid .watch-condition-editor { align-items: flex-end; }
 
 .watch-dash-empty {
-  padding: 28px 18px;
+  margin-top: 28px;
+  padding: clamp(32px, 6vw, 52px) 22px;
   border: 1px dashed color-mix(in srgb, var(--sidebar-border) 80%, transparent);
   border-radius: var(--radius-md, 12px);
   text-align: center;
@@ -394,6 +469,142 @@
   margin: 0 0 8px;
   gap: 3px;
 }
+.watch-dash-empty > .watch-step-label { margin-bottom: 10px; }
+.watch-dash-empty > strong { display: block; color: var(--text-color); font-size: clamp(1.15rem, 2vw, 1.35rem); }
+.watch-dash-empty > p { max-width: 640px; margin: 9px auto 0; }
+.watch-empty-flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 430px;
+  margin: 24px auto 0;
+}
+.watch-empty-flow > span { display: grid; justify-items: center; gap: 5px; min-width: 62px; }
+.watch-empty-flow b {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--sidebar-border));
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 7%, var(--container-bg));
+  color: var(--text-color);
+  font-size: .78rem;
+}
+.watch-empty-flow small { color: var(--text-color); font-size: .73rem; font-weight: 650; }
+.watch-empty-flow i { width: min(76px, 10vw); height: 1px; margin-bottom: 21px; background: color-mix(in srgb, var(--accent) 24%, var(--sidebar-border)); }
+.watch-empty-examples { margin-top: 24px; }
+.watch-empty-examples > span { display: block; margin-bottom: 9px; font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.watch-empty-examples > div { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; }
+.watch-example-chip {
+  min-height: 25px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 62%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sidebar-text-muted);
+  font: inherit;
+  font-size: .66rem;
+  cursor: pointer;
+  opacity: .82;
+}
+.watch-example-chip:hover { border-color: color-mix(in srgb, var(--accent) 28%, var(--sidebar-border)); color: var(--text-color); opacity: 1; }
+.watch-empty-actions { display: flex; justify-content: center; margin-top: 18px; }
+.watch-empty-actions > .share-primary-btn { width: max-content; }
+
+.watch-step-label {
+  margin-bottom: 8px;
+  color: var(--accent);
+  font-size: .72rem;
+  font-weight: 750;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.watch-question-input { min-height: 122px; }
+.watch-question-preview {
+  margin: 13px 0 4px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 72%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 5%, var(--input-bg));
+}
+.watch-question-preview span,
+.watch-question-preview strong { display: block; }
+.watch-question-preview span { margin-bottom: 4px; color: var(--sidebar-text-muted); font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.watch-question-preview strong { font-size: .84rem; line-height: 1.45; overflow-wrap: anywhere; }
+.watch-setup-summary {
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--sidebar-border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 5%, var(--input-bg));
+}
+.watch-setup-summary-label { display: block; color: var(--sidebar-text-muted); font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.watch-setup-summary-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.watch-setup-summary-chips > span {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--text-color);
+  font-size: .7rem;
+  font-weight: 650;
+}
+.watch-delivery-field {
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, #229ed9 25%, var(--sidebar-border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, #229ed9 4%, var(--input-bg));
+}
+.watch-delivery-field .share-link-btn[hidden] { display: none; }
+.watch-advanced-settings {
+  margin-top: 13px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 76%, transparent);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.watch-advanced-settings > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  padding: 0 12px;
+  color: var(--text-color);
+  font-size: .79rem;
+  font-weight: 650;
+  cursor: pointer;
+  list-style: none;
+}
+.watch-advanced-settings > summary::-webkit-details-marker { display: none; }
+.watch-advanced-settings > summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  color: var(--sidebar-text-muted);
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform .18s ease;
+}
+.watch-advanced-settings[open] > summary { border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 70%, transparent); }
+.watch-advanced-settings[open] > summary::after { transform: translateY(2px) rotate(225deg); }
+.watch-advanced-settings > summary small { color: var(--sidebar-text-muted); font-size: .68rem; font-weight: 500; }
+.watch-advanced-settings-body { padding: 0 12px 13px; }
+.watch-success-card { display: flex; align-items: flex-start; gap: 12px; padding: 15px; border: 1px solid color-mix(in srgb, #22c55e 28%, var(--sidebar-border)); border-radius: var(--radius-md); background: color-mix(in srgb, #22c55e 6%, var(--input-bg)); }
+.watch-success-card > div { min-width: 0; }
+.watch-success-icon { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: color-mix(in srgb, #22c55e 17%, transparent); color: #15803d; font-weight: 800; }
+.watch-success-card strong { display: block; font-size: .9rem; line-height: 1.4; }
+.watch-success-card p { margin: 5px 0 0; color: var(--sidebar-text-muted); font-size: .78rem; line-height: 1.45; }
+.watch-question-guidance {
+  margin-top: 12px;
+  color: var(--sidebar-text-muted);
+  font-size: .78rem;
+  line-height: 1.5;
+}
+.watch-question-guidance summary { cursor: pointer; color: var(--text-color); font-weight: 650; }
+.watch-question-guidance ul { margin: 8px 0 0; padding-left: 20px; }
+.watch-question-guidance li + li { margin-top: 3px; }
 .watch-filter {
   appearance: none;
   -webkit-appearance: none;
@@ -430,7 +641,7 @@
 .watch-card[hidden] { display: none; }
 
 @media (max-width: 640px) {
-  .watch-page-inner { padding: 14px 12px 40px; }
+  .watch-page-inner { padding: 64px 12px 40px; }
   .watch-dash-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .watch-card-body { gap: 10px 14px; }
   /* Die Frage bleibt die erste Zeile; Status- und Kanal-Chips bekommen ihre
@@ -442,4 +653,34 @@
   .watch-drift-feed-list time { display: none; }
   .watch-notifications > summary { min-height: 50px; padding: 0 13px; }
   .watch-notifications-summary { max-width: 180px; }
+  .watch-dash-heading-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 5px 14px;
+  }
+  .watch-dash-heading-row > div { display: contents; }
+  .watch-dash-heading-row h1 { grid-column: 1; grid-row: 1; }
+  .watch-dash-subtitle { grid-column: 1; grid-row: 2; }
+  .watch-dash-heading-row .watch-limit-summary {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    max-width: none;
+    margin-top: 5px;
+  }
+  .watch-dash-heading-row > .share-primary-btn {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: flex-end;
+    min-height: 34px;
+    margin-bottom: 2px;
+    padding-inline: 12px;
+  }
+  .watch-dash-empty { margin-top: 24px; padding: 36px 14px; }
+  .watch-empty-flow i { width: 44px; }
+  .watch-setup-summary-chips > span { font-size: .67rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #viewSwitchWatches.has-watch-pulse::after { animation: none; opacity: 0; }
 }

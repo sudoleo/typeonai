@@ -99,3 +99,17 @@ def test_settings_are_grouped_without_changing_control_ids():
 
     assert template.count('class="settings-category"') >= 3
     assert template.count('class="settings-group"') >= 4
+
+
+def test_logout_clears_the_loaded_run_and_aborts_active_streams():
+    firebase = read("static/firebase.js")
+    app_init = read("static/js/app-init.js")
+
+    assert "function resetLoadedRunAfterLogout()" in firebase
+    assert "window.cancelCurrentQuery?.();" in firebase
+    assert "window.cancelCurrentConsensus?.();" in firebase
+    assert "window.clearResponseBoxes?.({ silent: true });" in firebase
+    assert "window.App?.watch?.resetAfterLogout?.();" in firebase
+    assert 'document.body.classList.add("is-hero")' in firebase
+    assert "window.clearResponseBoxes = function (options = {})" in app_init
+    assert "window.consensusCitationMeta = null" in app_init

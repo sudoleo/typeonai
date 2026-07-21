@@ -6,10 +6,10 @@
   </a>
   <div class="nav-links lp-nav-links">
     <a href="/#product"{% if public_path == '/' %} aria-current="page"{% endif %}>Product</a>
+    <a href="/#watch">Watches</a>
     <a href="/questions"{% if public_path == '/questions' %} aria-current="page"{% endif %}>Questions</a>
     <a href="/ai-model-comparison"{% if public_path == '/ai-model-comparison' %} aria-current="page"{% endif %}>Models</a>
     <a href="/benchmark"{% if public_path == '/benchmark' %} aria-current="page"{% endif %}>Benchmark</a>
-    <a href="/consensus-engine"{% if public_path == '/consensus-engine' %} aria-current="page"{% endif %}>Consensus Engine</a>
     <a href="/about"{% if public_path == '/about' %} aria-current="page"{% endif %}>About</a>
     <a id="navCtaButton" href="{{ public_nav_cta_href | default('/app') }}"
        class="nav-cta lp-nav-cta"{% if public_nav_event %} data-umami-event="{{ public_nav_event }}"{% endif %}>{{ public_nav_cta_label | default('Open app') }}</a>

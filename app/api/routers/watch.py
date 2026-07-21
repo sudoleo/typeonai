@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from app.core import config as cfg
 from app.core.rate_limit import limiter
 from app.core.security import extract_id_token, is_user_pro, verify_user_token
 from app.api.routers.pages import SITE_URL
@@ -58,6 +59,7 @@ async def create_watch(request: Request, data: dict = Body(...)):
             is_pro=is_user_pro(uid),
             result_id=data.get("result_id"),
             share_id=data.get("share_id"),
+            question=data.get("question"),
         )
     except watch_service.WatchError as exc:
         _raise(exc)
@@ -72,7 +74,22 @@ async def create_watch(request: Request, data: dict = Body(...)):
 async def my_watches(request: Request):
     uid = _uid(request, {})
     try:
-        return {"status": "success", "watches": watch_service.list_watches(uid, include_history=True)}
+        watches = watch_service.list_watches(uid, include_history=True)
+        is_pro = is_user_pro(uid)
+        active_count = sum(1 for watch in watches if watch.get("status") == "active")
+        active_limit = cfg.get_watch_active_limit(is_pro)
+        return {
+            "status": "success",
+            "watches": watches,
+            "limits": {
+                "plan": "pro" if is_pro else "free",
+                "active_count": active_count,
+                "active_limit": active_limit,
+                "remaining": max(0, active_limit - active_count),
+                "paused_count": len(watches) - active_count,
+                "daily_available": is_pro,
+            },
+        }
     except Exception:
         logging.exception("my_watches failed")
         raise HTTPException(status_code=500, detail="Error loading watches")

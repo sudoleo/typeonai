@@ -1437,8 +1437,8 @@
           });
         }
 
-        window.clearResponseBoxes = function () {
-          trackAppEvent("app_responses_cleared");
+        window.clearResponseBoxes = function (options = {}) {
+          if (!options.silent) trackAppEvent("app_responses_cleared");
           const boxIds = [
             "openaiResponse",
             "mistralResponse",
@@ -1492,6 +1492,10 @@
             window.syncDemoChipState?.();
           }
           window.App.setAppTitle();
+          window.lastQuestion = "";
+          window.currentEvidenceSources = [];
+          window.consensusCitationMeta = null;
+          window.clearPreparedBookmarkShareResult?.();
 
           setAgentModeStatus("idle");
         }

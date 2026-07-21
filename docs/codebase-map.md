@@ -64,7 +64,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. |
 | `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` zum sicheren Wiederherstellen eines Share-/Watch-fähigen Pending-Snapshots aus einem eigenen Consensus-Bookmark. Beide Save-Endpunkte liefern den vollständig zusammengeführten Bookmark-Datensatz zurück, damit der Client ihn ohne Reload aktualisiert. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
-| `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. kompakter History je Watch), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
+| `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` ohne DeepSeek und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil und DeepSeek-Ausschluss. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 
 Der Scheduled Publisher läuft per GitHub Actions montags, mittwochs und freitags.
@@ -98,7 +98,10 @@ Alle öffentlichen HTML-Seiten teilen Navigation und Footer über
 ist seit 2026-07-17 demo-first: Ein klickbares Input-Feld (Look des /app-Inputs,
 "Try the demo"-Pill, Provider-Chips darunter) verlinkt auf `/app?demo=1`;
 `static/demo.js` erkennt den Parameter und startet die Demo automatisch in der
-echten App. Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
+echten App. Die Produktgeschichte führt danach über Ask/Run/Decide zum vierten
+Landing-Schritt `#watch`: Eine kompakte Baseline→Change→Telegram-Visualisierung
+erklärt Consensus Watch und verlinkt direkt auf `/app/watches`; derselbe Anker
+ist in der öffentlichen Navigation erreichbar. Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
 aus `partials/product_result_mockup.html`. Die gemeinsamen, an `/app`
 ausgerichteten Light-/Dark-Tokens liegen in `static/css/public-tokens.css` und
 werden von `landing.css` sowie `public-pages.css` importiert; seitenbezogene
@@ -182,16 +185,18 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   `window.App.consensusLifecycle.*`-Brücke (siehe §4/§8).
 - **`share-dialog.js`** — `window.openShareDialog`, Share-Liste und die gemeinsame
   `window.App.sharedModal.*`-Steuerung für den Share-/Watch-Dialog (einziger
-  innerer Scrollbereich, Background-Scroll-Lock, Escape/Focus-Restore).
+  innerer Scrollbereich, Background-Scroll-Lock, Escape/Focus-Restore). Der
+  normale Share-Dialog schließt weiterhin über den Backdrop; im Watch-Modus
+  verhindern unbeabsichtigte Außenklicks das Schließen.
 - **`consensus-actions.js`** — Copy/Citation/Share-Buttons am Consensus.
 - **`watch.js`** — `window.openWatchDialog` (Create-Dialog im Share-Modal) und
   `window.openWatchDashboard` (eigene Seite `/app/watches`: Vollbild-View
   `#watchDashboard` unter dem fixen View-Switch, Styles in
   `static/css/components-watch.css`; URL-Sync via pushState/popstate, Deep-Link
-  wartet auf den asynchronen Firebase-Auth-Status): Dashboard-KPIs für aktive
-  Monitore, Checks/Changes der letzten sieben Tage und nächsten Lauf, ein
+  wartet auf den asynchronen Firebase-Auth-Status): Bei vorhandenen Watches
+  Dashboard-KPIs für aktive Watches, Checks/Changes der letzten sieben Tage und nächsten Lauf, ein
   Recent-Movement-Feed, All/Changed/Stable/Paused-Filter sowie Karten je Watch mit
-  Driftstatus/-Summary, Direction Shift, Score/Delta/History-Sparkline und
+  Driftstatus/-Summary, Movement-Score, Score/Delta/History-Sparkline und
   Inline-Settings (Intervall/Uhrzeit/Alert-Regel/Condition, E-Mail-/Telegram-
   Kanäle, Pause/Delete). Telegram-Verbindungskarte mit Deep-Link/Test und
   Morning-Brief-Karte (`/api/my/watch-brief`, Toggle im selben
@@ -200,7 +205,10 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   den Brief beim Löschen der letzten Watch ab. `openWatchDialog("list")`
   leitet auf die Seite um; Einstieg zusätzlich über den login-gated,
   schwebenden View-Switch `#viewSwitch` (Consensus/Watches; `firebase.js`
-  blendet ihn ein/aus, `watch.js` synchronisiert URL und aktiven Zustand). Nach dem
+  blendet ihn ein/aus, `watch.js` synchronisiert URL und aktiven Zustand). Ein
+  kurzer, auf zwei Zyklen begrenzter Puls weist dort dezent auf Watches hin,
+  verschwindet beim ersten Öffnen lokal dauerhaft und respektiert
+  `prefers-reduced-motion`. Nach dem
   ersten erfolgreichen, speicherbaren Consensus zeigt `window.App.watch.*`
   einmalig einen dezenten Hinweis am Watch-Button; Schließen oder Öffnen des
   Features persistiert die Bestätigung in `localStorage`. Die
@@ -209,6 +217,23 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   (`run_weekday`) und können ihn im Dashboard nachträglich ändern.
   Der gemeinsame Notifications-Bereich ist ein einklappbares `<details>`-Panel;
   dessen lokaler Offen-/Zu-Zustand liegt in `consensus_watch_notifications_open`.
+  `window.App.watch.resetAfterLogout()` leert und schließt das bereits geladene
+  Dashboard beim Session-Ende.
+  Das Dashboard bietet zusätzlich einen professionell geführten Query-first-
+  Einstieg: Ohne Watch ersetzen ein dreistufiger Empty State und optionale
+  Beispielfragen die leeren KPI-/Notification-Flächen. Nach der Frage verwendet
+  der Dialog sichere Defaults (privat, wöchentlich mit dem morgigen Wochentag als
+  erstem Check, Material-Changes, E-Mail);
+  Telegram-Verbindung und Kanalauswahl bleiben als zentrale Konfiguration offen
+  sichtbar, während Zeitplan, Sichtbarkeit und erweiterte Alert-Regeln in einem
+  optionalen Details-Panel liegen. Dieser Pfad startet keinen
+  normalen App-Consensus; `POST /api/watch` akzeptiert dafür alternativ zu
+  `result_id`/`share_id` ein exklusives `question`-Feld. Dashboard und beide
+  Create-Schritte zeigen vor der Aktion kompakt den serverseitigen Plan, aktive
+  Watches/Limit und freie Plätze. Pausierte Watches werden ausdrücklich als
+  nicht limitrelevant erklärt; Free kommuniziert zusätzlich 5 aktive Watches
+  plus Daily als Pro-Unterschied. Am Limit wird die Create-Aktion vor dem Request
+  deaktiviert.
 - **`user-tier.js`** — Free/Pro-UI, Premium-Modellstatus (`updateUserTierUI`,
   `updatePremiumModelsState`) und Plan-Label im Sidebar-Account-Footer.
 - **`consensus-insights.js`** — strukturierte Auswertung: Claim-Badges,
@@ -222,7 +247,9 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   beendet über `window.exitHeroMode()` den zentrierten Input-Leerzustand.
 - **`app-init.js`** — das gesamte `initApp()`: Theme, Usage/Limits + User-Status,
   Response-Box-Toggles, Sidebar/Layout, Modals, Tooltips, Evidence-Rendering,
-  API-Key-Test. Läuft als letztes Script, ruft `initApp()` direkt auf.
+  API-Key-Test. `clearResponseBoxes({silent?})` entfernt außerdem den kompletten
+  fragebezogenen Share-/Citation-/Evidence-State. Läuft als letztes Script,
+  ruft `initApp()` direkt auf.
 
 **Nicht unter `static/js/`** (älter, eigene Verantwortung):
 - **`static/firebase.js`** (ES-Modul) — Firebase-Init, Login/Logout, Token-Handling,
@@ -233,6 +260,8 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Saves aktualisieren `window.bookmarksData` und das DOM direkt aus dem vom
   Server zurückgegebenen Merge-Ergebnis. Nach einer E-Mail-Registrierung zeigt
   das Auth-Modal einen eigenen Verifizierungs-Erfolgszustand statt eines Browser-Alerts.
+  Logout bricht laufende Query-/Consensus-Streams ab, leert den geladenen Run
+  samt Bookmark-/Share-Kontext und stellt den Hero-Ausgangszustand wieder her.
 - **`static/demo.js`** (ES-Modul) — Demo-Flow (`runDemoFlow`) für die „Demo"-Query;
   zeigt Gästen nach Abschluss der Demo am Eingabebereich eine Login-/Registrierungs-
   Aufforderung, ohne die Demo-Frage aus dem deaktivierten Feld zu entfernen, und
@@ -782,7 +811,10 @@ Wichtige Verträge im Backend:
   verändern den Share-Snapshot nicht. Neben Score/Change-Metadaten können sie
   eine kompakte `opinion_map` tragen: maximal vier aus der strukturierten
   Differences-Analyse abgeleitete Dimensionen, kurze Standpunkte,
-  Provider-Gruppen und einen 0–100 `shift_score`; niemals Rohantworten.
+  Provider-Gruppen und einen 0–100 `shift_score`; niemals Rohantworten. Ein
+  Stable-Urteil ergibt 0 Shift. Nicht zuverlässig gematchte, neu formulierte
+  Dimensionen bleiben unbewertet statt automatisch 100/100; bestehende History
+  wird beim Lesen sequenziell gegen den realen Vorgänger neu bewertet.
 - `watch_runtime` — globaler Worker-Lease und datumsgebundener Tageszähler;
   verhindert parallele Scheduler-Worker und begrenzt Watch-Versuche restartfest.
 - `watch_briefs/{uid}` — user-level Morning-Brief-Einstellungen (`enabled`,
@@ -948,12 +980,12 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **672 passed** (2026-07-21; inklusive der neuen
+  Letzte bekannte Baseline: **691 passed** (2026-07-21; inklusive der neuen
   Search-Console-/SEO-Dossier-, Query-, Recommendation-, LLM-Schema-,
   Weekly-Portfolio-Review-, Action-, Publisher-Lineage-/Watch-Capacity-,
   Idempotenz- und Admin-Schutztests sowie
   run-basierter Usage-, Consensus-API-Publishing-/Scope-/Vertrags- sowie
-  Scheduled-Publisher- sowie versionierten Watch-/Drift-Tests).
+  Scheduled-Publisher-, Query-first-Watch- sowie versionierten Watch-/Drift-Tests).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, kompakte Antwort→Consensus-
@@ -1064,7 +1096,9 @@ Die öffentliche Watch-History rendert zusätzlich eine **Position Map**: statt
 einer universellen Ja/Nein-Achse zeigt sie frage-spezifische Standpunkt-
 Dimensionen, Provider-Bewegungen über die Läufe und den gemeinsamen
 **Direction Shift**. Die Berechnung ist deterministisch aus dem ohnehin
-vorhandenen Differences-JSON und verursacht keinen zusätzlichen LLM-Call.
+vorhandenen Differences-JSON plus dem Change-Judge-Ergebnis und verursacht
+keinen zusätzlichen LLM-Call. Stable-Läufe werden mit 0 gewertet; bei nicht
+vergleichbaren Dimensionssätzen zeigt die UI keinen erfundenen Voll-Shift.
 **Morning Brief**: opt-in tägliche Digest-Mail pro Nutzer (nicht pro Watch),
 konfiguriert im Watch-Dashboard (`/api/my/watch-brief`), gespeichert in
 `watch_briefs/{uid}`; Aktivierung setzt mindestens eine vorhandene Watch voraus.
@@ -1082,6 +1116,13 @@ sofort aufgeweckt werden; der HTTP-Request wartet nicht auf die Modellaufrufe.
 Der manuelle Lauf verbraucht reale Modellaufrufe, schreibt reguläre History, rückt den Zeitplan vor
 und wendet unverändert die konfigurierte Mailregel an. Der unabhängige SMTP-Test führt
 keinen Watch-Lauf aus und ändert keinen Zeitplan.
+Query-first-Watches legen beim Erstellen nur eine nicht indexierte Share-Hülle
+mit Frage und `awaiting_first_watch_run=true` an. Der erste planmäßige Watch-Lauf
+gilt ausdrücklich als Baseline (kein Changes-only-Alert durch den vorher leeren
+Text), schreibt zugleich die erste immutable History-Version und füllt die
+Share-Baseline. Condition- und Every-run-Regeln dürfen beim ersten Lauf bereits
+auslösen; vor diesem Lauf zeigt die Watch-Seite transparent den ausstehenden
+ersten Check statt eines leeren Consensus-Panels.
 
 ---
 
@@ -1121,7 +1162,8 @@ keinen Watch-Lauf aus und ändert keinen Zeitplan.
   rendern alte Läufe in neue.
 - **`window.App.watch.showFeatureNudge()`** wird nach einem erfolgreichen
   Consensus-Final aufgerufen und zeigt den einmaligen, lokal dismissbaren
-  Consensus-Watch-Hinweis nur für eingeloggte Nutzer mit `result_id`.
+  Consensus-Watch-Hinweis nur für eingeloggte Nutzer mit `result_id`;
+  `.resetAfterLogout()` leert und schließt die geladene Watch-Ansicht.
 - **`window.App.sharedModal.open(mode)` / `.close()`** koordinieren den gemeinsam
   genutzten `#shareModal` für Share und Watch einschließlich Modusklasse,
   Background-Scroll-Lock und Rückgabe des Fokus an den Auslöser.

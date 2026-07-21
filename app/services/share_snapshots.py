@@ -888,6 +888,44 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
     }
 
 
+def create_share_for_watch_query(uid, question, *, visibility="private", db=None):
+    """Create the empty, non-indexed page behind a query-first Watch.
+
+    Unlike a regular Share this document has no generated answer yet.  The
+    first scheduled Watch run atomically promotes its result to the immutable
+    baseline and clears ``awaiting_first_watch_run``.
+    """
+    db = db if db is not None else db_firestore
+    visibility = validate_share_visibility(visibility)
+    question = _clip(question, MAX_QUESTION_CHARS)
+    if not question:
+        raise ShareError("bad_request", "Enter a question for this watch.")
+
+    share_id = generate_share_id()
+    payload = {
+        "question": question,
+        "consensus_md": "",
+        "differences_data": {},
+        "differences_text": "",
+        "sources": [],
+        "included_models": [],
+        "consensus_model": "",
+        "answered_at": "",
+    }
+    share_doc = _build_share_document(uid, payload, visibility=visibility)
+    share_doc.update({
+        "watch_query_only": True,
+        "awaiting_first_watch_run": True,
+    })
+    db.collection(SHARES_COLLECTION).document(share_id).set(share_doc)
+    return {
+        "share_id": share_id,
+        "slug": share_doc["slug"],
+        "created": True,
+        "visibility": visibility,
+    }
+
+
 def revoke_share(share_id, uid, is_admin=False, db=None):
     db = db if db is not None else db_firestore
     data = get_share(share_id, db=db)
@@ -1469,6 +1507,16 @@ def list_watch_history(share_id, db=None, max_items=100):
             "opinion_map": opinion_map.sanitize_opinion_map(data.get("opinion_map")),
         })
     points.sort(key=lambda item: item["ts"])
+    previous_map = None
+    for point in points:
+        current_map = opinion_map.recalculate_opinion_map(
+            point.get("opinion_map"),
+            previous_map,
+            consensus_changed=bool(point.get("changed")),
+        )
+        point["opinion_map"] = current_map
+        if current_map:
+            previous_map = current_map
     return points
 
 

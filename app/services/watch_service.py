@@ -30,6 +30,7 @@ WATCH_WEEKDAYS = (
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
 )
 WATCH_CONDITION_MAX_CHARS = 500
+WATCH_QUESTION_MIN_CHARS = 8
 WATCH_RUN_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 UNSUBSCRIBE_MAX_AGE_DAYS = 90
 WATCH_LEASE_MINUTES = 15
@@ -222,6 +223,11 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         "last_change_summary": str(data.get("last_change_summary") or "")[:400],
         "last_drift_score": data.get("last_drift_score"),
         "last_event_type": str(data.get("last_event_type") or ""),
+        "query_first": data.get("query_first") is True,
+        "awaiting_first_run": bool(
+            share.get("awaiting_first_watch_run")
+            and not data.get("last_successful_run_id")
+        ),
         "created_at": iso(data.get("created_at")),
     }
 
@@ -251,7 +257,7 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
                  condition="", visibility="public", run_time="", timezone_name="",
                  run_weekday="",
                  result_id=None,
-                 share_id=None, model_tier="", return_existing=False,
+                 share_id=None, question=None, model_tier="", return_existing=False,
                  bypass_active_limit=False, excluded_providers=None, db=None) -> dict:
     db = db if db is not None else db_firestore
     interval = validate_interval(interval, is_pro)
@@ -276,8 +282,38 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
     })
     if any(provider not in WATCH_INTERNAL_EXCLUDED_PROVIDERS for provider in normalized_excluded):
         raise WatchError("invalid_provider", "Unsupported Watch provider exclusion.")
-    if bool(result_id) == bool(share_id):
-        raise WatchError("invalid_request", "Provide exactly one of result_id or share_id.")
+    if question is not None and not isinstance(question, str):
+        raise WatchError("invalid_question", "Question must be text.")
+    sources = [bool(result_id), bool(share_id), bool(str(question or "").strip())]
+    if sum(sources) != 1:
+        raise WatchError(
+            "invalid_request",
+            "Provide exactly one of result_id, share_id, or question.",
+        )
+    created_query_share = False
+    if question:
+        normalized_question = " ".join(str(question).split()).strip()
+        if len(normalized_question) < WATCH_QUESTION_MIN_CHARS:
+            raise WatchError("invalid_question", "Enter a complete question for this watch.")
+        if len(normalized_question) > share_snapshots.MAX_QUESTION_CHARS:
+            raise WatchError(
+                "invalid_question",
+                f"Question must be at most {share_snapshots.MAX_QUESTION_CHARS} characters.",
+            )
+        question_hash = share_snapshots.question_hash(normalized_question)
+        for existing in _where_equal(db.collection(WATCHES_COLLECTION), "owner_uid", uid).stream():
+            if (existing.to_dict() or {}).get("question_hash") == question_hash:
+                raise WatchError("already_exists", "This question is already watched.")
+        if not bypass_active_limit:
+            _check_active_limit(uid, is_pro, db)
+        try:
+            created = share_snapshots.create_share_for_watch_query(
+                uid, normalized_question, db=db, visibility=visibility,
+            )
+        except share_snapshots.ShareError as exc:
+            raise WatchError(exc.code, exc.message) from exc
+        share_id = created["share_id"]
+        created_query_share = True
     if result_id:
         try:
             created = share_snapshots.create_share_from_pending(
@@ -316,7 +352,7 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
                         existing_data.update(managed_updates)
                 return _serialize_watch(existing.id, existing_data, share)
             raise WatchError("already_exists", "This consensus is already watched.")
-    if not bypass_active_limit:
+    if not bypass_active_limit and not created_query_share:
         _check_active_limit(uid, is_pro, db)
 
     watch_id = _watch_id()
@@ -358,6 +394,7 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
         "last_change_summary": "",
         "last_drift_score": None,
         "last_event_type": "",
+        "query_first": created_query_share,
     }
     db.collection(WATCHES_COLLECTION).document(watch_id).set(doc)
     return _serialize_watch(watch_id, doc, share)
@@ -402,6 +439,9 @@ def list_watches(uid: str, db=None, include_history=False) -> list[dict]:
             except Exception:
                 points = []
             item["history"] = serialize_history_points(points)
+            if item["history"]:
+                latest_map = item["history"][-1].get("opinion_map") or {}
+                item["last_drift_score"] = latest_map.get("shift_score")
         items.append(item)
     items.sort(key=lambda item: item["created_at"], reverse=True)
     return items
@@ -670,8 +710,17 @@ def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) 
 
 def delete_watch(uid: str, watch_id: str, db=None):
     db = db if db is not None else db_firestore
-    ref, _ = _owned_watch(uid, watch_id, db)
+    ref, data = _owned_watch(uid, watch_id, db)
     ref.delete()
+    if data.get("query_first") and not data.get("last_successful_run_id"):
+        share_id = str(data.get("share_id") or "")
+        share = share_snapshots.get_share(share_id, db=db) or {}
+        if share.get("awaiting_first_watch_run"):
+            db.collection(share_snapshots.SHARES_COLLECTION).document(share_id).update({
+                "status": "revoked",
+                "indexed": False,
+            })
+            share_snapshots.invalidate_share_cache(share_id)
 
 
 def pause_watch(uid: str, watch_id: str, db=None) -> dict:
@@ -944,6 +993,24 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
         "last_watch_run_at": now,
         "latest_watch_run_id": str(claimed["current_run_id"]),
     }
+    if claimed.get("initial_watch_run"):
+        # A query-first Watch has no manual Consensus snapshot.  Its first
+        # scheduled result becomes the immutable baseline used by all later
+        # comparisons and keeps the page useful if the Watch is deleted.
+        share_updates.update({
+            "consensus_md": history["consensus_md"],
+            "differences_data": history["differences_data"],
+            "differences_text": history["differences_text"],
+            "sources": history["sources"],
+            "included_models": history["included_models"],
+            "consensus_model": history["consensus_model"],
+            "answered_at": now.isoformat(),
+            "awaiting_first_watch_run": False,
+            "index_eligible": share_snapshots.compute_index_eligible(
+                claimed.get("question") or "",
+                history["consensus_md"], history["sources"], history["included_models"],
+            ),
+        })
     # History + Scheduler-Fortschritt atomar: ein Restart kann nie einen
     # sichtbaren Punkt ohne vorgeruecktes next_run_at hinterlassen.
     if hasattr(db, "batch"):

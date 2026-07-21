@@ -48,6 +48,7 @@ function closeLogoutConfirm() {
 async function performLogout() {
   trackAppEvent("auth_logout_click");
   closeLogoutConfirm();
+  resetLoadedRunAfterLogout();
   try {
     await fetch("/auth/session", { method: "DELETE" });
   } catch (_) {
@@ -65,6 +66,21 @@ function openLogoutConfirm() {
   }
   modal.style.display = "block";
   document.getElementById("logoutCancelBtn")?.focus();
+}
+
+function resetLoadedRunAfterLogout() {
+  // A response belongs to the authenticated session that loaded it. Abort
+  // active streams first so a late SSE event cannot render it again after the
+  // DOM and share/bookmark context have been cleared.
+  window.cancelCurrentQuery?.();
+  window.cancelCurrentConsensus?.();
+  window.clearResponseBoxes?.({ silent: true });
+  window.clearPreparedBookmarkShareResult?.();
+  window.currentEvidenceSources = [];
+  window.consensusCitationMeta = null;
+  window.App?.watch?.resetAfterLogout?.();
+  document.body.classList.add("is-hero");
+  window.syncHeroResponseAccess?.();
 }
 
 (function initLogoutConfirmModal() {
@@ -372,6 +388,7 @@ onIdTokenChanged(auth, async (user) => {
 
     } else {
         // Cleanup bei Logout
+        resetLoadedRunAfterLogout();
         window.clearPreparedBookmarkShareResult?.();
         fetch("/auth/session", { method: "DELETE" }).catch(() => {});
         localStorage.removeItem("id_token");

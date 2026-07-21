@@ -318,6 +318,60 @@ class WatchCrudTests(unittest.TestCase):
         create_share.assert_called_once_with("u1", "R" * 16, db=self.db, visibility="public")
         self.assertEqual(created["share_id"], self.share_id)
 
+    def test_query_first_watch_creates_an_empty_scheduled_baseline(self):
+        created = watch_service.create_watch(
+            "u1",
+            question="Has the EU AI Act guidance changed?",
+            interval="weekly",
+            visibility="private",
+            run_weekday="wednesday",
+            run_time="09:00",
+            timezone_name="Europe/Berlin",
+            is_pro=False,
+            db=self.db,
+        )
+        seeded_share = self.db.stores["shares"][created["share_id"]]
+        self.assertTrue(created["query_first"])
+        self.assertTrue(created["awaiting_first_run"])
+        self.assertEqual(created["question"], "Has the EU AI Act guidance changed?")
+        self.assertEqual(created["visibility"], "private")
+        self.assertEqual(seeded_share["consensus_md"], "")
+        self.assertTrue(seeded_share["awaiting_first_watch_run"])
+        self.assertFalse(seeded_share["indexed"])
+
+    def test_query_first_watch_rejects_duplicate_question(self):
+        kwargs = {
+            "question": "Has the EU AI Act guidance changed?",
+            "interval": "weekly",
+            "is_pro": True,
+            "db": self.db,
+        }
+        watch_service.create_watch("u1", **kwargs)
+        with self.assertRaisesRegex(WatchError, "already watched"):
+            watch_service.create_watch("u1", **kwargs)
+
+    def test_query_first_watch_requires_a_complete_text_question(self):
+        with self.assertRaisesRegex(WatchError, "complete question"):
+            watch_service.create_watch(
+                "u1", question="Why?", interval="weekly", is_pro=False, db=self.db,
+            )
+        with self.assertRaisesRegex(WatchError, "must be text"):
+            watch_service.create_watch(
+                "u1", question={"prompt": "invalid"}, interval="weekly",
+                is_pro=False, db=self.db,
+            )
+
+    def test_deleting_query_first_watch_revokes_its_empty_page(self):
+        created = watch_service.create_watch(
+            "u1", question="Has the guidance changed?", interval="weekly",
+            is_pro=False, db=self.db,
+        )
+        with patch.object(watch_service.share_snapshots, "invalidate_share_cache"):
+            watch_service.delete_watch("u1", created["id"], db=self.db)
+        self.assertEqual(
+            self.db.stores["shares"][created["share_id"]]["status"], "revoked",
+        )
+
     def test_private_watch_keeps_visibility_private(self):
         private_id = "P" * 16
         self.db.stores["shares"][private_id] = {**share(slug="private"), "visibility": "private"}
@@ -567,6 +621,35 @@ class SchedulerSafetyTests(unittest.TestCase):
         self.assertTrue(result["baseline_changed"])
         self.assertEqual(result["baseline_summary"], "Moved since tracking began.")
 
+    def test_query_first_pipeline_establishes_baseline_without_change_alert(self):
+        with patch.dict(os.environ, {"MOCK_LLM": "1"}), \
+                patch.object(watch_scheduler, "query_consensus_change") as compare:
+            result = watch_scheduler.execute_watch(
+                "Has the EU AI Act guidance changed?", "",
+            )
+        compare.assert_not_called()
+        self.assertFalse(result["changed"])
+        self.assertEqual(result["change_summary"], "First consensus established.")
+
+    def test_query_first_condition_is_evaluated_against_first_consensus(self):
+        condition_result = {
+            "changed": False,
+            "severity": "minor",
+            "change_summary": "",
+            "condition_status": "met",
+            "condition_reason": "An official date is present.",
+        }
+        with patch.dict(os.environ, {"MOCK_LLM": "1"}), \
+                patch.object(
+                    watch_scheduler, "query_consensus_change", return_value=condition_result,
+                ) as compare:
+            result = watch_scheduler.execute_watch(
+                "Has a date been announced?", "", condition="An official date is announced",
+            )
+        self.assertEqual(compare.call_count, 1)
+        self.assertEqual(compare.call_args.args[0], compare.call_args.args[1])
+        self.assertEqual(result["condition_status"], "met")
+
     def test_complete_run_persists_full_version_and_simple_event_type(self):
         db = MagicMock()
         share_ref = MagicMock()
@@ -606,6 +689,45 @@ class SchedulerSafetyTests(unittest.TestCase):
         batch.set.assert_called_once_with(history_ref, history)
         share_updates = batch.update.call_args_list[1].args[1]
         self.assertEqual(share_updates["latest_watch_run_id"], "run12345678")
+
+    def test_first_query_watch_run_promotes_result_to_share_baseline(self):
+        db = MagicMock()
+        share_ref = MagicMock()
+        history_ref = MagicMock()
+        watch_ref = MagicMock()
+        share_ref.collection.return_value.document.return_value = history_ref
+        db.collection.side_effect = lambda name: (
+            MagicMock(document=MagicMock(return_value=share_ref))
+            if name == "shares"
+            else MagicMock(document=MagicMock(return_value=watch_ref))
+        )
+        claimed = {
+            "share_id": "A" * 16,
+            "current_run_id": "run12345678",
+            "interval": "weekly",
+            "question": "Has guidance changed?",
+            "initial_watch_run": True,
+        }
+        result = {
+            "consensus": "The first scheduled consensus.",
+            "agreement_score": 76,
+            "changed": False,
+            "severity": "minor",
+            "change_summary": "First consensus established.",
+            "differences_data": {"agreement": {"score": 76}},
+            "sources": [],
+            "included_models": ["OpenAI", "Google Gemini"],
+            "consensus_model": "OpenAI",
+        }
+        with patch.object(watch_service.share_snapshots, "invalidate_share_cache"):
+            watch_service.complete_watch_run(
+                "w1", claimed, result,
+                now=datetime(2026, 7, 21, tzinfo=timezone.utc), db=db,
+            )
+        share_updates = db.batch.return_value.update.call_args_list[1].args[1]
+        self.assertEqual(share_updates["consensus_md"], "The first scheduled consensus.")
+        self.assertFalse(share_updates["awaiting_first_watch_run"])
+        self.assertEqual(share_updates["answered_at"], "2026-07-21T00:00:00+00:00")
 
     def test_watch_uses_all_configured_models_for_the_selected_tier(self):
         configured = {
@@ -744,6 +866,51 @@ class OpinionMapTests(unittest.TestCase):
         self.assertGreater(current["shift_score"], 0)
         openai = next(item for item in current["models"] if item["provider"] == "OpenAI")
         self.assertTrue(openai["moved"])
+
+    def test_stable_judge_prevents_synthetic_full_shift(self):
+        baseline = opinion_map.build_opinion_map(self._differences())
+        current = opinion_map.build_opinion_map(
+            self._differences(
+                openai_stance="Recommend adoption now",
+                openai_with="Anthropic",
+            ),
+            baseline,
+            consensus_changed=False,
+        )
+        self.assertEqual(current["shift_score"], 0)
+        self.assertEqual(current["shift_label"], "Stable")
+        self.assertTrue(all(not item["moved"] for item in current["models"]))
+
+    def test_reframed_dimensions_are_unscored_instead_of_full_shift(self):
+        baseline = opinion_map.build_opinion_map(self._differences())
+        reframed = {
+            "differences": [{
+                "claim": "A completely different generated heading",
+                "type": "contradiction",
+                "positions": [
+                    {"stance": "Proceed", "models": ["OpenAI", "Gemini"]},
+                    {"stance": "Wait", "models": ["Anthropic"]},
+                ],
+            }],
+        }
+        current = opinion_map.build_opinion_map(
+            reframed, baseline, consensus_changed=True,
+        )
+        self.assertIsNone(current["shift_score"])
+        self.assertEqual(current["shift_label"], "Not comparable")
+
+    def test_legacy_full_shift_is_recalculated_against_predecessor(self):
+        baseline = opinion_map.build_opinion_map(self._differences())
+        legacy = opinion_map.build_opinion_map(
+            self._differences(openai_stance="Recommend adoption now"), baseline,
+        )
+        legacy["shift_score"] = 100
+        legacy["shift_label"] = "Turning"
+        corrected = opinion_map.recalculate_opinion_map(
+            legacy, baseline, consensus_changed=False,
+        )
+        self.assertEqual(corrected["shift_score"], 0)
+        self.assertEqual(corrected["shift_label"], "Stable")
 
     def test_map_is_compact_and_contains_no_raw_answers(self):
         result = opinion_map.build_opinion_map(self._differences())
@@ -1087,6 +1254,53 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn('id="watchTelegramEnabled"', source)
         self.assertIn('"/api/my/telegram/link"', source)
         self.assertIn('"telegram_enabled"', source)
+
+    def test_watch_dashboard_supports_query_first_creation(self):
+        source = Path("static/js/watch.js").read_text(encoding="utf-8")
+        html_source = Path("templates/index.html").read_text(encoding="utf-8")
+        share_source = Path("templates/share.html").read_text(encoding="utf-8")
+        self.assertIn('renderQuestionStep(options?.question)', source)
+        self.assertIn('payload.question = directQuestion', source)
+        self.assertIn('No model run starts until the Watch reaches its scheduled check.', source)
+        self.assertIn('id="watchDashCreate"', html_source)
+        self.assertIn("watch_awaiting_first_run", share_source)
+
+    def test_watch_empty_state_and_mobile_create_button_alignment(self):
+        source = Path("static/js/watch.js").read_text(encoding="utf-8")
+        css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
+        self.assertIn('<strong>Keep changing answers current.</strong>', source)
+        self.assertIn('"watch-example-chip"', source)
+        self.assertIn(".watch-empty-actions", css)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", css)
+        self.assertIn(".watch-dash-heading-row .watch-limit-summary", css)
+
+    def test_watch_setup_keeps_telegram_primary_and_hides_advanced_defaults(self):
+        source = Path("static/js/watch.js").read_text(encoding="utf-8")
+        self.assertLess(source.index('id="watchTelegramEnabled"'), source.index('id="watchAdvancedSettings"'))
+        self.assertIn('<option value="private" selected>', source)
+        self.assertIn('class="watch-advanced-settings"', source)
+        self.assertIn('Ready with smart defaults', source)
+        self.assertIn('/100 movement', source)
+        self.assertIn('weekdayOptions(browserTomorrowWeekday())', source)
+
+    def test_watch_dialog_ignores_backdrop_click_and_view_switch_hint_is_finite(self):
+        watch_source = Path("static/js/watch.js").read_text(encoding="utf-8")
+        share_source = Path("static/js/share-dialog.js").read_text(encoding="utf-8")
+        css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
+
+        self.assertIn('!modal.classList.contains("is-watch-dialog")', share_source)
+        self.assertIn('consensio.watchViewSwitchHint.seen.v1', watch_source)
+        self.assertIn('animation: watchSwitchPulse 1.8s ease-out 2', css)
+        self.assertIn('prefers-reduced-motion: reduce', css)
+
+    def test_watch_limits_are_visible_before_creation_and_on_dashboard(self):
+        source = Path("static/js/watch.js").read_text(encoding="utf-8")
+        html_source = Path("templates/index.html").read_text(encoding="utf-8")
+        self.assertIn('id="watchDashLimit"', html_source)
+        self.assertIn('id="watchDialogLimit"', source)
+        self.assertIn("Paused Watches do not count.", source)
+        self.assertIn("Pro includes 5 active Watches and daily checks.", source)
+        self.assertIn('action.textContent = "Watch limit reached"', source)
 
     def test_watch_modal_has_one_scroll_area_and_locks_background(self):
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
@@ -1490,6 +1704,49 @@ class WatchRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["watch"]["run_weekday"], "friday")
         self.assertEqual(create.call_args.kwargs["run_weekday"], "friday")
+
+    def test_create_forwards_query_without_result_id(self):
+        created = {"id": "w1", "query_first": True}
+        with (
+            patch.object(watch_router, "extract_id_token", return_value="tok"),
+            patch.object(watch_router, "verify_user_token", return_value="u1"),
+            patch.object(watch_router, "is_user_pro", return_value=False),
+            patch.object(watch_router.watch_service, "create_watch", return_value=created) as create,
+        ):
+            response = self.client.post("/api/watch", json={
+                "question": "Has the EU AI Act guidance changed?",
+                "interval": "weekly",
+                "visibility": "private",
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            create.call_args.kwargs["question"],
+            "Has the EU AI Act guidance changed?",
+        )
+        self.assertIsNone(create.call_args.kwargs["result_id"])
+
+    def test_my_watches_exposes_authoritative_active_limit(self):
+        watches = [
+            {"id": "w1", "status": "active"},
+            {"id": "w2", "status": "paused"},
+        ]
+        with (
+            patch.object(watch_router, "extract_id_token", return_value="tok"),
+            patch.object(watch_router, "verify_user_token", return_value="u1"),
+            patch.object(watch_router, "is_user_pro", return_value=False),
+            patch.object(watch_router.watch_service, "list_watches", return_value=watches),
+            patch.object(watch_router.cfg, "get_watch_active_limit", return_value=1),
+        ):
+            response = self.client.get("/api/my/watches")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["limits"], {
+            "plan": "free",
+            "active_count": 1,
+            "active_limit": 1,
+            "remaining": 0,
+            "paused_count": 1,
+            "daily_available": False,
+        })
 
     def test_telegram_must_be_connected_before_enabling_watch_channel(self):
         with (

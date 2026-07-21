@@ -1168,6 +1168,24 @@ a:hover {
   -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.52)) saturate(1.12);
 }
 
+.watch-awaiting-first {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: clamp(22px, 4vw, 32px);
+}
+.watch-awaiting-first h2 { margin: 2px 0 7px; }
+.watch-awaiting-first p:last-child { margin: 0; color: var(--muted); }
+.watch-awaiting-icon {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  margin-top: 10px;
+  border: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+}
+
 .info-card,
 .model-card {
   transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;

@@ -116,7 +116,7 @@ def _build_watch_history_view(points):
     }
 
 
-def _build_watch_drift_view(history_points, selected_run_id=""):
+def _build_watch_drift_view(history_points, selected_run_id="", query_first=False):
     """Human-readable drift state for the current or selected Watch version."""
     if selected_run_id == "original":
         return {
@@ -143,6 +143,17 @@ def _build_watch_drift_view(history_points, selected_run_id=""):
                 index = candidate
                 break
     point = history_points[index]
+    if query_first and index == 0:
+        return {
+            "trigger": "stable",
+            "label": "Baseline established",
+            "summary": "The first scheduled consensus is ready.",
+            "score_delta": None,
+            "direction_shift": (point.get("opinion_map") or {}).get("shift_score"),
+            "baseline_summary": "",
+            "baseline_changed": False,
+            "checked_at": point.get("ts"),
+        }
     previous_score = history_points[index - 1]["agreement_score"] if index else None
     score = point.get("agreement_score")
     score_delta = (
@@ -632,6 +643,9 @@ async def share_page(request: Request, slug_id: str):
     display_data = {**data, **selected_version} if selected_version else data
     payload = snapshots.public_share_payload(display_data)
     consensus_html = render_public_markdown(payload["consensus_md"], payload["sources"])
+    watch_awaiting_first_run = bool(
+        watch_page and data.get("awaiting_first_watch_run") and not selected_version
+    )
 
     # Indexierung: nur wenn der Admin "indexed" gesetzt hat (nie automatisch).
     is_indexed = bool(data.get("indexed")) and not is_private
@@ -711,6 +725,7 @@ async def share_page(request: Request, slug_id: str):
     watch_drift = _build_watch_drift_view(
         history_points,
         selected_run_id,
+        query_first=bool(data.get("watch_query_only")),
     ) if watch_page else None
     watch_versions = _build_watch_versions_view(
         history_points, selected_run_id, latest_run_id, page_path,
@@ -769,7 +784,11 @@ async def share_page(request: Request, slug_id: str):
         )
         meta_description = prefix + excerpt
     else:
-        meta_description = markdown_to_plaintext(payload["consensus_md"], limit=160)
+        meta_description = (
+            f"Scheduled Consensus Watch for: {payload['question']}"[:160]
+            if watch_awaiting_first_run
+            else markdown_to_plaintext(payload["consensus_md"], limit=160)
+        )
 
     # Generierte OG-Karte (Scoreboard als Bild) statt Favicon, wenn möglich.
     og_is_card = og_image.is_available() and not is_private
@@ -813,11 +832,15 @@ async def share_page(request: Request, slug_id: str):
         "model_count": model_count,
         "contradiction_count": contradiction_count,
         "scoreboard": scoreboard,
-        "can_follow": bool(not is_private and watch_page and watch_page["is_active"]),
+        "can_follow": bool(
+            not is_private and watch_page and watch_page["is_active"]
+            and not watch_awaiting_first_run
+        ),
         "sources": sources_view,
         "related_shares": related_shares,
         "watch_history": watch_history,
         "watch_page": watch_page,
+        "watch_awaiting_first_run": watch_awaiting_first_run,
         "watch_drift": watch_drift,
         "watch_versions": watch_versions,
         "watch_selected_version": {

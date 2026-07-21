@@ -155,15 +155,38 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
         raise RuntimeError("Differences Judge failed.")
     agreement = compute_agreement_score(differences)
     differences["agreement"] = agreement
-    position_map = opinion_map.build_opinion_map(differences, previous_opinion_map)
-    change = query_consensus_change(
-        previous_consensus, consensus, keys, engine, condition=condition,
-    )
+    if str(previous_consensus or "").strip():
+        change = query_consensus_change(
+            previous_consensus, consensus, keys, engine, condition=condition,
+        )
+    else:
+        # A query-first Watch intentionally has no manual Consensus baseline.
+        # Its first scheduled result establishes that baseline and must not be
+        # reported as a material change merely because the old text was empty.
+        change = {
+            "changed": False,
+            "severity": "minor",
+            "change_summary": "First consensus established.",
+        }
+        if condition:
+            condition_result = query_consensus_change(
+                consensus, consensus, keys, engine, condition=condition,
+            )
+            change.update({
+                key: condition_result[key]
+                for key in ("condition_status", "condition_reason")
+                if key in condition_result
+            })
     baseline = str(baseline_consensus or previous_consensus or "")
     if baseline.strip() and baseline.strip() != str(previous_consensus or "").strip():
         baseline_change = query_consensus_change(baseline, consensus, keys, engine)
     else:
         baseline_change = change
+    position_map = opinion_map.build_opinion_map(
+        differences,
+        previous_opinion_map,
+        consensus_changed=bool(change.get("changed")),
+    )
     included_providers = [PROVIDER_LABELS[provider] for provider in answers]
     model_labels = {
         PROVIDER_LABELS[provider]: model for provider, model in selected_models
@@ -360,6 +383,10 @@ async def run_watch_tick() -> int:
                     raise RuntimeError("Watch share is unavailable.")
                 claimed["question"] = share.get("question") or ""
                 claimed["share_slug"] = share.get("slug") or ""
+                claimed["initial_watch_run"] = bool(
+                    share.get("awaiting_first_watch_run")
+                    and not claimed.get("last_successful_run_id")
+                )
                 account_is_pro = await asyncio.to_thread(
                     security.is_user_pro, claimed["owner_uid"]
                 )
