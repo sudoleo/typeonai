@@ -391,10 +391,15 @@
         const closeProBtn = document.getElementById("closeProModal");
         const keepFreeBtn = document.getElementById("keepFreeBtn");
         const upgradeBtn = document.getElementById("smokeTestUpgradeBtn");
+        const proRequestStatus = document.getElementById("proRequestStatus");
 
         // Funktion zum Schließen des Modals
         function closeProModal() {
           proModal.style.display = "none";
+          if (proRequestStatus && !proRequestStatus.classList.contains("is-success")) {
+            proRequestStatus.textContent = "";
+            proRequestStatus.className = "pro-request-status";
+          }
         }
 
         // Event Listener für Schließen-Buttons
@@ -406,13 +411,14 @@
         // Aufrufer sonst auf ein Popup ausweichen können. Der Untertitel
         // passt sich dem geklickten Feature an (Fallback: generischer Text).
         const PRO_FEATURE_DESCRIPTIONS = {
-          "Deep Think": "Complex reasoning requires advanced compute power. Upgrade to access the smartest AI models.",
+          "Deep Think": "Request Pro beta access to advanced reasoning models.",
           "High Quality mode": "Use a premium model set across all six answers and the final consensus synthesis.",
           "Resolve": "Let the disagreeing models confront each other's position and see whether they revise or hold their ground.",
           "Follow-up questions": "Keep the conversation going. Your previous question and its consensus answer travel along as context.",
         };
-        const PRO_FEATURE_DESCRIPTION_FALLBACK = "Upgrade to unlock the full consens.io toolkit, including the smartest AI models.";
+        const PRO_FEATURE_DESCRIPTION_FALLBACK = "Request access to the Pro beta. There is no checkout or active billing.";
         window.App.showProFeatureModal = function (featureName) {
+          if (window.isUserPro) return false;
           const nameEl = document.getElementById("proModalFeatureName");
           if (nameEl && featureName) nameEl.textContent = featureName;
           const descEl = document.getElementById("proModalDescription");
@@ -421,6 +427,7 @@
           }
           if (!proModal) return false;
           proModal.style.display = "block";
+          trackAppEvent("app_pro_beta_opened", { feature: featureName || "general" });
           return true;
         };
 
@@ -434,42 +441,41 @@
         // smoke test
         if (upgradeBtn) {
           upgradeBtn.addEventListener("click", async (event) => {
-            // 1. Verhindert, dass die Seite neu lädt
             event.preventDefault();
-
-
-            // Zugriff über window.auth ist sicherer
             const currentUser = window.auth ? window.auth.currentUser : null;
-
-            // --- ÄNDERUNG: Prüfung ZUERST durchführen ---
-            if (currentUser) {
-              // A) USER IST EINGELOGGT
-              trackAppEvent("app_pro_interest_click", { logged_in: true });
-
-              // UI Feedback (Erfolg)
-              alert("Thanks for your support! We are still early in development and hard at work building this feature. We've noted your interest to help us prioritize it!");
-              closeProModal();
-
-              try {
-                const id_token = await currentUser.getIdToken(false);
-
-                await fetch("/track-interest", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    id_token: id_token,
-                    source: "smoke_test_modal"
-                  })
-                });
-
-                localStorage.setItem("proInterestShown", "true");
-
-              } catch (err) {
-                console.error("Tracking failed:", err);
-              }
-            } else {
-              trackAppEvent("app_pro_interest_click", { logged_in: false });
-              alert("Please log in to register your interest. We can only track your request if you are signed into your account.");
+            if (!proRequestStatus) return;
+            if (!currentUser) {
+              proRequestStatus.textContent = "Log in first, then reopen this dialog to request access.";
+              proRequestStatus.className = "pro-request-status is-error";
+              trackAppEvent("app_pro_beta_error", { reason: "logged_out" });
+              return;
+            }
+            upgradeBtn.disabled = true;
+            upgradeBtn.textContent = "Sending request…";
+            proRequestStatus.textContent = "Sending your request…";
+            proRequestStatus.className = "pro-request-status is-pending";
+            trackAppEvent("app_pro_beta_submitted", {});
+            try {
+              const idToken = await currentUser.getIdToken(false);
+              const response = await fetch("/track-interest", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id_token: idToken, source: "pro_beta_modal" })
+              });
+              const data = await response.json();
+              if (!response.ok) throw new Error(data.detail || "Request failed");
+              proRequestStatus.textContent = data.message || "Your Pro beta request is pending.";
+              proRequestStatus.className = "pro-request-status is-success";
+              upgradeBtn.textContent = "Request pending";
+              localStorage.setItem("proInterestShown", "true");
+              trackAppEvent("app_pro_beta_success", { already_requested: Boolean(data.already_requested) });
+            } catch (err) {
+              console.error("Pro beta request failed:", err);
+              proRequestStatus.textContent = "We could not send the request. Please try again.";
+              proRequestStatus.className = "pro-request-status is-error";
+              upgradeBtn.disabled = false;
+              upgradeBtn.textContent = "Request Pro access";
+              trackAppEvent("app_pro_beta_error", { reason: "request_failed" });
             }
           });
         }
@@ -483,7 +489,7 @@
 
             // Modal anzeigen (mit passendem Feature-Namen im Header)
             if (!window.App.showProFeatureModal("Deep Think")) {
-              alert("Deep Think is a Pro feature.");
+              window.App?.showPopup?.("Deep Think requires Pro access.");
             }
           }
         });
@@ -503,12 +509,12 @@
 
         const LIMITS = {
           FREE: {
-            NORMAL: getConfiguredLimit("free_consensus_run_limit", 3),
+            NORMAL: getConfiguredLimit("free_consensus_run_limit", 0),
             DEEP: getConfiguredLimit("free_deep_think_run_limit", 0)
           },
           PRO: {
-            NORMAL: getConfiguredLimit("pro_consensus_run_limit", 500),
-            DEEP: getConfiguredLimit("pro_deep_think_run_limit", 50)
+            NORMAL: getConfiguredLimit("pro_consensus_run_limit", 0),
+            DEEP: getConfiguredLimit("pro_deep_think_run_limit", 0)
           }
         };
         let currentMaxLimit = LIMITS.FREE.NORMAL;
@@ -1090,13 +1096,20 @@
           trackAppEvent("app_sidebar_section_toggled", { section: "leaderboard", open: !isCollapsed });
         };
 
-        // Chat search filtering
-        document.getElementById("chatSearch")?.addEventListener("input", function () {
-          const q = this.value.trim().toLowerCase();
+        window.filterBookmarks = function (query) {
+          const q = String(query || "").trim().toLowerCase();
           document.querySelectorAll("#bookmarksContainer .bookmark").forEach(el => {
             const text = el.querySelector("p")?.textContent?.toLowerCase() || "";
             el.style.display = q && !text.includes(q) ? "none" : "";
           });
+        };
+
+        // Search operates on compact metadata only. When needed, remaining
+        // metadata pages are fetched without loading full bookmark answers.
+        document.getElementById("chatSearch")?.addEventListener("input", async function () {
+          const query = this.value;
+          if (query.trim()) await window.loadAllBookmarkMetadata?.();
+          window.filterBookmarks(query);
         });
 
         window.toggleBookmarks = function () {
@@ -1577,11 +1590,8 @@
 
         if (headerUpgradeLink) {
           headerUpgradeLink.addEventListener("click", function (e) {
-            e.preventDefault(); // Verhindert Springen nach oben (#)
-            const modal = document.getElementById("proFeatureModal");
-            if (modal) {
-              modal.style.display = "block";
-            }
+            e.preventDefault();
+            window.App.showProFeatureModal?.("Pro features");
           });
         }
 

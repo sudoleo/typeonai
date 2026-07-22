@@ -274,24 +274,47 @@ async def track_interest(request: Request, data: dict = Body(...)):
          raise HTTPException(status_code=401, detail="Authentication failed")
 
     try:
-        # 1. User verifizieren (deine existierende Funktion nutzen)
         uid = verify_user_token(token)
+        if is_user_pro(uid):
+            raise HTTPException(status_code=409, detail="Pro access is already active.")
         user_email = auth.get_user(uid).email
-        
-        # 2. Daten vorbereiten (Datenminimierung: keine IP / kein User-Agent,
-        #    Spam-Schutz übernehmen Rate-Limit und Auth-Pflicht)
+        waitlist = db_firestore.collection("pro_waitlist")
+        request_ref = waitlist.document(uid)
+        existing = request_ref.get()
+        legacy_pending = False
+        if not existing.exists:
+            legacy_pending = any(
+                waitlist.where("uid", "==", uid).limit(1).stream()
+            )
+        if existing.exists or legacy_pending:
+            return {
+                "status": "pending",
+                "already_requested": True,
+                "message": "Your Pro beta request is already pending.",
+            }
+
+        source = str(source or "unknown")[:80]
+        if source not in {"pro_beta_modal", "unknown"}:
+            source = "other"
         interest_data = {
             "uid": uid,
             "email": user_email,
             "timestamp": firestore.SERVER_TIMESTAMP,
-            "source": source
+            "source": source,
+            "status": "pending",
         }
-        
-        # 3. In "pro_waitlist" Collection schreiben (Backend Admin SDK hat immer Schreibrechte)
-        db_firestore.collection("pro_waitlist").add(interest_data)
-        
-        return {"status": "success", "message": "Interest tracked"}
+        request_ref.set(interest_data)
+        return {
+            "status": "success",
+            "already_requested": False,
+            "message": "Your Pro beta request has been received.",
+        }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logging.error(f"Tracking error for token prefix {token[:10]}...: {e}")
-        return {"status": "error", "detail": "Could not track interest. Please try again later."}
+        logging.error("Pro beta request failed: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail="Could not request Pro access. Please try again later.",
+        ) from e

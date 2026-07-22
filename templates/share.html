@@ -23,7 +23,7 @@
   {% if og_is_card %}<meta name="twitter:image" content="{{ og_image }}">{% endif %}
   <script type="application/ld+json">{{ jsonld | safe }}</script>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260721-querywatch1">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260722-watch-version1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -65,12 +65,18 @@
         </div>
         {% endif %}
       </div>
+      {% if watch_selected_version and watch_selected_version.fallback_notice %}
+      <div class="watch-version-fallback" role="status">
+        <strong>Latest version unavailable.</strong>
+        <span>{{ watch_selected_version.fallback_notice }}</span>
+      </div>
+      {% endif %}
       {% if watch_page and watch_drift and not watch_awaiting_first_run %}
       <section class="watch-drift-hero is-{{ watch_drift.trigger }}" aria-labelledby="watchDriftHeading">
         <div class="watch-drift-status">
           <span class="watch-drift-pulse" aria-hidden="true"></span>
           <div>
-            <p class="eyebrow">Latest movement</p>
+            <p class="eyebrow">{% if watch_selected_version.is_original %}Tracking baseline{% elif watch_selected_version.is_historical %}Movement at this check{% else %}Latest movement{% endif %}</p>
             <h2 id="watchDriftHeading">{{ watch_drift.label }}</h2>
           </div>
         </div>
@@ -86,7 +92,7 @@
           </div>
           <div>
             <dt>Compared with</dt>
-            <dd class="is-text">Previous check</dd>
+            <dd class="is-text">{% if watch_selected_version.is_original %}Tracking start{% else %}Previous check{% endif %}</dd>
           </div>
         </dl>
         {% if watch_drift.baseline_changed and watch_drift.baseline_summary %}
@@ -152,7 +158,7 @@
       {% endif %}
       {% if has_differences_view %}
       <div class="share-toggle has-cue" role="group" aria-label="Switch between consensus and differences">
-        <button type="button" id="toggleConsensusView" aria-pressed="true">{% if watch_page %}Current consensus{% else %}Consensus{% endif %}</button>
+        <button type="button" id="toggleConsensusView" aria-pressed="true">{% if watch_page %}{% if watch_selected_version.is_original %}Original consensus{% elif watch_selected_version.is_historical %}Consensus at this check{% else %}Current consensus{% endif %}{% else %}Consensus{% endif %}</button>
         <button type="button" id="toggleDifferencesView" aria-pressed="false">{% if watch_page %}Model differences{% else %}Differences{% endif %}</button>
       </div>
       {% endif %}
@@ -278,8 +284,10 @@
             <p class="eyebrow">Consensus Watch</p>
             <h2 id="watchHistoryHeading">How AI answers move</h2>
           </div>
-          <strong class="watch-history-latest">{{ watch_history.latest_score }}<span>/100</span><small> agreement</small></strong>
+          <strong class="watch-history-latest">{{ watch_history.latest_score }}<span>/100</span><small> latest agreement</small></strong>
         </div>
+        <details class="watch-history-details"{% if watch_history.points | length <= 3 %} open{% endif %}>
+        <summary>Explore agreement history, position movement and saved versions</summary>
         {% if watch_history.position_map %}
         <div class="watch-position-map" aria-labelledby="watchPositionHeading">
           <div class="watch-position-intro">
@@ -405,6 +413,7 @@
           </ol>
         </details>
         {% endif %}
+        </details>
       </section>
       {% endif %}
 

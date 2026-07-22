@@ -59,7 +59,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260722-watchtrend1">
+  <link rel="stylesheet" href="/static/style.css?v=20260722-watch-compact2">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -72,7 +72,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.js" integrity="sha384-AtrdNsnxl/75rvBneBVH7DtOvCxSVahR2zWqle1coBKd8DEmLoviqNeJSx64gNAs" crossorigin="anonymous"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260721-logoutreset1"></script>
+  <script type="module" src="/static/firebase.js?v=20260722-bookmark-pages1"></script>
   <script type="module" src="/static/demo.js?v=20260717-demo-autostart1"></script>
   <script src="/static/app-ui.js?v=20260628-prompt-default2" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
@@ -86,7 +86,7 @@
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
   <script src="/static/js/sources.js?v=20260626-extract1" defer></script>
   <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
-  <script src="/static/js/attachments.js?v=20260719-notes1" defer></script>
+  <script src="/static/js/attachments.js?v=20260722-plan-copy1" defer></script>
   <!-- Agent Mode (aus index.html ausgelagert) -->
   <script src="/static/js/agent-mode.js?v=20260716-consensus-progress1" defer></script>
   <!-- Kompakte Zwei-Phasen-Anzeige fuer regulaere Laeufe (ohne Agent Mode). -->
@@ -98,13 +98,13 @@
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-actions.js?v=20260706-fixes2" defer></script>
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
-  <script src="/static/js/watch.js?v=20260722-watchtrend1" defer></script>
+  <script src="/static/js/watch.js?v=20260722-watch-compact2" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
-  <script src="/static/js/user-tier.js?v=20260715-redesign1" defer></script>
+  <script src="/static/js/user-tier.js?v=20260722-probeta1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-insights.js?v=20260718-runusage2" defer></script>
   <script src="/static/js/consensus-run.js?v=20260718-runusage2" defer></script>
-  <script src="/static/js/query-send.js?v=20260718-runusage2" defer></script>
+  <script src="/static/js/query-send.js?v=20260722-plan-copy1" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
@@ -182,6 +182,7 @@
         <div id="usageDisplay">
           <span id="freeUsageDisplay">Runs: <strong>...</strong></span><br>
           <span id="deepUsageDisplay">Deep Think: <strong>...</strong></span><br>
+          <span id="watchUsageDisplay">Watches: <strong>...</strong></span><br>
           <span id="countdownDisplay"></span>
         </div>
       </div>
@@ -318,7 +319,7 @@
         </script>
         <div class="sidebar-account-meta">
           <span id="accountLabel" class="sidebar-account-label" hidden></span>
-          <a id="upgradeLink" href="#" style="display: none;">Upgrade</a>
+          <a id="upgradeLink" href="#" style="display: none;" aria-label="Request Pro access" title="Request Pro access">Pro beta</a>
         </div>
         <button id="editSystemPromptBtn" title="Settings" aria-label="Settings">
           <span class="settings-icon" aria-hidden="true">
@@ -356,7 +357,7 @@
             <span>Upload document</span>
             <span class="pro-badge attach-pro-badge model-picker-pro-badge">Pro</span>
           </button>
-          <div class="attach-menu-hint">PDF, Word, TXT/MD/CSV, PNG, JPG, WebP &middot; max 5 MB &middot; up to 2 files</div>
+          <div class="attach-menu-hint">PDF, Word, TXT/MD/CSV, PNG, JPG and WebP &middot; limits are checked before upload</div>
           <div class="attach-menu-divider"></div>
           <!-- Deep Think lebt jetzt im (+)-Kontextmenü -->
           <label class="attach-menu-toggle" for="deepSearchToggle" title="Deep Think">
@@ -737,7 +738,7 @@
       </div>
     </div>
 
-  <script src="/static/js/app-init.js?v=20260721-logoutreset1" defer></script>
+  <script src="/static/js/app-init.js?v=20260722-probeta1" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing
@@ -1069,82 +1070,20 @@
       <span class="close" id="closeProModal">&times;</span>
 
       <div class="pro-header">
-        <h2>Unlock <span class="highlight-tech" id="proModalFeatureName">Deep Think</span></h2>
-        <p id="proModalDescription">Complex reasoning requires advanced compute power. Upgrade to access the smartest AI models.</p>
+        <p class="eyebrow">Pro beta</p>
+        <h2>Join Pro beta for <span class="highlight-tech" id="proModalFeatureName">Deep Think</span></h2>
+        <p id="proModalDescription">Request early access to Pro features. There is no checkout or active billing.</p>
       </div>
 
-      <div class="pricing-grid">
-
-        <div class="pricing-header">
-          <div class="col-feature">Features</div>
-          <div class="col-plan">Free</div>
-          <div class="col-plan">Pro</div>
+      <div class="pro-beta-panel">
+        <p>Access is reviewed before activation. Sending this request does not start a subscription or charge you.</p>
+        <p id="proRequestStatus" class="pro-request-status" role="status" aria-live="polite"></p>
+        <div class="pro-beta-actions">
+          <button class="btn-free" id="keepFreeBtn">Not now</button>
+          <button id="smokeTestUpgradeBtn" class="btn-pro">Request Pro access</button>
         </div>
-
-        <div class="pricing-row">
-          <div class="col-feature">Fast Queries</div>
-          <div class="col-plan">25 / day</div>
-          <div class="col-plan bold">100 / day</div>
-        </div>
-
-        <div class="pricing-row">
-          <div class="col-feature">Web Search</div>
-          <div class="col-plan">25 / day</div>
-          <div class="col-plan bold">100 / day</div>
-        </div>
-
-        <div class="pricing-row">
-          <div class="col-feature">Deep Think</div>
-          <div class="col-plan">none</div>
-          <div class="col-plan bold">25 / day</div>
-        </div>
-
-        <div class="pricing-row">
-          <div class="col-feature">Resolve contradictions</div>
-          <div class="col-plan">none</div>
-          <div class="col-plan bold">included</div>
-        </div>
-
-        <div class="pricing-row">
-          <div class="col-feature">Follow-up questions</div>
-          <div class="col-plan">none</div>
-          <div class="col-plan bold">included</div>
-        </div>
-
-        <div class="pricing-row">
-          <div class="col-feature">File uploads</div>
-          <div class="col-plan">none</div>
-          <div class="col-plan bold">2 per question</div>
-        </div>
-
-        <div class="pricing-row">
-          <div class="col-feature">Context Window</div>
-          <div class="col-plan">Medium</div>
-          <div class="col-plan bold">Large</div>
-        </div>
-
-        <div class="pricing-row">
-          <div class="col-feature">Models</div>
-          <div class="col-plan">Lightweight<br><small>GPT-5.4 mini, Gemini 3.1 Flash...</small></div>
-          <div class="col-plan bold"><span class="highlight-tech">Frontier</span><br><small>Gemini 3.1 Pro,
-              GPT-5.5...</small></div>
-        </div>
-
-        <div class="pricing-footer">
-          <div class="col-feature"></div>
-          <div class="col-plan price-block">
-            <span class="price">€0</span>
-            <button class="btn-free" id="keepFreeBtn">Stay Free</button>
-          </div>
-
-          <div class="col-plan price-block">
-            <span class="price">€10<small>/mo</small></span>
-            <button id="smokeTestUpgradeBtn" class="btn-pro">Upgrade</button>
-            <div class="guarantee">(Pricing preview, not active yet)</div>
-          </div>
-        </div>
-
       </div>
+
     </div>
   </div>
 
@@ -1468,9 +1407,8 @@
                 <span class="faq-toggle-icon">＋</span>
               </h3>
               <p>
-                Users without their own subscription or external keys can run up to 25 standard AI-powered queries per
-                day. Deep Think Mode is part of Pro; on the free tier it is not included. The remaining quota is
-                displayed in the sidebar.
+                Your current run allowance comes from your account plan and the active server configuration. Deep
+                Think availability is shown separately. The sidebar always displays the authoritative remaining quota.
               </p>
             </div>
 

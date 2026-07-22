@@ -136,12 +136,12 @@ function getConfiguredLimit(key, fallback) {
 // Globale Limits Definition
 window.LIMITS = {
   FREE: {
-    NORMAL: getConfiguredLimit("free_consensus_run_limit", 3),
+    NORMAL: getConfiguredLimit("free_consensus_run_limit", 0),
     DEEP: getConfiguredLimit("free_deep_think_run_limit", 0)
   },
   PRO: {
-    NORMAL: getConfiguredLimit("pro_consensus_run_limit", 500),
-    DEEP: getConfiguredLimit("pro_deep_think_run_limit", 50)
+    NORMAL: getConfiguredLimit("pro_consensus_run_limit", 0),
+    DEEP: getConfiguredLimit("pro_deep_think_run_limit", 0)
   }
 };
 
@@ -151,6 +151,10 @@ window.currentDeepLimit = window.LIMITS.FREE.DEEP;
 
 // merken, dass wir Bookmarks schon einmal geladen haben
 let bookmarksLoaded = false;
+let bookmarksNextCursor = null;
+let bookmarksLoading = false;
+let openedBookmarkId = null;
+const bookmarkDetailCache = new Map();
 
 async function checkUserStatusOnLoad(user, token) {
   if (!user || !token) return;
@@ -284,6 +288,7 @@ onIdTokenChanged(auth, async (user) => {
     if (!bookmarksLoaded) {
       bookmarksLoaded = await loadBookmarks();
     }
+    window.App?.watch?.refreshQuota?.().catch(() => {});
 
     // 4) Usage-UI anzeigen
     if (usageOptions) {
@@ -421,6 +426,11 @@ onIdTokenChanged(auth, async (user) => {
 
         document.getElementById("bookmarksContainer").innerHTML = "";
         bookmarksLoaded = false;
+        bookmarksNextCursor = null;
+        bookmarksLoading = false;
+        openedBookmarkId = null;
+        bookmarkDetailCache.clear();
+        window.bookmarksData = [];
         
         // A) Badge verstecken (Direkter Zugriff)
         const badge = document.getElementById("proBadge");
@@ -981,6 +991,38 @@ function truncateText(text, maxWords = 5) {
   return text;
 }
 
+function bookmarkMeta(bookmark) {
+  const responses = bookmark?.responses && typeof bookmark.responses === "object" ? bookmark.responses : {};
+  const modelCount = Object.entries(responses).filter(([key, value]) =>
+    !["consensus", "differences", "differences_data"].includes(key) && String(value || "").trim()
+  ).length;
+  return {
+    id: bookmark?.id || "",
+    query: bookmark?.query || "",
+    mode: bookmark?.mode || "",
+    timestamp: bookmark?.timestamp || null,
+    has_consensus: Boolean(String(responses.consensus || "").trim()),
+    model_count: Number(bookmark?.model_count ?? modelCount) || 0,
+    source_count: Number(bookmark?.source_count ?? bookmark?.sources?.length) || 0,
+    attachment_count: Number(bookmark?.attachment_count ?? bookmark?.attachments?.length) || 0,
+  };
+}
+
+function upsertBookmarkMeta(bookmark, { prepend = true } = {}) {
+  const meta = bookmarkMeta(bookmark);
+  if (!meta.id) return;
+  if (!window.bookmarksData) window.bookmarksData = [];
+  const existingIndex = window.bookmarksData.findIndex(item => item.id === meta.id);
+  if (existingIndex >= 0) {
+    window.bookmarksData[existingIndex] = meta;
+    updateBookmarkDOM(meta);
+  } else {
+    if (prepend) window.bookmarksData.unshift(meta);
+    else window.bookmarksData.push(meta);
+    addBookmarkToDOM(meta, { prepend });
+  }
+}
+
 async function saveBookmark(question, response, modelName, mode) {
   if (!auth.currentUser) return;
   const id_token = await auth.currentUser.getIdToken(false);
@@ -1016,18 +1058,10 @@ async function saveBookmark(question, response, modelName, mode) {
     }
 
     if (data.bookmark) {
-        // Initialisiere Array falls leer
-        if (!window.bookmarksData) window.bookmarksData = [];
-        const existingIndex = window.bookmarksData.findIndex(b => b.id === data.bookmark.id);
-
-        if (existingIndex > -1) {
-            window.bookmarksData[existingIndex] = data.bookmark;
-
-        } else {
-            // Neu: Vorne ins Array
-            window.bookmarksData.unshift(data.bookmark);
-            // Und ins UI einfügen
-            addBookmarkToDOM(data.bookmark);
+        upsertBookmarkMeta(data.bookmark);
+        if (openedBookmarkId === data.bookmark.id) {
+          bookmarkDetailCache.clear();
+          bookmarkDetailCache.set(data.bookmark.id, data.bookmark);
         }
         trackAppEvent("app_bookmark_saved", { type: "model", mode });
     }
@@ -1072,13 +1106,10 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
       return;
     }
     if (data.bookmark) {
-      if (!window.bookmarksData) window.bookmarksData = [];
-      const existingIndex = window.bookmarksData.findIndex(b => b.id === data.bookmark.id);
-      if (existingIndex >= 0) {
-        window.bookmarksData[existingIndex] = data.bookmark;
-      } else {
-        window.bookmarksData.unshift(data.bookmark);
-        addBookmarkToDOM(data.bookmark);
+      upsertBookmarkMeta(data.bookmark);
+      if (openedBookmarkId === data.bookmark.id) {
+        bookmarkDetailCache.clear();
+        bookmarkDetailCache.set(data.bookmark.id, data.bookmark);
       }
     }
     trackAppEvent("app_bookmark_saved", { type: "consensus" });
@@ -1329,41 +1360,87 @@ function loadSingleBookmarkUI(bookmark) {
     }
 }
 
-async function loadBookmarks() {
-  if (!auth.currentUser) return false;
-  const id_token = await auth.currentUser.getIdToken(false);
+function renderBookmarksLoadMore() {
+  document.getElementById("bookmarksLoadMore")?.remove();
+  if (!bookmarksNextCursor) return;
+  const container = document.getElementById("bookmarksContainer");
+  if (!container) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.id = "bookmarksLoadMore";
+  button.className = "bookmarks-load-more";
+  button.textContent = "Load more";
+  button.addEventListener("click", () => loadBookmarks({ append: true }));
+  container.appendChild(button);
+}
 
+async function loadBookmarks({ append = false, loadAll = false } = {}) {
+  if (!auth.currentUser || bookmarksLoading) return false;
+  bookmarksLoading = true;
+  const container = document.getElementById("bookmarksContainer");
+  const idToken = await auth.currentUser.getIdToken(false);
   try {
-    const res = await fetch("/bookmarks", {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + id_token
-      }
-    });
-    const data = await res.json();
-
-    // Container leeren (entfernt auch die Skeleton-Platzhalter) – vor den
-    // Early-Returns, damit der Skeleton auch bei einem Fehler verschwindet.
-    const container = document.getElementById("bookmarksContainer");
-    if (container) container.innerHTML = "";
-
-    if (!res.ok) return false;
-
-    // Global speichern
-    window.bookmarksData = data.bookmarks;
-
-    [...data.bookmarks].reverse().forEach(bm => addBookmarkToDOM(bm));
+    let cursor = append ? bookmarksNextCursor : null;
+    if (!append) {
+      window.bookmarksData = [];
+      bookmarksNextCursor = null;
+      if (container) container.innerHTML = "";
+    }
+    do {
+      const path = "/bookmarks?limit=30" + (cursor ? "&cursor=" + encodeURIComponent(cursor) : "");
+      const response = await fetch(path, { headers: { "Authorization": "Bearer " + idToken } });
+      const data = await response.json();
+      if (!response.ok) return false;
+      (data.bookmarks || []).forEach(item => upsertBookmarkMeta(item, { prepend: false }));
+      bookmarksNextCursor = data.next_cursor || null;
+      cursor = bookmarksNextCursor;
+    } while (loadAll && cursor);
+    renderBookmarksLoadMore();
+    window.filterBookmarks?.(document.getElementById("chatSearch")?.value || "");
     return true;
-
   } catch (error) {
     console.error("Error in loadBookmarks:", error);
-    // Skeleton auch im Fehlerfall (z. B. Netzwerkabbruch) entfernen.
-    const container = document.getElementById("bookmarksContainer");
-    if (container) container.innerHTML = "";
     return false;
+  } finally {
+    bookmarksLoading = false;
+    if (!append && container && !window.bookmarksData?.length) container.innerHTML = "";
   }
 }
+
+async function loadBookmarkDetail(bookmarkId) {
+  if (!auth.currentUser) throw new Error("Authentication required");
+  if (bookmarkDetailCache.has(bookmarkId)) return bookmarkDetailCache.get(bookmarkId);
+  const idToken = await auth.currentUser.getIdToken(false);
+  const response = await fetch("/bookmarks/" + encodeURIComponent(bookmarkId), {
+    headers: { "Authorization": "Bearer " + idToken }
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Could not load bookmark");
+  bookmarkDetailCache.clear();
+  bookmarkDetailCache.set(bookmarkId, data.bookmark);
+  return data.bookmark;
+}
+
+window.openBookmark = async function (bookmarkId) {
+  const row = document.querySelector(`.bookmark[data-id="${bookmarkId}"]`);
+  row?.classList.add("is-loading");
+  try {
+    const bookmark = await loadBookmarkDetail(bookmarkId);
+    openedBookmarkId = bookmarkId;
+    loadSingleBookmarkUI(bookmark);
+    trackAppEvent("app_bookmark_opened");
+  } catch (error) {
+    console.error("Error opening bookmark:", error);
+    window.App?.showPopup?.("Could not load this bookmark.");
+  } finally {
+    row?.classList.remove("is-loading");
+  }
+};
+
+window.loadAllBookmarkMetadata = async function () {
+  if (!bookmarksNextCursor) return true;
+  return loadBookmarks({ append: true, loadAll: true });
+};
 
 window.loadBookmarks = loadBookmarks;
 
@@ -1387,6 +1464,8 @@ async function deleteBookmark(bookmarkId) {
 
     // Lokales Array und DOM aktualisieren
     window.bookmarksData = window.bookmarksData.filter(b => b.id !== bookmarkId);
+    bookmarkDetailCache.delete(bookmarkId);
+    if (openedBookmarkId === bookmarkId) openedBookmarkId = null;
     const el = document.querySelector(`.bookmark[data-id="${bookmarkId}"]`);
     if (el) el.remove();
     trackAppEvent("app_bookmark_deleted");
@@ -1438,7 +1517,13 @@ function sendFeedback(message, email) {
 // Exponiere die Funktion, damit sie von index.html aus aufgerufen werden kann
 window.sendFeedback = sendFeedback;
 
-function addBookmarkToDOM(bookmark) {
+function updateBookmarkDOM(bookmark) {
+  const row = document.querySelector(`.bookmark[data-id="${bookmark.id}"]`);
+  const label = row?.querySelector("p");
+  if (label) label.textContent = truncateText(bookmark.query || "");
+}
+
+function addBookmarkToDOM(bookmark, { prepend = true } = {}) {
   const container = document.getElementById("bookmarksContainer");
   
   // Prüfen, ob das Bookmark schon existiert (Update-Fall), um Duplikate zu vermeiden
@@ -1473,15 +1558,11 @@ function addBookmarkToDOM(bookmark) {
 
   // Click-Event -> Ruft jetzt die ausgelagerte Funktion auf
   div.addEventListener("click", () => {
-    // Wir holen uns die aktuellsten Daten aus dem globalen Array (falls vorhanden), 
-    // oder nehmen das übergebene Objekt.
-    const currentData = window.bookmarksData.find(b => b.id === bookmark.id) || bookmark;
-    loadSingleBookmarkUI(currentData);
-    trackAppEvent("app_bookmark_opened");
+    window.openBookmark(bookmark.id);
   });
 
-  // WICHTIG: prepend statt appendChild, damit es oben erscheint
-  container.prepend(div);
+  if (prepend) container.prepend(div);
+  else container.appendChild(div);
 
   // Animation
   div.classList.add("fade-in");

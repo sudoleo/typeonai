@@ -133,8 +133,11 @@
     const isPro = String(rawLimits?.plan || "").toLowerCase() === "pro"
       || (rawLimits?.plan == null && window.isUserPro === true);
     const configuredLimit = Number(rawLimits?.active_limit);
+    const configFallback = Number((window.APP_LIMITS || {})[
+      isPro ? "watch_pro_active_limit" : "watch_free_active_limit"
+    ]);
     const activeLimit = Number.isFinite(configuredLimit) && configuredLimit >= 0
-      ? configuredLimit : (isPro ? 5 : 1);
+      ? configuredLimit : (Number.isFinite(configFallback) ? configFallback : 0);
     const configuredActive = Number(rawLimits?.active_count);
     const activeCount = Number.isFinite(configuredActive) && configuredActive >= 0
       ? configuredActive : activeFromList;
@@ -147,6 +150,7 @@
       activeLimit: activeLimit,
       remaining: Math.max(0, activeLimit - activeCount),
       pausedCount: pausedCount,
+      dailyAvailable: rawLimits?.daily_available === true,
       atLimit: activeCount >= activeLimit
     };
   }
@@ -157,6 +161,7 @@
     watchLimitRequest = api("GET", "/api/my/watches")
       .then(data => {
         watchLimitState = normalizeWatchLimits(data.limits, data.watches);
+        renderSidebarWatchQuota(watchLimitState);
         return watchLimitState;
       })
       .finally(() => { watchLimitRequest = null; });
@@ -164,7 +169,13 @@
   }
 
   function showWatchUpgrade() {
-    window.App?.showProFeatureModal?.("Up to 5 active Consensus Watches and daily checks");
+    window.App?.showProFeatureModal?.("More frequent Consensus Watch checks");
+  }
+
+  function renderSidebarWatchQuota(limits) {
+    const target = document.getElementById("watchUsageDisplay");
+    if (!target || !limits) return;
+    target.innerHTML = `Watches: <strong>${limits.activeCount} / ${limits.activeLimit}</strong>`;
   }
 
   function renderWatchLimit(target, limits) {
@@ -188,7 +199,7 @@
       </div>
       <div class="watch-limit-detail">
         <span>Paused Watches do not count.</span>
-        ${isPro ? "" : '<span>Pro includes 5 active Watches and daily checks.</span><button type="button" class="watch-limit-upgrade">View Pro</button>'}
+        ${isPro ? "" : `<span>Pro beta offers a larger Watch allowance and more frequent checks.</span><button type="button" class="watch-limit-upgrade">Request Pro access</button>`}
       </div>`;
     target.querySelector(".watch-limit-upgrade")?.addEventListener("click", showWatchUpgrade);
   }
@@ -1176,7 +1187,7 @@
     container.appendChild(panel);
   }
 
-  function renderWatchCard(watch, onListChanged, telegram) {
+  function renderWatchCard(watch, onListChanged, telegram, collapseByDefault = false) {
     const card = document.createElement("li");
     card.className = "watch-card";
     const state = driftState(watch);
@@ -1212,7 +1223,41 @@
       listing.textContent = watch.indexed ? "On Google" : "Listing in review";
       chips.appendChild(listing);
     }
-    top.append(question, chips);
+    const detailsToggle = makeButton("", "watch-card-toggle", () => {
+      setCollapsed(!content.hidden);
+    });
+    detailsToggle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"></path></svg>';
+
+    const compactSummary = document.createElement("div");
+    compactSummary.className = "watch-card-summary";
+    const summaryItems = [
+      typeof watch.last_agreement_score === "number"
+        ? `${Math.round(watch.last_agreement_score)}/100 agreement`
+        : "Awaiting first check",
+      state.label,
+      watch.last_run_at ? `Last checked ${relativeTime(watch.last_run_at)}` : "No completed check",
+    ];
+    if (watch.status === "active" && watch.next_run_at) {
+      summaryItems.push(`Next ${formatDateTime(watch.next_run_at)}`);
+    } else {
+      summaryItems.push(formatWatchSchedule(watch));
+    }
+    compactSummary.innerHTML = summaryItems
+      .filter(Boolean)
+      .map(item => `<span>${escapeHtml(item)}</span>`)
+      .join("");
+    top.append(question, chips, detailsToggle, compactSummary);
+
+    const content = document.createElement("div");
+    content.className = "watch-card-content";
+    function setCollapsed(collapsed) {
+      content.hidden = collapsed;
+      card.classList.toggle("is-collapsed", collapsed);
+      detailsToggle.setAttribute("aria-expanded", String(!collapsed));
+      detailsToggle.setAttribute("aria-label", collapsed ? "Show Watch details" : "Hide Watch details");
+      detailsToggle.title = collapsed ? "Show details" : "Hide details";
+    }
+    setCollapsed(collapseByDefault);
 
     const bodyRow = document.createElement("div");
     bodyRow.className = "watch-card-body";
@@ -1502,7 +1547,8 @@
       settings.appendChild(buildListingBlock(watch, onListChanged));
     }
 
-    card.append(top, bodyRow, actions, settings);
+    content.append(bodyRow, actions, settings);
+    card.append(top, content);
     return card;
   }
 
@@ -1633,7 +1679,10 @@
     body.appendChild(listTitle);
     const list = document.createElement("ul");
     list.className = "watch-dash-list";
-    watches.forEach(watch => list.appendChild(renderWatchCard(watch, renderDashboard, telegram)));
+    const collapseCards = watches.length > 2;
+    watches.forEach(watch => list.appendChild(
+      renderWatchCard(watch, renderDashboard, telegram, collapseCards)
+    ));
     const filterBar = document.createElement("div");
     filterBar.className = "watch-filter-bar";
     const filterDefinitions = [
@@ -1714,6 +1763,8 @@
     if (body) body.innerHTML = "";
     watchLimitState = null;
     watchLimitRequest = null;
+    const quota = document.getElementById("watchUsageDisplay");
+    if (quota) quota.innerHTML = "Watches: <strong>...</strong>";
     if (page) page.hidden = true;
     setViewSwitchState(false);
     if (onWatchPagePath()) window.history.replaceState(null, "", APP_PATH);
@@ -1723,6 +1774,7 @@
   window.openWatchDashboard = openWatchDashboard;
   window.App.watch = Object.assign(window.App.watch || {}, {
     showFeatureNudge: showWatchFeatureNudge,
+    refreshQuota: () => loadWatchLimits(true),
     resetAfterLogout: resetAfterLogout
   });
   initWatchButton();

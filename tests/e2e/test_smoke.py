@@ -441,7 +441,7 @@ def test_watch_limit_is_explained_before_creation(app_page):
 
     app_page.click("#watchDashCreate")
     expect(app_page.locator("#watchDialogLimit")).to_contain_text(
-        "Pro includes 5 active Watches and daily checks"
+        "Pro beta offers a larger Watch allowance and more frequent checks"
     )
     expect(app_page.locator("#watchQuestionNext")).to_be_disabled()
     expect(app_page.locator("#watchQuestionNext")).to_have_text("Watch limit reached")

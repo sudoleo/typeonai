@@ -61,8 +61,8 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin`, `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (Pro, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). |
-| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. |
-| `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` zum sicheren Wiederherstellen eines Share-/Watch-fähigen Pending-Snapshots aus einem eigenen Consensus-Bookmark. Beide Save-Endpunkte liefern den vollständig zusammengeführten Bookmark-Datensatz zurück, damit der Client ihn ohne Reload aktualisiert. |
+| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. |
+| `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` ohne DeepSeek und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil und DeepSeek-Ausschluss. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
@@ -156,6 +156,10 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   das Avatar-Menü mit deckender Light-/Dark-Fläche zeigt. Settings sind in
   Experience, Connections, Model behavior und Account gruppiert; die
   bestehenden Control-IDs bleiben der JavaScript-Vertrag.
+  Die Usage-Gruppe zeigt zusätzlich das aktive Watch-Kontingent aus
+  `/api/my/watches`; der Pro-Einstieg ist bis zur Einführung von Billing ein
+  zustandsbehafteter „Request Pro access“-/„Join Pro beta“-Dialog ohne Preis-
+  oder Kaufdarstellung und ohne Browser-Alerts.
 - **`math-render.js`** — gemeinsame KaTeX-Brücke für App und öffentliche
   Share-/Watch-Seiten. Bewahrt `\[...\]`/`\(...\)` durch den Markdown-Pass und
   exponiert `window.ConsensusMath.{prepareMarkdown,render}`.
@@ -199,7 +203,10 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Driftstatus/-Summary, Movement-Score, Score/Delta und eine stets platzhaltende
   History-Sparkline (bei bestehenden Consensus-Watches ab Original-Baseline) sowie
   Inline-Settings (Intervall/Uhrzeit/Alert-Regel/Condition, E-Mail-/Telegram-
-  Kanäle, Pause/Delete). Telegram-Verbindungskarte mit Deep-Link/Test und
+  Kanäle, Pause/Delete). Bei mehr als zwei Watches starten die Karten als
+  kompakte, einzeln per zentriertem Pfeil aufklappbare Zusammenfassungen mit
+  Agreement-Score, Driftstatus, letzter Prüfung und nächstem Lauf; bei ein bis zwei
+  Watches bleibt die Detailansicht offen. Telegram-Verbindungskarte mit Deep-Link/Test und
   Morning-Brief-Karte (`/api/my/watch-brief`, Toggle im selben
   `.switch`/`.slider`-Stil wie das Input-Feld). Ohne vorhandene Watch ist der
   Toggle erklärend deaktiviert; das Backend erzwingt dasselbe Gate und schaltet
@@ -258,8 +265,11 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Nutzericon-Menü im Sidebar-Footer (Avatar, Name/Plan, „Shared links“ und
   direkt darunter „Watched“). Ein geöffnetes Bookmark beendet den Hero-
   Leerzustand sofort. Bookmark-
-  Saves aktualisieren `window.bookmarksData` und das DOM direkt aus dem vom
-  Server zurückgegebenen Merge-Ergebnis. Nach einer E-Mail-Registrierung zeigt
+  Die paginierte Liste hält nur kompakte Metadaten in `window.bookmarksData`;
+  Vollinhalte kommen erst beim Öffnen über `GET /bookmarks/{id}` und nur das
+  aktuell geöffnete Detail bleibt im Cache. Suche lädt bei Bedarf weitere
+  Metadatenseiten, nicht deren Antworten. Saves reduzieren das serverseitige
+  Merge-Ergebnis sofort wieder auf Listenmetadaten. Nach einer E-Mail-Registrierung zeigt
   das Auth-Modal einen eigenen Verifizierungs-Erfolgszustand statt eines Browser-Alerts.
   Logout bricht laufende Query-/Consensus-Streams ab, leert den geladenen Run
   samt Bookmark-/Share-Kontext und stellt den Hero-Ausgangszustand wieder her.
@@ -981,7 +991,7 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **691 passed** (2026-07-21; inklusive der neuen
+  Letzte bekannte Baseline: **699 passed** (2026-07-22; inklusive der neuen
   Search-Console-/SEO-Dossier-, Query-, Recommendation-, LLM-Schema-,
   Weekly-Portfolio-Review-, Action-, Publisher-Lineage-/Watch-Capacity-,
   Idempotenz- und Admin-Schutztests sowie
@@ -1091,7 +1101,12 @@ mit Intervall sowie letztem und ggf. nächstem Fragenlauf. Die normale Watch-URL
 rendert serverseitig die neueste Vollversion über dem unveränderten Share-Baseline-
 Dokument; `?version=<run_id>` öffnet eine immutable historische Vollversion und
 `?version=original` den Ausgangs-Consensus. Shared Pages ohne Watch behalten ihr
-bisheriges Snapshot-Verhalten. Der Drift-Header trennt Direction Shift und
+bisheriges Snapshot-Verhalten. Ein Backend-`display_version` ist die einzige
+Quelle für Consensus, Differences, Agreement, Modelle, Quellen, Answer-Zeit und
+Citation; kompakte History-Metadaten werden nie in den Share-Snapshot gemischt.
+Fehlt die aktuelle Vollversion (auch bei Legacy-History), zeigt die Seite einen
+klaren Hinweis und rendert den Original-Snapshot vollständig konsistent. Die
+umfangreiche History-/Position-Map ist bei längeren Verläufen einklappbar. Der Drift-Header trennt Direction Shift und
 Agreement Change und stellt Stable/Changed sowie den Change-Summary vor den Text.
 Die öffentliche Watch-History rendert zusätzlich eine **Position Map**: statt
 einer universellen Ja/Nein-Achse zeigt sie frage-spezifische Standpunkt-

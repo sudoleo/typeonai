@@ -384,7 +384,7 @@
           return;
         }
         if (file.size > ATTACH_MAX_BYTES) {
-          alert("'" + attachmentName(file, mime, source, index) + "' is too large. The limit is 5 MB per file.");
+          alert("'" + attachmentName(file, mime, source, index) + "' is too large for the configured upload limit.");
           return;
         }
         if (window.pendingAttachments.length + pendingFileReads >= ATTACH_MAX_FILES) {

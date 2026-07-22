@@ -254,29 +254,6 @@ def _build_watch_page_meta(meta, history_points):
     }
 
 
-def _mini_spark(history_points, width=120, height=34):
-    """Kompakte Sparkline fürs Scoreboard – auf den echten Score-Bereich
-    skaliert (min. 20 Punkte Spanne), sonst wirkt jede Kurve flach."""
-    scores = [p["agreement_score"] for p in history_points][-16:]
-    if len(scores) < 2:
-        return None
-    low, high = min(scores), max(scores)
-    span = max(20, high - low + 10)
-    lo = max(0, min(100 - span, (low + high) / 2 - span / 2))
-    pad = 3
-    step = (width - 2 * pad) / (len(scores) - 1)
-    coords = [
-        (round(pad + index * step, 1),
-         round(pad + (height - 2 * pad) * (1 - (score - lo) / span), 1))
-        for index, score in enumerate(scores)
-    ]
-    path = " ".join(
-        ("M" if index == 0 else "L") + f" {x} {y}" for index, (x, y) in enumerate(coords)
-    )
-    return {"width": width, "height": height, "path": path,
-            "last_x": coords[-1][0], "last_y": coords[-1][1]}
-
-
 def _score_stats(data):
     """(agreement-dict, model_count, contradiction_count) aus einem Share-Doc."""
     differences_data = data.get("differences_data")
@@ -292,6 +269,47 @@ def _score_stats(data):
         if isinstance(d, dict) and d.get("type") == "contradiction"
     )
     return agreement, model_count, contradiction_count
+
+
+def _resolve_display_version(data, watch_page, requested_version, latest_run_id, share_id):
+    """Resolve the only snapshot allowed to supply visible answer content."""
+    original = {
+        "id": "original",
+        "kind": "original",
+        "data": data,
+        "snapshot": None,
+        "fallback_notice": "",
+    }
+    if not watch_page or requested_version == "original":
+        return original
+    if requested_version:
+        snapshot = snapshots.get_watch_version(share_id, requested_version)
+        if snapshot is None:
+            return None
+        return {
+            "id": requested_version,
+            "kind": "historical",
+            "data": {**data, **snapshot},
+            "snapshot": snapshot,
+            "fallback_notice": "",
+        }
+    if not latest_run_id:
+        return original
+    snapshot = snapshots.get_watch_version(share_id, latest_run_id)
+    if snapshot is None:
+        original["kind"] = "fallback"
+        original["fallback_notice"] = (
+            "The latest Watch check has no complete saved version. "
+            "Showing the original consensus and all of its original metadata instead."
+        )
+        return original
+    return {
+        "id": latest_run_id,
+        "kind": "current",
+        "data": {**data, **snapshot},
+        "snapshot": snapshot,
+        "fallback_notice": "",
+    }
 
 
 def _require_uid(request, data):
@@ -509,24 +527,41 @@ async def share_og_card(request: Request, slug_id: str):
             or str(data.get("visibility") or "public") == "private"):
         raise HTTPException(status_code=404, detail="Not found")
 
-    agreement, model_count, contradiction_count = _score_stats(data)
     try:
         history_points = snapshots.list_watch_history(share_id)
     except Exception:
         logging.exception("share_og_card history failed")
         history_points = []
-    history_scores = [p["agreement_score"] for p in history_points]
-    score = history_scores[-1] if history_scores else agreement.get("score")
-    checked_label = ""
-    if history_points:
-        checked_label = "Tracked since " + history_points[0]["ts"].strftime("%b %Y")
+    try:
+        watch_meta = watch_service.get_public_watch_meta(share_id)
+    except Exception:
+        watch_meta = None
+    watch_page = _build_watch_page_meta(watch_meta, history_points)
+    latest_run_id = str(
+        (watch_meta or {}).get("last_successful_run_id")
+        or data.get("latest_watch_run_id") or ""
+    )
+    try:
+        display_version = _resolve_display_version(data, watch_page, "", latest_run_id, share_id)
+    except Exception:
+        display_version = None
+    display_data = display_version["data"] if display_version else data
+    agreement, model_count, contradiction_count = _score_stats(display_data)
+    score = agreement.get("score")
+    if not isinstance(score, (int, float)):
+        score = display_data.get("agreement_score")
+    display_payload = snapshots.public_share_payload(display_data)
+    checked_label = (
+        "Answered " + display_payload["answered_at"][:10]
+        if display_payload["answered_at"] else ""
+    )
     png = og_image.share_card_png(
         share_id,
         question=str(data.get("question") or ""),
         score=score if isinstance(score, (int, float)) else None,
         model_count=model_count,
         contradiction_count=contradiction_count,
-        history_scores=history_scores,
+        history_scores=[],
         checked_label=checked_label,
     )
     if png is None:
@@ -607,40 +642,41 @@ async def share_page(request: Request, slug_id: str):
     watch_page = _build_watch_page_meta(current_watch_meta, history_points)
 
     requested_version = str(request.query_params.get("version") or "").strip()
-    selected_version = None
     latest_run_id = str(
         (current_watch_meta or {}).get("last_successful_run_id")
         or data.get("latest_watch_run_id")
         or ""
     )
-    selected_run_id = "original" if requested_version == "original" else ""
     if watch_page and requested_version and requested_version != "original":
         if not re.fullmatch(r"[A-Za-z0-9]{8,64}", requested_version):
             return _unavailable_response(
                 request, 404, "Version not found",
                 "This Consensus Watch version does not exist.",
             )
-        try:
-            selected_version = snapshots.get_watch_version(share_id, requested_version)
-        except Exception:
-            logging.exception("get_watch_version failed")
-            selected_version = None
-        if selected_version is None:
+    try:
+        display_version = _resolve_display_version(
+            data, watch_page, requested_version, latest_run_id, share_id,
+        )
+    except Exception:
+        logging.exception("resolve Watch display version failed")
+        display_version = None
+    if display_version is None:
+        if requested_version:
             return _unavailable_response(
                 request, 404, "Version not found",
                 "This Consensus Watch version does not exist.",
             )
-        selected_run_id = requested_version
-    elif watch_page and not requested_version and latest_run_id:
-        try:
-            selected_version = snapshots.get_watch_version(share_id, latest_run_id)
-        except Exception:
-            logging.exception("get current Watch version failed")
-            selected_version = None
-        if selected_version:
-            selected_run_id = latest_run_id
+        display_version = {
+            "id": "original", "kind": "fallback", "data": data, "snapshot": None,
+            "fallback_notice": (
+                "The latest Watch version could not be loaded. "
+                "Showing the original consensus and all of its original metadata instead."
+            ),
+        }
 
-    display_data = {**data, **selected_version} if selected_version else data
+    selected_run_id = display_version["id"]
+    selected_version = display_version["snapshot"]
+    display_data = display_version["data"]
     payload = snapshots.public_share_payload(display_data)
     consensus_html = render_public_markdown(payload["consensus_md"], payload["sources"])
     watch_awaiting_first_run = bool(
@@ -732,36 +768,28 @@ async def share_page(request: Request, slug_id: str):
     ) if watch_page else []
 
     date_iso = payload["answered_at"] or payload["created_at"]
-    published_iso = data.get("answered_at") or (
-        data.get("created_at").isoformat() if isinstance(data.get("created_at"), datetime) else ""
-    )
-    # Watch-Seiten sind lebende Dokumente: der letzte Run ist das echte
-    # dateModified (Freshness-Signal für Google), nicht das Erstelldatum.
-    modified_iso = (
-        history_points[-1]["ts"].isoformat() if history_points else date_iso
-    )
+    published_iso = date_iso
+    # Auch strukturierte Zeitangaben bleiben an die autoritative Anzeigeversion
+    # gebunden; kompakte History-Metadaten dürfen hier nicht einsickern.
+    modified_iso = date_iso
 
     # Verdict-Scoreboard: der datendichte Einstieg über der Konsens-Antwort.
     agreement_data = differences_data.get("agreement")
     agreement_data = agreement_data if isinstance(agreement_data, dict) else {}
     base_score = agreement_data.get("score")
-    latest_score = (
-        watch_history["latest_score"] if watch_history
-        else base_score if isinstance(base_score, (int, float)) else None
-    )
+    if not isinstance(base_score, (int, float)):
+        base_score = display_data.get("agreement_score")
+    latest_score = base_score if isinstance(base_score, (int, float)) else None
     scoreboard = {
         "score": int(latest_score) if isinstance(latest_score, (int, float)) else None,
         "level": str(agreement_data.get("level") or ""),
         "model_count": model_count,
         "contradiction_count": contradiction_count,
         "source_count": len(sources_view),
-        "checks": len(history_points),
-        "tracked_since": history_points[0]["ts"].strftime("%b %Y") if history_points else "",
-        "last_checked": (
-            history_points[-1]["ts"].strftime("%Y-%m-%d") if history_points
-            else (date_iso[:10] if date_iso else "")
-        ),
-        "spark": _mini_spark(history_points),
+        "checks": 0,
+        "tracked_since": "",
+        "last_checked": date_iso[:10] if date_iso else "",
+        "spark": None,
     }
 
     # Meta-Description datengeführt statt AI-Textanfang: liest sich im SERP
@@ -844,12 +872,12 @@ async def share_page(request: Request, slug_id: str):
         "watch_drift": watch_drift,
         "watch_versions": watch_versions,
         "watch_selected_version": {
-            "id": selected_run_id or latest_run_id or "original",
-            "is_original": selected_run_id == "original" or not selected_version,
-            "is_current": bool(
-                selected_version and selected_run_id == latest_run_id and not requested_version
-            ),
+            "id": selected_run_id,
+            "kind": display_version["kind"],
+            "is_original": display_version["kind"] in {"original", "fallback"},
+            "is_current": display_version["kind"] == "current",
             "is_historical": bool(requested_version),
+            "fallback_notice": display_version["fallback_notice"],
             "current_url": page_path,
             "original_url": page_path + "?version=original",
         } if watch_page else None,

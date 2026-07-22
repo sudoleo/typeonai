@@ -1,8 +1,9 @@
 import re
 import base64
+import json
 import logging
 from firebase_admin import firestore
-from fastapi import APIRouter, Request, Body, HTTPException
+from fastapi import APIRouter, Request, Body, HTTPException, Query
 
 from app.core.rate_limit import limiter
 from app.core.security import verify_user_token, extract_id_token, db_firestore
@@ -11,6 +12,54 @@ from app.services import share_snapshots
 from app.services.share_snapshots import sanitize_differences_data
 
 router = APIRouter()
+BOOKMARK_PAGE_SIZE = 30
+BOOKMARK_PAGE_SIZE_MAX = 50
+BOOKMARK_ID_RE = re.compile(r"[A-Za-z0-9_]{1,100}")
+
+
+def _bookmark_uid(request: Request):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authentication failed")
+    try:
+        return verify_user_token(auth_header.split(" ", 1)[1])
+    except Exception as exc:
+        logging.error("bookmark auth failed: %s", exc)
+        raise HTTPException(status_code=401, detail="Authentication failed") from exc
+
+
+def _bookmark_meta(bookmark_id, data):
+    responses = data.get("responses") if isinstance(data.get("responses"), dict) else {}
+    return {
+        "id": str(bookmark_id),
+        "query": str(data.get("query") or ""),
+        "mode": str(data.get("mode") or ""),
+        "timestamp": data.get("timestamp"),
+        "has_consensus": bool(str(responses.get("consensus") or "").strip()),
+        "model_count": sum(
+            1 for key, value in responses.items()
+            if key not in {"consensus", "differences", "differences_data"}
+            and str(value or "").strip()
+        ),
+        "source_count": len(data.get("sources") or []) if isinstance(data.get("sources"), list) else 0,
+        "attachment_count": len(data.get("attachments") or []) if isinstance(data.get("attachments"), list) else 0,
+    }
+
+
+def _encode_bookmark_cursor(bookmark_id):
+    raw = json.dumps({"id": str(bookmark_id)}, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _decode_bookmark_cursor(cursor):
+    try:
+        raw = base64.urlsafe_b64decode(str(cursor) + "=" * (-len(str(cursor)) % 4))
+        bookmark_id = str(json.loads(raw.decode("utf-8")).get("id") or "")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid bookmark cursor") from exc
+    if not BOOKMARK_ID_RE.fullmatch(bookmark_id):
+        raise HTTPException(status_code=400, detail="Invalid bookmark cursor")
+    return bookmark_id
 
 
 def sanitize_attachment_meta(raw):
@@ -44,31 +93,58 @@ def sanitize_attachment_meta(raw):
 
 @router.get("/bookmarks")
 @limiter.limit("20/minute")
-async def load_bookmarks(request: Request):
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Authentication failed")
-
-    id_token = auth_header.split(" ")[1]
-    try:
-        uid = verify_user_token(id_token)
-    except Exception as e:
-        logging.error(f"/bookmarks auth failed: {e}")
-        raise HTTPException(status_code=401, detail="Authentication failed")
-    
+async def load_bookmarks(
+    request: Request,
+    cursor: str = Query(default="", max_length=256),
+    limit: int = Query(default=BOOKMARK_PAGE_SIZE, ge=1, le=BOOKMARK_PAGE_SIZE_MAX),
+):
+    uid = _bookmark_uid(request)
     try:
         bookmarks_ref = db_firestore.collection("users").document(uid).collection("bookmarks")
         query_ref = bookmarks_ref.order_by("timestamp", direction=firestore.Query.DESCENDING)
-        docs = query_ref.stream()
-        bookmarks = []
-        for doc in docs:
-            bookmark_data = doc.to_dict()
-            bookmark_data["id"] = doc.id
-            bookmarks.append(bookmark_data)
-        return {"status": "success", "bookmarks": bookmarks}
+        if cursor:
+            cursor_id = _decode_bookmark_cursor(cursor)
+            cursor_snapshot = bookmarks_ref.document(cursor_id).get()
+            if not cursor_snapshot.exists:
+                raise HTTPException(status_code=400, detail="Bookmark cursor expired")
+            query_ref = query_ref.start_after(cursor_snapshot)
+        docs = list(query_ref.limit(limit + 1).stream())
+        has_more = len(docs) > limit
+        page = docs[:limit]
+        bookmarks = [_bookmark_meta(doc.id, doc.to_dict() or {}) for doc in page]
+        next_cursor = _encode_bookmark_cursor(page[-1].id) if has_more and page else None
+        return {
+            "status": "success",
+            "bookmarks": bookmarks,
+            "next_cursor": next_cursor,
+            "has_more": has_more,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"Error loading bookmarks for uid={uid}: {e}")
         raise HTTPException(status_code=500, detail="Error loading bookmarks")
+
+
+@router.get("/bookmarks/{bookmark_id}")
+@limiter.limit("30/minute")
+async def load_bookmark_detail(request: Request, bookmark_id: str):
+    uid = _bookmark_uid(request)
+    if not BOOKMARK_ID_RE.fullmatch(bookmark_id):
+        raise HTTPException(status_code=404, detail="Bookmark not found")
+    try:
+        snap = (
+            db_firestore.collection("users").document(uid)
+            .collection("bookmarks").document(bookmark_id).get()
+        )
+    except Exception as exc:
+        logging.exception("Error loading bookmark detail for uid=%s", uid)
+        raise HTTPException(status_code=500, detail="Error loading bookmark") from exc
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Bookmark not found")
+    bookmark = snap.to_dict() or {}
+    bookmark["id"] = snap.id
+    return {"status": "success", "bookmark": bookmark}
 
 
 @router.post("/bookmark")

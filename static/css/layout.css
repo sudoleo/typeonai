@@ -197,15 +197,17 @@ body:has(.sidebar.active) .brand-float {
 
 #upgradeLink {
   display: none;
-  padding: 5px 11px;
+  flex: 0 0 auto;
+  padding: 4px 8px;
   border: 1px solid color-mix(in srgb, var(--sidebar-border) 85%, transparent);
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--glass-bg-strong) 60%, transparent);
   color: var(--sidebar-text-muted);
-  font-size: 0.74rem;
+  font-size: 0.67rem;
   font-weight: 650;
   letter-spacing: 0.01em;
   line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   box-shadow: inset 0 1px 0 var(--glass-highlight);
   transition: color .15s ease, border-color .15s ease, background-color .15s ease;
@@ -751,7 +753,7 @@ body:has(.sidebar.active) .brand-float {
   display: inline-flex;
   align-items: center;
   min-width: 0;
-  gap: 8px;
+  gap: 5px;
 }
 
 .sidebar-heading-label svg {
@@ -1019,6 +1021,14 @@ body:has(.sidebar.active) .brand-float {
 #bookmarksContainer {
   margin-top: 2px;
 }
+.bookmarks-load-more {
+  width: calc(100% - 12px); margin: 8px 6px 4px; padding: 8px 10px;
+  border: 1px solid var(--sidebar-border); border-radius: var(--radius-sm);
+  background: transparent; color: var(--sidebar-text-muted); font: inherit;
+  font-size: .75rem; cursor: pointer;
+}
+.bookmarks-load-more:hover { color: var(--sidebar-text); border-color: var(--accent); }
+.bookmark.is-loading { opacity: .58; pointer-events: none; }
 
 /* Bookmarks: schlichte einzeilige Textzeilen mit Ellipsis (kein Card-Look) */
 .bookmark {

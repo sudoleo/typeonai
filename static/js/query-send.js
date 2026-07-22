@@ -374,7 +374,9 @@
         ? window.getAttachmentsPayload()
         : [];
       if (attachmentsPayload.length && !window.isUserPro) {
-        alert("File uploads are a Pro feature. Please remove the attachments or upgrade.");
+        if (!window.App?.showProFeatureModal?.("File uploads")) {
+          window.App?.showPopup?.("File uploads require Pro access. Remove the attachments to continue.");
+        }
         finishQueryRun(queryRunId);
         return;
       }

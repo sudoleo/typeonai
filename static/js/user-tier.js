@@ -69,6 +69,8 @@
       // --- PRO USER ---
       if (badge) badge.style.display = "inline-block";
       if (upgradeLink) upgradeLink.style.display = "none";
+      const proModal = document.getElementById("proFeatureModal");
+      if (proModal) proModal.style.display = "none";
 
       // Limits
       window.setCurrentUsageLimits?.(true);

@@ -342,7 +342,28 @@
   box-shadow: 0 8px 26px rgba(24, 25, 27, 0.06);
   padding: 14px 16px;
 }
-.watch-card-top { display: flex; align-items: flex-start; gap: 10px; }
+.watch-card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.watch-card-toggle {
+  display: inline-grid; place-items: center; box-sizing: border-box;
+  flex: 0 0 32px; width: 32px; height: 32px; min-width: 32px; padding: 0;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 88%, transparent); border-radius: 9px;
+  background: color-mix(in srgb, var(--container-bg) 92%, var(--text-color) 8%);
+  color: var(--text-color); line-height: 0; cursor: pointer; appearance: none;
+}
+.watch-card-toggle svg { display: block; width: 16px; height: 16px; transition: transform .18s ease; }
+.watch-card-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.watch-card-toggle:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 52%, var(--sidebar-border)); }
+.watch-card-toggle:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent); outline-offset: 2px; }
+.watch-card-content[hidden] { display: none; }
+.watch-card-summary {
+  display: none; flex: 1 0 100%; align-items: center; flex-wrap: wrap;
+  gap: 4px 0; min-width: 0; margin-top: -1px; color: var(--sidebar-text-muted);
+  font-size: .72rem; line-height: 1.45;
+}
+.watch-card.is-collapsed .watch-card-summary { display: flex; }
+.watch-card-summary span { display: inline-flex; align-items: center; }
+.watch-card-summary span + span::before { content: "·"; margin: 0 7px; color: var(--sidebar-border); }
+.watch-card-summary span:first-child { color: var(--text-color); font-weight: 700; }
 .watch-card-question {
   flex: 1;
   min-width: 0;
@@ -648,8 +669,10 @@
   .watch-card-body { gap: 10px 14px; }
   /* Die Frage bleibt die erste Zeile; Status- und Kanal-Chips bekommen ihre
      eigene Zeile, statt sie auf schmale Textspalten zusammenzudrücken. */
-  .watch-card-top { display: block; }
-  .watch-card-chips { flex-wrap: wrap; margin-top: 8px; gap: 5px; }
+  .watch-card-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .watch-card-toggle { grid-column: 2; grid-row: 1; }
+  .watch-card-chips { grid-column: 1 / -1; grid-row: 2; flex-wrap: wrap; margin-top: 2px; gap: 5px; }
+  .watch-card-summary { grid-column: 1 / -1; grid-row: 3; }
   .watch-filter-bar { display: flex; width: 100%; box-sizing: border-box; }
   .watch-filter { min-width: 0; flex: 1 1 0; padding: 0 5px; }
   .watch-drift-feed-list time { display: none; }

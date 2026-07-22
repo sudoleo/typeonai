@@ -1300,7 +1300,8 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn('id="watchDashLimit"', html_source)
         self.assertIn('id="watchDialogLimit"', source)
         self.assertIn("Paused Watches do not count.", source)
-        self.assertIn("Pro includes 5 active Watches and daily checks.", source)
+        self.assertIn("Pro beta offers a larger Watch allowance and more frequent checks.", source)
+        self.assertIn('id="watchUsageDisplay"', html_source)
         self.assertIn('action.textContent = "Watch limit reached"', source)
 
     def test_watch_modal_has_one_scroll_area_and_locks_background(self):
@@ -1343,6 +1344,21 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertNotIn('id="viewSwitch" class="view-switch" hidden', html_source)
         firebase_source = Path("static/firebase.js").read_text(encoding="utf-8")
         self.assertEqual(firebase_source.count('getElementById("viewSwitch")'), 0)
+
+    def test_collapsed_watch_cards_keep_a_centered_themed_toggle_and_summary(self):
+        watch_source = Path("static/js/watch.js").read_text(encoding="utf-8")
+        watch_css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
+        input_css = Path("static/css/components-input.css").read_text(encoding="utf-8")
+
+        self.assertIn('compactSummary.className = "watch-card-summary"', watch_source)
+        self.assertIn("agreement", watch_source)
+        self.assertIn("Last checked", watch_source)
+        self.assertIn("Next ", watch_source)
+        self.assertIn("setCollapsed", watch_source)
+        self.assertIn('d="m7 10 5 5 5-5"', watch_source)
+        self.assertIn("place-items: center", watch_css)
+        self.assertIn(".watch-card.is-collapsed .watch-card-summary", watch_css)
+        self.assertIn(":not(.watch-card-toggle)", input_css)
 
 
 class WatchPageRouteTests(unittest.TestCase):

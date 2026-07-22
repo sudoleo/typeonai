@@ -1176,7 +1176,10 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("Original consensus", body)
 
     def test_watch_page_renders_latest_version_without_mutating_shared_baseline(self):
-        doc = self._share_doc(consensus_md="Original immutable answer.")
+        doc = self._share_doc(
+            consensus_md="Original immutable answer.",
+            differences_data={"agreement": {"score": 71}},
+        )
         now = datetime(2026, 7, 21, 8, 0, tzinfo=timezone.utc)
         run_id = "abcdef1234567890"
         points = [{
@@ -1189,7 +1192,8 @@ class SharePageRouteTests(unittest.TestCase):
         version = {
             "run_id": run_id, "ts": now, "consensus_md": "Latest watched answer.",
             "differences_data": {"agreement": {"score": 82}},
-            "differences_text": "", "sources": [], "included_models": ["OpenAI", "Google Gemini"],
+            "differences_text": "", "sources": [{"id": "S1", "title": "Current source", "url": "https://current.test"}],
+            "included_models": ["OpenAI", "Google Gemini"],
             "consensus_model": "OpenAI", "answered_at": now.isoformat(),
         }
         meta = {
@@ -1206,10 +1210,106 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("Latest watched answer.", current.text)
         self.assertNotIn("Original immutable answer.", current.text)
         self.assertIn("Changed since last check", current.text)
+        self.assertIn('<strong>82</strong>', current.text)
+        self.assertIn("2</b> AI models", current.text)
+        self.assertIn("Current source", current.text)
+        self.assertIn("2026-07-21", current.text)
+        self.assertIn("Sources: https://current.test", current.text)
         self.assertIn("Original immutable answer.", original.text)
         self.assertNotIn("Latest watched answer.", original.text)
+        self.assertIn('<strong>71</strong>', original.text)
+        self.assertIn("2026-06-11", original.text)
         self.assertIn("max-age=60", current.headers["Cache-Control"])
         self.assertEqual(doc["consensus_md"], "Original immutable answer.")
+
+    def test_watch_historical_version_uses_only_its_full_snapshot_metadata(self):
+        doc = self._share_doc(
+            consensus_md="Original answer.",
+            differences_data={"agreement": {"score": 11}, "models_compared": ["OpenAI"]},
+            sources=[{"id": "S1", "title": "Original source", "url": "https://original.test"}],
+            included_models=["OpenAI: original-model"],
+            consensus_model="Original judge",
+        )
+        old_id, new_id = "11111111abcdefaa", "22222222abcdefbb"
+        old_ts = datetime(2026, 7, 2, 9, 0, tzinfo=timezone.utc)
+        new_ts = datetime(2026, 7, 20, 9, 0, tzinfo=timezone.utc)
+        points = [
+            {"run_id": old_id, "ts": old_ts, "agreement_score": 42, "changed": False,
+             "severity": "", "change_summary": "", "has_snapshot": True, "opinion_map": None},
+            {"run_id": new_id, "ts": new_ts, "agreement_score": 91, "changed": True,
+             "severity": "major", "change_summary": "New movement", "has_snapshot": True, "opinion_map": None},
+        ]
+        old_version = {
+            "run_id": old_id, "ts": old_ts, "consensus_md": "Historical answer only.",
+            "differences_data": {"agreement": {"score": 42}, "models_compared": ["Gemini", "Grok"]},
+            "differences_text": "Historical differences only.",
+            "sources": [{"id": "S1", "title": "Historical source", "url": "https://historical.test"}],
+            "included_models": ["Google Gemini: historic", "Grok: historic"],
+            "consensus_model": "Historical judge", "answered_at": old_ts.isoformat(),
+        }
+        meta = {"status": "active", "interval": "weekly", "last_successful_run_id": new_id}
+        path = "/s/%s-%s?version=%s" % (doc["slug"], self.share_id, old_id)
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router.snapshots, "list_watch_history", return_value=points), \
+                patch.object(share_router.watch_service, "get_public_watch_meta", return_value=meta), \
+                patch.object(share_router.snapshots, "get_watch_version", return_value=old_version):
+            response = self.client.get(path)
+        body = response.text
+        self.assertIn("Historical answer only.", body)
+        self.assertIn('<strong>42</strong>', body)
+        self.assertIn("Historical source", body)
+        self.assertIn("2</b> AI models", body)
+        self.assertIn("2026-07-02", body)
+        self.assertIn("Models consulted: Google Gemini: historic, Grok: historic.", body)
+        self.assertNotIn("Original source", body)
+
+    def test_missing_current_full_version_falls_back_consistently_to_original(self):
+        doc = self._share_doc(
+            consensus_md="Original fallback answer.",
+            differences_data={"agreement": {"score": 17}, "models_compared": ["OpenAI"]},
+            sources=[{"id": "S1", "title": "Baseline source", "url": "https://baseline.test"}],
+            included_models=["OpenAI: baseline"],
+            consensus_model="Baseline judge",
+            latest_watch_run_id="abcdef1234567890",
+        )
+        point = {"run_id": "abcdef1234567890", "ts": datetime(2026, 7, 21, tzinfo=timezone.utc),
+                 "agreement_score": 99, "changed": True, "severity": "major",
+                 "change_summary": "Legacy compact change", "has_snapshot": False, "opinion_map": None}
+        meta = {"status": "active", "interval": "weekly", "last_successful_run_id": point["run_id"]}
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router.snapshots, "list_watch_history", return_value=[point]), \
+                patch.object(share_router.watch_service, "get_public_watch_meta", return_value=meta), \
+                patch.object(share_router.snapshots, "get_watch_version", return_value=None):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        body = response.text
+        self.assertIn("Latest version unavailable", body)
+        self.assertIn("Original fallback answer.", body)
+        self.assertIn('<strong>17</strong>', body)
+        self.assertIn("Baseline source", body)
+        self.assertIn("Models consulted: OpenAI: baseline.", body)
+        self.assertIn("Original baseline", body)
+
+    def test_legacy_compact_history_without_version_pointer_keeps_original_snapshot(self):
+        doc = self._share_doc(
+            consensus_md="Legacy original answer.",
+            differences_data={"agreement": {"score": 33}, "models_compared": ["OpenAI"]},
+            sources=[{"id": "S1", "title": "Legacy baseline source", "url": "https://legacy.test"}],
+            included_models=["OpenAI: legacy-baseline"],
+        )
+        point = {"run_id": "legacy001", "ts": datetime(2025, 12, 1, tzinfo=timezone.utc),
+                 "agreement_score": 88, "changed": True, "severity": "major",
+                 "change_summary": "Compact-only history", "has_snapshot": False, "opinion_map": None}
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router.snapshots, "list_watch_history", return_value=[point]), \
+                patch.object(share_router.watch_service, "get_public_watch_meta", return_value=None), \
+                patch.object(share_router.snapshots, "get_watch_version") as get_version:
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        body = response.text
+        self.assertIn("Legacy original answer.", body)
+        self.assertIn('<strong>33</strong>', body)
+        self.assertIn("Legacy baseline source", body)
+        self.assertNotIn("Latest version unavailable", body)
+        get_version.assert_not_called()
 
     def test_watch_page_shows_selected_local_run_time(self):
         doc = self._share_doc()
@@ -1771,13 +1871,13 @@ class ShareSeoEnhancementTests(unittest.TestCase):
         self.assertIn("agreement 71/100", body)
         self.assertIn("How it works", body)
 
-    def test_date_modified_uses_last_watch_run(self):
+    def test_date_modified_uses_authoritative_display_version(self):
         doc = self._share_doc()
         with patch.object(share_router.snapshots, "get_share", return_value=doc), \
                 patch.object(share_router.snapshots, "list_watch_history", return_value=self._history()):
             response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
         body = response.text
-        self.assertIn('"dateModified": "2026-07-10T08:30:00+00:00"', body)
+        self.assertIn('"dateModified": "2026-06-11T10:00:00+00:00"', body)
         self.assertIn('"datePublished": "2026-06-11T10:00:00+00:00"', body)
 
     def test_follow_form_only_on_active_public_watch_pages(self):
