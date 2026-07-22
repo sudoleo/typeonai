@@ -415,6 +415,8 @@
 .watch-sparkline .spark-area { fill: color-mix(in srgb, var(--accent) 14%, transparent); stroke: none; }
 .watch-sparkline .spark-dot { fill: var(--accent); }
 .watch-sparkline .spark-dot.event { fill: #d97706; }
+.watch-sparkline.is-single .spark-path { opacity: .65; stroke-dasharray: 4 4; }
+.watch-sparkline .spark-placeholder { fill: none; stroke: var(--sidebar-border); stroke-width: 2; stroke-dasharray: 3 5; }
 
 .watch-card-meta { flex: 1 1 220px; min-width: 0; font-size: .8rem; color: var(--sidebar-text-muted); line-height: 1.55; }
 .watch-card-meta .watch-meta-change { color: var(--text-color); }

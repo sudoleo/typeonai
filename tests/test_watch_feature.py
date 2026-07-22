@@ -132,6 +132,7 @@ class WatchCrudTests(unittest.TestCase):
         self.assertTrue(created["email_enabled"])
         self.assertFalse(created["telegram_enabled"])
         self.assertEqual(created["last_agreement_score"], 60)
+        self.assertEqual(created["baseline_agreement_score"], 60)
         self.assertEqual(len(watch_service.list_watches("u1", db=self.db)), 1)
 
         paused = watch_service.update_watch("u1", created["id"], {"status": "paused"}, False, db=self.db)
@@ -1380,6 +1381,7 @@ class WatchHistorySerializationTests(unittest.TestCase):
         self.assertEqual(history[0]["ts"], "2026-07-01T00:00:00+00:00")
         self.assertTrue(history[1]["changed"])
         self.assertEqual(history[1]["change_summary"], "Conclusion changed.")
+        self.assertEqual(items[0]["baseline_agreement_score"], 60)
         self.assertEqual(created["id"], items[0]["id"])
 
     def test_history_lookup_failure_degrades_to_empty_list(self):

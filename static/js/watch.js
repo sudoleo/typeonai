@@ -864,30 +864,62 @@
     return days + " d" + suffix;
   }
 
+  function trendHistory(watch) {
+    const history = Array.isArray(watch.history) ? [...watch.history] : [];
+    if (!watch.query_first && typeof watch.baseline_agreement_score === "number") {
+      history.unshift({
+        agreement_score: watch.baseline_agreement_score,
+        changed: false,
+        baseline: true
+      });
+    }
+    return history;
+  }
+
   function buildSparkline(history) {
-    const scores = history
-      .map(point => point.agreement_score)
-      .filter(score => typeof score === "number");
-    if (scores.length < 2) return null;
+    const points = history.filter(point => typeof point.agreement_score === "number");
     const width = 150, height = 42, pad = 4;
-    const step = (width - 2 * pad) / (scores.length - 1);
-    const y = score => pad + (height - 2 * pad) * (100 - score) / 100;
-    const coords = scores.map((score, index) => ({ x: pad + step * index, y: y(score) }));
-    const path = coords.map((c, i) => (i ? "L" : "M") + c.x.toFixed(1) + " " + c.y.toFixed(1)).join(" ");
-    const area = path + ` L ${coords[coords.length - 1].x.toFixed(1)} ${height - pad} L ${coords[0].x.toFixed(1)} ${height - pad} Z`;
-    const dots = history.map((point, index) => {
-      if (typeof point.agreement_score !== "number") return "";
-      const prev = index ? history[index - 1].agreement_score : null;
-      const isEvent = point.changed || (typeof prev === "number" && Math.abs(point.agreement_score - prev) >= 15);
-      const last = index === history.length - 1;
-      if (!isEvent && !last) return "";
-      const c = coords[index];
-      if (!c) return "";
-      return `<circle class="spark-dot${isEvent && !last ? " event" : ""}" cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${last ? 3 : 2.4}"></circle>`;
-    }).join("");
     const wrapper = document.createElement("div");
     wrapper.className = "watch-sparkline";
-    wrapper.title = "Agreement score trend (" + scores.length + " checks)";
+    if (!points.length) {
+      wrapper.classList.add("is-empty");
+      wrapper.title = "Agreement trend starts after the first check";
+      wrapper.innerHTML =
+        `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Agreement trend awaiting first check">` +
+        `<path class="spark-placeholder" d="M ${pad} ${height / 2} L ${width - pad} ${height / 2}"></path></svg>`;
+      return wrapper;
+    }
+
+    const y = score => pad + (height - 2 * pad) * (100 - score) / 100;
+    if (points.length === 1) {
+      const score = points[0].agreement_score;
+      const scoreY = y(score);
+      wrapper.classList.add("is-single");
+      wrapper.title = "Agreement baseline; trend starts after the next check";
+      wrapper.innerHTML =
+        `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Agreement baseline ${Math.round(score)} out of 100">` +
+        `<path class="spark-path" d="M ${pad} ${scoreY.toFixed(1)} L ${width - pad} ${scoreY.toFixed(1)}"></path>` +
+        `<circle class="spark-dot" cx="${width - pad}" cy="${scoreY.toFixed(1)}" r="3"></circle></svg>`;
+      return wrapper;
+    }
+
+    const step = (width - 2 * pad) / (points.length - 1);
+    const coords = points.map((point, index) => ({
+      x: pad + step * index,
+      y: y(point.agreement_score)
+    }));
+    const path = coords.map((c, i) => (i ? "L" : "M") + c.x.toFixed(1) + " " + c.y.toFixed(1)).join(" ");
+    const area = path + ` L ${coords[coords.length - 1].x.toFixed(1)} ${height - pad} L ${coords[0].x.toFixed(1)} ${height - pad} Z`;
+    const dots = points.map((point, index) => {
+      const prev = index ? points[index - 1].agreement_score : null;
+      const isEvent = point.changed || (typeof prev === "number" && Math.abs(point.agreement_score - prev) >= 15);
+      const last = index === points.length - 1;
+      if (!isEvent && !last) return "";
+      const c = coords[index];
+      return `<circle class="spark-dot${isEvent && !last ? " event" : ""}" cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${last ? 3 : 2.4}"></circle>`;
+    }).join("");
+    const includesBaseline = points.some(point => point.baseline);
+    wrapper.title = "Agreement score trend (" + points.length + (includesBaseline ? " scores including baseline)" : " checks)");
     wrapper.innerHTML =
       `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Agreement score trend">` +
       `<path class="spark-area" d="${area}"></path><path class="spark-path" d="${path}"></path>${dots}</svg>`;
@@ -1185,6 +1217,7 @@
     const bodyRow = document.createElement("div");
     bodyRow.className = "watch-card-body";
     const history = watch.history || [];
+    const trend = trendHistory(watch);
     const drift = document.createElement("div");
     drift.className = "watch-card-drift is-" + state.key;
     const shiftScore = state.point?.opinion_map?.shift_score;
@@ -1196,7 +1229,7 @@
     const score = document.createElement("div");
     score.className = "watch-card-score";
     if (typeof watch.last_agreement_score === "number") {
-      const previous = history.length >= 2 ? history[history.length - 2].agreement_score : null;
+      const previous = trend.length >= 2 ? trend[trend.length - 2].agreement_score : null;
       let deltaHtml = "";
       if (typeof previous === "number" && previous !== watch.last_agreement_score) {
         const delta = watch.last_agreement_score - previous;
@@ -1208,8 +1241,7 @@
       score.innerHTML = '<span class="watch-score-empty">No check completed yet</span>';
     }
     bodyRow.appendChild(score);
-    const sparkline = buildSparkline(history);
-    if (sparkline) bodyRow.appendChild(sparkline);
+    bodyRow.appendChild(buildSparkline(trend));
 
     const meta = document.createElement("div");
     meta.className = "watch-card-meta";

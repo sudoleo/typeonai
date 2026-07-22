@@ -64,7 +64,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. |
 | `bookmarks.py` | `/bookmarks` (GET), `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` zum sicheren Wiederherstellen eines Share-/Watch-fähigen Pending-Snapshots aus einem eigenen Consensus-Bookmark. Beide Save-Endpunkte liefern den vollständig zusammengeführten Bookmark-Datensatz zurück, damit der Client ihn ohne Reload aktualisiert. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
-| `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
+| `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` ohne DeepSeek und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil und DeepSeek-Ausschluss. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 
 Der Scheduled Publisher läuft per GitHub Actions montags, mittwochs und freitags.
@@ -196,7 +196,8 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   wartet auf den asynchronen Firebase-Auth-Status): Bei vorhandenen Watches
   Dashboard-KPIs für aktive Watches, Checks/Changes der letzten sieben Tage und nächsten Lauf, ein
   Recent-Movement-Feed, All/Changed/Stable/Paused-Filter sowie Karten je Watch mit
-  Driftstatus/-Summary, Movement-Score, Score/Delta/History-Sparkline und
+  Driftstatus/-Summary, Movement-Score, Score/Delta und eine stets platzhaltende
+  History-Sparkline (bei bestehenden Consensus-Watches ab Original-Baseline) sowie
   Inline-Settings (Intervall/Uhrzeit/Alert-Regel/Condition, E-Mail-/Telegram-
   Kanäle, Pause/Delete). Telegram-Verbindungskarte mit Deep-Link/Test und
   Morning-Brief-Karte (`/api/my/watch-brief`, Toggle im selben

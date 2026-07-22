@@ -181,6 +181,8 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
     slug = str(share.get("slug") or data.get("share_slug") or "")
     visibility = str(share.get("visibility") or data.get("visibility") or "public")
     excluded_providers = list(data.get("excluded_providers") or [])
+    baseline_agreement = (share.get("differences_data") or {}).get("agreement") or {}
+    baseline_agreement_score = baseline_agreement.get("score")
     if data.get("model_tier") == "free" and not excluded_providers:
         # Backward-compatible default for Publisher Watches created before the
         # explicit exclusion field was introduced.
@@ -218,6 +220,10 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         "next_run_at": iso(data.get("next_run_at")),
         "last_run_at": iso(data.get("last_run_at")),
         "last_agreement_score": data.get("last_agreement_score"),
+        "baseline_agreement_score": (
+            baseline_agreement_score
+            if isinstance(baseline_agreement_score, (int, float)) else None
+        ),
         "last_successful_run_id": str(data.get("last_successful_run_id") or ""),
         "last_trigger": "changed" if data.get("last_trigger") == "changed" else "stable",
         "last_change_summary": str(data.get("last_change_summary") or "")[:400],
