@@ -6,7 +6,7 @@ Modell-Ausschluss, Theme-Toggle und Picker-Persistenz ab (Lauf: siehe
 `tests/e2e/README.md`). Die übrigen Punkte weiterhin manuell durchgehen
 (oder zumindest die vom Cluster betroffenen), bevor committet wird. Backend
 bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
-(Baseline: 498 passed, Stand 2026-07-18).
+(Baseline: 708 passed, Stand 2026-07-23).
 
 ## Browser-Konsole
 - [ ] Beim Laden **keine** JS-Fehler in der Konsole (besonders: keine
@@ -168,6 +168,38 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       unterdrückt weitere Telegram-Alerts, „Pause“ verlangt eine zweite
       Bestätigung und pausiert nur die eigene Watch. Ein erneuter Scheduler-
       Versuch für dieselbe Run-ID verschickt kein Duplikat.
+
+## Curated Topics
+- [ ] `/topics` zeigt nur Topics mit mindestens einem veröffentlichten Snapshot;
+      Suche und Kategorie-Filter funktionieren ohne Reload. Navigation, Footer,
+      Light/Dark, Focus States und Mobile-Layout bleiben ohne horizontalen
+      Overflow.
+- [ ] `/topics/{slug}` zeigt den aktuellen Consensus, Agreement-Score,
+      Change-Summary, wichtige Modellbewegungen, Modelle und den nach Snapshot
+      gruppierten Evidence Feed. X-, Official-, GitHub-, Documentation- und
+      Press-Links öffnen sicher in einem neuen Tab.
+- [ ] Die visuelle Timeline zeigt alle versionierten Stände und ihre Agreement-
+      Entwicklung. Ein historischer `?version=<run_id>`-Link rendert den
+      unveränderlichen alten Consensus samt damaligen Modellen/Evidence,
+      kennzeichnet die historische Ansicht und verlinkt zur aktuellen Version.
+- [ ] Topic-Follow sendet mit Test-SMTP eine Double-Opt-in-Mail; erst der
+      Bestätigungslink persistiert das Abo. Ein neuer Minor-/Major-Snapshot
+      versendet genau ein Update, Stable nicht; der Abmelde-Link entfernt nur
+      das Topic-Abo und verändert weder Nutzer-Watches noch Share-Follower.
+- [ ] `/admin#topics`: Create/Edit, Slug/Kategorie/Intervall, Status
+      Active/Paused/Archived, konkrete Modelle je Provider, Quellenpräferenzen
+      und SEO lassen sich verständlich speichern. `/admin/topics` leitet auf
+      diesen Tab um.
+- [ ] „Run now“ benötigt keinen manuell eingetragenen Consensus, Score,
+      Evidence-Link oder Opinion Change. Der Lauf recherchiert aktuelle Quellen,
+      führt nur die ausgewählten Modelle aus und legt eine neue unveränderliche
+      Version mit Agreement, Change-Summary, Opinion Map und Evidence an. Ein
+      zweiter Run vergleicht gegen den ersten Stand.
+- [ ] Daily/Weekly/Biweekly/Monthly setzt einen sichtbaren `next_run_at`; der
+      Topic-Scheduler führt fällige aktive Topics aus. Manual setzt keinen
+      Termin, Paused/Archived laufen weder automatisch noch über „Run now“.
+      Bei fehlendem SMTP wird ein erfolgreicher Material-Change-Run gespeichert
+      und der Admin transparent auf nicht versendete Updates hingewiesen.
 
 ## Modelle / Picker
 - [ ] Custom Model Picker öffnet/wählt, sichtbarer Name aktualisiert.

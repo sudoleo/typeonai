@@ -122,6 +122,7 @@
             border-radius: var(--radius-md);
             box-shadow: var(--card-shadow);
         }
+        .admin-savebar[hidden] { display: none; }
         .admin-savebar h2 { margin: 0; font-size: 1.05em; flex: 1; }
         .dirty-dot {
             display: none;
@@ -152,6 +153,24 @@
             font-size: 0.82em;
             color: var(--sidebar-text-muted);
         }
+        .topic-admin-layout { display: grid; grid-template-columns: minmax(210px, .7fr) minmax(0, 2fr); gap: 18px; }
+        .topic-admin-list { display: grid; align-content: start; gap: 8px; }
+        .topic-admin-list button { width: 100%; padding: 10px 12px; border: 1px solid var(--input-border); border-radius: var(--radius-sm); color: var(--text-color); background: var(--input-bg); text-align: left; cursor: pointer; }
+        .topic-admin-list button.is-active { border-color: var(--accent-primary); box-shadow: 0 0 0 1px var(--accent-primary); }
+        .topic-admin-list small, .topic-run-history small { display: block; margin-top: 4px; color: var(--sidebar-text-muted); }
+        .topic-admin-form, .topic-form-grid { display: grid; gap: 12px; }
+        .topic-admin-form[hidden] { display: none; }
+        .topic-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .topic-form-grid .wide { grid-column: 1 / -1; }
+        .topic-form-grid label, .topic-model-row label { display: grid; gap: 5px; color: var(--sidebar-text-muted); font-size: .78rem; font-weight: 650; }
+        .topic-form-grid input, .topic-form-grid textarea, .topic-form-grid select, .topic-model-row select { width: 100%; box-sizing: border-box; border: 1px solid var(--input-border); border-radius: var(--radius-sm); padding: 9px 10px; color: var(--text-color); background: var(--input-bg); }
+        .topic-model-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; }
+        .topic-model-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center; }
+        .topic-model-row label { display: flex; align-items: center; }
+        .topic-admin-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .topic-run-history { display: grid; gap: 8px; }
+        .topic-run-history > div { padding: 10px 0; border-top: 1px solid var(--input-border); }
+        .topic-status-line { min-height: 20px; font-size: .84rem; }
         /* minmax(0,1fr) statt 1fr: 1fr = minmax(auto,1fr), d.h. der
            Min-Content der Modell-Zeilen (nowrap-Labels) konnte die Spalten
            ueber die Shell hinaus aufblasen — das Grid wirkte dann
@@ -571,6 +590,7 @@
             .seo-summary-grid { grid-template-columns: 1fr; }
             .seo-editorial-controls { grid-template-columns: 1fr; }
             .seo-topic-diff { grid-template-columns: 1fr; }
+            .topic-admin-layout, .topic-form-grid, .topic-model-grid { grid-template-columns: 1fr; }
         }
     </style>
     <script type="module">
@@ -640,7 +660,7 @@
         // ==============================
         // Tabs
         // ==============================
-        const TAB_IDS = ['models', 'consensus', 'limits', 'api', 'shares', 'watches', 'seo'];
+        const TAB_IDS = ['models', 'consensus', 'limits', 'api', 'shares', 'watches', 'topics', 'seo'];
         function activateTab(tabId) {
             if (!TAB_IDS.includes(tabId)) tabId = 'models';
             if (tabId !== 'api') clearIssuedApiKey();
@@ -650,6 +670,7 @@
                 btn.classList.toggle('active', id === tabId);
                 btn.setAttribute('aria-selected', id === tabId ? 'true' : 'false');
             });
+            document.getElementById('adminSavebar').hidden = tabId === 'topics';
             history.replaceState(null, '', `#${tabId}`);
         }
         document.querySelectorAll('.admin-tabs button').forEach(btn => {
@@ -2024,6 +2045,253 @@
             }
         });
 
+        // === Public Topic tickers ===
+        let adminTopics = [];
+        let selectedTopicId = '';
+        let selectedTopicDetail = null;
+        let topicSlugTouched = false;
+
+        function topicAdminStatus(message, isError) {
+            const el = document.getElementById('topicAdminStatus');
+            el.textContent = message || '';
+            el.className = `topic-status-line ${isError ? 'error' : 'success'}`;
+        }
+
+        function topicSlug(value) {
+            return String(value || '').toLowerCase().trim()
+                .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        }
+
+        function renderAdminTopicList() {
+            const container = document.getElementById('adminTopicList');
+            container.innerHTML = '';
+            if (!adminTopics.length) {
+                container.textContent = 'No Topics yet.';
+                return;
+            }
+            adminTopics.forEach(topic => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.classList.toggle('is-active', topic.id === selectedTopicId);
+                const title = document.createElement('strong');
+                title.textContent = topic.title || '(untitled)';
+                const metaLine = document.createElement('small');
+                metaLine.textContent = `${topic.status} · ${topic.run_count || 0} runs · next ${formatAdminTime(topic.next_run_at)}`;
+                button.append(title, metaLine);
+                button.addEventListener('click', () => selectAdminTopic(topic.id));
+                container.appendChild(button);
+            });
+        }
+
+        function renderTopicModelPlan(providerModels) {
+            const selected = providerModels || {};
+            const defaults = (globalModelsData.watch_models || {}).free || {};
+            const container = document.getElementById('topicModelPlan');
+            container.innerHTML = '';
+            providers.forEach(provider => {
+                const models = globalModelsData[provider] || [];
+                const chosen = selected[provider] || defaults[provider] || '';
+                const row = document.createElement('div');
+                row.className = 'topic-model-row';
+                row.dataset.provider = provider;
+                const toggleLabel = document.createElement('label');
+                const toggle = document.createElement('input');
+                toggle.type = 'checkbox';
+                toggle.checked = !!chosen;
+                toggle.setAttribute('aria-label', `Run ${provider}`);
+                toggleLabel.append(toggle, document.createTextNode(PROVIDER_LABELS[provider] || provider));
+                const select = document.createElement('select');
+                const options = models.length ? models : (chosen ? [chosen] : []);
+                options.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = ((globalModelsData.meta || {}).labels || {})[model] || model;
+                    option.selected = model === chosen;
+                    select.appendChild(option);
+                });
+                select.disabled = !toggle.checked;
+                toggle.addEventListener('change', () => {
+                    select.disabled = !toggle.checked;
+                    if (toggle.checked && !select.value && select.options.length) select.selectedIndex = 0;
+                });
+                row.append(toggleLabel, select);
+                container.appendChild(row);
+            });
+        }
+
+        const PROVIDER_LABELS = {
+            openai: 'OpenAI', mistral: 'Mistral', anthropic: 'Anthropic',
+            gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok'
+        };
+
+        function fillAdminTopic(topic, runs) {
+            selectedTopicDetail = topic;
+            document.getElementById('topicEditorEmpty').hidden = true;
+            document.getElementById('topicAdminForm').hidden = false;
+            document.getElementById('adminTopicTitle').value = topic.title || '';
+            document.getElementById('adminTopicSlug').value = topic.slug || '';
+            document.getElementById('adminTopicQuestion').value = topic.lead_question || '';
+            document.getElementById('adminTopicCategory').value = topic.category || '';
+            document.getElementById('adminTopicSummary').value = topic.summary || '';
+            document.getElementById('adminTopicStatus').value = topic.status || 'active';
+            document.getElementById('adminTopicInterval').value = topic.update_interval || 'weekly';
+            document.getElementById('adminTopicDomains').value =
+                ((topic.source_rules || {}).preferred_domains || []).join('\n');
+            document.getElementById('adminTopicSourceNotes').value =
+                (topic.source_rules || {}).notes || '';
+            document.getElementById('adminTopicSeoTitle').value = (topic.seo || {}).title || '';
+            document.getElementById('adminTopicSeoDescription').value = (topic.seo || {}).description || '';
+            document.getElementById('adminTopicNoindex').checked = !!(topic.seo || {}).noindex;
+            renderTopicModelPlan((topic.run_config || {}).provider_models || {});
+            const schedule = document.getElementById('topicScheduleState');
+            schedule.textContent = topic.id
+                ? `Last: ${formatAdminTime(topic.latest_run_at)} · Next: ${formatAdminTime(topic.next_run_at)} · ${topic.last_run_status || 'never'}${topic.last_run_error ? ` · ${topic.last_run_error}` : ''}`
+                : 'Save the Topic before its first run.';
+            const history = document.getElementById('topicRunHistory');
+            history.innerHTML = '';
+            (runs || []).forEach(run => {
+                const item = document.createElement('div');
+                const headline = document.createElement('strong');
+                headline.textContent = `Run ${run.version} · ${run.agreement_score}/100 · ${run.change_type}`;
+                const details = document.createElement('small');
+                details.textContent = `${formatAdminTime(run.observed_at)} · ${(run.models || []).length} models · ${(run.evidence || []).length} sources`;
+                const summary = document.createElement('small');
+                summary.textContent = run.change_summary || 'No material change.';
+                item.append(headline, details, summary);
+                history.appendChild(item);
+            });
+            if (!(runs || []).length) history.textContent = 'No runs yet.';
+            const leaseActive = topic.claimed_until && new Date(topic.claimed_until).getTime() > Date.now();
+            document.getElementById('runAdminTopicBtn').disabled =
+                !topic.id || topic.status !== 'active' || leaseActive;
+            document.getElementById('openAdminTopicBtn').hidden = !topic.latest_run_id;
+            document.getElementById('openAdminTopicBtn').href = topic.slug ? `/topics/${encodeURIComponent(topic.slug)}` : '#';
+            topicSlugTouched = !!topic.id;
+            topicAdminStatus('', false);
+        }
+
+        async function selectAdminTopic(topicId) {
+            selectedTopicId = topicId;
+            renderAdminTopicList();
+            topicAdminStatus('Loading Topic...', false);
+            try {
+                const data = await shareAdminRequest('GET', `/api/admin/topics/${encodeURIComponent(topicId)}`);
+                fillAdminTopic(data.topic, data.runs || []);
+            } catch (err) {
+                topicAdminStatus(err.message, true);
+            }
+        }
+
+        async function loadAdminTopics(selectId) {
+            topicAdminStatus('Loading Topics...', false);
+            try {
+                const data = await shareAdminRequest('GET', '/api/admin/topics');
+                adminTopics = data.topics || [];
+                renderAdminTopicList();
+                const target = selectId || selectedTopicId;
+                if (target) await selectAdminTopic(target);
+                topicAdminStatus('', false);
+            } catch (err) {
+                topicAdminStatus(err.message, true);
+            }
+        }
+
+        function newAdminTopic() {
+            selectedTopicId = '';
+            renderAdminTopicList();
+            fillAdminTopic({
+                status: 'active',
+                update_interval: 'weekly',
+                source_rules: { allowed_types: ['x', 'official', 'github', 'documentation', 'press'] },
+                run_config: { provider_models: (globalModelsData.watch_models || {}).free || {} },
+                seo: {}
+            }, []);
+            topicSlugTouched = false;
+        }
+
+        function topicProviderModels() {
+            const result = {};
+            document.querySelectorAll('#topicModelPlan .topic-model-row').forEach(row => {
+                const toggle = row.querySelector('input[type="checkbox"]');
+                const select = row.querySelector('select');
+                if (toggle.checked && select.value) result[row.dataset.provider] = select.value;
+            });
+            return result;
+        }
+
+        function topicLines(value) {
+            return String(value || '').split(/\r?\n/).map(item => item.trim()).filter(Boolean);
+        }
+
+        function adminTopicPayload() {
+            return {
+                title: document.getElementById('adminTopicTitle').value.trim(),
+                slug: document.getElementById('adminTopicSlug').value.trim(),
+                lead_question: document.getElementById('adminTopicQuestion').value.trim(),
+                category: document.getElementById('adminTopicCategory').value.trim(),
+                summary: document.getElementById('adminTopicSummary').value.trim(),
+                status: document.getElementById('adminTopicStatus').value,
+                update_interval: document.getElementById('adminTopicInterval').value,
+                run_config: { provider_models: topicProviderModels(), collect_sources: true },
+                source_rules: {
+                    allowed_types: ['x', 'official', 'github', 'documentation', 'press'],
+                    preferred_domains: topicLines(document.getElementById('adminTopicDomains').value),
+                    notes: document.getElementById('adminTopicSourceNotes').value.trim()
+                },
+                seo: {
+                    title: document.getElementById('adminTopicSeoTitle').value.trim(),
+                    description: document.getElementById('adminTopicSeoDescription').value.trim(),
+                    noindex: document.getElementById('adminTopicNoindex').checked
+                }
+            };
+        }
+
+        async function saveAdminTopic() {
+            const button = document.getElementById('saveAdminTopicBtn');
+            button.disabled = true;
+            topicAdminStatus('Saving Topic...', false);
+            try {
+                const data = await shareAdminRequest(
+                    selectedTopicId ? 'PUT' : 'POST',
+                    selectedTopicId ? `/api/admin/topics/${encodeURIComponent(selectedTopicId)}` : '/api/admin/topics',
+                    adminTopicPayload()
+                );
+                selectedTopicId = data.topic.id;
+                await loadAdminTopics(selectedTopicId);
+                topicAdminStatus('Topic configuration saved.', false);
+            } catch (err) {
+                topicAdminStatus(err.message, true);
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        async function runAdminTopic() {
+            if (!selectedTopicId) return;
+            if (!confirm('Run this Topic now? The selected models will research current sources and create a new immutable timeline point.')) return;
+            const button = document.getElementById('runAdminTopicBtn');
+            button.disabled = true;
+            topicAdminStatus('Researching sources and building Consensus. This can take a minute...', false);
+            try {
+                const data = await shareAdminRequest('POST', `/api/admin/topics/${encodeURIComponent(selectedTopicId)}/runs`, {});
+                await loadAdminTopics(selectedTopicId);
+                topicAdminStatus(`Run ${data.run.version} saved: ${data.run.agreement_score}/100 agreement and ${(data.run.evidence || []).length} sources.`, false);
+            } catch (err) {
+                topicAdminStatus(err.message, true);
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        document.getElementById('newAdminTopicBtn').addEventListener('click', newAdminTopic);
+        document.getElementById('reloadAdminTopicsBtn').addEventListener('click', () => loadAdminTopics(selectedTopicId));
+        document.getElementById('saveAdminTopicBtn').addEventListener('click', saveAdminTopic);
+        document.getElementById('runAdminTopicBtn').addEventListener('click', runAdminTopic);
+        document.getElementById('adminTopicTitle').addEventListener('input', event => {
+            if (!topicSlugTouched) document.getElementById('adminTopicSlug').value = topicSlug(event.target.value);
+        });
+        document.getElementById('adminTopicSlug').addEventListener('input', () => { topicSlugTouched = true; });
+
         // === Read-only SEO data foundation ===
         function seoStatus(message, isError) {
             const el = document.getElementById('seoStatus');
@@ -2593,6 +2861,7 @@
                 loadApiKeys();
                 loadShares('reported');
                 loadAdminWatches();
+                loadAdminTopics();
                 loadSeoOverview();
             } else {
                 setStatus('Please log in to access the admin panel.', true);
@@ -2612,6 +2881,7 @@
             <span class="top-bar-title">consens.io Admin</span>
         </div>
         <div class="top-bar-right">
+            <a href="/topics" class="top-bar-about">Public Topics</a>
             <a href="/admin/benchmark" class="top-bar-about">Benchmark</a>
             <a href="/app" class="top-bar-about">Back to App</a>
         </div>
@@ -2625,6 +2895,7 @@
             <button type="button" data-tab="api" role="tab">API</button>
             <button type="button" data-tab="shares" role="tab">Shared Pages</button>
             <button type="button" data-tab="watches" role="tab">Consensus Watch</button>
+            <button type="button" data-tab="topics" role="tab">Topics</button>
             <button type="button" data-tab="seo" role="tab">SEO</button>
         </nav>
 
@@ -2883,6 +3154,85 @@
                 </div>
                 <div id="watchesContainer">
                     <!-- Populated by JavaScript -->
+                </div>
+            </div>
+        </section>
+
+        <section id="tab-topics" class="admin-tab-panel" role="tabpanel" hidden>
+            <div class="admin-section">
+                <h3>Public Topic tickers</h3>
+                <p class="section-hint">
+                    A Topic reruns one stable research question with the selected answer models.
+                    Each run searches for current sources, builds Consensus and Agreement, detects
+                    material opinion movement, and appends an immutable point to the public timeline.
+                    Seed links and manual Consensus text are not required.
+                </p>
+                <div class="topic-admin-actions" style="margin-bottom: 14px;">
+                    <button id="newAdminTopicBtn" type="button" class="admin-btn">New Topic</button>
+                    <button id="reloadAdminTopicsBtn" type="button" class="admin-btn secondary">Reload</button>
+                    <span id="topicAdminStatus" class="topic-status-line" role="status"></span>
+                </div>
+                <div class="topic-admin-layout">
+                    <aside id="adminTopicList" class="topic-admin-list" aria-label="Topics"></aside>
+                    <div>
+                        <p id="topicEditorEmpty" class="section-hint">Select a Topic or create a new one.</p>
+                        <form id="topicAdminForm" class="topic-admin-form" hidden onsubmit="return false;">
+                            <div class="topic-form-grid">
+                                <label>Title<input id="adminTopicTitle" maxlength="140" required></label>
+                                <label>URL slug<input id="adminTopicSlug" maxlength="80" required></label>
+                                <label class="wide">Ticker question<input id="adminTopicQuestion" maxlength="500" required placeholder="What is the current evidence about...?"></label>
+                                <label>Category<input id="adminTopicCategory" maxlength="80" required></label>
+                                <label>Status
+                                    <select id="adminTopicStatus">
+                                        <option value="active">Active - public and scheduled</option>
+                                        <option value="paused">Paused - public, no runs</option>
+                                        <option value="archived">Archived - hidden</option>
+                                    </select>
+                                </label>
+                                <label>Collection interval
+                                    <select id="adminTopicInterval">
+                                        <option value="manual">Manual only</option>
+                                        <option value="daily">Daily</option>
+                                        <option value="weekly">Weekly</option>
+                                        <option value="biweekly">Every two weeks</option>
+                                        <option value="monthly">Monthly</option>
+                                    </select>
+                                </label>
+                                <label class="wide">Public summary<textarea id="adminTopicSummary" rows="3" maxlength="1200"></textarea></label>
+                            </div>
+
+                            <div>
+                                <h4 style="margin-bottom: 5px;">Models that collect the new state</h4>
+                                <p class="section-hint">Enable at least two providers. The stored configuration uses concrete provider-to-model IDs, just like Watch model profiles.</p>
+                                <div id="topicModelPlan" class="topic-model-grid"></div>
+                            </div>
+
+                            <div class="topic-form-grid">
+                                <label class="wide">Preferred source domains (one per line)<textarea id="adminTopicDomains" rows="3" placeholder="openai.com"></textarea></label>
+                                <label class="wide">Research guidance<textarea id="adminTopicSourceNotes" rows="3" maxlength="3000" placeholder="Prefer primary sources and official release notes."></textarea></label>
+                            </div>
+
+                            <details>
+                                <summary>Search appearance</summary>
+                                <div class="topic-form-grid" style="margin-top: 10px;">
+                                    <label>SEO title<input id="adminTopicSeoTitle" maxlength="160"></label>
+                                    <label>Meta description<input id="adminTopicSeoDescription" maxlength="300"></label>
+                                    <label class="wide"><span><input id="adminTopicNoindex" type="checkbox" style="width:auto;"> Keep out of search indexes</span></label>
+                                </div>
+                            </details>
+
+                            <p id="topicScheduleState" class="section-hint"></p>
+                            <div class="topic-admin-actions">
+                                <button id="saveAdminTopicBtn" type="button" class="admin-btn">Save configuration</button>
+                                <button id="runAdminTopicBtn" type="button" class="admin-btn secondary">Run now</button>
+                                <a id="openAdminTopicBtn" class="admin-btn secondary" target="_blank" rel="noopener">Open public ticker</a>
+                            </div>
+                            <div>
+                                <h4>Timeline history</h4>
+                                <div id="topicRunHistory" class="topic-run-history"></div>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
         </section>

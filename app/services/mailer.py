@@ -199,6 +199,71 @@ def build_follow_confirm_message(*, recipient: str, question: str,
     return _base_message(recipient, subject, plain, html_body)
 
 
+def build_topic_follow_confirm_message(*, recipient: str, title: str,
+                                       confirm_url: str, topic_url: str) -> EmailMessage:
+    """Double opt-in confirmation for the independent curated Topics area."""
+    clipped_title = " ".join(str(title or "").split())
+    subject_title = clipped_title[:72] + ("…" if len(clipped_title) > 72 else "")
+    subject = f'Confirm: follow "{subject_title}"'
+    plain = (
+        "Confirm that you want to follow this topic on consens.io.\n\n"
+        f"{clipped_title}\n\n"
+        "You will receive an e-mail when the curated consensus changes materially.\n"
+        f"Confirm: {confirm_url}\n\n"
+        f"Topic: {topic_url}\n"
+        "If you did not request this, ignore this e-mail; nothing is stored.\n"
+    )
+    safe_title = html.escape(clipped_title)
+    safe_confirm = html.escape(confirm_url)
+    safe_topic = html.escape(topic_url)
+    html_body = f"""<!doctype html><html><body style="font-family:Arial,sans-serif;color:#172033;line-height:1.55">
+<div style="max-width:620px;margin:auto;padding:24px"><h1 style="font-size:22px">Follow this topic?</h1>
+<p style="font-size:17px;font-weight:600">{safe_title}</p>
+<p>You will receive an e-mail when the curated AI consensus changes materially.</p>
+<p><a href="{safe_confirm}" style="display:inline-block;background:#335cff;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px">Confirm and follow</a></p>
+<p style="font-size:12px;color:#667085;margin-top:32px">If you did not request this, ignore this e-mail; nothing is stored. <a href="{safe_topic}">Open the topic</a>.</p>
+</div></body></html>"""
+    return _base_message(recipient, subject, plain, html_body)
+
+
+def build_topic_change_message(*, recipient: str, title: str, question: str,
+                               old_score, new_score, change_type: str,
+                               summary: str, topic_url: str,
+                               unsubscribe_url: str) -> EmailMessage:
+    """Material-change notification for a confirmed Topic follower."""
+    clipped_title = " ".join(str(title or "").split())
+    clipped_question = " ".join(str(question or "").split())
+    subject_title = clipped_title[:72] + ("…" if len(clipped_title) > 72 else "")
+    subject = f"Topic update: {subject_title}"
+    old_label = "—" if old_score is None else f"{old_score}/100"
+    new_label = "—" if new_score is None else f"{new_score}/100"
+    plain = (
+        f"The curated consensus changed ({change_type}).\n\n"
+        f"{clipped_title}\n{clipped_question}\n\n"
+        f"Agreement: {old_label} -> {new_label}\n{summary}\n\n"
+        f"Open the timeline: {topic_url}\nUnfollow: {unsubscribe_url}\n"
+    )
+    safe = {key: html.escape(str(value)) for key, value in {
+        "title": clipped_title,
+        "question": clipped_question,
+        "old": old_label,
+        "new": new_label,
+        "change_type": change_type,
+        "summary": summary,
+        "topic": topic_url,
+        "unsubscribe": unsubscribe_url,
+    }.items()}
+    html_body = f"""<!doctype html><html><body style="font-family:Arial,sans-serif;color:#172033;line-height:1.55">
+<div style="max-width:620px;margin:auto;padding:24px"><p style="color:#335cff;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em">Curated Topic update</p>
+<h1 style="font-size:24px">{safe['title']}</h1><p style="font-size:16px;color:#667085">{safe['question']}</p>
+<div style="padding:18px;background:#f3f6fb;border-radius:12px;font-size:20px"><span style="color:#667085">{safe['old']}</span> → <strong>{safe['new']}</strong> agreement</div>
+<p><strong>{safe['change_type'].title()} change:</strong> {safe['summary']}</p>
+<p><a href="{safe['topic']}" style="display:inline-block;background:#335cff;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px">Open the timeline</a></p>
+<p style="font-size:12px;color:#667085;margin-top:32px">You follow this curated topic on consens.io. <a href="{safe['unsubscribe']}">Unfollow</a>.</p>
+</div></body></html>"""
+    return _base_message(recipient, subject, plain, html_body)
+
+
 def build_follower_change_message(*, recipient: str, question: str, old_score,
                                   new_score, summary: str, share_url: str,
                                   unsubscribe_url: str) -> EmailMessage:

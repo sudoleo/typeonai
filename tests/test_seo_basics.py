@@ -44,6 +44,7 @@ class SeoBasicsTests(unittest.TestCase):
         self.assertIn("<sitemapindex", content)
         self.assertIn(f"<loc>{SITE_URL}/sitemap-pages.xml</loc>", content)
         self.assertIn(f"<loc>{SITE_URL}/sitemap-shares.xml</loc>", content)
+        self.assertIn(f"<loc>{SITE_URL}/sitemap-topics.xml</loc>", content)
 
     def test_pages_sitemap_contains_public_indexable_pages(self):
         response = sitemap_pages_xml()
@@ -54,6 +55,7 @@ class SeoBasicsTests(unittest.TestCase):
         self.assertIn(f"<loc>{SITE_URL}/ai-model-comparison</loc>", content)
         self.assertIn(f"<loc>{SITE_URL}/consensus-engine</loc>", content)
         self.assertIn(f"<loc>{SITE_URL}/questions</loc>", content)
+        self.assertIn(f"<loc>{SITE_URL}/topics</loc>", content)
         self.assertIn(f"<loc>{SITE_URL}/about</loc>", content)
         self.assertNotIn(f"<loc>{SITE_URL}/app</loc>", content)
         self.assertNotIn(f"<loc>{SITE_URL}/privacy</loc>", content)
@@ -90,6 +92,14 @@ class SeoBasicsTests(unittest.TestCase):
         self.assertIn('property="og:title"', template)
         self.assertIn('type="application/ld+json"', template)
 
+    def test_topics_hub_template_has_seo_metadata(self):
+        template = (ROOT / "templates" / "topics.html").read_text(encoding="utf-8")
+
+        self.assertIn('<link rel="canonical" href="https://www.consens.io/topics">', template)
+        self.assertIn('<meta name="robots" content="index, follow">', template)
+        self.assertIn('property="og:title"', template)
+        self.assertIn('type="application/ld+json"', template)
+
     def test_public_nav_and_footer_link_to_questions_hub(self):
         # SEO-Kern des Hubs: indexierte Shares hängen nicht mehr nur in der
         # Sitemap, sondern sind aus Nav + Footer jeder Public-Seite erreichbar.
@@ -98,6 +108,8 @@ class SeoBasicsTests(unittest.TestCase):
 
         self.assertIn('href="/questions"', nav)
         self.assertIn('href="/questions"', footer)
+        self.assertIn('href="/topics"', nav)
+        self.assertIn('href="/topics"', footer)
 
     def test_app_template_is_noindex(self):
         template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")

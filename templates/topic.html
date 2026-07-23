@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{ meta_description }}">
+  <meta name="robots" content="{{ robots_meta }}">
+  <link rel="canonical" href="{{ canonical_url }}">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="consens.io">
+  <meta property="og:title" content="{{ page_title }}">
+  <meta property="og:description" content="{{ meta_description }}">
+  <meta property="og:url" content="{{ page_url }}">
+  <meta property="og:image" content="https://www.consens.io/static/favicon-square.png">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{ page_title }}">
+  <meta name="twitter:description" content="{{ meta_description }}">
+  <title>{{ page_title }} | consens.io</title>
+  <script type="application/ld+json">{{ jsonld | safe }}</script>
+  <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260721-querywatch1">
+  <link rel="stylesheet" href="/static/css/topics.css?v=20260723-topics1">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css">
+  <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
+  <script>
+    (function () {
+      const savedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (savedTheme === "dark" || (!savedTheme && prefersDark)) document.documentElement.classList.add("dark-mode");
+    })();
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/contrib/auto-render.min.js"></script>
+  <script defer src="/static/js/math-render.js?v=20260720-math1"></script>
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
+</head>
+<body>
+  {% include "partials/public_nav.html" %}
+
+  <main class="page-shell topic-detail-shell" data-math-render>
+    <header class="topic-detail-header">
+      <div class="topic-breadcrumb"><a href="/topics">Topics</a><span>/</span><span>{{ topic.category }}</span></div>
+      <div class="topic-title-row">
+        <div>
+          <div class="topic-title-meta">
+            <span class="topic-state{% if topic.status == 'paused' %} is-paused{% endif %}">{{ "Paused" if topic.status == "paused" else "Live" }}</span>
+            <span>Checked {{ topic.update_interval }}</span>
+            <span>{{ topic.run_count }} version{{ "s" if topic.run_count != 1 }}</span>
+          </div>
+          <h1>{{ topic.title }}</h1>
+          <p class="topic-lead-question">{{ topic.lead_question }}</p>
+          {% if topic.summary %}<p class="topic-summary">{{ topic.summary }}</p>{% endif %}
+        </div>
+        <div class="topic-current-score{% if selected.agreement_score >= 75 %} is-high{% elif selected.agreement_score >= 50 %} is-mid{% else %} is-low{% endif %}">
+          <span>Agreement</span>
+          <strong>{{ selected.agreement_score }}</strong>
+          <small>out of 100</small>
+        </div>
+      </div>
+      {% if not is_current %}
+      <div class="topic-version-notice">
+        You are viewing snapshot {{ selected.version }} from {{ selected.observed_at[:10] }}.
+        <a href="/topics/{{ topic.slug }}">Return to the current consensus</a>
+      </div>
+      {% endif %}
+    </header>
+
+    <div class="topic-detail-layout">
+      <article class="topic-main-column">
+        <section class="topic-panel topic-consensus-panel">
+          <div class="topic-panel-head">
+            <div>
+              <p class="eyebrow">Consensus snapshot {{ selected.version }}</p>
+              <h2>{{ selected.observed_at[:10] }}</h2>
+            </div>
+            <span class="topic-change-badge is-{{ selected.change_type }}">{{ selected.change_type }}</span>
+          </div>
+          {% if selected.change_summary %}
+          <div class="topic-change-summary is-{{ selected.change_type }}">
+            <span>What changed</span>
+            <p>{{ selected.change_summary }}</p>
+          </div>
+          {% endif %}
+          <div class="topic-consensus prose">{{ selected.consensus_html | safe }}</div>
+          {% if selected.models %}
+          <div class="topic-models">
+            <span>Models in this snapshot</span>
+            <div>{% for model in selected.models %}<span>{{ model }}</span>{% endfor %}</div>
+          </div>
+          {% endif %}
+        </section>
+
+        {% if selected.opinion_changes %}
+        <section class="topic-panel">
+          <div class="topic-panel-head">
+            <div><p class="eyebrow">Model movement</p><h2>Important opinion changes</h2></div>
+          </div>
+          <div class="opinion-change-list">
+            {% for change in selected.opinion_changes %}
+            <article class="opinion-change">
+              <div class="opinion-change-model">{{ change.model or "Cross-model shift" }}</div>
+              {% if change.from or change.to %}
+              <div class="opinion-direction">
+                <span>{{ change.from or "Earlier position" }}</span><b aria-hidden="true">&rarr;</b><span>{{ change.to or "Current position" }}</span>
+              </div>
+              {% endif %}
+              <div class="prose">{{ change.summary_html | safe }}</div>
+            </article>
+            {% endfor %}
+          </div>
+        </section>
+        {% endif %}
+
+        <section class="topic-panel" id="evidence">
+          <div class="topic-panel-head">
+            <div><p class="eyebrow">Evidence feed</p><h2>What moved the timeline</h2></div>
+          </div>
+          <div class="evidence-run-list">
+            {% for run in runs %}
+            {% if run.evidence %}
+            <section class="evidence-run">
+              <div class="evidence-run-date">
+                <span>{{ run.date_display }}</span>
+                <small>Snapshot {{ run.version }}</small>
+              </div>
+              <div class="evidence-cards">
+                {% for item in run.evidence %}
+                <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer" class="evidence-card evidence-{{ item.type }}">
+                  <span class="evidence-type">{{ "X post" if item.type == "x" else item.type }}</span>
+                  <strong>{{ item.title }}</strong>
+                  <span>{{ item.publisher }}{% if item.publisher and item.published_at %} &middot; {% endif %}{{ item.published_at }}</span>
+                  {% if item.excerpt %}<p>{{ item.excerpt }}</p>{% endif %}
+                  <b>{{ "View post" if item.type == "x" else "Open source" }} &nearr;</b>
+                </a>
+                {% endfor %}
+              </div>
+            </section>
+            {% endif %}
+            {% endfor %}
+          </div>
+        </section>
+      </article>
+
+      <aside class="topic-side-column">
+        <section class="topic-follow-card">
+          <p class="eyebrow">Follow this Topic</p>
+          <h2>Know when the consensus moves.</h2>
+          <p>Get one e-mail when a new run detects a material consensus change. Double opt-in, no account required.</p>
+          {% if topic.status == "active" %}
+          <form id="topicFollowForm" data-slug="{{ topic.slug }}">
+            <label class="visually-hidden" for="topicFollowEmail">E-mail address</label>
+            <input id="topicFollowEmail" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+            <button type="submit">Follow Topic</button>
+          </form>
+          <p id="topicFollowStatus" class="topic-follow-status" role="status"></p>
+          {% else %}
+          <p class="topic-follow-status">This Topic is paused. Its public history remains available.</p>
+          {% endif %}
+        </section>
+
+        <section class="topic-timeline-card">
+          <div class="topic-timeline-head">
+            <p class="eyebrow">Timeline</p>
+            <span>Agreement</span>
+          </div>
+          <ol class="topic-timeline">
+            {% for run in runs %}
+            <li class="is-{{ run.change_type }}{% if run.is_selected %} is-selected{% endif %}">
+              <a href="/topics/{{ topic.slug }}{% if run.id != topic.latest_run_id %}?version={{ run.id }}{% endif %}">
+                <span class="timeline-dot"></span>
+                <span class="timeline-copy">
+                  <strong>{{ run.date_display }}</strong>
+                  <small>{{ run.change_summary or "No material change" }}</small>
+                  {% if run.opinion_changes %}<em>{{ run.opinion_changes | length }} opinion change{{ "s" if run.opinion_changes | length != 1 }}</em>{% endif %}
+                </span>
+                <span class="timeline-score">
+                  <strong>{{ run.agreement_score }}</strong>
+                  <i><b style="width: {{ run.agreement_score }}%"></b></i>
+                </span>
+              </a>
+            </li>
+            {% endfor %}
+          </ol>
+        </section>
+
+        <section class="topic-side-link-card">
+          <span>Want a one-off answer?</span>
+          <strong>Ask several AI models at once.</strong>
+          <a href="/app">Open consens.io &rarr;</a>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  {% include "partials/public_footer.html" %}
+
+  <script>
+    (function () {
+      const form = document.getElementById("topicFollowForm");
+      if (!form) return;
+      const status = document.getElementById("topicFollowStatus");
+      const button = form.querySelector("button");
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        button.disabled = true;
+        status.textContent = "Sending confirmation…";
+        try {
+          const response = await fetch("/api/topics/" + encodeURIComponent(form.dataset.slug) + "/follow", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({email: form.email.value})
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Could not follow this Topic.");
+          status.textContent = data.message;
+          form.reset();
+        } catch (error) {
+          status.textContent = error.message;
+          status.classList.add("is-error");
+        } finally {
+          button.disabled = false;
+        }
+      });
+      window.addEventListener("DOMContentLoaded", function () {
+        if (window.ConsensusMath) window.ConsensusMath.render(document.querySelector("[data-math-render]"));
+      });
+    })();
+  </script>
+</body>
+</html>

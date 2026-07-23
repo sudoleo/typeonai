@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 from bs4 import BeautifulSoup
 
-from app.services import share_snapshots
+from app.services import share_snapshots, topics
 from app.services.public_markdown import markdown_to_plaintext
 
 
@@ -22,6 +22,7 @@ STATIC_TEMPLATE_BY_PATH = {
     "/ai-model-comparison": "ai-model-comparison.html",
     "/consensus-engine": "consensus-engine.html",
     "/questions": "questions.html",
+    "/topics": "topics.html",
     "/benchmark": "benchmark.html",
     "/about": "about.html",
 }
@@ -185,6 +186,61 @@ def build_share_dossier(share_id: str, *, db=None) -> dict:
             "last_material_change_at": _iso(last_material_change),
         },
         "technical_uncertainties": sorted(set(uncertainties)),
+    }
+
+
+def build_topic_dossier(topic_id: str, *, db=None) -> dict:
+    topic = topics.get_topic(topic_id, db=db)
+    if not topic:
+        return {
+            "schema_version": 1,
+            "published_at": None,
+            "last_content_change_at": None,
+            "title": "",
+            "meta_description": "",
+            "content_summary": "",
+            "content_representation": None,
+            "source_freshness": {"source_count": 0, "snapshot_at": None},
+            "watch_freshness": {"last_checked_at": None, "last_material_change_at": None},
+            "technical_uncertainties": ["topic_unavailable"],
+        }
+    latest = topics.get_run(topic_id, topic.get("latest_run_id") or "", db=db)
+    consensus = markdown_to_plaintext((latest or {}).get("consensus_md"), limit=3_000)
+    seo = topic.get("seo") if isinstance(topic.get("seo"), dict) else {}
+    evidence = (latest or {}).get("evidence")
+    evidence = evidence if isinstance(evidence, list) else []
+    title = _clip(
+        seo.get("title") or f"{topic.get('title', '')} Consensus Timeline | consens.io",
+        300,
+    )
+    description = _clip(
+        seo.get("description")
+        or f"{topic.get('lead_question', '')} Versioned consensus and evidence timeline.",
+        500,
+    )
+    return {
+        "schema_version": 1,
+        "published_at": _iso(topic.get("created_at")),
+        "last_content_change_at": _iso(
+            (latest or {}).get("observed_at") or topic.get("updated_at")
+        ),
+        "title": title,
+        "meta_description": description,
+        "content_summary": _clip(consensus, MAX_CONTENT_SUMMARY_CHARS),
+        "content_representation": _clip(
+            f"Topic: {topic.get('title', '')}\nQuestion: {topic.get('lead_question', '')}"
+            f"\nConsensus excerpt: {consensus}",
+            MAX_SHARE_CONTENT_REPRESENTATION_CHARS,
+        ),
+        "source_freshness": {
+            "source_count": len(evidence),
+            "snapshot_at": _iso((latest or {}).get("observed_at")),
+        },
+        "watch_freshness": {
+            "last_checked_at": _iso((latest or {}).get("observed_at")),
+            "last_material_change_at": _iso((latest or {}).get("observed_at")),
+        },
+        "technical_uncertainties": [],
     }
 
 

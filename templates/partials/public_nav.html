@@ -7,6 +7,7 @@
   <div class="nav-links lp-nav-links">
     <a href="/#product"{% if public_path == '/' %} aria-current="page"{% endif %}>Product</a>
     <a href="/#watch">Watches</a>
+    <a href="/topics"{% if public_path == '/topics' or public_path.startswith('/topics/') %} aria-current="page"{% endif %}>Topics</a>
     <a href="/questions"{% if public_path == '/questions' %} aria-current="page"{% endif %}>Questions</a>
     <a href="/ai-model-comparison"{% if public_path == '/ai-model-comparison' %} aria-current="page"{% endif %}>Models</a>
     <a href="/benchmark"{% if public_path == '/benchmark' %} aria-current="page"{% endif %}>Benchmark</a>

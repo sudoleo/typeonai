@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Follow curated AI topics through versioned consensus timelines, agreement scores, model opinion changes, and time-matched evidence.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://www.consens.io/topics">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="consens.io">
+  <meta property="og:title" content="AI Consensus Topics">
+  <meta property="og:description" content="Curated AI topics with consensus timelines, agreement scores, opinion shifts, and evidence.">
+  <meta property="og:url" content="https://www.consens.io/topics">
+  <meta property="og:image" content="https://www.consens.io/static/favicon-square.png">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="AI Consensus Topics">
+  <meta name="twitter:description" content="See how the AI consensus on important topics changes over time.">
+  <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
+  <title>AI Consensus Topics | consens.io</title>
+  <script type="application/ld+json">{{ jsonld | safe }}</script>
+  <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260721-querywatch1">
+  <link rel="stylesheet" href="/static/css/topics.css?v=20260723-topics1">
+  <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
+  <script>
+    (function () {
+      const savedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (savedTheme === "dark" || (!savedTheme && prefersDark)) document.documentElement.classList.add("dark-mode");
+    })();
+  </script>
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
+</head>
+<body>
+  {% include "partials/public_nav.html" %}
+
+  <main class="page-shell topics-shell">
+    <header class="page-header topics-hero">
+      <p class="eyebrow">Curated intelligence</p>
+      <h1>Follow the consensus,<br>not just the headline.</h1>
+      <p class="lead">
+        Topics turn fast-moving AI stories into a durable record: what the models
+        agree on now, how confident that agreement is, what changed, and which
+        evidence moved the picture.
+      </p>
+      <div class="topics-method">
+        <span><i></i> Versioned snapshots</span>
+        <span><i></i> Time-matched evidence</span>
+        <span><i></i> Material-change alerts</span>
+      </div>
+    </header>
+
+    <div class="page-content topics-content">
+      {% if entries %}
+      <div class="topics-toolbar" role="search">
+        <label class="visually-hidden" for="topicSearch">Filter topics</label>
+        <input id="topicSearch" type="search" placeholder="Search {{ entries | length }} curated topic{{ 's' if entries | length != 1 }}&hellip;" autocomplete="off">
+        <label class="visually-hidden" for="topicCategory">Filter by category</label>
+        <select id="topicCategory" aria-label="Filter by category">
+          <option value="">All categories</option>
+          {% for category in categories %}<option value="{{ category | lower }}">{{ category }}</option>{% endfor %}
+        </select>
+      </div>
+      <p id="topicCount" class="hub-count" aria-live="polite">{{ entries | length }} live topic{{ "s" if entries | length != 1 }}</p>
+
+      <ol id="topicGrid" class="topic-grid">
+        {% for entry in entries %}
+        <li class="topic-card-wrap" data-title="{{ (entry.title ~ ' ' ~ entry.lead_question) | lower }}" data-category="{{ entry.category | lower }}">
+          <a href="/topics/{{ entry.slug }}" class="topic-card" data-umami-event="topic_open">
+            <span class="topic-card-top">
+              <span class="topic-category">{{ entry.category }}</span>
+              {% if entry.status == "paused" %}<span class="topic-state is-paused">Paused</span>{% else %}<span class="topic-state">Live</span>{% endif %}
+            </span>
+            <span class="topic-card-title">{{ entry.title }}</span>
+            <span class="topic-card-question">{{ entry.lead_question }}</span>
+            {% if entry.summary %}<span class="topic-card-summary">{{ entry.summary }}</span>{% endif %}
+            <span class="topic-card-data">
+              <span class="topic-score{% if entry.latest_agreement_score >= 75 %} is-high{% elif entry.latest_agreement_score >= 50 %} is-mid{% else %} is-low{% endif %}">
+                <strong>{{ entry.latest_agreement_score }}</strong><small>/100 agreement</small>
+              </span>
+              <span class="topic-run-meta">
+                <strong>{{ entry.run_count }} snapshot{{ "s" if entry.run_count != 1 }}</strong>
+                <small>Updated {{ entry.latest_run_at[:10] }}</small>
+              </span>
+            </span>
+            <span class="topic-change is-{{ entry.latest_change_type or 'stable' }}">
+              <i></i>{{ entry.latest_change_summary or "No material shift in the latest review." }}
+            </span>
+            <span class="topic-card-link">Open timeline <b aria-hidden="true">&rarr;</b></span>
+          </a>
+        </li>
+        {% endfor %}
+      </ol>
+      <p id="topicEmpty" class="hub-empty" hidden>No topics match this filter.</p>
+      {% else %}
+      <section class="legal-panel">
+        <h2>The first Topics are being curated</h2>
+        <p>Versioned consensus timelines will appear here as soon as their first evidence-backed snapshot is published.</p>
+      </section>
+      {% endif %}
+
+      <section class="topic-explainer">
+        <div>
+          <p class="eyebrow">A different public record</p>
+          <h2>Questions answer once. Topics preserve the change.</h2>
+        </div>
+        <div class="topic-explainer-copy">
+          <p>Each snapshot freezes the consensus, agreement score, models, and evidence at that moment. Older states remain readable, even after the current view moves on.</p>
+          <a href="/questions">Browse individual consensus questions &rarr;</a>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  {% include "partials/public_footer.html" %}
+
+  <script>
+    (function () {
+      const grid = document.getElementById("topicGrid");
+      const search = document.getElementById("topicSearch");
+      const category = document.getElementById("topicCategory");
+      const count = document.getElementById("topicCount");
+      const empty = document.getElementById("topicEmpty");
+      if (!grid || !search || !category) return;
+      const cards = Array.from(grid.children);
+      function filter() {
+        const term = search.value.trim().toLowerCase();
+        const chosen = category.value;
+        let visible = 0;
+        cards.forEach(function (card) {
+          const matches = (!term || card.dataset.title.includes(term))
+            && (!chosen || card.dataset.category === chosen);
+          card.hidden = !matches;
+          if (matches) visible += 1;
+        });
+        if (count) count.textContent = visible + " topic" + (visible === 1 ? "" : "s");
+        if (empty) empty.hidden = visible > 0;
+      }
+      search.addEventListener("input", filter);
+      category.addEventListener("change", filter);
+    })();
+  </script>
+</body>
+</html>

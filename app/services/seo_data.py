@@ -11,6 +11,7 @@ from urllib.parse import urlsplit, urlunsplit
 from app.services import google_search_console as gsc
 from app.services import seo_dossier
 from app.services import share_snapshots
+from app.services import topics
 from app.services.seo_repository import FirestoreSeoRepository
 
 
@@ -64,6 +65,16 @@ def discover_indexable_pages() -> list[dict]:
             "origin": "share",
             "share_id": share_id,
             "dossier": seo_dossier.build_share_dossier(share_id) if share_id else {},
+        })
+    for item in topics.list_indexed_topic_urls():
+        path = str(item.get("path") or "")
+        slug = path.rsplit("/", 1)[-1] if path else ""
+        topic = topics.get_topic_by_slug(slug) if slug else None
+        pages.append({
+            "url": normalize_url(SITE_URL + path),
+            "origin": "topic",
+            "share_id": None,
+            "dossier": seo_dossier.build_topic_dossier(topic["id"]) if topic else {},
         })
     deduplicated = {page["url"]: page for page in pages if page["url"]}
     return [deduplicated[url] for url in sorted(deduplicated)]

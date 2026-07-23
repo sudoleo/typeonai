@@ -6,7 +6,7 @@ import openai
 from mistralai import Mistral
 import google.generativeai as genai
 from fastapi import APIRouter, Request, Body, HTTPException
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 import requests
 
 from app.core.rate_limit import limiter
@@ -28,6 +28,7 @@ SITEMAP_URLS = (
     {"loc": f"{SITE_URL}/ai-model-comparison", "lastmod": "2026-06-03", "changefreq": "monthly", "priority": "0.8"},
     {"loc": f"{SITE_URL}/consensus-engine", "lastmod": "2026-07-09", "changefreq": "monthly", "priority": "0.8"},
     {"loc": f"{SITE_URL}/questions", "lastmod": "2026-07-19", "changefreq": "weekly", "priority": "0.8"},
+    {"loc": f"{SITE_URL}/topics", "lastmod": "2026-07-23", "changefreq": "weekly", "priority": "0.9"},
     {"loc": f"{SITE_URL}/benchmark", "lastmod": "2026-06-30", "changefreq": "monthly", "priority": "0.7"},
     {"loc": f"{SITE_URL}/about", "lastmod": "2026-06-03", "changefreq": "monthly", "priority": "0.6"},
 )
@@ -50,7 +51,7 @@ def sitemap_xml():
         "  <sitemap>\n"
         f"    <loc>{SITE_URL}{path}</loc>\n"
         "  </sitemap>"
-        for path in ("/sitemap-pages.xml", "/sitemap-shares.xml")
+        for path in ("/sitemap-pages.xml", "/sitemap-shares.xml", "/sitemap-topics.xml")
     )
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -207,6 +208,11 @@ async def admin_benchmark_page(request: Request):
         "request": request,
         **firebase_config
     })
+
+
+@router.get("/admin/topics")
+async def admin_topics_page():
+    return RedirectResponse("/admin#topics", status_code=308)
 
 @router.post("/feedback")
 @limiter.limit("3/minute")

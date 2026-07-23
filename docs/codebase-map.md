@@ -58,13 +58,14 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin`, `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
+| `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (Pro, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). |
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
+| `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (`?version=<run_id>`), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe`; Admin-CRUD unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` ohne DeepSeek und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil und DeepSeek-Ausschluss. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 
 Der Scheduled Publisher läuft per GitHub Actions montags, mittwochs und freitags.
@@ -93,6 +94,9 @@ Endpunkte sind admin-only.
 Template + Firebase-Auth-Modul wie `admin.html`), `share.html` (öffentliche
 Consensus-Seite), `share_unavailable.html`, plus statische Rechts-/SEO-Seiten
 und SEO-Erklärseiten wie `ai-model-comparison.html` / `consensus-engine.html`.
+`topics.html` und `topic.html` bilden den öffentlichen Topics-Hub bzw. die
+Timeline-/Evidence-Detailseite; `admin_topics.html` ist der getrennte,
+Firebase-authentifizierte Redaktionsbereich unter `/admin/topics`.
 Alle öffentlichen HTML-Seiten teilen Navigation und Footer über
 `templates/partials/public_nav.html` und `public_footer.html`. Der Landing-Hero
 ist seit 2026-07-17 demo-first: Ein klickbares Input-Feld (Look des /app-Inputs,
@@ -106,7 +110,9 @@ aus `partials/product_result_mockup.html`. Die gemeinsamen, an `/app`
 ausgerichteten Light-/Dark-Tokens liegen in `static/css/public-tokens.css` und
 werden von `landing.css` sowie `public-pages.css` importiert; seitenbezogene
 Layouts bleiben in diesen beiden Dateien bzw. in `benchmark.css` und
-`consensus-engine.css`.
+`consensus-engine.css`. `topics.css` ergänzt ausschließlich Hub-, Timeline-,
+Evidence- und Follow-Komponenten der beiden Topic-Templates und importiert
+dieselbe Token-Schicht mit eigenem Cache-Buster.
 **`index.html` enthält kein App-JS inline mehr**
 — nur den Jinja-Config-Block im `<head>` und die Modul-`<script>`-Tags.
 
@@ -608,10 +614,48 @@ Whitelist für Bild-MIME-Typen.
   werden zugehörige Watch-Scheduler-Daten, Watch-History und Follower entfernt.
   Sonst erfolgt der 30-Tage-Hard-Delete widerrufener Shares via `cleanup_revoked_shares`.
 
+### Kuratierte Topics
+- Topics sind bewusst **keine Shares und keine Nutzer-Watches**. `topics/{id}`
+  hält redaktionelle Metadaten plus die ausführbare `run_config` mit konkretem
+  `provider_models`-Mapping, `update_interval`, Quellenpräferenzen, SEO, Status
+  `active|paused|archived`, `next_run_at` und kurze Lease-/Fehlerfelder. Das
+  denormalisierte `models`-Array enthält nur öffentliche Labels; ausführbare
+  Modell-IDs stehen ausschließlich in `run_config`.
+- `topic_runner.py` nutzt dieselbe Provider-/Consensus-/Differences-Pipeline wie
+  Watches, aber mit der pro Topic gespeicherten Modellauswahl. Jeder Lauf
+  recherchiert aktuelle Webquellen neu, dedupliziert sie zu Evidence, vergleicht
+  Consensus und Opinion Map mit dem Vorgänger und schreibt einen unveränderlichen
+  Vollsnapshot nach
+  `topics/{id}/runs/{run_id}`: Consensus-Markdown, Agreement, Change-Typ/
+  -Summary, wichtige Modellbewegungen, Differences/Opinion Map, Modelle,
+  Quellenregeln und Evidence.
+  Anschließend werden nur Latest-Pointer/-Score und `run_count` am Topic
+  fortgeschrieben. Mindestens zwei konfigurierte Provider sind Pflicht; Links,
+  Consensus-Text, Agreement und Meinungsänderungen werden nicht manuell für
+  normale Runs eingegeben. Der eigene 60-Sekunden-Scheduler in `main.py`
+  beansprucht fällige Topics per Firestore-Lease; manuelle Admin-Runs benutzen
+  denselben Claim. Paused/archived Topics werden nicht ausgeführt.
+- `/topics/{slug}` rendert SSR, sanitisiertes Markdown, JSON-LD, Current- und
+  historische `?version=`-Ansichten sowie eine visuelle Agreement-/Change-
+  Timeline und einen pro Snapshot zugeordneten Evidence Feed. Nur Topics mit
+  Run und Status Active/Paused erscheinen im Hub; `seo.noindex` entfernt sie
+  zusätzlich aus `sitemap-topics.xml`. Historische Query-Ansichten sind
+  `noindex`, aber immutable gecacht.
+- Besucher-Follows sind ein eigener Double-Opt-in-Flow in `topic_followers` und
+  teilen keine Dokumente mit `watch_followers`. Minor/Major-Runs versenden bei
+  konfiguriertem SMTP deduplizierte Multipart-Updates; Stable-Runs nicht.
+  Bestätigungs-/Abmelde-Tokens verwenden den vorhandenen HMAC-Unterbau und
+  `WATCH_UNSUBSCRIBE_SECRET`, tragen aber einen eigenen Topic-Token-Typ.
+- `/admin/topics` ist ein eigenständiger Firebase/Admin-geschützter Editor für
+  Metadaten, Status, Regeln, Evidence, SEO und manuelles Publizieren. Wie alle
+  `/api/admin/*`-Antworten wird seine API durch die Security-Middleware als
+  `private, no-store` ausgeliefert.
+
 ### SEO-Leistungsdaten und Recommendation Judge (Search Console, v2)
 - Der manuelle admin-only Lauf `POST /api/admin/seo/collect` übernimmt exakt die
-  statischen URLs aus `pages.py::SITEMAP_URLS` sowie aktive, öffentliche,
-  indexierte Shares aus `list_indexed_share_urls`; er verändert weder diese
+  statischen URLs aus `pages.py::SITEMAP_URLS`, aktive, öffentliche,
+  indexierte Shares aus `list_indexed_share_urls` sowie indexierbare Topics aus
+  `list_indexed_topic_urls`; er verändert weder diese
   Seiten noch Indexierungs-, Publisher- oder Robots-Zustände.
 - `google_search_console.py` nutzt ausschließlich den Scope
   `webmasters.readonly` über `google-auth` + autorisiertes HTTP. Search Analytics
@@ -727,6 +771,8 @@ app/services/
   watch_scheduler.py         Global-Lease, Tagesbudget, sequenzielle tierkonfigurierte Watch-Läufe + run_brief_tick (Morning-Brief-Versand)
   mailer.py                  Multipart-HTML/Plaintext-SMTP-Versand via Thread-Executor
   public_markdown.py         Server-Markdown-Rendering für Share-Seiten
+  topics.py                  Kuratierte Topic-Konfiguration, immutable Runs, Public-Discovery und eigene Follower/Dedupe-Daten
+  topic_runner.py            Leased Topic-Research/Consensus-Runs, automatische Evidence/Meinungsänderungen + Intervall-Scheduler
   differences_stats.py       Anonyme Differences-Telemetrie (differences_stats-Collection, §6)
 ```
 
@@ -822,6 +868,14 @@ Wichtige Verträge im Backend:
   Review-Auditfelder, …). `publication_source` existiert nur bei explizitem
   Publisher-Modus. Public-Shares sind per
   Link lesbar; private Watch-Snapshots ausschließlich mit Eigentümer-Session.
+- `topics/{topic_id}` — kuratierte, share-/watch-unabhängige Topic-Konfiguration
+  mit `run_config.provider_models`, Intervall/`next_run_at`, Run-Lease/-Status
+  und Latest-Pointer. `runs/{run_id}` darunter enthält append-only Vollsnapshots
+  mit Consensus, Agreement, Change-/Meinungsbewegung, Modellen, Source Rules
+  und zeitlich zugeordneter Evidence. `topic_followers` speichert nach
+  Double-Opt-in nur `topic_id`, E-Mail und Zeitpunkt;
+  `topic_follower_deliveries/{sha256(topic:run:follower)}` dedupliziert
+  Material-Change-Mails. Es werden keine IP-/User-Agent-Daten gespeichert.
 - `watches` — owner-gebundene Scheduling-Metadaten (`share_id`, `visibility`,
   Intervall, optionaler `run_weekday` für Weekly sowie lokale `run_time`
   (`HH:MM`) + IANA-`timezone`,
@@ -861,7 +915,7 @@ Wichtige Verträge im Backend:
   `manifest`, `results`, `audits`, abgeleitete Fragenmatrix; **keine**
   `calls.jsonl`-Rohantworten, Prompts oder Request-Payloads.
 - `seo_pages/{sha256(url)}` — eine aktuell oder historisch beobachtete
-  indexierbare Seite mit `url`, `origin=static_page|share`, optionaler
+  indexierbare Seite mit `url`, `origin=static_page|share|topic`, optionaler
   `share_id`, `active`, `indexable`, First-/Last-Seen-Zeitstempeln und dem
   minimierten `dossier` (Share-Inhaltsrepräsentation hart auf 3200 Zeichen begrenzt).
   `metrics_coverage_start|end` markieren ein nachweislich lückenlos
@@ -922,8 +976,10 @@ Wichtige Verträge im Backend:
   `DEVELOPER_OPENAI_API_KEY`, `DEVELOPER_MISTRAL_API_KEY`,
   `DEVELOPER_ANTHROPIC_API_KEY`, `DEVELOPER_GEMINI_API_KEY`,
   `DEVELOPER_DEEPSEEK_API_KEY`, `DEVELOPER_GROK_API_KEY`.
-- Consensus-Watch-Mail/Abmeldung: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`,
-  `SMTP_PASSWORD`, `MAIL_FROM`, `WATCH_UNSUBSCRIBE_SECRET`.
+- Consensus-Watch-/Topic-Follow-Mail und Abmeldung: `SMTP_HOST`, `SMTP_PORT`,
+  `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`, `WATCH_UNSUBSCRIBE_SECRET`.
+  Topic-Tokens tragen einen eigenen Typ und abonnieren ausschließlich
+  `topic_followers`, verwenden aber bewusst denselben serverseitigen HMAC-Key.
 - Search Console (nur serverseitig): `GSC_SITE_URL` (URL-Prefix- oder
   `sc-domain:`-Property) und `GSC_SERVICE_ACCOUNT_JSON` (**ausschließlich ein
   Dateipfad**, trotz Variablennamen). Relative Pfade werden gegen den Repository-
@@ -1005,6 +1061,9 @@ mit Link, Lauf-/Indexstatus und sofortiger Admin-Löschaktion. Der separate
 SMTP-Konfigurationsstatus und admin-only Aktionen für eine echte Testmail sowie den sofortigen Start einer aktiven Watch;
 der eigentliche Lauf bleibt im normalen Lease-/Budget-/Scheduler-Pfad. E2E-Zugriff auf
 Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
+Der eigenständige Topics-Editor unter `/admin/topics` ist aus der Admin-Topbar
+verlinkt und lädt/speichert ausschließlich die Topics-API; Pause/Archive und
+Snapshot-Publishing berühren die bestehenden Shared-Pages-/Watch-Tabs nicht.
 
 ---
 
@@ -1016,12 +1075,13 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **695 passed** (2026-07-22; inklusive der neuen
+  Letzte bekannte Baseline: **708 passed** (2026-07-23; inklusive der neuen
   Search-Console-/SEO-Dossier-, Query-, Recommendation-, LLM-Schema-,
   Weekly-Portfolio-Review-, Action-, Publisher-Lineage-/Watch-Capacity-,
   Idempotenz- und Admin-Schutztests sowie
   run-basierter Usage-, Consensus-API-Publishing-/Scope-/Vertrags- sowie
-  Scheduled-Publisher-, Query-first-Watch- sowie versionierten Watch-/Drift-Tests).
+  Scheduled-Publisher-, Query-first-Watch-, versionierten Watch-/Drift- sowie
+  kuratierten Topic-/Snapshot-/Follower-/SSR-Tests).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, kompakte Antwort→Consensus-

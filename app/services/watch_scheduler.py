@@ -59,8 +59,13 @@ def _developer_keys() -> dict:
     return {PROVIDER_LABELS[p]: os.environ.get(env, "").strip() for p, env in PROVIDER_ENV.items()}
 
 
-def _selected_models(keys: dict, is_pro: bool, excluded_providers=None) -> list[tuple[str, str]]:
-    configured = cfg.get_watch_models(is_pro)
+def _selected_models(keys: dict, is_pro: bool, excluded_providers=None,
+                     model_overrides=None) -> list[tuple[str, str]]:
+    configured = (
+        dict(model_overrides)
+        if isinstance(model_overrides, dict)
+        else cfg.get_watch_models(is_pro)
+    )
     excluded = {
         str(provider or "").strip().lower() for provider in (excluded_providers or ())
     }
@@ -99,7 +104,8 @@ def _provider_answer(provider: str, model: str, question: str, keys: dict, is_pr
 
 def execute_watch(question: str, previous_consensus: str, condition: str = "",
                   previous_opinion_map=None, is_pro: bool = False,
-                  excluded_providers=None, baseline_consensus: str = "") -> dict:
+                  excluded_providers=None, baseline_consensus: str = "",
+                  model_overrides=None) -> dict:
     """Run the configured tier models; never touches usage counters."""
     keys = _developer_keys()
     excluded = {
@@ -108,7 +114,9 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
     for provider in excluded:
         if provider in PROVIDER_LABELS:
             keys[PROVIDER_LABELS[provider]] = ""
-    selected_models = _selected_models(keys, is_pro, excluded)
+    selected_models = _selected_models(
+        keys, is_pro, excluded, model_overrides=model_overrides
+    )
     if mock_llm_enabled():
         for provider, _model in selected_models:
             keys[PROVIDER_LABELS[provider]] = "mock"

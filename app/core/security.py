@@ -34,7 +34,7 @@ class CustomSecurityMiddleware:
 
         path = str(scope.get("path") or "")
         sensitive_api_response = path.startswith("/api/v1/") or path.startswith(
-            "/api/admin/api-keys"
+            "/api/admin/"
         )
 
         async def send_wrapper(message):

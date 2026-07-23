@@ -13,6 +13,8 @@ PUBLIC_TEMPLATES = (
     "imprint.html",
     "share.html",
     "share_unavailable.html",
+    "topics.html",
+    "topic.html",
 )
 
 
