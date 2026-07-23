@@ -16,9 +16,10 @@
   const AGENT_MODE_STORAGE_KEY = "agentMode";
   const AGENT_PANEL_COLLAPSED_KEY = "agentModePanelCollapsed";
 
-  // Mobile-Default: Agent Mode aktiv und Panel eingeklappt — aber nur, wenn
-  // der Nutzer noch nie selbst gewählt hat (localStorage-Keys fehlen). Eine
-  // explizite Entscheidung (an/aus, auf/zu) bleibt auf allen Geräten erhalten.
+  // Mobile-Default: Agent Mode aktiv und Panel AUSGEKLAPPT (die Modellnamen
+  // sind sofort sichtbar) — aber nur, wenn der Nutzer noch nie selbst gewählt
+  // hat (localStorage-Keys fehlen). Eine explizite Entscheidung (an/aus,
+  // auf/zu) bleibt auf allen Geräten erhalten.
   try {
     const isMobileViewport = window.matchMedia("(max-width: 640px)").matches;
     if (isMobileViewport) {
@@ -26,7 +27,7 @@
         localStorage.setItem(AGENT_MODE_STORAGE_KEY, "true");
       }
       if (localStorage.getItem(AGENT_PANEL_COLLAPSED_KEY) === null) {
-        localStorage.setItem(AGENT_PANEL_COLLAPSED_KEY, "true");
+        localStorage.setItem(AGENT_PANEL_COLLAPSED_KEY, "false");
       }
     }
   } catch (e) { /* localStorage gesperrt: Default bleibt aus */ }
@@ -38,6 +39,63 @@
   let agentModeTimerInterval = null;
   // Session-only disclosure: every new grouped run starts in the clean view.
   let modelAnswersVisible = false;
+
+  // Stream-Fortschritt pro Modell (0..1), monoton steigend innerhalb eines
+  // Runs. Treibt den „Ladebalken“ in jedem Chip (CSS-Variable --stream-progress).
+  const modelProgress = new Map();        // pref.key -> 0..1
+  const modelStreamStartedAt = new Map(); // pref.key -> ts (sanfter Anlauf)
+  let agentProgressTicker = null;
+
+  // Schätzt den Fortschritt eines Modells aus dem tatsächlichen Stream:
+  // fertig ⇒ voll, während des Streams asymptotisch aus der Textlänge, davor
+  // ein langsamer zeitbasierter Anlauf, damit der Balken sichtbar „lebt“.
+  function computeModelProgress(pref) {
+    const box = document.getElementById(pref.responseId);
+    if (!box) return 0;
+    const state = box.dataset.responseState || "";
+    if (state === "complete" || state === "error") return 1;
+    const contentEl = box.querySelector(".collapsible-content");
+    const streaming = !!contentEl && contentEl.classList.contains("is-streaming");
+    if (streaming) {
+      const chars = (contentEl.textContent || "").trim().length;
+      // Asymptotisch: viel Text ⇒ Balken fast voll, aber nie ganz — die vollen
+      // 100 % kommen erst mit dem „complete“-Status.
+      const eased = 1 - Math.exp(-chars / 420);
+      return Math.min(0.92, 0.12 + eased * 0.8);
+    }
+    // Noch kein Token: langsamer Anlauf über die Zeit (bis ~10 %).
+    const startedAt = modelStreamStartedAt.get(pref.key) || Date.now();
+    modelStreamStartedAt.set(pref.key, startedAt);
+    return Math.min(0.1, (Date.now() - startedAt) / 26000);
+  }
+
+  function applyModelProgress() {
+    (window.App?.modelPrefs || []).forEach(pref => {
+      const next = computeModelProgress(pref);
+      const value = Math.max(modelProgress.get(pref.key) || 0, next); // monoton
+      modelProgress.set(pref.key, value);
+      const chip = document.querySelector(
+        `.agent-mode-chip[data-model-key="${pref.key}"]`
+      );
+      if (chip) chip.style.setProperty("--stream-progress", value.toFixed(3));
+    });
+  }
+
+  function startAgentProgressTicker() {
+    window.clearInterval(agentProgressTicker);
+    applyModelProgress();
+    agentProgressTicker = window.setInterval(applyModelProgress, 120);
+  }
+
+  function stopAgentProgressTicker() {
+    window.clearInterval(agentProgressTicker);
+    agentProgressTicker = null;
+  }
+
+  function resetModelProgress() {
+    modelProgress.clear();
+    modelStreamStartedAt.clear();
+  }
 
   function isAgentModeEnabled() {
     return localStorage.getItem(AGENT_MODE_STORAGE_KEY) === "true";
@@ -253,6 +311,14 @@
         chip.setAttribute("role", "group");
         chip.setAttribute("aria-label", `Choose ${modelInfo.label} model`);
         chip.textContent = "";
+        chip.dataset.modelKey = modelInfo.pref.key;
+        // Gespeicherten Fortschritt sofort anlegen, damit der Balken beim
+        // Neuaufbau der Chips (z. B. wenn ein Modell fertig wird) nicht auf 0
+        // zurückspringt.
+        chip.style.setProperty(
+          "--stream-progress",
+          (modelProgress.get(modelInfo.pref.key) || 0).toFixed(3)
+        );
         if (modelInfo.responseState) {
           chip.dataset.responseState = modelInfo.responseState;
         }
@@ -321,15 +387,23 @@
 
   function setAgentModeStatus(status, message = "") {
     if (status === "running") {
-      if (agentModeStatus !== "running") modelAnswersVisible = false;
+      if (agentModeStatus !== "running") {
+        modelAnswersVisible = false;
+        resetModelProgress();
+      }
       agentModeStatusMessage = "";
       startAgentModeTimer();
+      if (isAgentModeEnabled()) startAgentProgressTicker();
     } else if (status === "complete" || status === "canceled" || status === "error") {
       stopAgentModeTimer();
+      applyModelProgress(); // fertige Modelle auf 100 % schnappen lassen
+      stopAgentProgressTicker();
     } else if (status === "idle") {
       modelAnswersVisible = false;
       agentModeStatusMessage = "";
       resetAgentModeTimer();
+      resetModelProgress();
+      stopAgentProgressTicker();
     }
     if (message) {
       agentModeStatusMessage = message;

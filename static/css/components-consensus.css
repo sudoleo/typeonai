@@ -364,6 +364,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 }
 
 .agent-mode-chip {
+  --stream-progress: 0;
   width: fit-content;
   max-width: 100%;
   display: inline-flex;
@@ -379,11 +380,56 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   line-height: 1.15;
   overflow: visible;
   position: relative;
+  isolation: isolate;
   cursor: pointer;
   transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .12s ease;
   box-shadow: var(--chip-shadow);
   backdrop-filter: blur(calc(var(--glass-blur) * 0.45)) saturate(1.16);
   -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.45)) saturate(1.16);
+}
+
+/* Stream-Ladebalken: dezente Füllung, die mit dem Fortschritt des Streams von
+   links „vollläuft“. Breite kommt live aus --stream-progress (agent-mode.js).
+   Der linke Rand ist rund wie der Chip, der rechte („nasse“) Rand bleibt
+   knapp. Sichtbar nur während eines laufenden Runs und nur bei noch nicht
+   fertigen Chips. */
+.agent-mode-chip::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: calc(var(--stream-progress, 0) * 100%);
+  border-top-left-radius: inherit;
+  border-bottom-left-radius: inherit;
+  border-top-right-radius: 3px;
+  border-bottom-right-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--button-bg) 12%, transparent),
+    color-mix(in srgb, var(--button-bg) 24%, transparent)
+  );
+  opacity: 0;
+  /* Dank isolation:isolate am Chip liegt die Füllung über dem Chip-Hintergrund,
+     aber hinter Text und Picker — ohne die Kinder in eigene Stacking-Contexts
+     zu zwingen (das würde das Modell-Dropdown im Chip einsperren). */
+  z-index: -1;
+  pointer-events: none;
+  transition: width 0.35s cubic-bezier(0.33, 1, 0.68, 1), opacity 0.3s ease;
+}
+
+body.agent-mode-running .agent-mode-chip[data-response-state="pending"]::before {
+  opacity: 1;
+  animation: agentChipFillPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes agentChipFillPulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.14); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-mode-chip::before { transition: opacity 0.2s ease; animation: none; }
 }
 
 .agent-mode-chip[data-response-state="complete"] {
