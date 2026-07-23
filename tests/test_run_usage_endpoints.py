@@ -12,7 +12,7 @@ import app.core.config as cfg
 from app.api.routers import chat as chat_router
 from app.api.routers import users as users_router
 from app.core.rate_limit import limiter
-from app.services.usage_repository import UsageLimits
+from app.services.usage_repository import RunKind, UsageLimits
 from usage_test_support import make_usage_repository
 
 
@@ -93,7 +93,10 @@ def test_prepare_and_parallel_models_consume_exactly_one_run(run_api):
 
     prepared = _prepare(client, key)
     assert prepared.status_code == 200
-    assert prepared.json()["usage_run_status"] == "reserved"
+    # /prepare reserviert UND verbraucht den Slot sofort (ein wirksamer
+    # Reserve+Consume pro Lauf); der Fan-out unten trifft danach nur noch die
+    # idempotenten No-Write-Pfade und erzeugt keine Firestore-Contention mehr.
+    assert prepared.json()["usage_run_status"] == "consumed"
     assert prepared.json()["free_usage_remaining"] == 2
 
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -145,7 +148,10 @@ def test_consensus_reuses_consumed_run_without_second_charge(run_api):
 def test_usage_endpoint_reads_persistent_snapshot_and_release_frees_reservation(run_api):
     client, repository = run_api
     key = "unused-reservation"
-    assert _prepare(client, key).status_code == 200
+    # /prepare verbraucht den Slot inzwischen sofort, deshalb hier eine reine
+    # Reservierung direkt ueber das Repository anlegen, um den Release-Pfad
+    # (reserved -> released) isoliert zu pruefen.
+    repository.reserve(UID, key, RunKind.REGULAR, _limits())
 
     usage = client.post("/usage", json={"id_token": "test-token"})
     assert usage.status_code == 200

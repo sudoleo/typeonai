@@ -36,6 +36,21 @@
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
+.source-link.has-favicon {
+  gap: 5px;
+}
+
+.source-favicon {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  object-fit: contain;
+  /* White backing keeps dark/transparent logos legible in both themes. */
+  background: #fff;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #000 8%, transparent);
+}
+
 .source-link:hover,
 .source-link:focus-visible {
   background: color-mix(in srgb, var(--accent) 13%, transparent);

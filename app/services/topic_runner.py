@@ -61,9 +61,13 @@ def evidence_from_sources(sources, source_rules: dict) -> list[dict]:
             continue
         url = str(source["url"])
         host = (urlsplit(url).hostname or "").removeprefix("www.")
+        # Web-search tools sometimes hand back a bare citation index ("7") as
+        # the title; fall back to the host so cards never show a lonely number.
+        raw_title = str(source.get("title") or "").strip()
+        title = raw_title if raw_title and not raw_title.isdigit() else host or url
         evidence.append({
             "type": _source_type(url, allowed, preferred),
-            "title": str(source.get("title") or url)[:240],
+            "title": title[:240],
             "url": url,
             "publisher": str(source.get("provider") or host)[:120],
             "published_at": "",

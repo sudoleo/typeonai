@@ -43,6 +43,39 @@ function getSourceTitle(src, fallbackLabel) {
   return (src && (src.title || src.url)) ? String(src.title || src.url) : fallbackLabel;
 }
 
+function getSourceHost(src) {
+  if (!src || !src.url) return "";
+  try {
+    return new URL(String(src.url)).hostname.replace(/^www\./, "");
+  } catch (e) {
+    return "";
+  }
+}
+
+// Mirror the public Topic/Share pages: prepend a real site favicon (fetched
+// through our privacy-preserving proxy) so inline citation chips carry the
+// source's identity, not just its name. The icon is decorative; if it fails to
+// load we drop it and the chip falls back to text only.
+function prependSourceFavicon(el, src) {
+  const host = getSourceHost(src);
+  if (!host) return;
+  const fav = document.createElement("img");
+  fav.className = "source-favicon";
+  fav.src = "/api/topics/favicon?d=" + encodeURIComponent(host);
+  fav.alt = "";
+  fav.setAttribute("aria-hidden", "true");
+  fav.setAttribute("referrerpolicy", "no-referrer");
+  fav.loading = "lazy";
+  fav.width = 13;
+  fav.height = 13;
+  fav.addEventListener("error", function () {
+    fav.remove();
+    el.classList.remove("has-favicon");
+  });
+  el.insertBefore(fav, el.firstChild);
+  el.classList.add("has-favicon");
+}
+
 function createSourceChip(src, fallbackLabel) {
   const href = getSafeSourceHref(src);
   const el = href ? document.createElement("a") : document.createElement("span");
@@ -56,6 +89,8 @@ function createSourceChip(src, fallbackLabel) {
     el.target = "_blank";
     el.rel = "noopener noreferrer";
   }
+
+  prependSourceFavicon(el, src);
 
   return el;
 }

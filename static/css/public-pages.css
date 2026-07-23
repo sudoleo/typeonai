@@ -2540,6 +2540,21 @@ canvas {
   color: color-mix(in srgb, var(--accent) 48%, var(--text));
 }
 
+.share-md a[href^="#src-"].has-favicon {
+  gap: 5px;
+}
+
+.share-md .cite-favicon {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  object-fit: contain;
+  /* White backing keeps dark/transparent logos legible in both themes. */
+  background: #fff;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #000 8%, transparent);
+}
+
 /* Quellenliste: kompakte einzeilige Eintraege (Nummer + Titel + Domain),
    ab Tablet zweispaltig, lange Listen starten eingeklappt. */
 .share-sources {
@@ -2591,6 +2606,15 @@ canvas {
   font-weight: 750;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+}
+
+.share-source-favicon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  object-fit: contain;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
 .share-source-body {

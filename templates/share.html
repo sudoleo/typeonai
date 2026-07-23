@@ -23,7 +23,7 @@
   {% if og_is_card %}<meta name="twitter:image" content="{{ og_image }}">{% endif %}
   <script type="application/ld+json">{{ jsonld | safe }}</script>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260722-watch-version1">
+  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260723-favicon2">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -251,6 +251,7 @@
           {% for source in sources %}
           <li {% if source.num %}id="src-{{ source.num }}"{% endif %}>
             <span class="share-source-num" aria-hidden="true">{{ source.num or loop.index }}</span>
+            {% if source.domain %}<img class="share-source-favicon" src="/api/topics/favicon?d={{ source.domain | urlencode }}" alt="" loading="lazy" width="18" height="18" referrerpolicy="no-referrer">{% endif %}
             <span class="share-source-body">
               <a class="share-source-title" href="{{ source.url }}" target="_blank" rel="nofollow noopener noreferrer">{{ source.title }}</a>
               {% if source.domain and source.domain != source.title %}<span class="share-source-domain">{{ source.domain }}</span>{% endif %}
@@ -547,6 +548,37 @@
       }
       window.addEventListener("hashchange", expandForHash);
       expandForHash();
+    })();
+
+    // Favicons, die nicht laden, ausblenden – die Zeile sieht dann aus wie zuvor.
+    (function () {
+      document.querySelectorAll(".share-source-favicon").forEach(function (img) {
+        function fail() { img.remove(); }
+        img.addEventListener("error", fail);
+        if (img.complete && img.naturalWidth === 0) fail();
+      });
+    })();
+
+    // Inline-Citations bekommen das Favicon ihrer Quelle (gleiche URL = kein Extra-Request).
+    (function () {
+      document.querySelectorAll('.share-md a[href^="#src-"]').forEach(function (link) {
+        var target = document.getElementById(decodeURIComponent(link.getAttribute("href").slice(1)));
+        if (!target) return;
+        var srcImg = target.querySelector(".share-source-favicon");
+        var url = srcImg && srcImg.getAttribute("src");
+        if (!url) return;
+        var fav = document.createElement("img");
+        fav.className = "cite-favicon";
+        fav.setAttribute("src", url);
+        fav.setAttribute("alt", "");
+        fav.setAttribute("aria-hidden", "true");
+        fav.addEventListener("error", function () {
+          fav.remove();
+          link.classList.remove("has-favicon");
+        });
+        link.insertBefore(fav, link.firstChild);
+        link.classList.add("has-favicon");
+      });
     })();
 
     (function () {

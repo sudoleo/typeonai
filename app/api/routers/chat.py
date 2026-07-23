@@ -552,11 +552,23 @@ async def prepare(request: Request, data: dict = Body(...)):
         "sources": []
     }
     if not use_own_keys:
-        _, reservation = reserve_usage_run(
+        usage_key, _ = reserve_usage_run(
             uid, data, is_pro=is_pro, deep_think=deep_think
         )
-        response.update(usage_response_fields(reservation.snapshot, is_pro))
-        response["usage_run_status"] = reservation.status.value
+        # Den Slot sofort mitverbrauchen. Der anschliessende parallele
+        # /ask_*-Fan-out ruft zwar weiterhin reserve+consume, trifft danach aber
+        # ausschliesslich die idempotenten No-Write-Pfade (der Run ist bereits
+        # consumed). Genau das behebt die "Usage accounting is temporarily busy"-
+        # 503er: sechs gleichzeitige Read-Modify-WRITE-Transaktionen auf
+        # demselben usage_days-Dokument erzeugten Firestore-Contention (Aborted).
+        # Nach dem Vorab-Consume schreibt im Fan-out kein Request mehr; reine
+        # Lese-Transaktionen kollidieren nie. Ergo genau ein wirksamer
+        # Reserve+Consume pro Lauf, hier und seriell statt 6x parallel. Der
+        # Consume im Fan-out bleibt als Selbstheilung erhalten (falls /prepare
+        # nur reservieren, aber nicht konsumieren konnte).
+        usage_result = consume_usage_run(uid, usage_key, is_pro=is_pro)
+        response.update(usage_response_fields(usage_result.snapshot, is_pro))
+        response["usage_run_status"] = usage_result.status.value
     return response
 
 

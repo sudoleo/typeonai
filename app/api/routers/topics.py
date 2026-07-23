@@ -4,8 +4,10 @@ import asyncio
 import html
 import json
 import logging
+import re
 from datetime import datetime
 from typing import Optional
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
@@ -14,8 +16,12 @@ from fastapi.templating import Jinja2Templates
 from app.api.routers.pages import SITE_URL
 from app.core.rate_limit import limiter
 from app.core.security import extract_id_token, is_user_admin, verify_user_token
-from app.services import mailer, topic_runner, topics
-from app.services.public_markdown import markdown_to_plaintext, render_public_markdown
+from app.services import favicons, mailer, topic_runner, topics
+from app.services.public_markdown import (
+    markdown_to_plaintext,
+    render_public_markdown,
+    source_site_name,
+)
 
 
 router = APIRouter()
@@ -56,6 +62,55 @@ def _date_label(value: str) -> str:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).strftime("%b %d, %Y")
     except (TypeError, ValueError):
         return str(value or "")[:10]
+
+
+_VIDEO_HOST_RE = re.compile(r"(?:^|\.)(youtube\.com|youtu\.be|vimeo\.com)$")
+
+
+def _x_handle(url: str) -> str:
+    """Best-effort @handle from an X/Twitter status URL (x.com/<handle>/status/..)."""
+    try:
+        parts = [p for p in urlsplit(str(url or "")).path.split("/") if p]
+    except ValueError:
+        return ""
+    if parts and parts[0].lower() not in {"i", "intent", "search", "hashtag"}:
+        handle = re.sub(r"[^A-Za-z0-9_]", "", parts[0])[:30]
+        return f"@{handle}" if handle else ""
+    return ""
+
+
+def _is_video_url(url: str) -> bool:
+    try:
+        host = (urlsplit(str(url or "")).hostname or "").lower()
+    except ValueError:
+        return False
+    host = re.sub(r"^www\.", "", host)
+    return bool(_VIDEO_HOST_RE.search(host))
+
+
+def _host_of(url) -> str:
+    try:
+        host = (urlsplit(str(url or "")).hostname or "").lower()
+    except ValueError:
+        return ""
+    return re.sub(r"^www\.", "", host)
+
+
+def _enrich_evidence(item: dict) -> None:
+    """Attach self-hosted embed hints (no third-party requests at view time)."""
+    url = item.get("url")
+    item["site"] = source_site_name(url)
+    item["host"] = _host_of(url)
+    item["is_video"] = _is_video_url(url)
+    handle = _x_handle(url) if item.get("type") == "x" else ""
+    item["handle"] = handle
+    seed = str(item.get("publisher") or handle.lstrip("@") or item.get("site") or "X")
+    initial = next((ch for ch in seed if ch.isalnum()), "X")
+    item["initial"] = initial.upper()
+    # Auto-generated runs sometimes carry a bare citation index ("7") as the
+    # title. Suppress those so the card stays clean (favicon + site + badge).
+    title = str(item.get("title") or "").strip()
+    item["show_title"] = bool(title) and not title.isdigit()
 
 
 def _admin_topic_view(topic: dict) -> dict:
@@ -191,6 +246,8 @@ async def topic_page(
             run["consensus_md"], limit=190
         )
         run["is_selected"] = run["id"] == selected["id"]
+        for item in run["evidence"]:
+            _enrich_evidence(item)
     runs_desc = list(reversed(runs))
     selected["consensus_html"] = render_public_markdown(
         selected["consensus_md"], selected["evidence"]
@@ -246,6 +303,32 @@ async def topic_page(
         if version else "public, max-age=60, s-maxage=300, stale-while-revalidate=300"
     )
     return response
+
+
+_GLOBE_SVG = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" '
+    b'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" '
+    b'stroke-linejoin="round"><circle cx="12" cy="12" r="9"/>'
+    b'<path d="M3 12h18M12 3c2.5 2.5 3.5 6 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-6-3.5-9'
+    b'S9.5 5.5 12 3z"/></svg>'
+)
+
+
+@router.get("/api/topics/favicon")
+@limiter.limit("300/minute")
+async def topic_favicon(request: Request, d: str = Query(default="", max_length=253)):
+    data, content_type = await asyncio.to_thread(favicons.get_favicon, d)
+    if not data:
+        return Response(
+            content=_GLOBE_SVG,
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+    return Response(
+        content=data,
+        media_type=content_type or "image/png",
+        headers={"Cache-Control": "public, max-age=604800, immutable"},
+    )
 
 
 @router.post("/api/topics/{slug}/follow")

@@ -1,3 +1,52 @@
+{% macro src_favicon(item) -%}
+<span class="src-favicon" aria-hidden="true">
+  <span class="src-favicon-mono">{{ item.initial }}</span>
+  {% if item.host %}<img class="src-favicon-img" src="/api/topics/favicon?d={{ item.host | urlencode }}" alt="" loading="lazy" width="22" height="22" referrerpolicy="no-referrer">{% endif %}
+</span>
+{%- endmacro %}
+{% macro source_embed(item, anchored=false) -%}
+{% set num = item.id[1:] if item.id and item.id[0] in 'Ss' else item.id %}
+<a class="src-embed src-{{ item.type }}{% if item.is_video %} src-video{% endif %}"{% if anchored %} id="src-{{ num }}"{% endif %} href="{{ item.url }}" target="_blank" rel="nofollow noopener noreferrer">
+  {% if item.type == 'x' %}
+  <span class="src-embed-head">
+    <span class="src-x-avatar" aria-hidden="true">{{ item.initial }}</span>
+    <span class="src-x-author">
+      <strong>{{ item.publisher or 'Post on X' }}</strong>
+      {% if item.handle %}<small>{{ item.handle }}</small>{% endif %}
+    </span>
+    <svg class="src-x-mark" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+  </span>
+  <p class="src-x-body">{{ item.excerpt or item.title }}</p>
+  <span class="src-embed-foot"><span>{{ item.published_at }}</span><b>View on X &nearr;</b></span>
+  {% elif item.is_video %}
+  <span class="src-embed-media" aria-hidden="true"><span class="src-play"></span></span>
+  <span class="src-embed-body">
+    <span class="src-embed-head">
+      {{ src_favicon(item) }}
+      <span class="src-site">{{ item.site or item.host or item.publisher }}</span>
+      <span class="src-badge">Video</span>
+    </span>
+    {% if item.show_title %}<strong class="src-title">{{ item.title }}</strong>{% endif %}
+    {% if item.excerpt %}<p class="src-excerpt">{{ item.excerpt }}</p>{% endif %}
+    <span class="src-embed-foot"><span class="src-domain">{{ item.published_at }}</span><b>Watch &nearr;</b></span>
+  </span>
+  {% else %}
+  <span class="src-embed-body">
+    <span class="src-embed-head">
+      {{ src_favicon(item) }}
+      <span class="src-site">{{ item.site or item.host or item.publisher }}</span>
+      <span class="src-badge">{{ 'GitHub' if item.type == 'github' else item.type | capitalize }}</span>
+    </span>
+    {% if item.show_title %}<strong class="src-title">{{ item.title }}</strong>{% endif %}
+    {% if item.excerpt %}<p class="src-excerpt">{{ item.excerpt }}</p>{% endif %}
+    <span class="src-embed-foot">
+      <span class="src-domain">{{ item.host or item.site }}{% if item.published_at %} &middot; {{ item.published_at }}{% endif %}</span>
+      <b>Open source &nearr;</b>
+    </span>
+  </span>
+  {% endif %}
+</a>
+{%- endmacro %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -19,7 +68,7 @@
   <script type="application/ld+json">{{ jsonld | safe }}</script>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700,800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/public-pages.css?v=20260721-querywatch1">
-  <link rel="stylesheet" href="/static/css/topics.css?v=20260723-topics1">
+  <link rel="stylesheet" href="/static/css/topics.css?v=20260723-embeds3">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <script>
@@ -111,34 +160,41 @@
         </section>
         {% endif %}
 
-        <section class="topic-panel" id="evidence">
+        <section class="topic-panel topic-sources-panel" id="evidence">
           <div class="topic-panel-head">
-            <div><p class="eyebrow">Evidence feed</p><h2>What moved the timeline</h2></div>
+            <div><p class="eyebrow">Embedded sources</p><h2>Where this snapshot comes from</h2></div>
+            {% if selected.evidence %}<span class="topic-sources-count">{{ selected.evidence | length }} source{{ "s" if selected.evidence | length != 1 }}</span>{% endif %}
+          </div>
+          {% if selected.evidence %}
+          <div class="src-embed-grid">
+            {% for item in selected.evidence %}{{ source_embed(item, true) }}{% endfor %}
+          </div>
+          {% else %}
+          <p class="topic-empty">No sources were attached to this snapshot yet.</p>
+          {% endif %}
+        </section>
+
+        {% set history_runs = runs | selectattr("evidence") | rejectattr("is_selected") | list %}
+        {% if history_runs %}
+        <section class="topic-panel">
+          <div class="topic-panel-head">
+            <div><p class="eyebrow">Evidence timeline</p><h2>What moved earlier snapshots</h2></div>
           </div>
           <div class="evidence-run-list">
-            {% for run in runs %}
-            {% if run.evidence %}
+            {% for run in history_runs %}
             <section class="evidence-run">
               <div class="evidence-run-date">
                 <span>{{ run.date_display }}</span>
                 <small>Snapshot {{ run.version }}</small>
               </div>
               <div class="evidence-cards">
-                {% for item in run.evidence %}
-                <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer" class="evidence-card evidence-{{ item.type }}">
-                  <span class="evidence-type">{{ "X post" if item.type == "x" else item.type }}</span>
-                  <strong>{{ item.title }}</strong>
-                  <span>{{ item.publisher }}{% if item.publisher and item.published_at %} &middot; {% endif %}{{ item.published_at }}</span>
-                  {% if item.excerpt %}<p>{{ item.excerpt }}</p>{% endif %}
-                  <b>{{ "View post" if item.type == "x" else "Open source" }} &nearr;</b>
-                </a>
-                {% endfor %}
+                {% for item in run.evidence %}{{ source_embed(item, false) }}{% endfor %}
               </div>
             </section>
-            {% endif %}
             {% endfor %}
           </div>
         </section>
+        {% endif %}
       </article>
 
       <aside class="topic-side-column">
@@ -223,6 +279,64 @@
       });
       window.addEventListener("DOMContentLoaded", function () {
         if (window.ConsensusMath) window.ConsensusMath.render(document.querySelector("[data-math-render]"));
+      });
+    })();
+  </script>
+
+  <script>
+    // Inline citations behave as chips that reveal their embedded source.
+    (function () {
+      const prose = document.querySelector(".topic-consensus");
+      if (!prose) return;
+      let timer = null;
+      function flash(target) {
+        if (!target) return;
+        target.scrollIntoView({behavior: "smooth", block: "center"});
+        target.classList.add("is-cited");
+        if (timer) window.clearTimeout(timer);
+        timer = window.setTimeout(function () { target.classList.remove("is-cited"); }, 2200);
+      }
+      prose.querySelectorAll('a[href^="#src-"]').forEach(function (link) {
+        link.classList.add("source-chip");
+        const target = document.getElementById(decodeURIComponent(link.getAttribute("href").slice(1)));
+        if (target) {
+          const srcImg = target.querySelector(".src-favicon-img");
+          let url = srcImg && srcImg.getAttribute("src");
+          if (!url) {
+            // e.g. X cards carry no favicon slot: derive it from the source URL.
+            try {
+              const host = new URL(target.getAttribute("href"), window.location.href).hostname.replace(/^www\./, "");
+              if (host) url = "/api/topics/favicon?d=" + encodeURIComponent(host);
+            } catch (e) { /* keep the dot fallback */ }
+          }
+          if (url) {
+            const fav = document.createElement("img");
+            fav.className = "cite-favicon";
+            fav.setAttribute("src", url);
+            fav.setAttribute("alt", "");
+            fav.setAttribute("aria-hidden", "true");
+            fav.addEventListener("error", function () {
+              fav.remove();
+              link.classList.remove("has-favicon");
+            });
+            link.insertBefore(fav, link.firstChild);
+            link.classList.add("has-favicon");
+          }
+        }
+        link.addEventListener("click", function (event) {
+          if (!target) return;
+          event.preventDefault();
+          flash(target);
+        });
+      });
+    })();
+
+    // Drop favicons that fail to load so the monogram fallback shows through.
+    (function () {
+      document.querySelectorAll(".src-favicon-img").forEach(function (img) {
+        function fail() { img.remove(); }
+        img.addEventListener("error", fail);
+        if (img.complete && img.naturalWidth === 0) fail();
       });
     })();
   </script>
