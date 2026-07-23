@@ -297,7 +297,6 @@ _CONSENSUS_ENGINE_MODELS = {
     "Anthropic-Pro": cfg.ANTHROPIC_PRO_MODEL,
     "Gemini": cfg.GEMINI_FLASH_MODEL,
     "Gemini-Pro": cfg.GEMINI_PRO_MODEL,
-    cfg.GEMINI_FRONTIER_LOW_MODEL: cfg.GEMINI_FRONTIER_LOW_MODEL,
     "DeepSeek": cfg.DEFAULT_DEEPSEEK_MODEL,
     "DeepSeek-Pro": "deepseek-v4-pro",
     "Grok": cfg.DEFAULT_GROK_MODEL,

@@ -33,6 +33,18 @@ function injectMarkdown(el, md) {
 window.injectMarkdown = injectMarkdown;
 
 // === Streaming (SSE) Helpers ===
+function coerceStreamText(value) {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(coerceStreamText).join("");
+  if (value && typeof value === "object") {
+    for (const key of ["text", "output_text", "content", "delta"]) {
+      const text = coerceStreamText(value[key]);
+      if (text) return text;
+    }
+  }
+  return "";
+}
+
 // Rendert eintreffende Text-Deltas gedrosselt als Markdown in ein Element.
 function createStreamRenderer(outputEl, isActiveFn) {
   const RENDER_INTERVAL_MS = 120;
@@ -51,6 +63,7 @@ function createStreamRenderer(outputEl, isActiveFn) {
 
   return {
     append(chunk) {
+      chunk = coerceStreamText(chunk);
       if (!chunk) return;
       if (isActiveFn && !isActiveFn()) return;
       if (!started) {
@@ -147,10 +160,19 @@ async function streamSSERequest(url, payload, signal, deltaRenderers) {
 
     const contentType = (response.headers.get("content-type") || "").toLowerCase();
     if (!contentType.includes("text/event-stream") || !response.body) {
-      let data = {};
+      const rawBody = await response.text();
+      let data;
       try {
-        data = await response.json();
-      } catch (_) { /* keine JSON-Antwort -> leeres Objekt */ }
+        data = rawBody ? JSON.parse(rawBody) : {};
+      } catch (_) {
+        data = {
+          error: rawBody.trim() || `Request failed with HTTP ${response.status}.`,
+          error_code: "http_error"
+        };
+      }
+      if (!response.ok && !data.error && !data.detail) {
+        data.error = `Request failed with HTTP ${response.status}.`;
+      }
       return { ok: response.ok, status: response.status, data, streamed: false };
     }
 
@@ -166,8 +188,9 @@ async function streamSSERequest(url, payload, signal, deltaRenderers) {
       }
       const renderer = renderers[eventName];
       if (!renderer || !data) return;
-      if (data.text) {
-        renderer.append(data.text);
+      const deltaText = coerceStreamText(data.text);
+      if (deltaText) {
+        renderer.append(deltaText);
       } else if (data.reasoning && renderer.markReasoning) {
         // Reasoning-Marker auf einem benannten Event (z. B. consensus.delta):
         // nur den zugehörigen Renderer markieren, nicht alle.

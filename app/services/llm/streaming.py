@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 
 import app.core.config as cfg
 from app.services.llm.citations import (
+    coerce_text,
     make_llm_result,
     parse_anthropic_response,
     parse_gemini_response,
@@ -789,7 +790,9 @@ def streaming_model_response(stream_gen: Generator[StreamEvent, None, None], pro
         try:
             for item in stream_gen:
                 if item.get("type") == "delta":
-                    yield sse_pack("delta", {"text": item.get("text") or ""})
+                    text = coerce_text(item.get("text"))
+                    if text:
+                        yield sse_pack("delta", {"text": text})
                 elif item.get("type") == "reasoning":
                     now = time.monotonic()
                     if last_reasoning_at is None or now - last_reasoning_at >= 2.0:

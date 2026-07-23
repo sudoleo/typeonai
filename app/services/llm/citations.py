@@ -11,15 +11,41 @@ LLMResult = Dict[str, Any]
 
 def make_llm_result(text: str, sources: Iterable[Source] | None = None) -> LLMResult:
     return {
-        "text": (text or "").strip(),
+        "text": coerce_text(text).strip(),
         "sources": list(sources or []),
     }
 
 
+def coerce_text(value: Any) -> str:
+    """Normalisiert Provider-Content-Blöcke zu sichtbarem Antworttext.
+
+    Neue Modellversionen liefern Text je nach SDK als String, Liste von Blöcken
+    oder verschachteltes Objekt. Niemals das Objekt selbst stringifizieren:
+    im Browser wuerde daraus `[object Object]`.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (list, tuple)):
+        return "".join(coerce_text(item) for item in value)
+    if isinstance(value, dict):
+        for key in ("text", "output_text", "content", "delta", "message", "error"):
+            if key in value:
+                text = coerce_text(value.get(key))
+                if text:
+                    return text
+        return ""
+    plain = to_plain(value)
+    if plain is not value:
+        return coerce_text(plain)
+    return str(value) if isinstance(value, (int, float, bool)) else ""
+
+
 def result_text(result: Any) -> str:
     if isinstance(result, dict):
-        return str(result.get("text") or result.get("response") or "")
-    return str(result or "")
+        return coerce_text(result.get("text") or result.get("response"))
+    return coerce_text(result)
 
 
 def result_sources(result: Any) -> List[Source]:
@@ -32,7 +58,7 @@ def result_sources(result: Any) -> List[Source]:
 def source_response(result: Any, **extra: Any) -> Dict[str, Any]:
     if isinstance(result, dict) and result.get("error"):
         payload = {
-            "error": str(result.get("error") or "This model could not complete the request."),
+            "error": coerce_text(result.get("error")) or "This model could not complete the request.",
             "error_code": str(result.get("error_code") or "provider_request_failed"),
             "response": "",
             "sources": result_sources(result),

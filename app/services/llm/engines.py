@@ -339,10 +339,7 @@ def build_provider_payload(
                 "role": "user",
                 "parts": _gemini_parts_with_attachments(gemini_question_text, native_attachments),
             }],
-            "generationConfig": {
-                "maxOutputTokens": max_tokens,
-                "temperature": 0.2,
-            },
+            "generationConfig": {"maxOutputTokens": max_tokens},
             "safetySettings": [{
                 "category": "HARM_CATEGORY_HARASSMENT",
                 "threshold": "BLOCK_ONLY_HIGH",
@@ -350,6 +347,9 @@ def build_provider_payload(
         }
         if not benchmark_mode:
             payload["tools"] = [{"google_search": {}}]
+        # Admin-konfigurierte Gemini-IDs koennen neuere Generationen sein,
+        # deren Sampling-Schema sich geaendert hat. Temperature ist optional;
+        # deshalb bleibt der gemeinsame Payload modellunabhaengig.
         if model_config and model_config.request_config:
             _merge_nested_config(payload, model_config.request_config)
         return {

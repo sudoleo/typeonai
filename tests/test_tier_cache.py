@@ -1,7 +1,7 @@
 """Tests fuer den TTL-Cache der Firestore-Tier-Lookups (app/core/security.py).
 
-is_user_pro/is_user_early/is_user_admin teilen sich einen gecachten Fetch des
-users/{uid}-Dokuments: ein Firestore-Read statt drei pro Aufrufstelle, 60s TTL,
+is_user_pro/is_user_admin teilen sich einen gecachten Fetch des
+users/{uid}-Dokuments: ein Firestore-Read statt zwei pro Aufrufstelle, 60s TTL,
 Fehler werden nicht gecacht.
 """
 
@@ -35,30 +35,28 @@ def fresh_cache():
         yield clock
 
 
-def test_three_flag_checks_share_one_firestore_read(fresh_cache):
-    db = make_firestore_mock({"tier": "pro", "early": True, "role": "admin"})
+def test_tier_checks_share_one_firestore_read(fresh_cache):
+    db = make_firestore_mock({"tier": "pro", "role": "admin"})
     with patch.object(security, "db_firestore", db):
         assert security.is_user_pro("uid-a") is True
-        assert security.is_user_early("uid-a") is True
         assert security.is_user_admin("uid-a") is True
     assert get_call_count(db) == 1
 
 
 def test_flags_derived_like_before(fresh_cache):
     cases = [
-        ({"tier": "premium"}, {"pro": True, "early": False, "admin": False}),
-        ({"tier": "pro"}, {"pro": True, "early": False, "admin": False}),
-        ({"tier": "early"}, {"pro": False, "early": True, "admin": False}),
-        ({"early": "true"}, {"pro": False, "early": True, "admin": False}),
-        ({"role": "admin"}, {"pro": False, "early": False, "admin": True}),
-        ({}, {"pro": False, "early": False, "admin": False}),
+        ({"tier": "premium"}, {"pro": True, "admin": False}),
+        ({"tier": "pro"}, {"pro": True, "admin": False}),
+        ({"tier": "early"}, {"pro": False, "admin": False}),
+        ({"early": "true"}, {"pro": False, "admin": False}),
+        ({"role": "admin"}, {"pro": False, "admin": True}),
+        ({}, {"pro": False, "admin": False}),
     ]
     for i, (data, expected) in enumerate(cases):
         uid = f"uid-flags-{i}"
         db = make_firestore_mock(data)
         with patch.object(security, "db_firestore", db):
             assert security.is_user_pro(uid) is expected["pro"], data
-            assert security.is_user_early(uid) is expected["early"], data
             assert security.is_user_admin(uid) is expected["admin"], data
 
 
@@ -66,7 +64,6 @@ def test_missing_document_is_not_pro(fresh_cache):
     db = make_firestore_mock(None, exists=False)
     with patch.object(security, "db_firestore", db):
         assert security.is_user_pro("uid-missing") is False
-        assert security.is_user_early("uid-missing") is False
     assert get_call_count(db) == 1
 
 
@@ -115,6 +112,5 @@ def test_mock_auth_hook_bypasses_firestore(fresh_cache, monkeypatch):
     db = MagicMock()
     with patch.object(security, "db_firestore", db):
         assert security.is_user_pro(security.E2E_MOCK_UID) is False
-        assert security.is_user_early(security.E2E_MOCK_UID) is False
         assert security.is_user_admin(security.E2E_MOCK_UID) is False
     db.collection.assert_not_called()

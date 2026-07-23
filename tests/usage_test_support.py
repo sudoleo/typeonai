@@ -76,7 +76,7 @@ class FakeFirestore:
     def collection(self, name):
         return FakeCollectionReference(self, (name,))
 
-    def transaction(self):
+    def transaction(self, **_kwargs):
         return FakeTransaction(self)
 
     def run_transaction(self, operation):

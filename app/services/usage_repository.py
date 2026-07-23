@@ -360,7 +360,13 @@ class FirestoreUsageRepository:
     def _transaction(self, operation: Callable[[object], T]) -> T:
         if self._transaction_runner is not None:
             return self._transaction_runner(operation)
-        transaction = self._db.transaction()
+        # Ein UI-Lauf fannt mehrere /ask_* Requests parallel mit demselben
+        # Idempotency-Key aus. Der erste Request konsumiert den Run, die
+        # restlichen muessen danach idempotent den CONSUMED-Stand lesen. Fuenf
+        # Firestore-Versuche reichen bei sechs gleichzeitigen Transaktionen
+        # nicht verlaesslich; ein hoeheres SDK-Retry-Budget laesst die kurze
+        # Hot-Document-Kollision auslaufen, ohne den Run mehrfach zu zaehlen.
+        transaction = self._db.transaction(max_attempts=12)
 
         @firestore.transactional
         def run(tx):

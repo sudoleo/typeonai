@@ -6,12 +6,12 @@ from typing import Callable, Optional
 
 from fastapi import APIRouter, Request, Body, HTTPException
 from fastapi.responses import StreamingResponse
+from google.api_core.exceptions import Aborted as FirestoreAborted
 
 from app.core.rate_limit import limiter
 from app.core.security import (
     db_firestore,
     extract_id_token,
-    is_user_early,
     is_user_pro,
     verify_user_token,
 )
@@ -26,7 +26,7 @@ from app.services.llm.base import (
 from app.services.llm.engines import (
     query_openai, query_mistral, query_claude, query_gemini, query_deepseek, query_grok
 )
-from app.services.llm.citations import source_response
+from app.services.llm.citations import coerce_text, source_response
 from app.services.llm.mock_llm import mock_ask_result, mock_ask_stream, mock_llm_enabled
 from app.services.llm.streaming import (
     SSE_HEADERS,
@@ -128,6 +128,14 @@ def reserve_usage_run(uid: str, data: dict, *, is_pro: bool, deep_think: bool):
             status_code=409,
             detail={"error": str(exc), "error_code": "usage_run_conflict"},
         ) from None
+    except FirestoreAborted:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "Usage accounting is temporarily busy. Please retry this run.",
+                "error_code": "usage_storage_busy",
+            },
+        ) from None
     if result.status is RunStatus.RELEASED:
         raise HTTPException(
             status_code=409,
@@ -146,6 +154,14 @@ def consume_usage_run(uid: str, key: str, *, is_pro: bool):
         raise HTTPException(
             status_code=409,
             detail={"error": str(exc), "error_code": "usage_run_transition"},
+        ) from None
+    except FirestoreAborted:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "Usage accounting is temporarily busy. Please retry this run.",
+                "error_code": "usage_storage_busy",
+            },
         ) from None
 
 def parse_boolean_flag(value) -> bool:
@@ -349,14 +365,12 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     model = data.get("model")
 
     is_pro_user = False
-    is_early_user = False
     uid = None
 
     if id_token:
         try:
             uid = verify_user_token(id_token)
             is_pro_user = is_user_pro(uid)
-            is_early_user = is_pro_user or is_user_early(uid)
         except Exception:
             raise HTTPException(status_code=401, detail="Authentication failed")
 
@@ -370,7 +384,6 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
         getattr(cfg, provider.allowed_models_attr),
         provider.label,
         is_pro=is_pro_user,
-        is_early=is_early_user,
     )
     attachments = parse_attachments(data, is_pro_user)
     max_tokens = cfg.get_output_token_limit(is_pro_user, deep_search)
@@ -574,12 +587,6 @@ def consensus(request: Request, data: dict = Body(...)):
     if consensus_model not in cfg.ALLOWED_CONSENSUS_MODELS:
         raise HTTPException(status_code=400, detail="Invalid consensus model selected.")
 
-    # Early-Engine (z.B. Gemini Frontier-Low) ist tag-gated. Pro schliesst Early
-    # ein; gilt auch bei eigenen Keys, analog zum Premium-Gating weiter unten.
-    early_access = is_pro or (uid is not None and is_user_early(uid))
-    if cfg.is_early_consensus_model(consensus_model) and not early_access:
-        raise HTTPException(status_code=403, detail="Early access consensus engines are reserved for Early or Pro users.")
-
     if deep_think and not is_pro:
         raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
 
@@ -675,7 +682,6 @@ def consensus(request: Request, data: dict = Body(...)):
         "Mistral": "Mistral",     "Mistral-Pro": "Mistral",
         "Anthropic": "Anthropic", "Anthropic-Pro": "Anthropic",
         "Gemini": "Gemini",       "Gemini-Pro": "Gemini",
-        cfg.GEMINI_FRONTIER_LOW_MODEL: "Gemini",
         "DeepSeek": "DeepSeek",   "DeepSeek-Pro": "DeepSeek",
         "Grok": "Grok",           "Grok-Pro": "Grok",
     }
@@ -805,13 +811,15 @@ def consensus(request: Request, data: dict = Body(...)):
                     model_sources=model_sources,
                 ):
                     if item.get("type") == "delta":
-                        yield sse_pack("consensus.delta", {"text": item.get("text") or ""})
+                        text = coerce_text(item.get("text"))
+                        if text:
+                            yield sse_pack("consensus.delta", {"text": text})
                     elif item.get("type") == "reasoning":
                         event = _reasoning_event("consensus.delta")
                         if event:
                             yield event
                     else:
-                        consensus_text = item.get("text") or ""
+                        consensus_text = coerce_text(item.get("text"))
                         consensus_failed = bool(item.get("error")) or is_consensus_error_text(consensus_text)
 
                 if consensus_failed:
@@ -837,13 +845,15 @@ def consensus(request: Request, data: dict = Body(...)):
                         if item.get("type") == "delta":
                             # Das Frontend rendert diese Deltas nicht mehr (die Engine
                             # liefert JSON); sie halten nur die SSE-Verbindung aktiv.
-                            yield sse_pack("differences.delta", {"text": item.get("text") or ""})
+                            text = coerce_text(item.get("text"))
+                            if text:
+                                yield sse_pack("differences.delta", {"text": text})
                         elif item.get("type") == "reasoning":
                             event = _reasoning_event("differences.delta")
                             if event:
                                 yield event
                         else:
-                            differences_text = item.get("text") or ""
+                            differences_text = coerce_text(item.get("text"))
                             differences_data = item.get("data")
             except Exception as exc:
                 logging.exception("Consensus streaming failed")

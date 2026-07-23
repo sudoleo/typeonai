@@ -40,18 +40,10 @@
     return true;
   }
 
-  function applyTierDefaultModels(isPro, isEarly) {
-    // Pro -> Pro-Defaults; nur Early-Tag -> Early-Defaults (Frontier-Low);
-    // sonst die guenstigen Free-Defaults. Pro schliesst Early-Zugang ein, hat
-    // aber eigene Defaults, daher die Pro-Abfrage zuerst.
-    let defaults;
-    if (isPro) {
-      defaults = window.PRO_DEFAULT_MODELS || {};
-    } else if (isEarly) {
-      defaults = window.EARLY_DEFAULT_MODELS || {};
-    } else {
-      defaults = window.FREE_DEFAULT_MODELS || {};
-    }
+  function applyTierDefaultModels(isPro) {
+    const defaults = isPro
+      ? (window.PRO_DEFAULT_MODELS || {})
+      : (window.FREE_DEFAULT_MODELS || {});
     window.App.modelPrefs.forEach(pref => {
       if (localStorage.getItem("pref_select_" + pref.key) !== null) return;
       const select = document.getElementById(pref.selectId);
@@ -477,13 +469,8 @@
       if (!badges.length && option.classList.contains("premium-option")) {
         badges.push("Pro");
       }
-      if (!badges.length && option.classList.contains("early-option")) {
-        badges.push("Early");
-      }
       const hasProBadge = badges.some(badge => badge.toLowerCase() === "pro");
-      const hasEarlyBadge = badges.some(badge => badge.toLowerCase() === "early");
       item.classList.toggle("is-premium", option.classList.contains("premium-option") || hasProBadge);
-      item.classList.toggle("is-early", option.classList.contains("early-option") || hasEarlyBadge);
 
       const label = document.createElement("span");
       label.className = "model-picker-option-label";
@@ -492,9 +479,7 @@
 
       badges.forEach(badgeText => {
         const badge = document.createElement("span");
-        badge.className = badgeText.toLowerCase() === "pro"
-          ? "pro-badge model-picker-pro-badge"
-          : "model-picker-early-badge";
+        badge.className = "pro-badge model-picker-pro-badge";
         badge.textContent = badgeText;
         item.appendChild(badge);
       });

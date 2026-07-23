@@ -451,7 +451,19 @@
 
       function getApiErrorMessage(data, fallback = "Request failed.") {
         const normalized = unwrapApiError(data);
-        return normalized.error || normalized.detail || normalized.message || fallback;
+        const candidate = normalized.error || normalized.detail || normalized.message || fallback;
+        if (typeof candidate === "string") return candidate;
+        if (Array.isArray(candidate)) {
+          const messages = candidate
+            .map(item => item && (item.msg || item.message || item.error))
+            .filter(value => typeof value === "string");
+          if (messages.length) return messages.join(" ");
+        }
+        if (candidate && typeof candidate === "object") {
+          const nested = candidate.error || candidate.message || candidate.detail;
+          if (typeof nested === "string") return nested;
+        }
+        return fallback;
       }
 
       function isUsageLimitError(data, message = "") {
@@ -502,6 +514,7 @@
       }
 
       function markModelError(outputEl, message, data = {}) {
+        message = getApiErrorMessage({ error: message }, "The model request failed.");
         const box = outputEl?.closest?.(".response-box");
         if (box) {
           box.dataset.responseError = "true";
@@ -831,10 +844,7 @@
         streamSSERequest('/ask_openai', payload, querySignal, { "delta": openaiStreamRenderer })
           .then(({ ok, status, data }) => {
             if (!ok) {
-              // FastAPI gibt "detail" zurück; wir normalisieren auf eine Error-Message
-              const msg =
-                (data && (data.error || data.detail)) ||
-                `OpenAI HTTP ${status}`;
+              const msg = getApiErrorMessage(data, `OpenAI HTTP ${status}`);
               throw new Error(msg);
             }
 
@@ -939,12 +949,14 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "No response received. The model may have timed out. Please try again.", data);
+              markModelError(outputEl, "Mistral returned an empty response.", data);
             }
             checkAllResponses();
           })
           .catch(error => {
             if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
+            const outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
+            markModelError(outputEl, `Mistral error: ${error.message}`, { error: error.message });
             console.error("Error with Mistral:", error);
             checkAllResponses();
           });
@@ -1009,12 +1021,14 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "No response received. The model may have timed out. Please try again.", data);
+              markModelError(outputEl, "Anthropic returned an empty response.", data);
             }
             checkAllResponses();
           })
           .catch(error => {
             if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
+            const outputEl = document.getElementById("claudeResponse").querySelector(".collapsible-content");
+            markModelError(outputEl, `Anthropic error: ${error.message}`, { error: error.message });
             console.error("Error with Anthropic:", error);
             checkAllResponses();
           });
@@ -1079,12 +1093,14 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "No response received. The model may have timed out. Please try again.", data);
+              markModelError(outputEl, "Gemini returned an empty response.", data);
             }
             checkAllResponses();
           })
           .catch(error => {
             if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
+            const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
+            markModelError(outputEl, `Gemini error: ${error.message}`, { error: error.message });
             console.error("Error with Gemini:", error);
             checkAllResponses();
           });
@@ -1149,12 +1165,14 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "No response received. The model may have timed out. Please try again.", data);
+              markModelError(outputEl, "DeepSeek returned an empty response.", data);
             }
             checkAllResponses();
           })
           .catch(error => {
             if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
+            const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
+            markModelError(outputEl, `DeepSeek error: ${error.message}`, { error: error.message });
             console.error("Fehler bei DeepSeek:", error);
             checkAllResponses();
           });
@@ -1218,12 +1236,14 @@
             } else if (data.detail) {
               markModelError(outputEl, getApiErrorMessage(data), data);
             } else {
-              markModelError(outputEl, "No response received. The model may have timed out. Please try again.", data);
+              markModelError(outputEl, "Grok returned an empty response.", data);
             }
             checkAllResponses();
           })
           .catch(error => {
             if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
+            const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
+            markModelError(outputEl, `Grok error: ${error.message}`, { error: error.message });
             console.error("Fehler bei Grok:", error);
             checkAllResponses();
           });

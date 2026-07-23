@@ -104,7 +104,7 @@ class OpenAITokenParamTests(unittest.TestCase):
         self.assertIsNone(_effective_temperature("openai", "gpt-5.5", 0.3))
         self.assertIsNone(_effective_temperature("openai", "o3-mini", 0.3))
         self.assertEqual(_effective_temperature("openai", "gpt-4o", 0.3), 0.3)
-        self.assertEqual(_effective_temperature("gemini", "gemini-3.1-pro-preview", 0.3), 0.3)
+        self.assertIsNone(_effective_temperature("gemini", "gemini-3.1-pro-preview", 0.3))
 
 
 class QueryConsensusFallbackTests(unittest.TestCase):

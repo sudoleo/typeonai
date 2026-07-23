@@ -456,23 +456,6 @@
   margin-right: 14px;
 }
 
-.model-picker-early-badge {
-  flex: 0 0 auto;
-  margin-right: 0;
-  padding: 2px 6px;
-  border: 1px solid color-mix(in srgb, #0f766e 36%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, #14b8a6 14%, transparent);
-  color: color-mix(in srgb, #0f766e 88%, var(--text-color) 12%);
-  font-size: 0.66rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.model-picker-option.is-selected .model-picker-early-badge:last-child {
-  margin-right: 14px;
-}
-
 .dark-mode .model-picker-menu {
   border-color: color-mix(in srgb, var(--glass-border) 76%, #3a3a3a);
   background:
@@ -490,12 +473,6 @@
 
 .dark-mode .model-picker-option.is-selected {
   background: #343434;
-}
-
-.dark-mode .model-picker-early-badge {
-  border-color: color-mix(in srgb, #2dd4bf 34%, transparent);
-  background: color-mix(in srgb, #14b8a6 16%, transparent);
-  color: color-mix(in srgb, #99f6e4 84%, var(--text-color) 16%);
 }
 
 .model-name-trigger {

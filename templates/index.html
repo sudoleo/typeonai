@@ -20,7 +20,6 @@
     window.APP_LIMITS = JSON.parse('{{ limits | tojson | safe }}');
     window.FREE_DEFAULT_MODELS = JSON.parse('{{ default_models | tojson | safe }}');
     window.PRO_DEFAULT_MODELS = JSON.parse('{{ pro_default_models | tojson | safe }}');
-    window.EARLY_DEFAULT_MODELS = JSON.parse('{{ early_default_models | tojson | safe }}');
     // Consensus-Engine, auf die Deep Think umschaltet (Admin-konfigurierbar).
     window.DEEP_THINK_CONSENSUS_MODEL = JSON.parse('{{ deep_think_consensus_model | tojson | safe }}');
     // Preset-Ebene des Consensus-Pickers (Fast/Balanced/High Quality + Custom).
@@ -59,7 +58,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260722-watch-compact2">
+  <link rel="stylesheet" href="/static/style.css?v=20260723-model-config2">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -72,17 +71,17 @@
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.js" integrity="sha384-AtrdNsnxl/75rvBneBVH7DtOvCxSVahR2zWqle1coBKd8DEmLoviqNeJSx64gNAs" crossorigin="anonymous"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260722-bookmark-pages1"></script>
+  <script type="module" src="/static/firebase.js?v=20260722-model-fixes1"></script>
   <script type="module" src="/static/demo.js?v=20260717-demo-autostart1"></script>
   <script src="/static/app-ui.js?v=20260628-prompt-default2" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
-  <script src="/static/js/app-core.js?v=20260718-runusage2" defer></script>
+  <script src="/static/js/app-core.js?v=20260722-model-fixes1" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
-  <script src="/static/js/model-picker.js?v=20260718-grokcleanup1" defer></script>
+  <script src="/static/js/model-picker.js?v=20260722-model-fixes1" defer></script>
   <!-- Gemeinsame LaTeX-Aufbereitung; muss vor markdown-stream.js laden. -->
   <script src="/static/js/math-render.js?v=20260720-math1" defer></script>
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
-  <script src="/static/js/markdown-stream.js?v=20260720-math1" defer></script>
+  <script src="/static/js/markdown-stream.js?v=20260723-model-config2" defer></script>
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
   <script src="/static/js/sources.js?v=20260626-extract1" defer></script>
   <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
@@ -100,11 +99,11 @@
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
   <script src="/static/js/watch.js?v=20260722-watch-compact2" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
-  <script src="/static/js/user-tier.js?v=20260722-probeta1" defer></script>
+  <script src="/static/js/user-tier.js?v=20260722-model-fixes1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-insights.js?v=20260718-runusage2" defer></script>
   <script src="/static/js/consensus-run.js?v=20260718-runusage2" defer></script>
-  <script src="/static/js/query-send.js?v=20260722-plan-copy1" defer></script>
+  <script src="/static/js/query-send.js?v=20260723-model-config2" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
@@ -410,7 +409,7 @@
             <div class="select-wrapper">
               <select id="consensusModelDropdown" aria-label="Consensus model">
                 {% for model in consensus_models %}
-                <option value="{{ model.value }}" data-model-label="{{ model.label }}" data-model-badge="{{ model.badge }}" {% if loop.first %}selected{% endif %} {% if model.is_premium %}disabled class="premium-option"{% elif model.is_frontier %}disabled class="early-option"{% endif %}>{{ model.label }}{% if model.badge %} · {{ model.badge }}{% endif %}</option>
+                <option value="{{ model.value }}" data-model-label="{{ model.label }}" data-model-badge="{{ model.badge }}" {% if loop.first %}selected{% endif %} {% if model.is_premium %}disabled class="premium-option"{% endif %}>{{ model.label }}{% if model.badge %} · {{ model.badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </div>
@@ -609,7 +608,7 @@
               <select id="openaiModelSelect" class="model-picker">
                 {% for model in models['openai'] %}
                 {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['openai'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}disabled class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['openai'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -630,7 +629,7 @@
               <select id="mistralModelSelect" class="model-picker">
                 {% for model in models['mistral'] %}
                 {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['mistral'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}disabled class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['mistral'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -651,7 +650,7 @@
               <select id="claudeModelSelect" class="model-picker">
                 {% for model in models['anthropic'] %}
                 {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['anthropic'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}disabled class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['anthropic'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -672,7 +671,7 @@
               <select id="geminiModelSelect" class="model-picker">
                 {% for model in models['gemini'] %}
                 {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['gemini'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}disabled class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['gemini'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -702,7 +701,7 @@
               <select id="deepseekModelSelect" class="model-picker">
                 {% for model in models['deepseek'] %}
                 {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['deepseek'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}disabled class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['deepseek'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -725,7 +724,7 @@
               <select id="grokModelSelect" class="model-picker">
                 {% for model in models['grok'] %}
                 {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['grok'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% elif model in frontier_models %}disabled class="early-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['grok'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
@@ -738,7 +737,7 @@
       </div>
     </div>
 
-  <script src="/static/js/app-init.js?v=20260722-probeta1" defer></script>
+  <script src="/static/js/app-init.js?v=20260722-model-fixes1" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing
@@ -1072,7 +1071,7 @@
       <div class="pro-header">
         <p class="eyebrow">Pro beta</p>
         <h2>Join Pro beta for <span class="highlight-tech" id="proModalFeatureName">Deep Think</span></h2>
-        <p id="proModalDescription">Request early access to Pro features. There is no checkout or active billing.</p>
+        <p id="proModalDescription">Request access to Pro features. There is no checkout or active billing.</p>
       </div>
 
       <div class="pro-beta-panel">

@@ -144,7 +144,7 @@ async def read_root(request: Request):
         "gemini": cfg.get_ordered_models("gemini"),
         "deepseek": cfg.get_ordered_models("deepseek"),
         "grok": cfg.get_ordered_models("grok"),
-        "premium": list(PREMIUM_MODELS - cfg.EARLY_MODELS)
+        "premium": list(PREMIUM_MODELS)
     }
     model_metadata = cfg.get_model_picker_metadata()
     model_labels = {model_id: meta["label"] for model_id, meta in model_metadata.items()}
@@ -155,7 +155,6 @@ async def read_root(request: Request):
             "label": cfg.get_consensus_model_label(model),
             "badge": cfg.get_consensus_model_badge(model),
             "is_premium": cfg.is_premium_consensus_model(model),
-            "is_frontier": model in cfg.EARLY_MODELS,
         }
         for model in cfg.ALLOWED_CONSENSUS_MODELS
     ]
@@ -167,7 +166,6 @@ async def read_root(request: Request):
         "models": models,
         "default_models": cfg.FREE_DEFAULT_MODEL_BY_PROVIDER,
         "pro_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
-        "early_default_models": cfg.EARLY_DEFAULT_MODEL_BY_PROVIDER,
         "consensus_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
         "consensus_models": consensus_models,
         "consensus_presets": cfg.get_consensus_presets(),
@@ -175,7 +173,6 @@ async def read_root(request: Request):
         "deep_think_consensus_model": cfg.get_deep_think_consensus_model(),
         "model_labels": model_labels,
         "model_badges": model_badges,
-        "frontier_models": list(cfg.EARLY_MODELS),
         **firebase_config
     })
     response.headers["X-Robots-Tag"] = "noindex, follow"

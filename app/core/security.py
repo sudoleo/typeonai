@@ -124,25 +124,23 @@ def extract_id_token(request: Request, data: dict) -> Optional[str]:
     return None
 
 # --- Tier-Flag-Cache -------------------------------------------------------
-# is_user_pro/is_user_early/is_user_admin wurden pro Aufruf je ein Firestore-Get;
+# is_user_pro/is_user_admin wurden pro Aufruf je ein Firestore-Get;
 # ein Frage-Fan-out summierte sich auf 15+ Reads. Ein gemeinsamer Fetch des
-# users/{uid}-Dokuments liefert alle drei Flags, der TTL-Cache haelt sie kurz
-# (60s), damit manuell vergebene Pro/Early-Tags schnell greifen. Fehler werden
+# users/{uid}-Dokuments liefert beide Flags, der TTL-Cache haelt sie kurz
+# (60s), damit manuell vergebene Pro-/Admin-Tags schnell greifen. Fehler werden
 # NICHT gecacht (naechster Aufruf versucht Firestore erneut).
 TIER_CACHE_TTL_SECONDS = 60
 _tier_cache = TTLCache(maxsize=4096, ttl=TIER_CACHE_TTL_SECONDS)
 _tier_cache_lock = threading.Lock()
 
-_TIER_FLAGS_DEFAULT = {"pro": False, "early": False, "admin": False}
+_TIER_FLAGS_DEFAULT = {"pro": False, "admin": False}
 
 
 def _compute_tier_flags(data: dict) -> dict:
     tier = str(data.get("tier", "")).lower()
-    early = data.get("early") in (True, "true", "True") or tier == "early"
     role = str(data.get("role", "")).lower()
     return {
         "pro": tier in ("premium", "pro"),
-        "early": early,
         "admin": role == "admin",
     }
 
@@ -177,17 +175,6 @@ def is_user_pro(uid: str) -> bool:
     if _mock_auth_enabled() and uid == E2E_MOCK_UID:
         return False
     return _get_tier_flags(uid)["pro"]
-
-def is_user_early(uid: str) -> bool:
-    """
-    Liest (gecacht) aus Firestore, ob der Nutzer Early-Access hat: Feld 'early' == True
-    (oder tier == 'early'). Wird manuell vergeben, analog zum Pro-Tag.
-    Hinweis: Pro schliesst Early ein - das wird an den Aufrufstellen kombiniert
-    (is_user_pro(uid) or is_user_early(uid)), nicht hier.
-    """
-    if _mock_auth_enabled() and uid == E2E_MOCK_UID:
-        return False
-    return _get_tier_flags(uid)["early"]
 
 def is_user_admin(uid: str) -> bool:
     """

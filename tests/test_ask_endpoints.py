@@ -44,11 +44,10 @@ def free_model(provider: str) -> str:
     return cfg.FREE_DEFAULT_MODEL_BY_PROVIDER[provider]
 
 
-def auth_patches(uid="uid-ask-tests", is_pro=False, is_early=False):
+def auth_patches(uid="uid-ask-tests", is_pro=False):
     return (
         patch.object(chat_router, "verify_user_token", return_value=uid),
         patch.object(chat_router, "is_user_pro", return_value=is_pro),
-        patch.object(chat_router, "is_user_early", return_value=is_early),
     )
 
 
@@ -75,8 +74,8 @@ def test_no_auth_error_is_provider_specific():
 
 def test_gemini_own_keys_flag_without_key_is_rejected():
     client = make_client()
-    p1, p2, p3 = auth_patches()
-    with p1, p2, p3:
+    p1, p2 = auth_patches()
+    with p1, p2:
         response = client.post(
             "/ask_gemini",
             headers=AUTH_HEADER,
@@ -92,8 +91,8 @@ def test_gemini_own_keys_flag_without_key_is_rejected():
 
 def test_deep_search_is_pro_only():
     client = make_client()
-    p1, p2, p3 = auth_patches(is_pro=False)
-    with p1, p2, p3:
+    p1, p2 = auth_patches(is_pro=False)
+    with p1, p2:
         response = client.post(
             "/ask_grok",
             headers=AUTH_HEADER,
@@ -115,8 +114,8 @@ def test_usage_limit_blocks_developer_key_path(reset_rate_limiter):
         key = f"used-{index}"
         reset_rate_limiter.reserve(uid, key, RunKind.REGULAR, limits)
         reset_rate_limiter.consume(uid, key)
-    p1, p2, p3 = auth_patches(uid=uid)
-    with p1, p2, p3:
+    p1, p2 = auth_patches(uid=uid)
+    with p1, p2:
         response = client.post(
             "/ask_deepseek",
             headers=AUTH_HEADER,
@@ -139,8 +138,8 @@ def test_gemini_developer_path_uses_service_account_and_counts_usage(reset_rate_
         return {"ok": True}
 
     try:
-        p1, p2, p3 = auth_patches(uid=uid)
-        with p1, p2, p3, patch.object(chat_router, "_run_ask", side_effect=fake_run_ask):
+        p1, p2 = auth_patches(uid=uid)
+        with p1, p2, patch.object(chat_router, "_run_ask", side_effect=fake_run_ask):
             response = client.post(
                 "/ask_gemini",
                 headers=AUTH_HEADER,
@@ -175,8 +174,8 @@ def test_own_key_path_bypasses_usage_counting(reset_rate_limiter):
         return {"ok": True}
 
     try:
-        p1, p2, p3 = auth_patches(uid=uid)
-        with p1, p2, p3, patch.object(chat_router, "_run_ask", side_effect=fake_run_ask):
+        p1, p2 = auth_patches(uid=uid)
+        with p1, p2, patch.object(chat_router, "_run_ask", side_effect=fake_run_ask):
             response = client.post(
                 "/ask_claude",
                 headers=AUTH_HEADER,

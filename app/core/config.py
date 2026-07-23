@@ -16,7 +16,6 @@ class ModelConfig:
     label: str
     is_free: bool = True
     is_pro: bool = False
-    is_frontier: bool = False
     is_low_reasoning: bool = False
     request_config: dict[str, Any] = field(default_factory=dict)
 
@@ -80,18 +79,14 @@ DEFAULT_MISTRAL_MODEL = "mistral-small-latest"
 MISTRAL_PRO_MODEL = "mistral-medium-3-5"
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"
 ANTHROPIC_PRO_MODEL = "claude-opus-4-8"
-DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
+GEMINI_36_FLASH_MODEL = "gemini-3.6-flash"
 DEEPSEEK_FLASH_MODEL = "deepseek-v4-flash"
 DEEPSEEK_PRO_MODEL = "deepseek-v4-pro"
 DEFAULT_DEEPSEEK_MODEL = DEEPSEEK_PRO_MODEL
 GROK_NO_REASONING_MODEL = "grok-4.3-no-reasoning"
 GROK_FAST_MODEL = GROK_NO_REASONING_MODEL
 DEFAULT_GROK_MODEL = "grok-4.20-non-reasoning"
-
-OPENAI_FRONTIER_LOW_MODEL = "gpt-5.5-frontier-low"
-ANTHROPIC_FRONTIER_LOW_MODEL = "claude-opus-4-8-frontier-low"
-GEMINI_FRONTIER_LOW_MODEL = "gemini-3.1-pro-preview-frontier-low"
-GROK_FRONTIER_LOW_MODEL = "grok-4.3-low-reasoning"
 
 DEFAULT_MODEL_BY_PROVIDER = {
     "openai": DEFAULT_OPENAI_MODEL,
@@ -105,9 +100,7 @@ DEFAULT_MODEL_BY_PROVIDER = {
 GEMINI_FLASH_MODEL = DEFAULT_GEMINI_MODEL
 GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 GEMINI_35_FLASH_MODEL = "gemini-3.5-flash"
-# Defaults fuer Nutzer OHNE Early-Tag (und ohne Pro): durchweg die guenstigen
-# Basis-Modelle. Die teuren Early-Modelle (Frontier-Low + DeepSeek V4 Pro) sind
-# nur noch ueber den Early-Tag erreichbar (siehe EARLY_MODELS / is_user_early).
+# Defaults fuer Nutzer ohne Pro: durchweg die guenstigen Basis-Modelle.
 FREE_DEFAULT_MODEL_BY_PROVIDER = {
     "openai": DEFAULT_OPENAI_MODEL,
     "mistral": DEFAULT_MISTRAL_MODEL,
@@ -115,16 +108,6 @@ FREE_DEFAULT_MODEL_BY_PROVIDER = {
     "gemini": DEFAULT_GEMINI_MODEL,
     "deepseek": DEEPSEEK_FLASH_MODEL,
     "grok": DEFAULT_GROK_MODEL,
-}
-
-# Defaults fuer Early-Nutzer: die Frontier-Low-Varianten (frueheres Free-Default).
-EARLY_DEFAULT_MODEL_BY_PROVIDER = {
-    "openai": OPENAI_FRONTIER_LOW_MODEL,
-    "mistral": DEFAULT_MISTRAL_MODEL,
-    "anthropic": ANTHROPIC_FRONTIER_LOW_MODEL,
-    "gemini": GEMINI_FRONTIER_LOW_MODEL,
-    "deepseek": DEEPSEEK_PRO_MODEL,
-    "grok": GROK_FRONTIER_LOW_MODEL,
 }
 
 # Unveraenderliche Basis fuer den Free-Default je Provider. Der Admin kann den
@@ -180,8 +163,8 @@ _BASE_DIFFERENCES_JUDGE_BY_PROVIDER = {
 DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
 
 DEFAULT_CONSENSUS_MODELS = [
-    GEMINI_FRONTIER_LOW_MODEL,
     GEMINI_35_FLASH_MODEL,
+    GEMINI_36_FLASH_MODEL,
     OPENAI_LUNA_MODEL,
     "Grok",
     "OpenAI",
@@ -198,11 +181,6 @@ DEFAULT_CONSENSUS_MODELS = [
 ]
 
 ALLOWED_CONSENSUS_MODELS = list(DEFAULT_CONSENSUS_MODELS)
-UNSUPPORTED_GEMINI_MODELS = {
-    "gemini-3.1-flash-preview",
-    "gemini-3-pro-preview",
-}
-
 # Produktdefinition der Model-Set-Presets. Die sechs Antwortmodelle plus
 # Consensus-Engine koennen getrennt davon aus Firestore ueberschrieben werden;
 # "Custom" oeffnet weiterhin die volle Engine-Liste.
@@ -320,7 +298,7 @@ LEADERBOARD_MODEL_ALIASES = {
 ALLOWED_OPENAI_MODELS = {
     "gpt-5-nano", "gpt-5-mini", "gpt-4.1", "gpt-4o", "gpt-3.5-turbo",
     "gpt-5", "gpt-5-chat-latest", "gpt-5.1", "gpt-5.2", "gpt-5.3", "gpt-5.3-chat-latest", "gpt-5.4",
-    "gpt-5.5", "gpt-5.4-mini", OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL, OPENAI_FRONTIER_LOW_MODEL,
+    "gpt-5.5", "gpt-5.4-mini", OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL,
 }
 
 ALLOWED_MISTRAL_MODELS = {
@@ -336,13 +314,14 @@ DEPRECATED_MISTRAL_MODELS = {
 ALLOWED_ANTHROPIC_MODELS = {
     "claude-haiku-4-5", "claude-sonnet-4-20250514", "claude-3-7-sonnet-20250219", "claude-3-5-haiku-20241022",
     "claude-sonnet-4-5", "claude-opus-4-5", "claude-sonnet-4-6", "claude-opus-4-6",
-    "claude-opus-4-7", ANTHROPIC_PRO_MODEL, ANTHROPIC_FRONTIER_LOW_MODEL,
+    "claude-opus-4-7", ANTHROPIC_PRO_MODEL,
 }
 
 ALLOWED_GEMINI_MODELS = {
-    GEMINI_FLASH_MODEL, "gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview",
-    "gemini-2.5-flash", "gemini-2.0-flash", GEMINI_35_FLASH_MODEL,
-    GEMINI_PRO_MODEL, "gemini-2.5-pro", GEMINI_FRONTIER_LOW_MODEL,
+    GEMINI_FLASH_MODEL, GEMINI_36_FLASH_MODEL, "gemini-3.1-flash-lite",
+    "gemini-3.1-flash-lite-preview", "gemini-2.5-flash", "gemini-2.0-flash",
+    GEMINI_35_FLASH_MODEL,
+    GEMINI_PRO_MODEL, "gemini-2.5-pro",
 }
 
 ALLOWED_DEEPSEEK_MODELS = {
@@ -350,7 +329,7 @@ ALLOWED_DEEPSEEK_MODELS = {
 }
 
 ALLOWED_GROK_MODELS = {
-    GROK_NO_REASONING_MODEL, GROK_FRONTIER_LOW_MODEL,
+    GROK_NO_REASONING_MODEL,
     "grok-4.20", "grok-4.20-non-reasoning", "grok-4.3",
 }
 
@@ -359,22 +338,33 @@ ALLOWED_GROK_MODELS = {
 # Reasoning-Varianten migriert, damit keine doppelten/irrefuehrenden Zeilen
 # im Picker und in der Admin-DB verbleiben.
 GROK_MODEL_MIGRATIONS = {
-    "grok-4.3-frontier-low": GROK_FRONTIER_LOW_MODEL,
     "grok-4-1-fast-non-reasoning": GROK_NO_REASONING_MODEL,
     "grok-4-1-fast-non-reasoning-latest": GROK_NO_REASONING_MODEL,
     "grok-4-fast-non-reasoning": GROK_NO_REASONING_MODEL,
     "grok-4-fast-non-reasoning-latest": GROK_NO_REASONING_MODEL,
     "grok-3": GROK_NO_REASONING_MODEL,
     "grok-3-latest": GROK_NO_REASONING_MODEL,
-    "grok-4-1-fast-reasoning": GROK_FRONTIER_LOW_MODEL,
-    "grok-4-1-fast-reasoning-latest": GROK_FRONTIER_LOW_MODEL,
-    "grok-4-fast-reasoning": GROK_FRONTIER_LOW_MODEL,
-    "grok-4-fast-reasoning-latest": GROK_FRONTIER_LOW_MODEL,
-    "grok-4-0709": GROK_FRONTIER_LOW_MODEL,
+    "grok-4-1-fast-reasoning": "grok-4.3",
+    "grok-4-1-fast-reasoning-latest": "grok-4.3",
+    "grok-4-fast-reasoning": "grok-4.3",
+    "grok-4-fast-reasoning-latest": "grok-4.3",
+    "grok-4-0709": "grok-4.3",
     "grok-4": "grok-4.3",
     "grok-4-latest": "grok-4.3",
 }
 DEPRECATED_GROK_MODELS = set(GROK_MODEL_MIGRATIONS)
+REMOVED_MODEL_IDS = {
+    "gpt-5.5-frontier-low",
+    "claude-opus-4-8-frontier-low",
+    "gemini-3.1-pro-preview-frontier-low",
+    # Diese beiden IDs waren bereits vor der Early-Bereinigung als nicht
+    # aufrufbar bekannt. Neue Gemini-Modelle werden direkt ueber die Admin-
+    # Konfiguration zugelassen; bekannte tote Preview-IDs bleiben Tombstones.
+    "gemini-3.1-flash-preview",
+    "gemini-3-pro-preview",
+    "grok-4.3-frontier-low",
+    "grok-4.3-low-reasoning",
+}
 
 
 def canonical_model_id(model_id: str | None, provider: str | None = None) -> str:
@@ -391,28 +381,14 @@ def canonical_model_ids(models, provider: str) -> list[str]:
         if canonical_model_id(model, provider)
     ))
 
-FRONTIER_LOW_MODEL_IDS_BY_PROVIDER = {
-    "openai": OPENAI_FRONTIER_LOW_MODEL,
-    "anthropic": ANTHROPIC_FRONTIER_LOW_MODEL,
-    "gemini": GEMINI_FRONTIER_LOW_MODEL,
-    "grok": GROK_FRONTIER_LOW_MODEL,
-}
-FRONTIER_LOW_MODELS = set(FRONTIER_LOW_MODEL_IDS_BY_PROVIDER.values())
-# Modelle, die sowohl Early- als auch Pro-Charakter haben (teuer, aber kein
-# eigenes Frontier-Low-Mapping). Mistral Small ist hier bewusst NICHT mehr
-# enthalten: es ist guenstig und bleibt ein normales Free-Modell.
-EARLY_AND_PRO_MODELS = {DEEPSEEK_PRO_MODEL}
-# Early-Modelle sind ab sofort tag-gated (nicht mehr gratis fuer alle): nur mit
-# Early-Tag (oder Pro, das Early einschliesst) auswaehlbar.
-EARLY_MODELS = FRONTIER_LOW_MODELS | EARLY_AND_PRO_MODELS
-REQUIRED_PRO_MODELS = {
-    "gpt-5.5", OPENAI_SOL_MODEL, MISTRAL_PRO_MODEL, ANTHROPIC_PRO_MODEL,
-    GEMINI_PRO_MODEL, GEMINI_35_FLASH_MODEL, "grok-4.3",
-}
 DEPRECATED_DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner"}
-REQUIRED_DEEPSEEK_MODELS = {DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL}
 
 def ensure_default_models_allowed():
+    """Initialisiert ausschliesslich die Code-Fallback-Konfiguration.
+
+    Firestore-Providerlisten sind nach einem erfolgreichen Load autoritativ;
+    diese Funktion darf deshalb dort nicht erneut aufgerufen werden.
+    """
     ALLOWED_OPENAI_MODELS.update({
         DEFAULT_OPENAI_MODEL, OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL, "gpt-5.5"
     })
@@ -422,18 +398,20 @@ def ensure_default_models_allowed():
     ALLOWED_ANTHROPIC_MODELS.add(DEFAULT_ANTHROPIC_MODEL)
     ALLOWED_ANTHROPIC_MODELS.add(ANTHROPIC_PRO_MODEL)
     ALLOWED_GEMINI_MODELS.add(DEFAULT_GEMINI_MODEL)
+    ALLOWED_GEMINI_MODELS.add(GEMINI_36_FLASH_MODEL)
     ALLOWED_GEMINI_MODELS.add(GEMINI_35_FLASH_MODEL)
     ALLOWED_DEEPSEEK_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
-    ALLOWED_DEEPSEEK_MODELS.update(REQUIRED_DEEPSEEK_MODELS)
+    ALLOWED_DEEPSEEK_MODELS.update({DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL})
     ALLOWED_GROK_MODELS.update({
         DEFAULT_GROK_MODEL,
         "grok-4.3",
     })
     ALLOWED_GROK_MODELS.difference_update(DEPRECATED_GROK_MODELS)
-    ALLOWED_OPENAI_MODELS.add(OPENAI_FRONTIER_LOW_MODEL)
-    ALLOWED_ANTHROPIC_MODELS.add(ANTHROPIC_FRONTIER_LOW_MODEL)
-    ALLOWED_GEMINI_MODELS.add(GEMINI_FRONTIER_LOW_MODEL)
-    ALLOWED_GROK_MODELS.add(GROK_FRONTIER_LOW_MODEL)
+    for models in (
+        ALLOWED_OPENAI_MODELS, ALLOWED_MISTRAL_MODELS, ALLOWED_ANTHROPIC_MODELS,
+        ALLOWED_GEMINI_MODELS, ALLOWED_DEEPSEEK_MODELS, ALLOWED_GROK_MODELS,
+    ):
+        models.difference_update(REMOVED_MODEL_IDS)
 
 ensure_default_models_allowed()
 
@@ -444,16 +422,14 @@ PREMIUM_MODELS = {
     "claude-sonnet-4-5", "claude-opus-4-5", "claude-sonnet-4-6", "claude-opus-4-6",
     "claude-opus-4-7", ANTHROPIC_PRO_MODEL,
     "mistral-large-latest", "mistral-medium-latest", MISTRAL_PRO_MODEL,
-    GEMINI_PRO_MODEL, "gemini-2.5-pro",
+    GEMINI_PRO_MODEL, GEMINI_35_FLASH_MODEL, "gemini-2.5-pro",
     DEEPSEEK_PRO_MODEL,
     "grok-4.20", "grok-4.3",
 }
-PREMIUM_MODELS.difference_update(FRONTIER_LOW_MODELS)
+PREMIUM_MODELS.difference_update(REMOVED_MODEL_IDS)
 PREMIUM_MODELS.difference_update(DEPRECATED_MISTRAL_MODELS)
 PREMIUM_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
 PREMIUM_MODELS.difference_update(DEPRECATED_GROK_MODELS)
-PREMIUM_MODELS.update(EARLY_AND_PRO_MODELS)
-PREMIUM_MODELS.update(REQUIRED_PRO_MODELS)
 
 ALL_ALLOWED_MODELS = (
     ALLOWED_OPENAI_MODELS | ALLOWED_MISTRAL_MODELS | ALLOWED_ANTHROPIC_MODELS |
@@ -464,23 +440,20 @@ MODEL_LABEL_OVERRIDES = {
     OPENAI_LUNA_MODEL: "GPT-5.6 Luna",
     OPENAI_SOL_MODEL: "GPT-5.6 Sol",
     "gpt-5.5": "GPT-5.5",
-    OPENAI_FRONTIER_LOW_MODEL: "GPT-5.5",
     DEFAULT_OPENAI_MODEL: "GPT-5.4 mini",
     DEFAULT_ANTHROPIC_MODEL: "Claude Haiku 4.5",
-    DEFAULT_GEMINI_MODEL: "Gemini 3.1 Flash-Lite",
+    DEFAULT_GEMINI_MODEL: "Gemini 3.5 Flash-Lite",
     DEFAULT_GROK_MODEL: "Grok 4.20 · No reasoning",
     GROK_NO_REASONING_MODEL: "Grok 4.3 · No reasoning",
     "mistral-small-latest": "Mistral Small 4",
     MISTRAL_PRO_MODEL: "Mistral Medium 3.5",
     "claude-opus-4-7": "Claude Opus 4.7",
     ANTHROPIC_PRO_MODEL: "Claude Opus 4.8",
-    ANTHROPIC_FRONTIER_LOW_MODEL: "Claude Opus 4.8",
+    GEMINI_36_FLASH_MODEL: "Gemini 3.6 Flash",
     GEMINI_35_FLASH_MODEL: "Gemini 3.5 Flash",
     GEMINI_PRO_MODEL: "Gemini 3.1",
-    GEMINI_FRONTIER_LOW_MODEL: "Gemini 3.1",
     "grok-4.20": "Grok 4.20 · Reasoning",
     "grok-4.3": "Grok 4.3 · High reasoning",
-    GROK_FRONTIER_LOW_MODEL: "Grok 4.3 · Low reasoning",
     DEEPSEEK_FLASH_MODEL: "DeepSeek V4 Flash",
     DEEPSEEK_PRO_MODEL: "DeepSeek V4 Pro",
 }
@@ -517,45 +490,13 @@ def rebuild_model_configs():
             )
 
     MODEL_CONFIGS.update({
-        OPENAI_FRONTIER_LOW_MODEL: ModelConfig(
-            internal_id=OPENAI_FRONTIER_LOW_MODEL,
-            provider="openai",
-            api_model="gpt-5.5",
-            label="GPT-5.5",
-            is_free=True,
-            is_frontier=True,
-            is_low_reasoning=True,
-            request_config={"reasoning": {"effort": "low"}},
-        ),
-        ANTHROPIC_FRONTIER_LOW_MODEL: ModelConfig(
-            internal_id=ANTHROPIC_FRONTIER_LOW_MODEL,
-            provider="anthropic",
-            api_model=ANTHROPIC_PRO_MODEL,
-            label="Claude Opus 4.8",
-            is_free=True,
-            is_frontier=True,
-            is_low_reasoning=True,
-            request_config={
-                "thinking": {"type": "adaptive"},
-                "output_config": {"effort": "low"},
-            },
-        ),
-        GEMINI_FRONTIER_LOW_MODEL: ModelConfig(
-            internal_id=GEMINI_FRONTIER_LOW_MODEL,
-            provider="gemini",
-            api_model=GEMINI_PRO_MODEL,
-            label="Gemini 3.1",
-            is_free=True,
-            is_frontier=True,
-            is_low_reasoning=True,
-            request_config={"generationConfig": {"thinkingConfig": {"thinkingLevel": "low"}}},
-        ),
         GROK_NO_REASONING_MODEL: ModelConfig(
             internal_id=GROK_NO_REASONING_MODEL,
             provider="grok",
             api_model="grok-4.3",
             label="Grok 4.3 · No reasoning",
-            is_free=True,
+            is_free=GROK_NO_REASONING_MODEL not in PREMIUM_MODELS,
+            is_pro=GROK_NO_REASONING_MODEL in PREMIUM_MODELS,
             request_config={"reasoning": {"effort": "none"}},
         ),
         "grok-4.3": ModelConfig(
@@ -563,28 +504,9 @@ def rebuild_model_configs():
             provider="grok",
             api_model="grok-4.3",
             label="Grok 4.3 · High reasoning",
-            is_free=False,
-            is_pro=True,
+            is_free="grok-4.3" not in PREMIUM_MODELS,
+            is_pro="grok-4.3" in PREMIUM_MODELS,
             request_config={"reasoning": {"effort": "high"}},
-        ),
-        GROK_FRONTIER_LOW_MODEL: ModelConfig(
-            internal_id=GROK_FRONTIER_LOW_MODEL,
-            provider="grok",
-            api_model="grok-4.3",
-            label="Grok 4.3 · Low reasoning",
-            is_free=True,
-            is_frontier=True,
-            is_low_reasoning=True,
-            request_config={"reasoning": {"effort": "low"}},
-        ),
-        DEEPSEEK_PRO_MODEL: ModelConfig(
-            internal_id=DEEPSEEK_PRO_MODEL,
-            provider="deepseek",
-            api_model=DEEPSEEK_PRO_MODEL,
-            label=_fallback_label(DEEPSEEK_PRO_MODEL),
-            is_free=True,
-            is_pro=True,
-            is_frontier=True,
         ),
     })
 
@@ -619,12 +541,7 @@ def get_model_label(model_id: str) -> str:
 
 def get_model_badge(model_id: str) -> str:
     config = get_model_config(model_id)
-    badges = []
-    if config and config.is_frontier:
-        badges.append("Early")
-    if (config and config.is_pro) or model_id in PREMIUM_MODELS:
-        badges.append("Pro")
-    return " · ".join(dict.fromkeys(badges))
+    return "Pro" if (config and config.is_pro) or model_id in PREMIUM_MODELS else ""
 
 
 def get_consensus_model_config(model_id: str | None) -> ModelConfig | None:
@@ -646,13 +563,7 @@ def get_consensus_model_config(model_id: str | None) -> ModelConfig | None:
 
 def is_premium_consensus_model(model_id: str | None) -> bool:
     config = get_consensus_model_config(model_id)
-    return bool(config and config.is_pro and config.internal_id not in EARLY_MODELS)
-
-
-def is_early_consensus_model(model_id: str | None) -> bool:
-    """True, wenn die gewaehlte Consensus-Engine ein tag-gated Early-Modell ist
-    (aktuell nur das Gemini-Frontier-Low). Erfordert Early- oder Pro-Zugang."""
-    return bool(model_id) and model_id in EARLY_MODELS
+    return bool(config and config.is_pro)
 
 
 def get_consensus_model_label(model_id: str) -> str:
@@ -664,12 +575,7 @@ def get_consensus_model_badge(model_id: str) -> str:
     if str(model_id or "").endswith("-Pro"):
         return "Pro"
     config = get_consensus_model_config(model_id)
-    badges = []
-    if config and config.is_frontier:
-        badges.append("Early")
-    if config and config.is_pro and config.internal_id not in EARLY_MODELS:
-        badges.append("Pro")
-    return " · ".join(dict.fromkeys(badges))
+    return "Pro" if config and config.is_pro else ""
 
 
 def get_consensus_presets() -> list[dict]:
@@ -697,7 +603,7 @@ def get_consensus_preset_models() -> dict[str, dict[str, str]]:
 
 def apply_consensus_preset_models(config: dict | None) -> None:
     """Validiert und aktiviert die Firestore-Model-Sets. Fast/Balanced duerfen
-    keine Pro-/Early-Modelle enthalten; High Quality (ID: thorough) ist durch
+    keine Pro-Modelle enthalten; High Quality (ID: thorough) ist durch
     die Produktdefinition Pro-gated und darf die Premium-Modelle nutzen."""
     incoming = config if isinstance(config, dict) else {}
     allowed_sets = _provider_allowed_sets()
@@ -717,25 +623,35 @@ def apply_consensus_preset_models(config: dict | None) -> None:
             )
             if chosen in deprecated:
                 chosen = ""
-            if chosen not in allowed_sets.get(provider, set()):
-                chosen = base[provider]
-            if not pro_only and (chosen in PREMIUM_MODELS or chosen in EARLY_MODELS):
-                chosen = base[provider]
+            allowed = allowed_sets.get(provider, set())
+            if chosen not in allowed or (not pro_only and chosen in PREMIUM_MODELS):
+                fallback_candidates = [
+                    canonical_model_id(base.get(provider), provider),
+                    FREE_DEFAULT_MODEL_BY_PROVIDER.get(provider),
+                    DEFAULT_MODEL_BY_PROVIDER.get(provider),
+                    *get_ordered_models(provider),
+                ]
+                chosen = next(
+                    (
+                        candidate for candidate in fallback_candidates
+                        if candidate in allowed
+                        and (pro_only or candidate not in PREMIUM_MODELS)
+                    ),
+                    "",
+                )
             clean[provider] = chosen
 
         consensus = canonical_model_id(supplied.get("consensus"))
         consensus_config = get_consensus_model_config(consensus)
         if not consensus_config or not consensus_config.provider:
-            consensus = base["consensus"]
-        if not pro_only and (
-            is_premium_consensus_model(consensus) or is_early_consensus_model(consensus)
-        ):
-            consensus = base["consensus"]
+            consensus = canonical_model_id(base["consensus"])
+        if not pro_only and is_premium_consensus_model(consensus):
+            consensus = "Gemini"
+        if not get_consensus_model_config(consensus):
+            consensus = "Gemini"
         clean["consensus"] = consensus
         CONSENSUS_PRESET_MODELS[preset_id].clear()
         CONSENSUS_PRESET_MODELS[preset_id].update(clean)
-        for provider in DEFAULT_MODEL_BY_PROVIDER:
-            allowed_sets[provider].add(clean[provider])
 
 
 def normalize_consensus_models(models) -> list[str]:
@@ -749,8 +665,6 @@ def normalize_consensus_models(models) -> list[str]:
         config = get_consensus_model_config(model)
         if config and config.provider:
             allowed.append(model)
-    if GEMINI_FRONTIER_LOW_MODEL not in allowed:
-        allowed.insert(0, GEMINI_FRONTIER_LOW_MODEL)
     # Deep Think koppelt die Synthese fest an das konfigurierte Deep-Think-
     # Modell (Basis: Gemini 3.5 Flash). Deshalb muss das Modell auch bei einer
     # Admin-/Firestore-Liste ohne diesen Eintrag als Consensus-Option
@@ -792,11 +706,9 @@ def apply_deep_think_model(model_id) -> None:
 
 
 def is_valid_judge_model(provider: str, model_id) -> bool:
-    """Gueltiger Standard-Judge: erlaubtes Modell des Providers, das direkt
-    als API-Modell aufrufbar ist. Frontier-Low-IDs sind interne Aliasse
-    (api_model != internal_id) und deshalb hier ausgeschlossen."""
+    """Gueltiger Standard-Judge: erlaubtes Modell des Providers."""
     chosen = str(model_id or "").strip()
-    if not chosen or chosen in FRONTIER_LOW_MODELS:
+    if not chosen:
         return False
     return chosen in _provider_allowed_sets().get(provider, set())
 
@@ -808,10 +720,20 @@ def apply_judge_models(overrides: dict | None) -> None:
     data = overrides if isinstance(overrides, dict) else {}
     for provider, base in _BASE_DIFFERENCES_JUDGE_BY_PROVIDER.items():
         chosen = str(data.get(provider) or "").strip()
-        if chosen and is_valid_judge_model(provider, chosen):
-            DIFFERENCES_JUDGE_MODEL_BY_PROVIDER[provider] = chosen
-        else:
-            DIFFERENCES_JUDGE_MODEL_BY_PROVIDER[provider] = base
+        if not (chosen and is_valid_judge_model(provider, chosen)):
+            allowed = _provider_allowed_sets().get(provider, set())
+            chosen = next(
+                (
+                    candidate for candidate in (
+                        FREE_DEFAULT_MODEL_BY_PROVIDER.get(provider),
+                        base,
+                        *get_ordered_models(provider),
+                    )
+                    if candidate in allowed
+                ),
+                "",
+            )
+        DIFFERENCES_JUDGE_MODEL_BY_PROVIDER[provider] = chosen
 
 
 def get_judge_models() -> dict:
@@ -825,10 +747,22 @@ def apply_pro_judge_models(overrides: dict | None) -> None:
     data = overrides if isinstance(overrides, dict) else {}
     for provider, base in _BASE_PRO_JUDGE_BY_PROVIDER.items():
         chosen = str(data.get(provider) or "").strip()
-        if chosen and is_valid_judge_model(provider, chosen):
-            PRO_JUDGE_MODEL_BY_PROVIDER[provider] = chosen
-        else:
-            PRO_JUDGE_MODEL_BY_PROVIDER[provider] = base
+        if not (chosen and is_valid_judge_model(provider, chosen)):
+            allowed = _provider_allowed_sets().get(provider, set())
+            ordered = get_ordered_models(provider)
+            chosen = next(
+                (
+                    candidate for candidate in (
+                        base,
+                        *(model for model in ordered if model in PREMIUM_MODELS),
+                        FREE_DEFAULT_MODEL_BY_PROVIDER.get(provider),
+                        *ordered,
+                    )
+                    if candidate in allowed
+                ),
+                "",
+            )
+        PRO_JUDGE_MODEL_BY_PROVIDER[provider] = chosen
 
 
 def get_pro_judge_models() -> dict:
@@ -866,9 +800,8 @@ def get_model_picker_metadata() -> dict[str, dict[str, str]]:
 def model_picker_sort_key(model_id: str):
     config = get_model_config(model_id)
     label = config.label if config else model_id
-    is_premium = model_id in PREMIUM_MODELS and model_id not in EARLY_MODELS
-    is_frontier = bool(config and config.is_frontier)
-    return (is_premium, label.lower(), not is_frontier, model_id.lower())
+    is_premium = model_id in PREMIUM_MODELS
+    return (is_premium, label.lower(), model_id.lower())
 
 
 def get_ordered_models(provider: str) -> list[str]:
@@ -905,17 +838,21 @@ def apply_model_order(order_by_provider: dict | None) -> None:
 
 def apply_default_models(defaults: dict | None) -> None:
     """Setzt den Free-Default je Provider. Ein Override gilt nur, wenn das Modell
-    erlaubt und weder Premium noch Early ist (sonst saehe ein eingeloggter
-    Free-Nutzer einen gesperrten Default). Sonst greift die Basis."""
+    erlaubt und nicht Premium ist. Sonst greift die Basis."""
     overrides = defaults or {}
     allowed_sets = _provider_allowed_sets()
     for provider, base in _BASE_FREE_DEFAULTS.items():
         chosen = canonical_model_id(overrides.get(provider), provider)
         allowed = allowed_sets.get(provider, set())
-        if chosen and chosen in allowed and chosen not in PREMIUM_MODELS and chosen not in EARLY_MODELS:
-            FREE_DEFAULT_MODEL_BY_PROVIDER[provider] = chosen
-        else:
-            FREE_DEFAULT_MODEL_BY_PROVIDER[provider] = base
+        if not (chosen and chosen in allowed and chosen not in PREMIUM_MODELS):
+            chosen = next(
+                (
+                    candidate for candidate in (base, *get_ordered_models(provider))
+                    if candidate in allowed and candidate not in PREMIUM_MODELS
+                ),
+                "",
+            )
+        FREE_DEFAULT_MODEL_BY_PROVIDER[provider] = chosen
 
 
 def apply_watch_models(config: dict | None) -> None:
@@ -930,11 +867,29 @@ def apply_watch_models(config: dict | None) -> None:
             model = canonical_model_id(tier_data.get(provider), provider)
             if not model or model not in allowed_sets.get(provider, set()):
                 continue
-            if tier == "free" and (model in PREMIUM_MODELS or model in EARLY_MODELS):
+            if tier == "free" and model in PREMIUM_MODELS:
                 continue
             clean[provider] = model
         if len(clean) < 2:
-            clean = dict(_BASE_WATCH_MODELS_BY_TIER[tier])
+            clean = {}
+            for provider in DEFAULT_MODEL_BY_PROVIDER:
+                candidates = (
+                    FREE_DEFAULT_MODEL_BY_PROVIDER.get(provider),
+                    _BASE_WATCH_MODELS_BY_TIER[tier].get(provider),
+                    *get_ordered_models(provider),
+                )
+                model = next(
+                    (
+                        candidate for candidate in candidates
+                        if candidate in allowed_sets.get(provider, set())
+                        and (tier == "pro" or candidate not in PREMIUM_MODELS)
+                    ),
+                    "",
+                )
+                if model:
+                    clean[provider] = model
+                if len(clean) >= 3:
+                    break
         WATCH_MODELS_BY_TIER[tier].clear()
         WATCH_MODELS_BY_TIER[tier].update(clean)
 
@@ -1054,56 +1009,49 @@ def load_models_from_db():
             if "openai" in data:
                 ALLOWED_OPENAI_MODELS.clear()
                 ALLOWED_OPENAI_MODELS.update(data["openai"])
+                ALLOWED_OPENAI_MODELS.difference_update(REMOVED_MODEL_IDS)
             
             # Update Mistral
             if "mistral" in data:
                 ALLOWED_MISTRAL_MODELS.clear()
                 ALLOWED_MISTRAL_MODELS.update(data["mistral"])
                 ALLOWED_MISTRAL_MODELS.difference_update(DEPRECATED_MISTRAL_MODELS)
-                ALLOWED_MISTRAL_MODELS.update({DEFAULT_MISTRAL_MODEL, MISTRAL_PRO_MODEL})
             
             # Update Anthropic
             if "anthropic" in data:
                 ALLOWED_ANTHROPIC_MODELS.clear()
                 ALLOWED_ANTHROPIC_MODELS.update(data["anthropic"])
-                ALLOWED_ANTHROPIC_MODELS.update({DEFAULT_ANTHROPIC_MODEL, ANTHROPIC_PRO_MODEL})
+                ALLOWED_ANTHROPIC_MODELS.difference_update(REMOVED_MODEL_IDS)
             
             # Update Gemini
             if "gemini" in data:
                 ALLOWED_GEMINI_MODELS.clear()
                 ALLOWED_GEMINI_MODELS.update(data["gemini"])
-                ALLOWED_GEMINI_MODELS.difference_update(UNSUPPORTED_GEMINI_MODELS)
-                ALLOWED_GEMINI_MODELS.update({GEMINI_FLASH_MODEL, GEMINI_PRO_MODEL})
+                ALLOWED_GEMINI_MODELS.difference_update(REMOVED_MODEL_IDS)
             
             # Update DeepSeek
             if "deepseek" in data:
                 ALLOWED_DEEPSEEK_MODELS.clear()
                 ALLOWED_DEEPSEEK_MODELS.update(data["deepseek"])
                 ALLOWED_DEEPSEEK_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
-                ALLOWED_DEEPSEEK_MODELS.update(REQUIRED_DEEPSEEK_MODELS)
             
             # Update Grok
             if "grok" in data:
                 ALLOWED_GROK_MODELS.clear()
                 ALLOWED_GROK_MODELS.update(canonical_model_ids(data["grok"], "grok"))
                 ALLOWED_GROK_MODELS.difference_update(DEPRECATED_GROK_MODELS)
+                ALLOWED_GROK_MODELS.difference_update(REMOVED_MODEL_IDS)
 
-            ensure_default_models_allowed()
-            
             # Update Premium
             if "premium" in data:
                 PREMIUM_MODELS.clear()
                 PREMIUM_MODELS.update(data["premium"])
-                PREMIUM_MODELS.difference_update(UNSUPPORTED_GEMINI_MODELS)
-                PREMIUM_MODELS.difference_update(FRONTIER_LOW_MODELS)
+                PREMIUM_MODELS.difference_update(REMOVED_MODEL_IDS)
                 PREMIUM_MODELS.difference_update(DEPRECATED_MISTRAL_MODELS)
-                PREMIUM_MODELS.add(GEMINI_PRO_MODEL)
                 PREMIUM_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
                 PREMIUM_MODELS.difference_update(DEPRECATED_GROK_MODELS)
-                PREMIUM_MODELS.update(EARLY_AND_PRO_MODELS)
-                PREMIUM_MODELS.update(REQUIRED_PRO_MODELS)
-
-            ensure_default_models_allowed()
+                configured_models = set().union(*_provider_allowed_sets().values())
+                PREMIUM_MODELS.intersection_update(configured_models)
             ALL_ALLOWED_MODELS = (
                 ALLOWED_OPENAI_MODELS | ALLOWED_MISTRAL_MODELS | ALLOWED_ANTHROPIC_MODELS |
                 ALLOWED_GEMINI_MODELS | ALLOWED_DEEPSEEK_MODELS | ALLOWED_GROK_MODELS
@@ -1150,8 +1098,6 @@ def load_models_from_db():
                     {"limits": normalized_limits}, merge=True,
                     timeout=5.0, retry=None,
                 )
-            ensure_default_models_allowed()
-            
             # Update ALL_ALLOWED_MODELS
             ALL_ALLOWED_MODELS = (
                 ALLOWED_OPENAI_MODELS | ALLOWED_MISTRAL_MODELS | ALLOWED_ANTHROPIC_MODELS |

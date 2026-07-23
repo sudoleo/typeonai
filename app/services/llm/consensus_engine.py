@@ -77,8 +77,8 @@ def _gemini_engine_payload(
 
     Bewusst NICHT über build_provider_payload: dessen Gemini-Pfad kappt die
     Frage bei 12k Zeichen und hängt Chat-Instruktionen an — beides falsch für
-    die langen Engine-Prompts. Frontier-Low-Mapping (interne ID -> api_model
-    + request_config) läuft über resolve_api_model. effort ("low") kappt das
+    die langen Engine-Prompts. Modellauflösung und optionale Request-Konfiguration
+    laufen über resolve_api_model. effort ("low") kappt das
     Thinking-Budget (thinkingLevel) — genutzt für Judge-Calls, deren Task
     kein tiefes Denken braucht."""
     api_model, model_config = cfg.resolve_api_model(model_ref, GEMINI_FLASH_MODEL, "gemini")
@@ -239,6 +239,8 @@ def _effective_temperature(provider: str, api_model: str, temperature: float | N
         return None
     if provider == "mistral" and api_model in cfg.MISTRAL_REASONING_MODELS:
         return None
+    if provider == "gemini":
+        return None
     return temperature
 
 
@@ -246,9 +248,8 @@ def _resolve_engine(engine_model: str) -> tuple[str, str, str] | None:
     """Löst einen Engine-Wert (Alias wie "OpenAI-Pro" oder interne Modell-ID)
     zu (provider, api_model, gemini_model_ref) auf.
 
-    gemini_model_ref ist der Wert für resolve_api_model: bei internen IDs die
-    ID selbst (Frontier-Low mappt dort auf api_model + request_config), bei
-    Aliassen direkt das API-Modell."""
+    gemini_model_ref ist der Wert für resolve_api_model: bei direkten IDs die
+    ID selbst, bei Aliassen direkt das API-Modell."""
     config = resolve_consensus_engine_model(engine_model)
     if not config or not config.provider:
         return None
@@ -1297,7 +1298,7 @@ def _provider_key_available(provider: str, api_keys: dict) -> bool:
 
 def _judge_tier(differences_model: str) -> str:
     """Judge-Stufe der gewählten Consensus-Engine: Pro-Engines bekommen einen
-    Pro-Judge, alles andere (inkl. Early-/Frontier-Low-Engines) den günstigen
+    Pro-Judge, alles andere den günstigen
     Standard-Judge."""
     return "pro" if cfg.is_premium_consensus_model(differences_model) else "standard"
 

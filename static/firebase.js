@@ -171,18 +171,16 @@ async function checkUserStatusOnLoad(user, token) {
     if (response.ok) {
       const data = await response.json();
 
-      // 1. Globale Limits sofort aktualisieren. Pro schliesst Early ein.
+      // 1. Globale Limits sofort aktualisieren.
       window.currentMaxLimit = data.limit;
       window.currentDeepLimit = data.deep_limit;
       window.isUserPro = data.is_pro;
-      const hasEarlyAccess = Boolean(data.is_pro || data.is_early);
-      window.isUserEarly = hasEarlyAccess;
 
       // 2. UI AKTUALISIEREN
 
       // A) Der saubere Weg (falls vorhanden):
       if (typeof window.updateUserTierUI === "function") {
-          window.updateUserTierUI(data.is_pro, true, data.is_early);
+          window.updateUserTierUI(data.is_pro, true);
       }
       if (typeof window.setCurrentUsageLimits === "function") {
           window.setCurrentUsageLimits(data.is_pro, data);
@@ -195,13 +193,6 @@ async function checkUserStatusOnLoad(user, token) {
       const badge = document.getElementById("proBadge");
       const upgradeLink = document.getElementById("upgradeLink");
       const premiumOptions = document.querySelectorAll('.premium-option');
-      const earlyOptions = document.querySelectorAll('.early-option');
-
-      // Early-Optionen: mit Early-Tag (oder Pro) entsperren, sonst sperren.
-      earlyOptions.forEach(option => {
-          option.disabled = !hasEarlyAccess;
-      });
-
       if (data.is_pro) {
           // === IST PRO ===
           if (badge) badge.style.display = "inline-block";
@@ -441,7 +432,6 @@ onIdTokenChanged(auth, async (user) => {
         window.currentDeepLimit = window.LIMITS.FREE.DEEP;
 
         // C) Premium Modelle wieder sperren (HIER WAR DER FEHLER)
-        window.isUserEarly = false;
         const premiumOptions = document.querySelectorAll('.premium-option');
         premiumOptions.forEach(option => {
             option.disabled = true;
@@ -453,16 +443,6 @@ onIdTokenChanged(auth, async (user) => {
             // Falls ausgewählt (Cache-Problem), zurücksetzen auf Standard
             if (option.selected) {
                 option.parentNode.selectedIndex = 0;
-            }
-        });
-
-        // C2) Early-Modelle ebenfalls wieder sperren
-        document.querySelectorAll('.early-option').forEach(option => {
-            option.disabled = true;
-            if (option.selected) {
-                const parent = option.parentNode;
-                const firstEnabled = Array.from(parent.options).find(opt => !opt.disabled);
-                parent.selectedIndex = firstEnabled ? firstEnabled.index : 0;
             }
         });
 

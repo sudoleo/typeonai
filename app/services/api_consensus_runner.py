@@ -123,14 +123,12 @@ def build_server_model_plan(*, deep_think: bool, is_pro: bool,
         )
         if not consensus_model:
             raise ValueError("No allowed Consensus engine remains after provider exclusions")
-    is_early = bool(is_pro)
     for provider, model in providers.items():
         validate_model(
             model,
             getattr(cfg, PROVIDER_ALLOWED_ATTR[provider]),
             PROVIDER_LABELS[provider],
             is_pro=is_pro,
-            is_early=is_early,
         )
     if consensus_model not in cfg.ALLOWED_CONSENSUS_MODELS:
         raise ValueError("Configured consensus model is not allowed")

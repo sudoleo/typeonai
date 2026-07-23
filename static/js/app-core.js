@@ -70,7 +70,7 @@
   function getModelOptionLabel(option) {
     const explicitLabel = option?.dataset?.modelLabel;
     if (explicitLabel) return explicitLabel;
-    return (option?.textContent || "").replace(/(?:\s*(?:Â·|·)\s*(?:Pro|Early))+$/i, "").trim();
+    return (option?.textContent || "").replace(/(?:\s*(?:Â·|·)\s*Pro)+$/i, "").trim();
   }
 
   // Kurzlebiges Hinweis-Popup (cross-cutting UI-Helfer, von vielen Clustern genutzt).

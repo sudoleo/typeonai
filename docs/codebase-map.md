@@ -307,7 +307,12 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
 3. **SSE-Protokoll Modellantwort** (`streaming_model_response` in `streaming.py`):
    `event: delta {text}` … dann `event: final {response, sources,
    free_usage_remaining, deep_remaining, is_pro_user, key_used}`. Bei Fehler kommt
-   ein `final` mit `error`. Frontend rendert deltas und wertet `final` aus.
+   ein `final` mit `error`. Provider-SDK-Content-Blöcke werden an dieser Grenze
+   rekursiv zu Text normalisiert; Objektwerte gelangen weder als Delta noch als
+   `[object Object]` ins Frontend. Frontend rendert Deltas und wertet `final` aus.
+   Nicht-SSE-Antworten werden zuerst als Text gelesen und, falls möglich, als
+   JSON geparst; Plain-Text-/Proxy-/HTTP-Fehler bleiben dadurch sichtbar und
+   werden nicht mehr zur generischen „No response received“-Meldung.
 4. Ohne Agent Mode begleitet `consensus-progress.js` den Lauf rahmenlos unter
    dem Input: Antwortfortschritt basiert auf `dataset.responseState`; nach dem
    Fan-out wechselt die Anzeige zur nicht prozentual geschätzten Synthesephase
@@ -445,12 +450,12 @@ Whitelist für Bild-MIME-Typen.
   User-Key und `/consensus` mit `useOwnKeys` verlangen ein verifiziertes Token.
 - Pro-Status: `is_user_pro` liest Firestore `users/{uid}.tier ∈ {premium, pro}`.
   Admin: `users/{uid}.role == admin`.
-- **Tier-Flags sind gecacht**: `is_user_pro`/`is_user_early`/`is_user_admin`
+- **Tier-Flags sind gecacht**: `is_user_pro`/`is_user_admin`
   teilen sich einen TTL-Cache (60s, `security.py::_tier_cache`) über das
-  `users/{uid}`-Dokument — ein Firestore-Read statt drei pro Aufrufstelle.
+  `users/{uid}`-Dokument — ein Firestore-Read statt zwei pro Aufrufstelle.
   Fehler werden nicht gecacht; `/delete_account` invalidiert via
-  `invalidate_tier_cache(uid)`. Manuell vergebene Pro/Early-Tags greifen
-  dadurch erst nach ≤60s.
+  `invalidate_tier_cache(uid)`. Manuell vergebene Pro-Tags greifen dadurch
+  erst nach ≤60s. Ein separates Early-Tier existiert nicht mehr.
 - **Usage ist persistent und run-basiert:**
   `app/services/usage_repository.py` definiert `UsageRepository` und die
   Firestore-Implementierung `FirestoreUsageRepository`. Ein kompletter
@@ -460,6 +465,10 @@ Whitelist für Bild-MIME-Typen.
   `reserve` führt Idempotenzprüfung, Limitprüfung und Reservierung gemeinsam in
   einer Firestore-Transaktion aus; `consume` und `release` wechseln den Status
   ebenfalls transaktional, `snapshot` liest das einzelne UTC-Tagesaggregat.
+  Die Transaktionen verwenden 12 Retry-Versuche, weil der parallele Provider-
+  Fan-out denselben Run gleichzeitig konsumiert. Sind die Retries dennoch
+  ausgeschöpft, antwortet `/ask_*` strukturiert mit HTTP 503 statt mit einem
+  unlesbaren generischen 500er.
   Der neue Free-Default ist 3 reguläre Runs pro UTC-Tag
   (`free_consensus_run_limit`); reguläre und Deep-Think-Run-Limits je Tier sind
   als vier eigene `app_config/models.limits`-Felder konfigurierbar. `/prepare`
@@ -473,7 +482,7 @@ Whitelist für Bild-MIME-Typen.
   `get_deep_think_run_limit`, `get_word_limit`, `get_output_token_limit`, …)
   und können per Firestore
   (`app_config/models.limits`) überschrieben werden.
-- Die Antwortmodell-Picker wenden bei einem Tier-Wechsel die Free-/Early-/Pro-
+- Die Antwortmodell-Picker wenden bei einem Tier-Wechsel die Free-/Pro-
   Defaults erneut an, solange der Nutzer für den jeweiligen Provider keine
   explizite Auswahl (`pref_select_*`) gespeichert hat. Explizite Picker-Werte
   haben Vorrang. Normale Watch-Runs lesen den aktuellen Pro-Status des Owners
@@ -771,21 +780,29 @@ Wichtige Verträge im Backend:
   `accepted → reserved → running → succeeded|failed`.
 - `app_config/models` — von `load_models_from_db()` gelesen/erzeugt: erlaubte
   Modelle pro Provider, `premium`, `consensus`, `preset_models`, `deep_think_model`,
-  `judge_models`, `limits`.
+  `judge_models`, `judge_models_pro`, `judge_families`, `watch_models`, `defaults`,
+  `limits`.
   **Single Source of Truth für Limits/Modelle in Produktion** (überschreibt die
-  `config.py`-Defaults beim Startup). `consensus` steuert den App-Consensus-Picker;
+  `config.py`-Fallbacks beim Startup). Providerlisten und `premium` sind dabei
+  autoritativ: der Runtime-Loader ergänzt keine versteckten Pflichtmodelle und
+  Premium enthält nur IDs, die auch in einer Providerliste stehen.
+  `GET /api/admin/models` migriert Legacy-/Tombstone-Werte mit
+  `normalize_models_document` persistent zurück in dasselbe Dokument; ein neuer
+  Admin-POST wird bei inkonsistenten Defaults/Presets/Watches/Judges mit 400
+  abgelehnt statt serverseitig still korrigiert. `consensus` steuert den App-Consensus-Picker;
   Fehlende Limitfelder werden beim Startup normalisiert und per Merge in das
   Admin-Dokument zurückgeschrieben (Schema-Backfill ohne Verlust vorhandener Werte).
   Werte können historische Engine-Aliase (`Gemini-Pro`) oder direkte Modell-IDs aus
   den Provider-Listen sein. In `/admin` können Provider-Modelle per `Consensus`-
   Checkbox in diese Liste aufgenommen werden. `deep_think_model` ist die
   Consensus-Engine, auf die Deep Think umschaltet (`apply_deep_think_model`,
-  Fallback Gemini 3.5 Flash; ans Frontend via `window.DEEP_THINK_CONSENSUS_MODEL`).
+  Fallback direkte Gemini-3.5-ID, sofern konfiguriert, sonst Alias `Gemini`; ans
+  Frontend via `window.DEEP_THINK_CONSENSUS_MODEL`).
   `judge_models`/`judge_models_pro` setzen Standard- bzw. Pro-Differences-/
   Resolve-Judge je Provider (`apply_judge_models`/`apply_pro_judge_models` in
   config.py, in-place — consensus_engine/resolve_engine aliasen dieselben
-  dicts; Frontier-Low-IDs sind ausgeschlossen; Fallbacks: günstiges
-  Provider-Default-Modell bzw. API-Modell des `<Familie>-Pro`-Alias; Pro-Judges
+  dicts; entfernte Legacy-Aliasse sind ausgeschlossen; Fallbacks kommen nur aus
+  der jeweiligen konfigurierten Providerliste; Pro-Judges
   laufen unverändert mit effort=low). `judge_families` mappt Engine-Familie →
   bevorzugte Judge-Familie (`apply_judge_families`; nie die eigene Familie,
   ohne Eintrag/Key Auto über `JUDGE_FAMILY_PRIORITY`).
@@ -936,41 +953,49 @@ Wichtige Verträge im Backend:
 - Optional `STARTUP_JOB_TIMEOUT_SECONDS` (Default 15, Clamp 5–60): gemeinsames
   Readiness-Zeitbudget für die blockierenden Firestore-Startup-Jobs.
 
-Modell-IDs/Tier-Zuordnung/Labels: ausschließlich in `app/core/config.py` pflegen
+Code-Fallback-Modell-IDs und Labels liegen in `app/core/config.py`
 (`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
-`FREE_DEFAULT_MODEL_BY_PROVIDER`, `EARLY_DEFAULT_MODEL_BY_PROVIDER`,
-Frontier-Low-Mappings, `MODEL_LABEL_OVERRIDES`). Ebenfalls dort: die festen
-Produkt-Metadaten `CONSENSUS_PRESET_DEFINITIONS` und die Basis-Model-Sets.
+`FREE_DEFAULT_MODEL_BY_PROVIDER`, `MODEL_LABEL_OVERRIDES`). In Produktion sind
+Providerlisten, Reihenfolge, Free-Defaults und Premium-Zuordnung aus
+`app_config/models` autoritativ. Ebenfalls in `config.py`: die festen
+Produkt-Metadaten `CONSENSUS_PRESET_DEFINITIONS` und Basiswerte ausschließlich
+für ein fehlendes/noch nicht migriertes Dokument.
 Firestore `preset_models` ueberschreibt pro Fast/Balanced/High Quality (ID:
 `thorough`) die sechs
 Antwortmodelle plus Consensus-Engine; Fast/Balanced bleiben Free-faehig und
 High Quality bleibt unabhaengig von der Konfiguration Pro-only. Grok-Alt-Aliasse
 (u. a. 4.1 Fast) werden beim Laden auf explizite interne Grok-4.3-Varianten
 migriert: `grok-4.3-no-reasoning` sendet API-Modell `grok-4.3` mit
-`reasoning.effort=none` und bleibt Free; `grok-4.3-low-reasoning` nutzt `low` und
-bleibt Early, waehrend das Pro-Modell `grok-4.3` explizit `high` nutzt. Nur
-aktuell konfigurierte Preset-Modelle werden in Provider-Listen
-gesichert, sodass ersetzte Basiswerte im Admin danach entfernt werden koennen.
+`reasoning.effort=none` und bleibt Free, während das Pro-Modell `grok-4.3`
+  explizit `high` nutzt, sofern die Admin-Premium-Zuordnung es Pro-gated.
+  Presets dürfen ausschließlich bereits konfigurierte Provider-Modelle
+  referenzieren; sie fügen selbst keine Providerzeilen hinzu.
 
-Early-Gating: `EARLY_MODELS` (Frontier-Low + DeepSeek V4 Pro) sind tag-gated, nicht
-mehr gratis. Zugang via `is_user_early(uid)` (Firestore-Feld `early`/`tier=='early'`);
-Pro schließt Early ein (Kombination `is_user_pro or is_user_early` an den Aufrufstellen,
-`validate_model(..., is_early=...)`, `is_early_consensus_model`). Nicht-Early-Nutzer
-defaulten auf die günstigen Basis-Modelle. Mistral Small ist bewusst KEIN Early-Modell.
+Die frühere Early-/Frontier-Low-Schicht ist vollständig entfernt. Es gibt nur
+Free- und Pro-Zugriff; alte interne Low-Aliasse stehen in `REMOVED_MODEL_IDS`
+und werden beim Laden/Speichern aus bestehenden Admin-Daten entfernt. Gemini
+  3.5 Flash-Lite ist der Code-/Firestore-Free-Default, Gemini 3.6 Flash ist eine
+  direkte Modell-ID. Gemini-Payloads senden modellgenerationsunabhängig keine
+  optionale `temperature`, damit neue Admin-IDs nicht an geänderten
+  Sampling-Schemas scheitern. Bekannte tote Preview-IDs bleiben Tombstones.
 
 Admin-Modellkonfig (`/admin`, `app_config/models` in Firestore): Provider-Listen sind
 geordnet (Picker-Reihenfolge via `MODEL_ORDER_BY_PROVIDER`/`get_ordered_models`, im Admin
 per ↑/↓ sortierbar); Feld `defaults` setzt den Free-Default je Provider (`apply_default_models`,
-nur Nicht-Premium/Nicht-Early erlaubt, sonst `_BASE_FREE_DEFAULTS`). Feld `watch_models`
+nur Nicht-Premium erlaubt, sonst `_BASE_FREE_DEFAULTS`). Feld `watch_models`
 enthält getrennte `free`-/`pro`-Mappings Provider→Modell; je Tier sind mindestens zwei
-Provider nötig, Free wird serverseitig auf Nicht-Premium/Nicht-Early begrenzt.
-`normalize_models_document` erhält die Reihenfolge (kein `sorted` mehr) und validiert
-`defaults`, `preset_models`, `watch_models` + `deep_think_model`.
+Provider nötig, Free wird serverseitig auf Nicht-Premium begrenzt.
+  `normalize_models_document` erhält die Reihenfolge (kein `sorted` mehr), entfernt
+  verwaiste Premium-IDs und validiert `defaults`, `preset_models`, `watch_models`,
+  Judges + `deep_think_model`. Provider-
+Modelllisten werden bewusst nicht live gegen Provider-APIs validiert; diese
+Pflege bleibt eine explizite Admin-Aufgabe.
 Das Admin-UI (Tabs: Models / Consensus & Deep Think / Limits / API / Shared Pages /
 Consensus Watch / SEO) bekommt via
-`GET /api/admin/models` ein `meta`-Objekt (Alias-Auflösung, server-erzwungene Modelle je
-Provider, Early-Set, Labels), mit dem Required-/Early-Badges gerendert werden — die
-ensure/drop-Logik des Servers ist damit im UI sichtbar statt implizit. Der
+  `GET /api/admin/models` ein `meta`-Objekt (Alias-Auflösung, Labels und
+  referenzierende Defaults/Presets/Watches/Judges). Das „In use“-Badge ist
+  informativ und sperrt keine Providerzeile; nichts wird nach einem Save heimlich
+  als „Required“ wieder eingefügt. Der
 „API“-Tab gibt Schlüssel für eine bestehende Firebase-UID aus, zeigt den
 Klartextschlüssel genau einmal zum Kopieren und listet/widerruft danach nur
 Hash-ID, Präfix, Label, UID, Status und Audit-Zeitstempel. Zusätzlich listet er
@@ -986,12 +1011,12 @@ Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
 ## 7. Tests, Smoke-Checks & lokale Befehle
 
 - **Backend-Tests** (`tests/`, pytest): `test_attachments`, `test_streaming`,
-  `test_share_feature`, `test_differences_schema`, `test_frontier_model_payloads`,
+  `test_share_feature`, `test_differences_schema`, `test_model_configuration`,
   `test_rate_limit`, `test_seo_basics`, `test_seo_data`. Lauf:
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **699 passed** (2026-07-22; inklusive der neuen
+  Letzte bekannte Baseline: **695 passed** (2026-07-22; inklusive der neuen
   Search-Console-/SEO-Dossier-, Query-, Recommendation-, LLM-Schema-,
   Weekly-Portfolio-Review-, Action-, Publisher-Lineage-/Watch-Capacity-,
   Idempotenz- und Admin-Schutztests sowie

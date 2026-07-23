@@ -205,7 +205,6 @@
             color: var(--sidebar-text-muted);
         }
         .admin-chip.required { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
-        .admin-chip.early { color: var(--accent-secondary); border-color: color-mix(in srgb, var(--accent-secondary) 40%, transparent); }
         .admin-chip.deepthink { color: var(--accent-tertiary); border-color: color-mix(in srgb, var(--accent-tertiary) 45%, transparent); }
 
         .icon-btn {
@@ -690,11 +689,9 @@
         // Meta-Helfer (Alias-Aufloesung, server-erzwungene Modelle)
         // ==============================
         function meta() { return globalModelsData.meta || {}; }
-        function isEnforced(provider, model) {
-            return ((meta().enforced || {})[provider] || []).includes(model);
+        function dependencyReasons(provider, model) {
+            return ((((meta().dependencies || {})[provider] || {})[model]) || []);
         }
-        function isEarly(model) { return (meta().early || []).includes(model); }
-        function isPremiumEnforced(model) { return (meta().premium_enforced || []).includes(model); }
         function labelFor(model) { return (meta().labels || {})[model] || ''; }
         function consensusDescription(value) {
             const alias = (meta().aliases || {})[value];
@@ -739,7 +736,7 @@
                     disabled.textContent = 'Disabled';
                     select.appendChild(disabled);
                     (globalModelsData[provider] || []).forEach(model => {
-                        if (tier === 'free' && (premium.has(model) || isEarly(model))) return;
+                        if (tier === 'free' && premium.has(model)) return;
                         const option = document.createElement('option');
                         option.value = model;
                         option.textContent = labelFor(model) || model;
@@ -766,7 +763,7 @@
         function isLockedConsensusModel(model) {
             const alias = (meta().aliases || {})[model];
             if (alias && model.endsWith('-Pro')) return true;
-            return (globalModelsData.premium || []).includes(model) || isEarly(model);
+            return (globalModelsData.premium || []).includes(model);
         }
 
         function appendPresetOption(select, value, label) {
@@ -811,7 +808,7 @@
                         });
                     } else {
                         currentProviderModels(slot).forEach(model => {
-                            if (!definition.pro_only && (premium.has(model) || isEarly(model))) return;
+                            if (!definition.pro_only && premium.has(model)) return;
                             appendPresetOption(select, model, labelFor(model));
                         });
                     }
@@ -883,7 +880,7 @@
             const row = document.createElement('div');
             row.className = 'model-row';
 
-            const enforced = !!modelName && isEnforced(provider, modelName);
+            const dependencies = modelName ? dependencyReasons(provider, modelName) : [];
 
             const upBtn = document.createElement('button');
             upBtn.type = 'button';
@@ -903,10 +900,6 @@
             input.type = 'text';
             input.value = modelName;
             input.placeholder = 'Model identifier (e.g. gpt-5.5)';
-            if (enforced) {
-                input.readOnly = true;
-                input.title = 'Required by the server — re-added automatically on save.';
-            }
             const modelLabel = modelName ? labelFor(modelName) : '';
             if (modelLabel && modelLabel !== modelName) {
                 input.title = (input.title ? input.title + ' · ' : '') + `Shown as “${modelLabel}”`;
@@ -927,11 +920,16 @@
             const flags = document.createElement('div');
             flags.className = 'model-flags';
 
-            if (enforced) flags.appendChild(chip('required', 'Required', 'The server always keeps this model in the list (default/Pro/Early mapping). Removing it has no effect.'));
-            if (modelName && isEarly(modelName)) flags.appendChild(chip('early', 'Early', 'Tag-gated Early model (Pro includes Early).'));
+            if (dependencies.length) {
+                flags.appendChild(chip(
+                    'required',
+                    'In use',
+                    `Referenced by: ${dependencies.join(', ')}. You can remove it after updating those selections.`
+                ));
+            }
 
             const defaultLabel = document.createElement('label');
-            defaultLabel.title = 'Free default for this provider (shown before a manual pick). Must not be a Premium/Early model.';
+            defaultLabel.title = 'Free default for this provider (shown before a manual pick). Must not be a Premium model.';
             const defaultRadio = document.createElement('input');
             defaultRadio.type = 'radio';
             defaultRadio.className = 'default-radio';
@@ -945,11 +943,6 @@
             premiumCheckbox.type = 'checkbox';
             premiumCheckbox.className = 'premium-checkbox';
             premiumCheckbox.checked = isPremium;
-            if (modelName && isPremiumEnforced(modelName)) {
-                premiumCheckbox.disabled = true;
-                premiumCheckbox.checked = true;
-                premiumLabel.title = 'Server-enforced Pro model — always Premium.';
-            }
             premiumLabel.appendChild(premiumCheckbox);
             premiumLabel.appendChild(document.createTextNode(' Premium'));
 
@@ -973,8 +966,10 @@
             removeBtn.type = 'button';
             removeBtn.className = 'icon-btn danger';
             removeBtn.textContent = '✕';
-            removeBtn.title = enforced ? 'Required by the server — cannot be removed.' : 'Remove model';
-            removeBtn.disabled = enforced;
+            removeBtn.title = dependencies.length
+                ? `Remove model; then update: ${dependencies.join(', ')}`
+                : 'Remove model';
+            removeBtn.disabled = false;
             removeBtn.onclick = () => {
                 if (consensusCheckbox.checked) removeConsensusListValue(input.value.trim());
                 row.remove();
@@ -1246,12 +1241,10 @@
         }
 
         function buildJudgeModelSelect(provider, chosen, defaultModel, datasetKey, ariaText) {
-            const frontierLow = new Set(meta().frontier_low || []);
             const select = document.createElement('select');
             select.dataset[datasetKey] = provider;
             select.setAttribute('aria-label', ariaText);
             currentProviderModels(provider).forEach(model => {
-                if (frontierLow.has(model)) return;
                 const opt = document.createElement('option');
                 opt.value = model;
                 const lbl = labelFor(model);
@@ -2648,8 +2641,8 @@
                 Per-provider model lists shown in the app's model pickers (row order = picker order).
                 <strong>Default</strong> sets the Free-tier preselection. <strong>Premium</strong> marks Pro-only models.
                 <strong>Consensus</strong> offers the model in the Consensus picker.
-                Models marked <em>Required</em> are enforced server-side and re-added automatically —
-                that is why some entries can't be removed here.
+                <em>In use</em> shows which defaults, presets, Watches or judges currently reference a model.
+                Nothing is silently re-added: update those references when removing a model.
             </p>
             <div id="providersContainer" class="providers-grid">
                 <!-- Populated by JavaScript -->
@@ -2685,8 +2678,7 @@
                 <p class="section-hint">
                     Judge models per provider family for the Differences engine and the Resolve round.
                     Standard engines get the <strong>Standard</strong> judge, Pro engines the
-                    <strong>Pro</strong> judge (always run at low effort). Frontier-Low IDs are internal
-                    aliases and not selectable.
+                    <strong>Pro</strong> judge (always run at low effort).
                 </p>
                 <div id="judgeModelsContainer">
                     <!-- Populated by JavaScript -->

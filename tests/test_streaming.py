@@ -107,6 +107,28 @@ class StreamingModelResponseTests(unittest.TestCase):
         self.assertEqual(final["response"], "")
         self.assertEqual(final["free_usage_remaining"], 1)
 
+    def test_structured_content_blocks_never_serialize_as_object_object(self):
+        def gen():
+            yield {
+                "type": "delta",
+                "text": [{"type": "text", "text": "Structured answer"}],
+            }
+            yield {
+                "type": "final",
+                "result": {
+                    "text": {"type": "text", "text": "Structured answer"},
+                    "sources": [],
+                },
+            }
+
+        response = streaming_model_response(gen(), "DeepSeek")
+        events = parse_sse_text(collect_sse_body(response))
+        self.assertEqual(events[0], ("delta", {"text": "Structured answer"}))
+        self.assertEqual(events[-1][1]["response"], "Structured answer")
+        self.assertNotIn("[object Object]", collect_sse_body(
+            streaming_model_response(gen(), "DeepSeek")
+        ))
+
     def test_generator_exception_yields_error_final(self):
         def gen():
             yield {"type": "delta", "text": "x"}

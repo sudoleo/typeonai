@@ -6,7 +6,7 @@
 // Exporte: window.updateUserTierUI, window.updatePremiumModelsState.
 // Abhaengigkeiten: window.setCurrentUsageLimits (optional waehrend Init), window.restoreModelSelections,
 // window.syncCustomModelPickers, window.App.updateDeepThinkText,
-// window.App.applyTierDefaultModels, window.isUserPro / window.isUserEarly (State).
+// window.App.applyTierDefaultModels, window.isUserPro (State).
 // =====================================================================
 
 (function () {
@@ -24,17 +24,9 @@
     accountLabel.textContent = `${accountName} · ${isPro ? "Pro" : "Free"}`;
     accountLabel.hidden = false;
   }
-  function updateUserTierUI(isPro, isLoggedIn = false, isEarly) { // Standardmäßig false
-    // 1. Globalen Status aktualisieren. Pro schliesst Early-Zugang ein.
-    // Viele Aufrufer (z.B. nach jeder Query) uebergeben kein isEarly -> dann den
-    // beim Login ermittelten Zustand (window.isUserEarly) beibehalten, statt
-    // Early-Nutzern den Zugang faelschlich zu entziehen.
-    if (isEarly === undefined) {
-      isEarly = Boolean(window.isUserEarly);
-    }
+  function updateUserTierUI(isPro, isLoggedIn = false) {
+    // 1. Globalen Status aktualisieren.
     window.isUserPro = isPro;
-    const hasEarlyAccess = Boolean(isPro || isEarly);
-    window.isUserEarly = hasEarlyAccess;
 
     // Follow-up-Affordance neu rendern: Pro-Badge/Teaser hängen am Tier.
     window.App?.followup?.render?.();
@@ -54,7 +46,7 @@
       // Optional: Standard-Limits (Free) oder ganz sperren
       window.setCurrentUsageLimits?.(false);
 
-      if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false, false);
+      if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false);
 
       // Deep Search sperren (wie bei Free User)
       if (deepSearchLabel) {
@@ -75,8 +67,8 @@
       // Limits
       window.setCurrentUsageLimits?.(true);
 
-      // Dropdowns entsperren (Pro schliesst Early ein)
-      if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(true, true);
+      // Dropdowns entsperren
+      if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(true);
 
       // Deep Search entsperren
       if (deepSearchLabel) {
@@ -94,8 +86,8 @@
       // Limits
       window.setCurrentUsageLimits?.(false);
 
-      // Dropdowns sperren (Early-Modelle nur mit Early-Tag)
-      if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false, hasEarlyAccess);
+      // Pro-Modelle sperren
+      if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false);
 
       // Deep Search ausschalten & sperren
       const deepToggle = document.getElementById("deepSearchToggle");
@@ -116,7 +108,7 @@
     }
   }
 
-  function updatePremiumModelsState(isPro, isEarly = false) {
+  function updatePremiumModelsState(isPro) {
     // Dropdown-IDs definieren (Consensus und OpenAI)
     const dropdownIds = [
       "consensusModelDropdown",
@@ -141,14 +133,8 @@
         option.disabled = !isPro;
       });
 
-      // Early-Optionen: mit Early-Tag (oder Pro) entsperren.
-      dropdown.querySelectorAll('option.early-option').forEach(option => {
-        option.disabled = !isEarly;
-      });
-
-      // Falls die aktuell gewaehlte Option jetzt gesperrt ist (z.B. der
-      // Consensus-Default Gemini-Frontier-Low fuer Nicht-Early-Nutzer), auf die
-      // erste freigeschaltete Option zuruecksetzen.
+      // Falls die aktuell gewaehlte Option jetzt gesperrt ist, auf die erste
+      // freigeschaltete Option zuruecksetzen.
       const selected = dropdown.options[dropdown.selectedIndex];
       if (selected && selected.disabled) {
         const firstEnabled = Array.from(dropdown.options).find(opt => !opt.disabled);
@@ -157,7 +143,7 @@
     });
 
     if (typeof window.App.applyTierDefaultModels === "function") {
-      window.App.applyTierDefaultModels(isPro, isEarly);
+      window.App.applyTierDefaultModels(isPro);
     }
 
     if (window.restoreModelSelections) {

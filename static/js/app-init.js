@@ -1577,10 +1577,9 @@
         // ausgelagert. Export: window.openShareDialog.
 
         // Initialer Aufruf: Alles sperren (Standard)
-        updatePremiumModelsState(false, false);
+        updatePremiumModelsState(false);
 
         window.isUserPro = false;
-        window.isUserEarly = false;
 
         // Tier-/Pro-UI (updateUserTierUI, updatePremiumModelsState) ist nach
         // static/js/user-tier.js ausgelagert. Exporte gleichen Namens auf window.

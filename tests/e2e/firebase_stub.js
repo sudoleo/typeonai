@@ -36,7 +36,6 @@ window.LIMITS = {
 window.currentMaxLimit = window.LIMITS.FREE.NORMAL;
 window.currentDeepLimit = window.LIMITS.FREE.DEEP;
 window.isUserPro = false;
-window.isUserEarly = false;
 window.bookmarksData = [];
 
 window.recordModelVote = () => {};
@@ -51,7 +50,7 @@ window.sendFeedback = async () => ({ ok: true });
 // das im asynchronen onAuthStateChanged-Callback, daher hier ein Poll.
 (function initTierUI(attempt) {
   if (typeof window.updateUserTierUI === "function") {
-    window.updateUserTierUI(false, true, false);
+    window.updateUserTierUI(false, true);
     return;
   }
   if (attempt < 100) setTimeout(() => initTierUI(attempt + 1), 50);

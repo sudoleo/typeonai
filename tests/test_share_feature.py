@@ -357,12 +357,9 @@ class SanitizerTests(unittest.TestCase):
         self.assertTrue(pro["pro"])
         self.assertTrue(pro["icon"].endswith("claude.png"))
         self.assertTrue(pro["model"])  # konkretes Modell aufgelöst
-        # Frontier-ID per Substring -> Gemini:
-        frontier = snapshots.consensus_model_view(
-            snapshots.cfg.GEMINI_FRONTIER_LOW_MODEL
-        )
-        self.assertEqual(frontier["provider"], "Gemini")
-        self.assertFalse(frontier["pro"])
+        direct = snapshots.consensus_model_view(snapshots.cfg.GEMINI_36_FLASH_MODEL)
+        self.assertEqual(direct["provider"], "Gemini")
+        self.assertFalse(direct["pro"])
         self.assertIsNone(snapshots.consensus_model_view(""))
 
 

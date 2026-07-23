@@ -45,11 +45,10 @@ def free_model(provider: str) -> str:
     return cfg.FREE_DEFAULT_MODEL_BY_PROVIDER[provider]
 
 
-def auth_patches(uid="uid-followup-tests", is_pro=False, is_early=False):
+def auth_patches(uid="uid-followup-tests", is_pro=False):
     return (
         patch.object(chat_router, "verify_user_token", return_value=uid),
         patch.object(chat_router, "is_user_pro", return_value=is_pro),
-        patch.object(chat_router, "is_user_early", return_value=is_early),
     )
 
 
@@ -157,8 +156,8 @@ class TestBuildFollowupSystemPrompt:
 
 def test_ask_with_context_is_pro_only():
     client = make_client()
-    p1, p2, p3 = auth_patches(is_pro=False)
-    with p1, p2, p3:
+    p1, p2 = auth_patches(is_pro=False)
+    with p1, p2:
         response = client.post(
             "/ask_gemini",
             headers=AUTH_HEADER,
@@ -174,8 +173,8 @@ def test_ask_with_context_is_pro_only():
 
 def test_prepare_with_context_is_pro_only():
     client = make_client()
-    p1, p2, p3 = auth_patches(is_pro=False)
-    with p1, p2, p3:
+    p1, p2 = auth_patches(is_pro=False)
+    with p1, p2:
         response = client.post(
             "/prepare",
             headers=AUTH_HEADER,
@@ -196,8 +195,8 @@ def test_ask_injects_capped_context_into_system_prompt_for_pro():
 
     oversized_consensus = "c" * (cfg.get_followup_consensus_char_limit() + 10_000)
     try:
-        p1, p2, p3 = auth_patches(uid=uid, is_pro=True)
-        with p1, p2, p3, patch.object(chat_router, "_run_ask", side_effect=fake_run_ask):
+        p1, p2 = auth_patches(uid=uid, is_pro=True)
+        with p1, p2, patch.object(chat_router, "_run_ask", side_effect=fake_run_ask):
             response = client.post(
                 "/ask_gemini",
                 headers=AUTH_HEADER,
@@ -232,8 +231,8 @@ def test_ask_without_context_leaves_system_prompt_untouched():
         return {"ok": True}
 
     try:
-        p1, p2, p3 = auth_patches(uid=uid, is_pro=True)
-        with p1, p2, p3, patch.object(chat_router, "_run_ask", side_effect=fake_run_ask):
+        p1, p2 = auth_patches(uid=uid, is_pro=True)
+        with p1, p2, patch.object(chat_router, "_run_ask", side_effect=fake_run_ask):
             response = client.post(
                 "/ask_gemini",
                 headers=AUTH_HEADER,
@@ -254,8 +253,8 @@ def test_prepare_validates_but_does_not_inject_context():
     # Kontextblock doppelt im Prompt (Client schickt system_prompt + context
     # an /ask_*).
     client = make_client()
-    p1, p2, p3 = auth_patches(uid="uid-followup-prepare", is_pro=True)
-    with p1, p2, p3:
+    p1, p2 = auth_patches(uid="uid-followup-prepare", is_pro=True)
+    with p1, p2:
         response = client.post(
             "/prepare",
             headers=AUTH_HEADER,

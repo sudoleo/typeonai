@@ -39,6 +39,14 @@ def test_new_free_consensus_run_limit_defaults_to_three():
 def test_production_path_wraps_reserve_in_firestore_transaction(monkeypatch):
     db = FakeFirestore()
     calls = []
+    transaction_options = []
+    original_transaction = db.transaction
+
+    def capture_transaction(**kwargs):
+        transaction_options.append(kwargs)
+        return original_transaction(**kwargs)
+
+    db.transaction = capture_transaction
 
     def fake_transactional(function):
         calls.append("decorated")
@@ -59,6 +67,7 @@ def test_production_path_wraps_reserve_in_firestore_transaction(monkeypatch):
     repo.reserve("firestore-user", "tx-key", RunKind.REGULAR, LIMITS, now=UTC_NOON)
 
     assert calls == ["decorated"]
+    assert transaction_options == [{"max_attempts": 12}]
     assert repo.snapshot("firestore-user", LIMITS, now=UTC_NOON).total.reserved == 1
 
 

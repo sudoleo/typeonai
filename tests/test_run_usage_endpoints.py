@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from google.api_core.exceptions import Aborted
 
 import app.core.config as cfg
 from app.api.routers import chat as chat_router
@@ -28,9 +29,7 @@ def run_api(monkeypatch):
     monkeypatch.setattr(chat_router, "verify_user_token", lambda token: UID)
     monkeypatch.setattr(users_router, "verify_user_token", lambda token, **kwargs: UID)
     monkeypatch.setattr(chat_router, "is_user_pro", lambda uid: False)
-    monkeypatch.setattr(chat_router, "is_user_early", lambda uid: False)
     monkeypatch.setattr(users_router, "is_user_pro", lambda uid: False)
-    monkeypatch.setattr(users_router, "is_user_early", lambda uid: False)
     for env_name in (
         "DEVELOPER_OPENAI_API_KEY",
         "DEVELOPER_MISTRAL_API_KEY",
@@ -179,6 +178,18 @@ def test_requests_without_run_key_are_rejected_before_provider_call(run_api):
     assert response.status_code == 400
     assert response.json()["detail"]["error_code"] == "usage_run_key_required"
     assert repository.snapshot(UID, _limits()).total.consumed == 0
+
+
+def test_exhausted_firestore_contention_returns_structured_503(run_api, monkeypatch):
+    client, repository = run_api
+    key = "contention-run"
+    assert _prepare(client, key).status_code == 200
+    monkeypatch.setattr(repository, "consume", lambda *_args, **_kwargs: (_ for _ in ()).throw(Aborted("contention")))
+
+    response = _ask(client, "/ask_gemini", "gemini", key)
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["error_code"] == "usage_storage_busy"
 
 
 def test_deep_think_counts_once_total_and_once_in_deep_quota(run_api, monkeypatch):

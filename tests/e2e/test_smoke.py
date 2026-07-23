@@ -503,31 +503,35 @@ def test_theme_toggle(app_page):
     expect(app_page.locator("#systemPromptModal")).to_be_hidden()
 
 
-def test_deep_think_temporarily_selects_gemini_35_flash(app_page):
-    """Deep Think nutzt Gemini 3.5 Flash fuer die Synthese, ohne die zuvor
+def test_deep_think_temporarily_selects_configured_engine(app_page):
+    """Deep Think nutzt die Admin-konfigurierte Engine, ohne die zuvor
     gespeicherte Consensus-Auswahl des Pro-Nutzers dauerhaft zu ersetzen."""
-    app_page.evaluate(
+    initial_model = app_page.evaluate(
         """() => {
           window.isUserPro = true;
-          window.isUserEarly = true;
-          window.updatePremiumModelsState(true, true);
+          window.updatePremiumModelsState(true);
           const select = document.getElementById("consensusModelDropdown");
-          select.value = "Grok";
+          const initial = Array.from(select.options).find(option =>
+            !option.disabled && option.value !== window.DEEP_THINK_CONSENSUS_MODEL
+          ).value;
+          select.value = initial;
           select.dispatchEvent(new Event("change", { bubbles: true }));
+          return initial;
         }"""
     )
-    assert app_page.evaluate("() => localStorage.getItem('pref_select_consensus')") == "Grok"
+    assert app_page.evaluate("() => localStorage.getItem('pref_select_consensus')") == initial_model
 
     app_page.evaluate("() => document.getElementById('deepSearchToggle').click()")
     app_page.wait_for_function(
-        "() => document.getElementById('consensusModelDropdown').value === 'gemini-3.5-flash'",
+        "() => document.getElementById('consensusModelDropdown').value === window.DEEP_THINK_CONSENSUS_MODEL",
         timeout=5000,
     )
-    assert app_page.evaluate("() => localStorage.getItem('pref_select_consensus')") == "Grok"
+    assert app_page.evaluate("() => localStorage.getItem('pref_select_consensus')") == initial_model
 
     app_page.evaluate("() => document.getElementById('deepSearchToggle').click()")
     app_page.wait_for_function(
-        "() => document.getElementById('consensusModelDropdown').value === 'Grok'",
+        "(initial) => document.getElementById('consensusModelDropdown').value === initial",
+        arg=initial_model,
         timeout=5000,
     )
 
@@ -538,8 +542,7 @@ def test_consensus_presets_apply_full_model_sets_and_gate_thorough(app_page):
     result = app_page.evaluate(
         """() => {
           window.isUserPro = false;
-          window.isUserEarly = false;
-          window.updatePremiumModelsState(false, false);
+          window.updatePremiumModelsState(false);
           localStorage.setItem("pref_consensus_preset", "balanced");
           window.restoreModelSelections();
           const consensus = document.getElementById("consensusModelDropdown");
