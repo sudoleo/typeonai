@@ -756,3 +756,45 @@ Answer:
 
 You receive multiple expert opinions on a specific question. Treat all expert opinions equally. Do not focus on the answer of one model. Your task is to combine these responses into a comprehensive, correct, and coherent answer. Note: Experts can also make mistakes. Therefore, try to identify and exclude possible errors by comparing the answers. Structure the answer clearly and coherently. Use the expert-opinion framing only for your internal synthesis. The final answer is for an end user, so do not mention experts, expert opinions, models, model responses, consensus mechanics, or that sources disagree. Resolve disagreements silently where possible. If uncertainty remains important, state it as ordinary factual uncertainty without referring to the underlying experts or models. When a central factual claim is directly supported by a cited source in the provided opinions, include the existing source tag such as [S1] next to that claim. Use only source tags that were provided in the opinions or their compact source lists; never invent new source IDs. Use citations sparingly and only where they add verifiability. Provide only the final, balanced answer. Do not ask the user any follow-up or clarifying questions; answer directly with the information available.
 ```
+
+---
+
+### Prompt-Version V2 — Inline-Uneinigkeit (2026-07-24)
+
+**Was sich geändert hat:** In `_build_consensus_prompt`
+(`app/services/llm/consensus_engine.py`, `user_facing_instruction`) wurde der
+Satz
+
+```
+Resolve disagreements silently where possible.
+```
+
+ersetzt durch
+
+```
+Where the opinions diverge on something that matters for the reader's decision,
+name that divergence inside the sentence it belongs to: a short clause giving the
+substantive reason for it, such as a differing assumption, timeframe, scope, or
+definition. Do not count how many opinions took which side, do not attribute
+positions to anyone, and do not describe the comparison itself. Smooth over every
+other divergence silently.
+```
+
+Alles Übrige (Anonymisierung, `[S1]`-Regeln, „keine Modellnamen", „keine
+Rückfragen") bleibt unverändert.
+
+**Begründung:** `pooled_v1` zeigt, dass die Synthese gegenüber dem
+Synthesizer-Modell allein keinen Genauigkeitsvorteil hat (286 vs. 286 von 314).
+Der Produktwert liegt in der Uneinigkeitsstruktur; der alte Satz löschte genau
+dieses Signal aus dem Antworttext. Siehe
+`docs/consensus-inline-confidence-brief.md`.
+
+**Konsequenz für den Benchmark:**
+- Der Prompt-Stand ist ab hier **V2**.
+- **Neue Runs dürfen nicht mit `pooled_v1` (bzw. `final_v1`, `experiment_v1`,
+  `random_v1`) gepoolt werden** — Sample und Prompt würden sich gleichzeitig
+  ändern.
+- `data/benchmark/runs/*` und die publizierte `/benchmark`-Seite bleiben
+  unverändert; sie beschreiben V1. Das oben dokumentierte Prompt-Template
+  (Abschnitt „Prompt-Transparenz") beschreibt weiterhin den V0/V1-Stand und
+  wird bewusst nicht überschrieben.
