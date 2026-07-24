@@ -703,6 +703,16 @@
           }
 
           // --- Agreement-Badges in der Konsens-Antwort -----------------------
+          function claimBadgeLabel(claim) {
+            const agreeCount = claim.agree.length;
+            const total = agreeCount + claim.dissent.length;
+            // Gleiche Formulierung wie im aria-label und am Widerspruchs-Marker:
+            // der Tooltip haengt jetzt auch an der Passage, nicht nur am Badge.
+            return (claim.dissent.length
+              ? agreeCount + " of " + total + " models support this"
+              : "All " + total + " models that address this agree") + " — open details";
+          }
+
           function makeBadge(claim) {
             const agreeCount = claim.agree.length;
             const total = agreeCount + claim.dissent.length;
@@ -718,14 +728,10 @@
               badge.appendChild(dot);
             }
             badge.appendChild(document.createTextNode(agreeCount + "/" + total));
-            badge.title = claim.dissent.length
-              ? agreeCount + " of " + total + " models support this. Tap for details"
-              : "All " + total + " models that address this agree. Tap for details";
+            badge.title = claimBadgeLabel(claim);
             badge.setAttribute("aria-haspopup", "dialog");
             // Tastatur/Screenreader: sprechendes Label statt nacktem "4/6".
-            badge.setAttribute("aria-label", claim.dissent.length
-              ? agreeCount + " of " + total + " models support this — open details"
-              : "All " + total + " models that address this agree — open details");
+            badge.setAttribute("aria-label", claimBadgeLabel(claim));
             badge.addEventListener("click", function (event) {
               event.stopPropagation();
               openClaimPopover(claim, badge);
@@ -746,6 +752,13 @@
             return marked.find(function (r) { return start < r.end && end > r.start; }) || null;
           }
 
+          function diffMarkerLabel(diff) {
+            const isMajor = diff.type === "contradiction" && diff.severity === "major";
+            return (diff.type === "contradiction"
+              ? (isMajor ? "The models contradict each other here" : "The models differ on a detail here")
+              : "The models set a different focus here") + " — open details";
+          }
+
           function makeDiffMarker(diff, index) {
             const marker = document.createElement("button");
             marker.type = "button";
@@ -755,9 +768,7 @@
             dot.className = "cx-marker-dot";
             dot.setAttribute("aria-hidden", "true");
             marker.appendChild(dot);
-            const label = (diff.type === "contradiction"
-              ? (isMajor ? "The models contradict each other here" : "The models differ on a detail here")
-              : "The models set a different focus here") + " — open details";
+            const label = diffMarkerLabel(diff);
             marker.title = label;
             marker.setAttribute("aria-label", label + ": " + diff.claim);
             marker.addEventListener("click", function (event) {
@@ -813,6 +824,82 @@
             }
           }
 
+          // --- Passage und Marker aneinander koppeln --------------------------
+          // Der Marker ist ein 5px-Punkt, die markierte Passage daneben ein
+          // ganzer Satz. Auf dem Desktop ist der Satz also das weitaus groessere
+          // Ziel und traegt deshalb dieselbe Aufforderung: Tooltip, Zeigefinger,
+          // Klick. Der Hover wirkt in beide Richtungen, damit sichtbar wird,
+          // welcher Marker zu welchem Satz gehoert (ein Absatz kann mehrere
+          // tragen). Der Marker/das Badge bleibt das fokussierbare Steuerelement
+          // fuer Tastatur und Screenreader; die Passage ist nur ein zusaetzlicher
+          // Mausweg und deshalb bewusst nicht in der Tab-Reihenfolge.
+          function applyPassageHover(group) {
+            group.spans.forEach(function (span) {
+              span.classList.toggle("is-hovered", group.hover);
+            });
+            group.controls.forEach(function (ctrl) {
+              ctrl.el.classList.toggle("is-linked-hover", group.hover);
+            });
+          }
+
+          function setPassageHover(group, on) {
+            group.hover = on;
+            if (on) {
+              applyPassageHover(group);
+              return;
+            }
+            // Der Weg von einem Span zum naechsten (ein Satz kann in mehrere
+            // Spans zerfallen) oder zum Marker feuert leave/enter nacheinander.
+            // Ein Frame Verzoegerung verhindert das Flackern dazwischen.
+            requestAnimationFrame(function () {
+              if (!group.hover) applyPassageHover(group);
+            });
+          }
+
+          function passageGroup(spans) {
+            if (spans[0].cxGroup) return spans[0].cxGroup;
+            const group = { spans: spans, controls: [], hover: false };
+            spans.forEach(function (span) {
+              span.cxGroup = group;
+              span.classList.add("is-interactive");
+              span.addEventListener("mouseenter", function () { setPassageHover(group, true); });
+              span.addEventListener("mouseleave", function () { setPassageHover(group, false); });
+              span.addEventListener("click", function (event) {
+                // Quellenchips und [S1]-Links im Satz behalten Vorrang, und wer
+                // Text markiert, will ihn kopieren und nichts oeffnen.
+                if (event.target.closest("a, button")) return;
+                const selection = window.getSelection?.();
+                if (selection && !selection.isCollapsed) return;
+                const first = group.controls[0];
+                if (first) first.activate(event);
+              });
+            });
+            return group;
+          }
+
+          // Nur Geraete mit echtem Zeiger: auf Touch wuerde der Hover-Zustand
+          // nach dem Tippen haengen bleiben, und dort hat der Marker ohnehin
+          // schon eine 44px-Trefferflaeche.
+          function canHoverPassages() {
+            return !!window.matchMedia?.("(hover: hover) and (pointer: fine)").matches;
+          }
+
+          // Haengt das Steuerelement hinter die Passage und verbindet beide.
+          function attachControl(result, control, label, activate) {
+            insertAfterMark(result, control);
+            const spans = result.spans;
+            if (!spans || !spans.length || !canHoverPassages()) return;
+            const group = passageGroup(spans);
+            group.controls.push({ el: control, activate: activate });
+            spans.forEach(function (span) {
+              // Bei einer doppelt belegten Passage gewinnt der erste (staerkere)
+              // Marker den Tooltip.
+              if (!span.title) span.title = label;
+            });
+            control.addEventListener("mouseenter", function () { setPassageHover(group, true); });
+            control.addEventListener("mouseleave", function () { setPassageHover(group, false); });
+          }
+
           function renderInlineMarkers(claims, differences) {
             const body = window.App.consensusBodyEl();
             const fallbackBox = $("consensusClaimsFallback");
@@ -839,7 +926,9 @@
               const isMajor = diff.type === "contradiction" && diff.severity === "major";
               const result = mark(diff.consensus_anchor, isMajor ? "is-major" : "is-minor");
               if (!result) return;
-              insertAfterMark(result, makeDiffMarker(diff, index));
+              attachControl(result, makeDiffMarker(diff, index), diffMarkerLabel(diff), function () {
+                focusDifferenceCard(index);
+              });
             });
 
             // 2. Claims: is-unanimous ist bewusst dekorationslos (nur Badge),
@@ -851,7 +940,10 @@
                 unanchored.push(claim);
                 return;
               }
-              insertAfterMark(result, makeBadge(claim));
+              const badge = makeBadge(claim);
+              attachControl(result, badge, claimBadgeLabel(claim), function () {
+                openClaimPopover(claim, badge);
+              });
             });
 
             if (unanchored.length) {

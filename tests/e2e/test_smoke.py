@@ -235,6 +235,15 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
         .first.get_attribute("aria-label")
     ), "Marker braucht ein sprechendes aria-label"
 
+    # Desktop: die markierte Passage ist selbst das Ziel - gleicher Tooltip wie
+    # der Marker, und der Hover koppelt beide sichtbar aneinander.
+    assert marked.get_attribute("title"), "Passage braucht denselben Tooltip wie der Marker"
+    assert "is-interactive" in (marked.get_attribute("class") or "")
+    marked.hover()
+    expect(
+        app_page.locator("#consensusAnswerBody .cx-marker.is-linked-hover").first
+    ).to_be_visible(timeout=2000)
+
     # Der vollstaendige Differences-Ueberblick liegt zugeklappt UNTER der
     # Antwort; die Karten bleiben erreichbar, sind aber nicht mehr die zweite
     # Spalte der Primaeransicht.

@@ -267,6 +267,17 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   (Widersprüche laufen zuerst, Claims hängen sich an). Der Spalten-Balancer
   ist mit dem einspaltigen Layout entfallen; `window.balanceConsensusColumns`
   existiert nicht mehr.
+  Seit 2026-07-25 koppelt `attachControl` die Passage an ihr Steuerelement:
+  auf Zeigergeräten (`(hover: hover) and (pointer: fine)`, auf Touch bliebe
+  der Hover hängen) bekommt jeder `.cx-claim`-Span `is-interactive`, denselben
+  `title` wie Marker/Badge und einen Klick, der dieselbe Aktion auslöst. Der
+  Hover wirkt in beide Richtungen: `.cx-claim.is-hovered` (Wash, nur im Hover)
+  ↔ `.cx-marker/.claim-badge.is-linked-hover`. Fokussierbar bleibt allein das
+  Steuerelement — die Passage ist ein zusätzlicher Mausweg, kein Tab-Stop.
+  `.diff-card.is-focused` markiert die geöffnete Karte mit einem verblassenden
+  Bernstein-Wash (`diffCardFlash`), nicht mehr mit einem 2px-Ring: der Ring
+  las sich über die volle Listenbreite wie ein grauer Rahmen um den ganzen
+  Differences-Bereich.
 - **`consensus-run.js`** — `window.getConsensus`: baut `/consensus`-Payload, fährt
   den SSE-Stream, rendert Ergebnis + Citation/Share-Meta. `parseBestModel`.
 - **`query-send.js`** — `window.sendQuestion`: `/prepare` + `/ask_*`-Fan-out,

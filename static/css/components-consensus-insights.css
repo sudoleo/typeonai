@@ -146,8 +146,10 @@
   transition: box-shadow 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
+/* .is-linked-hover: die zugehoerige Passage wird gehovert (siehe .cx-claim). */
 .claim-badge:hover,
-.claim-badge:focus-visible {
+.claim-badge:focus-visible,
+.claim-badge.is-linked-hover {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
   color: var(--text-color);
   box-shadow: var(--liquid-focus-ring);
@@ -181,14 +183,12 @@
     color-mix(in srgb, var(--text-color) 42%, transparent);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
-  cursor: default;
 }
 
 .cx-claim.is-major {
   text-decoration: underline wavy var(--cx-major-line);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
-  cursor: default;
 }
 
 :root {
@@ -200,6 +200,35 @@
   /* Bernstein im Dark Mode aufhellen, sonst verschwindet die Wellenlinie. */
   --cx-major-line: #e8b968;
   --cx-flash: rgba(243, 198, 111, 0.15);
+}
+
+/* Die markierte Passage ist selbst anfassbar: auf dem Desktop ist der Satz
+   ein viel groesseres Ziel als der 5px-Punkt daneben. Der Hover laeuft in
+   beide Richtungen (Passage <-> Marker), damit die Zuordnung sichtbar wird.
+   Nur im Hover gibt es eine Flaeche - im Ruhezustand bleibt die Antwort
+   dekorationsfrei und ihr Kontrast unangetastet. */
+.cx-claim.is-interactive {
+  cursor: pointer;
+  /* Am .is-interactive statt am Hover-Zustand, damit der Wash in beide
+     Richtungen weich laeuft. */
+  transition: background-color 0.14s ease;
+}
+
+.cx-claim.is-hovered {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--text-color) 7%, transparent);
+  /* Ueber einen Zeilenumbruch hinweg bekommt jedes Fragment eigene Ecken. */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.cx-claim.is-major.is-hovered {
+  background: var(--cx-flash);
+  text-decoration-thickness: 2px;
+}
+
+.cx-claim.is-minor.is-hovered {
+  text-decoration-color: color-mix(in srgb, var(--text-color) 72%, transparent);
 }
 
 /* Marker an einem Widerspruch: kompakter Punkt-Button, keine Zaehlung. */
@@ -233,7 +262,8 @@
 }
 
 .cx-marker:hover,
-.cx-marker:focus-visible {
+.cx-marker:focus-visible,
+.cx-marker.is-linked-hover {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
   box-shadow: var(--liquid-focus-ring);
   outline: none;
