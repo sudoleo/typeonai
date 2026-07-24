@@ -403,9 +403,7 @@ img { display: block; max-width: 100%; }
    (border + top gloss only) so shadows don't stack, like the /app input box. */
 .lp-window .lp-prompt,
 .lp-window .lp-agent,
-.lp-window .lp-response,
-.lp-window .consensus-main,
-.lp-window .consensus-differences {
+.lp-window .lp-response {
   box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
@@ -463,6 +461,15 @@ img { display: block; max-width: 100%; }
 
 /* The hero card is compact: trim the diff-card's outer padding. */
 .lp-hero-result .diff-card-body { padding-bottom: 4px; }
+
+/* The differences panel already sits in its own .lp-hero-block, which draws
+   the separator — so it contributes no border or padding of its own here. */
+.lp-hero-result .consensus-differences {
+  border-top: 0;
+  padding: 0;
+}
+
+.lp-hero-result .consensus-marker-legend { margin-top: 9px; font-size: 0.7rem; }
 
 /* Hero mockup floats gently in the air while loading: slow, calming drift. */
 .lp-hero .lp-window { animation: lpFloat 7s ease-in-out infinite; will-change: transform; }
@@ -1091,11 +1098,14 @@ img { display: block; max-width: 100%; }
   color: var(--sidebar-text-muted);
 }
 
-/* The two-pane consensus box */
+/* One answer, read top to bottom — the differences live in a collapsible
+   overview UNDER it, not in a second column beside it (mirrors /app since
+   the inline-confidence redesign). */
 .consensus-box {
   display: flex;
+  flex-direction: column;
   align-items: stretch;
-  gap: 28px;
+  gap: 14px;
   padding: 0;
   border-radius: 0;
   border: 0;
@@ -1104,7 +1114,8 @@ img { display: block; max-width: 100%; }
 }
 
 .consensus-main {
-  flex: 1.7;
+  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
   position: relative;
   padding: 10px 16px 12px;
@@ -1117,19 +1128,69 @@ img { display: block; max-width: 100%; }
 .dark-mode .consensus-main { box-shadow: none; }
 
 .consensus-differences {
-  flex: 1;
-  min-width: min(320px, 100%);
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
   position: relative;
-  padding: 10px 16px 12px 24px;
+  padding: 4px 16px 8px;
   border-radius: var(--radius-md);
   border: 1px solid transparent;
-  border-left: 1px solid color-mix(in srgb, var(--sidebar-border) 52%, transparent);
+  /* Separator moved from left to top: the block sits below the answer now. */
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 52%, transparent);
   background: none;
   box-shadow: none;
 }
 
+.dark-mode .consensus-differences {
+  border-top-color: color-mix(in srgb, var(--sidebar-border) 60%, transparent);
+}
+
 /* The differences PANEL itself stays neutral (no coloured edge). Severity
    lives in the sev-dot and the type label inside each entry. */
+
+/* Collapsible summary line: a quiet text action, no card look. */
+.consensus-differences-summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 0;
+  list-style: none;
+  cursor: pointer;
+  color: var(--sidebar-text-muted);
+  font-size: 0.78rem;
+  font-weight: 620;
+  letter-spacing: 0.01em;
+  user-select: none;
+}
+
+.consensus-differences-summary::-webkit-details-marker { display: none; }
+
+.consensus-differences-summary::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 1.4px solid currentColor;
+  border-bottom: 1.4px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.18s ease;
+  flex-shrink: 0;
+}
+
+.consensus-differences-panel[open] > .consensus-differences-summary::before {
+  transform: rotate(45deg);
+}
+
+.consensus-differences-summary:hover { color: var(--text-color); }
+
+.consensus-differences-content { padding-bottom: 8px; }
+
+/* Legend under the answer: marked text was checked, unmarked text was not. */
+.consensus-marker-legend {
+  margin: 12px 0 0;
+  color: var(--sidebar-text-muted);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
 
 .consensus-main > h2 {
   position: relative;
@@ -1146,16 +1207,6 @@ img { display: block; max-width: 100%; }
 }
 
 .consensus-main > h2 img { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
-
-.consensus-differences > h2 {
-  margin: 0 0 12px;
-  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
-  font-size: 0.8rem;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
 
 .consensus-main-text { margin: 0; color: color-mix(in srgb, var(--text-color) 92%, var(--sidebar-text-muted)); font-size: 0.98rem; line-height: 1.72; }
 .consensus-main-text p { margin: 0 0 0.8em; }
@@ -1250,6 +1301,197 @@ img { display: block; max-width: 100%; }
 }
 
 .dark-mode .claim-badge .claim-dot { background: #e8b968; }
+
+/* --------------------------------------------------------------------------
+   Inline confidence — the marks inside the consensus answer
+   Spellcheck metaphor, identical to /app: agreement stays undecorated, a
+   difference gets a fine dotted line, a contradiction an amber wavy one.
+   Deliberately only text-decoration — no dimmed text, no background fill, so
+   the contrast of the answer itself is untouched.
+   -------------------------------------------------------------------------- */
+:root {
+  --cx-major-line: #c8862f;
+  --cx-flash: rgba(217, 155, 70, 0.16);
+}
+
+.dark-mode {
+  /* Lighten the amber in dark mode, else the wavy line disappears. */
+  --cx-major-line: #e8b968;
+  --cx-flash: rgba(243, 198, 111, 0.15);
+}
+
+.cx-claim { text-decoration: none; }
+
+.cx-claim.is-minor {
+  text-decoration: underline dotted
+    color-mix(in srgb, var(--text-color) 42%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.cx-claim.is-major {
+  text-decoration: underline wavy var(--cx-major-line);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+/* The marked passage is the click target too: on the desktop the sentence is
+   a far bigger target than the 5px dot beside it. The hover pairs both ways so
+   it stays obvious which mark belongs to which sentence. */
+.cx-claim.is-interactive {
+  cursor: pointer;
+  transition: background-color 0.14s ease;
+}
+
+.cx-claim.is-interactive:hover,
+.cx-claim.is-interactive:has(+ .cx-marker:hover) {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--text-color) 7%, transparent);
+  /* Across a line break each fragment gets its own corners. */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.cx-claim.is-major.is-interactive:hover,
+.cx-claim.is-major.is-interactive:has(+ .cx-marker:hover) {
+  background: var(--cx-flash);
+  text-decoration-thickness: 2px;
+}
+
+.cx-claim.is-minor.is-interactive:hover,
+.cx-claim.is-minor.is-interactive:has(+ .cx-marker:hover) {
+  text-decoration-color: color-mix(in srgb, var(--text-color) 72%, transparent);
+}
+
+/* Marker at a difference: compact dot button, no counting. */
+.cx-marker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: 1px;
+  margin: 0 2px 0 4px;
+  padding: 0 4px;
+  min-height: 16px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 90%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--glass-bg-strong) 55%, transparent);
+  line-height: 1;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+/* >=44px hit area without touching the line height. */
+.cx-marker::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+.cx-marker:hover,
+.cx-marker:focus-visible,
+.cx-claim.is-interactive:hover + .cx-marker {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
+  box-shadow: var(--liquid-focus-ring);
+  outline: none;
+}
+
+.cx-marker .cx-marker-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-color) 45%, transparent);
+}
+
+.cx-marker.is-major .cx-marker-dot { background: var(--cx-major-line); }
+
+/* The entry a mark just opened: a short amber wash that fades by itself. */
+.diff-card.is-focused {
+  border-radius: var(--radius-xs);
+  animation: diffCardFlash 1.9s ease forwards;
+}
+
+@keyframes diffCardFlash {
+  0%, 55% { background: var(--cx-flash); }
+  100% { background: transparent; }
+}
+
+/* The marks ink themselves in when the mockup scrolls into view: the product
+   in one gesture — a plain answer, then the doubt written onto it. */
+@keyframes cxInkMinor {
+  from { text-decoration-color: transparent; }
+  to { text-decoration-color: color-mix(in srgb, var(--text-color) 42%, transparent); }
+}
+
+@keyframes cxInkMajor {
+  from { text-decoration-color: transparent; }
+  to { text-decoration-color: var(--cx-major-line); }
+}
+
+@keyframes cxMarkerPop {
+  from { opacity: 0; transform: scale(0.5); }
+  to { opacity: 1; transform: none; }
+}
+
+.lp-scene-visual.is-visible .cx-claim.is-minor,
+.lp-slide.is-active .cx-claim.is-minor { animation: cxInkMinor 0.6s ease 0.45s backwards; }
+
+.lp-scene-visual.is-visible .cx-claim.is-major,
+.lp-slide.is-active .cx-claim.is-major { animation: cxInkMajor 0.6s ease 0.45s backwards; }
+
+.lp-scene-visual.is-visible .cx-marker,
+.lp-slide.is-active .cx-marker { animation: cxMarkerPop 0.3s ease 0.95s backwards; }
+
+/* Hint under the interactive mockup */
+.lp-scene-hint {
+  margin: 14px 0 0;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+/* --------------------------------------------------------------------------
+   Reading key — the three states in their real visual vocabulary
+   -------------------------------------------------------------------------- */
+.lp-mark-key {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 34px;
+  margin: clamp(26px, 3.5vw, 38px) 0 clamp(30px, 4vw, 44px);
+  padding: 0;
+  list-style: none;
+}
+
+.lp-mark-key li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.lp-mark-sample {
+  color: color-mix(in srgb, var(--text-color) 92%, var(--sidebar-text-muted));
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.lp-mark-note {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* The samples are illustrations, not controls: no pointer, and above all no
+   44px hit area that would swallow clicks on the neighbouring entry. */
+.lp-mark-key .cx-marker { cursor: default; }
+.lp-mark-key .cx-marker::after { display: none; }
 
 /* Differences: flat list, exactly like the /app — hairline separators instead
    of card frames; severity lives in the dot and the subtle text label. */
@@ -1557,7 +1799,7 @@ img { display: block; max-width: 100%; }
 }
 
 /* Compact variant of the consensus box inside slides */
-.lp-mini.consensus-box { gap: 22px; }
+.lp-mini.consensus-box { gap: 10px; }
 .lp-mini .consensus-main { padding: 6px 12px 8px; }
 .lp-mini .consensus-main > h2 {
   justify-content: flex-start;
@@ -1566,7 +1808,8 @@ img { display: block; max-width: 100%; }
   font-size: 0.9rem;
 }
 .lp-mini .consensus-main-text { font-size: 0.9rem; line-height: 1.6; }
-.lp-mini .consensus-differences { padding: 6px 12px 8px 22px; }
+.lp-mini .consensus-marker-legend { margin-top: 10px; font-size: 0.72rem; }
+.lp-mini .consensus-differences { padding: 2px 12px 6px; }
 
 .lp-slider-nav {
   display: flex;
@@ -1724,6 +1967,10 @@ img { display: block; max-width: 100%; }
   .lp-reveal { opacity: 1; transform: none; transition: none; }
   .lp-pulse i, .lp-agent::before, .lp-hero .lp-window, .lp-prompt-text.is-typing::after { animation: none; }
   .lp-slide { transition: none; transform: none; }
+  /* Marks are present from the start instead of inking themselves in; the
+     flash stays put (the JS removes the class after 2s). */
+  .cx-claim, .cx-marker, .consensus-differences-summary::before { animation: none; transition: none; }
+  .diff-card.is-focused { animation: none; background: var(--cx-flash); }
   html { scroll-behavior: auto; }
 }
 
@@ -1739,15 +1986,9 @@ img { display: block; max-width: 100%; }
   .lp-watch-story { grid-template-columns: 1fr; }
   .lp-watch-notification { width: min(100%, 430px); justify-self: end; margin-top: -12px; transform: none; }
 
-  /* Scene 03: stack panels, consensus first */
-  .consensus-box { flex-direction: column; gap: 10px; }
-  .consensus-main, .consensus-differences { flex: 1 1 auto; min-width: 0; }
-  .consensus-differences {
-    border-left: 0;
-    border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 52%, transparent);
-    padding: 14px 16px 8px;
-  }
-  .lp-mini .consensus-differences { padding: 14px 12px 8px; }
+  /* Scene 03: the consensus box is single-column at every width since the
+     inline-confidence redesign — only the reading key needs to stack. */
+  .lp-mark-key { gap: 12px 22px; }
 
   /* Verdict bar: judge footnote wraps under the headline, indented behind
      the score ring (42px ring + 14px gap), like the /app on small screens.
@@ -1812,8 +2053,9 @@ img { display: block; max-width: 100%; }
   .lp-logos { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .lp-logo { padding: 22px 10px; }
   .consensus-main { padding: 10px 16px 12px; }
-  .consensus-differences { padding: 14px 16px 8px; }
   .consensus-main > h2 { padding: 0 56px; }
+  /* Reading key: one state per row, so no sample wraps mid-underline. */
+  .lp-mark-key { flex-direction: column; align-items: flex-start; gap: 14px; }
   .lp-footer-inner { flex-direction: column; align-items: flex-start; }
   .lp-watch-story { padding: 12px; }
   .lp-watch-card { padding: 15px; }

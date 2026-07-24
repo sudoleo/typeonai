@@ -73,7 +73,6 @@
 
 .ce-judge,
 .ce-answer,
-.ce-differences,
 .ce-step,
 .ce-faq-list article {
   border: 1px solid color-mix(in srgb, var(--glass-border) 60%, var(--glass-edge));
@@ -619,7 +618,6 @@
 .ce-diff-stage h3,
 .ce-schema-panel h3,
 .ce-answer h3,
-.ce-differences h3,
 .ce-faq-list h3 {
   margin: 0;
   color: var(--text-primary);
@@ -632,7 +630,6 @@
 .ce-diff-stage p,
 .ce-schema-panel p,
 .ce-answer p,
-.ce-differences p,
 .ce-faq-list p {
   margin: 12px 0 0;
   color: var(--text-secondary);
@@ -744,15 +741,16 @@
   flex-wrap: wrap;
 }
 
+/* Single column since the inline-confidence redesign: one answer with the
+   marks in it, the differences collapsed underneath — no side column. */
 .ce-result-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.42fr) minmax(300px, 0.88fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 22px;
   align-items: stretch;
 }
 
 .ce-answer,
-.ce-differences,
 .ce-schema-panel {
   padding: 24px;
   border: 1px solid color-mix(in srgb, var(--glass-border) 60%, var(--glass-edge));
@@ -771,28 +769,29 @@
   color: var(--text-primary);
 }
 
-.ce-claim-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin-top: 12px;
-  padding-top: 12px;
+/* The differences panel sits inside the answer panel now; it brings its own
+   separator, so it needs neither the glass frame nor extra side padding. */
+.ce-answer .consensus-differences {
+  margin-top: 18px;
+  padding: 4px 0 0;
+  border: 0;
   border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 60%, transparent);
-  color: color-mix(in srgb, var(--text-primary) 82%, var(--text-secondary));
-  font-size: 0.9rem;
-  line-height: 1.35;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
 }
 
-/* Agreement badges in the claim rows come from landing.css (.claim-badge);
-   only neutralize the inline-text margin here. */
-.ce-claim-row .claim-badge {
-  margin: 0;
-}
-
-/* The flat differences list needs some air below the panel heading. */
-.ce-differences .differences-cards {
+/* The flat differences list needs some air below the summary line. */
+.ce-answer .differences-cards {
   margin-top: 4px;
+}
+
+/* Inline marks inherit landing.css; only the paragraph rhythm differs here. */
+.ce-answer .consensus-marker-legend {
+  margin: 12px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.5;
 }
 
 .ce-footnote {
@@ -988,8 +987,7 @@
   }
 
   .ce-answer,
-  .ce-differences,
-  .ce-step,
+    .ce-step,
   .ce-diff-stage,
   .ce-schema-panel,
   .ce-flow-entry,

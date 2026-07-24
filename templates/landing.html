@@ -17,7 +17,7 @@
   <meta name="twitter:description" content="See where leading AI answers contradict one another and when their positions change.">
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>Track Where AI Answers Disagree and Change | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260721-watchguide1">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260725-inlineconf1">
   <link rel="stylesheet" href="/static/css/benchmark.css?v=20260715-neutral1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -104,7 +104,7 @@
           <span><img src="/static/icons/chat_icons/deepseek.png" alt="">DeepSeek</span>
           <span><img src="/static/icons/chat_icons/grok.png" alt="">Grok</span>
         </div>
-        <p class="lp-hero-note">No account needed. The demo replays a real run: six independent answers, one consensus, contradictions kept visible.</p>
+        <p class="lp-hero-note">No account needed. The demo replays a real run: six independent answers, then one consensus with the contradictions marked inside it.</p>
 
         <div class="lp-hero-actions">
           <a id="ctaButton" href="/app" class="lp-link">Open the app</a>
@@ -235,9 +235,27 @@
       <div class="lp-shell">
         <div class="lp-head lp-reveal">
           <p class="lp-eyebrow">03 · Decide</p>
-          <h2 class="lp-h2">Separate agreement from doubt.</h2>
-          <p class="lp-lead">The final view keeps what the models agree on apart from what still conflicts, so both panels stay fully readable.</p>
+          <h2 class="lp-h2">The doubt is marked in the answer.</h2>
+          <p class="lp-lead">One answer, read top to bottom. Where the models pull apart, the sentence itself carries the mark, so you never have to read a second document to know what to trust.</p>
         </div>
+
+        <!-- Reading key: the same three states the app uses, rendered in the
+             actual visual vocabulary instead of described in prose. -->
+        <ul class="lp-mark-key lp-reveal" aria-label="What the marks in a consensus answer mean">
+          <li>
+            <span class="lp-mark-sample">All models that address it agree<span class="claim-badge" aria-hidden="true">6/6</span></span>
+            <span class="lp-mark-note">no mark, just the count</span>
+          </li>
+          <li>
+            <span class="lp-mark-sample"><span class="cx-claim is-minor">They differ on this detail</span><span class="cx-marker is-minor" aria-hidden="true"><span class="cx-marker-dot"></span></span></span>
+            <span class="lp-mark-note">fine dotted line</span>
+          </li>
+          <li>
+            <span class="lp-mark-sample"><span class="cx-claim is-major">They contradict each other here</span><span class="cx-marker is-major" aria-hidden="true"><span class="cx-marker-dot"></span></span></span>
+            <span class="lp-mark-note">amber wavy line</span>
+          </li>
+        </ul>
+
         <div class="lp-scene-visual lp-reveal">
           <div class="consensus-verdict is-warn">
             <span class="verdict-score" style="--val:68" title="Agreement score 68/100">
@@ -245,7 +263,7 @@
               <span class="verdict-score-num">68</span>
             </span>
             <span class="verdict-main">
-              <span class="verdict-headline">The models contradict each other on 1 point</span>
+              <span class="verdict-headline">Agreement on the core · Disputed: where the Amazon starts</span>
               <span class="verdict-detail">Minor details, 6 models compared</span>
             </span>
             <span class="verdict-judge">
@@ -264,66 +282,69 @@
                 </button>
               </div>
               <h2>Consensus Answer</h2>
-              <div class="consensus-main-text">
+              <div class="consensus-main-text consensus-answer-body">
                 <p><strong>The Nile is the conventional longest river, but the Amazon has a credible claim.</strong></p>
-                <p>The models converge on the framing: the Nile is the established answer at about 6,650 km<button class="claim-badge" type="button" tabindex="-1" aria-label="6 of 6 models support this claim">6/6</button>, while the Amazon, the largest river by water volume, measures roughly 6,400 km, or up to 6,992 km if a disputed 2007 survey is accepted<button class="claim-badge has-dissent" type="button" tabindex="-1" aria-label="3 of 6 models support this claim"><span class="claim-dot" aria-hidden="true"></span>3/6</button>.</p>
+                <p>By convention and in most references the Nile leads at about 6,650 km<button class="claim-badge" type="button" tabindex="-1" aria-label="All 6 models that address this agree. Open details">6/6</button> <span class="cx-claim is-minor is-interactive" data-diff-open="lpDiffRiver">Whether the Amazon overtakes it depends on where its mouth is drawn: counting the Pará estuary adds several hundred kilometres, and not every survey accepts that boundary.</span><button class="cx-marker is-minor" type="button" data-diff-open="lpDiffRiver" aria-haspopup="dialog" aria-label="The models differ on a detail here. Open details"><span class="cx-marker-dot" aria-hidden="true"></span></button></p>
                 <ul>
-                  <li>By convention and most references, the Nile leads on length.</li>
-                  <li>The Amazon is unambiguously the largest river by discharge.</li>
-                  <li>The dispute is about where the river starts, not the underlying data.</li>
+                  <li>The Amazon is unambiguously the largest river by discharge<button class="claim-badge" type="button" tabindex="-1" aria-label="All 6 models that address this agree. Open details">6/6</button></li>
+                  <li><span class="cx-claim is-minor is-interactive" data-diff-open="lpDiffRiver">The disputed 2007 expedition puts the Amazon at 6,992 km.</span><button class="claim-badge has-dissent" type="button" tabindex="-1" aria-label="3 of 6 models support this. Open details"><span class="claim-dot" aria-hidden="true"></span>3/6</button></li>
                 </ul>
                 <p>A careful answer names both rivers and the measurement dispute instead of hiding it inside one confident number.</p>
               </div>
-              <div class="consensus-claims-fallback">
-                <div class="claims-fallback-title">Key claims</div>
-                <div class="claims-fallback-row"><span class="claims-fallback-text">The Amazon is the largest river by water volume</span><span class="claim-badge">6/6</span></div>
-              </div>
+              <p class="consensus-marker-legend">Marked passages are checked key claims. Unmarked text was not compared individually.</p>
             </div>
-            <div class="consensus-differences">
-              <h2>Differences</h2>
-              <div class="differences-cards">
-                <details class="diff-card is-contradiction" open>
-                  <summary class="diff-card-summary">
-                    <span class="diff-card-tags">
-                      <span class="sev-dot is-warn" aria-hidden="true"></span>
-                      <span class="diff-type-tag">Contradiction · minor detail</span>
-                    </span>
-                    <span class="diff-card-claim">Is the Nile definitively the longest river?</span>
-                  </summary>
-                  <div class="diff-card-body">
-                    <div class="diff-position">
-                      <div class="diff-position-label">ChatGPT, Mistral, DeepSeek</div>
-                      <div class="diff-position-stance">The Nile is the settled answer at ~6,650 km.</div>
-                      <blockquote class="diff-position-quote">the Nile is traditionally listed as the longest river at about 6,650 km</blockquote>
-                      <div class="diff-position-links">
-                        <button class="diff-jump-link" type="button" tabindex="-1">ChatGPT</button>
-                        <button class="diff-jump-link" type="button" tabindex="-1">Mistral</button>
-                        <button class="diff-jump-link" type="button" tabindex="-1">DeepSeek</button>
+            <!-- Collapsed by default, exactly like the app: clicking a mark in the
+                 answer opens this panel on the matching entry. -->
+            <details class="consensus-differences consensus-differences-panel">
+              <summary class="consensus-differences-summary">
+                <span class="consensus-differences-summary-label">See all differences</span>
+              </summary>
+              <div class="consensus-differences-content">
+                <div class="differences-cards">
+                  <details class="diff-card is-contradiction" id="lpDiffRiver" open>
+                    <summary class="diff-card-summary">
+                      <span class="diff-card-tags">
+                        <span class="sev-dot is-warn" aria-hidden="true"></span>
+                        <span class="diff-type-tag">Contradiction · minor detail</span>
+                      </span>
+                      <span class="diff-card-claim">Is the Nile definitively the longest river?</span>
+                    </summary>
+                    <div class="diff-card-body">
+                      <div class="diff-position">
+                        <div class="diff-position-label">ChatGPT, Mistral, DeepSeek</div>
+                        <div class="diff-position-stance">The Nile is the settled answer at ~6,650 km.</div>
+                        <blockquote class="diff-position-quote">the Nile is traditionally listed as the longest river at about 6,650 km</blockquote>
+                        <div class="diff-position-links">
+                          <button class="diff-jump-link" type="button" tabindex="-1">ChatGPT</button>
+                          <button class="diff-jump-link" type="button" tabindex="-1">Mistral</button>
+                          <button class="diff-jump-link" type="button" tabindex="-1">DeepSeek</button>
+                        </div>
+                      </div>
+                      <div class="diff-position">
+                        <div class="diff-position-label">Claude, Gemini, Grok</div>
+                        <div class="diff-position-stance">The 2007 Amazon survey is a credible challenger.</div>
+                        <blockquote class="diff-position-quote">if the Pará estuary is counted, the Amazon may exceed 7,000 km</blockquote>
+                        <div class="diff-position-links">
+                          <button class="diff-jump-link" type="button" tabindex="-1">Claude</button>
+                          <button class="diff-jump-link" type="button" tabindex="-1">Gemini</button>
+                          <button class="diff-jump-link" type="button" tabindex="-1">Grok</button>
+                        </div>
+                      </div>
+                      <div class="diff-verify"><b>Worth verifying: </b>check whether the source counts the Pará estuary as part of the Amazon.</div>
+                      <div class="diff-resolve">
+                        <button class="diff-resolve-btn" type="button" tabindex="-1">
+                          <svg class="diff-resolve-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h9M11 5 8.8 2.8M11 5 8.8 7.2"/><path d="M14 11H5M5 11l2.2-2.2M5 11l2.2 2.2"/></svg>
+                          <span class="diff-resolve-btn-label">Resolve with the models</span>
+                          <span class="pro-badge diff-resolve-pro-chip">Pro</span>
+                        </button>
                       </div>
                     </div>
-                    <div class="diff-position">
-                      <div class="diff-position-label">Claude, Gemini, Grok</div>
-                      <div class="diff-position-stance">The 2007 Amazon survey is a credible challenger.</div>
-                      <blockquote class="diff-position-quote">if the Pará estuary is counted, the Amazon may exceed 7,000 km</blockquote>
-                      <div class="diff-position-links">
-                        <button class="diff-jump-link" type="button" tabindex="-1">Claude</button>
-                        <button class="diff-jump-link" type="button" tabindex="-1">Gemini</button>
-                        <button class="diff-jump-link" type="button" tabindex="-1">Grok</button>
-                      </div>
-                    </div>
-                    <div class="diff-verify"><b>Worth verifying: </b>check whether the source counts the Pará estuary as part of the Amazon.</div>
-                    <div class="diff-resolve">
-                      <button class="diff-resolve-btn" type="button" tabindex="-1">
-                        <svg class="diff-resolve-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h9M11 5 8.8 2.8M11 5 8.8 7.2"/><path d="M14 11H5M5 11l2.2-2.2M5 11l2.2 2.2"/></svg>
-                        <span class="diff-resolve-btn-label">Resolve with the models</span>
-                        <span class="pro-badge diff-resolve-pro-chip">Pro</span>
-                      </button>
-                    </div>
-                  </div>
-                </details>
+                  </details>
+                </div>
               </div>
-            </div>
+            </details>
           </div>
+          <p class="lp-scene-hint">Click a marked passage to open the difference behind it.</p>
         </div>
 
         <!-- Slideshow: the same consensus/differences lens on other questions -->
@@ -341,7 +362,7 @@
                 </span>
                 <span class="verdict-main">
                   <span class="verdict-headline">High agreement</span>
-                  <span class="verdict-detail">No contradictions found, 6 models compared</span>
+                  <span class="verdict-detail">no contradictions found, 6 models compared</span>
                 </span>
                 <span class="verdict-judge">
                   <span>Analysis by Claude</span>
@@ -351,23 +372,28 @@
               <div class="consensus-box lp-mini">
                 <div class="consensus-main">
                   <h2>Consensus Answer</h2>
-                  <div class="consensus-main-text">
+                  <div class="consensus-main-text consensus-answer-body">
                     <p><strong>Yes. Its lifecycle emissions are on par with wind.</strong></p>
-                    <p>All six models put nuclear power at roughly 10–15 g CO₂-eq per kWh over its full lifecycle<button class="claim-badge" type="button" tabindex="-1" aria-label="6 of 6 models support this claim">6/6</button>, far below coal and gas. The open questions they name are cost and construction time, not carbon.</p>
+                    <p>All six models put nuclear power at roughly 10–15 g CO₂-eq per kWh over its full lifecycle<button class="claim-badge" type="button" tabindex="-1" aria-label="All 6 models that address this agree. Open details">6/6</button>, far below coal and gas. The open questions they name are cost and construction time, not carbon.</p>
                   </div>
+                  <p class="consensus-marker-legend">Nothing is underlined: no passage in this answer is disputed.</p>
                 </div>
-                <div class="consensus-differences">
-                  <h2>Differences</h2>
-                  <div class="differences-cards">
-                    <div class="diff-empty-state">
-                      <span class="sev-dot is-ok" aria-hidden="true"></span>
-                      <div class="diff-empty-text">
-                        <div class="diff-empty-headline">No substantive contradictions found across the 6 answers.</div>
-                        <div class="diff-empty-note">Agreement is a good signal, but not a guarantee of correctness.</div>
+                <details class="consensus-differences consensus-differences-panel" open>
+                  <summary class="consensus-differences-summary">
+                    <span class="consensus-differences-summary-label">See all differences</span>
+                  </summary>
+                  <div class="consensus-differences-content">
+                    <div class="differences-cards">
+                      <div class="diff-empty-state">
+                        <span class="sev-dot is-ok" aria-hidden="true"></span>
+                        <div class="diff-empty-text">
+                          <div class="diff-empty-headline">No substantive contradictions found across the 6 answers.</div>
+                          <div class="diff-empty-note">Agreement is a good signal, but not a guarantee of correctness.</div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                </details>
               </div>
             </article>
 
@@ -381,7 +407,7 @@
                 </span>
                 <span class="verdict-main">
                   <span class="verdict-headline">High agreement</span>
-                  <span class="verdict-detail">1 difference in emphasis, no contradictions, 6 models compared</span>
+                  <span class="verdict-detail">different emphasis on how much the goal decides, no contradictions, 6 models compared</span>
                 </span>
                 <span class="verdict-judge">
                   <span>Analysis by OpenAI</span>
@@ -391,37 +417,42 @@
               <div class="consensus-box lp-mini">
                 <div class="consensus-main">
                   <h2>Consensus Answer</h2>
-                  <div class="consensus-main-text">
+                  <div class="consensus-main-text consensus-answer-body">
                     <p><strong>Python is the default first language.</strong></p>
-                    <p>Every model recommends Python for its readable syntax and broad use in data, automation and scripting<button class="claim-badge" type="button" tabindex="-1" aria-label="6 of 6 models support this claim">6/6</button>. Several add that the choice should follow your goal. If you want to build for the web, JavaScript is the pragmatic start<button class="claim-badge has-dissent" type="button" tabindex="-1" aria-label="4 of 6 models support this claim"><span class="claim-dot" aria-hidden="true"></span>4/6</button>.</p>
+                    <p>Every model recommends Python for its readable syntax and broad use in data, automation and scripting<button class="claim-badge" type="button" tabindex="-1" aria-label="All 6 models that address this agree. Open details">6/6</button> <span class="cx-claim is-minor is-interactive" data-diff-open="lpDiffLang">How much the choice should follow your goal is where they set different priorities: for the web, JavaScript gets you to something running sooner.</span><button class="cx-marker is-minor" type="button" data-diff-open="lpDiffLang" aria-haspopup="dialog" aria-label="The models set a different focus here. Open details"><span class="cx-marker-dot" aria-hidden="true"></span></button></p>
                   </div>
+                  <p class="consensus-marker-legend">Marked passages are checked key claims. Unmarked text was not compared individually.</p>
                 </div>
-                <div class="consensus-differences">
-                  <h2>Differences</h2>
-                  <div class="differences-cards">
-                    <details class="diff-card is-emphasis" open>
-                      <summary class="diff-card-summary">
-                        <span class="diff-card-tags">
-                          <span class="sev-dot is-info" aria-hidden="true"></span>
-                          <span class="diff-type-tag">Different emphasis</span>
-                        </span>
-                        <span class="diff-card-claim">How much should the first language depend on your goal?</span>
-                      </summary>
-                      <div class="diff-card-body">
-                        <div class="diff-position">
-                          <div class="diff-position-label">ChatGPT, Gemini, DeepSeek</div>
-                          <div class="diff-position-stance">Start with Python regardless of the goal; switching later is cheap.</div>
-                          <blockquote class="diff-position-quote">Python's simplicity lets the fundamentals stick before you specialise</blockquote>
+                <details class="consensus-differences consensus-differences-panel" open>
+                  <summary class="consensus-differences-summary">
+                    <span class="consensus-differences-summary-label">See all differences</span>
+                  </summary>
+                  <div class="consensus-differences-content">
+                    <div class="differences-cards">
+                      <details class="diff-card is-emphasis" id="lpDiffLang" open>
+                        <summary class="diff-card-summary">
+                          <span class="diff-card-tags">
+                            <span class="sev-dot is-info" aria-hidden="true"></span>
+                            <span class="diff-type-tag">Different emphasis</span>
+                          </span>
+                          <span class="diff-card-claim">How much should the first language depend on your goal?</span>
+                        </summary>
+                        <div class="diff-card-body">
+                          <div class="diff-position">
+                            <div class="diff-position-label">ChatGPT, Gemini, DeepSeek</div>
+                            <div class="diff-position-stance">Start with Python regardless of the goal; switching later is cheap.</div>
+                            <blockquote class="diff-position-quote">Python's simplicity lets the fundamentals stick before you specialise</blockquote>
+                          </div>
+                          <div class="diff-position">
+                            <div class="diff-position-label">Claude, Mistral, Grok</div>
+                            <div class="diff-position-stance">Pick by destination: JavaScript if you want to ship something visible early.</div>
+                            <blockquote class="diff-position-quote">if you want to build for the web, JavaScript gets you to a running product fastest</blockquote>
+                          </div>
                         </div>
-                        <div class="diff-position">
-                          <div class="diff-position-label">Claude, Mistral, Grok</div>
-                          <div class="diff-position-stance">Pick by destination: JavaScript if you want to ship something visible early.</div>
-                          <blockquote class="diff-position-quote">if you want to build for the web, JavaScript gets you to a running product fastest</blockquote>
-                        </div>
-                      </div>
-                    </details>
+                      </details>
+                    </div>
                   </div>
-                </div>
+                </details>
               </div>
             </article>
 
@@ -434,7 +465,7 @@
                   <span class="verdict-score-num">41</span>
                 </span>
                 <span class="verdict-main">
-                  <span class="verdict-headline">The models contradict each other on 1 point</span>
+                  <span class="verdict-headline">Agreement on the core · Disputed: an occasional dose</span>
                   <span class="verdict-detail"><span class="verdict-detail-crit">1 critical</span>, 6 models compared</span>
                 </span>
                 <span class="verdict-judge">
@@ -445,45 +476,50 @@
               <div class="consensus-box lp-mini">
                 <div class="consensus-main">
                   <h2>Consensus Answer</h2>
-                  <div class="consensus-main-text">
+                  <div class="consensus-main-text consensus-answer-body">
                     <p><strong>Avoid the combination unless a doctor approves it.</strong></p>
-                    <p>All models agree that ibuprofen raises bleeding risk on anticoagulants<button class="claim-badge" type="button" tabindex="-1" aria-label="6 of 6 models support this claim">6/6</button> and most name paracetamol as the safer default<button class="claim-badge has-dissent" type="button" tabindex="-1" aria-label="5 of 6 models support this claim"><span class="claim-dot" aria-hidden="true"></span>5/6</button>. They split on whether an occasional dose is acceptable.</p>
+                    <p>All models agree that ibuprofen raises bleeding risk on anticoagulants<button class="claim-badge" type="button" tabindex="-1" aria-label="All 6 models that address this agree. Open details">6/6</button> and most name paracetamol as the safer default<button class="claim-badge has-dissent" type="button" tabindex="-1" aria-label="5 of 6 models support this. Open details"><span class="claim-dot" aria-hidden="true"></span>5/6</button> <span class="cx-claim is-major is-interactive" data-diff-open="lpDiffIbu">Whether a single occasional dose is still acceptable is genuinely disputed, because the sources weigh the size of the added bleeding risk differently.</span><button class="cx-marker is-major" type="button" data-diff-open="lpDiffIbu" aria-haspopup="dialog" aria-label="The models contradict each other here. Open details"><span class="cx-marker-dot" aria-hidden="true"></span></button></p>
                   </div>
+                  <p class="consensus-marker-legend">Marked passages are checked key claims. Unmarked text was not compared individually.</p>
                 </div>
-                <div class="consensus-differences">
-                  <h2>Differences</h2>
-                  <div class="differences-cards">
-                    <details class="diff-card is-contradiction is-major" open>
-                      <summary class="diff-card-summary">
-                        <span class="diff-card-tags">
-                          <span class="sev-dot is-crit" aria-hidden="true"></span>
-                          <span class="diff-type-tag">Contradiction · critical</span>
-                        </span>
-                        <span class="diff-card-claim">Is an occasional ibuprofen dose acceptable?</span>
-                      </summary>
-                      <div class="diff-card-body">
-                        <div class="diff-position">
-                          <div class="diff-position-label">ChatGPT, Claude, Gemini, DeepSeek</div>
-                          <div class="diff-position-stance">No. Avoid NSAIDs entirely unless a doctor explicitly approves.</div>
-                          <blockquote class="diff-position-quote">even single doses can meaningfully increase bleeding risk</blockquote>
+                <details class="consensus-differences consensus-differences-panel" open>
+                  <summary class="consensus-differences-summary">
+                    <span class="consensus-differences-summary-label">See all differences</span>
+                  </summary>
+                  <div class="consensus-differences-content">
+                    <div class="differences-cards">
+                      <details class="diff-card is-contradiction is-major" id="lpDiffIbu" open>
+                        <summary class="diff-card-summary">
+                          <span class="diff-card-tags">
+                            <span class="sev-dot is-crit" aria-hidden="true"></span>
+                            <span class="diff-type-tag">Contradiction · critical</span>
+                          </span>
+                          <span class="diff-card-claim">Is an occasional ibuprofen dose acceptable?</span>
+                        </summary>
+                        <div class="diff-card-body">
+                          <div class="diff-position">
+                            <div class="diff-position-label">ChatGPT, Claude, Gemini, DeepSeek</div>
+                            <div class="diff-position-stance">No. Avoid NSAIDs entirely unless a doctor explicitly approves.</div>
+                            <blockquote class="diff-position-quote">even single doses can meaningfully increase bleeding risk</blockquote>
+                          </div>
+                          <div class="diff-position">
+                            <div class="diff-position-label">Mistral, Grok</div>
+                            <div class="diff-position-stance">A one-off low dose is usually tolerated.</div>
+                            <blockquote class="diff-position-quote">occasional use is generally considered low risk for most patients</blockquote>
+                          </div>
+                          <div class="diff-verify"><b>Worth verifying: </b>this is a medical decision. Confirm with a doctor or pharmacist before combining the two.</div>
+                          <div class="diff-resolve">
+                            <button class="diff-resolve-btn" type="button" tabindex="-1">
+                              <svg class="diff-resolve-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h9M11 5 8.8 2.8M11 5 8.8 7.2"/><path d="M14 11H5M5 11l2.2-2.2M5 11l2.2 2.2"/></svg>
+                              <span class="diff-resolve-btn-label">Resolve with the models</span>
+                              <span class="pro-badge diff-resolve-pro-chip">Pro</span>
+                            </button>
+                          </div>
                         </div>
-                        <div class="diff-position">
-                          <div class="diff-position-label">Mistral, Grok</div>
-                          <div class="diff-position-stance">A one-off low dose is usually tolerated.</div>
-                          <blockquote class="diff-position-quote">occasional use is generally considered low risk for most patients</blockquote>
-                        </div>
-                        <div class="diff-verify"><b>Worth verifying: </b>this is a medical decision. Confirm with a doctor or pharmacist before combining the two.</div>
-                        <div class="diff-resolve">
-                          <button class="diff-resolve-btn" type="button" tabindex="-1">
-                            <svg class="diff-resolve-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h9M11 5 8.8 2.8M11 5 8.8 7.2"/><path d="M14 11H5M5 11l2.2-2.2M5 11l2.2 2.2"/></svg>
-                            <span class="diff-resolve-btn-label">Resolve with the models</span>
-                            <span class="pro-badge diff-resolve-pro-chip">Pro</span>
-                          </button>
-                        </div>
-                      </div>
-                    </details>
+                      </details>
+                    </div>
                   </div>
-                </div>
+                </details>
               </div>
             </article>
 
@@ -608,8 +644,8 @@
           </article>
           <article class="lp-card">
             <p class="lp-eyebrow">Verify</p>
-            <h3>Disagreement is surfaced</h3>
-            <p>The app highlights differences instead of hiding them inside one confident answer.</p>
+            <h3>Disagreement is marked in place</h3>
+            <p>Where the models pull apart, the sentence itself carries the mark, instead of the doubt being smoothed into one confident answer.</p>
           </article>
           <article class="lp-card">
             <p class="lp-eyebrow">Control</p>
@@ -749,6 +785,25 @@
           start();
         }
       }
+
+      // Marked passages in the mockups behave like the real ones in /app:
+      // clicking the sentence (or its dot) expands the differences panel and
+      // flashes the entry behind the mark. The hover pairing between passage
+      // and marker is CSS (:has), this only handles the click.
+      document.querySelectorAll("[data-diff-open]").forEach(trigger => {
+        trigger.addEventListener("click", () => {
+          const card = document.getElementById(trigger.dataset.diffOpen);
+          if (!card) return;
+          card.closest("details.consensus-differences-panel")?.setAttribute("open", "");
+          card.open = true;
+          card.classList.remove("is-focused");
+          // Reflow, so a second click restarts the flash instead of ignoring it.
+          void card.offsetWidth;
+          card.classList.add("is-focused");
+          window.setTimeout(() => card.classList.remove("is-focused"), 2000);
+          window.umami?.track?.("landing_marker_opened");
+        });
+      });
 
       // Demo field: the app skips its landing redirect and auto-starts the
       // demo via the ?demo=1 parameter (handled in static/demo.js).

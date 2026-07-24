@@ -106,7 +106,19 @@ echten App. Die Produktgeschichte führt danach über Ask/Run/Decide zum vierten
 Landing-Schritt `#watch`: Eine kompakte Baseline→Change→Telegram-Visualisierung
 erklärt Consensus Watch und verlinkt direkt auf `/app/watches`; derselbe Anker
 ist in der öffentlichen Navigation erreichbar. Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
-aus `partials/product_result_mockup.html`. Die gemeinsamen, an `/app`
+aus `partials/product_result_mockup.html`. **Seit 2026-07-25 spiegeln alle
+Marketing-Mockups die Inline-Confidence-Darstellung der App** (Scene 03 in
+`landing.html` inkl. der drei Slider-Beispiele, `product_result_mockup.html`
+und die beiden Mockups in `consensus-engine.html`): eine Antwort in voller
+Breite, Uneinigkeit als `.cx-claim`/`.cx-marker` im Satz, die Differences als
+zugeklapptes `details.consensus-differences-panel` darunter. `landing.css`
+enthält dafür eine Kopie des Marker-Vokabulars (`--cx-major-line`,
+`--cx-flash`, gepunktet/wellig, `.diff-card.is-focused`) — sie muss bei
+Änderungen an `components-consensus-insights.css` mitgezogen werden. Landing-
+spezifisch sind nur die Lesehilfe `.lp-mark-key` unter der Scene-03-Überschrift,
+das Einlaufen der Marker beim Scroll (`.lp-scene-visual.is-visible` /
+`.lp-slide.is-active`) und ein kleiner Handler in `landing.html`, der
+`[data-diff-open]` auf die passende Karte klickbar macht. Die gemeinsamen, an `/app`
 ausgerichteten Light-/Dark-Tokens liegen in `static/css/public-tokens.css` und
 werden von `landing.css` sowie `public-pages.css` importiert; seitenbezogene
 Layouts bleiben in diesen beiden Dateien bzw. in `benchmark.css` und

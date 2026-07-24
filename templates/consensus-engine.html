@@ -18,8 +18,8 @@
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>How the Consensus Engine Works | consens.io</title>
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260721-watchguide1">
-  <link rel="stylesheet" href="/static/css/consensus-engine.css?v=20260716-public-system1">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260725-inlineconf1">
+  <link rel="stylesheet" href="/static/css/consensus-engine.css?v=20260725-inlineconf1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -43,7 +43,7 @@
             "name": "What does the Consensus Engine do?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "It reads the selected model answers, writes one combined answer from their overlap, and separately highlights important disagreements."
+              "text": "It reads the selected model answers and writes one combined answer. Where the sources diverge on something that matters for your decision, the answer names it in the text instead of smoothing it away."
             }
           },
           {
@@ -51,7 +51,7 @@
             "name": "Does the Consensus Engine hide disagreements?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "No. The consensus answer and the differences view are shown separately, so common ground stays readable while conflicts remain visible."
+              "text": "No. Where the judge verifies a disagreement, the passage in the consensus answer that states it is marked in place, and the full analysis stays available underneath the answer."
             }
           },
           {
@@ -191,7 +191,7 @@
           <div class="ce-flow-output">
             <span class="ce-flow-kicker">SSE final payload</span>
             <strong><code>consensus_response</code> + <code>differences_data</code> + usage/share metadata</strong>
-            <p>The UI renders the readable consensus, claim badges, agreement score, contradiction cards, and the judge note from the same final payload.</p>
+            <p>The UI renders one readable consensus from this payload, marks the anchored passages inline, and keeps the agreement score, the contradiction entries and the judge note attached to it.</p>
           </div>
         </div>
 
@@ -213,8 +213,8 @@
           </article>
           <article class="ce-step" data-step="04">
             <span class="ce-step-number">04</span>
-            <h3>The UI renders structured evidence.</h3>
-            <p>The final payload contains the consensus text, agreement score, claim badges, contradiction cards, and judge metadata, so the interface can show what happened.</p>
+            <h3>The UI marks the evidence inside the answer.</h3>
+            <p>The final payload contains the consensus text, agreement score, claim badges, contradiction entries with their anchors, and judge metadata, so each disputed passage can be marked exactly where it stands.</p>
           </article>
         </div>
       </div>
@@ -294,7 +294,7 @@
             <h3>What comes out of the Differences Engine</h3>
             <div class="ce-schema-list">
               <div><b>claims</b><span>Consensus anchors, agreeing models, dissenting model quotes.</span></div>
-              <div><b>differences</b><span>Contradiction or emphasis cards with positions and verification hints.</span></div>
+              <div><b>differences</b><span>Contradiction or emphasis entries with positions and verification hints, each with a <code>consensus_anchor</code>: the verbatim passage in the consensus answer that the disagreement is about.</span></div>
               <div><b>agreement</b><span>A 0-100 score computed from claim support and weighted disagreement penalties.</span></div>
               <div><b>judges</b><span>The provider, model, and tier that actually delivered the analysis.</span></div>
             </div>
@@ -306,7 +306,7 @@
                 <span class="verdict-score-num">64</span>
               </span>
               <span class="verdict-main">
-                <span class="verdict-headline">The models contradict each other on 1 point</span>
+                <span class="verdict-headline">Agreement on the core · Disputed: the condition attached to it</span>
                 <span class="verdict-detail"><span class="verdict-detail-crit">1 critical</span>, 6 models compared</span>
               </span>
               <span class="verdict-judge">
@@ -350,7 +350,8 @@
           <p class="lp-eyebrow">What you see</p>
           <h2 class="lp-h2">A useful answer without pretending everything is settled.</h2>
           <p class="lp-lead">
-            The interface separates the parts you can read directly from the parts you should inspect.
+            There is one answer to read. Where the judge found a verified disagreement, the passage that
+            carries it is marked in place, and the full analysis stays one click below.
           </p>
         </div>
 
@@ -361,7 +362,7 @@
               <span class="verdict-score-num">82</span>
             </span>
             <span class="verdict-main">
-              <span class="verdict-headline">The models contradict each other on 1 point</span>
+              <span class="verdict-headline">Agreement on the core · Disputed: how strong the evidence is</span>
               <span class="verdict-detail">Minor details, 6 models compared</span>
             </span>
             <span class="verdict-judge">
@@ -373,35 +374,38 @@
             <section class="ce-answer">
               <h3>Consensus Answer</h3>
               <p><strong>Most models agree on the main recommendation.</strong></p>
-              <p>The answer combines the repeated points, removes duplicated wording, and keeps caveats where the source answers were not fully aligned.</p>
-              <div class="ce-claim-row"><span>Main recommendation appears in most answers</span><span class="claim-badge has-dissent"><span class="claim-dot" aria-hidden="true"></span>5/6</span></div>
-              <div class="ce-claim-row"><span>Important caveat needs context</span><span class="claim-badge has-dissent"><span class="claim-dot" aria-hidden="true"></span>3/6</span></div>
-            </section>
-            <aside class="ce-differences">
-              <h3>Differences</h3>
-              <div class="differences-cards">
-                <details class="diff-card is-contradiction" open>
-                  <summary class="diff-card-summary">
-                    <span class="diff-card-tags">
-                      <span class="sev-dot is-warn" aria-hidden="true"></span>
-                      <span class="diff-type-tag">Contradiction · minor detail</span>
-                    </span>
-                    <span class="diff-card-claim">How strong is the evidence?</span>
-                  </summary>
-                  <div class="diff-card-body">
-                    <div class="diff-position">
-                      <div class="diff-position-label">ChatGPT, Gemini, DeepSeek</div>
-                      <div class="diff-position-stance">The evidence is settled and supports the recommendation.</div>
-                    </div>
-                    <div class="diff-position">
-                      <div class="diff-position-label">Claude, Mistral, Grok</div>
-                      <div class="diff-position-stance">A caveat about measurement or source quality applies.</div>
-                    </div>
+              <p>The answer combines the repeated points and removes duplicated wording<button class="claim-badge" type="button" tabindex="-1" aria-label="All 6 models that address this agree">6/6</button> <span class="cx-claim is-minor">How strong the underlying evidence is turns out to be the open question, because the sources rate the measurement quality differently.</span><button class="cx-marker is-minor" type="button" tabindex="-1" aria-label="The models differ on a detail here"><span class="cx-marker-dot" aria-hidden="true"></span></button></p>
+              <p class="consensus-marker-legend">Marked passages are checked key claims. Unmarked text was not compared individually.</p>
+              <details class="consensus-differences consensus-differences-panel" open>
+                <summary class="consensus-differences-summary">
+                  <span class="consensus-differences-summary-label">See all differences</span>
+                </summary>
+                <div class="consensus-differences-content">
+                  <div class="differences-cards">
+                    <details class="diff-card is-contradiction" open>
+                      <summary class="diff-card-summary">
+                        <span class="diff-card-tags">
+                          <span class="sev-dot is-warn" aria-hidden="true"></span>
+                          <span class="diff-type-tag">Contradiction · minor detail</span>
+                        </span>
+                        <span class="diff-card-claim">How strong is the evidence?</span>
+                      </summary>
+                      <div class="diff-card-body">
+                        <div class="diff-position">
+                          <div class="diff-position-label">ChatGPT, Gemini, DeepSeek</div>
+                          <div class="diff-position-stance">The evidence is settled and supports the recommendation.</div>
+                        </div>
+                        <div class="diff-position">
+                          <div class="diff-position-label">Claude, Mistral, Grok</div>
+                          <div class="diff-position-stance">A caveat about measurement or source quality applies.</div>
+                        </div>
+                      </div>
+                    </details>
                   </div>
-                </details>
-              </div>
-              <div class="ce-footnote">Analysis by a judge model, independent of the consensus engine where keys allow it.</div>
-            </aside>
+                  <div class="ce-footnote">Analysis by a judge model, independent of the consensus engine where keys allow it.</div>
+                </div>
+              </details>
+            </section>
           </div>
         </div>
       </div>
