@@ -193,11 +193,13 @@
 
 :root {
   --cx-major-line: #c8862f;
+  --cx-flash: rgba(217, 155, 70, 0.16);
 }
 
 .dark-mode {
   /* Bernstein im Dark Mode aufhellen, sonst verschwindet die Wellenlinie. */
   --cx-major-line: #e8b968;
+  --cx-flash: rgba(243, 198, 111, 0.15);
 }
 
 /* Marker an einem Widerspruch: kompakter Punkt-Button, keine Zaehlung. */
@@ -264,14 +266,25 @@
   transform: translate(-50%, -50%);
 }
 
-/* Karte, die ein Inline-Marker gerade geoeffnet hat */
+/* Karte, die ein Inline-Marker gerade geoeffnet hat: kurzer Wash in der
+   Bernstein-Note des Markers, der von selbst verblasst. Bewusst kein Ring -
+   ein 2px-Rahmen um die volle Breite der Liste las sich als grauer Rahmen um
+   den ganzen Differences-Bereich, nicht als Hinweis auf eine Zeile. */
 .diff-card.is-focused {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: var(--radius-xs);
+  animation: diffCardFlash 1.9s ease forwards;
+}
+
+@keyframes diffCardFlash {
+  0%, 55% { background: var(--cx-flash); }
+  100% { background: transparent; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Ohne Animation bleibt der Wash stehen; das JS nimmt die Klasse nach 2s. */
   .diff-card.is-focused {
-    transition: none;
+    animation: none;
+    background: var(--cx-flash);
   }
 }
 
