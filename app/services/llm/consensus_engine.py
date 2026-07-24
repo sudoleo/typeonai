@@ -1303,9 +1303,23 @@ def _judge_tier(differences_model: str) -> str:
     return "pro" if cfg.is_premium_consensus_model(differences_model) else "standard"
 
 
+def _judge_engine_tuple(provider: str, judge: str):
+    """(provider, api_model, model_ref) für eine konfigurierte Judge-Modell-ID.
+
+    Judge-Werte aus der Admin-Konfiguration sind INTERNE Modell-IDs. Für die
+    meisten Modelle ist die interne ID gleich dem API-Modell, aber virtuelle
+    Varianten weichen ab (z. B. grok-4.3-no-reasoning -> API-Modell grok-4.3
+    mit reasoning.effort=none). Ungeprüft durchgereicht quittiert der Provider
+    sie mit "Model not found", was den kompletten Differences-Schritt kippt.
+    Deshalb wird hier dieselbe Auflösung wie in _resolve_engine erzwungen."""
+    if not judge:
+        return provider, judge, judge
+    config = cfg.get_model_config(judge, provider)
+    return provider, (config.api_model if config else judge), judge
+
+
 def _standard_judge_engine(provider: str):
-    judge = DIFFERENCES_JUDGE_MODEL_BY_PROVIDER[provider]
-    return provider, judge, judge
+    return _judge_engine_tuple(provider, DIFFERENCES_JUDGE_MODEL_BY_PROVIDER[provider])
 
 
 def _judge_engine(provider: str, tier: str):
@@ -1316,7 +1330,7 @@ def _judge_engine(provider: str, tier: str):
     if tier == "pro":
         judge = cfg.PRO_JUDGE_MODEL_BY_PROVIDER.get(provider)
         if judge:
-            return provider, judge, judge
+            return _judge_engine_tuple(provider, judge)
     return _standard_judge_engine(provider)
 
 
@@ -1373,8 +1387,7 @@ def _fallback_judge_engine(exclude_provider: str, api_keys: dict):
             continue
         if not _provider_key_available(provider, api_keys):
             continue
-        judge = DIFFERENCES_JUDGE_MODEL_BY_PROVIDER[provider]
-        return provider, judge, judge
+        return _standard_judge_engine(provider)
     return None
 
 

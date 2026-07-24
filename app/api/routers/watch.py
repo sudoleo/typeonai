@@ -87,7 +87,7 @@ async def my_watches(request: Request):
                 "active_limit": active_limit,
                 "remaining": max(0, active_limit - active_count),
                 "paused_count": len(watches) - active_count,
-                "daily_available": is_pro,
+                "daily_available": cfg.is_watch_daily_allowed(is_pro),
             },
         }
     except Exception:

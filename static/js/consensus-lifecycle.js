@@ -135,6 +135,8 @@
     currentConsensusController = new AbortController();
     consensusRequestRunning = true;
     setButtonRunning(true);
+    // Der Send-Button bleibt Cancel, bis auch Consensus/Differences stehen.
+    window.App?.syncSendButtonRunning?.();
     window.App?.consensusPipeline?.onConsensusStart?.();
     return {
       runId: currentConsensusRunId,
@@ -155,6 +157,7 @@
     currentConsensusController = null;
     setSynthesizing(false);
     setButtonRunning(false);
+    window.App?.syncSendButtonRunning?.();
     window.App?.consensusPipeline?.onConsensusEnd?.();
   }
 

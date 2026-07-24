@@ -59,6 +59,10 @@ DEFAULT_LIMITS = {
     "watch_free_active_limit": 1,
     "watch_pro_active_limit": 5,
     "watch_max_runs_per_day": 50,
+    # 1 = taegliches Intervall bleibt Pro vorbehalten, 0 = auch Free darf
+    # taeglich pruefen lassen (Boolean als 0/1, damit es ins numerische
+    # Admin-Limits-Raster passt).
+    "watch_daily_interval_requires_pro": 1,
 }
 
 LIMITS = DEFAULT_LIMITS.copy()
@@ -443,8 +447,13 @@ MODEL_LABEL_OVERRIDES = {
     DEFAULT_OPENAI_MODEL: "GPT-5.4 mini",
     DEFAULT_ANTHROPIC_MODEL: "Claude Haiku 4.5",
     DEFAULT_GEMINI_MODEL: "Gemini 3.5 Flash-Lite",
+    # Grok-Labels bewusst nach einem Schema: "<Version> · <Reasoning-Zustand>".
+    # Die frueheren Mischformen ("High reasoning" vs. "Reasoning") legten nahe,
+    # es handle sich um verschiedene Modelle statt um Reasoning-Varianten
+    # desselben Modells.
     DEFAULT_GROK_MODEL: "Grok 4.20 · No reasoning",
     GROK_NO_REASONING_MODEL: "Grok 4.3 · No reasoning",
+    "grok-4.5": "Grok 4.5",
     "mistral-small-latest": "Mistral Small 4",
     MISTRAL_PRO_MODEL: "Mistral Medium 3.5",
     "claude-opus-4-7": "Claude Opus 4.7",
@@ -453,7 +462,7 @@ MODEL_LABEL_OVERRIDES = {
     GEMINI_35_FLASH_MODEL: "Gemini 3.5 Flash",
     GEMINI_PRO_MODEL: "Gemini 3.1",
     "grok-4.20": "Grok 4.20 · Reasoning",
-    "grok-4.3": "Grok 4.3 · High reasoning",
+    "grok-4.3": "Grok 4.3 · Reasoning",
     DEEPSEEK_FLASH_MODEL: "DeepSeek V4 Flash",
     DEEPSEEK_PRO_MODEL: "DeepSeek V4 Pro",
 }
@@ -494,7 +503,7 @@ def rebuild_model_configs():
             internal_id=GROK_NO_REASONING_MODEL,
             provider="grok",
             api_model="grok-4.3",
-            label="Grok 4.3 · No reasoning",
+            label=_fallback_label(GROK_NO_REASONING_MODEL),
             is_free=GROK_NO_REASONING_MODEL not in PREMIUM_MODELS,
             is_pro=GROK_NO_REASONING_MODEL in PREMIUM_MODELS,
             request_config={"reasoning": {"effort": "none"}},
@@ -503,12 +512,26 @@ def rebuild_model_configs():
             internal_id="grok-4.3",
             provider="grok",
             api_model="grok-4.3",
-            label="Grok 4.3 · High reasoning",
+            label=_fallback_label("grok-4.3"),
             is_free="grok-4.3" not in PREMIUM_MODELS,
             is_pro="grok-4.3" in PREMIUM_MODELS,
             request_config={"reasoning": {"effort": "high"}},
         ),
     })
+
+
+def virtual_model_ids() -> dict[str, str]:
+    """Interne IDs -> API-Modell, wo beide voneinander abweichen.
+
+    Reasoning-Varianten wie grok-4.3-no-reasoning sind reine Produkt-IDs; beim
+    Provider existieren sie nicht. Jede Stelle, die eine konfigurierte Modell-ID
+    in einen Request schreibt, muss sie vorher hierueber aufloesen.
+    """
+    return {
+        model_id: config.api_model
+        for model_id, config in MODEL_CONFIGS.items()
+        if config.api_model and config.api_model != model_id
+    }
 
 
 def get_model_config(model_id: str | None, provider: str | None = None) -> ModelConfig | None:
@@ -982,6 +1005,14 @@ def get_watch_active_limit(is_pro: bool) -> int:
 
 def get_watch_max_runs_per_day() -> int:
     return max(0, int(LIMITS["watch_max_runs_per_day"]))
+
+
+def watch_daily_requires_pro() -> bool:
+    return int(LIMITS["watch_daily_interval_requires_pro"]) != 0
+
+
+def is_watch_daily_allowed(is_pro: bool) -> bool:
+    return bool(is_pro) or not watch_daily_requires_pro()
 
 
 def get_output_token_limit(is_pro: bool, deep_search: bool = False) -> int:

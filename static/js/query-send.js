@@ -174,6 +174,21 @@
       }
     }
 
+    // Ein Lauf ist erst zu Ende, wenn auch Consensus/Differences fertig sind.
+    // Solange eine der beiden Phasen laeuft, bleibt der Send-Button ein
+    // Cancel-Button (Consensus startet direkt nach dem letzten Modell).
+    function isConsensusRunActive() {
+      return consensusLifecycle?.isRunning?.() === true;
+    }
+
+    function isRunActive() {
+      return queryRequestRunning || isConsensusRunActive();
+    }
+
+    function syncSendButtonRunning() {
+      setSendButtonRunning(isRunActive());
+    }
+
     function isActiveQueryRun(runId) {
       return queryRequestRunning
         && runId === currentQueryRunId
@@ -189,7 +204,7 @@
       if (runId !== currentQueryRunId) return;
       queryRequestRunning = false;
       currentQueryController = null;
-      setSendButtonRunning(false);
+      syncSendButtonRunning();
     }
 
     function markPendingQueryResponsesCanceled() {
@@ -245,6 +260,13 @@
     window.sendQuestion = async function () {
       if (queryRequestRunning) {
         window.cancelCurrentQuery();
+        return;
+      }
+
+      // Der Lauf haengt jetzt in der Consensus-/Differences-Phase: derselbe
+      // Button bricht sie ab, statt eine neue Frage zu starten.
+      if (isConsensusRunActive()) {
+        window.cancelCurrentConsensus?.();
         return;
       }
 
@@ -423,7 +445,9 @@
       }
 
       // 🔸 PHASE 1: UI Feedback setzen
-      setAgentModeStatus(modelBoxes.length > 0 ? "running" : "idle");
+      // Erst die Boxen auf "pending" zuruecksetzen, dann den Status melden:
+      // setAgentModeStatus baut die Chips neu und startet den Fortschritts-
+      // Ticker, der sonst noch das "complete" des vorherigen Laufs liest.
       window.spinnerHTML = baseSpinnerHTML;
       modelBoxes.forEach(box => {
         delete box.dataset.consensusAnswer;
@@ -432,6 +456,7 @@
         box.dataset.responseState = "pending";
         window.setSpinnerEl(box);
       });
+      setAgentModeStatus(modelBoxes.length > 0 ? "running" : "idle");
       window.currentEvidenceSources = [];
       if (window.renderEvidenceSources) window.renderEvidenceSources([]);
 
@@ -1264,4 +1289,10 @@
   window.isQueryRequestRunning = function () {
     return queryRequestRunning;
   };
+
+  // Modell-Lauf ODER Consensus-Lauf; die Send-Wiring in app-init.js nutzt das,
+  // damit der Cancel-Klick nicht durch die Eingabe-Validierung laeuft.
+  window.isRunActive = isRunActive;
+  // consensus-lifecycle.js meldet Start/Ende der Consensus-Phase hierher.
+  window.App.syncSendButtonRunning = syncSendButtonRunning;
 })();

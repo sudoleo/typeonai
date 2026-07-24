@@ -259,6 +259,11 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Streaming-Rendering, Usage/Tier-UI, Auto-Consensus-Trigger, Query-Run-State
   (`isQueryRequestRunning`, `cancelCurrentQuery`). Ein valider erster Lauf
   beendet über `window.exitHeroMode()` den zentrierten Input-Leerzustand.
+  Der Send-Button spiegelt den GANZEN Lauf: `window.isRunActive()` = Modell-
+  Phase ODER Consensus-Phase; `window.App.syncSendButtonRunning()` wird von
+  `consensus-lifecycle.js` bei Start/Ende der Consensus-Phase gerufen, damit
+  der Cancel-Button bis zum fertigen Consensus/Differences stehen bleibt
+  (ein Klick bricht dann via `cancelCurrentConsensus` ab).
 - **`app-init.js`** — das gesamte `initApp()`: Theme, Usage/Limits + User-Status,
   Response-Box-Toggles, Sidebar/Layout, Modals, Tooltips, Evidence-Rendering,
   API-Key-Test. `clearResponseBoxes({silent?})` entfernt außerdem den kompletten
@@ -1026,6 +1031,16 @@ migriert: `grok-4.3-no-reasoning` sendet API-Modell `grok-4.3` mit
   explizit `high` nutzt, sofern die Admin-Premium-Zuordnung es Pro-gated.
   Presets dürfen ausschließlich bereits konfigurierte Provider-Modelle
   referenzieren; sie fügen selbst keine Providerzeilen hinzu.
+  `cfg.virtual_model_ids()` listet alle internen IDs, deren API-Modell
+  abweicht. Jede Stelle, die eine konfigurierte Modell-ID in einen
+  Provider-Request schreibt, muss vorher über `get_model_config(...).api_model`
+  auflösen — die Judge-/Fallback-Pfade der Differences-, Resolve- und
+  Consensus-Engine taten das früher nicht und quittierten
+  `grok-4.3-no-reasoning` mit HTTP 400 „Model not found“. Das Admin-Dashboard
+  blendet die Auflösung als `→ <api_model>` hinter dem Optionsnamen ein.
+  Die Admin-Dropdowns blenden Premium-Modelle in Free-Kontexten (Free Watch,
+  Fast/Balanced-Preset) nicht mehr aus, sondern zeigen sie deaktiviert mit dem
+  Zusatz „— Pro only“, damit die Liste vollständig bleibt.
 
 Die frühere Early-/Frontier-Low-Schicht ist vollständig entfernt. Es gibt nur
 Free- und Pro-Zugriff; alte interne Low-Aliasse stehen in `REMOVED_MODEL_IDS`

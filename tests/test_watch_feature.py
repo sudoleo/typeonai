@@ -199,6 +199,13 @@ class WatchCrudTests(unittest.TestCase):
         created = watch_service.create_watch("u1", share_id=self.share_id, interval="daily", is_pro=True, db=self.db)
         self.assertEqual(created["interval"], "daily")
 
+    def test_daily_gate_follows_admin_limit(self):
+        cfg.apply_limits({**self.old_limits, "watch_daily_interval_requires_pro": 0})
+        created = watch_service.create_watch(
+            "u1", share_id=self.share_id, interval="daily", is_pro=False, db=self.db,
+        )
+        self.assertEqual(created["interval"], "daily")
+
     def test_free_and_pro_active_limits(self):
         cfg.apply_limits({**self.old_limits, "watch_free_active_limit": 1, "watch_pro_active_limit": 2})
         first = watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db)

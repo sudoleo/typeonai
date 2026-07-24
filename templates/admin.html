@@ -641,7 +641,8 @@
                 fields: [
                     ['watch_free_active_limit', 'Free active watches'],
                     ['watch_pro_active_limit', 'Pro active watches'],
-                    ['watch_max_runs_per_day', 'Global runs per day']
+                    ['watch_max_runs_per_day', 'Global runs per day'],
+                    ['watch_daily_interval_requires_pro', 'Daily interval Pro-only (1 = yes, 0 = Free too)']
                 ]
             },
             {
@@ -714,6 +715,17 @@
             return ((((meta().dependencies || {})[provider] || {})[model]) || []);
         }
         function labelFor(model) { return (meta().labels || {})[model] || ''; }
+        // Virtuelle IDs senden ein anderes API-Modell (z. B.
+        // grok-4.3-no-reasoning -> grok-4.3). Sichtbar machen, sonst sieht man
+        // zwei fast gleich aussehende Eintraege ohne erkennbaren Unterschied.
+        function apiModelFor(model) { return (meta().api_models || {})[model] || ''; }
+        function optionTextFor(model) {
+            let text = labelFor(model) || model;
+            if (text !== model) text += ` (${model})`;
+            const apiModel = apiModelFor(model);
+            if (apiModel) text += ` → ${apiModel}`;
+            return text;
+        }
         function consensusDescription(value) {
             const alias = (meta().aliases || {})[value];
             if (alias) return `alias → ${alias.provider} · ${alias.label} (${alias.model})`;
@@ -757,11 +769,16 @@
                     disabled.textContent = 'Disabled';
                     select.appendChild(disabled);
                     (globalModelsData[provider] || []).forEach(model => {
-                        if (tier === 'free' && premium.has(model)) return;
                         const option = document.createElement('option');
                         option.value = model;
-                        option.textContent = labelFor(model) || model;
-                        if (option.textContent !== model) option.textContent += ` (${model})`;
+                        option.textContent = optionTextFor(model);
+                        // Free-Watches duerfen keine Premium-Modelle fahren.
+                        // Die Eintraege bleiben trotzdem sichtbar, damit die
+                        // Liste vollstaendig ist und der Grund erkennbar wird.
+                        if (tier === 'free' && premium.has(model)) {
+                            option.disabled = true;
+                            option.textContent += ' — Pro only';
+                        }
                         select.appendChild(option);
                     });
                     select.value = ((configured[tier] || {})[provider]) || '';
@@ -787,11 +804,20 @@
             return (globalModelsData.premium || []).includes(model);
         }
 
-        function appendPresetOption(select, value, label) {
+        function appendPresetOption(select, value, label, locked) {
             const option = document.createElement('option');
             option.value = value;
             option.textContent = label || value;
             if (option.textContent !== value) option.textContent += ` (${value})`;
+            const apiModel = apiModelFor(value);
+            if (apiModel) option.textContent += ` → ${apiModel}`;
+            // Fast/Balanced sind Free-faehig und duerfen keine Premium-Modelle
+            // setzen. Sichtbar lassen statt ausblenden: sonst wirkt die Liste
+            // unvollstaendig, ohne dass der Grund erkennbar waere.
+            if (locked) {
+                option.disabled = true;
+                option.textContent += ' — Pro only';
+            }
             select.appendChild(option);
         }
 
@@ -824,13 +850,13 @@
 
                     if (slot === 'consensus') {
                         consensusListValues().forEach(model => {
-                            if (!definition.pro_only && isLockedConsensusModel(model)) return;
-                            appendPresetOption(select, model, consensusDescription(model));
+                            appendPresetOption(select, model, consensusDescription(model),
+                                !definition.pro_only && isLockedConsensusModel(model));
                         });
                     } else {
                         currentProviderModels(slot).forEach(model => {
-                            if (!definition.pro_only && premium.has(model)) return;
-                            appendPresetOption(select, model, labelFor(model));
+                            appendPresetOption(select, model, labelFor(model),
+                                !definition.pro_only && premium.has(model));
                         });
                     }
                     select.value = configured[slot] || '';
@@ -1270,6 +1296,8 @@
                 opt.value = model;
                 const lbl = labelFor(model);
                 opt.textContent = lbl && lbl !== model ? `${model} — ${lbl}` : model;
+                const apiModel = apiModelFor(model);
+                if (apiModel) opt.textContent += ` → ${apiModel}`;
                 if (model === defaultModel) opt.textContent += ' (server default)';
                 if (model === chosen) opt.selected = true;
                 select.appendChild(opt);
@@ -3144,7 +3172,7 @@
                     Manual runs make real model calls, write history, advance their schedule, and apply their configured e-mail rule.
                 </p>
                 <h4>Answer models by user tier</h4>
-                <p class="section-hint">Choose one model per enabled provider. At least two providers are required for each tier; Free only offers non-Premium models.</p>
+                <p class="section-hint">Choose one model per enabled provider. At least two providers are required for each tier. Premium models stay listed for Free but are locked (“Pro only”). An arrow (→) marks a variant that sends a different API model.</p>
                 <div id="watchModelConfig" class="watch-model-grid"></div>
                 <div class="watch-admin-toolbar">
                     <button id="loadWatchesBtn" type="button" class="admin-btn secondary">Reload watches</button>

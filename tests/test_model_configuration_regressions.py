@@ -245,6 +245,79 @@ class ExistingModelFlowTests(unittest.TestCase):
         finally:
             cfg.apply_judge_families(snapshot)
 
+    def test_judge_engines_resolve_virtual_ids_to_their_api_model(self):
+        """Judge-IDs sind interne IDs; der Request muss das API-Modell tragen.
+
+        grok-4.3-no-reasoning existiert bei xAI nicht unter diesem Namen. Wurde
+        die interne ID ungeprueft als api_model durchgereicht, quittierte der
+        Provider das mit HTTP 400 "Model not found" und der komplette
+        Differences-Schritt (und damit ein Publisher-Run) schlug fehl.
+        """
+        from app.services.llm import consensus_engine
+
+        snapshot = cfg.get_judge_models()
+        pro_snapshot = cfg.get_pro_judge_models()
+        all_keys = {name: "key" for name in
+                    ("OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok")}
+        try:
+            cfg.apply_judge_models({"grok": cfg.GROK_NO_REASONING_MODEL})
+            cfg.apply_pro_judge_models({"grok": cfg.GROK_NO_REASONING_MODEL})
+            expected = ("grok", "grok-4.3", cfg.GROK_NO_REASONING_MODEL)
+
+            self.assertEqual(consensus_engine._standard_judge_engine("grok"), expected)
+            self.assertEqual(consensus_engine._judge_engine("grok", "standard"), expected)
+            self.assertEqual(consensus_engine._judge_engine("grok", "pro"), expected)
+
+            # Auch der Fallback-Judge (dritter Consensus-Versuch) muss aufloesen.
+            # Gemini ist ueber Dev-Key/ADC immer verfuegbar und deshalb hier
+            # als Engine-Familie ausgeschlossen; damit bleibt nur Grok uebrig.
+            self.assertEqual(
+                consensus_engine._fallback_judge_engine("gemini", {"Grok": "key"}),
+                expected,
+            )
+
+            # Jeder Attempt im Differences-Plan traegt ein echtes API-Modell.
+            for (provider, api_model, _ref), _retry, _tier in (
+                consensus_engine._differences_attempts(cfg.OPENAI_LUNA_MODEL, all_keys)
+            ):
+                with self.subTest(provider=provider, api_model=api_model):
+                    self.assertNotIn(api_model, cfg.virtual_model_ids())
+        finally:
+            cfg.apply_judge_models(snapshot)
+            cfg.apply_pro_judge_models(pro_snapshot)
+
+    def test_grok_reasoning_labels_are_consistent(self):
+        """"High reasoning" neben "Reasoning" las sich wie zwei Modelle."""
+        for model_id in ("grok-4.3", "grok-4.20"):
+            with self.subTest(model=model_id):
+                self.assertEqual(cfg.get_model_label(model_id).split(" · ")[-1], "Reasoning")
+        for model_id in (cfg.GROK_NO_REASONING_MODEL, cfg.DEFAULT_GROK_MODEL):
+            with self.subTest(model=model_id):
+                self.assertEqual(cfg.get_model_label(model_id).split(" · ")[-1], "No reasoning")
+        # Ohne Label faellt die UI auf die rohe ID zurueck.
+        self.assertEqual(cfg.get_model_label("grok-4.5"), "Grok 4.5")
+
+    def test_admin_meta_exposes_virtual_api_models(self):
+        """Die UI muss zeigen koennen, was tatsaechlich beim Provider ankommt."""
+        from app.api.routers.admin import _admin_meta
+
+        meta = _admin_meta({})
+        self.assertEqual(meta["api_models"].get(cfg.GROK_NO_REASONING_MODEL), "grok-4.3")
+        # Modelle, deren ID bereits das API-Modell ist, tauchen nicht auf.
+        self.assertNotIn("grok-4.3", meta["api_models"])
+        self.assertNotIn(cfg.DEFAULT_GROK_MODEL, meta["api_models"])
+
+    def test_admin_template_lists_premium_models_as_locked_instead_of_hiding(self):
+        """Ausgeblendete Eintraege liessen die Liste unvollstaendig wirken."""
+        template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
+        self.assertIn("function apiModelFor(model)", template)
+        self.assertIn("function optionTextFor(model)", template)
+        self.assertIn("' — Pro only'", template)
+        # Der alte Filter hat Premium-Modelle aus den Free-Listen entfernt.
+        self.assertNotIn("if (tier === 'free' && premium.has(model)) return;", template)
+        self.assertNotIn("if (!definition.pro_only && premium.has(model)) return;", template)
+        self.assertNotIn("if (!definition.pro_only && isLockedConsensusModel(model)) return;", template)
+
     def test_admin_template_has_tabs_and_deep_think_control(self):
         template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
         self.assertIn('deepThinkModelSelect', template)

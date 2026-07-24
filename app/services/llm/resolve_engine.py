@@ -20,10 +20,10 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 
 from app.services.llm.consensus_engine import (
-    DIFFERENCES_JUDGE_MODEL_BY_PROVIDER,
     _call_engine_text,
     _clip,
     _extract_json_object,
+    _standard_judge_engine,
     normalize_model_name,
 )
 
@@ -128,7 +128,9 @@ def _build_resolve_prompt(question: str, claim: str, own_position: dict, opposin
 def _query_resolve_model(model_label: str, question: str, claim: str,
                          own_position: dict, opposing: list, api_keys: dict) -> dict:
     provider = PROVIDER_BY_LABEL[model_label]
-    judge_model = DIFFERENCES_JUDGE_MODEL_BY_PROVIDER[provider]
+    # Interne Judge-ID -> API-Modell aufloesen; virtuelle Varianten wie
+    # grok-4.3-no-reasoning existieren beim Provider nicht unter diesem Namen.
+    _judge_provider, judge_api_model, judge_model = _standard_judge_engine(provider)
     result = {"model": model_label, "decision": "error", "position": "", "reason": ""}
 
     # Gemini kann ohne expliziten Key ueber Dev-Key/ADC laufen (siehe
@@ -144,7 +146,7 @@ def _query_resolve_model(model_label: str, question: str, claim: str,
     result["prompt"] = prompt
     try:
         raw = _call_engine_text(
-            provider, judge_model, judge_model, api_keys,
+            provider, judge_api_model, judge_model, api_keys,
             system=RESOLVE_SYSTEM_PROMPT,
             prompt=prompt,
             max_tokens=RESOLVE_MAX_TOKENS,

@@ -46,6 +46,17 @@
   const modelStreamStartedAt = new Map(); // pref.key -> ts (sanfter Anlauf)
   let agentProgressTicker = null;
 
+  // Beim zweiten Lauf stehen die Antwort-Boxen beim Start noch auf dem
+  // Ergebnis des vorherigen Laufs: setAgentModeStatus("running") kommt vor
+  // dem Zuruecksetzen der Boxen auf "pending" (query-send.js). Ohne diese
+  // Sperre liest der erste Tick "complete", der monoton steigende Balken
+  // rastet sofort auf 100 % ein und haengt dort den ganzen Lauf fest.
+  const staleModelKeys = new Set();
+
+  function isTerminalResponseState(state) {
+    return state === "complete" || state === "error";
+  }
+
   // Schätzt den Fortschritt eines Modells aus dem tatsächlichen Stream:
   // fertig ⇒ voll, während des Streams asymptotisch aus der Textlänge, davor
   // ein langsamer zeitbasierter Anlauf, damit der Balken sichtbar „lebt“.
@@ -53,7 +64,13 @@
     const box = document.getElementById(pref.responseId);
     if (!box) return 0;
     const state = box.dataset.responseState || "";
-    if (state === "complete" || state === "error") return 1;
+    // Noch das alte Ergebnis in der Box: erst wenn der neue Lauf sie auf
+    // "pending" zurueckgesetzt hat, zaehlt der Fortschritt wieder.
+    if (staleModelKeys.has(pref.key)) {
+      if (isTerminalResponseState(state)) return 0;
+      staleModelKeys.delete(pref.key);
+    }
+    if (isTerminalResponseState(state)) return 1;
     const contentEl = box.querySelector(".collapsible-content");
     const streaming = !!contentEl && contentEl.classList.contains("is-streaming");
     if (streaming) {
@@ -95,6 +112,13 @@
   function resetModelProgress() {
     modelProgress.clear();
     modelStreamStartedAt.clear();
+    staleModelKeys.clear();
+    (window.App?.modelPrefs || []).forEach(pref => {
+      const box = document.getElementById(pref.responseId);
+      if (box && isTerminalResponseState(box.dataset.responseState || "")) {
+        staleModelKeys.add(pref.key);
+      }
+    });
   }
 
   function isAgentModeEnabled() {

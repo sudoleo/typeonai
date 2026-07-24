@@ -789,6 +789,9 @@
         window.validateInputText = validateInputText;
 
         document.getElementById("sendButton").addEventListener("click", function (e) {
+          // Laeuft noch etwas (Modelle ODER Consensus), ist der Klick ein
+          // Abbruch — dann nicht gegen die Eingabe validieren.
+          if (window.isRunActive && window.isRunActive()) return;
           if (window.isQueryRequestRunning && window.isQueryRequestRunning()) return;
           if (!validateInputText()) {
             e.preventDefault();
@@ -799,6 +802,10 @@
         // Frage per Enter (ohne Zeilenumbruch) absenden
         document.getElementById("questionInput").addEventListener("keydown", function (event) {
           if (event.key === "Enter" && !event.shiftKey) {
+            if (window.isRunActive && window.isRunActive()) {
+              event.preventDefault();
+              return;
+            }
             if (window.isQueryRequestRunning && window.isQueryRequestRunning()) {
               event.preventDefault();
               return;

@@ -73,7 +73,7 @@ def validate_interval(interval, is_pro: bool) -> str:
     normalized = str(interval or "").strip().lower()
     if normalized not in WATCH_INTERVALS:
         raise WatchError("invalid_interval", "Interval must be daily, weekly, or monthly.")
-    if not is_pro and normalized == "daily":
+    if normalized == "daily" and not cfg.is_watch_daily_allowed(is_pro):
         raise WatchError("pro_required", "Daily watches require Pro.")
     return normalized
 

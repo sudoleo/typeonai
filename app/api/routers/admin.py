@@ -881,11 +881,20 @@ def _admin_meta(data: dict) -> dict:
             labels[model] = cfg.get_model_label(model)
     for model in cfg.ALL_ALLOWED_MODELS:
         labels.setdefault(model, cfg.get_model_label(model))
+    # Nur virtuelle Modelle, deren API-Modell von der internen ID abweicht
+    # (z. B. grok-4.3-no-reasoning -> grok-4.3). Die Admin-UI blendet das ein,
+    # damit sichtbar ist, was tatsaechlich beim Provider ankommt.
+    api_models = {
+        model: api_model
+        for model, api_model in cfg.virtual_model_ids().items()
+        if model in labels
+    }
     return {
         "aliases": aliases,
         "enforced": enforced,
         "dependencies": _model_dependencies(data),
         "labels": labels,
+        "api_models": api_models,
         "deep_think_fallback": cfg._BASE_DEEP_THINK_CONSENSUS_MODEL,
         "judge_defaults": dict(cfg._BASE_DIFFERENCES_JUDGE_BY_PROVIDER),
         "judge_pro_defaults": dict(cfg._BASE_PRO_JUDGE_BY_PROVIDER),

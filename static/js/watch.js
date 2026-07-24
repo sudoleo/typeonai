@@ -257,8 +257,14 @@
       .replace(/"/g, "&quot;");
   }
 
+  function dailyIntervalAllowed() {
+    if (window.isUserPro === true) return true;
+    if (watchLimitState) return watchLimitState.dailyAvailable === true;
+    return Number((window.APP_LIMITS || {}).watch_daily_interval_requires_pro) === 0;
+  }
+
   function intervalOptions(selected) {
-    const dailyDisabled = !window.isUserPro;
+    const dailyDisabled = !dailyIntervalAllowed();
     return `
       <option value="weekly"${selected === "weekly" ? " selected" : ""}>Weekly</option>
       <option value="monthly"${selected === "monthly" ? " selected" : ""}>Monthly</option>
@@ -492,7 +498,7 @@
           </div>
           <div class="watch-config-grid">
             <div class="watch-config-field">
-              <label class="watch-interval-label" for="watchInterval">Interval ${window.isUserPro ? "" : '<span class="pro-badge is-subtle">Pro: daily</span>'}</label>
+              <label class="watch-interval-label" for="watchInterval">Interval ${dailyIntervalAllowed() ? "" : '<span class="pro-badge is-subtle">Pro: daily</span>'}</label>
               <select id="watchInterval" class="watch-interval-select">${intervalOptions("weekly")}</select>
               <div id="watchWeekdayWrap" class="watch-weekday-wrap">
                 <label class="watch-interval-label" for="watchWeekday">Run day</label>
@@ -1679,7 +1685,8 @@
     body.appendChild(listTitle);
     const list = document.createElement("ul");
     list.className = "watch-dash-list";
-    const collapseCards = watches.length > 2;
+    const activeCount = watches.filter(watch => watch.status === "active").length;
+    const collapseCards = activeCount > 5;
     watches.forEach(watch => list.appendChild(
       renderWatchCard(watch, renderDashboard, telegram, collapseCards)
     ));
