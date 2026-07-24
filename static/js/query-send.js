@@ -226,7 +226,7 @@
       });
 
       const consensusBox = document.getElementById("consensusResponse");
-      const consensusMain = consensusBox?.querySelector(".consensus-main p");
+      const consensusMain = window.App.consensusBodyEl(consensusBox);
       const consensusDiff = consensusBox?.querySelector(".consensus-differences p");
       if (consensusMain && (consensusMain.querySelector(".thinking-wrap") || consensusMain.classList.contains("is-streaming"))) {
         consensusMain.classList.remove("is-streaming");

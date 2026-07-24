@@ -73,6 +73,21 @@
     return (option?.textContent || "").replace(/(?:\s*(?:Â·|·)\s*Pro)+$/i, "").trim();
   }
 
+  // Einziges Renderziel des Konsenstextes. Frueher war das ein einzelnes <p>
+  // unter .consensus-main, adressiert per ".consensus-main p" an einem guten
+  // Dutzend Stellen. Das Inline-Marker-Rendering braucht einen stabilen
+  // Blockcontainer, deshalb laeuft jeder Zugriff jetzt ueber diesen Helfer.
+  // Der scope-Parameter erlaubt es, gezielt in einer bestimmten Konsens-Box zu
+  // suchen (z. B. der von getConsensus gehaltenen Referenz).
+  function consensusBodyEl(scope) {
+    const root = scope || document;
+    return (
+      root.querySelector?.("#consensusAnswerBody")
+      || root.querySelector?.(".consensus-main .consensus-answer-body")
+      || null
+    );
+  }
+
   // Kurzlebiges Hinweis-Popup (cross-cutting UI-Helfer, von vielen Clustern genutzt).
   function showPopup(message) {
     const popup = document.createElement('div');
@@ -197,6 +212,7 @@
     getModelOptionLabel,
     getSelectedModelCount,
     setAppTitle,
+    consensusBodyEl,
     trackAppEvent,
     showPopup,
     exitHeroMode,

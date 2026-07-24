@@ -1490,7 +1490,7 @@
           // Leere den Inhalt der Consensus-Antwortbox.
           const consensusBox = document.getElementById("consensusResponse");
           if (consensusBox) {
-            const mainElement = consensusBox.querySelector(".consensus-main p");
+            const mainElement = window.App.consensusBodyEl(consensusBox);
             if (mainElement) {
               mainElement.innerHTML = "";
             }
