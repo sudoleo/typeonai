@@ -128,6 +128,10 @@
     document
       .getElementById("consensusResponse")
       ?.classList.toggle("is-synthesizing", !!isSynthesizing);
+    // Waehrend der Synthese ist der Differences-Bereich offen (der Spinner
+    // gehoert sichtbar); danach entscheidet das Ergebnis, ob er zuklappt
+    // (strukturierte Karten) oder offen bleibt (Freitext-Fallback).
+    if (isSynthesizing) window.App?.differencesPanel?.setSynthesizing?.();
   }
 
   function startRun() {
@@ -169,7 +173,7 @@
     const consensusDiv = document.getElementById("consensusResponse");
     if (!consensusDiv) return;
 
-    const mainEl = consensusDiv.querySelector(".consensus-main p");
+    const mainEl = window.App.consensusBodyEl(consensusDiv);
     const diffEl = consensusDiv.querySelector(".consensus-differences p");
     if (mainEl && (mainEl.querySelector(".thinking-wrap") || mainEl.classList.contains("is-streaming"))) {
       mainEl.classList.remove("is-streaming");

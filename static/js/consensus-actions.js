@@ -94,7 +94,7 @@
     }
 
     const consensusBox = document.getElementById("consensusResponse");
-    const mainPara = consensusBox?.querySelector(".consensus-main p");
+    const mainPara = window.App.consensusBodyEl(consensusBox);
     const hrefSet = new Set();
 
     if (mainPara) {
@@ -175,15 +175,17 @@
 
     copyAnswerBtn.addEventListener("click", () => {
       const consensusBox = document.getElementById("consensusResponse");
-      const mainPara = consensusBox?.querySelector(".consensus-main p");
-      // Agreement-Badges (z. B. "6/6") sind UI-Elemente und gehören nicht in
-      // den kopierten Text. Klon ohne Badges kurz unsichtbar einhängen:
+      const mainPara = window.App.consensusBodyEl(consensusBox);
+      // Agreement-Badges (z. B. "6/6") und Inline-Marker sind UI-Elemente und
+      // gehören nicht in den kopierten Text. Die .cx-claim-Spans bleiben: sie
+      // tragen den Antworttext selbst und fügen keine Beschriftung hinzu.
+      // Klon ohne Badges/Marker kurz unsichtbar einhängen:
       // innerText braucht ein gerendertes Element, um Zeilenumbrüche zu
       // erhalten (und ignoriert display:none-Kinder nur dann zuverlässig).
       let mainText = "";
       if (mainPara) {
         const clone = mainPara.cloneNode(true);
-        clone.querySelectorAll(".claim-badge, .copy-btn, .response-code-copy").forEach(el => el.remove());
+        clone.querySelectorAll(".claim-badge, .cx-marker, .copy-btn, .response-code-copy").forEach(el => el.remove());
         clone.style.position = "absolute";
         clone.style.left = "-99999px";
         clone.style.top = "0";

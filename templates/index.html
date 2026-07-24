@@ -58,7 +58,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260723-streambar1">
+  <link rel="stylesheet" href="/static/style.css?v=20260724-inlineconf1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -71,11 +71,11 @@
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.js" integrity="sha384-AtrdNsnxl/75rvBneBVH7DtOvCxSVahR2zWqle1coBKd8DEmLoviqNeJSx64gNAs" crossorigin="anonymous"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260722-model-fixes1"></script>
-  <script type="module" src="/static/demo.js?v=20260717-demo-autostart1"></script>
+  <script type="module" src="/static/firebase.js?v=20260724-inlineconf1"></script>
+  <script type="module" src="/static/demo.js?v=20260724-inlineconf1"></script>
   <script src="/static/app-ui.js?v=20260628-prompt-default2" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
-  <script src="/static/js/app-core.js?v=20260722-model-fixes1" defer></script>
+  <script src="/static/js/app-core.js?v=20260724-inlineconf1" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
   <script src="/static/js/model-picker.js?v=20260722-model-fixes1" defer></script>
   <!-- Gemeinsame LaTeX-Aufbereitung; muss vor markdown-stream.js laden. -->
@@ -91,19 +91,19 @@
   <!-- Kompakte Zwei-Phasen-Anzeige fuer regulaere Laeufe (ohne Agent Mode). -->
   <script src="/static/js/consensus-progress.js?v=20260716-consensus-progress1" defer></script>
   <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
-  <script src="/static/js/consensus-lifecycle.js?v=20260724-runcancel1" defer></script>
+  <script src="/static/js/consensus-lifecycle.js?v=20260724-inlineconf1" defer></script>
   <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
   <script src="/static/js/share-dialog.js?v=20260721-watchguide2" defer></script>
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-actions.js?v=20260706-fixes2" defer></script>
+  <script src="/static/js/consensus-actions.js?v=20260724-inlineconf1" defer></script>
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
   <script src="/static/js/watch.js?v=20260724-watch-daily-limit" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260722-model-fixes1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-insights.js?v=20260718-runusage2" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260718-runusage2" defer></script>
-  <script src="/static/js/query-send.js?v=20260724-runcancel1" defer></script>
+  <script src="/static/js/consensus-insights.js?v=20260724-inlineconf1" defer></script>
+  <script src="/static/js/consensus-run.js?v=20260724-inlineconf1" defer></script>
+  <script src="/static/js/query-send.js?v=20260724-inlineconf1" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
@@ -533,21 +533,37 @@
         <div id="consensusOutput" class="consensus-output is-hidden">
           <!-- Verdict-Header: kompakte Einordnung, bevor der Nutzer liest -->
           <div id="consensusVerdict" class="consensus-verdict" hidden aria-live="polite"></div>
-          <!-- Konsens-Box mit zwei nebeneinanderliegenden Bereichen -->
+          <!-- Konsens-Box: EINE Antwort von oben nach unten. Die Uneinigkeit
+               steckt als Inline-Marker im Text; der vollstaendige
+               Differences-Ueberblick liegt zugeklappt darunter. -->
           <div class="consensus-box" id="consensusResponse">
-            <!-- Linker Bereich: Konsens-Antwort (80%) -->
+            <!-- Die Antwort, volle Breite -->
             <div class="consensus-main">
               <h2>Consensus Answer</h2>
-              <p></p>
+              <!-- Einziges Renderziel des Konsenstextes (Streaming + Final).
+                   Bewusst ein Blockcontainer statt eines <p>: die Inline-Marker
+                   wrappen Ranges im gerenderten Markdown. Zugriff ausschliesslich
+                   ueber window.App.consensusBodyEl(). -->
+              <div id="consensusAnswerBody" class="consensus-answer-body"></div>
               <!-- Kernaussagen, deren Anker nicht im Text gefunden wurde -->
               <div id="consensusClaimsFallback" class="consensus-claims-fallback" hidden></div>
+              <!-- Verhindert, dass fehlende Markierung als Bestaetigung gelesen wird -->
+              <p id="consensusMarkerLegend" class="consensus-marker-legend" hidden>
+                Marked passages are checked key claims. Unmarked text was not compared individually.
+              </p>
             </div>
-            <!-- Rechter Bereich: Unterschiede (20%) -->
-            <div class="consensus-differences">
-              <h2>Differences</h2>
-              <div id="differencesCards" class="differences-cards" hidden></div>
-              <p></p>
-            </div>
+            <!-- Vollstaendiger Unterschieds-Ueberblick, standardmaessig zu.
+                 Bleibt .consensus-differences: Spinner, Credibility-Frame und
+                 Karten-Rendering adressieren diesen Selektor. -->
+            <details id="consensusDifferencesPanel" class="consensus-differences consensus-differences-panel">
+              <summary class="consensus-differences-summary">
+                <span class="consensus-differences-summary-label">See all differences</span>
+              </summary>
+              <div class="consensus-differences-content">
+                <div id="differencesCards" class="differences-cards" hidden></div>
+                <p></p>
+              </div>
+            </details>
           </div>
           <!-- Dezenter Trennstrich zwischen Konsens-Bereich und Antwort-Grid -->
           <div class="consensus-divider" aria-hidden="true"></div>
@@ -737,7 +753,7 @@
       </div>
     </div>
 
-  <script src="/static/js/app-init.js?v=20260724-runcancel1" defer></script>
+  <script src="/static/js/app-init.js?v=20260724-inlineconf1" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing

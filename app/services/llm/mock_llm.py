@@ -107,6 +107,9 @@ def _build_mock_differences_json(prompt: str) -> str:
     if dissent_label and agree:
         differences.append({
             "claim": "Completion year of the Eiffel Tower",
+            # Muss - wie die Claim-Anchors - ein Substring von
+            # MOCK_CONSENSUS_TEXT sein, sonst leert _verify_differences_data ihn.
+            "consensus_anchor": "was completed in 1889",
             "type": "contradiction",
             "severity": "major",
             "positions": [

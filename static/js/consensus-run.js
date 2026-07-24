@@ -344,7 +344,8 @@
       if (window.resetCredibilityFrame) {
         window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
       }
-      consensusDiv.querySelector(".consensus-main p").innerText = "";
+      const emptyBodyEl = window.App.consensusBodyEl(consensusDiv);
+      if (emptyBodyEl) emptyBodyEl.innerText = "";
       consensusDiv.querySelector(".consensus-differences p").innerText = "";
       finishConsensusRun(consensusRunId);
       return;
@@ -364,7 +365,8 @@
     // Rahmenlosen Konsens-Bereich sanft einblenden (Fade-In + Slide-Up).
     window.revealConsensusOutput?.();
     setConsensusSynthesizing(true);
-    consensusDiv.querySelector(".consensus-main p").innerHTML = window.consensusSpinnerHTML || window.spinnerHTML;
+    const spinnerBodyEl = window.App.consensusBodyEl(consensusDiv);
+    if (spinnerBodyEl) spinnerBodyEl.innerHTML = window.consensusSpinnerHTML || window.spinnerHTML;
     consensusDiv.querySelector(".consensus-differences p").innerHTML = window.consensusDifferencesSpinnerHTML || window.spinnerHTML;
 
     // Die übrigen Parameter wie "excluded_models" werden wie bisher ermittelt
@@ -478,7 +480,7 @@
         if (!label || label.textContent === text) return;
         label.textContent = text;
       }
-      const consensusMainEl = consensusDiv.querySelector(".consensus-main p");
+      const consensusMainEl = window.App.consensusBodyEl(consensusDiv);
       const consensusMainRenderer = createStreamRenderer(
         consensusMainEl,
         () => isActiveConsensusRun(consensusRunId)
@@ -571,7 +573,7 @@
         // Teilen möglich (serverseitiger Snapshot vorhanden).
         window.lastShareResultId = data.result_id || null;
 
-        const mainEl = consensusDiv.querySelector(".consensus-main p");
+        const mainEl = window.App.consensusBodyEl(consensusDiv);
         const diffEl = consensusDiv.querySelector(".consensus-differences p");
 
         if (mainEl) {
@@ -587,6 +589,9 @@
             : false;
 
           if (!structuredRendered) {
+            // Ohne strukturierte Daten ist der Freitext die einzige Analyse:
+            // Panel sichtbar aufklappen statt sie zuzuklappen.
+            window.App.differencesPanel?.expandForFallback?.();
             const diffsMD = data.differences || "No differences found.";
             if (window.applyCredibilityFrame) {
               window.applyCredibilityFrame(diffEl, diffsMD);
@@ -641,7 +646,8 @@
         if (consensusErrorDetail?.error_code === "usage_limit_exceeded" && typeof window.setAgentModeStatus === "function" && window.isAgentModeEnabled?.()) {
           window.setAgentModeStatus("error", consensusErrorMessage);
         }
-        consensusDiv.querySelector(".consensus-main p").innerText = "Error: " + consensusErrorMessage;
+        const errorBodyEl = window.App.consensusBodyEl(consensusDiv);
+        if (errorBodyEl) errorBodyEl.innerText = "Error: " + consensusErrorMessage;
         consensusDiv.querySelector(".consensus-differences p").innerText = "";
         trackAppEvent("app_consensus_completed", {
           status: "error",
@@ -658,7 +664,8 @@
       if (window.resetCredibilityFrame) {
         window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
       }
-      consensusDiv.querySelector(".consensus-main p").innerText = "Error in the consensus calculation.";
+      const failBodyEl = window.App.consensusBodyEl(consensusDiv);
+      if (failBodyEl) failBodyEl.innerText = "Error in the consensus calculation.";
       consensusDiv.querySelector(".consensus-differences p").innerText = "";
       trackAppEvent("app_consensus_completed", {
         status: "error",

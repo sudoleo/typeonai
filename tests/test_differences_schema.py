@@ -189,6 +189,42 @@ class QuoteVerificationTests(unittest.TestCase):
         )
         self.assertTrue(data["claims"][0]["anchor"].startswith("The capital of France is"))
 
+    def test_difference_consensus_anchor_is_verified_against_the_consensus(self):
+        """Der Widerspruchs-Anker zeigt in die Konsensantwort (nicht in eine
+        Modellantwort) und wird wie claims[].anchor auf den Originalwortlaut
+        normalisiert - das Frontend markiert damit den Satz inline."""
+        payload = valid_payload()
+        payload["differences"][0]["consensus_anchor"] = "the capital of  france is paris"
+        consensus = "Intro. The Capital of  France is Paris. End."
+        data, _ = parse_differences_payload(
+            json.dumps(payload), ANON_MAP,
+            consensus_answer=consensus, model_answers={},
+        )
+        self.assertEqual(
+            data["differences"][0]["consensus_anchor"],
+            "The Capital of  France is Paris",
+        )
+
+    def test_unfindable_difference_anchor_is_cleared(self):
+        """Anders als beim Claim-Anker (der in die Fallback-Box wandert) waere
+        ein nicht auffindbarer Widerspruchs-Anker eine falsche Markierung im
+        Text - er wird deshalb geleert, die Karte bleibt."""
+        payload = valid_payload()
+        payload["differences"][0]["consensus_anchor"] = "hallucinated passage nobody wrote"
+        data, _ = parse_differences_payload(
+            json.dumps(payload), ANON_MAP,
+            consensus_answer="Something else entirely.", model_answers={},
+        )
+        self.assertEqual(data["differences"][0]["consensus_anchor"], "")
+
+    def test_missing_difference_anchor_defaults_to_empty(self):
+        """Alte Bookmarks/Snapshots ohne das Feld degradieren sauber."""
+        data, _ = parse_differences_payload(
+            json.dumps(valid_payload()), ANON_MAP,
+            consensus_answer="Anything.", model_answers={},
+        )
+        self.assertEqual(data["differences"][0]["consensus_anchor"], "")
+
     def test_unfindable_anchor_is_kept_for_fallback_box(self):
         payload = valid_payload()
         payload["claims"][0]["anchor"] = "completely unrelated hallucinated sentence here"

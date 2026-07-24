@@ -221,7 +221,11 @@ const DEMO_DATA = {
     differences: [
       {
         claim: "Do fish-free vegetarians need an algae omega-3 supplement?",
+        // Stelle im Konsenstext, die inline markiert wird (Wellenlinie +
+        // Marker). Muss woertlich im Antworttext oben vorkommen.
+        consensus_anchor: "algae EPA/DHA is the direct fish-free option",
         type: "contradiction",
+        severity: "major",
         positions: [
           {
             stance: "Algae EPA/DHA is the recommended route.",
@@ -448,6 +452,7 @@ async function renderDemoConsensus(mainP, diffP) {
     : false;
 
   if (!structuredRendered && diffP) {
+    window.App.differencesPanel?.expandForFallback?.();
     window.applyCredibilityFrame?.(diffP, DEMO_DATA.differences);
     const html = marked.parse(
       (window.colorizeCredibility?.(DEMO_DATA.differences) ?? DEMO_DATA.differences)
@@ -518,7 +523,7 @@ async function runDemoFlow() {
   window.setAgentModeStatus?.("complete");
 
   const consensusDiv = document.getElementById("consensusResponse");
-  const mainP = consensusDiv?.querySelector(".consensus-main p");
+  const mainP = window.App.consensusBodyEl(consensusDiv);
   const diffP = consensusDiv?.querySelector(".consensus-differences p");
   // Auto Consensus ist standardmäßig an (Einstellungen). Ist es nicht explizit
   // deaktiviert, läuft der Konsens automatisch, sobald alle Antworten da sind.

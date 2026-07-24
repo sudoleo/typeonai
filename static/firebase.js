@@ -1235,7 +1235,7 @@ function loadSingleBookmarkUI(bookmark) {
 
         // WICHTIG: Die Konsens-Antwort zuerst rendern – die Claim-Badges
         // (Modell-Zustimmung) verankern sich am Text der Hauptantwort.
-        const conMain = document.querySelector("#consensusResponse .consensus-main p");
+        const conMain = window.App.consensusBodyEl(consensusDiv);
         renderContent(conMain, consensusText);
 
         // --- Differences Box ---
@@ -1264,7 +1264,9 @@ function loadSingleBookmarkUI(bookmark) {
 
         if (!structuredRendered) {
             // Freitext-Fallback (ältere Bookmarks ohne differences_data),
-            // inkl. optionaler Credibility-Badges (Farben).
+            // inkl. optionaler Credibility-Badges (Farben). Das Panel bleibt
+            // dann sichtbar aufgeklappt - der Freitext ist die einzige Analyse.
+            window.App.differencesPanel?.expandForFallback?.();
             let diffText = bookmark.responses["differences"] || "";
             if (window.applyCredibilityFrame) {
                 window.applyCredibilityFrame(conDiff, diffText);

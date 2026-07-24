@@ -130,10 +130,9 @@
               .trim();
           }
 
-          // Sucht den normalisierten Needle in einem Textknoten und liefert die
+          // Sucht den normalisierten Needle in einem Rohtext und liefert die
           // Original-Offsets (für splitText/Range) zurück.
-          function findRangeInTextNode(node, normNeedle) {
-            const raw = node.nodeValue || "";
+          function findRangeInText(raw, normNeedle) {
             let norm = "";
             const map = [];
             for (let i = 0; i < raw.length; i++) {
@@ -151,6 +150,10 @@
             return { start: map[idx], end: map[idx + normNeedle.length - 1] + 1 };
           }
 
+          function findRangeInTextNode(node, normNeedle) {
+            return findRangeInText(node.nodeValue || "", normNeedle);
+          }
+
           function searchVariants(text) {
             const norm = normalizeForSearch(text).replace(/^(\.{3}|…)\s*/, "").replace(/\s*(\.{3}|…)$/, "");
             if (!norm) return [];
@@ -160,12 +163,19 @@
             return variants;
           }
 
+          // Textknoten, die beim Markieren und bei der Ankersuche uebersprungen
+          // werden: Badges/Marker und die [S1]-Quellenchips sind UI (ihr Text
+          // wuerde die Offsets verschieben), Code und KaTeX duerfen nicht
+          // angefasst werden.
+          const MARK_SKIP_SELECTOR = ".claim-badge, .cx-marker, .source-link, code, pre, .katex";
+          const BLOCK_SELECTOR = "p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, dd, dt";
+
           function findAnchorTarget(container, anchor) {
             for (const needle of searchVariants(anchor)) {
               const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
               let node;
               while ((node = walker.nextNode())) {
-                if (!node.nodeValue || node.parentElement?.closest(".claim-badge, code, pre")) continue;
+                if (!node.nodeValue || node.parentElement?.closest(MARK_SKIP_SELECTOR)) continue;
                 const range = findRangeInTextNode(node, needle);
                 if (range) return { type: "exact", node, range };
               }
@@ -177,6 +187,149 @@
               }
             }
             return null;
+          }
+
+          // --- Inline-Marker: Satzgrenzen und Text-Wrapping -----------------
+          // Der verifizierte Anker ist absichtlich kurz (5-12 Wörter). Als
+          // Markierungseinheit wäre er zu klein: ein unterstrichenes Fragment
+          // mitten im Satz wirkt zufällig. Für die Darstellung wird deshalb auf
+          // den umgebenden Satz ausgedehnt, der Anker selbst bleibt intern
+          // unverändert (Popover zitiert weiter den Anker).
+
+          // Über diese Länge hinaus ist "der ganze Satz" keine Hilfe mehr,
+          // sondern eine Wand aus Unterstreichung: dann nur der Anker.
+          const MAX_MARK_CHARS = 400;
+
+          // Abkürzungen, deren Punkt kein Satzende ist.
+          const ABBREVIATIONS = [
+            "z.b", "u.a", "d.h", "u.u", "i.d.r", "ggf", "bzw", "ca", "etc", "usw",
+            "vgl", "evtl", "inkl", "exkl", "nr", "abb", "tab", "bspw", "dr", "prof",
+            "mr", "mrs", "ms", "st", "vs", "approx", "e.g", "i.e", "cf", "fig",
+            "no", "inc", "ltd", "co", "al", "jr", "sr", "ph.d"
+          ];
+
+          function isAbbreviationBefore(text, dotIndex) {
+            const before = text.slice(Math.max(0, dotIndex - 12), dotIndex).toLowerCase();
+            const word = (before.match(/[a-zäöüß.]+$/) || [""])[0];
+            return ABBREVIATIONS.includes(word);
+          }
+
+          // Ist text[i] ("." / "!" / "?") ein echtes Satzende?
+          function isSentenceEnd(text, i) {
+            const ch = text[i];
+            if (ch === ".") {
+              const prev = text[i - 1] || "";
+              const next = text[i + 1] || "";
+              if (/\d/.test(prev) && /\d/.test(next)) return false;          // 1.5
+              if (text.slice(i - 2, i + 1) === "..." || next === ".") return false;
+              // Einzelner Großbuchstabe davor = Initial ("J. R. R.")
+              if (/[A-ZÄÖÜ]/.test(prev) && !/[A-Za-zÄÖÜäöüß]/.test(text[i - 2] || " ")) return false;
+              if (isAbbreviationBefore(text, i)) return false;
+            }
+            // Schließende Anführungszeichen/Klammern gehören noch zum Satz.
+            let j = i + 1;
+            while (j < text.length && /["'”’»)\]]/.test(text[j])) j++;
+            if (j >= text.length) return true;
+            if (!/\s/.test(text[j])) return false;
+            let k = j;
+            while (k < text.length && /\s/.test(text[k])) k++;
+            if (k >= text.length) return true;
+            // Kleinbuchstabe danach spricht gegen einen Satzanfang.
+            return !/[a-zäöüß]/.test(text[k]);
+          }
+
+          // Dehnt [start,end) auf die umgebenden Satzgrenzen aus.
+          function sentenceBounds(text, start, end) {
+            let s = start;
+            while (s > 0) {
+              const i = s - 1;
+              if (text[i] === "\n") break;
+              if (/[.!?]/.test(text[i]) && isSentenceEnd(text, i)) break;
+              s--;
+            }
+            while (s < end && /\s/.test(text[s])) s++;
+
+            let e = end;
+            while (e < text.length) {
+              const ch = text[e];
+              if (ch === "\n") break;
+              if (/[.!?]/.test(ch) && isSentenceEnd(text, e)) {
+                e++;
+                while (e < text.length && /["'”’»)\]]/.test(text[e])) e++;
+                break;
+              }
+              e++;
+            }
+            while (e > s && /\s/.test(text[e - 1])) e--;
+
+            if (e - s > MAX_MARK_CHARS) return { start: start, end: end };
+            return { start: s, end: e };
+          }
+
+          // Blockelement, in dem ein Textknoten steht (Grenze der Ausdehnung).
+          function blockOf(node, container) {
+            const el = node.parentElement;
+            if (!el) return container;
+            const block = el.closest(BLOCK_SELECTOR);
+            return (block && container.contains(block)) ? block : container;
+          }
+
+          // Flache Textsicht eines Blocks: alle markierbaren Textknoten in
+          // Dokumentreihenfolge mit ihren Offsets im zusammengesetzten Text.
+          function collectTextSlices(block) {
+            const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+            const slices = [];
+            let flat = "";
+            let node;
+            while ((node = walker.nextNode())) {
+              const raw = node.nodeValue || "";
+              if (!raw) continue;
+              if (node.parentElement?.closest(MARK_SKIP_SELECTOR)) continue;
+              slices.push({ node, start: flat.length, end: flat.length + raw.length });
+              flat += raw;
+            }
+            return { slices, flat };
+          }
+
+          // Anker -> konkreter Bereich in der flachen Textsicht seines Blocks.
+          function locateAnchor(container, anchor) {
+            const target = findAnchorTarget(container, anchor);
+            if (!target) return null;
+            const block = target.type === "exact"
+              ? blockOf(target.node, container)
+              : target.block;
+            const { slices, flat } = collectTextSlices(block);
+            if (!slices.length) return null;
+
+            for (const needle of searchVariants(anchor)) {
+              const range = findRangeInText(flat, needle);
+              if (range) return { block, slices, flat, start: range.start, end: range.end };
+            }
+            // Im Block gefunden, aber nicht als zusammenhängender Treffer
+            // (z. B. durch übersprungene Code-/KaTeX-Knoten): ganzer Block.
+            return { block, slices, flat, start: 0, end: flat.length };
+          }
+
+          // Wrappt [start,end) der flachen Sicht in <span class="...">.
+          // Bewusst pro Textknoten statt per Range.extractContents: erhaltene
+          // Inline-Auszeichnung (<strong>, [S1]-Links, KaTeX) bleibt exakt an
+          // ihrem Platz, es wird nichts umgehängt.
+          function wrapFlatRange(slices, start, end, className) {
+            const spans = [];
+            slices.forEach(function (slice) {
+              if (slice.end <= start || slice.start >= end) return;
+              let node = slice.node;
+              const from = Math.max(start, slice.start) - slice.start;
+              const to = Math.min(end, slice.end) - slice.start;
+              if (to < node.nodeValue.length) node.splitText(to);
+              if (from > 0) node = node.splitText(from);
+              const span = document.createElement("span");
+              span.className = className;
+              node.parentNode.insertBefore(span, node);
+              span.appendChild(node);
+              spans.push(span);
+            });
+            return spans;
           }
 
           // --- Popover / Bottom Sheet -------------------------------------
@@ -402,6 +555,37 @@
             }, delay);
           }
 
+          // --- Verdict: worüber, nicht wie viele -------------------------------
+          // Aus differences[].claim wird eine kurze Themenangabe abgeleitet -
+          // rein deterministisch, ohne zusätzlichen LLM-Call. "The models
+          // contradict each other on 1 point" sagt dem Leser nichts darüber,
+          // ob ihn der strittige Punkt betrifft; das Thema schon.
+          const TOPIC_PREFIX =
+            /^(?:the\s+models?\s+)?(?:dis)?agree(?:ment)?\s+(?:on|about)\s+|^(?:do|does|did|is|are|was|were|should|shall|can|could|will|would|has|have|whether|how|what|which|when|why)\b\s*/i;
+          const TOPIC_MAX_WORDS = 7;
+          const TOPIC_MAX_SHOWN = 2;
+
+          function toTopic(claim) {
+            let text = String(claim || "").trim().replace(/[.?!]+$/, "");
+            text = text.replace(TOPIC_PREFIX, "").trim();
+            if (!text) return "";
+            const words = text.split(/\s+/);
+            // Groß-/Kleinschreibung bleibt unangetastet: ein automatisches
+            // Kleinschreiben würde Eigennamen beschädigen.
+            if (words.length > TOPIC_MAX_WORDS) {
+              return words.slice(0, TOPIC_MAX_WORDS).join(" ") + "…";
+            }
+            return text;
+          }
+
+          function topicList(entries) {
+            const topics = entries.map(d => toTopic(d.claim)).filter(Boolean);
+            if (!topics.length) return "";
+            const shown = topics.slice(0, TOPIC_MAX_SHOWN).join(" · ");
+            const rest = topics.length - TOPIC_MAX_SHOWN;
+            return rest > 0 ? shown + " · +" + rest + " more" : shown;
+          }
+
           // --- Verdict-Balken --------------------------------------------------
           // Neutraler Glas-Balken: Score-Ring links (Farbe = Semantik),
           // Headline + Detailzeile daneben, Judge-Attribution rechts.
@@ -449,22 +633,39 @@
               verdict.appendChild(icon);
             }
 
+            const contradictionTopics = topicList(
+              differences.filter(d => d.type === "contradiction")
+            );
+            const emphasisTopics = topicList(
+              differences.filter(d => d.type !== "contradiction")
+            );
+
             const main = document.createElement("span");
             main.className = "verdict-main";
             const headline = document.createElement("span");
             headline.className = "verdict-headline";
-            headline.textContent = contradictions === 0
-              ? "High agreement"
-              : "The models contradict each other on " + contradictions
-                + " point" + (contradictions === 1 ? "" : "s");
+            // Inhalt statt Zählung: WORÜBER die Modelle uneinig sind. Die
+            // Zählung bleibt in der Detailzeile (Severity) und im Score.
+            if (contradictions === 0) {
+              headline.textContent = "High agreement";
+            } else if (contradictionTopics) {
+              headline.textContent = "Agreement on the core · Disputed: " + contradictionTopics;
+            } else {
+              headline.textContent = "The models contradict each other";
+            }
             main.appendChild(headline);
 
             const detail = document.createElement("span");
             detail.className = "verdict-detail";
             if (contradictions === 0) {
-              const note = emphases > 0
-                ? emphases + " difference" + (emphases === 1 ? "" : "s") + " in emphasis, no contradictions"
-                : "no contradictions found";
+              let note;
+              if (emphases > 0) {
+                note = emphasisTopics
+                  ? "different emphasis on " + emphasisTopics + ", no contradictions"
+                  : emphases + " difference" + (emphases === 1 ? "" : "s") + " in emphasis, no contradictions";
+              } else {
+                note = "no contradictions found";
+              }
               detail.textContent = note + ", " + modelsLabel;
             } else if (hasSeverity && critical > 0) {
               const crit = document.createElement("span");
@@ -521,6 +722,10 @@
               ? agreeCount + " of " + total + " models support this. Tap for details"
               : "All " + total + " models that address this agree. Tap for details";
             badge.setAttribute("aria-haspopup", "dialog");
+            // Tastatur/Screenreader: sprechendes Label statt nacktem "4/6".
+            badge.setAttribute("aria-label", claim.dissent.length
+              ? agreeCount + " of " + total + " models support this — open details"
+              : "All " + total + " models that address this agree — open details");
             badge.addEventListener("click", function (event) {
               event.stopPropagation();
               openClaimPopover(claim, badge);
@@ -528,27 +733,125 @@
             return badge;
           }
 
-          function renderClaimBadges(claims) {
-            const mainP = document.querySelector("#consensusResponse .consensus-main p");
-            const fallbackBox = $("consensusClaimsFallback");
-            if (!mainP || !fallbackBox) return;
+          // --- Inline-Marker: Widersprüche und Claims im Antworttext ---------
+          // Rechtschreibprüfungs-Metapher: die Textstelle selbst trägt die
+          // Markierung (Wellenlinie/Punktlinie), der Marker daneben öffnet die
+          // Details. Einigkeit bekommt bewusst KEINE Dekoration - nur das
+          // bestehende kompakte Badge.
 
+          // Ein Satz wird höchstens einmal dekoriert. Widersprüche laufen
+          // deshalb zuerst (stärkere Stufe), Claim-Badges hängen sich danach an
+          // denselben Satz, ohne ihn ein zweites Mal zu unterstreichen.
+          function findOverlap(marked, start, end) {
+            return marked.find(function (r) { return start < r.end && end > r.start; }) || null;
+          }
+
+          function makeDiffMarker(diff, index) {
+            const marker = document.createElement("button");
+            marker.type = "button";
+            const isMajor = diff.type === "contradiction" && diff.severity === "major";
+            marker.className = "cx-marker " + (isMajor ? "is-major" : "is-minor");
+            const dot = document.createElement("span");
+            dot.className = "cx-marker-dot";
+            dot.setAttribute("aria-hidden", "true");
+            marker.appendChild(dot);
+            const label = (diff.type === "contradiction"
+              ? (isMajor ? "The models contradict each other here" : "The models differ on a detail here")
+              : "The models set a different focus here") + " — open details";
+            marker.title = label;
+            marker.setAttribute("aria-label", label + ": " + diff.claim);
+            marker.addEventListener("click", function (event) {
+              event.stopPropagation();
+              focusDifferenceCard(index);
+            });
+            return marker;
+          }
+
+          // Öffnet die zugehörige Karte im Differences-Überblick und hebt sie
+          // kurz hervor. Das <details> darüber (Phase 4) wird mit aufgeklappt.
+          function focusDifferenceCard(index) {
+            const cards = $("differencesCards");
+            const card = cards?.querySelectorAll(".diff-card")[index];
+            if (!card) return;
+            const panel = card.closest("details.consensus-differences-panel");
+            if (panel) panel.open = true;
+            card.open = true;
+            card.scrollIntoView({ behavior: "smooth", block: "center" });
+            card.classList.add("is-focused");
+            setTimeout(function () { card.classList.remove("is-focused"); }, 2000);
+            window.trackUmamiEvent?.("app_consensus_marker_opened", { kind: "difference" });
+          }
+
+          // Markiert eine Textstelle satzweise und liefert den letzten Span
+          // zurück (dahinter wird der Marker/das Badge eingehängt).
+          function markSentence(container, anchor, severityClass, marked) {
+            const hit = locateAnchor(container, anchor);
+            if (!hit) return null;
+
+            const bounds = sentenceBounds(hit.flat, hit.start, hit.end);
+            if (bounds.end <= bounds.start) return null;
+
+            // Derselbe Satz wird nicht zweimal dekoriert (ein Widerspruch und
+            // ein Claim können auf dieselbe Stelle zeigen). Das zweite Element
+            // hängt sich an die bereits erzeugten Spans an.
+            const existing = findOverlap(marked, bounds.start, bounds.end);
+            if (existing) return { spans: existing.spans, block: hit.block };
+
+            const spans = wrapFlatRange(
+              hit.slices, bounds.start, bounds.end, "cx-claim " + severityClass
+            );
+            marked.push({ start: bounds.start, end: bounds.end, spans: spans });
+            return { spans, block: hit.block };
+          }
+
+          function insertAfterMark(result, el) {
+            const last = result.spans[result.spans.length - 1];
+            if (last && last.parentNode) {
+              last.parentNode.insertBefore(el, last.nextSibling);
+            } else {
+              result.block.appendChild(el);
+            }
+          }
+
+          function renderInlineMarkers(claims, differences) {
+            const body = window.App.consensusBodyEl();
+            const fallbackBox = $("consensusClaimsFallback");
+            if (!body || !fallbackBox) return;
+
+            // Pro Blockelement eine eigene Liste bereits markierter Bereiche:
+            // die flachen Offsets gelten nur innerhalb ihres Blocks.
+            const markedByBlock = new Map();
+            function marksFor(block) {
+              if (!markedByBlock.has(block)) markedByBlock.set(block, []);
+              return markedByBlock.get(block);
+            }
+            // markSentence braucht die Liste, bevor der Block bekannt ist -
+            // deshalb eine gemeinsame Liste je Aufruf und Zuordnung danach.
+            function mark(anchor, severityClass) {
+              const probe = locateAnchor(body, anchor);
+              if (!probe) return null;
+              return markSentence(body, anchor, severityClass, marksFor(probe.block));
+            }
+
+            // 1. Widersprüche zuerst: sie tragen die stärkere Markierung.
+            differences.forEach(function (diff, index) {
+              if (!diff.consensus_anchor) return;
+              const isMajor = diff.type === "contradiction" && diff.severity === "major";
+              const result = mark(diff.consensus_anchor, isMajor ? "is-major" : "is-minor");
+              if (!result) return;
+              insertAfterMark(result, makeDiffMarker(diff, index));
+            });
+
+            // 2. Claims: is-unanimous ist bewusst dekorationslos (nur Badge),
+            //    dient hier aber als präziser Einhängepunkt für das Badge.
             const unanchored = [];
             claims.forEach(function (claim) {
-              const target = findAnchorTarget(mainP, claim.anchor);
-              if (!target) {
+              const result = mark(claim.anchor, claim.dissent.length ? "is-minor" : "is-unanimous");
+              if (!result) {
                 unanchored.push(claim);
                 return;
               }
-              const badge = makeBadge(claim);
-              if (target.type === "exact") {
-                const node = target.node;
-                const offset = Math.min(target.range.end, node.nodeValue.length);
-                const rest = node.splitText(offset);
-                node.parentNode.insertBefore(badge, rest);
-              } else {
-                target.block.appendChild(badge);
-              }
+              insertAfterMark(result, makeBadge(claim));
             });
 
             if (unanchored.length) {
@@ -567,6 +870,13 @@
                 fallbackBox.appendChild(row);
               });
               fallbackBox.hidden = false;
+            }
+
+            // Legende nur, wenn wirklich etwas markiert wurde. Sie verhindert,
+            // dass unmarkierter Text als geprueft-und-bestaetigt gelesen wird.
+            const legend = $("consensusMarkerLegend");
+            if (legend) {
+              legend.hidden = !body.querySelector(".cx-claim, .claim-badge, .cx-marker");
             }
           }
 
@@ -933,6 +1243,32 @@
             return wrap;
           }
 
+          // --- Differences-Panel ----------------------------------------------
+          // Die Unterschiede sind nicht mehr die zweite Spalte neben der
+          // Antwort, sondern ein zugeklappter Ueberblick darunter. Waehrend der
+          // Synthese ist er offen (Spinner), danach entscheidet das Ergebnis.
+          const DIFF_SUMMARY_RUNNING = "Differences";
+          const DIFF_SUMMARY_DONE = "See all differences";
+
+          function differencesPanel() {
+            return $("consensusDifferencesPanel");
+          }
+
+          function setPanelState(open, label) {
+            const panel = differencesPanel();
+            if (!panel) return;
+            panel.open = !!open;
+            const labelEl = panel.querySelector(".consensus-differences-summary-label");
+            if (labelEl && label) labelEl.textContent = label;
+          }
+
+          window.App.differencesPanel = {
+            setSynthesizing: function () { setPanelState(true, DIFF_SUMMARY_RUNNING); },
+            // Freitext-Fallback: der alte Block muss sichtbar und aufgeklappt
+            // erscheinen, sonst verschwindet die Analyse stillschweigend.
+            expandForFallback: function () { setPanelState(true, DIFF_SUMMARY_DONE); }
+          };
+
           // --- Differences-Karten --------------------------------------------
           function renderDifferenceCards(differences, modelCount) {
             const cards = $("differencesCards");
@@ -1064,6 +1400,8 @@
               diffP.innerHTML = "";
               diffP.hidden = true;
             }
+            // Strukturierte Karten liegen ab hier zugeklappt unter der Antwort.
+            setPanelState(false, DIFF_SUMMARY_DONE);
           }
 
           // --- Reset & Haupteinstieg -----------------------------------------
@@ -1085,7 +1423,19 @@
               fallbackBox.hidden = true;
               fallbackBox.innerHTML = "";
             }
-            document.querySelectorAll(".claim-badge").forEach(function (badge) { badge.remove(); });
+            const legend = $("consensusMarkerLegend");
+            if (legend) legend.hidden = true;
+            document.querySelectorAll(".claim-badge, .cx-marker").forEach(function (el) { el.remove(); });
+            // Inline-Markierungen auflösen: Span entfernen, Text an Ort und
+            // Stelle lassen. normalize() führt die Textknoten wieder zusammen,
+            // damit eine erneute Ankersuche nicht an Fragmenten scheitert.
+            document.querySelectorAll(".cx-claim").forEach(function (span) {
+              const parent = span.parentNode;
+              if (!parent) return;
+              while (span.firstChild) parent.insertBefore(span.firstChild, span);
+              span.remove();
+              parent.normalize();
+            });
             const diffP = document.querySelector("#consensusResponse .consensus-differences p");
             if (diffP) diffP.hidden = false;
           }
@@ -1106,8 +1456,9 @@
               ? data.judges.differences : null;
 
             renderVerdictHeader(differences, modelCount, agreement, judge);
-            renderClaimBadges(claims);
+            // Karten zuerst: die Inline-Marker verlinken per Index auf sie.
             renderDifferenceCards(differences, modelCount);
+            renderInlineMarkers(claims, differences);
             window.trackUmamiEvent?.("app_consensus_insights_rendered", {
               claims: claims.length,
               differences: differences.length,
@@ -1123,91 +1474,4 @@
           window.jumpToModelAnswer = jumpToModelAnswer;
         })();
 
-        // --------------------------------------------------------------------
-        // Konsens-Layout: Breite des Differences-Bereichs dynamisch an die
-        // Inhaltsmenge anpassen. Ist die Consensus-Antwort kurz, die
-        // Differences aber lang, bekommt Differences mehr Breite (statt schmal
-        // und sehr hoch zu werden). Wir gleichen die natürlichen Inhaltshöhen
-        // beider Spalten an, indem die Breiten proportional zur Inhaltsfläche
-        // (natürliche Höhe × aktuelle Breite) verteilt werden.
-        // --------------------------------------------------------------------
-        (function setupConsensusColumnBalancer() {
-          const box = document.getElementById("consensusResponse");
-          if (!box) return;
-          const main = box.querySelector(".consensus-main");
-          const diff = box.querySelector(".consensus-differences");
-          if (!main || !diff || typeof ResizeObserver === "undefined") return;
-
-          const MIN_DIFF = 0.24; // Differences nie schmaler als ~24 % (Redesign 2026-07: breitere Spalte)
-          const MAX_DIFF = 0.5;  // ...und nie breiter als die Antwortspalte
-          let appliedFrac = null;
-          let prevAppliedFrac = null;
-          let scheduled = false;
-
-          const resetColumns = () => {
-            main.style.flex = "";
-            diff.style.flex = "";
-            appliedFrac = null;
-            prevAppliedFrac = null;
-          };
-
-          // Natürliche Inhaltshöhe messen: align-items:stretch zwingt beide
-          // Spalten sonst auf dieselbe (gestreckte) Höhe, daher kurz auf
-          // flex-start setzen, messen und zurücksetzen.
-          const naturalHeight = (col) => {
-            const prev = col.style.alignSelf;
-            col.style.alignSelf = "flex-start";
-            const h = col.scrollHeight;
-            col.style.alignSelf = prev;
-            return h;
-          };
-
-          const balance = () => {
-            scheduled = false;
-            // Gestapeltes Mobil-Layout, ausgeblendet oder im Lade-/Synthese-
-            // Zustand: das Stylesheet entscheiden lassen.
-            if (!box.offsetParent
-                || box.classList.contains("is-synthesizing")
-                || getComputedStyle(box).flexDirection !== "row") {
-              if (appliedFrac !== null) resetColumns();
-              return;
-            }
-            const wMain = main.clientWidth;
-            const wDiff = diff.clientWidth;
-            if (wMain <= 0 || wDiff <= 0) return;
-
-            const areaMain = naturalHeight(main) * wMain;
-            const areaDiff = naturalHeight(diff) * wDiff;
-            if (areaMain <= 0 || areaDiff <= 0) return;
-
-            let frac = areaDiff / (areaMain + areaDiff);
-            frac = Math.max(MIN_DIFF, Math.min(MAX_DIFF, frac));
-
-            // Rückkopplungsschleife vermeiden: nur bei spürbarer Änderung neu
-            // schreiben (Breitenänderung triggert den ResizeObserver erneut).
-            // Hysterese bewusst größer als das Reflow-Rauschen: Umbrüche nach
-            // einer Breitenänderung verschieben die gemessene Inhaltsfläche
-            // leicht, was sonst zwischen zwei Breiten oszilliert (Flackern).
-            if (appliedFrac !== null && Math.abs(frac - appliedFrac) < 0.05) return;
-            // Bounce-Guard: springt der Wert zurück auf die vorletzte Breite
-            // (A -> B -> A ...), liegt eine Mess-Oszillation vor - einfrieren.
-            if (prevAppliedFrac !== null && Math.abs(frac - prevAppliedFrac) < 0.01) return;
-            prevAppliedFrac = appliedFrac;
-            appliedFrac = frac;
-            main.style.flex = (1 - frac).toFixed(4);
-            diff.style.flex = frac.toFixed(4);
-          };
-
-          const schedule = () => {
-            if (scheduled) return;
-            scheduled = true;
-            requestAnimationFrame(balance);
-          };
-
-          const ro = new ResizeObserver(schedule);
-          ro.observe(main);
-          ro.observe(diff);
-          window.addEventListener("resize", schedule);
-          window.balanceConsensusColumns = schedule;
-        })();
 

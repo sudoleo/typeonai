@@ -6,6 +6,8 @@ Share-Dialog-CRUD, Attachments, Follow-up, Bookmarks, Agent-Mode-Timer,
 Demo-Flow und das vollständige Mobile-Layout - siehe tests/e2e/README.md.
 """
 
+import re
+
 from playwright.sync_api import expect
 
 QUESTION = "When was the Eiffel Tower completed?"
@@ -222,7 +224,44 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     expect(verdict).to_contain_text("/100")
 
     expect(app_page.locator(".claim-badge").first).to_be_visible(timeout=15000)
-    expect(app_page.locator(".diff-card.is-contradiction").first).to_be_visible(timeout=15000)
+
+    # Inline-Confidence: der Widerspruch wird im Antworttext selbst markiert
+    # (Wellenlinie + Marker), nicht nur in einer Karte daneben.
+    marked = app_page.locator("#consensusAnswerBody .cx-claim.is-major").first
+    expect(marked).to_be_visible(timeout=15000)
+    expect(app_page.locator("#consensusAnswerBody .cx-marker").first).to_be_visible()
+    assert (
+        app_page.locator("#consensusAnswerBody .cx-marker")
+        .first.get_attribute("aria-label")
+    ), "Marker braucht ein sprechendes aria-label"
+
+    # Der vollstaendige Differences-Ueberblick liegt zugeklappt UNTER der
+    # Antwort; die Karten bleiben erreichbar, sind aber nicht mehr die zweite
+    # Spalte der Primaeransicht.
+    panel = app_page.locator("#consensusDifferencesPanel")
+    expect(panel).to_be_visible(timeout=15000)
+    assert panel.evaluate("el => el.open") is False, "Differences starten zugeklappt"
+    expect(app_page.locator(".diff-card.is-contradiction").first).to_be_hidden()
+
+    panel.locator(".consensus-differences-summary").click()
+    expect(app_page.locator(".diff-card.is-contradiction").first).to_be_visible(timeout=5000)
+
+    # Kopierter Text darf keine Marker-/Badge-Beschriftung enthalten.
+    copied = app_page.evaluate(
+        """() => {
+          const body = window.App.consensusBodyEl();
+          const clone = body.cloneNode(true);
+          clone.querySelectorAll('.claim-badge, .cx-marker, .copy-btn, .response-code-copy')
+            .forEach(el => el.remove());
+          clone.style.position = 'absolute';
+          clone.style.left = '-99999px';
+          document.body.appendChild(clone);
+          const text = clone.innerText.trim();
+          clone.remove();
+          return text;
+        }"""
+    )
+    assert not re.search(r"\d+\s*/\s*\d+", copied), f"Badge-Zaehlung im Copy-Text: {copied!r}"
 
     consensus_box = app_page.locator("#consensusOutput").bounding_box()
     first_answer_box = app_page.locator("#openaiResponse").bounding_box()

@@ -761,6 +761,7 @@ def _build_differences_prompt(
         '  "differences": [\n'
         "    {\n"
         '      "claim": "the disputed point in one short sentence",\n'
+        '      "consensus_anchor": "verbatim excerpt of 5-12 consecutive words copied exactly from the consensus answer, at the place where this disputed point is stated (empty string if the consensus answer does not state it)",\n'
         '      "type": "contradiction",\n'
         '      "severity": "major",\n'
         '      "positions": [\n'
@@ -782,6 +783,9 @@ def _build_differences_prompt(
         "- \"severity\" (only for type \"contradiction\"): \"major\" when the disagreement changes the overall "
         "conclusion, recommendation, or a central fact of the answer; \"minor\" when it concerns a side detail "
         "that leaves the conclusion intact. Omit it for \"emphasis\" differences.\n"
+        "- \"consensus_anchor\": the passage in the CONSENSUS ANSWER that the disagreement is about, so the reader can "
+        "see it marked in place. Copy it verbatim from the consensus answer, never from a model response. Use an "
+        "empty string if the consensus answer does not state the disputed point at all.\n"
         "- Quotes and anchors must be copied verbatim from the given texts. You may shorten them at the start or end, "
         "but never paraphrase. Keep each quote under 200 characters.\n"
         f"- Use only these model labels: {allowed_list}. Never invent other labels.\n"
@@ -979,6 +983,12 @@ def _normalize_differences(raw_differences, anon_map: dict) -> list:
 
         differences.append({
             "claim": claim,
+            # Stelle im Konsenstext, an der der Widerspruch haengt. Wird - wie
+            # claims[].anchor - serverseitig gegen die Konsensantwort verifiziert
+            # und geleert, wenn sie dort nicht auffindbar ist. Das Frontend
+            # markiert damit den Satz inline; ohne Anker bleibt der Widerspruch
+            # ausschliesslich in der Karte.
+            "consensus_anchor": _clip(entry.get("consensus_anchor"), MAX_DIFF_TEXT_CHARS),
             "type": diff_type,
             "severity": severity,
             "positions": positions,
@@ -1192,6 +1202,19 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
                 item["quote"] = ""
 
     for diff in data.get("differences") or []:
+        # Der Widerspruchs-Anker zeigt in die KONSENSANTWORT (nicht in eine
+        # Modellantwort). Nicht auffindbar = halluziniert -> leeren, damit das
+        # Frontend keinen falschen Satz markiert.
+        if diff.get("consensus_anchor"):
+            span = _find("__consensus__", consensus_text, diff["consensus_anchor"])
+            if span:
+                diff["consensus_anchor"] = _clip(span, MAX_DIFF_TEXT_CHARS)
+            else:
+                logging.info(
+                    f"Difference anchor not found in consensus answer: {diff['consensus_anchor']!r}"
+                )
+                diff["consensus_anchor"] = ""
+
         for position in diff.get("positions") or []:
             if not position.get("quote"):
                 continue

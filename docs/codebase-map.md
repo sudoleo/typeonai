@@ -250,9 +250,23 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   deaktiviert.
 - **`user-tier.js`** — Free/Pro-UI, Premium-Modellstatus (`updateUserTierUI`,
   `updatePremiumModelsState`) und Plan-Label im Sidebar-Account-Footer.
-- **`consensus-insights.js`** — strukturierte Auswertung: Claim-Badges,
-  Difference-Karten, Credibility-Frame-Farben, Jump-to-answer, Spalten-Balancer,
-  Resolve-Runde (Button an Widerspruchs-Karten → `POST /resolve`).
+- **`consensus-insights.js`** — strukturierte Auswertung: **Inline-Marker im
+  Antworttext**, Claim-Badges, Difference-Karten, Credibility-Frame-Farben,
+  Jump-to-answer, Resolve-Runde (Button an Widerspruchs-Karten → `POST
+  /resolve`). Seit 2026-07-24 ist die Uneinigkeit *im* Antworttext markiert
+  statt in einer zweiten Spalte daneben (Rechtschreibprüfungs-Metapher):
+  `findAnchorTarget` löst den verifizierten Anker auf, `sentenceBounds`
+  dehnt ihn auf den umgebenden Satz aus, `wrapFlatRange` wrappt die
+  betroffenen Textknoten in `<span class="cx-claim is-unanimous|is-minor|
+  is-major">`. Gewrappt wird pro Textknoten (nicht per
+  `Range.extractContents`), damit `<strong>`, `[S1]`-Links und KaTeX exakt an
+  ihrem Platz bleiben; `code`/`pre`/`.katex`/Badges werden übersprungen.
+  `is-unanimous` ist bewusst dekorationslos (nur Badge), `is-minor` fein
+  gepunktet, `is-major` bernsteinfarbene Wellenlinie — kein reduzierter
+  Kontrast, keine Hintergrundfarbe. Ein Satz wird höchstens einmal dekoriert
+  (Widersprüche laufen zuerst, Claims hängen sich an). Der Spalten-Balancer
+  ist mit dem einspaltigen Layout entfallen; `window.balanceConsensusColumns`
+  existiert nicht mehr.
 - **`consensus-run.js`** — `window.getConsensus`: baut `/consensus`-Payload, fährt
   den SSE-Stream, rendert Ergebnis + Citation/Share-Meta. `parseBestModel`.
 - **`query-send.js`** — `window.sendQuestion`: `/prepare` + `/ask_*`-Fan-out,
@@ -354,6 +368,22 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
 - Im App-Layout steht `#consensusOutput` oberhalb der Modellantworten: Das
   synthetisierte Ergebnis ist die Primäransicht, die einzelnen Antworten sind
   darunter die prüfbare Grundlage.
+- **Inline-Confidence statt Zwei-Spalten (seit 2026-07-24):** `.consensus-box`
+  ist einspaltig. Die Antwort (`.consensus-main`, volle Breite) rendert in den
+  stabilen Container **`#consensusAnswerBody`** — einziges Render-/Streamziel,
+  Zugriff ausschließlich über **`window.App.consensusBodyEl(scope?)`**
+  (das alte `.consensus-main p` gibt es nicht mehr). Darunter liegt eine
+  Legendenzeile (`#consensusMarkerLegend`) und der zugeklappte
+  `<details id="consensusDifferencesPanel" class="consensus-differences
+  consensus-differences-panel">`; `#differencesCards` und das Karten-Rendering
+  sind inhaltlich unverändert. `window.App.differencesPanel.{setSynthesizing,
+  expandForFallback}` steuert offen/zu: während der Synthese offen (Spinner),
+  danach zu (strukturierte Karten) bzw. offen (Freitext-Fallback).
+  Der Consensus-Prompt glättet Uneinigkeit nicht mehr weg (Prompt-Version
+  **V2**, siehe `docs/benchmark-plan.md`), der Verdict-Header nennt das
+  strittige **Thema** statt einer Zählung (deterministisch aus
+  `differences[].claim`, kein zusätzlicher LLM-Call). Hintergrund und
+  Entscheidungen: `docs/consensus-inline-confidence-brief.md`.
 - `getConsensus` (`consensus-run.js`) sammelt die vorhandenen Modellantworten +
   `excluded_models` + `consensus_model` und ruft **`POST /consensus`**
   (`stream:true`) mit demselben `usage_run_key`. Der Endpoint validiert/
@@ -377,6 +407,12 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   zusätzlich Kommentar-Keepalives, wenn eine Engine länger keine Bytes liefert.
   `differences_data` ist
   strukturiertes JSON (Verdict, Karten, `best_model`, `models_compared`).
+  Jeder Eintrag in `differences[]` trägt zusätzlich **`consensus_anchor`**: ein
+  wörtlicher Auszug aus der KONSENSANTWORT (nicht aus einer Modellantwort),
+  serverseitig wie `claims[].anchor` verifiziert und bei Nichtauffindbarkeit
+  **geleert** — das Frontend markiert damit den Satz inline. `positions[].quote`
+  bleibt unverändert ein Zitat aus der jeweiligen Modellantwort. Alte
+  Bookmarks/Snapshots ohne das Feld degradieren auf „nur Karte".
 - Robustheit Differences (`consensus_engine.py`): einheitlicher Engine-Dispatch
   (`_resolve_engine`/`_call_engine_text`/`_stream_engine_text`), Structured
   Output je Provider (json_object / responseMimeType / Anthropic-Prefill).
@@ -1090,7 +1126,8 @@ Snapshot-Publishing berühren die bestehenden Shared-Pages-/Watch-Tabs nicht.
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **708 passed** (2026-07-23; inklusive der neuen
+  Letzte bekannte Baseline: **718 passed** (2026-07-24; inklusive der neuen
+  Differences-`consensus_anchor`-Tests sowie der bisherigen
   Search-Console-/SEO-Dossier-, Query-, Recommendation-, LLM-Schema-,
   Weekly-Portfolio-Review-, Action-, Publisher-Lineage-/Watch-Capacity-,
   Idempotenz- und Admin-Schutztests sowie
@@ -1101,7 +1138,9 @@ Snapshot-Publishing berühren die bestehenden Shared-Pages-/Watch-Tabs nicht.
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, kompakte Antwort→Consensus-
   Pipeline inkl. Mobile-Clipping/Ergebnis-Reihenfolge,
-  Consensus→Differences+Score, Watch-Dialog mit Pflicht-Sichtbarkeit/Condition-
+  Consensus→Differences+Score inkl. Inline-Marker (`.cx-claim.is-major`,
+  `.cx-marker` mit aria-label), zugeklapptem `#consensusDifferencesPanel` und
+  markerfreiem Copy-Text, Watch-Dialog mit Pflicht-Sichtbarkeit/Condition-
   Feld, Exclude, Theme, Picker-Persistenz). Startet einen eigenen uvicorn auf Port
   8031 mit `MOCK_LLM=1` (deterministische Fixtures in
   `app/services/llm/mock_llm.py`, Seams: `_run_ask`,
@@ -1255,7 +1294,7 @@ ersten Check statt eines leeren Consensus-Panels.
   Feature-Modulen. Wer eine Funktion umbenennt/verschiebt, muss alle `window.`-
   Aufrufstellen mitziehen (Grep über `static/js/` + `static/firebase.js` +
   `static/demo.js`). Wichtige Globals u. a.: `window.sendQuestion`,
-  `window.getConsensus`, `window.canGenerateConsensus`,
+  `window.getConsensus`, `window.canGenerateConsensus`, `window.App.consensusBodyEl`,
   `window.updateConsensusButtonAvailability`, `window.revealConsensusOutput` /
   `hideConsensusOutput`, `window.cancelCurrentConsensus`, `window.openShareDialog`,
   `window.openWatchDialog`, `window.openWatchDashboard`,
@@ -1272,6 +1311,19 @@ ersten Check statt eines leeren Consensus-Panels.
 - **`window.App.setAppTitle(question?)`** (definiert in `app-core.js`) hält den
   Standard- bzw. fragebezogenen Browser-Tab-Titel bei Query-Send, Bookmark-Open
   und Clear synchron zur aktuellen Ansicht.
+- **`window.App.consensusBodyEl(scope?)`** (definiert in `app-core.js`) ist das
+  EINZIGE Renderziel des Konsenstextes (`#consensusAnswerBody`). Nie wieder per
+  `.consensus-main p` adressieren — dieses `<p>` existiert nicht mehr; alle
+  Aufrufer (`consensus-run.js`, `consensus-lifecycle.js`, `consensus-actions.js`,
+  `consensus-insights.js`, `query-send.js`, `app-init.js`, `firebase.js`,
+  `demo.js`) gehen über den Helfer. Reihenfolge bleibt Vertrag: erst
+  `injectMarkdown` (inkl. KaTeX), **danach** `renderConsensusInsights` — sonst
+  zerstört der Math-Renderer die Marker bzw. die Ankersuche trifft KaTeX-Knoten.
+- **`window.App.differencesPanel.{setSynthesizing,expandForFallback}`**
+  (definiert in `consensus-insights.js`) steuert das zugeklappte
+  `<details>` unter der Antwort. Wer einen neuen Freitext-Fallback-Pfad baut,
+  muss `expandForFallback()` rufen — sonst verschwindet die Analyse
+  stillschweigend hinter einer zugeklappten Zeile.
 - **`window.App.consensusLifecycle.*`** ist die gezielte Run-State-Brücke
   (`startRun/isActiveRun/finishRun/setSynthesizing/isRunning/setGate/
   markPendingCanceled/initAutoConsensusToggle`). Run-ID-Gating nicht umgehen, sonst

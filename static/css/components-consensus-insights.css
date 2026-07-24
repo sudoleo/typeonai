@@ -165,6 +165,116 @@
   background: #e8b968;
 }
 
+/* --- Inline-Marker im Antworttext -----------------------------------------
+   Rechtschreibpruefungs-Metapher: die Textstelle traegt die Markierung, der
+   Marker daneben oeffnet die Details. Bewusst NUR text-decoration - kein
+   reduzierter Textkontrast und keine Hintergrundfarbe, damit der
+   WCAG-Kontrast der Antwort unangetastet bleibt. */
+.cx-claim {
+  /* Einigkeit ist der Normalfall und bleibt undekoriert; die Klasse dient nur
+     als praeziser Einhaengepunkt fuer das Badge. */
+  text-decoration: none;
+}
+
+.cx-claim.is-minor {
+  text-decoration: underline dotted
+    color-mix(in srgb, var(--text-color) 42%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: default;
+}
+
+.cx-claim.is-major {
+  text-decoration: underline wavy var(--cx-major-line);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: default;
+}
+
+:root {
+  --cx-major-line: #c8862f;
+}
+
+.dark-mode {
+  /* Bernstein im Dark Mode aufhellen, sonst verschwindet die Wellenlinie. */
+  --cx-major-line: #e8b968;
+}
+
+/* Marker an einem Widerspruch: kompakter Punkt-Button, keine Zaehlung. */
+.cx-marker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: 1px;
+  margin: 0 2px 0 4px;
+  padding: 0 4px;
+  min-height: 16px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 90%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--glass-bg-strong) 55%, transparent);
+  line-height: 1;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+/* Trefferflaeche >= 44px ohne Einfluss auf die Zeilenhoehe: das Pseudoelement
+   vergroessert nur den Klickbereich, nicht die Box. */
+.cx-marker::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+.cx-marker:hover,
+.cx-marker:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
+  box-shadow: var(--liquid-focus-ring);
+  outline: none;
+}
+
+.cx-marker .cx-marker-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-color) 45%, transparent);
+}
+
+.cx-marker.is-major .cx-marker-dot {
+  background: var(--cx-major-line);
+}
+
+/* Dasselbe fuer das bestehende Claim-Badge: Trefferflaeche vergroessern,
+   ohne die Zeilenhoehe des Absatzes zu veraendern. */
+.claim-badge {
+  position: relative;
+}
+
+.claim-badge::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+/* Karte, die ein Inline-Marker gerade geoeffnet hat */
+.diff-card.is-focused {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diff-card.is-focused {
+    transition: none;
+  }
+}
+
 /* Kernaussagen ohne gefundenen Anker */
 .consensus-claims-fallback {
   position: relative;
