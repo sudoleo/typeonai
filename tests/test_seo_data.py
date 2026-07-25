@@ -665,6 +665,91 @@ def test_deterministic_recommendation_maps_existing_status_classes():
         assert result["recommendation"] == expected
 
 
+def contested_page(*, observed_days=61, agreement_score=55, contradictions=2):
+    page = recommendation_page(observed_days=observed_days)
+    page["origin"] = "share"
+    page["dossier"]["consensus_signal"] = {
+        "agreement_score": agreement_score,
+        "contradictions": contradictions,
+        "major_contradictions": 1 if contradictions else 0,
+        "other_differences": 0,
+        "models_compared": 5,
+    }
+    return page
+
+
+def test_distinctive_pages_get_a_longer_grace_period_before_retirement():
+    final_date = date(2026, 7, 17)
+    metrics = daily_rows(final_date, impressions=0, clicks=0)
+
+    distinctive = seo_recommendation.deterministic_recommendation(
+        contested_page(observed_days=61), metrics, complete_query_snapshot(),
+        final_date=final_date, now=NOW,
+    )
+    commodity = seo_recommendation.deterministic_recommendation(
+        contested_page(observed_days=61, agreement_score=93, contradictions=0),
+        metrics, complete_query_snapshot(), final_date=final_date, now=NOW,
+    )
+    aged_out = seo_recommendation.deterministic_recommendation(
+        contested_page(observed_days=121), metrics, complete_query_snapshot(),
+        final_date=final_date, now=NOW,
+    )
+
+    assert distinctive["distinctiveness"]["distinctive"] is True
+    assert distinctive["safeguards"]["observed_long_enough"] is False
+    assert distinctive["recommendation"] == "refresh_title_and_intro"
+
+    assert commodity["distinctiveness"]["distinctive"] is False
+    assert commodity["recommendation"] == "noindex_candidate"
+
+    assert aged_out["recommendation"] == "noindex_candidate"
+
+
+def test_pages_without_a_consensus_signal_keep_the_plain_60_day_rule():
+    final_date = date(2026, 7, 17)
+    metrics = daily_rows(final_date, impressions=0, clicks=0)
+
+    result = seo_recommendation.deterministic_recommendation(
+        recommendation_page(observed_days=61), metrics, complete_query_snapshot(),
+        final_date=final_date, now=NOW,
+    )
+
+    assert result["distinctiveness"]["distinctive"] is None
+    assert result["recommendation"] == "noindex_candidate"
+
+
+def test_share_dossier_reports_the_consensus_signal(monkeypatch):
+    monkeypatch.setattr(seo_dossier.share_snapshots, "get_share", lambda share_id, db=None: {
+        "question": "Which coding assistant handles large refactors better?",
+        "consensus_md": "Answer.",
+        "created_at": NOW - timedelta(days=30),
+        "included_models": ["OpenAI", "Anthropic", "Gemini"],
+        "differences_data": {
+            "models_compared": ["OpenAI", "Anthropic", "Gemini", "Grok"],
+            "agreement": {"score": 61},
+            "differences": [
+                {"type": "contradiction", "severity": "major"},
+                {"type": "contradiction", "severity": "minor"},
+                {"type": "emphasis"},
+            ],
+        },
+    })
+    monkeypatch.setattr(
+        seo_dossier.share_snapshots, "list_watch_history",
+        lambda share_id, db=None, max_items=100: [],
+    )
+
+    signal = seo_dossier.build_share_dossier("abc123")["consensus_signal"]
+
+    assert signal == {
+        "agreement_score": 61,
+        "contradictions": 2,
+        "major_contradictions": 1,
+        "other_differences": 1,
+        "models_compared": 4,
+    }
+
+
 def test_query_snapshot_marks_privacy_filtered_rows_as_partial():
     class QueryClient(FakeSearchConsoleClient):
         def query_page_queries(self, start_date, end_date, page_url, *, limit):

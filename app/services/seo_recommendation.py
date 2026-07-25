@@ -17,7 +17,8 @@ from app.services import seo_data, seo_dossier
 from app.services.seo_repository import FirestoreSeoRepository
 
 
-RULE_VERSION = "seo-recommendation-v1"
+# v2 judges a page by its model disagreement as well as its Search Console data.
+RULE_VERSION = "seo-recommendation-v2"
 RECOMMENDATIONS = (
     "wait",
     "monitor",
@@ -28,9 +29,18 @@ RECOMMENDATIONS = (
     "noindex_candidate",
 )
 NOINDEX_MIN_OBSERVED_DAYS = 60
+# A page whose models genuinely diverged carries information that exists nowhere
+# else, and those pages rank slowly because they answer contested questions. They
+# get a longer leash before the portfolio review may retire them.
+NOINDEX_MIN_OBSERVED_DAYS_DISTINCTIVE = 120
 NOINDEX_MAX_IMPRESSIONS = 3
 REQUIRED_FINAL_DAYS = 28
 MAX_PROMPT_CHARS = 8_000
+
+# Mirrors the publisher's publication filter, so a page is judged by the same
+# standard that decided whether it deserved a URL in the first place.
+DISTINCTIVE_MAX_AGREEMENT = 80
+DISTINCTIVE_MIN_CONTRADICTIONS = 1
 
 
 class SeoRecommendationError(Exception):
@@ -114,6 +124,38 @@ def _has_positive_development(metrics: list[dict], final_date: date) -> bool:
     return bool(impressions_up or clicks_up)
 
 
+def classify_distinctiveness(dossier: dict) -> dict:
+    """Say whether a page shows real model disagreement, or nothing unique.
+
+    ``distinctive`` is None when the page is not a consensus page at all (a
+    static page) or when the signal is missing; callers must not read that as
+    "commodity".
+    """
+    signal = dossier.get("consensus_signal")
+    if not isinstance(signal, dict):
+        return {"distinctive": None, "reason": "no_consensus_signal"}
+    score = signal.get("agreement_score")
+    contradictions = int(signal.get("contradictions") or 0)
+    if not isinstance(score, int):
+        return {
+            "distinctive": None,
+            "reason": "missing_agreement_score",
+            "contradictions": contradictions,
+        }
+    distinctive = (
+        contradictions >= DISTINCTIVE_MIN_CONTRADICTIONS
+        and score <= DISTINCTIVE_MAX_AGREEMENT
+    )
+    return {
+        "distinctive": distinctive,
+        "reason": "models_diverge" if distinctive else "models_agree",
+        "agreement_score": score,
+        "contradictions": contradictions,
+        "major_contradictions": int(signal.get("major_contradictions") or 0),
+        "models_compared": int(signal.get("models_compared") or 0),
+    }
+
+
 def deterministic_recommendation(
     page: dict,
     metrics: list[dict],
@@ -149,12 +191,18 @@ def deterministic_recommendation(
         uncertainties.append("missing_meta_description")
     uncertainties = sorted(set(uncertainties))
 
+    distinctiveness = classify_distinctiveness(dossier)
+    required_days = (
+        NOINDEX_MIN_OBSERVED_DAYS_DISTINCTIVE
+        if distinctiveness["distinctive"] else NOINDEX_MIN_OBSERVED_DAYS
+    )
+
     practically_invisible = (
         summary["clicks"] == 0
         and summary["impressions"] <= NOINDEX_MAX_IMPRESSIONS
     )
     safeguards = {
-        "observed_at_least_60_days": observed_days >= NOINDEX_MIN_OBSERVED_DAYS,
+        "observed_long_enough": observed_days >= required_days,
         "has_28_finalized_days": unique_days >= REQUIRED_FINAL_DAYS,
         "practically_no_visibility": practically_invisible,
         "no_positive_development": not positive_development,
@@ -167,6 +215,18 @@ def deterministic_recommendation(
         f"Observed for {observed_days} days; {unique_days} finalized daily rows are available.",
         f"28-day visibility: {summary['clicks']} clicks and {summary['impressions']} impressions.",
     ]
+    if distinctiveness["distinctive"] is True:
+        evidence.append(
+            f"Distinctive: agreement {distinctiveness['agreement_score']}/100 with "
+            f"{distinctiveness['contradictions']} contradiction(s); retirement needs "
+            f"{required_days} observed days instead of {NOINDEX_MIN_OBSERVED_DAYS}."
+        )
+    elif distinctiveness["distinctive"] is False:
+        evidence.append(
+            f"Commodity page: agreement {distinctiveness['agreement_score']}/100 with "
+            f"{distinctiveness['contradictions']} contradiction(s), so it repeats what a "
+            "single model would answer."
+        )
     if positive_development:
         evidence.append("The recent 14-day window shows positive development.")
     if uncertainties:
@@ -185,7 +245,12 @@ def deterministic_recommendation(
         recommendation, confidence, review_after = "wait", 0.9, 14
     elif status_class == "invisible":
         # An invisible status alone is never enough for noindex_candidate.
-        recommendation, confidence, review_after = "monitor", 0.78, 21
+        if distinctiveness["distinctive"] and observed_days >= REQUIRED_FINAL_DAYS:
+            # The answer is the part that cannot be reproduced elsewhere, so an
+            # invisible distinctive page is a demand-matching problem first.
+            recommendation, confidence, review_after = "refresh_title_and_intro", 0.7, 21
+        else:
+            recommendation, confidence, review_after = "monitor", 0.78, 21
     elif summary["clicks"] == 0 and summary["impressions"] >= 30:
         recommendation, confidence, review_after = "refresh_content", 0.72, 28
     else:
@@ -194,6 +259,7 @@ def deterministic_recommendation(
     return {
         "rule_version": RULE_VERSION,
         "status_class": status_class,
+        "distinctiveness": distinctiveness,
         "recommendation": recommendation,
         "confidence": confidence,
         "evidence": _clip_list(evidence),
@@ -261,6 +327,16 @@ class SeoContentJudge:
             "Review this read-only SEO page dossier. Return only the requested JSON. "
             "Do not propose publishing, deleting, redirecting, reindexing, or changing robots directives. "
             "Any change requires human approval.\n\n"
+            "This site publishes one thing no single model answer provides: where several AI "
+            "models disagreed on the same question. `consensus_signal` and `distinctiveness` "
+            "describe that. Judge accordingly:\n"
+            "- A distinctive page that few people find is usually a demand-matching problem. "
+            "Propose title and intro wording that matches how people actually search, and never "
+            "propose diluting the disagreement the page documents.\n"
+            "- A commodity page — models agreed, no contradictions — cannot be rescued by "
+            "rewriting. Say so plainly in the evidence instead of proposing cosmetic edits.\n"
+            "- Traffic alone does not make a page worth keeping, and low traffic alone does not "
+            "make a distinctive page worth retiring.\n\n"
         )
         # Keep the JSON intact while enforcing a hard prompt cap. The complete
         # page/share body is never sent; this further tightens the already
@@ -406,6 +482,7 @@ class SeoRecommendationService:
             },
             "recommendation": result["recommendation"],
             "evidence": result["evidence"],
+            "distinctiveness": result["distinctiveness"],
         }
         fingerprint = hashlib.sha256(
             json.dumps(fingerprint_payload, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
@@ -419,6 +496,7 @@ class SeoRecommendationService:
             "data_window": result["data_window"],
             "dossier_summary": dossier_summary,
             "status_class": result["status_class"],
+            "distinctiveness": result["distinctiveness"],
             "recommendation": result["recommendation"],
             "confidence": result["confidence"],
             "evidence": result["evidence"],
@@ -436,18 +514,23 @@ class SeoRecommendationService:
         deterministic = self.generate(page_id)
         if (
             deterministic.get("status_class") not in {"opportunity", "declining"}
-            and deterministic.get("recommendation") != "noindex_candidate"
+            and deterministic.get("recommendation")
+            not in {"noindex_candidate", "refresh_title_and_intro"}
         ):
             raise SeoRecommendationError(
                 "content_judge_not_applicable",
-                "The content judge is limited to opportunity, declining, and safeguarded noindex candidates.",
+                "The content judge is limited to opportunity, declining, title-refresh, and "
+                "safeguarded noindex candidates.",
             )
         page, _, query_snapshot, _ = self._context(page_id)
         dossier = page.get("dossier") if isinstance(page.get("dossier"), dict) else {}
         context = {
             "deterministic_judgement": {
                 key: deterministic.get(key)
-                for key in ("status_class", "recommendation", "confidence", "evidence", "data_window")
+                for key in (
+                    "status_class", "recommendation", "confidence", "evidence",
+                    "data_window", "distinctiveness",
+                )
             },
             "dossier": {
                 **seo_dossier.journal_summary(page),

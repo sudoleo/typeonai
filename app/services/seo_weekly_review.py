@@ -211,6 +211,7 @@ class SeoPortfolioJudge:
                 "metrics_28d": page.get("metrics_28d"),
                 "status": page.get("status"),
                 "deterministic_recommendation": page.get("recommendation"),
+                "distinctiveness": page.get("distinctiveness") or {},
                 "top_queries": [
                     {
                         "query": _clip(item.get("query"), 120),
@@ -233,6 +234,18 @@ class SeoPortfolioJudge:
             "only strict JSON. You cannot execute actions. Never invent noindex/delete approval: "
             "the server will retain deterministic safeguards. Suggest a topic brief only when "
             "at least three mature pages show clear evidence; otherwise return null fields.\n\n"
+            "Strategy this portfolio is run on: each page publishes where several AI models "
+            "disagreed on one question, which is the only thing here that a single model answer "
+            "cannot reproduce. `distinctiveness` reports that per page. Apply it:\n"
+            "- Weigh distinctive pages by whether they are finding their audience, not by raw "
+            "clicks. They rank slowly, and the server already grants them a longer grace period "
+            "before retirement; do not argue against it.\n"
+            "- Treat commodity pages (models agreed, no contradictions) as the portfolio's real "
+            "problem even when they perform well. They cannot be fixed by rewriting, so name the "
+            "pattern in negative_patterns rather than proposing edits page by page.\n"
+            "- A proposed topic brief must move future publishing toward questions with durable "
+            "demand where the models measurably diverge. Ground it in the pages you were given: "
+            "which questions produced real disagreement and found readers, and which did not.\n\n"
         )
         serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
         prompt = instructions + serialized
@@ -686,6 +699,7 @@ class SeoWeeklyReviewService:
             "metrics_28d": row.get("metrics_28d") or {},
             "status": row.get("status"),
             "recommendation": deterministic.get("recommendation"),
+            "distinctiveness": deterministic.get("distinctiveness") or {},
             "confidence": deterministic.get("confidence"),
             "evidence": deterministic.get("evidence") or [],
             "safeguards": safeguards,

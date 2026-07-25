@@ -57,6 +57,29 @@ def _static_summary(soup: BeautifulSoup, meta_description: str) -> str:
     return _clip(" ".join(parts) or meta_description, MAX_CONTENT_SUMMARY_CHARS)
 
 
+def _consensus_signal(differences: dict, *, model_fallback=0, agreement_score=None) -> dict:
+    """Raw distinctiveness facts of a consensus page.
+
+    This is the one thing a consens.io page has that a single model answer does
+    not: where the models actually diverged. The SEO layer needs it as data, so
+    the review can tell a page carrying unique information apart from one that
+    merely repeats what any model would have said.
+    """
+    agreement = differences.get("agreement")
+    agreement = agreement if isinstance(agreement, dict) else {}
+    entries = [item for item in (differences.get("differences") or []) if isinstance(item, dict)]
+    contradictions = [item for item in entries if item.get("type") == "contradiction"]
+    major = sum(1 for item in contradictions if item.get("severity") != "minor")
+    score = agreement_score if agreement_score is not None else agreement.get("score")
+    return {
+        "agreement_score": int(score) if isinstance(score, (int, float)) else None,
+        "contradictions": len(contradictions),
+        "major_contradictions": major,
+        "other_differences": len(entries) - len(contradictions),
+        "models_compared": len(differences.get("models_compared") or []) or model_fallback,
+    }
+
+
 def _share_meta_description(data: dict, history: list[dict]) -> str:
     differences = data.get("differences_data")
     differences = differences if isinstance(differences, dict) else {}
@@ -121,6 +144,8 @@ def build_static_dossier(url: str, lastmod=None) -> dict:
         "meta_description": meta_description,
         "content_summary": content_summary,
         "content_representation": None,
+        # Static pages carry no model comparison, so they have no signal to show.
+        "consensus_signal": None,
         "source_freshness": {"source_count": 0, "snapshot_at": None},
         "watch_freshness": {"last_checked_at": None, "last_material_change_at": None},
         "technical_uncertainties": sorted(set(uncertainties)),
@@ -138,6 +163,7 @@ def build_share_dossier(share_id: str, *, db=None) -> dict:
             "meta_description": "",
             "content_summary": "",
             "content_representation": None,
+            "consensus_signal": None,
             "source_freshness": {"source_count": 0, "snapshot_at": None},
             "watch_freshness": {"last_checked_at": None, "last_material_change_at": None},
             "technical_uncertainties": ["share_snapshot_unavailable"],
@@ -159,6 +185,15 @@ def build_share_dossier(share_id: str, *, db=None) -> dict:
         f"Question: {question}\nConsensus excerpt: {consensus}",
         MAX_SHARE_CONTENT_REPRESENTATION_CHARS,
     )
+    differences = data.get("differences_data")
+    differences = differences if isinstance(differences, dict) else {}
+    consensus_signal = _consensus_signal(
+        differences,
+        model_fallback=len(data.get("included_models") or []),
+        # A Watch re-scores the same question over time; the newest score is the
+        # one that describes the page as it stands today.
+        agreement_score=history[-1].get("agreement_score") if history else None,
+    )
     uncertainties = []
     if not title:
         uncertainties.append("missing_title")
@@ -166,6 +201,9 @@ def build_share_dossier(share_id: str, *, db=None) -> dict:
         uncertainties.append("missing_meta_description")
     if not isinstance(created_at, datetime):
         uncertainties.append("missing_publish_timestamp")
+    # A missing agreement score is not a technical defect: older snapshots
+    # predate it. It only means the page gets no distinctiveness bonus, and
+    # flagging it here would block those pages from ever being retired.
     return {
         "schema_version": 1,
         "published_at": _iso(created_at),
@@ -177,6 +215,7 @@ def build_share_dossier(share_id: str, *, db=None) -> dict:
         # the page dossier so an optional content judge has useful context
         # without persisting the full share answer a second time.
         "content_representation": representation,
+        "consensus_signal": consensus_signal,
         "source_freshness": {
             "source_count": len(sources),
             "snapshot_at": _iso(source_snapshot_at),
@@ -200,6 +239,7 @@ def build_topic_dossier(topic_id: str, *, db=None) -> dict:
             "meta_description": "",
             "content_summary": "",
             "content_representation": None,
+            "consensus_signal": None,
             "source_freshness": {"source_count": 0, "snapshot_at": None},
             "watch_freshness": {"last_checked_at": None, "last_material_change_at": None},
             "technical_uncertainties": ["topic_unavailable"],
@@ -232,6 +272,11 @@ def build_topic_dossier(topic_id: str, *, db=None) -> dict:
             f"\nConsensus excerpt: {consensus}",
             MAX_SHARE_CONTENT_REPRESENTATION_CHARS,
         ),
+        "consensus_signal": _consensus_signal(
+            (latest or {}).get("differences_data")
+            if isinstance((latest or {}).get("differences_data"), dict) else {},
+            agreement_score=(latest or {}).get("agreement_score"),
+        ),
         "source_freshness": {
             "source_count": len(evidence),
             "snapshot_at": _iso((latest or {}).get("observed_at")),
@@ -256,6 +301,7 @@ def journal_summary(page: dict) -> dict:
         "title": _clip(dossier.get("title"), 300),
         "meta_description": _clip(dossier.get("meta_description"), 500),
         "content_summary": _clip(dossier.get("content_summary"), MAX_CONTENT_SUMMARY_CHARS),
+        "consensus_signal": dossier.get("consensus_signal") or None,
         "source_freshness": dossier.get("source_freshness") or {},
         "watch_freshness": dossier.get("watch_freshness") or {},
         "technical_uncertainties": list(dossier.get("technical_uncertainties") or [])[:10],
