@@ -61,11 +61,11 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (Pro, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). |
-| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. |
+| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
-| `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (`?version=<run_id>`), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe`; Admin-CRUD unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
+| `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (`?version=<run_id>`, rendert Position Map + Agreement-Kurve über `services/history_view.py` — dieselbe Darstellung wie die Watch-Seiten, bewusst nur bis zum gewählten Snapshot), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe`; Admin-CRUD unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` ohne DeepSeek und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil und DeepSeek-Ausschluss. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 
 Der Scheduled Publisher läuft per GitHub Actions montags, mittwochs und freitags.
@@ -87,6 +87,15 @@ Snapshot-Entscheidungen werden per `POST .../{run_id}/editorial-decision`
 gespeichert; ein vom Portfolio-Judge vorgeschlagener Publisher Topic Brief wird
 explizit per `POST .../{run_id}/topic-brief/accept|reject` entschieden. Alle
 Endpunkte sind admin-only.
+
+Akquise-Strategie (seit 2026-07-26): Publisher-Brief und
+`SEARCH_OPPORTUNITY_RULES` wählen dauerhaft nachgefragte, **strittige** Fragen
+statt des News-/Meme-Fensters; `evaluate_disagreement` im Publisher-Skript
+veröffentlicht einen fertigen Lauf nur bei Agreement ≤ 80 und mindestens einem
+Widerspruch. Dieselbe Schwelle bewertet den Bestand: `seo_dossier` liefert
+`consensus_signal`, `seo_recommendation.classify_distinctiveness` macht daraus
+distinctive/commodity, distinctive Seiten bekommen 120 statt 60 Tage vor
+`noindex` und bei Unsichtbarkeit `refresh_title_and_intro`.
 
 **Zentrale Templates** (`templates/`, gerendert mit `Jinja2Templates`):
 `landing.html` (Marketing), `index.html` (die App — Haupt-Markup + Script-Tags),
@@ -175,9 +184,12 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Experience, Connections, Model behavior und Account gruppiert; die
   bestehenden Control-IDs bleiben der JavaScript-Vertrag.
   Die Usage-Gruppe zeigt zusätzlich das aktive Watch-Kontingent aus
-  `/api/my/watches`; der Pro-Einstieg ist bis zur Einführung von Billing ein
-  zustandsbehafteter „Request Pro access“-/„Join Pro beta“-Dialog ohne Preis-
-  oder Kaufdarstellung und ohne Browser-Alerts.
+  `/api/my/watches`. Es wird nichts verkauft: Gesperrte Features öffnen einen
+  reinen Erklärdialog („Warum ist das aus?“ → dieser Lauf kostet ein Vielfaches,
+  deshalb pro Account statt für alle freigeschaltet), ohne Preis, Kauf,
+  Zugangs-Request oder Browser-Alert. Formel ist „nothing to buy **today**“ plus
+  offener Hinweis auf eine mögliche spätere Mitgliedschaft — nie „es gibt nichts
+  zu kaufen“. Der Sidebar-Link heißt „Why limits?“ und öffnet denselben Dialog.
 - **`math-render.js`** — gemeinsame KaTeX-Brücke für App und öffentliche
   Share-/Watch-Seiten. Bewahrt `\[...\]`/`\(...\)` durch den Markdown-Pass und
   exponiert `window.ConsensusMath.{prepareMarkdown,render}`.
