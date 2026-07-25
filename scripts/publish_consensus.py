@@ -25,51 +25,56 @@ class PublisherError(RuntimeError):
 
 
 DEFAULT_TOPIC_BRIEF = (
-    "Choose one highly current, evidence-rich AI topic that people are beginning to search "
-    "for now. Focus on named AI models, products, features, subscriptions, developer tools, "
-    "release timing, availability, surprising product behavior, or a credible emerging "
-    "rumor. Favor a narrow exact-intent query while the news window is still young and "
-    "dedicated coverage is sparse.\n\n"
-    "The question should help someone verify a claim, understand what just changed, or "
-    "decide whether to wait for or use a specific AI product. It must benefit from comparing "
-    "multiple AI models and support a substantial answer from several credible web sources. "
-    "Careful speculation is welcome only when it is clearly framed and anchored in official "
-    "announcements, documentation, changelogs, observed product behavior, or credible reporting.\n\n"
-    "Avoid government policy, regulation, legislation, elections, broad evergreen explainers, "
-    "generic AI trend pieces, personal medical/legal/financial advice, sensationalism, and "
-    "unsupported rumors."
+    "Choose one question about AI products that people keep asking and that credible sources "
+    "still answer differently. Focus on named AI models, plans, coding tools, agents, and APIs: "
+    "capability and cost comparisons, which tool fits a stated job, whether a documented limit "
+    "or price holds up in practice, how two products really differ, and whether a widely "
+    "repeated claim about a model is true.\n\n"
+    "The question must have durable search demand — still worth asking in six months — and it "
+    "must be genuinely contested, so that a careful person reading the available evidence could "
+    "reasonably land on different answers. That disagreement is the point: comparing several AI "
+    "models has to expose it rather than repeat one obvious answer. Support it with several "
+    "credible web sources.\n\n"
+    "Avoid news-of-the-day items, memes, rumor chasing, government policy, regulation, "
+    "legislation, elections, personal medical/legal/financial advice, sensationalism, and broad "
+    "trend pieces without a checkable claim."
 )
 
 
 # These requirements are appended even when an older Admin topic brief is still stored.
-# They encode the Search Console pattern behind the publisher's current acquisition strategy.
+# They encode the acquisition strategy: durable, genuinely contested questions
+# instead of the news window. Keep in sync with publisher_config.py.
 SEARCH_OPPORTUNITY_RULES = (
     "Search-opportunity requirements:\n"
-    "- Work in the high-current AI product/news lane. Prefer a named model, company, feature, "
-    "plan, coding tool, release, leak, or rumor with a new signal from roughly the last seven days.\n"
-    "- Give special priority to fast-rising AI memes and cynical or ironic narratives on X when "
-    "the originating post or breakout signal appeared within roughly the last 12 hours, reposts, "
-    "remixes, quotes, or discussion are visibly accelerating, and the viral wave is still rolling. "
-    "Look for posts whose reference, joke, or implied claim people need explained.\n"
-    "- For a meme candidate, prefer a query that asks what it means, where it came from, why the "
-    "irony or cynicism lands, or whether the underlying claim is true. Illustrative patterns include "
-    "Le Chaton Fat and 'The Jacobian Conjecture is False Per Anthropic'; treat these as examples of "
-    "the format, not evergreen topics to repeat.\n"
-    "- Use the original timestamped X post and its visible spread as primary evidence for a meme's "
-    "origin and momentum, then use credible external sources to verify the underlying facts and "
-    "context. Dedicated articles about the meme itself are not required while it is still emerging. "
-    "Reject memes whose growth has already stalled or whose apparent virality cannot be checked.\n"
-    "- Favor queries shaped like release/availability checks, rumor verification, product-name "
-    "clarification, or what a just-announced change means for users.\n"
+    "- Choose a question with durable demand. People should still be asking it in six months. "
+    "Recurring comparison, suitability, cost, reliability, limit, and claim-checking questions "
+    "qualify; today's news cycle, memes, leaks, and viral posts do not.\n"
+    "- Require genuine contestedness. Before choosing, verify with web search that credible "
+    "sources, documentation, benchmarks, or practitioner reports actually disagree, or that an "
+    "honest answer depends on conditions the asker has to weigh. A question every source answers "
+    "the same way is a rejection, however much traffic it might carry.\n"
+    "- Name the disagreement in your own reasoning: who holds which position, and on what "
+    "evidence. If you cannot name at least two defensible answers, choose another candidate.\n"
+    "- Prefer questions where comparing several AI models is the point, because the models are "
+    "likely to weigh the same evidence differently. Reject questions whose whole answer is one "
+    "retrievable date, number, price, or yes/no that every source states outright.\n"
+    "- Stay in the AI product, model, and developer-tooling lane: named models, plans, coding "
+    "tools, agents, APIs, pricing, capability claims, and observed product behavior.\n"
     "- Use web search to compare at least five candidate queries before choosing. Reject a "
-    "candidate when its exact search intent is already answered by many established, high-ranking "
-    "news, government, legal, or corporate explainer pages. Choose the candidate with the best "
-    "combination of freshness, plausible search demand, low exact-intent competition, and sources.\n"
+    "candidate when its exact search intent is already answered well by established, high-ranking "
+    "pages. Choose the candidate with the best combination of lasting search demand, real "
+    "disagreement, low exact-intent competition, and checkable sources.\n"
     "- Do not select government policy, grants, federal/state law, regulation, enforcement, "
     "elections, or broad societal impact as the main intent.\n"
-    "- Do not invent a release or rumor. A speculative question needs at least one current, "
-    "checkable signal and must make uncertainty explicit."
+    "- Do not manufacture a controversy. The disagreement has to be visible in current sources; "
+    "a question that is merely phrased as contested does not qualify."
 )
+
+# A run whose models all agree adds nothing that asking one model would not.
+# Those runs are the ones that quietly fill a portfolio with pages nobody needs,
+# so the publisher pays for the run and then declines to publish it.
+DEFAULT_MAX_AGREEMENT_SCORE = 80
+DEFAULT_MIN_CONTRADICTIONS = 1
 
 
 def env_bool(name: str, default: bool) -> bool:
@@ -77,6 +82,13 @@ def env_bool(name: str, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def env_int(name: str, default: int) -> int:
+    try:
+        return int(str(os.environ.get(name, "")).strip())
+    except ValueError:
+        return default
 
 
 def http_json(method: str, url: str, *, headers=None, payload=None, timeout=60):
@@ -176,8 +188,8 @@ Write the final question as a Google-style search query and clickable page title
 - avoid subordinate clauses introduced by when, while, whereas, although, or despite;
 - include a year only when it is essential to identify a policy, event, or product.
 
-For example, prefer "Do AI data centers raise household electricity prices?" over a long
-question that asks whether benefits are justified while also discussing costs and climate goals.
+For example, prefer "Is Cursor or GitHub Copilot better for large refactors?" over a long
+question that asks which coding tool is best while also weighing pricing, team size, and setup.
 
 Return exactly one neutral English question, with no quotation marks, preface, markdown, or explanation.
 {feedback}"""
@@ -301,6 +313,56 @@ def wait_for_run(api_base: str, api_key: str, run_id: str) -> dict:
     raise PublisherError(f"Consensus run {run_id} did not finish within {timeout_seconds:.0f}s")
 
 
+def run_agreement(run: dict) -> dict:
+    result = (run or {}).get("result")
+    result = result if isinstance(result, dict) else {}
+    differences = result.get("differences_data")
+    differences = differences if isinstance(differences, dict) else {}
+    agreement = differences.get("agreement")
+    return agreement if isinstance(agreement, dict) else {}
+
+
+def evaluate_disagreement(run: dict) -> dict:
+    """Decide whether a finished run is worth a public URL.
+
+    The value of a public consensus page is the divergence between the models.
+    When they all land in the same place, the page repeats what a single model
+    would have said, so it is published only if the operator lowers the bar
+    deliberately. Missing agreement data is treated as a reason to hold back:
+    publishing blind is exactly how a portfolio fills up with filler.
+    """
+    max_score = env_int("CONSENSUS_MAX_AGREEMENT_SCORE", DEFAULT_MAX_AGREEMENT_SCORE)
+    min_contradictions = env_int("CONSENSUS_MIN_CONTRADICTIONS", DEFAULT_MIN_CONTRADICTIONS)
+    agreement = run_agreement(run)
+    score = agreement.get("score")
+    if not isinstance(score, int):
+        return {
+            "publish": False,
+            "reason": "missing_agreement_data",
+            "detail": "The run carries no agreement score, so its distinctiveness cannot be checked.",
+            "agreement": agreement,
+        }
+    major = int(agreement.get("major_contradictions") or 0)
+    minor = int(agreement.get("minor_contradictions") or 0)
+    contradictions = major + minor
+    detail = (
+        f"agreement {score}/100, {contradictions} contradiction"
+        f"{'' if contradictions == 1 else 's'} "
+        f"({major} major, {minor} minor)"
+    )
+    if score > max_score or contradictions < min_contradictions:
+        return {
+            "publish": False,
+            "reason": "models_agree",
+            "detail": (
+                f"{detail}; the threshold is at most {max_score}/100 with at least "
+                f"{min_contradictions} contradiction(s)."
+            ),
+            "agreement": agreement,
+        }
+    return {"publish": True, "reason": "models_diverge", "detail": detail, "agreement": agreement}
+
+
 def write_github_summary(question: str, share: dict, watch: dict | None = None) -> None:
     target = os.environ.get("GITHUB_STEP_SUMMARY", "").strip()
     if not target:
@@ -325,8 +387,24 @@ def write_github_summary(question: str, share: dict, watch: dict | None = None) 
         summary.write("\n".join(lines))
 
 
-def send_telegram_notification(question: str, share: dict) -> bool:
-    """Send the published page to Telegram without failing the publisher run."""
+def write_github_skip_summary(question: str, gate: dict) -> None:
+    target = os.environ.get("GITHUB_STEP_SUMMARY", "").strip()
+    if not target:
+        return
+    lines = [
+        "## Consensus run not published",
+        "",
+        f"- Question: {question}",
+        f"- Reason: {gate.get('reason')}",
+        f"- Detail: {gate.get('detail')}",
+        "",
+    ]
+    with Path(target).open("a", encoding="utf-8") as summary:
+        summary.write("\n".join(lines))
+
+
+def send_telegram_message(message: str) -> bool:
+    """Post one message to Telegram without ever failing the publisher run."""
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
     if not bot_token and not chat_id:
@@ -339,15 +417,6 @@ def send_telegram_notification(question: str, share: dict) -> bool:
         )
         return False
 
-    url = str(share.get("url") or "").strip()
-    if not url:
-        print(
-            "Warning: Telegram notification skipped because the share URL is missing.",
-            file=sys.stderr,
-        )
-        return False
-
-    message = f"New Consensus published\n\n{question}\n\n{url}"
     payload = json.dumps(
         {
             "chat_id": chat_id,
@@ -377,6 +446,27 @@ def send_telegram_notification(question: str, share: dict) -> bool:
 
     print("Telegram notification sent.")
     return True
+
+
+def send_telegram_notification(question: str, share: dict) -> bool:
+    """Send the published page to Telegram."""
+    url = str(share.get("url") or "").strip()
+    if not url:
+        print(
+            "Warning: Telegram notification skipped because the share URL is missing.",
+            file=sys.stderr,
+        )
+        return False
+    return send_telegram_message(f"New Consensus published\n\n{question}\n\n{url}")
+
+
+def send_telegram_skip_notice(question: str, gate: dict) -> bool:
+    """Report a deliberately unpublished run, so a quiet loop stays visible."""
+    return send_telegram_message(
+        "Consensus run not published\n\n"
+        f"{question}\n\n"
+        f"Reason: {gate.get('reason')}\n{gate.get('detail')}"
+    )
 
 
 def main() -> int:
@@ -411,7 +501,20 @@ def main() -> int:
     run_id = str((run or {}).get("run_id") or "")
     if not run_id:
         raise PublisherError("Consensus API did not return a run_id")
-    wait_for_run(api_base, api_key, run_id)
+    finished = wait_for_run(api_base, api_key, run_id)
+
+    gate = evaluate_disagreement(finished)
+    print(f"Disagreement check: {gate['reason']} — {gate['detail']}")
+    if not gate["publish"]:
+        print(
+            json.dumps(
+                {"question": question, "run_id": run_id, "published": False, "gate": gate},
+                indent=2,
+            )
+        )
+        write_github_skip_summary(question, gate)
+        send_telegram_skip_notice(question, gate)
+        return 0
 
     _status, share = http_json(
         "POST",

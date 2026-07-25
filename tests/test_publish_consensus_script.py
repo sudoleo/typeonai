@@ -54,7 +54,19 @@ def test_main_runs_publish_and_index_flow_without_topic_call(monkeypatch, capsys
         if url.endswith("/api/v1/consensus/runs"):
             return 202, {"run_id": "a" * 32, "status": "reserved"}
         if url.endswith("/api/v1/consensus/runs/" + "a" * 32):
-            return 200, {"run_id": "a" * 32, "status": "succeeded"}
+            return 200, {
+                "run_id": "a" * 32,
+                "status": "succeeded",
+                "result": {
+                    "differences_data": {
+                        "agreement": {
+                            "score": 58,
+                            "major_contradictions": 1,
+                            "minor_contradictions": 1,
+                        }
+                    }
+                },
+            }
         if url.endswith("/share"):
             return 201, {"share_id": "B" * 16, "indexing_status": "noindex"}
         if url.endswith("/watch"):
@@ -109,7 +121,14 @@ def test_watch_capacity_skip_keeps_publisher_run_successful(monkeypatch, capsys)
         if url.endswith("/consensus/runs"):
             return 202, {"run_id": "a" * 32}
         if url.endswith("/" + "a" * 32):
-            return 200, {"status": "succeeded"}
+            return 200, {
+                "status": "succeeded",
+                "result": {
+                    "differences_data": {
+                        "agreement": {"score": 61, "major_contradictions": 1}
+                    }
+                },
+            }
         if url.endswith("/share"):
             return 201, {"share_id": "B" * 16, "url": "https://example/s/x"}
         if url.endswith("/watch"):
@@ -218,18 +237,94 @@ def test_topic_selection_uses_web_search_and_recent_question_history(monkeypatch
     assert captured["payload"]["model"] == "gpt-5.6-luna"
     assert captured["payload"]["tools"] == [{"type": "web_search"}]
     assert "What was already published?" in captured["payload"]["input"]
-    assert "highly current, evidence-rich AI topic" in captured["payload"]["input"]
+    assert "still answer differently" in captured["payload"]["input"]
     assert "Google-style search query and clickable page title" in captured["payload"]["input"]
     assert "compare at least five candidate queries" in captured["payload"]["input"]
     assert "low exact-intent competition" in captured["payload"]["input"]
-    assert "within roughly the last 12 hours" in captured["payload"]["input"]
-    assert "viral wave is still rolling" in captured["payload"]["input"]
-    assert "Le Chaton Fat" in captured["payload"]["input"]
-    assert "The Jacobian Conjecture is False Per Anthropic" in captured["payload"]["input"]
+    assert "still be asking it in six months" in captured["payload"]["input"]
+    assert "Require genuine contestedness" in captured["payload"]["input"]
+    assert "Do not manufacture a controversy" in captured["payload"]["input"]
+    prompt = captured["payload"]["input"]
+    assert "viral wave is still rolling" not in prompt
+    assert "Le Chaton Fat" not in prompt
 
 
 def test_search_opportunity_rules_match_backend_product_fact():
     assert publisher.SEARCH_OPPORTUNITY_RULES == publisher_config.SEARCH_OPPORTUNITY_RULES
+    assert publisher.DEFAULT_TOPIC_BRIEF == publisher_config.DEFAULT_TOPIC_BRIEF
+
+
+def test_evaluate_disagreement_publishes_only_contested_runs(monkeypatch):
+    monkeypatch.delenv("CONSENSUS_MAX_AGREEMENT_SCORE", raising=False)
+    monkeypatch.delenv("CONSENSUS_MIN_CONTRADICTIONS", raising=False)
+
+    def run(agreement):
+        return {"result": {"differences_data": {"agreement": agreement}}}
+
+    contested = publisher.evaluate_disagreement(
+        run({"score": 55, "major_contradictions": 1, "minor_contradictions": 2})
+    )
+    assert contested["publish"] is True
+    assert contested["reason"] == "models_diverge"
+
+    unanimous = publisher.evaluate_disagreement(
+        run({"score": 92, "major_contradictions": 0, "minor_contradictions": 0})
+    )
+    assert unanimous["publish"] is False
+    assert unanimous["reason"] == "models_agree"
+
+    # A low score without a single contradiction is emphasis noise, not dissent.
+    emphasis_only = publisher.evaluate_disagreement(
+        run({"score": 79, "major_contradictions": 0, "minor_contradictions": 0})
+    )
+    assert emphasis_only["publish"] is False
+
+    assert publisher.evaluate_disagreement({"result": {}})["reason"] == "missing_agreement_data"
+
+    monkeypatch.setenv("CONSENSUS_MAX_AGREEMENT_SCORE", "100")
+    monkeypatch.setenv("CONSENSUS_MIN_CONTRADICTIONS", "0")
+    assert publisher.evaluate_disagreement(
+        run({"score": 92, "major_contradictions": 0, "minor_contradictions": 0})
+    )["publish"] is True
+
+
+def test_unanimous_run_is_not_published_but_reported(monkeypatch, capsys):
+    monkeypatch.setenv("CONSENSUS_API_KEY", "cns_test")
+    monkeypatch.setenv("CONSENSUS_QUESTION", "Which technologies should be compared?")
+    monkeypatch.delenv("CONSENSUS_MAX_AGREEMENT_SCORE", raising=False)
+    monkeypatch.delenv("CONSENSUS_MIN_CONTRADICTIONS", raising=False)
+    notices = []
+
+    def fake_http(method, url, **kwargs):
+        if url.endswith("/publisher/config"):
+            return 200, {"enabled": True, "weekly_watch_enabled": True, "auto_index": True}
+        if url.endswith("/consensus/runs"):
+            return 202, {"run_id": "a" * 32}
+        if url.endswith("/" + "a" * 32):
+            return 200, {
+                "status": "succeeded",
+                "result": {
+                    "differences_data": {
+                        "agreement": {
+                            "score": 88,
+                            "major_contradictions": 0,
+                            "minor_contradictions": 0,
+                        }
+                    }
+                },
+            }
+        raise AssertionError(f"unexpected call to {url}")
+
+    monkeypatch.setattr(publisher, "http_json", fake_http)
+    monkeypatch.setattr(
+        publisher, "send_telegram_skip_notice", lambda *args: notices.append(args) or True
+    )
+
+    assert publisher.main() == 0
+    output = capsys.readouterr().out
+    assert "models_agree" in output
+    assert '"published": false' in output
+    assert len(notices) == 1
 
 
 def test_generated_topic_rejects_government_policy_queries():

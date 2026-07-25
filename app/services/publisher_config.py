@@ -16,32 +16,35 @@ DEFAULT_MAX_ACTIVE_PUBLISHER_WATCHES = 12
 # Kept here as a read-only product fact for the Admin SEO review. The standalone
 # publisher script intentionally carries the same constant because it has no
 # application-package dependency at runtime.
+#
+# The rules select for contested questions with durable demand instead of the
+# news window they targeted before. A page only earns a URL when the models
+# actually diverge on it; everything else is something a single model answers
+# just as well, and the portfolio then decays with the news cycle.
 SEARCH_OPPORTUNITY_RULES = (
     "Search-opportunity requirements:\n"
-    "- Work in the high-current AI product/news lane. Prefer a named model, company, feature, "
-    "plan, coding tool, release, leak, or rumor with a new signal from roughly the last seven days.\n"
-    "- Give special priority to fast-rising AI memes and cynical or ironic narratives on X when "
-    "the originating post or breakout signal appeared within roughly the last 12 hours, reposts, "
-    "remixes, quotes, or discussion are visibly accelerating, and the viral wave is still rolling. "
-    "Look for posts whose reference, joke, or implied claim people need explained.\n"
-    "- For a meme candidate, prefer a query that asks what it means, where it came from, why the "
-    "irony or cynicism lands, or whether the underlying claim is true. Illustrative patterns include "
-    "Le Chaton Fat and 'The Jacobian Conjecture is False Per Anthropic'; treat these as examples of "
-    "the format, not evergreen topics to repeat.\n"
-    "- Use the original timestamped X post and its visible spread as primary evidence for a meme's "
-    "origin and momentum, then use credible external sources to verify the underlying facts and "
-    "context. Dedicated articles about the meme itself are not required while it is still emerging. "
-    "Reject memes whose growth has already stalled or whose apparent virality cannot be checked.\n"
-    "- Favor queries shaped like release/availability checks, rumor verification, product-name "
-    "clarification, or what a just-announced change means for users.\n"
+    "- Choose a question with durable demand. People should still be asking it in six months. "
+    "Recurring comparison, suitability, cost, reliability, limit, and claim-checking questions "
+    "qualify; today's news cycle, memes, leaks, and viral posts do not.\n"
+    "- Require genuine contestedness. Before choosing, verify with web search that credible "
+    "sources, documentation, benchmarks, or practitioner reports actually disagree, or that an "
+    "honest answer depends on conditions the asker has to weigh. A question every source answers "
+    "the same way is a rejection, however much traffic it might carry.\n"
+    "- Name the disagreement in your own reasoning: who holds which position, and on what "
+    "evidence. If you cannot name at least two defensible answers, choose another candidate.\n"
+    "- Prefer questions where comparing several AI models is the point, because the models are "
+    "likely to weigh the same evidence differently. Reject questions whose whole answer is one "
+    "retrievable date, number, price, or yes/no that every source states outright.\n"
+    "- Stay in the AI product, model, and developer-tooling lane: named models, plans, coding "
+    "tools, agents, APIs, pricing, capability claims, and observed product behavior.\n"
     "- Use web search to compare at least five candidate queries before choosing. Reject a "
-    "candidate when its exact search intent is already answered by many established, high-ranking "
-    "news, government, legal, or corporate explainer pages. Choose the candidate with the best "
-    "combination of freshness, plausible search demand, low exact-intent competition, and sources.\n"
+    "candidate when its exact search intent is already answered well by established, high-ranking "
+    "pages. Choose the candidate with the best combination of lasting search demand, real "
+    "disagreement, low exact-intent competition, and checkable sources.\n"
     "- Do not select government policy, grants, federal/state law, regulation, enforcement, "
     "elections, or broad societal impact as the main intent.\n"
-    "- Do not invent a release or rumor. A speculative question needs at least one current, "
-    "checkable signal and must make uncertainty explicit."
+    "- Do not manufacture a controversy. The disagreement has to be visible in current sources; "
+    "a question that is merely phrased as contested does not qualify."
 )
 
 LEGACY_DEFAULT_TOPIC_BRIEF = (
@@ -59,7 +62,7 @@ LEGACY_DEFAULT_TOPIC_BRIEF = (
     "polls, and purely speculative topics with no verifiable grounding."
 )
 
-DEFAULT_TOPIC_BRIEF = (
+LEGACY_NEWS_TOPIC_BRIEF = (
     "Choose one highly current, evidence-rich AI topic that people are beginning to search "
     "for now. Focus on named AI models, products, features, subscriptions, developer tools, "
     "release timing, availability, surprising product behavior, or a credible emerging "
@@ -74,6 +77,26 @@ DEFAULT_TOPIC_BRIEF = (
     "generic AI trend pieces, personal medical/legal/financial advice, sensationalism, and "
     "unsupported rumors."
 )
+
+DEFAULT_TOPIC_BRIEF = (
+    "Choose one question about AI products that people keep asking and that credible sources "
+    "still answer differently. Focus on named AI models, plans, coding tools, agents, and APIs: "
+    "capability and cost comparisons, which tool fits a stated job, whether a documented limit "
+    "or price holds up in practice, how two products really differ, and whether a widely "
+    "repeated claim about a model is true.\n\n"
+    "The question must have durable search demand — still worth asking in six months — and it "
+    "must be genuinely contested, so that a careful person reading the available evidence could "
+    "reasonably land on different answers. That disagreement is the point: comparing several AI "
+    "models has to expose it rather than repeat one obvious answer. Support it with several "
+    "credible web sources.\n\n"
+    "Avoid news-of-the-day items, memes, rumor chasing, government policy, regulation, "
+    "legislation, elections, personal medical/legal/financial advice, sensationalism, and broad "
+    "trend pieces without a checkable claim."
+)
+
+# Stored briefs that were never edited by hand are migrated to the current
+# default, so a strategy change does not require an Admin round-trip.
+SUPERSEDED_TOPIC_BRIEFS = (LEGACY_DEFAULT_TOPIC_BRIEF, LEGACY_NEWS_TOPIC_BRIEF)
 
 DEFAULT_CONFIG = {
     "enabled": True,
@@ -105,7 +128,7 @@ def normalize_config(data: dict | None) -> dict:
             config[field] = incoming[field]
 
     brief = str(incoming.get("topic_brief", config["topic_brief"]) or "").strip()
-    if brief == LEGACY_DEFAULT_TOPIC_BRIEF:
+    if brief in SUPERSEDED_TOPIC_BRIEFS:
         brief = DEFAULT_TOPIC_BRIEF
     if not brief:
         raise PublisherConfigError("topic_brief must not be empty")

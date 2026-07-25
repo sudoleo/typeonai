@@ -77,12 +77,23 @@ def test_saved_publisher_configuration_is_normalized():
     assert db.store["scheduled_consensus_publisher"]["updated_by"] == "admin-1"
 
 
-def test_legacy_default_topic_brief_migrates_to_ai_search_strategy():
+def test_superseded_default_topic_briefs_migrate_to_the_disagreement_strategy():
+    for superseded in publisher_config.SUPERSEDED_TOPIC_BRIEFS:
+        config = publisher_config.normalize_config({
+            **publisher_config.DEFAULT_CONFIG,
+            "topic_brief": superseded,
+        })
+
+        assert config["topic_brief"] == publisher_config.DEFAULT_TOPIC_BRIEF
+
+    assert "still answer differently" in publisher_config.DEFAULT_TOPIC_BRIEF
+    assert "durable search demand" in publisher_config.DEFAULT_TOPIC_BRIEF
+
+
+def test_hand_edited_topic_brief_is_never_overwritten():
     config = publisher_config.normalize_config({
         **publisher_config.DEFAULT_CONFIG,
-        "topic_brief": publisher_config.LEGACY_DEFAULT_TOPIC_BRIEF,
+        "topic_brief": "My own brief.",
     })
 
-    assert config["topic_brief"] == publisher_config.DEFAULT_TOPIC_BRIEF
-    assert "highly current" in config["topic_brief"]
-    assert "AI topic" in config["topic_brief"]
+    assert config["topic_brief"] == "My own brief."
