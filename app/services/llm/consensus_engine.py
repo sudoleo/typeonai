@@ -1471,12 +1471,17 @@ def _judge_metadata(provider: str, api_model: str, tier: str, attempts: int = 0,
 
 def _judge_effort(judge_tier: str) -> str | None:
     """Thinking-Kappung für Judge-Calls: Der Judge-Task (Zitate verbatim
-    extrahieren und vergleichen) braucht kein tiefes Denken. Pro-Judges sind
-    Reasoning-Modelle, deren unbegrenztes Thinking den Differences-Schritt
-    minutenlang verzögert und das Token-Budget des JSON auffressen kann —
-    daher effort "low" (Gemini thinkingLevel, OpenAI/Mistral reasoning_effort).
-    Standard-Judges sind günstige, schnelle Modelle und bleiben unangetastet."""
-    return "low" if judge_tier == "pro" else None
+    extrahieren und vergleichen) braucht kein tiefes Denken. Unbegrenztes
+    Thinking verzögert den Differences-Schritt dagegen minutenlang und frisst
+    das Token-Budget des JSON auf — daher immer effort "low" (Gemini
+    thinkingLevel, OpenAI/Mistral reasoning_effort; die übrigen Provider kennen
+    den Parameter nicht und ignorieren ihn).
+
+    Gilt bewusst für BEIDE Stufen: die Standard-Judges sind zwar die günstigen
+    Basis-Modelle, aber längst selbst Reasoning-Modelle (Gemini Flash, das
+    OpenAI-Mini) — und Gemini steht in JUDGE_FAMILY_PRIORITY vorn, ist also der
+    häufigste Judge überhaupt. Das Modell selbst wird dabei nie getauscht."""
+    return "low"
 
 
 def query_differences(

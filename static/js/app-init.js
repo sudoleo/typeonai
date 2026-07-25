@@ -35,10 +35,13 @@
             <span class="thinking consensus-thinking">Synthesizing consensus</span>
           </span>
         `;
+        // Der Differences-Judge liefert JSON, das erst am Ende sichtbar wird:
+        // statt der Punkte trägt dieser Spinner eine Fortschrittsleiste, die
+        // consensus-run.js aus dem echten Stream speist (--diff-progress).
         window.consensusDifferencesSpinnerHTML = `
           <span class="thinking-wrap consensus-thinking-wrap" role="status" aria-live="polite" aria-busy="true">
-            <span class="consensus-loader" aria-hidden="true"><span></span><span></span><span></span></span>
             <span class="thinking consensus-thinking">Comparing responses</span>
+            <span class="differences-progress" aria-hidden="true"></span>
           </span>
         `;
 

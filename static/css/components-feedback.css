@@ -79,6 +79,45 @@
   animation-delay: 0.36s;
 }
 
+/* Fortschrittsleiste des Differences-Laufs: dünne Linie, die mit dem
+   tatsächlich gestreamten Judge-Output von links vollläuft. Breite kommt live
+   aus --diff-progress (consensus-run.js), analog zum Stream-Ladebalken der
+   Agent-Mode-Chips. Der Sheen läuft weiter, wenn die Breite gerade steht —
+   ein denkender Judge sendet minutenlang keine Tokens. */
+.differences-progress {
+  --diff-progress: 0;
+  position: relative;
+  flex: 0 1 132px;
+  width: 132px;
+  height: 3px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.differences-progress::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--diff-progress, 0) * 100%);
+  border-radius: inherit;
+  background: color-mix(in srgb, currentColor 62%, transparent);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.differences-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, currentColor 24%, transparent),
+    transparent
+  );
+  animation: consensusProgressSheen 2.1s ease-in-out infinite;
+}
+
 .typing-dots {
   display: inline-flex;
   width: 4ch;
@@ -116,6 +155,7 @@
   .spinner,
   .typing-dots span,
   .consensus-loader span,
+  .differences-progress::after,
   .consensus-box.is-synthesizing::after {
     animation: none;
   }
@@ -125,6 +165,10 @@
     opacity: 1;
     transform: none;
   }
+
+  /* Der Balken bleibt (er trägt echte Information), nur ohne Sheen und Tween. */
+  .differences-progress::after { opacity: 0; }
+  .differences-progress::before { transition: none; }
 }
 
 /* --------------------------------------------------------------------------
@@ -139,6 +183,11 @@
 @keyframes consensusLoadingLine {
   0% { transform: translateX(-115%); }
   100% { transform: translateX(415%); }
+}
+
+@keyframes consensusProgressSheen {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 @keyframes consensusLoaderDots {

@@ -49,6 +49,68 @@
     return match ? match[1].trim() : null;
   }
 
+  // --------- Fortschrittsleiste des Differences-Laufs ---------
+  // Der Judge streamt JSON, das bewusst nicht gerendert wird (siehe
+  // differencesPhaseRenderer weiter unten). Bei langen Konsensantworten steht
+  // der Spinner dadurch minutenlang stumm. Die Leiste schaetzt den Fortschritt
+  // wie der Agent-Mode-Balken aus dem echten Stream: solange nur
+  // Reasoning-Marker kommen, ein langsamer zeitbasierter Anlauf, danach
+  // asymptotisch aus der Laenge des empfangenen JSON. Monoton steigend und nie
+  // ganz voll — die 100 % gibt erst das final-Event mit dem fertigen Ergebnis.
+  const differencesProgress = (function () {
+    const RAMP_MS = 30000;    // Anlauf bis 12 %, solange kein Token da ist
+    const RAMP_MAX = 0.12;
+    const CHAR_SCALE = 2200;  // typische JSON-Laenge einer Judge-Antwort
+    const CEILING = 0.94;
+    let barEl = null;
+    let ticker = null;
+    let startedAt = 0;
+    let chars = 0;
+    let value = 0;
+
+    function write() {
+      if (barEl) barEl.style.setProperty("--diff-progress", value.toFixed(3));
+    }
+
+    function tick() {
+      const ramp = Math.min(RAMP_MAX, ((Date.now() - startedAt) / RAMP_MS) * RAMP_MAX);
+      const streamed = chars > 0
+        ? RAMP_MAX + (1 - Math.exp(-chars / CHAR_SCALE)) * (CEILING - RAMP_MAX)
+        : 0;
+      value = Math.min(CEILING, Math.max(value, ramp, streamed)); // monoton
+      write();
+    }
+
+    return {
+      // Neuer Lauf: Leiste im frisch eingesetzten Spinner suchen, Zaehler
+      // zuruecksetzen. Ohne Leiste (Fallback-Spinner) laufen alle weiteren
+      // Aufrufe ins Leere.
+      reset(container) {
+        this.stop();
+        barEl = container ? container.querySelector(".differences-progress") : null;
+        startedAt = 0;
+        chars = 0;
+        value = 0;
+        write();
+      },
+      // Erstes Lebenszeichen des Judges (Delta oder Reasoning-Marker): ab hier
+      // laeuft die Uhr. Vorher gehoert die Zeit noch der Konsens-Synthese.
+      begin() {
+        if (ticker || !barEl) return;
+        startedAt = Date.now();
+        tick();
+        ticker = window.setInterval(tick, 120);
+      },
+      push(text) {
+        chars += (text || "").length;
+      },
+      stop() {
+        window.clearInterval(ticker);
+        ticker = null;
+      }
+    };
+  })();
+
   // --------- Follow-up-Fragen (Pro): Kontext-State + Input-Affordance ---------
   // Genau eine Kontext-Ebene: das Frage/Konsens-Paar des letzten erfolgreichen
   // Laufs. offer() merkt sich das Paar und zeigt den "Ask a follow-up"-Button
@@ -367,7 +429,9 @@
     setConsensusSynthesizing(true);
     const spinnerBodyEl = window.App.consensusBodyEl(consensusDiv);
     if (spinnerBodyEl) spinnerBodyEl.innerHTML = window.consensusSpinnerHTML || window.spinnerHTML;
-    consensusDiv.querySelector(".consensus-differences p").innerHTML = window.consensusDifferencesSpinnerHTML || window.spinnerHTML;
+    const differencesSpinnerEl = consensusDiv.querySelector(".consensus-differences p");
+    differencesSpinnerEl.innerHTML = window.consensusDifferencesSpinnerHTML || window.spinnerHTML;
+    differencesProgress.reset(differencesSpinnerEl);
 
     // Die übrigen Parameter wie "excluded_models" werden wie bisher ermittelt
     const excludedModels = [];
@@ -498,12 +562,17 @@
       // bis dahin stehen; Reasoning-Marker flippen nur sein Label.
       const differencesEl = consensusDiv.querySelector(".consensus-differences p");
       const differencesPhaseRenderer = {
-        append() {},
+        append(text) {
+          if (!isActiveConsensusRun(consensusRunId)) return;
+          differencesProgress.begin();
+          differencesProgress.push(text);
+        },
         markReasoning() {
           if (!isActiveConsensusRun(consensusRunId)) return;
+          differencesProgress.begin();
           flipThinkingLabel(differencesEl, "Reasoning");
         },
-        stop() {}
+        stop() { differencesProgress.stop(); }
       };
       const consensusRequestResult = await streamSSERequest("/consensus", {
           id_token: id_token,
@@ -673,6 +742,9 @@
         included_models: includedAnswerCount
       });
     } finally {
+      // Auch bei Abbruch/Fehler: der Ticker darf den naechsten Lauf nicht
+      // mit dem Fortschritt des alten weiterschieben.
+      differencesProgress.stop();
       finishConsensusRun(consensusRunId);
     }
   };
