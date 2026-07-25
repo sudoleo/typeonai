@@ -409,6 +409,74 @@ def test_admin_topic_api_creates_updates_and_versions_without_share_data(
     assert "watches" not in collection_names
 
 
+def opinion_map_payload(*, stance="A late-2026 launch", moved=False):
+    return {
+        "schema_version": 1,
+        "dimensions": [{
+            "label": "When does the model ship?",
+            "type": "contradiction",
+            "positions": [
+                {"stance": stance, "models": ["OpenAI", "Gemini"]},
+                {"stance": "No launch before 2027", "models": ["Anthropic"]},
+            ],
+        }],
+        "models": [
+            {"provider": "OpenAI", "movement_score": 100 if moved else 0, "moved": moved, "summary": ""},
+            {"provider": "Anthropic", "movement_score": 0, "moved": False, "summary": ""},
+        ],
+        "shift_score": 50 if moved else 0,
+        "shift_label": "Turning" if moved else "Stable",
+        "center": [stance],
+    }
+
+
+def test_topic_page_shows_the_position_map_and_agreement_history(monkeypatch):
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    first = topics.create_run(
+        topic["id"],
+        run_payload(opinion_map=opinion_map_payload()),
+        actor_uid="admin", db=db, now=NOW,
+    )
+    topics.create_run(
+        topic["id"],
+        run_payload(
+            agreement_score=52,
+            change_type="major",
+            change_summary="Anthropic moved to a 2027 window.",
+            opinion_map=opinion_map_payload(stance="A 2027 launch", moved=True),
+        ),
+        actor_uid="admin", db=db, now=NOW,
+    )
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(topics_router.router)
+    client = TestClient(app)
+
+    current = client.get("/topics/gpt-6")
+    historical = client.get(f"/topics/gpt-6?version={first['id']}")
+
+    assert current.status_code == 200
+    assert "Where the models actually split" in current.text
+    assert "No launch before 2027" in current.text
+    assert "Direction Shift" in current.text
+    assert "How this answer held up" in current.text
+    assert "Anthropic moved to a 2027 window." in current.text
+    assert "</b> AI models" in current.text
+    assert "<b>1</b> contradiction" in current.text
+    assert "<b>2</b> checks since" in current.text
+
+    # A historical version shows the state of knowledge at that time, so the
+    # later snapshot must not leak into its curve or its map. The sidebar
+    # timeline stays complete, because it is navigation.
+    assert historical.status_code == 200
+    assert "A late-2026 launch" in historical.text
+    assert "A 2027 launch" not in historical.text
+    assert "How this answer held up" not in historical.text
+    assert "Return to the current consensus" in historical.text
+
+
 def test_public_topic_history_is_ssr_and_historical_version_is_noindex(monkeypatch):
     db = FakeFirestore()
     monkeypatch.setattr(topics, "db_firestore", db)

@@ -17,6 +17,7 @@ from app.api.routers.pages import SITE_URL
 from app.core.rate_limit import limiter
 from app.core.security import extract_id_token, is_user_admin, verify_user_token
 from app.services import favicons, mailer, topic_runner, topics
+from app.services.history_view import build_history_view
 from app.services.public_markdown import (
     markdown_to_plaintext,
     render_public_markdown,
@@ -36,6 +37,52 @@ _STATUS_BY_CODE = {
     "expired_token": 410,
     "limit_reached": 429,
 }
+
+
+def _topic_history_view(runs_raw, selected_version: int):
+    """Agreement curve and Position Map as of the selected snapshot.
+
+    Later runs are excluded on purpose: an older version has to show the state
+    of knowledge at that time, otherwise browsing the history only ever repeats
+    today's picture with an older answer above it.
+    """
+    points = []
+    for run in runs_raw:
+        observed_at = run.get("observed_at")
+        score = run.get("agreement_score")
+        if not isinstance(observed_at, datetime) or not isinstance(score, (int, float)):
+            continue
+        if int(run.get("version") or 0) > selected_version:
+            continue
+        opinion_map = run.get("opinion_map")
+        points.append({
+            "ts": observed_at,
+            "agreement_score": int(score),
+            "changed": str(run.get("change_type") or "stable") != "stable",
+            "change_summary": str(run.get("change_summary") or ""),
+            "severity": "major" if run.get("change_type") == "major" else "",
+            "opinion_map": opinion_map if isinstance(opinion_map, dict) and opinion_map else None,
+            "run_id": run["id"],
+            "has_snapshot": True,
+        })
+    return build_history_view(points)
+
+
+def _topic_scoreboard(topic: dict, selected: dict, runs) -> dict:
+    """The facts that separate this page from asking one model once."""
+    position_map = selected.get("opinion_map") or {}
+    dimensions = position_map.get("dimensions") or []
+    first_run = runs[0] if runs else None
+    return {
+        "model_count": len(selected.get("models") or []) or len(topic.get("models") or []),
+        "contradiction_count": sum(
+            1 for dimension in dimensions if dimension.get("type") == "contradiction"
+        ),
+        "position_count": len(dimensions),
+        "source_count": len(selected.get("evidence") or []),
+        "version_count": len(runs),
+        "tracked_since": (first_run or {}).get("date_display") or "",
+    }
 
 
 def _raise_topic(exc: topics.TopicError):
@@ -249,6 +296,8 @@ async def topic_page(
         for item in run["evidence"]:
             _enrich_evidence(item)
     runs_desc = list(reversed(runs))
+    history = _topic_history_view(runs_raw, int(selected.get("version") or 0))
+    scoreboard = _topic_scoreboard(topic, selected, runs)
     selected["consensus_html"] = render_public_markdown(
         selected["consensus_md"], selected["evidence"]
     )
@@ -289,6 +338,8 @@ async def topic_page(
         "topic": public_topic,
         "selected": selected,
         "runs": runs_desc,
+        "history": history,
+        "scoreboard": scoreboard,
         "canonical_url": canonical_url,
         "page_url": page_url,
         "page_title": title,
