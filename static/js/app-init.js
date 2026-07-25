@@ -386,37 +386,34 @@
           trackAppEvent("app_deep_think_changed", { enabled: this.checked });
         });
 
-        // --- NEU: Pro Modal Referenzen ---
+        // --- Pro Modal Referenzen ---
+        // Das Modal verkauft nichts: es erklaert nur, warum ein Feature aus ist.
         const proModal = document.getElementById("proFeatureModal");
         const closeProBtn = document.getElementById("closeProModal");
         const keepFreeBtn = document.getElementById("keepFreeBtn");
-        const upgradeBtn = document.getElementById("smokeTestUpgradeBtn");
-        const proRequestStatus = document.getElementById("proRequestStatus");
 
         // Funktion zum Schließen des Modals
         function closeProModal() {
           proModal.style.display = "none";
-          if (proRequestStatus && !proRequestStatus.classList.contains("is-success")) {
-            proRequestStatus.textContent = "";
-            proRequestStatus.className = "pro-request-status";
-          }
         }
 
         // Event Listener für Schließen-Buttons
         if (closeProBtn) closeProBtn.addEventListener("click", closeProModal);
         if (keepFreeBtn) keepFreeBtn.addEventListener("click", closeProModal);
 
-        // Pro-Modal mit Feature-Name öffnen ("Unlock Deep Think" / "Unlock
-        // Resolve"). Gibt zurück, ob das Modal gezeigt werden konnte, damit
-        // Aufrufer sonst auf ein Popup ausweichen können. Der Untertitel
-        // passt sich dem geklickten Feature an (Fallback: generischer Text).
+        // Pro-Modal mit Feature-Name öffnen. Gibt zurück, ob das Modal gezeigt
+        // werden konnte, damit Aufrufer sonst auf ein Popup ausweichen können.
+        // Der Untertitel nennt beim geklickten Feature den echten Grund: was
+        // dieser Lauf kostet (Fallback: generischer Text).
         const PRO_FEATURE_DESCRIPTIONS = {
-          "Deep Think": "Request Pro beta access to advanced reasoning models.",
-          "High Quality mode": "Use a premium model set across all six answers and the final consensus synthesis.",
-          "Resolve": "Let the disagreeing models confront each other's position and see whether they revise or hold their ground.",
-          "Follow-up questions": "Keep the conversation going. Your previous question and its consensus answer travel along as context.",
+          "Deep Think": "Deep Think puts the reasoning models on your question. One run costs several times a normal one, so it stays off unless I switch it on for an account.",
+          "High Quality mode": "High Quality mode uses the expensive model set for all six answers and for the synthesis. It is the priciest run consens.io can do.",
+          "Resolve": "A Resolve round sends the disagreeing models back at each other, which is a second full round of calls on top of the run you already made.",
+          "Follow-up questions": "A follow-up carries your previous question and its consensus along as context, so it is a full six-model run again, with a longer prompt.",
+          "More frequent Consensus Watch checks": "A Watch re-runs your question on a schedule. More Watches and shorter intervals mean more paid runs every single day.",
+          "File uploads": "An attached file is read and sent along to every model, which makes all six calls a lot longer, and longer prompts cost more per run.",
         };
-        const PRO_FEATURE_DESCRIPTION_FALLBACK = "Request access to the Pro beta. There is no checkout or active billing.";
+        const PRO_FEATURE_DESCRIPTION_FALLBACK = "This one costs a multiple of a normal run, so it stays off by default.";
         window.App.showProFeatureModal = function (featureName) {
           if (window.isUserPro) return false;
           const nameEl = document.getElementById("proModalFeatureName");
@@ -438,47 +435,9 @@
           }
         });
 
-        // smoke test
-        if (upgradeBtn) {
-          upgradeBtn.addEventListener("click", async (event) => {
-            event.preventDefault();
-            const currentUser = window.auth ? window.auth.currentUser : null;
-            if (!proRequestStatus) return;
-            if (!currentUser) {
-              proRequestStatus.textContent = "Log in first, then reopen this dialog to request access.";
-              proRequestStatus.className = "pro-request-status is-error";
-              trackAppEvent("app_pro_beta_error", { reason: "logged_out" });
-              return;
-            }
-            upgradeBtn.disabled = true;
-            upgradeBtn.textContent = "Sending request…";
-            proRequestStatus.textContent = "Sending your request…";
-            proRequestStatus.className = "pro-request-status is-pending";
-            trackAppEvent("app_pro_beta_submitted", {});
-            try {
-              const idToken = await currentUser.getIdToken(false);
-              const response = await fetch("/track-interest", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id_token: idToken, source: "pro_beta_modal" })
-              });
-              const data = await response.json();
-              if (!response.ok) throw new Error(data.detail || "Request failed");
-              proRequestStatus.textContent = data.message || "Your Pro beta request is pending.";
-              proRequestStatus.className = "pro-request-status is-success";
-              upgradeBtn.textContent = "Request pending";
-              localStorage.setItem("proInterestShown", "true");
-              trackAppEvent("app_pro_beta_success", { already_requested: Boolean(data.already_requested) });
-            } catch (err) {
-              console.error("Pro beta request failed:", err);
-              proRequestStatus.textContent = "We could not send the request. Please try again.";
-              proRequestStatus.className = "pro-request-status is-error";
-              upgradeBtn.disabled = false;
-              upgradeBtn.textContent = "Request Pro access";
-              trackAppEvent("app_pro_beta_error", { reason: "request_failed" });
-            }
-          });
-        }
+        // Kein Zugangs-Request mehr: das Modal erklaert nur noch die Kosten.
+        // Der Server-Endpunkt /track-interest bleibt bestehen, wird aber von
+        // der App nicht mehr aufgerufen.
 
         // --- DEEP THINK TOGGLE SPERRE ---
         document.getElementById("deepSearchToggle").addEventListener("click", function (event) {
@@ -489,7 +448,7 @@
 
             // Modal anzeigen (mit passendem Feature-Namen im Header)
             if (!window.App.showProFeatureModal("Deep Think")) {
-              window.App?.showPopup?.("Deep Think requires Pro access.");
+              window.App?.showPopup?.("Deep Think is off here. It costs a multiple of a normal run.");
             }
           }
         });
@@ -1591,13 +1550,13 @@
         // Tier-/Pro-UI (updateUserTierUI, updatePremiumModelsState) ist nach
         // static/js/user-tier.js ausgelagert. Exporte gleichen Namens auf window.
 
-        // Event Listener für den neuen Upgrade-Link im Header
+        // Event Listener für den "Why limits?"-Link in der Sidebar
         const headerUpgradeLink = document.getElementById("upgradeLink");
 
         if (headerUpgradeLink) {
           headerUpgradeLink.addEventListener("click", function (e) {
             e.preventDefault();
-            window.App.showProFeatureModal?.("Pro features");
+            window.App.showProFeatureModal?.("The expensive extras");
           });
         }
 

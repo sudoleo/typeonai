@@ -56,8 +56,9 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 - [ ] Presets: Fast/Balanced setzen sichtbar alle sechs Antwortmodelle und die
       konfigurierte Consensus-Engine; eine manuelle Modellwahl wechselt zu Custom.
 - [ ] High Quality zeigt ein Pro-Badge, hat beim Hover/Fokus eine dezente
-      Power-Animation, oeffnet fuer Free das Upgrade-Modal und setzt fuer Pro das
-      vollstaendige Premium-Model-Set. Deep Think bleibt separat.
+      Power-Animation, oeffnet fuer Free den Kosten-Erklaerdialog (kein Kauf-,
+      kein Zugangs-Request-Button) und setzt fuer Pro das vollstaendige
+      Premium-Model-Set. Deep Think bleibt separat.
 - [ ] Consensus und Differences erscheinen oberhalb der Modellantworten; der
       Reveal scrollt nur dann sanft zum Ergebnis, wenn es außerhalb des
       relevanten Viewports liegt.

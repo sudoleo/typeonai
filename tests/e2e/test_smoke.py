@@ -489,7 +489,7 @@ def test_watch_limit_is_explained_before_creation(app_page):
 
     app_page.click("#watchDashCreate")
     expect(app_page.locator("#watchDialogLimit")).to_contain_text(
-        "Pro beta offers a larger Watch allowance and more frequent checks"
+        "costs me money each time"
     )
     expect(app_page.locator("#watchQuestionNext")).to_be_disabled()
     expect(app_page.locator("#watchQuestionNext")).to_have_text("Watch limit reached")
@@ -586,7 +586,7 @@ def test_deep_think_temporarily_selects_configured_engine(app_page):
 
 def test_consensus_presets_apply_full_model_sets_and_gate_thorough(app_page):
     """Fast/Balanced sind vollstaendige Model-Sets; High Quality bleibt fuer Free
-    sichtbar, aber oeffnet mit Pro-Badge das Upgrade-Modal."""
+    sichtbar, oeffnet mit Pro-Badge aber den Kosten-Hinweis statt eines Kaufdialogs."""
     result = app_page.evaluate(
         """() => {
           window.isUserPro = false;

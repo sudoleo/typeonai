@@ -92,29 +92,72 @@ def test_pro_beta_request_is_idempotent_and_active_pro_is_rejected():
     assert active.status_code == 409
 
 
-def test_pro_beta_modal_has_inline_states_without_pricing_or_purchase_copy():
+def test_locked_feature_modal_explains_the_cost_and_sells_nothing():
     html = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
     js = (ROOT / "static" / "js" / "app-init.js").read_text(encoding="utf-8")
     modal = html[html.index('id="proFeatureModal"'):html.index('id="popupContainer"')]
-    handler_start = js.index("if (upgradeBtn)")
-    handler = js[handler_start:js.index("// --- DEEP THINK", handler_start)]
-    assert "Join Pro beta" in modal
-    assert "Request Pro access" in modal
-    assert 'id="proRequestStatus"' in modal
-    assert "pricing-grid" not in modal
-    assert "€" not in modal
-    assert "alert(" not in handler
-    assert "is-pending" in handler and "is-success" in handler and "is-error" in handler
+    assert "while I'm testing it, it's free" in modal
+    assert "nothing to buy today" in modal
+    assert "switched off by default" in modal
+    # Kein Zukunftsversprechen in beide Richtungen: Pro-Features gibt es, eine
+    # spaetere Mitgliedschaft ist moeglich und wird als moeglich benannt.
+    assert "membership" in modal
+    assert "per account instead of for everyone" in modal
+    assert "contact@consens.io" in modal
+    for sales_copy in ("Request Pro access", "Join Pro beta", "smokeTestUpgradeBtn", "pricing-grid", "€"):
+        assert sales_copy not in modal
+    # Der Zugangs-Request ist aus dem Frontend entfernt; der Endpunkt bleibt ungenutzt bestehen.
+    assert 'fetch("/track-interest"' not in js
     assert "if (window.isUserPro) return false" in js
 
 
-def test_sidebar_uses_compact_pro_beta_entry_but_keeps_full_accessible_label():
+def test_sidebar_link_explains_limits_instead_of_offering_an_upgrade():
     html = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
     layout = (ROOT / "static" / "css" / "layout.css").read_text(encoding="utf-8")
-    assert 'aria-label="Request Pro access"' in html
-    assert '>Pro beta</a>' in html
+    assert 'aria-label="Why there are limits"' in html
+    assert '>Why limits?</a>' in html
     assert "#upgradeLink" in layout
     assert "white-space: nowrap" in layout
+
+
+def test_public_pages_state_the_free_while_testing_position():
+    pages = {
+        "landing": ROOT / "templates" / "landing.html",
+        "about": ROOT / "templates" / "about.html",
+        "app": ROOT / "templates" / "index.html",
+    }
+    for name, path in pages.items():
+        text = path.read_text(encoding="utf-8").lower()
+        assert "free while i'm testing it" in text, name
+        assert "costs me real money" in text or "costs me money" in text or "lands on me" in text, name
+        # Kein pauschales "es wird nie etwas kosten": die Moeglichkeit einer
+        # spaeteren Mitgliedschaft steht ausdruecklich auf jeder dieser Seiten,
+        # zusammen mit dem Kontaktweg, ueber den sich Interesse zeigen kann.
+        assert "membership" in text, name
+        assert "contact@consens.io" in text, name
+
+
+def test_no_page_claims_that_nothing_will_ever_be_for_sale():
+    for path in (ROOT / "templates").glob("*.html"):
+        text = path.read_text(encoding="utf-8")
+        for absolute_claim in (
+            "There is nothing to buy here",
+            "Nothing on it is for sale",
+            "no subscription, no waiting list",
+            "cannot be bought",
+        ):
+            assert absolute_claim not in text, f"{path.name}: {absolute_claim}"
+
+
+def test_no_purchase_call_to_action_survives_anywhere_in_the_ui():
+    targets = list((ROOT / "templates").glob("*.html")) + list((ROOT / "static" / "js").glob("*.js"))
+    targets.append(ROOT / "static" / "firebase.js")
+    for path in targets:
+        if path.name == "admin.html":
+            continue
+        text = path.read_text(encoding="utf-8")
+        for sales_copy in ("Request Pro access", "Join Pro beta", "upgrade your plan", "Pro plan", "Free plan"):
+            assert sales_copy not in text, f"{path.name}: {sales_copy}"
 
 
 def test_user_visible_plan_copy_has_no_stale_literal_plan_values():

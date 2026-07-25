@@ -1929,6 +1929,17 @@ img { display: block; max-width: 100%; }
 
 .lp-logo span { color: var(--text-secondary); font-size: 0.92rem; font-weight: 500; }
 
+/* Inline-Links im Fliesstext einer Karte (z. B. die Kontaktadresse im
+   Kosten-Abschnitt) muessen als Link lesbar sein; global gilt hier
+   "a { color: inherit; text-decoration: none; }". */
+.lp-card p a {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.lp-card p a:hover { color: var(--accent); }
+
 /* --------------------------------------------------------------------------
    Final CTA
    -------------------------------------------------------------------------- */

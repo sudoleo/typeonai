@@ -1294,7 +1294,19 @@
   min-height: 0;
 }
 .pro-beta-panel { margin-top: 20px; padding: 18px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--input-bg); }
-.pro-beta-panel > p:first-child { margin: 0; color: var(--sidebar-text-muted); font-size: .88rem; line-height: 1.55; }
+.pro-beta-panel > p { margin: 0; color: var(--sidebar-text-muted); font-size: .88rem; line-height: 1.55; }
+.pro-beta-panel > p + p { margin-top: 11px; }
+/* Die Kontaktadresse muss als Link erkennbar sein; der Panel-/FAQ-Text ist
+   gedimmt und base.css setzt global "text-decoration: none !important". */
+.pro-beta-panel a,
+.faq-item p a {
+  color: var(--text-color);
+  text-decoration: underline !important;
+  text-underline-offset: 2px;
+}
+
+.pro-beta-panel a:hover,
+.faq-item p a:hover { color: var(--accent); }
 .pro-beta-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .pro-request-status { min-height: 1.4em; margin: 13px 0 0; font-size: .82rem; font-weight: 650; }
 .pro-request-status.is-pending { color: var(--sidebar-text-muted); }

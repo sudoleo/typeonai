@@ -397,7 +397,7 @@
         : [];
       if (attachmentsPayload.length && !window.isUserPro) {
         if (!window.App?.showProFeatureModal?.("File uploads")) {
-          window.App?.showPopup?.("File uploads require Pro access. Remove the attachments to continue.");
+          window.App?.showPopup?.("File uploads are off here. Remove the attachments to continue.");
         }
         finishQueryRun(queryRunId);
         return;

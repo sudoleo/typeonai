@@ -50,5 +50,8 @@ def validate_model(model: str, allowed: set, provider: str, is_pro: bool = False
     if is_pro_only and not is_pro:
         raise HTTPException(
             status_code=403,
-            detail=f"The model '{model}' is reserved for Premium users. Please upgrade your plan."
+            detail=(
+                f"The model '{model}' is off for this account because it costs a multiple "
+                "of a normal run. Pick another model, or use your own API keys."
+            )
         )

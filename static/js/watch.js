@@ -168,7 +168,7 @@
     return watchLimitRequest;
   }
 
-  function showWatchUpgrade() {
+  function showWatchCostInfo() {
     window.App?.showProFeatureModal?.("More frequent Consensus Watch checks");
   }
 
@@ -181,7 +181,7 @@
   function renderWatchLimit(target, limits) {
     if (!target || !limits) return;
     const isPro = limits.plan === "pro";
-    const planLabel = isPro ? "Pro plan" : "Free plan";
+    const planLabel = isPro ? "Pro access" : "Standard access";
     const activeLabel = `${limits.activeCount} of ${limits.activeLimit} active`;
     const availabilityLabel = limits.atLimit
       ? "Limit reached"
@@ -199,9 +199,9 @@
       </div>
       <div class="watch-limit-detail">
         <span>Paused Watches do not count.</span>
-        ${isPro ? "" : `<span>Pro beta offers a larger Watch allowance and more frequent checks.</span><button type="button" class="watch-limit-upgrade">Request Pro access</button>`}
+        ${isPro ? "" : `<span>Every Watch re-runs your question on a schedule and costs me money each time, which is why the number is capped.</span><button type="button" class="watch-limit-upgrade">Why limits?</button>`}
       </div>`;
-    target.querySelector(".watch-limit-upgrade")?.addEventListener("click", showWatchUpgrade);
+    target.querySelector(".watch-limit-upgrade")?.addEventListener("click", showWatchCostInfo);
   }
 
   function applyDialogWatchLimit(limits) {
@@ -661,7 +661,7 @@
         if (error.status === 429) {
           watchLimitState = null;
           loadWatchLimits(true).then(applyDialogWatchLimit).catch(() => {});
-          if (!window.isUserPro) showWatchUpgrade();
+          if (!window.isUserPro) showWatchCostInfo();
         }
         popup("Watch could not be started: " + error.message);
       }

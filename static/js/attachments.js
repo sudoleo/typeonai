@@ -214,11 +214,9 @@
     function showAttachmentProGate(source) {
       setMenuOpen(false);
       trackAppEvent("app_attachment_locked_click", { source: source });
-      const modal = document.getElementById("proFeatureModal");
-      if (modal) {
-        modal.style.display = "block";
-      } else {
-        alert("File uploads are a Pro feature.");
+      const shown = window.App?.showProFeatureModal?.("File uploads");
+      if (!shown) {
+        window.App?.showPopup?.("File uploads are off here. Attached files make every one of the six calls a lot longer.");
       }
     }
 

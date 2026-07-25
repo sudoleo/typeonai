@@ -98,7 +98,7 @@
       if (!window.isUserPro) {
         trackAppEvent("app_followup_pro_teaser_click");
         const shown = window.App.showProFeatureModal?.("Follow-up questions");
-        if (!shown) window.App.showPopup?.("Follow-up questions are a Pro feature.");
+        if (!shown) window.App.showPopup?.("Follow-ups are off here. Each one is a full six-model run again.");
         return;
       }
       this.armed = true;
@@ -177,8 +177,8 @@
         btn.className = "followup-offer-btn";
         btn.innerHTML = FOLLOWUP_ICON + '<span class="followup-offer-label">Ask a follow-up</span>';
 
-        // Pro-Chip immer zeigen: Free-Nutzer sehen den Teaser (Klick öffnet
-        // das Upgrade-Modal), Pro-Nutzer eine dezente Kennzeichnung.
+        // Pro-Chip immer zeigen: Free-Nutzer sehen den Hinweis (Klick öffnet
+        // die Kosten-Erklaerung), Pro-Nutzer eine dezente Kennzeichnung.
         const badge = document.createElement("span");
         badge.className = "pro-badge followup-pro-badge";
         badge.textContent = "Pro";
@@ -189,7 +189,7 @@
           badge.classList.add("is-subtle");
         } else {
           btn.classList.add("is-pro-locked");
-          btn.title = "Follow-up questions are a Pro feature";
+          btn.title = "Off by default: each follow-up is a full six-model run again";
         }
         btn.addEventListener("click", () => this.arm());
         bar.appendChild(btn);

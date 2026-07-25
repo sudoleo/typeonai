@@ -1,6 +1,6 @@
 // =====================================================================
 // user-tier.js
-// Tier-/Pro-UI: Badge, Upgrade-Link, Deep-Search-Sperre, Premium-Modell-
+// Tier-/Pro-UI: Badge, "Why limits?"-Link, Deep-Search-Sperre, Premium-Modell-
 // Optionen je nach Pro/Free/ausgeloggt. In eigene IIFE gekapselt.
 // Extrahiert aus templates/index.html (initApp-Closure).
 // Exporte: window.updateUserTierUI, window.updatePremiumModelsState.
@@ -81,7 +81,7 @@
     } else {
       // --- FREE USER (EINGELOGGT) ---
       if (badge) badge.style.display = "none";
-      if (upgradeLink) upgradeLink.style.display = "inline-block"; // Hier zeigen wir Upgrade
+      if (upgradeLink) upgradeLink.style.display = "inline-block"; // "Why limits?" nur fuer Free
 
       // Limits
       window.setCurrentUsageLimits?.(false);
@@ -97,7 +97,7 @@
       }
       if (deepSearchLabel) {
         deepSearchLabel.classList.add("locked");
-        deepSearchLabel.title = "Pro feature only";
+        deepSearchLabel.title = "Off by default: one Deep Think run costs a multiple of a normal one";
 
         // WICHTIG: Klicks auf dem gesamten Label erlauben, damit der Listener feuert
         deepSearchLabel.style.pointerEvents = "auto";

@@ -207,7 +207,7 @@ CONSENSUS_PRESET_DEFINITIONS = [
     {
         "id": "thorough",
         "label": "High Quality",
-        "hint": "Premium models for the best answer quality",
+        "hint": "The expensive models from end to end, the priciest run there is",
         "pro_only": True,
     },
 ]

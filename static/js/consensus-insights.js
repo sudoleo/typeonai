@@ -1156,7 +1156,7 @@
             window.trackUmamiEvent?.("app_resolve_pro_teaser_click");
             const shown = window.App?.showProFeatureModal?.("Resolve");
             if (!shown) {
-              window.App?.showPopup?.("Resolve rounds are a Pro feature.");
+              window.App?.showPopup?.("Resolve is off here. It is a second full round of model calls.");
             }
           }
 
@@ -1313,15 +1313,15 @@
             label.textContent = "Resolve with the models";
             btn.appendChild(label);
             btn.title = "Ask the disagreeing models to re-examine this point against each other's position (uses 1 request)";
-            // Pro-Chip immer zeigen: Free-Nutzer sehen den Teaser (Klick öffnet
-            // das Upgrade-Modal), Pro-Nutzer die gleiche klare Kennzeichnung.
+            // Pro-Chip immer zeigen: Free-Nutzer sehen den Hinweis (Klick öffnet
+            // die Kosten-Erklaerung), Pro-Nutzer die gleiche klare Kennzeichnung.
             const chip = document.createElement("span");
             chip.className = "pro-badge diff-resolve-pro-chip";
             chip.textContent = "Pro";
             btn.appendChild(chip);
             if (!window.isUserPro) {
               btn.classList.add("is-pro-locked");
-              btn.title = "Resolve rounds are a Pro feature";
+              btn.title = "Off by default: a Resolve round is a second full round of model calls";
             }
 
             btn.addEventListener("click", function () {

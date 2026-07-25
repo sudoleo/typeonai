@@ -117,6 +117,16 @@ Das ist kein kosmetischer Fehler. Die Plattform verkauft epistemische Klarheit; 
 
 ### P0: Pricing, Limits und Pro-Kommunikation widersprechen der Live-Konfiguration
 
+> **Überholt seit 2026-07-25.** Das Problem wurde nicht gelöst, sondern gestrichen:
+> consens.io verkauft nichts mehr und kommuniziert stattdessen die Wahrheit —
+> „free while I'm testing it; Limits gibt es, weil jeder Lauf echtes Geld kostet”.
+> Kein Plan-Katalog, kein Preis, kein Zugangs-Request. Eine spätere
+> Kommerzialisierung (dann als Mitgliedschaft) wird offen als Möglichkeit
+> benannt, aber nicht vorbereitet und nicht versprochen. Die
+> Empfehlungen unten (PLAN_CATALOG, „Request Pro access“, Billing-Lifecycle)
+> gelten damit nicht mehr; nur der letzte Punkt (Kosten pro Run kennen) bleibt
+> relevant.
+
 Im Live-Account waren 50 Pro-Runs, 5 Deep-Think-Runs und 10 aktive Watch-Slots sichtbar. Gleichzeitig enthält der Pro-Dialog harte Werte wie:
 
 - Free: 25 Fast Queries pro Tag
@@ -374,6 +384,12 @@ Mögliche Verpackung:
 - **Team/Monitor:** mehr Watches, Folder, Rollen, Slack/Webhooks, CSV/API, Audit Trail, gemeinsame Dashboards.
 
 Bis Self-Service-Billing existiert, sollte das Produkt explizit als Pro Beta auftreten und keine aktive Subscription vortäuschen.
+
+> **Überholt seit 2026-07-25.** Es gibt keine Monetarisierungsspur mehr: kein
+> Billing, keine Tier-Verpackung, keine Pro Beta als Vorstufe davon. Das Produkt
+> ist kostenlos, solange der Betreiber es bezahlt, und sagt genau das. Die
+> Kostenmessung oben bleibt sinnvoll — allerdings als Budgetfrage, nicht als
+> Pricing-Vorbereitung.
 
 ## 90-Tage-Roadmap
 
