@@ -42,6 +42,13 @@ a:hover {
   color: var(--accent);
 }
 
+/* Inline-Links im Fliesstext der Legal-/Info-Panels (z. B. die Kontaktadresse
+   im Kosten-Abschnitt) muessen als Link lesbar bleiben. */
+.legal-panel p a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .site-nav,
 .landing-shell,
 .page-shell,
@@ -2514,21 +2521,22 @@ canvas {
   align-items: center;
   max-width: min(200px, 100%);
   margin: 0 2px;
-  padding: 1px 8px;
+  padding: 0 7px;
   border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--accent) 7%, transparent);
   color: color-mix(in srgb, var(--accent) 64%, var(--text));
-  font-size: 0.7rem;
+  font-size: 0.66rem;
   font-weight: 650;
   letter-spacing: 0.01em;
   line-height: 1.45;
   text-decoration: none;
-  vertical-align: baseline;
+  /* Sits with the middle of the line rather than on the baseline, so the chip
+     reads as part of the sentence instead of hovering above it. */
+  vertical-align: middle;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transform: translateY(-1px);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 36%, transparent);
   transition: background-color .15s ease, border-color .15s ease, color .15s ease;
 }
@@ -2546,9 +2554,9 @@ canvas {
 
 .share-md .cite-favicon {
   flex: 0 0 auto;
-  width: 13px;
-  height: 13px;
-  border-radius: 3px;
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
   object-fit: contain;
   /* White backing keeps dark/transparent logos legible in both themes. */
   background: #fff;
