@@ -197,10 +197,20 @@
       return ctx;
     },
 
+    // Zwei Orte, ein Zustand:
+    //   #followupBar      — das ANGEBOT, in der Provenance-Zeile an der
+    //                       Antwort, deren Kontext es mitnehmen wuerde
+    //   #followupChipBar  — der aktivierte KONTEXT-CHIP, am Eingabefeld,
+    //                       weil er beschreibt, was gleich rausgeht
     render() {
-      const bar = document.getElementById("followupBar");
-      if (!bar) return;
-      bar.innerHTML = "";
+      const offerBar = document.getElementById("followupBar");
+      const chipBar = document.getElementById("followupChipBar");
+      if (!offerBar && !chipBar) return;
+      if (offerBar) offerBar.innerHTML = "";
+      if (chipBar) {
+        chipBar.innerHTML = "";
+        chipBar.hidden = true;
+      }
 
       const input = document.getElementById("questionInput");
       if (input) {
@@ -208,6 +218,9 @@
           ? FOLLOWUP_INPUT_PLACEHOLDER
           : DEFAULT_INPUT_PLACEHOLDER;
       }
+
+      const bar = (this.armed && this.lastExchange) ? chipBar : offerBar;
+      if (!bar) return;
 
       if (this.armed && this.lastExchange) {
         const chip = document.createElement("div");
@@ -259,6 +272,12 @@
       } else {
         bar.hidden = true;
       }
+
+      // Die Provenance-Zeile traegt das Angebot. Sie kann leer sein (ein aus
+      // dem Bookmark geladener Konsens hatte hier keinen Lauf) — dann muss sie
+      // trotzdem aufmachen, sonst waere das Follow-up unerreichbar.
+      const provenance = document.getElementById("runProvenance");
+      if (provenance && bar === offerBar && !bar.hidden) provenance.hidden = false;
     }
   };
   window.App.followup = followup;
@@ -284,9 +303,11 @@
     const consensusRunId = consensusRun.runId;
     const consensusSignal = consensusRun.signal;
 
-    const question =
-      (document.getElementById("questionInput")?.value ?? window.lastQuestion ?? "")
-        .trim();
+    // Der Composer wird beim Senden geleert (die Frage steht im Thread-Kopf),
+    // deshalb ist window.lastQuestion die Quelle — das Eingabefeld enthaelt
+    // hoechstens schon die NAECHSTE, noch nicht gesendete Frage.
+    const question = (window.lastQuestion ?? "").trim()
+      || (document.getElementById("questionInput")?.value ?? "").trim();
     // Status, ob eigene API Keys genutzt werden sollen
     const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
     const deepThink = window.App.usageRun?.current?.deepThink
@@ -565,11 +586,15 @@
         append(text) {
           if (!isActiveConsensusRun(consensusRunId)) return;
           differencesProgress.begin();
+          // Erstes Differences-Byte = der Konsens steht, der Judge laeuft.
+          // Der gefuehrte Lauf schaltet hier auf seinen letzten Schritt.
+          window.App?.consensusPipeline?.onDifferencesStart?.();
           differencesProgress.push(text);
         },
         markReasoning() {
           if (!isActiveConsensusRun(consensusRunId)) return;
           differencesProgress.begin();
+          window.App?.consensusPipeline?.onDifferencesStart?.();
           flipThinkingLabel(differencesEl, "Reasoning");
         },
         stop() { differencesProgress.stop(); }

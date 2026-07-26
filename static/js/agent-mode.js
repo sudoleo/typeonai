@@ -478,4 +478,23 @@
   window.isAgentModeRunning = function () {
     return agentModeStatus === "running";
   };
+
+  // Der gefuehrte Lauf (consensus-progress.js) zeigt dieselben Modell-Balken
+  // ausserhalb des Agent Mode. Statt die Schaetzung zu duplizieren, liest er
+  // hier den bereits berechneten, monoton steigenden Fortschritt — indiziert
+  // nach Response-Box-ID, weil das die ID ist, die er ohnehin in der Hand hat.
+  window.App = window.App || {};
+  window.App.agentMode = {
+    streamProgressByResponseId() {
+      const out = {};
+      (window.App?.modelPrefs || []).forEach(pref => {
+        const next = computeModelProgress(pref);
+        const value = Math.max(modelProgress.get(pref.key) || 0, next);
+        modelProgress.set(pref.key, value);
+        out[pref.responseId] = value;
+      });
+      return out;
+    },
+    resetStreamProgress: resetModelProgress
+  };
 })();

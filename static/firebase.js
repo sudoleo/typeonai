@@ -1299,12 +1299,16 @@ function loadSingleBookmarkUI(bookmark) {
             }
         }
         
-        // Frage ins Eingabefeld setzen (optional, aber hilfreich)
-        const questionInput = document.getElementById("questionInput");
-        if (questionInput && bookmark.query) {
-            questionInput.value = bookmark.query;
-            questionInput.dispatchEvent(new Event("input", { bubbles: true }));
-            window.syncDemoChipState?.();
+        // Die Frage steht im Thread-Kopf über der Antwort; das Eingabefeld
+        // unten bleibt frei für die nächste Frage.
+        if (bookmark.query) {
+            window.App?.setThreadQuestion?.(bookmark.query);
+            const questionInput = document.getElementById("questionInput");
+            if (questionInput) {
+                questionInput.value = "";
+                questionInput.dispatchEvent(new Event("input", { bubbles: true }));
+                window.syncDemoChipState?.();
+            }
             // Falls du eine globale Variable für die letzte Frage hast:
             if (typeof lastQuestion !== 'undefined') lastQuestion = bookmark.query;
         }

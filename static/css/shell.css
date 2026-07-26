@@ -1,0 +1,1233 @@
+/* ==========================================================================
+   Shell — frameless app surface (v2)
+
+   Loaded LAST, so it wins on equal specificity. It carries the parts of the
+   redesign that are about *material* rather than about a single component:
+
+     1. elevation — only floating layers keep a shadow
+     2. the sidebar (one toggle, quiet list, account + quota at the bottom)
+     3. topbar / thread / composer: horizons and an inset field, no boxes
+
+   The rule everywhere: separation comes from tone and from a hairline that
+   fades out at both ends, never from a rectangle drawn around content.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Elevation
+
+   variables.css flattened every shadow token, which is right for inline
+   surfaces but wrong for layers that genuinely float above the page. Those
+   get --lift back here, in one place.
+   -------------------------------------------------------------------------- */
+.modal-content,
+.popup,
+.attach-menu,
+.claim-popover,
+.model-picker-panel,
+#emailPopup,
+.attachment-viewer,
+.sidebar-quota {
+  box-shadow: var(--lift);
+}
+
+/* Floating layers are opaque: a translucent menu over streaming text is
+   unreadable, and there is no blur left to rescue it. */
+.modal-content,
+.attach-menu,
+.claim-popover,
+.model-picker-panel,
+#emailPopup {
+  background: var(--raise);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* --------------------------------------------------------------------------
+   2. Sidebar
+
+   Top row is toggle + "New comparison". The toggle lives HERE and only here
+   while the sidebar is open; .app-nav-float supplies it when it is closed —
+   so the shell never shows two burgers at once.
+   -------------------------------------------------------------------------- */
+.sidebar {
+  background: var(--ground);
+  border-right: 1px solid var(--line-soft);
+  gap: 10px;
+  text-align: left;
+}
+
+/* ---- Exactly one burger --------------------------------------------------
+   The floating toggle exists so the sidebar can be reopened once it is gone.
+   While the sidebar is open its own toggle is on screen, so the floating one
+   has nothing left to say and is removed — not dimmed, removed, so it cannot
+   be tabbed to either.
+   -------------------------------------------------------------------------- */
+body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
+  display: none;
+}
+
+/* Overlay widths use .active rather than the absence of .collapsed. */
+@media (max-width: 1099px) {
+  body:has(.sidebar.active) .app-nav-float .sidebar-toggle {
+    display: none;
+  }
+
+  body:has(.sidebar.collapsed) .app-nav-float .sidebar-toggle {
+    display: flex;
+  }
+}
+
+/* Wordmark in the footer, sized down: it identifies the app, it is not a
+   heading competing with the two actions at the top. The #logoLink id rule
+   (layout.css) centers and shrinks it — the id-qualified selector here wins,
+   so the mark sits flush left on its own line like every other row. */
+.sidebar-brand-link,
+#logoLink.sidebar-brand-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  min-width: 0;
+  flex: 1 1 100%;
+  margin-bottom: 6px;
+  text-decoration: none;
+  color: var(--ink-2);
+}
+
+.sidebar-brand-link:hover {
+  color: var(--ink);
+}
+
+.sidebar-brand-link .sidebar-brand-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.sidebar-brand-link .app-favicon {
+  height: 16px;
+}
+
+.sidebar-footer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: left;
+  gap: 5px;
+  padding: 0 4px;
+}
+
+.sidebar-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 0 2px;
+  min-height: 34px;
+}
+
+/* The in-sidebar toggle. Square, quiet, same footprint as the float one so
+   the icon does not jump when the sidebar opens or closes. */
+.sidebar-toggle-square {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-toggle-square:hover {
+  background: var(--raise);
+  color: var(--ink);
+}
+
+.sidebar-toggle-square svg {
+  width: 17px;
+  height: 17px;
+  display: block;
+}
+
+/* Primary action of the whole sidebar: start a fresh comparison. */
+/* Sits next to the toggle in .sidebar-top and takes the rest of the row.
+   flex-basis 0 rather than width:100% — the latter would measure against the
+   whole row and push itself past the right edge. */
+.sidebar-new-run {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--raise);
+  color: var(--ink);
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 0.845rem;
+  font-weight: 550;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.sidebar-new-run:hover {
+  background: var(--well);
+}
+
+.sidebar-new-run svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+/* Chat search: a real magnifier, not an emoji — emoji render as somebody
+   else's artwork (colour, weight, platform) inside a monochrome shell. */
+.sidebar-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-search-icon {
+  position: absolute;
+  left: 11px;
+  width: 14px;
+  height: 14px;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+.sidebar-search-box input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px 7px 32px;
+  font-size: 0.82rem;
+  transition: background-color 0.15s ease;
+}
+
+.sidebar-search-box input::placeholder {
+  color: var(--ink-3);
+}
+
+.sidebar-search-box input:hover,
+.sidebar-search-box input:focus {
+  background: var(--raise);
+  outline: none;
+  box-shadow: none;
+}
+
+/* Section headings shrink to quiet eyebrows — the list is the content. */
+.sidebar-static-heading,
+.sidebar-toggle-btn {
+  color: var(--ink-3);
+}
+
+.sidebar-section h2 {
+  font-size: 0.655rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+/* Bookmarks read as a flat list: hover is a tint, the active row a tint that
+   stays. No card, no border, no bullet. */
+.sidebar .bookmark {
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink-2);
+  padding: 6px 8px;
+}
+
+.sidebar .bookmark:hover,
+.sidebar .bookmark.is-active {
+  background: var(--raise);
+  color: var(--ink);
+}
+
+.sidebar-separator {
+  background: var(--line-soft);
+}
+
+/* ---- Account + quota -----------------------------------------------------
+   The footer row carries a progress ring around the avatar; clicking it opens
+   the quota panel upward. The ring is the only place in the shell where a
+   number about *your* account is always visible.
+   -------------------------------------------------------------------------- */
+/* The footer used to be position:fixed with an 80px margin reserved above it
+   — that reserve is exactly the dead band that sat between the bookmark list
+   and the account row. In the flex column the footer needs no reservation:
+   the scrollable list runs all the way down to it. */
+.sidebar-settings {
+  /* relative, not fixed: stays the anchor for the quota panel, but sits in
+     the flex column. inset:auto kills the left/bottom offsets layout.css
+     still declares for its fixed incarnation. */
+  position: relative;
+  inset: auto;
+  width: auto;
+  margin-top: auto;
+  background: transparent;
+  text-align: left;
+  border-top: 1px solid var(--line-soft);
+}
+
+.sidebar-content {
+  min-height: 0;
+  margin-bottom: 0;
+}
+
+.sidebar-quota {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 4px;
+  right: 4px;
+  z-index: var(--z-dropdown);
+  display: none;
+  flex-direction: column;
+  gap: 11px;
+  background: var(--raise);
+  border-radius: var(--radius-md);
+  padding: 13px 14px;
+}
+
+.sidebar-quota.is-open {
+  display: flex;
+}
+
+.sidebar-quota-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--ink-3);
+}
+
+.quota-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.quota-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.76rem;
+}
+
+.quota-top b {
+  font-weight: 550;
+  color: var(--ink);
+}
+
+.quota-top span {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+}
+
+.quota-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.quota-track i {
+  display: block;
+  height: 100%;
+  width: var(--p, 0%);
+  background: var(--ink-2);
+  transition: width 0.3s ease;
+}
+
+/* Nearly spent reads amber — the same amber the answer uses for "contested",
+   so one colour never means two things. */
+.quota-track.is-low i {
+  background: var(--partial);
+}
+
+.quota-track.is-out i {
+  background: var(--dispute);
+}
+
+.sidebar-quota-foot {
+  font-size: 0.72rem;
+  color: var(--ink-3);
+}
+
+.quota-trigger {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+.quota-trigger[hidden] {
+  display: none;
+}
+
+.quota-trigger:hover {
+  background: var(--raise);
+}
+
+.quota-ring {
+  position: absolute;
+  inset: 0;
+  width: 32px;
+  height: 32px;
+  transform: rotate(-90deg);
+}
+
+.quota-ring circle {
+  transition: stroke-dashoffset 0.4s ease, stroke 0.3s ease;
+}
+
+.quota-trigger-value {
+  position: relative;
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* --------------------------------------------------------------------------
+   3. Topbar / view switch
+   -------------------------------------------------------------------------- */
+.view-switch {
+  background: var(--raise);
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.view-switch-btn {
+  color: var(--ink-2);
+}
+
+.view-switch-btn.is-active {
+  background: var(--ground);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: none;
+}
+
+/* --------------------------------------------------------------------------
+   4. Composer — an inset field, not a card
+
+   The old container was a white card with a border and a drop shadow. It is
+   now a well: a shade darker than the page, no contour. Above it sits a
+   hairline that fades out at both ends, so the input area is bounded without
+   being boxed.
+   -------------------------------------------------------------------------- */
+.chat-input-container,
+body:not(.dark-mode) .chat-input-container {
+  background: var(--well);
+  border: 0;
+  border-radius: var(--radius-xl);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.chat-input-container::before {
+  display: none;
+}
+
+.chat-input-container:focus-within {
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.input-field {
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+}
+
+.input-field::placeholder {
+  color: var(--ink-3);
+}
+
+/* One row under the field: attach, the single run switch, send. The row is
+   laid out in flow rather than pinned with absolute offsets, so it can wrap
+   on a narrow screen instead of overlapping the text. */
+.chat-input-container {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 10px;
+  min-height: 0;
+  padding-bottom: 10px;
+}
+
+.chat-input-container .input-field {
+  flex: 1 1 100%;
+  min-height: 52px;
+}
+
+.consensus-switch-container {
+  position: static;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.input-actions-container {
+  position: static;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Chips inside the well lift by one step, so they stay legible against it. */
+.attach-trigger,
+.model-picker-display {
+  background: var(--ground);
+  border: 0;
+  box-shadow: none;
+  color: var(--ink-2);
+}
+
+.attach-trigger:hover,
+.model-picker-display:hover {
+  color: var(--ink);
+}
+
+.model-picker-display {
+  border-radius: var(--radius-pill);
+  padding: 6px 12px;
+  font-size: 0.78rem;
+}
+
+.consensus-model-inline {
+  min-width: 0;
+}
+
+/* The send button is the one filled control in the composer. */
+.input-action-btn-primary {
+  width: 33px;
+  height: 33px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--ground);
+  border: 0;
+  box-shadow: none;
+}
+
+.composer-foot,
+.feedback-line {
+  color: var(--ink-3);
+}
+
+/* The Agent Mode switch was the loudest thing on a quiet page: a saturated
+   lime gradient with a glow. It uses the shared agreement green now — on
+   means on, it does not need to shout. */
+.consensus-switch-container input:checked + .slider,
+.attach-menu-switch input:checked + .slider {
+  background: var(--agree);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.consensus-switch-container input:checked + .slider::before,
+.attach-menu-switch input:checked + .slider::before {
+  background: #ffffff;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.consensus-switch-container .slider,
+.attach-menu-switch .slider {
+  background: var(--line);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.consensus-switch-container .slider::before,
+.attach-menu-switch .slider::before {
+  background: var(--ground);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* ---- The guided run ------------------------------------------------------
+   One active step at a time. What is finished is a grey check line, what is
+   running is one label with one bar, and what comes next is named so the
+   wait has a shape. When it ends the whole block collapses upward and the
+   provenance line under the answer takes over.
+   -------------------------------------------------------------------------- */
+.run {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 62ch;
+  margin: 2px 6px 14px;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.run[hidden] {
+  display: none;
+}
+
+.run.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.run.is-gone {
+  opacity: 0;
+  transform: translateY(-6px);
+  max-height: 0 !important;
+  margin-bottom: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.36s ease,
+    transform 0.42s ease,
+    max-height 0.48s ease,
+    margin-bottom 0.48s ease;
+}
+
+/* Finished steps: one grey line, checked off. */
+.run-past {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+  font-size: 0.76rem;
+  color: var(--ink-3);
+}
+
+.run-past[hidden] {
+  display: none;
+}
+
+.run-past span::before {
+  content: "✓ ";
+  color: var(--agree);
+}
+
+.run-now {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.run-pulse {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--agree);
+  animation: runPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes runPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.72); }
+}
+
+.run[data-stage="done"] .run-pulse {
+  animation: none;
+}
+
+.run-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+
+.run-count {
+  font-size: 0.75rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.run-time {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.run-track {
+  position: relative;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.run-track i {
+  display: block;
+  height: 100%;
+  width: var(--p, 0%);
+  border-radius: inherit;
+  background: var(--ink);
+  transition: width 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* A phase that cannot honestly report a share of itself sweeps instead of
+   pretending to know a percentage. */
+.run-track.is-indeterminate i {
+  width: 34%;
+  transition: none;
+  animation: runSweep 1.25s ease-in-out infinite;
+}
+
+@keyframes runSweep {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(330%); }
+}
+
+.run-next {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--ink-3);
+}
+
+.run-next[hidden] {
+  display: none;
+}
+
+.run-next b {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+/* Per-model rows: present only while the models are actually answering. */
+.run-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.run-detail[hidden] {
+  display: none;
+}
+
+.run-model {
+  display: grid;
+  grid-template-columns: minmax(76px, 124px) minmax(0, 1fr) 38px;
+  gap: 10px;
+  align-items: center;
+}
+
+.run-model-name {
+  font-size: 0.74rem;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.run-model[data-state="done"] .run-model-name {
+  color: var(--ink-2);
+}
+
+.run-model-track {
+  height: 2px;
+  border-radius: 2px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.run-model-track i {
+  display: block;
+  height: 100%;
+  width: var(--p, 0%);
+  background: var(--ink-3);
+  transition: width 0.3s linear;
+}
+
+.run-model[data-state="done"] .run-model-track i {
+  background: var(--agree);
+}
+
+.run-model-time {
+  font-size: 0.68rem;
+  color: var(--ink-3);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Provenance line -----------------------------------------------------
+   What the run leaves behind: what the answer was made of, and what you can
+   do next with it. Nothing is lost when the run collapses — it just stops
+   taking up the screen.
+   -------------------------------------------------------------------------- */
+.run-provenance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 12px;
+  font-size: 0.76rem;
+  color: var(--ink-3);
+}
+
+.run-provenance[hidden] {
+  display: none;
+}
+
+.run-provenance-facts b {
+  color: var(--ink-2);
+  font-weight: 550;
+}
+
+.run-replay-btn {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 0.76rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line);
+}
+
+.run-replay-btn:hover {
+  color: var(--ink);
+  text-decoration-color: var(--ink-3);
+}
+
+.run-provenance-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.run-provenance-actions:empty,
+.run-provenance-actions[hidden],
+.run-replay-btn[hidden] {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .run-model {
+    grid-template-columns: minmax(62px, 88px) minmax(0, 1fr) 34px;
+  }
+
+  .run-provenance-actions {
+    margin-left: 0;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   4b. Thread order — the composer sinks to the bottom
+
+   Before the first question the page is the hero: input centered (or at the
+   top on the wide desktop), nothing else. From the first run on the page
+   reads like a thread: question, run, answer, model answers — and the
+   composer waits at the BOTTOM, pinned, ready for the follow-up. The DOM
+   keeps the input first (the hero math depends on it); flex order does the
+   turning, so the hero state stays untouched.
+   -------------------------------------------------------------------------- */
+body:not(.is-hero) .container {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-height: calc(100dvh - 10px);
+}
+
+.thread-ask { order: 1; }
+body:not(.is-hero) #consensusRun { order: 2; }
+body:not(.is-hero) .consensus-section { order: 3; }
+body:not(.is-hero) .response-section { order: 4; }
+
+body:not(.is-hero) .input-section {
+  order: 5;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin-top: auto;
+  padding-top: 14px;
+  background: var(--ground);
+}
+
+/* The composer's upper edge is a horizon that fades out at both ends, not
+   the top line of a box. It replaces the hairline the consensus section used
+   to draw when the composer still sat above the result. */
+body:not(.is-hero) .input-section::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--line);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+}
+
+body:not(.is-hero) .consensus-section::before {
+  display: none;
+}
+
+/* ---- The question at the head of the thread ------------------------------
+   An eyebrow and the question itself in the serif voice — the one element
+   that speaks in the user's words, so it gets the largest quiet type on the
+   page. Long questions clamp to three lines; the link below unfolds them. */
+.thread-ask {
+  max-width: 60ch;
+  margin: 10px 6px 18px;
+}
+
+.thread-ask[hidden] {
+  display: none;
+}
+
+.thread-ask-label {
+  margin-bottom: 7px;
+  font-size: 0.655rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.thread-ask-text {
+  font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: clamp(19px, 2vw, 23px);
+  line-height: 1.34;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.thread-ask.is-open .thread-ask-text {
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.thread-ask-more {
+  display: none;
+  margin-top: 5px;
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--ink-3);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line);
+}
+
+.thread-ask.is-long .thread-ask-more {
+  display: inline-block;
+}
+
+.thread-ask-more:hover {
+  color: var(--ink);
+  text-decoration-color: var(--ink-3);
+}
+
+/* --------------------------------------------------------------------------
+   5. Thread surfaces
+
+   Answer, model cards and the differences drawer sit directly on the page.
+   Everything that used to be a card keeps its spacing and loses its frame.
+   -------------------------------------------------------------------------- */
+.consensus-box,
+.response-box,
+.consensus-output {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.consensus-divider {
+  background: var(--line-soft);
+}
+
+/* ---- The answer itself ---------------------------------------------------
+   The result is a page of text, not a card: the heading shrinks to the same
+   eyebrow the question wears ("Question" above, "Consensus answer" below),
+   and the body gets the largest reading type on the page — one voice per
+   element, sized by importance, aligned to the thread's left edge. */
+.consensus-main,
+.consensus-box.is-synthesizing .consensus-main {
+  padding: 0 6px;
+  /* overflow-x:auto (components-consensus) grew a horizontal scrollbar the
+     moment the inline copy actions poked 8px past the edge — a grey bar
+     right across the provenance line. The answer sits on the page now; code
+     already wraps (pre-wrap), so nothing needs a private scroll region. */
+  overflow: visible;
+}
+
+.consensus-main h2,
+.consensus-box.is-synthesizing .consensus-main h2 {
+  justify-content: flex-start;
+  margin: 0 0 9px;
+  padding-inline: 0;
+  font-size: 0.655rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.consensus-main h2 img {
+  display: none !important;
+}
+
+.consensus-main > .consensus-answer-body {
+  max-width: 64ch;
+  font-size: 1.03rem;
+  line-height: 1.7;
+  letter-spacing: -0.003em;
+  color: var(--ink);
+}
+
+/* The differences drawer and the verdict line hold the same column as the
+   answer text instead of stretching across the page. */
+.consensus-differences-panel {
+  max-width: 64ch;
+}
+
+/* ---- Follow-up offer: a quiet action, not a call-out ---------------------
+   The offer sits in the provenance line under the answer. It used to be a
+   dashed accent chip — louder than everything around it. It reads as one of
+   the line's quiet actions now; the small Pro badge still marks the gate. */
+.run-provenance-actions .followup-offer-btn {
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-xs);
+  padding: 4px 9px;
+  color: var(--ink-3);
+  font-size: 0.76rem;
+  gap: 6px;
+}
+
+.run-provenance-actions .followup-offer-btn:hover {
+  background: var(--raise);
+  border: 0;
+  color: var(--ink);
+}
+
+.run-provenance-actions .followup-offer-btn.is-pro-locked {
+  opacity: 1;
+}
+
+/* The verdict was a filled, bordered banner. It says the same thing as a
+   line: score ring, headline, judge footnote — so it becomes a line. The
+   traffic light stays, because that is the one piece of colour that carries
+   meaning rather than decoration. */
+.consensus-verdict,
+.consensus-verdict.is-calm,
+.consensus-verdict.is-warn {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 4px 2px;
+  border-radius: 0;
+}
+
+.consensus-verdict.is-calm {
+  --verdict-ring: var(--agree);
+}
+
+.consensus-verdict.is-warn {
+  --verdict-ring: var(--partial);
+}
+
+.verdict-detail,
+.verdict-judge {
+  color: var(--ink-3);
+}
+
+/* Differences drawer: a disclosure on the page, not a panel on a card. */
+.consensus-differences,
+.consensus-differences-panel {
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  box-shadow: none;
+}
+
+.diff-card {
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+
+/* While the consensus is being synthesised the block used to become a
+   ring-lined card. The pipeline line above already says a run is in flight,
+   so the answer area just stays the page — nothing appears and disappears
+   around the text as it streams in. */
+.consensus-box.is-synthesizing,
+.dark-mode .consensus-box.is-synthesizing {
+  background: none;
+  box-shadow: none;
+  border: 0;
+}
+
+/* The Agent Mode panel is retired as a progress surface — the guided run
+   above the thread now narrates every run, Agent Mode included. Its one
+   still-useful control, "Show model answers", has moved into the provenance
+   line, so nothing is lost by taking the panel off screen. */
+body.agent-mode-enabled .agent-mode-panel,
+.agent-mode-panel {
+  display: none;
+}
+
+/* Disclosure for the individual answers, now sitting in the provenance row. */
+.agent-mode-answers-row {
+  display: inline-flex;
+}
+
+.agent-mode-answers-row[hidden] {
+  display: none;
+}
+
+.agent-mode-answers-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  padding: 4px 9px;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 0.76rem;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.agent-mode-answers-toggle:hover {
+  background: var(--raise);
+  color: var(--ink);
+}
+
+.post-demo-login-prompt {
+  background: var(--raise);
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* The one hairline that separates result from composer, faded at both ends
+   so it reads as a horizon rather than the top edge of a box. */
+.consensus-section {
+  position: relative;
+}
+
+.consensus-section::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--line);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+}
+
+/* No result yet, no horizon — an empty page should not be divided. */
+.consensus-section:has(.consensus-output.is-hidden)::before,
+body.is-hero .consensus-section::before {
+  display: none;
+}
+
+/* --------------------------------------------------------------------------
+   6. Watch dashboard
+
+   Same treatment as the thread: the KPI tiles, cards and feeds are tinted
+   surfaces rather than bordered boxes, and the status colours come from the
+   shared traffic light instead of a private amber.
+   -------------------------------------------------------------------------- */
+.watch-dash-stat,
+.watch-card,
+.watch-brief-card,
+.watch-telegram-card,
+.watch-success-card,
+.watch-limit-summary,
+.watch-notifications,
+.watch-question-preview,
+.watch-setup-summary {
+  border: 0;
+  background: var(--raise);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Drift is the one thing on this page worth a colour. It gets a rail on the
+   leading edge rather than a coloured border all the way around — a box that
+   changes colour reads as an error, a rail reads as a flag. */
+.watch-dash-stat.is-drift,
+.watch-drift-feed {
+  border: 0;
+  border-left: 2px solid var(--partial);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--partial-bg);
+  box-shadow: none;
+}
+
+.watch-card-drift-dot,
+.watch-drift-feed-dot {
+  background: var(--partial);
+}
+
+.watch-filter {
+  background: transparent;
+  border: 0;
+  color: var(--ink-2);
+}
+
+.watch-filter:hover,
+.watch-filter.is-active,
+.watch-filter[aria-pressed="true"] {
+  background: var(--raise);
+  color: var(--ink);
+}
+
+.watch-page {
+  background: var(--ground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quota-track i,
+  .sidebar-new-run,
+  .sidebar-toggle-square {
+    transition: none;
+  }
+}

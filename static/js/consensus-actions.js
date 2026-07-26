@@ -69,7 +69,9 @@
     const dd = String(date.getDate()).padStart(2, "0");
     const dateStr = `${yyyy}-${mm}-${dd}`;
 
-    const question = (meta.question || document.getElementById("questionInput")?.value || "").trim();
+    // Der Composer ist nach dem Senden leer; die gestellte Frage haelt
+    // window.lastQuestion fest.
+    const question = (meta.question || window.lastQuestion || "").trim();
     const modelsPart = includedModels.join(", ");
     const consensusSelect = document.getElementById("consensusModelDropdown");
     const consensusModel = meta.consensusModel

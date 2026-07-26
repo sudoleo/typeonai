@@ -127,7 +127,11 @@ enthält dafür eine Kopie des Marker-Vokabulars (`--cx-major-line`,
 spezifisch sind nur die Lesehilfe `.lp-mark-key` unter der Scene-03-Überschrift,
 das Einlaufen der Marker beim Scroll (`.lp-scene-visual.is-visible` /
 `.lp-slide.is-active`) und ein kleiner Handler in `landing.html`, der
-`[data-diff-open]` auf die passende Karte klickbar macht. Die gemeinsamen, an `/app`
+`[data-diff-open]` auf die passende Karte klickbar macht. Seit 2026-07-27 tragen alle diese Mockups
+zusätzlich die rahmenlose Shell-Sprache: Der Verdict ist eine Zeile (Score-Ring
++ Headline + Judge-Fußnote) statt eines gefüllten Balkens — die Kopie in
+`landing.css` muss mit dem `.consensus-verdict`-Block in `shell.css` in Schritt
+bleiben. Die gemeinsamen, an `/app`
 ausgerichteten Light-/Dark-Tokens liegen in `static/css/public-tokens.css` und
 werden von `landing.css` sowie `public-pages.css` importiert; seitenbezogene
 Layouts bleiben in diesen beiden Dateien bzw. in `benchmark.css` und
@@ -173,8 +177,37 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   jedes change-Event am Dropdown); `pref_select_consensus` bleibt die
   Custom-Wahl. Bestandsnutzer mit gespeicherter Modellwahl migrieren zu
   "custom"; die volle Modell-Liste bleibt bewusst ohne Beschreibungen.
+- **Rahmenlose Shell (seit 2026-07-27)** — `static/css/shell.css` wird als
+  **letztes** `@import` in `static/style.css` geladen und gewinnt damit bei
+  gleicher Spezifität. Es trägt die Material-Ebene des Redesigns: Elevation
+  (nur echte Floating-Layer behalten `--lift`), Sidebar, Topbar, Composer,
+  Thread- und Watch-Flächen. Grundlage ist eine Fünf-Werte-Oberflächenskala in
+  `variables.css` (`--ground`/`--raise`/`--well` + `--ink`/`--ink-2`/`--ink-3`,
+  `--line`/`--line-soft`) plus die Ampel `--agree`/`--partial`/`--dispute`; die
+  alten Glas-Tokens (`--glass-*`, `--liquid-shadow`, `--card-shadow`) sind als
+  **Aliasse auf diese Skala** erhalten geblieben, damit die ~400 bestehenden
+  Aufrufstellen weiterlaufen — sie malen nur keine Transluzenz, Blur, Inner-
+  Highlights und Schatten mehr. `static/css/public-tokens.css` spiegelt die
+  identische Skala, deshalb sind Landing-/Public-Mockups aus demselben Material
+  wie `/app` (Testvertrag: `tests/test_public_design_system.py`). Dark Mode
+  überschreibt ausschließlich die fünf Werte + die Ampel.
+- **Ein einziger Sidebar-Toggle** — `.app-nav-float .sidebar-toggle` erscheint
+  nur bei geschlossener Sidebar, `#sidebarToggleInner` sitzt im Sidebar-Kopf.
+  `shell.css` blendet den schwebenden per `body:not(:has(.sidebar.collapsed))`
+  (Overlay ≤1099px: `body:has(.sidebar.active)`) aus. `app-init.js` bindet
+  **alle** `.sidebar-toggle`-Buttons an denselben Handler; `updateToggleButton`
+  pflegt aria/title auf allen. Darunter liegt `#newRunButton` („New
+  comparison“): derselbe saubere Ausgangszustand wie
+  `firebase.js::resetLoadedRunAfterLogout` (Streams abbrechen, Lauf +
+  Share-/Bookmark-Kontext leeren, `is-hero` zurück).
+- **`sidebar-quota.js`** — Kontingent-Ring im Sidebar-Footer (`#quotaTrigger`)
+  + Panel `#sidebarQuota` (Runs / Deep Think / Watches + Reset-Zeit). Rechnet
+  **nichts** selbst: ein MutationObserver spiegelt die weiterhin von
+  `app-core.js::renderUsageDisplay`, `firebase.js` und `watch.js` beschriebene
+  Usage-Spalte `#usageDisplay`, die nur noch `visually-hidden` ist und die
+  einzige Quelle bleibt. Bus: `window.App.sidebarQuota.{sync,setOpen}`.
 - **Navigation/Settings-Shell** (`templates/index.html`, `layout.css`,
-  `components-modals.css`, `app-init.js`, `firebase.js`) — Models,
+  `shell.css`, `components-modals.css`, `app-init.js`, `firebase.js`) — Models,
   Leaderboard und Bookmarks sind ausschließlich Sidebar-Abschnitte mit
   integrierten Icons. Bei offener Desktop-Sidebar begrenzen symmetrische
   Gutters die Contentbreite und halten den Input in der Viewport-Mitte; mobil
@@ -204,16 +237,67 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   sichtbaren Kompatibilitätshinweis deaktiviert, weil dessen Chat-API keine
   Datei-/Bild-Inputs akzeptiert; nach Entfernen wird die vorherige Auswahl
   wiederhergestellt. `window.pendingAttachments`, `getAttachmentsPayload`.
-- **`agent-mode.js`** — Agent-Mode-UI/Status/Timer; zeigt pro Modell den
-  Query-Abschluss aus `dataset.responseState`; einzige Stelle, die den
-  Auto-Consensus-Toggle erzwingt/sperrt. Sobald Antworten vorliegen, bietet das
-  Panel einen dezenten, session-lokalen „Show/Hide model answers“-Disclosure;
-  jeder neue Lauf startet wieder mit verborgenen Einzelantworten.
-- **`consensus-progress.js`** — beobachtende Zwei-Phasen-Anzeige direkt unter
-  dem Input für reguläre Läufe: zählt fertige Modellantworten determiniert und
-  zeigt die anschließende Consensus-/Differences-Synthese bewusst indeterminiert.
-  Im Agent Mode bleibt sie verborgen; Status-Brücke ist
-  `window.App.consensusPipeline.*`.
+- **`agent-mode.js`** — Agent-Mode-**Zustand**, Status-Hub und Timer; einzige
+  Stelle, die den Auto-Consensus-Toggle erzwingt/sperrt, und `setAgentModeStatus`
+  bleibt der zentrale Lifecycle-Kanal JEDES Laufs (auch ohne Agent Mode).
+  Seit 2026-07-27 ist das Panel `#agentModePanel` als **Fortschrittsanzeige
+  stillgelegt** (in `shell.css` auf `display:none`): zwei Progress-UIs fuer
+  einen Request waren genau der Ueberschuss, den der gefuehrte Lauf abbaut.
+  Agent Mode behaelt sein Verhalten (Modelle gruppieren, Auto-Consensus,
+  Einzelantworten standardmaessig verborgen). Der session-lokale
+  „Show/Hide model answers"-Disclosure (`#agentModeAnswersRow`) ist ins Markup
+  der Provenance-Zeile gewandert — agent-mode.js adressiert ihn unveraendert
+  per `getElementById`, die Position ist kein Vertrag. Neu exportiert:
+  `window.App.agentMode.streamProgressByResponseId()`, damit der gefuehrte Lauf
+  dieselbe monotone Stream-Schaetzung nutzt statt sie zu duplizieren.
+- **`consensus-progress.js`** — der **gefuehrte Lauf** `#consensusRun` unter dem
+  Input, seit 2026-07-27 die **einzige** Fortschrittsanzeige (auch im Agent
+  Mode; dessen Panel ist als Progress-Flaeche stillgelegt, siehe unten).
+  Sichtbar ist immer nur EIN aktiver Schritt — vier Phasen in dieser Reihenfolge:
+  `prepare → answers → consensus → differences`. Erledigte Schritte schrumpfen
+  auf graue Haken-Zeilen (`#runPast`), die Modell-Zeilen (`#runDetail`, Balken
+  aus `window.App.agentMode.streamProgressByResponseId()`) existieren nur
+  waehrend der Antwortphase, und Phasen ohne ehrlichen Prozentwert laufen
+  indeterminiert (`.run-track.is-indeterminate`) statt einen zu erfinden.
+  Am Ende klappt der Block zusammen und uebergibt an die **Provenance-Zeile**
+  `#runProvenance` unter der Antwort ("N models · X s · N contested passages",
+  „Replay run", Follow-up-Angebot, „Show model answers"). Die strittigen
+  Stellen werden aus den tatsaechlich gerenderten `.cx-marker` gezaehlt, nicht
+  separat gebucht; `consensus-insights.js` ruft dafuer nach dem Markieren
+  `renderProvenance()` nach. Bruecke: `window.App.consensusPipeline.{onPrepare,
+  onQueryStatus,onConsensusStart,onDifferencesStart,onConsensusEnd,
+  renderProvenance,dismiss}`. `onPrepare` kommt aus `query-send.js` **vor**
+  `/prepare`, `onDifferencesStart` aus dem ersten `differences.delta`
+  (`consensus-run.js`).
+- **Thread-Layout: Composer unten (2026-07-27)** — ab dem ersten Lauf liest
+  sich `/app` als Thread: Frage oben, Lauf, Antwort, Modellantworten, Composer
+  **unten am Viewport**. Das DOM behaelt die Reihenfolge Input → Consensus →
+  Responses (die Hero-Zentrierung rechnet damit); `shell.css` dreht sie nur
+  fuer `body:not(.is-hero)` per Flex-`order` und macht `.input-section`
+  `position:sticky; bottom:0` mit eigenem auslaufenden Horizont
+  (`.consensus-section::before` ist in diesem Zustand aus). Die Frage steht im
+  Thread-Kopf `#threadAsk` („Question“-Eyebrow + Serif-Text, 3-Zeilen-Clamp mit
+  „Show full question“): `window.App.setThreadQuestion` (app-core.js), gefuellt
+  von `query-send.js` (send), `demo.js` (nach der Tipp-Phase) und
+  `firebase.js::loadSingleBookmarkUI`; geleert von „New comparison“ und
+  `clearResponseBoxes`. Der Composer wird beim Senden **geleert** (erst nach
+  `/prepare`, damit Login-/Limit-Abbrueche den Text nicht fressen) — deshalb ist
+  `window.lastQuestion` die Quelle fuer `getConsensus` und die Citation, nicht
+  mehr `#questionInput`. Der gefuehrte Lauf `#consensusRun` liegt jetzt als
+  Container-Kind im Thread (unter der Frage), nicht mehr in der Input-Section.
+  Antwort-Typo im Mockup-Mass: `.consensus-main`-H2 als Eyebrow, Body 1.03rem/
+  1.7 auf max. 64ch; `.consensus-main` ist `overflow:visible`, weil der alte
+  `overflow-x:auto` mit den -8px-Copy-Icons einen Quer-Scrollbalken unter der
+  Provenance-Zeile malte. Achtung-Falle erneut bestaetigt: neue stille Buttons
+  (`.run-replay-btn`, `.thread-ask-more`) muessen in die globale
+  `button:not(...)`-Kette in `components-input.css`.
+- **Composer-Reduktion (2026-07-27)** — die Eingabezeile ist auf Anhang (+),
+  EINEN Lauf-Schalter („N models · Preset", der bestehende Consensus-Picker mit
+  vorangestellter Modellanzahl) und Senden reduziert. Entfallen sind dort
+  `#toggleAllButton` (Agent Mode → Settings `#agentModeSwitch`),
+  `#modeExplainerTrigger` samt `#modeExplainer`-Section (Modi werden dort
+  erklaert, wo man sie schaltet) und `#clearButton` (→ „New comparison").
+  Alle betroffenen JS-Stellen waren bereits null-gesichert.
 - **`consensus-lifecycle.js`** — Consensus-Sichtbarkeit, Gate/Availability,
   Run-State, Abort/Cancel, Run-ID-Gating, Auto-Consensus-Persistenz. Exponiert die
   `window.App.consensusLifecycle.*`-Brücke (siehe §4/§8).
@@ -383,10 +467,15 @@ Nach einem erfolgreichen Consensus kann eine Anschlussfrage mit Kontext
 gestellt werden. Kontext ist **genau eine Ebene**: das letzte Frage/Konsens-
 Paar (`{previous_question, previous_consensus}`) — bewusst NICHT die sechs
 Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
-- Frontend: `window.App.followup` (in `consensus-run.js`) zeigt nach dem
-  Consensus-Render eine „Ask a follow-up"-Affordance im Input-Bereich
-  (`#followupBar`), Pro-gebadged; Free-Klick öffnet das Pro-Modal. Aktivieren
-  erzeugt einen Kontext-Chip mit X; `query-send.js` konsumiert den State beim
+- Frontend: `window.App.followup` (in `consensus-run.js`) rendert **zwei Orte,
+  einen Zustand** (seit 2026-07-27): Das **Angebot** „Ask a follow-up" steht in
+  `#followupBar` **innerhalb der Provenance-Zeile an der Antwort** — dort, deren
+  Kontext es mitnehmen wuerde —, Pro-gebadged; Free-Klick öffnet das Pro-Modal.
+  Aktivieren erzeugt den **Kontext-Chip** in `#followupChipBar` **am
+  Eingabefeld**, weil er beschreibt, was gleich rausgeht. `render()` waehlt
+  anhand von `armed` den Zielcontainer und macht `#runProvenance` auch dann
+  auf, wenn sie sonst leer waere (aus dem Bookmark geladener Konsens ohne Lauf).
+  `query-send.js` konsumiert den State beim
   Senden und legt `context` in den `/prepare`- und alle `/ask_*`-Payloads.
   **Follow-ups verketten sich nicht** (Kostenkontrolle): `consume()` markiert
   den Lauf via `followupInFlight`, der Konsens einer Follow-up-Frage bietet
@@ -1422,8 +1511,12 @@ Commit/PR**, wenn sich Folgendes ändert:
   `?v=`-Query-String der betroffenen Datei gebumpt werden: für CSS-Module in
   `static/style.css` (@import-Zeilen) **und** den `style.css`-Link in
   `templates/index.html`, für JS die `<script>`-Tags in `templates/index.html`.
-  Konvention: `?v=YYYYMMDD-kurzlabel`. Ohne Bump liefern Browser/CDN die alte
-  Datei aus und die Änderung ist in Produktion unsichtbar (§8).
+  Für die öffentlichen Seiten zusätzlich der `public-tokens.css`-Import in
+  `landing.css`/`public-pages.css`/`topics.css` und die `<link>`-Tags der
+  jeweiligen Templates. Konvention: `?v=YYYYMMDD-kurzlabel`. Ohne Bump liefern
+  Browser/CDN die alte Datei aus und die Änderung ist in Produktion unsichtbar
+  (§8) — beim lokalen Verifizieren gilt dasselbe, ein nicht gebumptes
+  `app-init.js` sieht wie „mein Handler wird nicht gebunden“ aus.
 
 Faustregel: Wenn ein neuer Agent durch deine Änderung an einer der obigen Stellen
 **überrascht** würde, gehört es hier rein. Kurz halten — verifizierte Fakten statt

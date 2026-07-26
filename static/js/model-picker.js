@@ -183,6 +183,11 @@
 
   const CONSENSUS_PRESET_STORAGE_KEY = "pref_consensus_preset";
 
+  // Zuletzt angezeigtes Preset-/Modell-Label OHNE die Modellanzahl davor.
+  // Der gefuehrte Lauf nennt es in seiner "Question prepared"-Zeile; die Zahl
+  // steht dort schon separat, sie wuerde sich sonst doppeln.
+  let lastPresetDisplayLabel = "";
+
   function getConsensusPresets() {
     return Array.isArray(window.CONSENSUS_PRESETS) ? window.CONSENSUS_PRESETS : [];
   }
@@ -304,6 +309,15 @@
           displayLabel = preset.label;
           displayTitle = `${preset.label} · ${selectedLabel}`;
         }
+      }
+      // Der Consensus-Trigger ist im rahmenlosen Composer der EINZIGE
+      // Lauf-Schalter. Er sagt deshalb beides: wie viele Modelle antworten
+      // und welche Stufe den Konsens schreibt ("6 models · Balanced").
+      const count = window.App.getSelectedModelCount?.();
+      if (count) {
+        lastPresetDisplayLabel = displayLabel;
+        displayLabel = `${count} models · ${displayLabel}`;
+        displayTitle = `${count} models · ${displayTitle}`;
       }
     }
 
@@ -660,4 +674,5 @@
   window.App.collapseExpandedModelPicker = collapseExpandedModelPicker;
   window.App.initCustomModelPicker = initCustomModelPicker;
   window.App.markConsensusPresetCustom = markConsensusPresetCustom;
+  window.App.currentPresetLabel = () => lastPresetDisplayLabel;
 })();

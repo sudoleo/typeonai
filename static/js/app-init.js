@@ -210,56 +210,9 @@
         }
         window.showMobileInfoPopup = showMobileInfoPopup;
 
-        const MODE_EXPLAINER_STORAGE_KEY = "modeExplainerConfirmed";
-        const MODE_EXPLAINER_TRIGGER_HIDDEN_KEY = "modeExplainerTriggerHidden";
-
-        function initModeExplainer() {
-          const explainer = document.getElementById("modeExplainer");
-          const trigger = document.getElementById("modeExplainerTrigger");
-          const dismiss = document.getElementById("modeExplainerDismiss");
-          const hideTriggerCheckbox = document.getElementById("modeExplainerHideTrigger");
-          if (!explainer || !trigger || !dismiss) return;
-
-          const setExplainerVisible = (visible) => {
-            explainer.hidden = !visible;
-            explainer.classList.toggle("is-visible", visible);
-            trigger.setAttribute("aria-expanded", String(visible));
-            trigger.classList.toggle("is-active", visible);
-          };
-
-          const applyTriggerHidden = (hidden) => {
-            trigger.classList.toggle("is-hidden", hidden);
-          };
-
-          // Standardmäßig eingeklappt – auch für neue Nutzer. Der Bereich wird nur
-          // bewusst über den (i)-Trigger geöffnet.
-          setExplainerVisible(false);
-
-          const triggerHidden = localStorage.getItem(MODE_EXPLAINER_TRIGGER_HIDDEN_KEY) === "true";
-          if (hideTriggerCheckbox) hideTriggerCheckbox.checked = triggerHidden;
-          applyTriggerHidden(triggerHidden);
-
-          trigger.addEventListener("click", () => {
-            const nextVisible = explainer.hidden;
-            setExplainerVisible(nextVisible);
-            trackAppEvent("app_mode_help_toggled", { open: nextVisible });
-          });
-
-          dismiss.addEventListener("click", () => {
-            localStorage.setItem(MODE_EXPLAINER_STORAGE_KEY, "true");
-            setExplainerVisible(false);
-            trackAppEvent("app_mode_help_confirmed");
-          });
-
-          hideTriggerCheckbox?.addEventListener("change", () => {
-            const hidden = hideTriggerCheckbox.checked;
-            localStorage.setItem(MODE_EXPLAINER_TRIGGER_HIDDEN_KEY, String(hidden));
-            applyTriggerHidden(hidden);
-            trackAppEvent("app_mode_help_trigger_hidden", { hidden });
-          });
-        }
-
-        initModeExplainer();
+        // Der Modus-Erklaerer ist mit seinem (i)-Trigger entfallen: die
+        // Modi werden jetzt dort erklaert, wo man sie schaltet (Settings,
+        // (+)-Menue) und waehrend sie laufen (gefuehrter Lauf).
 
         // deepThinkModelLabels stammt aus app-core.js (window.App), siehe Alias oben.
         // Admin-konfigurierbar via /admin (Firestore-Feld deep_think_model),
@@ -782,7 +735,14 @@
           }
         });
 
-        document.getElementById("toggleSidebarButton").addEventListener("click", function () {
+        // Es gibt genau EINEN sichtbaren Sidebar-Toggle: der schwebende
+        // (.app-nav-float) bei geschlossener Sidebar, der im Sidebar-Kopf bei
+        // offener. Beide teilen sich diesen Handler.
+        document.querySelectorAll(".sidebar-toggle").forEach(function (button) {
+          button.addEventListener("click", handleSidebarToggle);
+        });
+
+        function handleSidebarToggle() {
           const sidebar = document.querySelector(".sidebar");
           if (!sidebar) return;
 
@@ -800,6 +760,34 @@
           }
           updateToggleButton();
           trackAppEvent("app_sidebar_toggle", { open: !sidebar.classList.contains("collapsed") });
+        }
+
+        // "New comparison": derselbe saubere Ausgangszustand, den auch der
+        // Logout herstellt (firebase.js::resetLoadedRunAfterLogout) — laufende
+        // Streams abbrechen, Lauf + Share-/Bookmark-Kontext leeren, zurück in
+        // den Hero-Zustand. Auf der Overlay-Sidebar schließt sie sich danach,
+        // sonst verdeckt sie das Eingabefeld, in dem man tippen soll.
+        document.getElementById("newRunButton")?.addEventListener("click", function () {
+          window.cancelCurrentQuery?.();
+          window.cancelCurrentConsensus?.();
+          window.clearResponseBoxes?.({ silent: true });
+          window.clearPreparedBookmarkShareResult?.();
+          window.currentEvidenceSources = [];
+          window.consensusCitationMeta = null;
+
+          const input = document.getElementById("questionInput");
+          if (input) {
+            input.value = "";
+            input.disabled = false;
+          }
+          document.body.classList.add("is-hero");
+          window.syncHeroResponseAccess?.();
+          window.App?.setAppTitle?.();
+          window.App?.setThreadQuestion?.("");
+
+          if (usesOverlaySidebar()) closeOverlaySidebar();
+          input?.focus();
+          trackAppEvent("app_new_comparison");
         });
 
         // Fenstergröße prüfen – wenn <1024px, Sidebar einklappen
@@ -823,16 +811,15 @@
         // Aktualisiert den Pfeil des Sidebar-Toggle-Buttons
         function updateToggleButton() {
           const sidebar = document.querySelector(".sidebar");
-          const toggleButton = document.getElementById("toggleSidebarButton");
           if (!sidebar) return;
           const isOpen = usesOverlaySidebar()
             ? sidebar.classList.contains("active")
             : !sidebar.classList.contains("collapsed");
-          if (toggleButton) {
+          document.querySelectorAll(".sidebar-toggle").forEach(function (toggleButton) {
             toggleButton.setAttribute("aria-expanded", String(isOpen));
             toggleButton.setAttribute("aria-label", isOpen ? "Collapse sidebar" : "Open sidebar");
             toggleButton.title = isOpen ? "Collapse sidebar" : "Open sidebar";
-          }
+          });
           const newText = sidebar.classList.contains("collapsed") ? "►" : "◄";
           const arrow = document.querySelector(".sidebar-toggle .arrow");
           if (arrow) {
@@ -1474,6 +1461,7 @@
             window.syncDemoChipState?.();
           }
           window.App.setAppTitle();
+          window.App.setThreadQuestion?.("");
           window.lastQuestion = "";
           window.currentEvidenceSources = [];
           window.consensusCitationMeta = null;

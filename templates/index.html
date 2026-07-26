@@ -58,11 +58,11 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260726-diffprogress1">
+  <link rel="stylesheet" href="/static/style.css?v=20260727-runflow7">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
-  <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
-  <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
-  <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
+  <link rel="icon" href="/static/favicon.svg?v=20260727-runflow7" type="image/svg+xml">
+  <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-runflow7" sizes="any" type="image/png">
+  <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260727-runflow7">
   <!-- Marked (Markdown -> HTML) -->
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <!-- DOMPurify (HTML Sanitizer) -->
@@ -71,39 +71,41 @@
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.js" integrity="sha384-AtrdNsnxl/75rvBneBVH7DtOvCxSVahR2zWqle1coBKd8DEmLoviqNeJSx64gNAs" crossorigin="anonymous"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260725-passagehover2"></script>
-  <script type="module" src="/static/demo.js?v=20260725-passagehover2"></script>
-  <script src="/static/app-ui.js?v=20260628-prompt-default2" defer></script>
+  <script type="module" src="/static/firebase.js?v=20260727-runflow7"></script>
+  <script type="module" src="/static/demo.js?v=20260727-runflow7"></script>
+  <script src="/static/app-ui.js?v=20260727-runflow7" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
-  <script src="/static/js/app-core.js?v=20260725-passagehover2" defer></script>
+  <script src="/static/js/app-core.js?v=20260727-runflow7" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
-  <script src="/static/js/model-picker.js?v=20260722-model-fixes1" defer></script>
+  <script src="/static/js/model-picker.js?v=20260727-runflow7" defer></script>
   <!-- Gemeinsame LaTeX-Aufbereitung; muss vor markdown-stream.js laden. -->
-  <script src="/static/js/math-render.js?v=20260720-math1" defer></script>
+  <script src="/static/js/math-render.js?v=20260727-runflow7" defer></script>
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
-  <script src="/static/js/markdown-stream.js?v=20260723-model-config2" defer></script>
+  <script src="/static/js/markdown-stream.js?v=20260727-runflow7" defer></script>
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
-  <script src="/static/js/sources.js?v=20260723-srcfavicon1" defer></script>
+  <script src="/static/js/sources.js?v=20260727-runflow7" defer></script>
   <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
-  <script src="/static/js/attachments.js?v=20260725-honest2" defer></script>
+  <script src="/static/js/attachments.js?v=20260727-runflow7" defer></script>
   <!-- Agent Mode (aus index.html ausgelagert) -->
-  <script src="/static/js/agent-mode.js?v=20260724-runcancel1" defer></script>
+  <script src="/static/js/agent-mode.js?v=20260727-runflow7" defer></script>
   <!-- Kompakte Zwei-Phasen-Anzeige fuer regulaere Laeufe (ohne Agent Mode). -->
-  <script src="/static/js/consensus-progress.js?v=20260716-consensus-progress1" defer></script>
+  <script src="/static/js/consensus-progress.js?v=20260727-runflow7" defer></script>
   <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
-  <script src="/static/js/consensus-lifecycle.js?v=20260725-passagehover2" defer></script>
+  <script src="/static/js/consensus-lifecycle.js?v=20260727-runflow7" defer></script>
   <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
-  <script src="/static/js/share-dialog.js?v=20260721-watchguide2" defer></script>
+  <script src="/static/js/share-dialog.js?v=20260727-runflow7" defer></script>
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-actions.js?v=20260725-passagehover2" defer></script>
+  <script src="/static/js/consensus-actions.js?v=20260727-runflow7" defer></script>
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
-  <script src="/static/js/watch.js?v=20260725-honest2" defer></script>
+  <script src="/static/js/watch.js?v=20260727-runflow7" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
-  <script src="/static/js/user-tier.js?v=20260725-honest2" defer></script>
+  <script src="/static/js/user-tier.js?v=20260727-runflow7" defer></script>
+  <!-- Kontingent-Ring + Panel im Sidebar-Footer; spiegelt nur #usageDisplay -->
+  <script src="/static/js/sidebar-quota.js?v=20260727-runflow7" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-insights.js?v=20260725-honest2" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260726-diffprogress1" defer></script>
-  <script src="/static/js/query-send.js?v=20260725-honest2" defer></script>
+  <script src="/static/js/consensus-insights.js?v=20260727-runflow7" defer></script>
+  <script src="/static/js/consensus-run.js?v=20260727-runflow7" defer></script>
+  <script src="/static/js/query-send.js?v=20260727-runflow7" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
@@ -164,19 +166,33 @@
     </button>
   </nav>
   <div class="sidebar">
-    <!-- Brand-Kopf: Logo + Name (ehemals Topbar), Pro-Badge daneben.
-         Rechts bleibt Platz für den fixierten Sidebar-Toggle (app-nav-float). -->
-    <div class="sidebar-brand">
-      <a href="/" id="logoLink" aria-label="consens.io home">
-        <img src="/static/favicon.png" alt="consens.io" class="app-favicon">
-      </a>
-      <span class="sidebar-brand-title">consens.io</span>
+    <!-- Kopfzeile: DER Sidebar-Toggle (genau einer im ganzen Shell — der
+         schwebende in .app-nav-float erscheint nur bei geschlossener Sidebar),
+         daneben Brand + Pro-Badge. Darunter die Primäraktion. -->
+    <div class="sidebar-top">
+      <button id="sidebarToggleInner" class="sidebar-toggle sidebar-toggle-square" type="button"
+        aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+      <!-- Neuer Vergleich: leert den Lauf und setzt den Hero-Zustand zurück. -->
+      <button type="button" id="newRunButton" class="sidebar-new-run" title="Start a new comparison">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <span>New comparison</span>
+      </button>
       <span id="proBadge" class="pro-badge" style="display: none;">PRO</span>
     </div>
-    <!-- Pinned: Usage, Models, Leaderboard — does not scroll with bookmarks -->
+    <!-- Pinned: Models, Leaderboard — does not scroll with bookmarks.
+         Usage lebt jetzt im Kontingent-Panel über dem Account-Footer. -->
     <div class="sidebar-pinned">
 
-      <div id="usageOptions" style="margin-top: 0;">
+      <div id="usageOptions" class="visually-hidden" style="margin-top: 0;">
         <h2 class="sidebar-static-heading">Usage</h2>
         <div id="usageDisplay">
           <span id="freeUsageDisplay">Runs: <strong>...</strong></span><br>
@@ -185,8 +201,6 @@
           <span id="countdownDisplay"></span>
         </div>
       </div>
-
-      <div class="sidebar-separator"></div>
 
       <!-- Verwendete Modelle (einklappbar) -->
       <div class="sidebar-section models-section is-collapsed">
@@ -266,6 +280,10 @@
           </button>
         </h2>
         <div class="sidebar-search-box">
+          <svg class="sidebar-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7"></circle>
+            <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
+          </svg>
           <input type="search" id="chatSearch" placeholder="Search chats…" autocomplete="off" aria-label="Search chats">
         </div>
         <div id="bookmarksContainer"></div>
@@ -297,6 +315,26 @@
     <!-- Fußzeile: Account-Icon nur für eingeloggte Nutzer; Gäste verwenden
          ausschließlich die Auth-Aktionen oben rechts. -->
     <div class="sidebar-settings">
+      <!-- Kontingent-Panel: öffnet nach oben über dem Account-Footer.
+           Gefüllt von static/js/sidebar-quota.js, das die (versteckte)
+           #usageDisplay-Spalte beobachtet — die bleibt die einzige Quelle,
+           damit app-core.js, firebase.js und watch.js unverändert bleiben. -->
+      <div id="sidebarQuota" class="sidebar-quota" role="region" aria-label="Your allowance">
+        <div class="sidebar-quota-head"><span>Your allowance</span><span id="quotaPlanLabel">Free</span></div>
+        <div class="quota-row" id="quotaRowRuns" hidden>
+          <div class="quota-top"><b>Runs</b><span id="quotaRunsValue"></span></div>
+          <div class="quota-track"><i></i></div>
+        </div>
+        <div class="quota-row" id="quotaRowDeep" hidden>
+          <div class="quota-top"><b>Deep Think</b><span id="quotaDeepValue"></span></div>
+          <div class="quota-track"><i></i></div>
+        </div>
+        <div class="quota-row" id="quotaRowWatch" hidden>
+          <div class="quota-top"><b>Watches</b><span id="quotaWatchValue"></span></div>
+          <div class="quota-track"><i></i></div>
+        </div>
+        <div class="sidebar-quota-foot" id="quotaFoot" hidden></div>
+      </div>
       <div class="sidebar-footer-row">
         <div id="loginContainer" class="login-text" hidden></div>
         <script>
@@ -320,6 +358,17 @@
           <span id="accountLabel" class="sidebar-account-label" hidden></span>
           <a id="upgradeLink" href="#" style="display: none;" aria-label="Why there are limits" title="Why there are limits">Why limits?</a>
         </div>
+        <!-- Kontingent-Ring: das einzige Element im Shell, das dauerhaft eine
+             Zahl über den eigenen Account zeigt. Klick öffnet #sidebarQuota. -->
+        <button type="button" id="quotaTrigger" class="quota-trigger" aria-expanded="false"
+          aria-controls="sidebarQuota" title="Your allowance" aria-label="Your allowance" hidden>
+          <svg class="quota-ring" viewBox="0 0 32 32" aria-hidden="true">
+            <circle cx="16" cy="16" r="14" fill="none" stroke="var(--line-soft)" stroke-width="2.5"></circle>
+            <circle id="quotaRingArc" cx="16" cy="16" r="14" fill="none" stroke="var(--ink-2)" stroke-width="2.5"
+              stroke-linecap="round" stroke-dasharray="87.9" stroke-dashoffset="87.9"></circle>
+          </svg>
+          <span class="quota-trigger-value" id="quotaTriggerValue" aria-hidden="true"></span>
+        </button>
         <button id="editSystemPromptBtn" title="Settings" aria-label="Settings">
           <span class="settings-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -329,7 +378,14 @@
           </span>
         </button>
       </div>
+      <!-- Die Wortmarke sitzt in der Fußzeile: der Sidebar-Kopf gehört den
+           beiden Aktionen (Toggle + Neuer Vergleich), aber die Marke soll
+           deshalb nicht ganz aus der App verschwinden. -->
       <div class="sidebar-footer-meta">
+        <a href="/" id="logoLink" aria-label="consens.io home" class="sidebar-brand-link">
+          <img src="/static/favicon.png" alt="" class="app-favicon">
+          <span class="sidebar-brand-title">consens.io</span>
+        </a>
         <a href="/about" class="sidebar-footer-link">About us</a>
         <span aria-hidden="true">&middot;</span>
         <span id="version-number">v1.11.0</span>
@@ -337,14 +393,45 @@
     </div>
   </div>
   <div class="container">
+    <!-- Kopf des Threads: die gestellte Frage. Wird von window.App.setThreadQuestion
+         (app-core.js) gefüllt, sobald ein Lauf startet oder ein Bookmark lädt.
+         Lange Fragen clampen auf drei Zeilen; der Link darunter klappt auf. -->
+    <div id="threadAsk" class="thread-ask" hidden>
+      <div class="thread-ask-label">Question</div>
+      <div class="thread-ask-text" id="threadAskText"></div>
+      <button type="button" id="threadAskMore" class="thread-ask-more">Show full question</button>
+    </div>
+    <!-- Gefuehrter Lauf. Sichtbar ist immer nur EIN aktiver Schritt: eine
+         Zeile, ein Balken, eine "Next"-Zeile. Erledigte Schritte schrumpfen
+         auf eine graue Haken-Zeile, die Modell-Zeilen erscheinen nur,
+         solange die Modelle antworten. Nach dem Lauf blendet der Block sich
+         weich aus und uebergibt an die Provenance-Zeile unter der Antwort.
+         Lebt im Thread (unter der Frage, wo gleich die Antwort steht), nicht
+         am Composer. Gesteuert von static/js/consensus-progress.js. -->
+    <section id="consensusRun" class="run" data-stage="idle"
+      role="status" aria-live="polite" aria-atomic="true" hidden>
+      <span id="runStatus" class="visually-hidden"></span>
+      <div class="run-past" id="runPast"></div>
+      <div class="run-now">
+        <span class="run-pulse" aria-hidden="true"></span>
+        <span class="run-label" id="runLabel"></span>
+        <span class="run-count" id="runCount"></span>
+        <span class="run-time" id="runTime"></span>
+      </div>
+      <div class="run-track" id="runTrack" aria-hidden="true"><i id="runBar"></i></div>
+      <p class="run-next" id="runNext"></p>
+      <div class="run-detail" id="runDetail" aria-hidden="true" hidden></div>
+    </section>
     <div class="input-section">
       <!-- Nur im Agent-Mode-Hero und nur bei ausreichender Viewport-Fläche sichtbar. -->
       <p class="hero-greeting">What should the models cross-check?</p>
       <div class="chat-input-container" style="position: relative;">
         <div id="attachmentBar" class="attachment-bar" hidden></div>
-        <!-- Follow-up-Fragen (Pro): Affordance/Kontext-Chip, gefüllt von
-             window.App.followup (consensus-run.js) nach jedem Konsens. -->
-        <div id="followupBar" class="followup-bar" hidden></div>
+        <!-- Follow-up: das ANGEBOT steht an der Antwort (#followupBar in der
+             Provenance-Zeile), weil es deren Kontext mitnimmt. Ist es aktiviert,
+             erscheint der Kontext-Chip hier — er gehoert zu dem, was gleich
+             abgeschickt wird. Beides rendert window.App.followup. -->
+        <div id="followupChipBar" class="followup-bar" hidden></div>
         <textarea class="input-field" id="questionInput" placeholder="Enter your question"></textarea>
         <!-- Attachment-Menü (öffnet über dem Plus-Button) -->
         <div id="attachMenu" class="attach-menu" hidden>
@@ -376,81 +463,42 @@
           </label>
         </div>
         <input type="file" id="attachFileInput" accept=".pdf,.docx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,image/png,image/jpeg,image/webp" multiple hidden>
-        <!-- Container für beide Schalter -->
-        <div class="consensus-switch-container"
-          style="position: absolute; bottom: 10px; left: 10px; display: flex; align-items: center; gap: 20px;">
+        <!-- Composer-Zeile: Anhang, EIN Lauf-Schalter ("N models · Preset"),
+             Senden. Agent Mode und die Modus-Erklaerung sind in die Settings
+             gewandert, der Trash-Button in "New comparison" — der gefuehrte
+             Lauf sagt jetzt selbst, was passiert, statt es hier anzukuendigen.
+             .consensus-switch-container bleibt als Selektor-Vertrag bestehen. -->
+        <div class="consensus-switch-container">
           <button type="button" id="attachTrigger" class="attach-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="attachMenu" title="Add attachment" aria-label="Add attachment">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
           </button>
-          <div class="agent-mode-control">
-            <label class="switch agent-mode-switch" aria-label="Agent Mode" title="Agent Mode">
-              <input type="checkbox" id="toggleAllButton">
-              <span class="slider"></span>
-            </label>
-            <span class="agent-mode-label">Agent Mode</span>
-          </div>
-          <button type="button" id="modeExplainerTrigger" class="mode-explainer-trigger" aria-controls="modeExplainer" aria-expanded="false" title="Explain modes">
-            <span aria-hidden="true">i</span>
-            <span class="visually-hidden">Explain modes</span>
-          </button>
-        </div>
-        <!-- Actions bottom right -->
-        <div class="input-actions-container">
-          <div id="deepThinkInputIndicator" class="deep-think-input-indicator" role="status" aria-live="polite" aria-label="Deep Think active" title="Deep Think active" hidden>
-            <span class="deep-think-input-status-dot" aria-hidden="true"></span>
-            <span class="deep-think-input-indicator-text">Deep <span class="deep-think-input-indicator-word">Think</span></span>
-          </div>
-          <!-- Consensus-Modell-Auswahl direkt links neben den Aktionen -->
-          <div class="consensus-model consensus-model-inline" title="Model that synthesises the final consensus">
-            <span class="consensus-label">Consensus</span>
+          <!-- Lauf-Schalter: Modellanzahl + Preset in einem Chip. model-picker.js
+               ersetzt das Select durch den Custom-Picker mit Preset-Ebene. -->
+          <div class="consensus-model consensus-model-inline" title="How many models answer, and which one writes the consensus">
             <div class="select-wrapper">
-              <select id="consensusModelDropdown" aria-label="Consensus model">
+              <select id="consensusModelDropdown" aria-label="Models and consensus engine">
                 {% for model in consensus_models %}
                 <option value="{{ model.value }}" data-model-label="{{ model.label }}" data-model-badge="{{ model.badge }}" {% if loop.first %}selected{% endif %} {% if model.is_premium %}disabled class="premium-option"{% endif %}>{{ model.label }}{% if model.badge %} · {{ model.badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </div>
           </div>
-          <button id="clearButton" class="input-action-btn-subtle" onclick="clearResponseBoxes()" title="Clear all responses" aria-label="Clear all responses">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;">
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            </svg>
-          </button>
+          <div id="deepThinkInputIndicator" class="deep-think-input-indicator" role="status" aria-live="polite" aria-label="Deep Think active" title="Deep Think active" hidden>
+            <span class="deep-think-input-status-dot" aria-hidden="true"></span>
+            <span class="deep-think-input-indicator-text">Deep <span class="deep-think-input-indicator-word">Think</span></span>
+          </div>
+        </div>
+        <!-- Actions bottom right -->
+        <div class="input-actions-container">
           <button id="sendButton" class="input-action-btn-primary" onclick="sendQuestion()" title="Send question" aria-label="Send question">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;">
               <line x1="22" y1="2" x2="11" y2="13"></line>
               <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
             </svg>
           </button>
-        </div>
-      </div>
-      <!-- Rahmenlose Zwei-Phasen-Anzeige fuer regulaere Laeufe. Der erste
-           Abschnitt ist anhand fertiger Antworten determiniert; die Dauer der
-           Synthese wird bewusst nicht als scheinexakter Prozentwert verkauft. -->
-      <div id="consensusPipeline" class="consensus-pipeline" data-stage="answers"
-        role="status" aria-live="polite" aria-atomic="true" hidden>
-        <span id="consensusPipelineStatus" class="visually-hidden"></span>
-        <div class="consensus-pipeline-steps" aria-hidden="true">
-          <span class="consensus-pipeline-step" data-step="answers">
-            <span class="consensus-pipeline-dot"></span>
-            <span>Model answers</span>
-            <span id="consensusPipelineCount" class="consensus-pipeline-count"></span>
-          </span>
-          <svg class="consensus-pipeline-arrow" viewBox="0 0 18 10" fill="none" aria-hidden="true">
-            <path d="M1 5h15m-3-3 3 3-3 3"></path>
-          </svg>
-          <span class="consensus-pipeline-step" data-step="consensus">
-            <span class="consensus-pipeline-dot"></span>
-            <span>Consensus &amp; differences</span>
-          </span>
-        </div>
-        <div class="consensus-pipeline-track" aria-hidden="true">
-          <span id="consensusPipelineBar" class="consensus-pipeline-bar"></span>
-          <span class="consensus-pipeline-sweep"></span>
         </div>
       </div>
       <div id="postDemoLoginPrompt" class="post-demo-login-prompt" role="status" aria-live="polite" hidden>
@@ -466,42 +514,10 @@
         </div>
         <button type="button" id="postDemoLoginButton" class="post-demo-login-action">Log in or sign up</button>
       </div>
-      <section id="modeExplainer" class="mode-explainer" aria-label="Mode overview">
-        <div class="mode-explainer-copy">
-          <p class="mode-explainer-kicker">Mode overview</p>
-          <p>Use them when a question needs comparison, synthesis, or deeper reasoning.</p>
-        </div>
-        <div class="mode-explainer-items">
-          <div class="mode-explainer-item">
-            <span class="mode-explainer-icon mode-explainer-icon-agent" aria-hidden="true"></span>
-            <div>
-              <strong>Agent Mode</strong>
-              <p>Runs selected models together and keeps progress visible.</p>
-            </div>
-          </div>
-          <div class="mode-explainer-item">
-            <span class="mode-explainer-icon mode-explainer-icon-consensus" aria-hidden="true"></span>
-            <div>
-              <strong>Consensus</strong>
-              <p>The model answers are merged into one consensus answer. Choose which model writes it with the Consensus selector next to Send.</p>
-            </div>
-          </div>
-          <div class="mode-explainer-item">
-            <span class="mode-explainer-icon mode-explainer-icon-deep" aria-hidden="true"></span>
-            <div>
-              <strong>Deep Think</strong>
-              <p>Stronger reasoning models for harder questions. Find it in the (+) menu.</p>
-            </div>
-          </div>
-        </div>
-        <div class="mode-explainer-footer">
-          <button type="button" id="modeExplainerDismiss" class="mode-explainer-dismiss">Got it</button>
-          <label class="mode-explainer-hide-option" for="modeExplainerHideTrigger">
-            <input type="checkbox" id="modeExplainerHideTrigger">
-            <span>Hide the (i) icon</span>
-          </label>
-        </div>
-      </section>
+      <!-- Der Modus-Erklaerer ist entfallen: Agent Mode und Auto Consensus
+           stehen mit eigener Beschreibung in den Settings, Deep Think im
+           (+)-Menue, und der gefuehrte Lauf benennt jeden Schritt waehrend er
+           laeuft. Eine vierte Stelle, die dasselbe erklaert, war Ballast. -->
 
       <!-- Disclaimer + Legal-Links gehören zum Eingabebereich. Dadurch folgen
            sie dessen Hero-/Agent-Mode-Bewegung und bleiben immer darunter. -->
@@ -551,6 +567,31 @@
               <p id="consensusMarkerLegend" class="consensus-marker-legend" hidden>
                 Marked passages are checked key claims. Unmarked text was not compared individually.
               </p>
+              <!-- Beleg-Zeile: uebernimmt, wenn der Lauf sich ausblendet. Sie
+                   haelt fest, WORAUS die Antwort entstanden ist, und bietet die
+                   naechsten Schritte an — inklusive Follow-up, das hier an der
+                   Antwort steht, die es als Kontext mitnehmen wuerde. -->
+              <div id="runProvenance" class="run-provenance" hidden>
+                <span class="run-provenance-facts" id="runProvenanceFacts"></span>
+                <button type="button" id="runReplayButton" class="run-replay-btn">Replay run</button>
+                <!-- Die Einzelantworten-Disclosure ist aus dem Agent-Mode-Panel
+                     hierher gewandert: sie gehoert zu der Antwort, deren
+                     Grundlage sie aufdeckt. IDs bleiben, agent-mode.js
+                     adressiert sie unveraendert ueber getElementById. -->
+                <div id="agentModeAnswersRow" class="agent-mode-answers-row" hidden>
+                  <button type="button" id="agentModeAnswersToggle" class="agent-mode-answers-toggle"
+                    aria-expanded="false"
+                    aria-controls="openaiResponse mistralResponse claudeResponse geminiResponse deepseekResponse grokResponse">
+                    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none"
+                      stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path>
+                      <circle cx="12" cy="12" r="2.5"></circle>
+                    </svg>
+                    <span>Show model answers</span>
+                  </button>
+                </div>
+                <span class="run-provenance-actions" id="followupBar"></span>
+              </div>
             </div>
             <!-- Vollstaendiger Unterschieds-Ueberblick, standardmaessig zu.
                  Bleibt .consensus-differences: Spinner, Credibility-Frame und
@@ -599,18 +640,6 @@
           <span></span>
         </div>
         <div id="agentModeStatus" class="agent-mode-status">Ready for a grouped model run.</div>
-        <div id="agentModeAnswersRow" class="agent-mode-answers-row" hidden>
-          <button type="button" id="agentModeAnswersToggle" class="agent-mode-answers-toggle"
-            aria-expanded="false"
-            aria-controls="openaiResponse mistralResponse claudeResponse geminiResponse deepseekResponse grokResponse">
-            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none"
-              stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path>
-              <circle cx="12" cy="12" r="2.5"></circle>
-            </svg>
-            <span>Show model answers</span>
-          </button>
-        </div>
       </div>
 
       <div class="response-box" id="openaiResponse" data-model="OpenAI" data-short-label="OpenAI">
@@ -753,7 +782,7 @@
       </div>
     </div>
 
-  <script src="/static/js/app-init.js?v=20260726-diffprogress1" defer></script>
+  <script src="/static/js/app-init.js?v=20260727-runflow7" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing

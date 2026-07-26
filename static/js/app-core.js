@@ -48,6 +48,37 @@
     document.title = `${shortened} | consens.io`;
   }
 
+  // Kopf des Threads (#threadAsk): zeigt die gestellte Frage über dem Lauf.
+  // Leerer Text versteckt den Block wieder (New comparison, Clear). Lange
+  // Fragen clampen per CSS auf drei Zeilen; is-long schaltet den Aufklapp-
+  // Link frei, is-open hebt den Clamp auf.
+  function setThreadQuestion(question = "") {
+    const wrap = document.getElementById("threadAsk");
+    const text = document.getElementById("threadAskText");
+    if (!wrap || !text) return;
+
+    const normalized = String(question || "").replace(/\s+/g, " ").trim();
+    text.textContent = normalized;
+    wrap.hidden = !normalized;
+    wrap.classList.remove("is-open", "is-long");
+    const more = document.getElementById("threadAskMore");
+    if (more) more.textContent = "Show full question";
+    if (!normalized) return;
+
+    requestAnimationFrame(() => {
+      wrap.classList.toggle("is-long", text.scrollHeight > text.clientHeight + 2);
+    });
+  }
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("#threadAskMore")) return;
+    const wrap = document.getElementById("threadAsk");
+    const more = document.getElementById("threadAskMore");
+    if (!wrap || !more) return;
+    const open = wrap.classList.toggle("is-open");
+    more.textContent = open ? "Collapse question" : "Show full question";
+  });
+
   // Definition der Modelle und IDs (zentral, von mehreren Clustern genutzt).
   const modelPrefs = [
     { key: "OpenAI", provider: "openai", label: "OpenAI", checkId: "selectOpenAI", selectId: "openaiModelSelect", responseId: "openaiResponse", textId: "openaiModelText" },
@@ -212,6 +243,7 @@
     getModelOptionLabel,
     getSelectedModelCount,
     setAppTitle,
+    setThreadQuestion,
     consensusBodyEl,
     trackAppEvent,
     showPopup,

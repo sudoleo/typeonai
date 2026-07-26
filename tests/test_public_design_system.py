@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 
@@ -30,26 +31,34 @@ def test_public_pages_share_navigation_and_footer_partials():
 
 
 def test_public_styles_share_the_app_aligned_token_layer():
-    token_import = "@import url('./public-tokens.css?v=20260716-public-system1');"
-    assert token_import in read("static/css/landing.css")
-    assert token_import in read("static/css/public-pages.css")
+    # Version-agnostic: the cache buster is bumped on every CSS change, and
+    # pinning it here only ever fails for the bump, never for a real drift.
+    token_import = re.compile(r"@import url\('\./public-tokens\.css\?v=[\w.-]+'\);")
+    assert token_import.search(read("static/css/landing.css"))
+    assert token_import.search(read("static/css/public-pages.css"))
 
     app_tokens = read("static/css/variables.css")
     public_tokens = read("static/css/public-tokens.css")
-    for contract in (
-        "--radius-lg: 16px;",
-        "--bg-color: #f5f5f4;",
-        "--accent-secondary: #4fc2a3;",
-        "--glass-blur: 18px;",
-    ):
-        assert contract in app_tokens
 
+    # The surface scale is the contract between /app and the public pages:
+    # the marketing mockups are supposed to be made of the same material as
+    # the product, so these five values have to be identical in both files —
+    # in light AND dark. Everything else is derived from them.
     for contract in (
         "--radius-lg: 16px;",
-        "--page-bg: var(--bg-grey);",
-        "--accent-secondary: #4fc2a3;",
-        "--glass-blur: 18px;",
+        "--ground: #f2f1ef;",
+        "--raise: #eae8e5;",
+        "--well: #e6e4e0;",
+        "--ink: #222428;",
+        "--ground: #191a1c;",
+        "--raise: #212325;",
+        "--accent-secondary: var(--agree);",
+        "--glass-blur: 0px;",
     ):
+        assert contract in app_tokens, f"missing in variables.css: {contract}"
+        assert contract in public_tokens, f"missing in public-tokens.css: {contract}"
+
+    for contract in ("--page-bg: var(--ground);",):
         assert contract in public_tokens
 
 

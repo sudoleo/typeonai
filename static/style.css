@@ -3,17 +3,20 @@
    This file aggregates all modular CSS files.
    ========================================================================== */
 
-@import url('./css/variables.css?v=20260715-neutral3');
-@import url('./css/base.css?v=20260718-layoutfix1');
-@import url('./css/layout.css?v=20260722-probeta-compact2');
+@import url('./css/variables.css?v=20260727-runflow7');
+@import url('./css/base.css?v=20260727-runflow7');
+@import url('./css/layout.css?v=20260727-runflow7');
 /* components.css was split by section into the files below (same cascade order). */
-@import url('./css/components-input.css?v=20260725-passagehover2');
-@import url('./css/components-attachment-viewer.css?v=20260715-neutral2');
-@import url('./css/components-consensus.css?v=20260725-passagehover2');
-@import url('./css/components-controls.css?v=20260715-redesign1');
-@import url('./css/components-modals.css?v=20260725-honest3');
-@import url('./css/components-misc.css?v=20260723-srcfavicon1');
-@import url('./css/components-model-picker.css?v=20260722-model-fixes1');
-@import url('./css/components-feedback.css?v=20260726-diffprogress1');
-@import url('./css/components-consensus-insights.css?v=20260725-passagehover2');
-@import url('./css/components-watch.css?v=20260722-watch-compact2');
+@import url('./css/components-input.css?v=20260727-runflow7');
+@import url('./css/components-attachment-viewer.css?v=20260727-runflow7');
+@import url('./css/components-consensus.css?v=20260727-runflow7');
+@import url('./css/components-controls.css?v=20260727-runflow7');
+@import url('./css/components-modals.css?v=20260727-runflow7');
+@import url('./css/components-misc.css?v=20260727-runflow7');
+@import url('./css/components-model-picker.css?v=20260727-runflow7');
+@import url('./css/components-feedback.css?v=20260727-runflow7');
+@import url('./css/components-consensus-insights.css?v=20260727-runflow7');
+@import url('./css/components-watch.css?v=20260727-runflow7');
+/* Shell layer — loaded LAST so the frameless redesign wins on equal
+   specificity. Elevation, sidebar, topbar, composer and thread material. */
+@import url('./css/shell.css?v=20260727-runflow7');

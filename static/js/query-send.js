@@ -287,9 +287,15 @@
         return;
       }
 
-      // Ab dem ersten echten Lauf dockt das Eingabefeld dauerhaft oben an.
-      // Der Demo-Pfad nutzt denselben Übergang.
+      // Ab dem ersten echten Lauf wird die Seite zum Thread: Frage oben,
+      // Composer unten. Der Demo-Pfad nutzt denselben Übergang.
       window.exitHeroMode?.();
+      window.App.setThreadQuestion?.(question);
+
+      // Der gefuehrte Lauf beginnt HIER, nicht erst beim Fan-out: zwischen
+      // Klick und erster Modellantwort liegen Validierung und /prepare, und
+      // genau in dieser Luecke soll der Nutzer schon sehen, dass etwas laeuft.
+      window.App?.consensusPipeline?.onPrepare?.();
 
       // === DEMO: Früh raus, wenn "Demo" ===
       if (isDemoQuery(question)) {
@@ -644,6 +650,16 @@
 
       if (!isActiveQueryRun(queryRunId)) {
         return;
+      }
+
+      // Die Frage steht jetzt im Thread-Kopf; der Composer wird frei für die
+      // nächste. Erst hier leeren — die frühen Abbruch-Pfade (Login, Limit)
+      // sollen den getippten Text nicht verlieren.
+      const questionInputEl = document.getElementById("questionInput");
+      if (questionInputEl) {
+        questionInputEl.value = "";
+        questionInputEl.dispatchEvent(new Event("input", { bubbles: true }));
+        window.syncDemoChipState?.();
       }
 
       window.spinnerHTML = baseSpinnerHTML;

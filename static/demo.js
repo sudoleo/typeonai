@@ -496,6 +496,15 @@ async function runDemoFlow() {
     await sleep(DEMO_PHASES.pauseAfterTypingAll);
   }
 
+  // Wie beim echten Lauf: Die Frage wandert in den Thread-Kopf, der
+  // Composer unten wird frei für die nächste Eingabe.
+  window.App?.setThreadQuestion?.(DEMO_SCENARIO_PROMPT);
+  if (qi) {
+    qi.value = "";
+    qi.dispatchEvent(new Event("input", { bubbles: true }));
+    window.syncDemoChipState?.();
+  }
+
   window.setAgentModeStatus?.("running");
   Object.keys(MODEL_TO_BOX).forEach(key => {
     const box = getBox(key);

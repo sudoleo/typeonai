@@ -18,53 +18,73 @@
   --radius: var(--radius-lg);
   --card-radius: 18px;
 
-  --text-primary: #1d1d1d;
-  --text-secondary: #6e6e6e;
-  --text-color: #26282b;
-  --text: #26282b;
+  /* Surface scale — the same five values as static/css/variables.css. The
+     marketing pages and the product mockups they contain must be made of the
+     same material as /app, otherwise the screenshots stop being screenshots. */
+  --ground: #f2f1ef;
+  --raise: #eae8e5;
+  --well: #e6e4e0;
+  --ink: #222428;
+  --ink-2: #5c5f66;
+  --ink-3: #8a8d93;
+  --line: rgba(34, 36, 40, 0.14);
+  --line-soft: rgba(34, 36, 40, 0.07);
+  --lift: 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 34px rgba(28, 30, 33, 0.08);
+
+  --agree: #3d8f76;
+  --agree-bg: rgba(61, 143, 118, 0.15);
+  --partial: #a8791b;
+  --partial-bg: rgba(168, 121, 27, 0.16);
+  --dispute: #a94f34;
+  --dispute-bg: rgba(169, 79, 52, 0.15);
+
+  --text-primary: var(--ink);
+  --text-secondary: var(--ink-3);
+  --text-color: var(--ink);
+  --text: var(--ink);
   --heading: var(--text-primary);
   --muted: var(--text-secondary);
 
-  --bg-white: #ffffff;
-  --bg-grey: #f5f5f4;
-  --page-bg: var(--bg-grey);
-  --panel-bg: var(--bg-white);
-  --panel-soft: var(--bg-white);
+  --bg-white: var(--raise);
+  --bg-grey: var(--ground);
+  --page-bg: var(--ground);
+  --panel-bg: var(--raise);
+  --panel-soft: var(--raise);
 
-  --accent: #28292b;
+  --accent: var(--ink);
   --accent-hover: #151617;
   --accent-contrast: #171819;
-  --accent-secondary: #4fc2a3;
-  --accent-tertiary: #d99b46;
+  --accent-secondary: var(--agree);
+  --accent-tertiary: var(--partial);
   --button-bg: #1d2126;
   --button-text: #ffffff;
 
   --sidebar-text-muted: var(--text-secondary);
-  --sidebar-border: rgba(122, 124, 127, 0.22);
-  --sidebar-hover: rgba(255, 255, 255, 0.5);
+  --sidebar-border: var(--line-soft);
+  --sidebar-hover: var(--raise);
   --slider-bg: #cccccc;
 
-  --response-bg: rgba(255, 255, 255, 0.62);
-  --container-bg: rgba(255, 255, 255, 0.66);
-  --glass-bg: rgba(255, 255, 255, 0.54);
-  --glass-bg-strong: rgba(255, 255, 255, 0.72);
-  --glass-bg-soft: rgba(255, 255, 255, 0.36);
-  --glass-border: rgba(255, 255, 255, 0.62);
-  --glass-edge: rgba(98, 101, 105, 0.20);
-  --glass-highlight: rgba(255, 255, 255, 0.90);
-  --glass-blur: 18px;
+  --response-bg: var(--raise);
+  --container-bg: var(--raise);
+  --glass-bg: var(--raise);
+  --glass-bg-strong: var(--raise);
+  --glass-bg-soft: var(--raise);
+  --glass-border: var(--line-soft);
+  --glass-edge: var(--line-soft);
+  --glass-highlight: transparent;
+  --glass-blur: 0px;
 
-  --liquid-shadow: 0 14px 38px rgba(28, 30, 33, 0.08), 0 2px 8px rgba(28, 30, 33, 0.045), inset 0 1px 0 rgba(255, 255, 255, 0.78);
-  --liquid-shadow-hover: 0 22px 54px rgba(28, 30, 33, 0.11), 0 4px 16px rgba(28, 30, 33, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  --liquid-shadow: none;
+  --liquid-shadow-hover: none;
   --liquid-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
-  --shadow: var(--liquid-shadow);
-  --card-shadow: var(--liquid-shadow);
-  --card-shadow-lift: var(--liquid-shadow-hover);
-  --card-shadow-hover: var(--liquid-shadow-hover);
+  --shadow: none;
+  --card-shadow: none;
+  --card-shadow-lift: none;
+  --card-shadow-hover: none;
 
-  --border: rgba(0, 0, 0, 0.10);
-  --hairline: rgba(0, 0, 0, 0.08);
-  --hairline-soft: rgba(0, 0, 0, 0.06);
+  --border: var(--line-soft);
+  --hairline: var(--line-soft);
+  --hairline-soft: var(--line-soft);
 
   --maxw: 1120px;
   --section-pad: clamp(76px, 11vw, 150px);
@@ -77,52 +97,70 @@
 .dark-mode {
   color-scheme: dark;
 
-  --text-primary: #f5f5f4;
-  --text-secondary: #a7a9ac;
-  --text-color: #ececec;
-  --text: #ececec;
-  --heading: #f5f5f4;
+  /* Same five values as .dark-mode in static/css/variables.css. */
+  --ground: #191a1c;
+  --raise: #212325;
+  --well: #26282b;
+  --ink: #ededed;
+  --ink-2: #a7a9ad;
+  --ink-3: #7b7e83;
+  --line: rgba(255, 255, 255, 0.14);
+  --line-soft: rgba(255, 255, 255, 0.07);
+  --lift: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 36px rgba(0, 0, 0, 0.34);
+
+  --agree: #6dc0a4;
+  --agree-bg: rgba(109, 192, 164, 0.17);
+  --partial: #dcb163;
+  --partial-bg: rgba(220, 177, 99, 0.17);
+  --dispute: #db8368;
+  --dispute-bg: rgba(219, 131, 104, 0.17);
+
+  --text-primary: var(--ink);
+  --text-secondary: var(--ink-3);
+  --text-color: var(--ink);
+  --text: var(--ink);
+  --heading: var(--ink);
   --muted: var(--text-secondary);
 
-  --bg-white: #1e1e1e;
-  --bg-grey: #161616;
-  --page-bg: var(--bg-white);
-  --panel-bg: #262626;
-  --panel-soft: #262626;
+  --bg-white: var(--raise);
+  --bg-grey: var(--ground);
+  --page-bg: var(--ground);
+  --panel-bg: var(--raise);
+  --panel-soft: var(--raise);
 
-  --accent: #e6e6e6;
+  --accent: var(--ink);
   --accent-hover: #ffffff;
   --accent-contrast: #141414;
-  --accent-secondary: #8ee6c8;
-  --accent-tertiary: #f3c66f;
+  --accent-secondary: var(--agree);
+  --accent-tertiary: var(--partial);
   --button-bg: #f0f0f0;
   --button-text: #141414;
 
-  --sidebar-border: rgba(255, 255, 255, 0.10);
-  --sidebar-hover: rgba(255, 255, 255, 0.08);
+  --sidebar-border: var(--line-soft);
+  --sidebar-hover: var(--raise);
   --slider-bg: #636363;
 
-  --response-bg: rgba(42, 42, 42, 0.80);
-  --container-bg: rgba(38, 38, 38, 0.84);
-  --glass-bg: rgba(44, 44, 44, 0.34);
-  --glass-bg-strong: rgba(52, 52, 52, 0.52);
-  --glass-bg-soft: rgba(255, 255, 255, 0.04);
-  --glass-border: rgba(255, 255, 255, 0.11);
-  --glass-edge: rgba(255, 255, 255, 0.06);
-  --glass-highlight: rgba(255, 255, 255, 0.10);
-  --glass-blur: 14px;
+  --response-bg: var(--raise);
+  --container-bg: var(--raise);
+  --glass-bg: var(--raise);
+  --glass-bg-strong: var(--raise);
+  --glass-bg-soft: var(--raise);
+  --glass-border: var(--line-soft);
+  --glass-edge: var(--line-soft);
+  --glass-highlight: transparent;
+  --glass-blur: 0px;
 
-  --liquid-shadow: 0 8px 22px rgba(0, 0, 0, 0.20), 0 1px 5px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.045);
-  --liquid-shadow-hover: 0 10px 30px rgba(0, 0, 0, 0.25), 0 2px 9px rgba(0, 0, 0, 0.17), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --liquid-shadow: none;
+  --liquid-shadow-hover: none;
   --liquid-focus-ring: 0 0 0 3px rgba(255, 255, 255, 0.20);
-  --shadow: var(--liquid-shadow);
-  --card-shadow: var(--liquid-shadow);
-  --card-shadow-lift: var(--liquid-shadow-hover);
-  --card-shadow-hover: var(--liquid-shadow-hover);
+  --shadow: none;
+  --card-shadow: none;
+  --card-shadow-lift: none;
+  --card-shadow-hover: none;
 
-  --border: rgba(255, 255, 255, 0.12);
-  --hairline: rgba(255, 255, 255, 0.10);
-  --hairline-soft: rgba(255, 255, 255, 0.07);
+  --border: var(--line-soft);
+  --hairline: var(--line-soft);
+  --hairline-soft: var(--line-soft);
 }
 
 :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {

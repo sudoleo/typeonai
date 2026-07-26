@@ -11,20 +11,51 @@
   --radius-xl: 20px;
   --radius-pill: 999px;
 
+  /* ------------------------------------------------------------------
+     Surface scale (frameless shell). Everything else is derived from
+     these five values, so light/dark stay in step by construction:
+
+       ground  page canvas
+       raise   slightly lifted surface (hover, pills, popovers)
+       well    inset field (composer) — reads as pressed into the page
+       ink/2/3 text ladder, primary → muted
+       line/soft hairlines; a frame is the exception, not the default
+
+     Depth is carried by tone, not by borders and glass. Only genuinely
+     floating layers (popover, modal, menu) get --lift.
+     ------------------------------------------------------------------ */
+  --ground: #f2f1ef;
+  --raise: #eae8e5;
+  --well: #e6e4e0;
+  --ink: #222428;
+  --ink-2: #5c5f66;
+  --ink-3: #8a8d93;
+  --line: rgba(34, 36, 40, 0.14);
+  --line-soft: rgba(34, 36, 40, 0.07);
+  --lift: 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 34px rgba(28, 30, 33, 0.08);
+
+  /* Agreement traffic light — shared by run, marks, dots and diff rails. */
+  --agree: #3d8f76;
+  --agree-bg: rgba(61, 143, 118, 0.15);
+  --partial: #a8791b;
+  --partial-bg: rgba(168, 121, 27, 0.16);
+  --dispute: #a94f34;
+  --dispute-bg: rgba(169, 79, 52, 0.15);
+
   /* Colors - Light Mode */
-  --bg-color: #f5f5f4;
-  --container-bg: rgba(255, 255, 255, 0.66);
-  --text-color: #26282b;
-  --input-bg: rgba(255, 255, 255, 0.58);
-  --input-border: rgba(60, 62, 65, 0.2);
+  --bg-color: var(--ground);
+  --container-bg: var(--raise);
+  --text-color: var(--ink);
+  --input-bg: var(--well);
+  --input-border: var(--line-soft);
   --button-bg: #1d2126;
   --button-text: #ffffff;
-  --response-bg: rgba(255, 255, 255, 0.62);
+  --response-bg: var(--raise);
   /* Additional UI Colors */
   --sidebar-bg: var(--bg-color);
-  --sidebar-border: rgba(0, 0, 0, 0.1);
-  --sidebar-text-muted: #6e7175;
-  --sidebar-hover: rgba(255, 255, 255, 0.5);
+  --sidebar-border: var(--line-soft);
+  --sidebar-text-muted: var(--ink-3);
+  --sidebar-hover: var(--raise);
 
   --code-bg: #f7f7f7;
   --feedback-text-color: #b3b3b3;
@@ -53,25 +84,27 @@
   --vote-exclude-bg: var(--clear-button-bg);
   --vote-exclude-color: var(--clear-button-text);
   
-  /* Modern UI / Pulse Tokens */
-  --accent: #28292b;
+  /* Modern UI tokens. The former "liquid glass" layer is kept as an alias
+     surface so the ~400 existing call sites keep working — it just no
+     longer paints translucency, blur, inner highlights or drop shadows. */
+  --accent: var(--ink);
   --accent-contrast: #171819;
-  --accent-secondary: #4fc2a3;
-  --accent-tertiary: #d99b46;
-  --glass-bg: rgba(255, 255, 255, 0.54);
-  --glass-bg-strong: rgba(255, 255, 255, 0.72);
-  --glass-bg-soft: rgba(255, 255, 255, 0.36);
-  --glass-border: rgba(255, 255, 255, 0.62);
-  --glass-edge: rgba(98, 101, 105, 0.2);
-  --glass-highlight: rgba(255, 255, 255, 0.9);
-  --glass-blur: 18px;
-  --liquid-shadow: 0 14px 38px rgba(28, 30, 33, 0.08), 0 2px 8px rgba(28, 30, 33, 0.045), inset 0 1px 0 rgba(255, 255, 255, 0.78);
-  --liquid-shadow-hover: 0 22px 54px rgba(28, 30, 33, 0.11), 0 4px 16px rgba(28, 30, 33, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  --accent-secondary: var(--agree);
+  --accent-tertiary: var(--partial);
+  --glass-bg: var(--raise);
+  --glass-bg-strong: var(--raise);
+  --glass-bg-soft: var(--raise);
+  --glass-border: var(--line-soft);
+  --glass-edge: var(--line-soft);
+  --glass-highlight: transparent;
+  --glass-blur: 0px;
+  --liquid-shadow: none;
+  --liquid-shadow-hover: none;
   --liquid-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
-  --chip-bg: rgba(255,255,255,0.42);
-  --chip-border: rgba(255,255,255,0.58);
-  --chip-shadow: 0 8px 24px rgba(30,32,35,0.09), inset 0 1px 0 rgba(255,255,255,0.72);
-  --chip-shadow-active: 0 10px 28px rgba(25,26,28,0.14);
+  --chip-bg: var(--ground);
+  --chip-border: transparent;
+  --chip-shadow: none;
+  --chip-shadow-active: none;
   --overlay-dim: rgba(0, 0, 0, 0.38);
 
   /* Box Shadows */
@@ -79,9 +112,9 @@
   --shadow-hover: var(--liquid-shadow-hover);
 
   /* Card Design Tokens - Light */
-  --card-border: 1px solid color-mix(in srgb, var(--glass-border) 72%, var(--glass-edge));
-  --card-shadow: var(--liquid-shadow);
-  --card-shadow-hover: var(--liquid-shadow-hover);
+  --card-border: 1px solid var(--line-soft);
+  --card-shadow: none;
+  --card-shadow-hover: none;
 
   /* Credibility Badges (Light) */
   --cred-bg: #e6f4ea;
@@ -102,19 +135,38 @@
 
 /* Colors - Dark Mode */
 .dark-mode {
-  --bg-color: #1e1e1e;
-  --container-bg: rgba(38, 38, 38, 0.84);
-  --text-color: #ececec;
-  --input-bg: rgba(30, 30, 30, 0.76);
-  --input-border: rgba(255, 255, 255, 0.14);
+  /* Only the five surface values + the traffic light flip; everything
+     downstream is already expressed in terms of them. */
+  --ground: #191a1c;
+  --raise: #212325;
+  --well: #26282b;
+  --ink: #ededed;
+  --ink-2: #a7a9ad;
+  --ink-3: #7b7e83;
+  --line: rgba(255, 255, 255, 0.14);
+  --line-soft: rgba(255, 255, 255, 0.07);
+  --lift: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 36px rgba(0, 0, 0, 0.34);
+
+  --agree: #6dc0a4;
+  --agree-bg: rgba(109, 192, 164, 0.17);
+  --partial: #dcb163;
+  --partial-bg: rgba(220, 177, 99, 0.17);
+  --dispute: #db8368;
+  --dispute-bg: rgba(219, 131, 104, 0.17);
+
+  --bg-color: var(--ground);
+  --container-bg: var(--raise);
+  --text-color: var(--ink);
+  --input-bg: var(--well);
+  --input-border: var(--line-soft);
   --button-bg: #f0f0f0;
   --button-text: #141414;
-  --response-bg: rgba(42, 42, 42, 0.8);
+  --response-bg: var(--raise);
 
   --sidebar-bg: var(--bg-color);
-  --sidebar-border: rgba(255, 255, 255, 0.1);
-  --sidebar-text-muted: #a7a9ac;
-  --sidebar-hover: rgba(255, 255, 255, 0.08);
+  --sidebar-border: var(--line-soft);
+  --sidebar-text-muted: var(--ink-3);
+  --sidebar-hover: var(--raise);
 
   --code-bg: #161616;
   --feedback-text-color: #949494;
@@ -143,31 +195,31 @@
   --vote-exclude-bg: var(--clear-button-bg);
   --vote-exclude-color: var(--clear-button-text);
   
-  --accent: #e6e6e6;
+  --accent: var(--ink);
   --accent-contrast: #141414;
-  --accent-secondary: #8ee6c8;
-  --accent-tertiary: #f3c66f;
-  --glass-bg: rgba(44, 44, 44, 0.34);
-  --glass-bg-strong: rgba(52, 52, 52, 0.52);
-  --glass-bg-soft: rgba(255, 255, 255, 0.04);
-  --glass-border: rgba(255, 255, 255, 0.11);
-  --glass-edge: rgba(255, 255, 255, 0.06);
-  --glass-highlight: rgba(255, 255, 255, 0.1);
-  --glass-blur: 14px;
-  --liquid-shadow: 0 8px 22px rgba(0, 0, 0, 0.2), 0 1px 5px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.045);
-  --liquid-shadow-hover: 0 10px 30px rgba(0, 0, 0, 0.25), 0 2px 9px rgba(0, 0, 0, 0.17), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --accent-secondary: var(--agree);
+  --accent-tertiary: var(--partial);
+  --glass-bg: var(--raise);
+  --glass-bg-strong: var(--raise);
+  --glass-bg-soft: var(--raise);
+  --glass-border: var(--line-soft);
+  --glass-edge: var(--line-soft);
+  --glass-highlight: transparent;
+  --glass-blur: 0px;
+  --liquid-shadow: none;
+  --liquid-shadow-hover: none;
   --liquid-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
-  --chip-bg: rgba(255,255,255,0.08);
-  --chip-border: rgba(255,255,255,0.12);
-  --chip-shadow: 0 7px 18px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.06);
-  --chip-shadow-active: 0 3px 14px rgba(0,0,0,0.3);
+  --chip-bg: var(--ground);
+  --chip-border: transparent;
+  --chip-shadow: none;
+  --chip-shadow-active: none;
   --overlay-dim: rgba(0, 0, 0, 0.62);
 
   --box-shadow: var(--liquid-shadow);
   --shadow-hover: var(--liquid-shadow-hover);
 
   /* Card Design Tokens - Dark */
-  --card-border: 1px solid color-mix(in srgb, var(--glass-border) 78%, var(--glass-edge));
-  --card-shadow: var(--liquid-shadow);
-  --card-shadow-hover: var(--liquid-shadow-hover);
+  --card-border: 1px solid var(--line-soft);
+  --card-shadow: none;
+  --card-shadow-hover: none;
 }

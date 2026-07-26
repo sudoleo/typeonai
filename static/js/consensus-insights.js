@@ -970,6 +970,11 @@
             if (legend) {
               legend.hidden = !body.querySelector(".cx-claim, .claim-badge, .cx-marker");
             }
+
+            // Die Provenance-Zeile zaehlt die strittigen Stellen aus genau
+            // diesen Markern. Sie wird beim Laufende zuerst ohne sie gerendert
+            // (die Marker entstehen erst hier) und holt die Zahl jetzt nach.
+            window.App?.consensusPipeline?.renderProvenance?.();
           }
 
           // --- Resolve-Runde ---------------------------------------------------
