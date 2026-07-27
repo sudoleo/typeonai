@@ -258,7 +258,8 @@
 
     // Seit 2026-07-27 haengt die Einzelantworten-Disclosure NICHT mehr am
     // Agent Mode. Sie ist eine der drei Aufklapp-Flaechen in der Fusszeile
-    // ("Differences · Model answers · Sources") und war dort in zwei von
+    // ("Review differences · Compare answers · Verify sources") und war dort
+    // in zwei von
     // drei Faellen unsichtbar, obwohl sie das Wichtigste dahinter oeffnet:
     // worauf die Antwort beruht. Der Footer selbst wird erst zusammen mit
     // einer fertigen Consensus-Antwort sichtbar; innerhalb dieses Footers ist
@@ -280,7 +281,7 @@
 
     if (answersRow) answersRow.hidden = false;
     if (answersToggle) {
-      const label = modelAnswersVisible ? "Hide answers" : "Model answers";
+      const label = modelAnswersVisible ? "Hide answers" : "Compare answers";
       answersToggle.setAttribute("aria-expanded", String(modelAnswersVisible));
       answersToggle.title = label;
       answersToggle.setAttribute("aria-label", label);

@@ -314,7 +314,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     # Agent Mode. Sie ist ein fester Teil jeder Consensus-Antwort.
     model_answers_toggle = app_page.locator("#agentModeAnswersToggle")
     expect(model_answers_toggle).to_be_visible(timeout=15000)
-    expect(model_answers_toggle).to_have_text("Model answers")
+    expect(model_answers_toggle).to_have_text("Compare answers")
 
     footer_metrics = app_page.locator("#consensusFooterTabs").evaluate(
         """element => ({
@@ -453,7 +453,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
 
     # Ausgangszustand für die bestehende Disclosure-/Reihenfolge-Prüfung.
     model_answers_toggle.click()
-    expect(model_answers_toggle).to_have_text("Model answers")
+    expect(model_answers_toggle).to_have_text("Compare answers")
 
     # Kopierter Text darf keine Marker-/Badge-Beschriftung enthalten.
     copied = app_page.evaluate(
@@ -508,7 +508,7 @@ def test_agent_mode_can_reveal_hidden_model_answers_on_mobile(app_page):
 
     toggle = app_page.locator("#agentModeAnswersToggle")
     expect(toggle).to_be_visible(timeout=15000)
-    expect(toggle).to_have_text("Model answers")
+    expect(toggle).to_have_text("Compare answers")
     expect(app_page.locator("#openaiResponse")).to_be_hidden()
 
     toggle.click()
@@ -517,7 +517,7 @@ def test_agent_mode_can_reveal_hidden_model_answers_on_mobile(app_page):
     expect(app_page.locator("#openaiResponse")).to_be_visible()
 
     toggle.click()
-    expect(toggle).to_have_text("Model answers")
+    expect(toggle).to_have_text("Compare answers")
     expect(app_page.locator("#openaiResponse")).to_be_hidden()
 
 

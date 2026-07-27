@@ -769,8 +769,9 @@
           function claimBadgeLabel(claim) {
             const agreeCount = claim.agree.length;
             const total = agreeCount + claim.dissent.length;
-            // Gleiche Formulierung wie im aria-label und am Widerspruchs-Marker:
-            // der Tooltip haengt jetzt auch an der Passage, nicht nur am Badge.
+            // Die Formulierung bleibt fuer Screenreader und den Detaildialog
+            // erhalten. Die sichtbare Erklaerung liefert allein die formatierte
+            // Hover-Vorschau, nicht zusaetzlich ein nativer Browser-Tooltip.
             return (claim.dissent.length
               ? agreeCount + " of " + total + " models support this"
               : "All " + total + " models that address this agree") + " — open details";
@@ -795,7 +796,6 @@
             ratio.textContent = agreeCount + "/" + total;
             ratio.setAttribute("aria-hidden", "true");
             badge.appendChild(ratio);
-            badge.title = claimBadgeLabel(claim);
             badge.setAttribute("aria-haspopup", "dialog");
             // Tastatur/Screenreader: sprechendes Label statt nacktem "4/6".
             badge.setAttribute("aria-label", claimBadgeLabel(claim));
@@ -836,7 +836,6 @@
             dot.setAttribute("aria-hidden", "true");
             marker.appendChild(dot);
             const label = diffMarkerLabel(diff);
-            marker.title = label;
             marker.setAttribute("aria-label", label + ": " + diff.claim);
             marker.addEventListener("click", function (event) {
               event.stopPropagation();
@@ -894,7 +893,7 @@
           // --- Passage und Marker aneinander koppeln --------------------------
           // Der Marker ist ein 5px-Punkt, die markierte Passage daneben ein
           // ganzer Satz. Auf dem Desktop ist der Satz also das weitaus groessere
-          // Ziel und traegt deshalb dieselbe Aufforderung: Tooltip, Zeigefinger,
+          // Ziel und traegt deshalb dieselbe Aufforderung: Vorschau, Zeigefinger,
           // Klick. Der Hover wirkt in beide Richtungen, damit sichtbar wird,
           // welcher Marker zu welchem Satz gehoert (ein Absatz kann mehrere
           // tragen). Der Marker/das Badge bleibt das fokussierbare Steuerelement
@@ -1121,17 +1120,12 @@
           }
 
           // Haengt das Steuerelement hinter die Passage und verbindet beide.
-          function attachControl(result, control, label, activate, preview) {
+          function attachControl(result, control, activate, preview) {
             insertAfterMark(result, control);
             const spans = result.spans;
             if (!spans || !spans.length) return;
             const group = passageGroup(spans);
             group.controls.push({ el: control, activate: activate, preview: preview });
-            spans.forEach(function (span) {
-              // Bei einer doppelt belegten Passage gewinnt der erste (staerkere)
-              // Marker den Tooltip.
-              if (!span.title) span.title = label;
-            });
             if (canHoverPassages()) {
               control.addEventListener("mouseenter", function () { setPassageHover(group, true); });
               control.addEventListener("mouseleave", function () { setPassageHover(group, false); });
@@ -1173,7 +1167,7 @@
               if (!result) return;
               const marker = makeDiffMarker(diff, index);
               differenceControls.push({ spans: result.spans, marker: marker });
-              attachControl(result, marker, diffMarkerLabel(diff), function () {
+              attachControl(result, marker, function () {
                 focusDifferenceCard(index);
               }, function () { return buildDiffPreview(diff); });
             });
@@ -1226,7 +1220,7 @@
                 overlappingDifference.marker.setAttribute("aria-hidden", "true");
                 overlappingDifference.marker.tabIndex = -1;
               }
-              attachControl(result, badge, claimBadgeLabel(claim), function () {
+              attachControl(result, badge, function () {
                 openClaimPopover(claim, badge);
               }, function () { return buildClaimPreview(claim); });
             });

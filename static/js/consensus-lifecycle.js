@@ -80,7 +80,7 @@
       const contentEl = box.querySelector(".collapsible-content");
       if (!contentEl || contentEl.querySelector(".thinking-wrap") || contentEl.classList.contains("is-streaming")) return false;
       // textContent, nicht innerText: die Antwortboxen liegen jetzt in beiden
-      // Modi hinter dem "Model answers"-Schalter, und innerText liefert
+      // Modi hinter dem "Compare answers"-Schalter, und innerText liefert
       // fuer ein display:none-Element den leeren String — die vorhandene
       // Antwort waere damit unsichtbar fuer die Zaehlung.
       const text = contentEl.textContent.trim();

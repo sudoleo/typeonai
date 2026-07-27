@@ -85,7 +85,7 @@
 
     // Demo responses do not use data-response-state. Their streaming class
     // and thinking element still provide a reliable completion signal.
-    // textContent, not innerText: the boxes sit behind "Model answers"
+    // textContent, not innerText: the boxes sit behind "Compare answers"
     // and innerText reports nothing for a display:none element.
     const content = box.querySelector(".collapsible-content");
     return Boolean(
@@ -600,7 +600,7 @@
   function onConsensusEnd() {
     // Ein manuell spaeter gestarteter Consensus und ein wiederhergestelltes
     // Ergebnis haben keine aktive Query-Pipeline mehr. Der Provenance-Fuss
-    // (inklusive "Model answers") gehoert trotzdem immer zur fertigen
+    // (inklusive "Compare answers") gehoert trotzdem immer zur fertigen
     // Antwort.
     if (stage !== "consensus" && stage !== "differences") {
       renderProvenance();

@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_answer_disclosure_contract_is_mode_independent():
-    """Die Einzelantworten liegen in BEIDEN Modi hinter "Model answers"
+    """Die Einzelantworten liegen in BEIDEN Modi hinter "Compare answers"
     (seit 2026-07-27). Der Schalter ist eine der drei Aufklapp-Flaechen der
     Provenance-Fusszeile und war, an den Agent Mode gebunden, in zwei von drei
     Faellen unsichtbar — obwohl er das Wichtigste dahinter oeffnet: worauf die
@@ -16,7 +16,7 @@ def test_answer_disclosure_contract_is_mode_independent():
     css = (ROOT / "static" / "css" / "components-consensus.css").read_text(encoding="utf-8")
 
     assert 'id="agentModeAnswersToggle"' in template
-    assert "Model answers" in template
+    assert "Compare answers" in template
     assert '"Hide answers"' in script
     assert '"agent-mode-show-answers"' in script
     assert "answersRow.hidden = false" in script
@@ -40,6 +40,20 @@ def test_consensus_jumps_reveal_answers_without_disabling_agent_mode():
     assert "box.getBoundingClientRect()" in jump
     assert "window.requestAnimationFrame" not in jump
     assert "window.setAgentMode" not in jump
+
+
+def test_consensus_actions_are_explicit_and_hover_preview_has_no_native_duplicate():
+    template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
+    insights = (ROOT / "static" / "js" / "consensus-insights.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Review differences" in template
+    assert "Compare answers" in template
+    assert "Verify sources" in template
+    assert "badge.title" not in insights
+    assert "marker.title" not in insights
+    assert "span.title" not in insights
 
 
 def test_answer_disclosure_is_restored_for_manual_consensus_and_bookmarks():

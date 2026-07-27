@@ -955,6 +955,15 @@ body:not(.dark-mode) .chat-input-container {
   display: none;
 }
 
+/* On desktop the final action line needs a little air before the composer's
+   separating horizon. Mobile keeps its tightly measured fixed-composer
+   reserve unchanged. */
+@media (min-width: 1100px) {
+  body:not(.is-hero) .consensus-output {
+    padding-bottom: 10px;
+  }
+}
+
 .consensus-tab {
   display: inline-flex;
   align-items: center;
@@ -1231,7 +1240,7 @@ body:not(.is-hero) .input-section {
   }
 }
 
-/* Die sechs Antwortboxen liegen standardmaessig hinter "Model answers".
+/* Die sechs Antwortboxen liegen standardmaessig hinter "Compare answers".
    Ist der Drawer zu, verschwindet auch ihr leerer Flex-Wrapper samt
    margin-bottom; sonst bleiben zwischen Footer und Composer weitere 20px. */
 body:not(.is-hero):not(.agent-mode-show-answers) .response-section {

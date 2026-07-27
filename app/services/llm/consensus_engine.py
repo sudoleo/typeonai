@@ -61,7 +61,11 @@ _OPENAI_COMPAT_BASE_URLS = {
 
 
 def _gemini_engine_key(api_keys: dict) -> str | None:
-    return api_keys.get("Gemini") or os.environ.get("DEVELOPER_GEMINI_API_KEY")
+    # Das vom Aufrufer gebaute Dict ist autoritativ. Insbesondere im
+    # Own-Key-Modus darf ein fehlender Nutzer-Key nicht heimlich auf den
+    # Developer-Key zurueckfallen. Serverpfade loesen Developer-Keys vorab
+    # ueber credentials.resolve_developer_api_keys auf.
+    return str(api_keys.get("Gemini") or "").strip() or None
 
 
 def _gemini_engine_payload(
@@ -72,6 +76,7 @@ def _gemini_engine_payload(
     temperature: float | None = None,
     json_mode: bool = False,
     effort: str | None = None,
+    json_schema: dict | None = None,
 ) -> tuple[str, dict]:
     """Baut den generateContent-Payload für Consensus-/Differences-Calls.
 
@@ -96,6 +101,12 @@ def _gemini_engine_payload(
         payload["generationConfig"]["temperature"] = temperature
     if json_mode:
         payload["generationConfig"]["responseMimeType"] = "application/json"
+    if json_schema:
+        # responseMimeType allein garantiert nur syntaktisches JSON. Der
+        # Differences-Parser braucht jedoch die drei Pflichtfelder; ohne
+        # Schema konnte Gemini promptabhaengig z. B. "differences" weglassen
+        # und derselbe Call wurde danach unnoetig wiederholt.
+        payload["generationConfig"]["responseJsonSchema"] = json_schema
     if model_config and model_config.request_config:
         _merge_nested_config(payload, model_config.request_config)
     if effort:
@@ -272,6 +283,7 @@ def _call_engine_text(
     temperature: float | None = None,
     json_mode: bool = False,
     effort: str | None = None,
+    json_schema: dict | None = None,
 ) -> str:
     if mock_llm_enabled():
         # E2E-Suite: deterministische Engine-Antwort; Prompt-Bau, Parsing,
@@ -354,6 +366,7 @@ def _call_engine_text(
         gemini_model, payload = _gemini_engine_payload(
             model_ref, system, prompt, max_tokens,
             temperature=temperature, json_mode=json_mode, effort=effort,
+            json_schema=json_schema,
         )
         return _gemini_generate_content(gemini_model, payload, _gemini_engine_key(api_keys))
 
@@ -372,6 +385,7 @@ def _stream_engine_text(
     temperature: float | None = None,
     json_mode: bool = False,
     effort: str | None = None,
+    json_schema: dict | None = None,
 ):
     """Streamt Engine-Events: {"type": "delta", "text": ...} für Antworttext
     und {"type": "reasoning"} als Fortschrittsmarker, solange ein
@@ -438,6 +452,7 @@ def _stream_engine_text(
         gemini_model, payload = _gemini_engine_payload(
             model_ref, system, prompt, max_tokens,
             temperature=temperature, json_mode=json_mode, effort=effort,
+            json_schema=json_schema,
         )
         yield from stream_gemini_payload_text(
             api_model=gemini_model,
@@ -1318,11 +1333,82 @@ DIFFERENCES_RETRY_SUFFIX = (
     "matching the schema above. No prose, no markdown fences, no trailing text."
 )
 
+# Gemini Structured Output: responseMimeType allein erzwingt ein JSON-Dokument,
+# aber nicht die fuer den Parser erforderlichen Felder. Das REST-Feld
+# responseJsonSchema ist fuer generateContent/streamGenerateContent vorgesehen
+# und haelt auch gestreamte Antworten am gleichen Vertrag.
+DIFFERENCES_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "claims": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "anchor": {"type": "string"},
+                    "agree": {"type": "array", "items": {"type": "string"}},
+                    "dissent": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "model": {"type": "string"},
+                                "quote": {"type": "string"},
+                            },
+                            "required": ["model", "quote"],
+                        },
+                    },
+                },
+                "required": ["anchor", "agree", "dissent"],
+            },
+        },
+        "differences": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "claim": {"type": "string"},
+                    "consensus_anchor": {"type": "string"},
+                    "type": {"type": "string", "enum": ["contradiction", "emphasis"]},
+                    "severity": {"type": "string", "enum": ["major", "minor"]},
+                    "positions": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "stance": {"type": "string"},
+                                "models": {"type": "array", "items": {"type": "string"}},
+                                "quote": {"type": "string"},
+                            },
+                            "required": ["stance", "models", "quote"],
+                        },
+                    },
+                    "verify": {"type": "string"},
+                },
+                "required": ["claim", "consensus_anchor", "type", "positions"],
+            },
+        },
+        "best_model": {"type": "string"},
+    },
+    "required": ["claims", "differences", "best_model"],
+}
+
+_NON_RETRYABLE_PROVIDER_STATUS_RE = re.compile(
+    r"(?:^|[\s:])(?:400|401|403|404)(?:[\s:\-]|$)"
+)
+
+
+def _provider_error_is_retryable(error: Exception) -> bool:
+    """4xx-Konfigurations/Auth-/Model-Fehler werden durch denselben Request
+    nicht besser. Rate limits (429), 5xx und Transportfehler duerfen retryen."""
+    return not bool(_NON_RETRYABLE_PROVIDER_STATUS_RE.search(str(error or "")))
+
 
 def _provider_key_available(provider: str, api_keys: dict) -> bool:
     if provider == "gemini":
         return bool(_gemini_engine_key(api_keys))
-    return bool(api_keys.get(_PROVIDER_KEY_NAMES[provider]))
+    value = api_keys.get(_PROVIDER_KEY_NAMES[provider])
+    return bool(str(value or "").strip())
 
 
 def _judge_tier(differences_model: str) -> str:
@@ -1526,7 +1612,14 @@ def query_differences(
 
     prose_fallback = None
     last_error = "empty result from differences engine."
-    for attempt_no, ((provider, api_model, model_ref), is_retry, judge_tier) in enumerate(attempts, start=1):
+    skip_retries_for = set()
+    executed_attempts = 0
+    for (provider, api_model, model_ref), is_retry, judge_tier in attempts:
+        attempt_key = (provider, api_model, judge_tier)
+        if is_retry and attempt_key in skip_retries_for:
+            continue
+        executed_attempts += 1
+        attempt_no = executed_attempts
         attempt_prompt = differences_prompt + (DIFFERENCES_RETRY_SUFFIX if is_retry else "")
         attempt_started = time.monotonic()
         try:
@@ -1538,9 +1631,12 @@ def query_differences(
                 temperature=DIFFERENCES_TEMPERATURE,
                 json_mode=True,
                 effort=_judge_effort(judge_tier),
+                json_schema=DIFFERENCES_JSON_SCHEMA,
             )
         except Exception as e:
             last_error = str(e)
+            if not _provider_error_is_retryable(e):
+                skip_retries_for.add(attempt_key)
             logging.warning(
                 f"Differences attempt {attempt_no} failed on {provider}/{api_model} "
                 f"after {time.monotonic() - attempt_started:.1f}s: {e}"
@@ -1767,7 +1863,14 @@ def stream_differences(
 
     prose_fallback = None
     last_error = "empty result from differences engine."
-    for attempt_no, ((provider, api_model, model_ref), is_retry, judge_tier) in enumerate(attempts, start=1):
+    skip_retries_for = set()
+    executed_attempts = 0
+    for (provider, api_model, model_ref), is_retry, judge_tier in attempts:
+        attempt_key = (provider, api_model, judge_tier)
+        if is_retry and attempt_key in skip_retries_for:
+            continue
+        executed_attempts += 1
+        attempt_no = executed_attempts
         attempt_prompt = differences_prompt + (DIFFERENCES_RETRY_SUFFIX if is_retry else "")
         attempt_started = time.monotonic()
         parts = []
@@ -1780,6 +1883,7 @@ def stream_differences(
                 temperature=DIFFERENCES_TEMPERATURE,
                 json_mode=True,
                 effort=_judge_effort(judge_tier),
+                json_schema=DIFFERENCES_JSON_SCHEMA,
             ):
                 if event.get("type") == "reasoning":
                     # Marker, solange der Judge noch denkt: hält die
@@ -1793,6 +1897,8 @@ def stream_differences(
                 yield {"type": "delta", "text": text}
         except Exception as e:
             last_error = str(e)
+            if not _provider_error_is_retryable(e):
+                skip_retries_for.add(attempt_key)
             logging.warning(
                 f"Differences stream attempt {attempt_no} failed on {provider}/{api_model} "
                 f"after {time.monotonic() - attempt_started:.1f}s: {e}"

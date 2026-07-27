@@ -6,9 +6,12 @@ import app.core.config as cfg
 from app.services.llm.consensus_engine import (
     _build_differences_prompt,
     _differences_attempts,
+    _gemini_engine_payload,
     _legacy_differences_text,
+    _provider_error_is_retryable,
     _resolve_differences_engine,
     compute_agreement_score,
+    DIFFERENCES_JSON_SCHEMA,
     parse_differences_payload,
 )
 
@@ -328,6 +331,39 @@ class JudgePolicyTests(unittest.TestCase):
         for (provider, api_model, _), _, tier in attempts:
             self.assertEqual((provider, api_model, tier), ("openai", cfg.DEFAULT_OPENAI_MODEL, "standard"))
 
+    def test_gemini_judge_payload_enforces_differences_schema(self):
+        _, payload = _gemini_engine_payload(
+            cfg.DEFAULT_GEMINI_MODEL,
+            "system",
+            "prompt",
+            2048,
+            json_mode=True,
+            effort="low",
+            json_schema=DIFFERENCES_JSON_SCHEMA,
+        )
+        generation = payload["generationConfig"]
+        self.assertEqual(generation["responseMimeType"], "application/json")
+        self.assertEqual(generation["responseJsonSchema"], DIFFERENCES_JSON_SCHEMA)
+        self.assertEqual(
+            set(generation["responseJsonSchema"]["required"]),
+            {"claims", "differences", "best_model"},
+        )
+
+    def test_only_retryable_provider_errors_repeat_same_call(self):
+        for message, expected in (
+            ("Gemini: 400 - invalid schema", False),
+            ("401 - invalid API key", False),
+            ("404 - model not found", False),
+            ("429 - rate limited", True),
+            ("503 - temporarily unavailable", True),
+            ("connection reset", True),
+        ):
+            with self.subTest(message=message):
+                self.assertEqual(
+                    _provider_error_is_retryable(RuntimeError(message)),
+                    expected,
+                )
+
 
 class JudgeMetadataTests(unittest.TestCase):
     """data['judges'] weist den Judge aus, der das Ergebnis TATSÄCHLICH
@@ -376,6 +412,25 @@ class JudgeMetadataTests(unittest.TestCase):
         )
         self.assertIsNotNone(data)
         self.assertEqual(data["judges"]["differences"]["provider"], "Anthropic")
+
+    def test_non_retryable_primary_error_skips_duplicate_call(self):
+        payload = json.dumps({"claims": [], "differences": [], "best_model": ""})
+        providers = []
+
+        def invalid_key_then_fallback(provider, *args, **kwargs):
+            providers.append(provider)
+            if provider == "mistral":
+                raise RuntimeError("Mistral: 401 - invalid API key")
+            return payload
+
+        _, data = self._run_query(
+            {"OpenAI": "sk-1", "Mistral": "sk-2", "Anthropic": "sk-3"},
+            invalid_key_then_fallback,
+        )
+        self.assertIsNotNone(data)
+        self.assertEqual(providers, ["mistral", "anthropic"])
+        self.assertEqual(data["judges"]["differences"]["provider"], "Anthropic")
+        self.assertEqual(data["judges"]["differences"]["attempts"], 2)
 
     def test_stream_differences_reports_judge(self):
         from app.services.llm.consensus_engine import stream_differences

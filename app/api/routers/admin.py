@@ -992,11 +992,11 @@ def get_models(request: Request):
             data = normalize_models_document(raw_data)
             apply_limits(data.get("limits"))
             data["limits"] = get_limits_config()
-            if data != raw_data:
-                # Persistente Schema-/Legacy-Bereinigung: der Admin sieht nicht
-                # nur eine geschoente Response, sondern Firestore wird zur
-                # kanonischen, vom Runtime-Loader konsumierten Quelle.
-                doc_ref.set(data)
+            # GET bleibt strikt read-only. Der fruehere komplette doc_ref.set
+            # konnte einen kurz zuvor gespeicherten Judge-Family-Wert mit dem
+            # veralteten Snapshot eines parallelen Admin-Reads ueberschreiben.
+            # Persistiert wird ausschliesslich ueber POST; die normalisierte
+            # GET-Response bleibt weiterhin direkt darstellbar.
         else:
             from app.core.config import ALLOWED_OPENAI_MODELS, ALLOWED_MISTRAL_MODELS, ALLOWED_ANTHROPIC_MODELS, ALLOWED_GEMINI_MODELS, ALLOWED_DEEPSEEK_MODELS, ALLOWED_GROK_MODELS, PREMIUM_MODELS
             data = {

@@ -76,7 +76,7 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 
 ## Agent Mode
 - [ ] Agent-Mode an/aus, Timer läuft, Status-Text korrekt, Auto-Consensus-Kopplung.
-- [ ] Nach der ersten fertigen Modellantwort erscheint dezent „Model answers“
+- [ ] Nach der ersten fertigen Modellantwort erscheint dezent „Compare answers“
       (auch im eingeklappten Mobile-Panel); der Toggle zeigt/versteckt die
       einzelnen Antwortboxen, ohne Agent Mode auszuschalten, und startet bei
       einer neuen Frage wieder in der cleanen, verborgenen Ansicht.

@@ -1,15 +1,22 @@
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from fastapi import HTTPException
 
 import app.core.config as cfg
+from app.api.routers import admin as admin_router
 from app.api.routers.admin import (
+    get_models,
     _model_dependencies,
     _server_enforced_models,
     normalize_models_document,
 )
-from app.api.routers.chat import parse_boolean_flag, validate_question_word_limit
+from app.api.routers.chat import (
+    build_engine_api_keys,
+    parse_boolean_flag,
+    validate_question_word_limit,
+)
 from app.services.llm.base import validate_model
 from app.services.llm.citations import source_response
 from app.services.llm.engines import build_provider_payload
@@ -19,6 +26,94 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ModelConfigurationTests(unittest.TestCase):
+    def test_engine_developer_keys_use_shared_credentials_source(self):
+        expected = {
+            "OpenAI": "openai-dev",
+            "Mistral": "mistral-dev",
+            "Anthropic": None,
+            "Gemini": "gemini-dev",
+            "DeepSeek": None,
+            "Grok": "grok-dev",
+        }
+        with mock.patch(
+            "app.api.routers.chat.resolve_developer_api_keys",
+            return_value=expected,
+        ) as resolver:
+            self.assertEqual(build_engine_api_keys({}, False), expected)
+        resolver.assert_called_once_with()
+
+    def test_engine_own_keys_are_stripped_and_never_use_developer_keys(self):
+        with mock.patch(
+            "app.api.routers.chat.resolve_developer_api_keys",
+        ) as resolver:
+            keys = build_engine_api_keys(
+                {
+                    "openai_key": "  user-openai  ",
+                    "gemini_key": "",
+                    "mistral_key": "   ",
+                },
+                True,
+            )
+        resolver.assert_not_called()
+        self.assertEqual(keys["OpenAI"], "user-openai")
+        self.assertIsNone(keys["Gemini"])
+        self.assertIsNone(keys["Mistral"])
+
+    def test_admin_models_get_is_read_only_and_preserves_judge_family(self):
+        raw = {
+            "openai": [cfg.DEFAULT_OPENAI_MODEL],
+            "mistral": [cfg.DEFAULT_MISTRAL_MODEL],
+            "anthropic": [cfg.DEFAULT_ANTHROPIC_MODEL],
+            "gemini": [cfg.DEFAULT_GEMINI_MODEL],
+            "deepseek": [cfg.DEEPSEEK_FLASH_MODEL],
+            "grok": [cfg.DEFAULT_GROK_MODEL],
+            "premium": [],
+            "consensus": ["Gemini"],
+            "judge_families": {"openai": "gemini"},
+        }
+
+        class FakeSnapshot:
+            exists = True
+
+            def to_dict(self):
+                return dict(raw)
+
+        class FakeDocument:
+            def __init__(self):
+                self.set_calls = []
+
+            def get(self):
+                return FakeSnapshot()
+
+            def set(self, *args, **kwargs):
+                self.set_calls.append((args, kwargs))
+
+        class FakeCollection:
+            def __init__(self, document):
+                self._document = document
+
+            def document(self, name):
+                self.name = name
+                return self._document
+
+        class FakeDB:
+            def __init__(self, document):
+                self._document = document
+
+            def collection(self, name):
+                self.name = name
+                return FakeCollection(self._document)
+
+        document = FakeDocument()
+        with (
+            mock.patch.object(admin_router, "db_firestore", FakeDB(document)),
+            mock.patch.object(admin_router, "_require_admin"),
+        ):
+            response = get_models(mock.Mock())
+
+        self.assertEqual(response["judge_families"], {"openai": "gemini"})
+        self.assertEqual(document.set_calls, [])
+
     def test_removed_low_reasoning_aliases_are_not_runtime_models(self):
         self.assertFalse(hasattr(cfg, "EARLY_DEFAULT_MODEL_BY_PROVIDER"))
         self.assertFalse(hasattr(cfg, "EARLY_MODELS"))

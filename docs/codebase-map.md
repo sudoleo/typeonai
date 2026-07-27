@@ -288,7 +288,7 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   einen Request waren genau der Ueberschuss, den der gefuehrte Lauf abbaut.
   Agent Mode behaelt danach nur noch zwei Aufgaben: Modelle gruppieren und
   Auto-Consensus. Der session-lokale
-  „Model answers/Hide answers"-Disclosure (`#agentModeAnswersRow`) ist ins Markup
+  „Compare answers/Hide answers"-Disclosure (`#agentModeAnswersRow`) ist ins Markup
   der Provenance-Zeile gewandert — agent-mode.js adressiert ihn unveraendert
   per `getElementById`, die Position ist kein Vertrag — und gilt seither in
   **beiden Modi**: `body:not(.is-hero):not(.agent-mode-show-answers)` blendet
@@ -322,7 +322,7 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Zitieren rechts; (2) der **Verdict** `#consensusVerdict`, der vorher UEBER
   der Antwort stand und sie damit bewertete, bevor sie gelesen war;
   (3) `#consensusFooterTabs` mit den drei Aufklapp-Flaechen
-  `#consensusDifferencesTab` / „Model answers" (`#agentModeAnswersRow`,
+  `#consensusDifferencesTab` / „Compare answers" (`#agentModeAnswersRow`,
   seit 2026-07-27 **nicht mehr agent-mode-gated**, siehe `agent-mode.js`) /
   `#consensusSourcesTab`. Bewusst rahmenlos: Text plus Zahl, aktiv per
   Schriftgewicht und Unterstreichung — ein Rechteck um ein Wort ist genau der
@@ -395,7 +395,7 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   erzeugt. Auf ≤640 px werden der alte relative `bottom`-/`left`-Offset
   explizit zurueckgesetzt und Plus, Picker sowie Send auf eine gemeinsame
   36-px-Zeile gesetzt. Verborgene `.response-section`-Platzhalter sind im
-  mobilen Hero und im fertigen Thread bei geschlossenem „Model answers"
+  mobilen Hero und im fertigen Thread bei geschlossenem „Compare answers"
   `display:none`; ebenso nimmt das geschlossene Differences-`<details>` keinen
   Restplatz ein. Dadurch reservieren weder leere Wrapper noch Flex-Resthoehe
   sichtbaren Leerraum zwischen Differences und Composer.
@@ -699,14 +699,20 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   Bookmarks/Snapshots ohne das Feld degradieren auf „nur Karte".
 - Robustheit Differences (`consensus_engine.py`): einheitlicher Engine-Dispatch
   (`_resolve_engine`/`_call_engine_text`/`_stream_engine_text`), Structured
-  Output je Provider (json_object / responseMimeType / Anthropic-Prefill).
+  Output je Provider (json_object / Gemini-`responseMimeType` plus
+  `responseJsonSchema` / Anthropic-Prefill). Das Gemini-Schema erzwingt die
+  Pflichtfelder `claims`, `differences` und `best_model` auch im Stream, statt
+  lediglich syntaktisches JSON anzufordern.
   Judge-Policy (`_resolve_differences_engine`): die Judge-Familie ist immer
   eine ANDERE als die der gewählten Consensus-Engine (Self-Judging-Bias);
   die Stufe folgt der Engine — Standard-Engine → Standard-Judge
   (`DIFFERENCES_JUDGE_MODEL_BY_PROVIDER`), Pro-Engine → Pro-Judge über die
   Engine-Aliasse (`<Familie>-Pro`). Attempt-Plan: primärer Judge, Retry,
   nächste Fremd-Familie (Pro fail-opent zuletzt auf einen Standard-Judge);
-  ohne Fremd-Key fail-open auf den eigenen Standard-Judge. Der tatsächlich
+  ohne Fremd-Key fail-open auf den eigenen Standard-Judge. Nicht
+  wiederholbare Providerfehler (400/401/403/404) überspringen den identischen
+  Retry und gehen direkt zur nächsten Familie; 429/5xx/Transportfehler sowie
+  unparsbares JSON dürfen weiter retryen. Der tatsächlich
   genutzte Judge steht als `differences_data.judges.differences`
   ({provider, model, tier, attempts, duration_ms}) im Payload/Snapshot und in
   der Telemetrie. Pro-Judges laufen mit niedriger Reasoning-Effort-Kappung;
@@ -1157,9 +1163,11 @@ Wichtige Verträge im Backend:
   `config.py`-Fallbacks beim Startup). Providerlisten und `premium` sind dabei
   autoritativ: der Runtime-Loader ergänzt keine versteckten Pflichtmodelle und
   Premium enthält nur IDs, die auch in einer Providerliste stehen.
-  `GET /api/admin/models` migriert Legacy-/Tombstone-Werte mit
-  `normalize_models_document` persistent zurück in dasselbe Dokument; ein neuer
-  Admin-POST wird bei inkonsistenten Defaults/Presets/Watches/Judges mit 400
+  `GET /api/admin/models` normalisiert Legacy-/Tombstone-Werte ausschließlich
+  für die Response und bleibt strikt read-only, damit ein paralleler Read nie
+  einen frisch gespeicherten Judge-Wert mit einem älteren Komplett-Snapshot
+  überschreibt. Nur `POST /api/admin/models` persistiert die Modellkonfiguration
+  und wird bei inkonsistenten Defaults/Presets/Watches/Judges mit 400
   abgelehnt statt serverseitig still korrigiert. `consensus` steuert den App-Consensus-Picker;
   Fehlende Limitfelder werden beim Startup normalisiert und per Merge in das
   Admin-Dokument zurückgeschrieben (Schema-Backfill ohne Verlust vorhandener Werte).
@@ -1300,7 +1308,11 @@ Wichtige Verträge im Backend:
 - Developer-LLM-Keys (Fallback wenn Nutzer keine eigenen Keys hat):
   `DEVELOPER_OPENAI_API_KEY`, `DEVELOPER_MISTRAL_API_KEY`,
   `DEVELOPER_ANTHROPIC_API_KEY`, `DEVELOPER_GEMINI_API_KEY`,
-  `DEVELOPER_DEEPSEEK_API_KEY`, `DEVELOPER_GROK_API_KEY`.
+  `DEVELOPER_DEEPSEEK_API_KEY`, `DEVELOPER_GROK_API_KEY`. App-Consensus,
+  Consensus-API und Benchmark lösen diese über
+  `llm.credentials.resolve_developer_api_keys` mit identischer
+  Leerwert-Behandlung auf; der Own-Key-Modus fällt auch für Gemini niemals
+  verdeckt auf einen Developer-Key zurück.
 - Consensus-Watch-/Topic-Follow-Mail und Abmeldung: `SMTP_HOST`, `SMTP_PORT`,
   `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`, `WATCH_UNSUBSCRIBE_SECRET`.
   Topic-Tokens tragen einen eigenen Typ und abonnieren ausschließlich

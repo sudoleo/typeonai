@@ -27,6 +27,7 @@ from app.services.llm.engines import (
     query_openai, query_mistral, query_claude, query_gemini, query_deepseek, query_grok
 )
 from app.services.llm.citations import coerce_text, source_response
+from app.services.llm.credentials import resolve_developer_api_keys
 from app.services.llm.mock_llm import mock_ask_result, mock_ask_stream, mock_llm_enabled
 from app.services.llm.streaming import (
     SSE_HEADERS,
@@ -169,26 +170,31 @@ def parse_boolean_flag(value) -> bool:
 
 
 ENGINE_KEY_FIELDS = {
-    "OpenAI": ("openai_key", "DEVELOPER_OPENAI_API_KEY"),
-    "Mistral": ("mistral_key", "DEVELOPER_MISTRAL_API_KEY"),
-    "Anthropic": ("anthropic_key", "DEVELOPER_ANTHROPIC_API_KEY"),
-    "Gemini": ("gemini_key", "DEVELOPER_GEMINI_API_KEY"),
-    "DeepSeek": ("deepseek_key", "DEVELOPER_DEEPSEEK_API_KEY"),
-    "Grok": ("grok_key", "DEVELOPER_GROK_API_KEY"),
+    "OpenAI": "openai_key",
+    "Mistral": "mistral_key",
+    "Anthropic": "anthropic_key",
+    "Gemini": "gemini_key",
+    "DeepSeek": "deepseek_key",
+    "Grok": "grok_key",
 }
 
 
 def build_engine_api_keys(data: dict, use_own_keys: bool) -> dict:
     """Keys fuer Consensus-/Differences-/Resolve-Engines: bei useOwnKeys nur
-    die vom Nutzer uebermittelten Keys, sonst Fallback auf die Developer-Keys."""
-    api_keys = {}
-    for label, (field, env_name) in ENGINE_KEY_FIELDS.items():
-        # Bei ausgeschaltetem Own-Key-Modus clientseitig mitgesendete Keys
-        # strikt ignorieren. Sonst wuerde der Run serverseitig berechnet,
-        # koennte aber unbemerkt einen gespeicherten Nutzer-Key verwenden.
-        key = data.get(field) if use_own_keys else os.environ.get(env_name)
-        api_keys[label] = key
-    return api_keys
+    die vom Nutzer uebermittelten Keys, sonst die zentral aufgeloesten
+    Developer-Keys. Leere/Whitespace-Werte werden einheitlich zu None."""
+    if not use_own_keys:
+        # Eine gemeinsame Quelle fuer App, API und Benchmark verhindert, dass
+        # ein Provider im Answer-Fan-out verfuegbar ist, im Judge-Plan aber
+        # wegen abweichender Env-Namen oder Leerwert-Behandlung fehlt.
+        return resolve_developer_api_keys()
+
+    # Im Own-Key-Modus Developer-Keys strikt ignorieren. Sonst koennte der
+    # Differences-Fallback unbemerkt einen Server-Key verwenden.
+    return {
+        label: str(data.get(field) or "").strip() or None
+        for label, field in ENGINE_KEY_FIELDS.items()
+    }
 
 
 def cap_engine_text(value, limit: int):
@@ -638,8 +644,9 @@ def consensus(request: Request, data: dict = Body(...)):
     if "Grok" in excluded_models:
         answer_grok = None
 
-    # API Keys setzen: Bei useOwnKeys werden die vom Nutzer übermittelten Keys genutzt,
-    # andernfalls wird für fehlende Keys auf die Developer Keys zurückgegriffen.
+    # API Keys setzen: Own-Key-Modus nutzt ausschliesslich Nutzer-Keys,
+    # andernfalls kommt das vollstaendige Developer-Key-Set aus der gemeinsamen
+    # Credential-Quelle.
     if cfg.is_premium_consensus_model(consensus_model):
         if not id_token:
             raise HTTPException(status_code=403, detail="Premium consensus engines require a Pro account.")
@@ -713,15 +720,13 @@ def consensus(request: Request, data: dict = Body(...)):
     if need_key_for:
         # ÄNDERUNG: Prüfe auf "Gemini" ODER "Gemini-Pro"
         if need_key_for == "Gemini":
-            # Erlaube drei Varianten:
-            # 1) expliziter Key (User- oder Dev-Key),
-            # 2) Dev-Key aus ENV,
-            # 3) Service Account via GOOGLE_APPLICATION_CREDENTIALS, aber NUR wenn nicht useOwnKeys
+            # Erlaube zwei Varianten:
+            # 1) expliziter Key aus dem autoritativen api_keys-Dict,
+            # 2) Service Account, aber NUR ausserhalb des Own-Key-Modus.
             has_explicit_key = bool(api_keys.get("Gemini"))
-            has_dev_key      = bool(os.environ.get("DEVELOPER_GEMINI_API_KEY"))
             using_service_acct = (not use_own_keys) and bool(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
 
-            if not (has_explicit_key or has_dev_key or using_service_acct):
+            if not (has_explicit_key or using_service_acct):
                 raise HTTPException(
                     status_code=400,
                     detail=("Missing credentials for selected consensus engine: Gemini. "
