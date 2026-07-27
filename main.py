@@ -38,6 +38,7 @@ from app.services.api_consensus_runner import (
     api_run_maintenance_loop,
     recover_persisted_runs,
 )
+from app.services.llm.mock_llm import mock_llm_enabled
 from app.services.share_snapshots import cleanup_expired_pending, cleanup_revoked_shares
 from app.services.topic_runner import topic_scheduler_loop
 from app.services.watch_scheduler import watch_scheduler_loop
@@ -79,6 +80,20 @@ async def _run_startup_jobs(jobs):
             STARTUP_JOB_TIMEOUT_SECONDS,
         )
 
+async def _disabled_loop() -> None:
+    return None
+
+
+def _scheduler_task(loop_factory, name: str):
+    """Background writers stay off in MOCK_LLM instances. They share the
+    production Firestore with the live deployment, so a local mock server would
+    claim due schedule slots and publish fixture answers as real snapshots."""
+    if mock_llm_enabled():
+        logging.info("%s not started: MOCK_LLM=1", name)
+        return asyncio.create_task(_disabled_loop(), name=name)
+    return asyncio.create_task(loop_factory(), name=name)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Fail-closed Account-Tombstones bleiben bestehen; nur ihre idempotente
@@ -103,13 +118,13 @@ async def lifespan(app: FastAPI):
         asyncio.to_thread(telegram_startup_maintenance),
         name="telegram-watch-startup-maintenance",
     )
-    watch_task = asyncio.create_task(watch_scheduler_loop(), name="consensus-watch-scheduler")
-    topic_task = asyncio.create_task(topic_scheduler_loop(), name="topic-scheduler")
-    seo_review_task = asyncio.create_task(
-        seo_review_scheduler_loop(), name="seo-weekly-review-scheduler"
+    watch_task = _scheduler_task(watch_scheduler_loop, "consensus-watch-scheduler")
+    topic_task = _scheduler_task(topic_scheduler_loop, "topic-scheduler")
+    seo_review_task = _scheduler_task(
+        seo_review_scheduler_loop, "seo-weekly-review-scheduler"
     )
-    api_maintenance_task = asyncio.create_task(
-        api_run_maintenance_loop(), name="consensus-api-maintenance"
+    api_maintenance_task = _scheduler_task(
+        api_run_maintenance_loop, "consensus-api-maintenance"
     )
     api_account_cleanup_task = asyncio.create_task(
         api_account_cleanup.retry_loop(), name="consensus-api-account-cleanup"

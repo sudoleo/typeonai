@@ -261,6 +261,10 @@ def cleanup_expired_runs() -> int:
 def recover_persisted_runs() -> int:
     """Requeue only pre-provider runs; running work is never replayed."""
     global _retention_backfilled
+    # A MOCK_LLM instance would answer recovered production runs with fixtures,
+    # so it never picks up durable work left behind by the live deployment.
+    if mock_llm_enabled():
+        return 0
     recovered = 0
     try:
         if not _retention_backfilled:

@@ -373,6 +373,11 @@ async def _send_paused_mail(watch_id: str, watch: dict):
 
 
 async def run_watch_tick() -> int:
+    # MOCK_LLM instances share the production Firestore: a mock tick would take
+    # the worker lease from the live deployment and persist fixture answers as
+    # real watch runs. execute_watch itself stays mockable for the test suite.
+    if mock_llm_enabled():
+        return 0
     now = watch_service.utcnow()
     if not await asyncio.to_thread(watch_service.acquire_worker_lease, now=now):
         return 0
@@ -516,7 +521,7 @@ async def run_watch_tick() -> int:
 async def run_brief_tick() -> int:
     """Deliver due Morning Briefs. Claim-advance happens transactionally per
     brief BEFORE sending, so a crash can skip one digest but never double-send."""
-    if not mailer.is_configured():
+    if mock_llm_enabled() or not mailer.is_configured():
         return 0
     now = watch_brief.utcnow()
     sent = 0

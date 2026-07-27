@@ -595,6 +595,17 @@ class SchedulerSafetyTests(unittest.TestCase):
             {"agreement_score": 61, "condition_status": "unknown"},
         ))
 
+    def test_mock_llm_scheduler_ticks_never_touch_the_shared_database(self):
+        """execute_watch stays mockable for tests, but the scheduler ticks must
+        not claim the worker lease or deliver briefs from a mock instance."""
+        with patch.dict(os.environ, {"MOCK_LLM": "1"}), \
+                patch.object(watch_scheduler.watch_service, "acquire_worker_lease") as lease, \
+                patch.object(watch_scheduler.watch_brief, "list_due_brief_uids") as due:
+            self.assertEqual(asyncio.run(watch_scheduler.run_watch_tick()), 0)
+            self.assertEqual(asyncio.run(watch_scheduler.run_brief_tick()), 0)
+        lease.assert_not_called()
+        due.assert_not_called()
+
     def test_mock_llm_watch_pipeline(self):
         with patch.dict(os.environ, {"MOCK_LLM": "1"}):
             result = watch_scheduler.execute_watch(

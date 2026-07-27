@@ -7,10 +7,22 @@ import logging
 from urllib.parse import urlsplit
 
 from app.services import mailer, topics, watch_scheduler
+from app.services.llm.mock_llm import mock_llm_enabled
 
 
 TOPIC_SCHEDULER_INTERVAL_SECONDS = 60
 SITE_URL = "https://www.consens.io"
+
+
+def _guard_mock_mode() -> None:
+    """A MOCK_LLM instance talks to the same production Firestore as the live
+    deployment, so a mock run would publish fixture text as a real snapshot and
+    steal the due slot from the deployment. Refuse before anything is claimed,
+    written or mailed."""
+    if mock_llm_enabled():
+        raise topics.TopicError(
+            "mock_mode", "Topic runs are disabled while MOCK_LLM=1."
+        )
 
 
 def _research_question(topic: dict) -> str:
@@ -111,6 +123,7 @@ def opinion_changes_from_maps(current: dict, previous: dict) -> list[dict]:
 def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
                           now=None, executor=None) -> dict:
     """Collect sources, run the selected models, and persist one immutable point."""
+    _guard_mock_mode()
     db = db if db is not None else topics.db_firestore
     now = now or topics.utcnow()
     executor = executor or watch_scheduler.execute_watch
@@ -172,6 +185,7 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
 
 def run_topic_now(topic_id: str, *, actor_uid: str, db=None, now=None,
                   executor=None) -> dict:
+    _guard_mock_mode()
     db = db if db is not None else topics.db_firestore
     now = now or topics.utcnow()
     claimed = topics.claim_topic_run(topic_id, force=True, db=db, now=now)
@@ -181,6 +195,8 @@ def run_topic_now(topic_id: str, *, actor_uid: str, db=None, now=None,
 
 
 async def notify_topic_followers(topic: dict, run: dict, old_score) -> None:
+    if mock_llm_enabled():
+        return
     if run.get("change_type") not in {"minor", "major"} or not mailer.is_configured():
         return
     for follower in await asyncio.to_thread(topics.list_followers, topic["id"]):
@@ -214,6 +230,8 @@ async def notify_topic_followers(topic: dict, run: dict, old_score) -> None:
 
 
 async def run_due_topic_tick() -> int:
+    if mock_llm_enabled():
+        return 0
     ran = 0
     due_ids = await asyncio.to_thread(topics.list_due_topic_ids)
     for topic_id in due_ids:

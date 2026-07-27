@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -339,6 +340,29 @@ def test_legacy_topic_admin_url_redirects_into_main_admin():
 
     assert response.status_code == 308
     assert response.headers["location"] == "/admin#topics"
+
+
+def test_mock_llm_instances_never_publish_topic_runs(monkeypatch):
+    """MOCK_LLM servers share the production Firestore, so they must refuse a
+    Topic run before claiming the slot instead of publishing fixture text."""
+    db = FakeFirestore()
+    topic = topics.create_topic(topic_payload(evidence=[]), actor_uid="admin", db=db, now=NOW)
+    monkeypatch.setenv("MOCK_LLM", "1")
+
+    with pytest.raises(topics.TopicError) as manual:
+        topic_runner.run_topic_now(topic["id"], actor_uid="admin", db=db, now=NOW)
+    with pytest.raises(topics.TopicError):
+        topic_runner.execute_claimed_topic(
+            {**topic, "current_run_id": "blocked"}, actor_uid="admin", db=db, now=NOW,
+        )
+
+    assert manual.value.code == "mock_mode"
+    stored = topics.get_topic(topic["id"], db=db)
+    # Neither the claim nor a failure marker reached the shared database.
+    assert not stored.get("latest_run_id")
+    assert stored.get("last_run_status") != "failed"
+    assert asyncio.run(topic_runner.run_due_topic_tick()) == 0
+    assert mailer._deliver(mailer._base_message("a@b.c", "s", "p", "<p>h</p>")) is False
 
 
 def test_automatic_topic_run_researches_sources_and_builds_timeline_point():

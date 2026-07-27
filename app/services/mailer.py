@@ -11,6 +11,8 @@ import ssl
 from email.message import EmailMessage
 from datetime import datetime, timezone
 
+from app.services.llm.mock_llm import mock_llm_enabled
+
 
 def _smtp_config():
     values = {
@@ -33,6 +35,11 @@ def is_configured() -> bool:
 
 def _deliver(message: EmailMessage) -> bool:
     config = _smtp_config()
+    # Last line of defence: a mock instance often inherits the real SMTP
+    # credentials from .env, so never let fixture content reach a recipient.
+    if mock_llm_enabled():
+        logging.info("Mail skipped: MOCK_LLM=1")
+        return False
     if not is_configured():
         logging.info("Consensus Watch mail skipped: SMTP_HOST/MAIL_FROM not configured")
         return False
