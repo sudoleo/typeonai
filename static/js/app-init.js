@@ -519,11 +519,34 @@
           return window.matchMedia(`(max-width: ${SIDEBAR_OVERLAY_BREAKPOINT}px)`).matches;
         }
 
+        const threadComposer = document.querySelector(".input-section");
+        function syncThreadComposerReserve() {
+          if (!threadComposer || !usesOverlaySidebar()) {
+            document.documentElement.style.removeProperty("--thread-composer-height");
+            return;
+          }
+
+          const composerHeight = Math.ceil(threadComposer.getBoundingClientRect().height);
+          if (composerHeight > 0) {
+            document.documentElement.style.setProperty(
+              "--thread-composer-height",
+              `${composerHeight}px`
+            );
+          }
+        }
+
+        if (threadComposer && typeof ResizeObserver === "function") {
+          const threadComposerObserver = new ResizeObserver(syncThreadComposerReserve);
+          threadComposerObserver.observe(threadComposer);
+        }
+        requestAnimationFrame(syncThreadComposerReserve);
+
         function closeOverlaySidebar() {
           const sidebar = document.querySelector(".sidebar");
           if (!sidebar || !usesOverlaySidebar()) return;
           sidebar.classList.remove("active");
           sidebar.classList.add("collapsed");
+          updateToggleButton();
         }
 
         document.addEventListener("click", function (event) {
@@ -796,6 +819,7 @@
         // Fenstergröße prüfen – wenn <1024px, Sidebar einklappen
         function checkWindowSize() {
           const sidebar = document.querySelector(".sidebar");
+          syncThreadComposerReserve();
           if (!sidebar) return;
 
           if (usesOverlaySidebar()) {
@@ -818,6 +842,15 @@
           const isOpen = usesOverlaySidebar()
             ? sidebar.classList.contains("active")
             : !sidebar.classList.contains("collapsed");
+          if (!isOpen && sidebar.contains(document.activeElement)) {
+            document.getElementById("toggleSidebarButton")?.focus();
+          }
+          sidebar.inert = !isOpen;
+          if (isOpen) {
+            sidebar.removeAttribute("aria-hidden");
+          } else {
+            sidebar.setAttribute("aria-hidden", "true");
+          }
           document.querySelectorAll(".sidebar-toggle").forEach(function (toggleButton) {
             toggleButton.setAttribute("aria-expanded", String(isOpen));
             toggleButton.setAttribute("aria-label", isOpen ? "Collapse sidebar" : "Open sidebar");

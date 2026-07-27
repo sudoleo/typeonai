@@ -33,6 +33,11 @@ _LINK_REL = "nofollow noopener noreferrer"
 
 # Läufe wie "[S1]", "[S1, S2]" oder "[1, 3]" (gleiches Muster wie im Frontend).
 _SOURCE_RUN_RE = re.compile(r"\[((?:S?\d+)(?:\s*,\s*S?\d+)*)\]", re.IGNORECASE)
+_TERMINAL_SOURCE_ORDER_RE = re.compile(
+    r"[ \t]*(\[((?:S?\d+)(?:\s*,\s*S?\d+)*)\])"
+    r"([.!?]+(?:[\"'”’)\]}]+)?)(?=\s|$)",
+    re.IGNORECASE,
+)
 # Fenced-Code-Blöcke und Inline-Code: dort keine Quellen-Tags ersetzen.
 _CODE_SEGMENT_RE = re.compile(r"(```.*?(?:```|$)|`[^`\n]*`)", re.DOTALL)
 # Markdown interpretiert die LaTeX-Delimiter \[, \], \( und \) als Escapes.
@@ -92,6 +97,8 @@ def _link_source_tags(md_text, labels):
         )
 
     def replace_outside_code(segment):
+        # Fussnoten am Satzende folgen dem Satzzeichen: `Aussage.[S1]`.
+        segment = _TERMINAL_SOURCE_ORDER_RE.sub(r"\3\1", segment)
         return _SOURCE_RUN_RE.sub(replace_run, segment)
 
     parts = _CODE_SEGMENT_RE.split(md_text)

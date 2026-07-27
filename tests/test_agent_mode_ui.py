@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_answer_disclosure_contract_is_mode_independent():
-    """Die Einzelantworten liegen in BEIDEN Modi hinter "Show model answers"
+    """Die Einzelantworten liegen in BEIDEN Modi hinter "Model answers"
     (seit 2026-07-27). Der Schalter ist eine der drei Aufklapp-Flaechen der
     Provenance-Fusszeile und war, an den Agent Mode gebunden, in zwei von drei
     Faellen unsichtbar — obwohl er das Wichtigste dahinter oeffnet: worauf die
@@ -16,8 +16,8 @@ def test_answer_disclosure_contract_is_mode_independent():
     css = (ROOT / "static" / "css" / "components-consensus.css").read_text(encoding="utf-8")
 
     assert 'id="agentModeAnswersToggle"' in template
-    assert "Show model answers" in template
-    assert '"Hide model answers"' in script
+    assert "Model answers" in template
+    assert '"Hide answers"' in script
     assert '"agent-mode-show-answers"' in script
     assert "answersRow.hidden = false" in script
     assert "showModelAnswers()" in script

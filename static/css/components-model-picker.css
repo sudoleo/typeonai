@@ -203,10 +203,15 @@
   padding-right: 30px;
 }
 
-.model-picker-option:hover,
+.model-picker-option:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--glass-bg-strong));
+  opacity: 1;
+}
+
 .model-picker-option:focus-visible {
   background: color-mix(in srgb, var(--accent) 8%, var(--glass-bg-strong));
-  outline: none;
+  outline: 2px solid color-mix(in srgb, var(--accent) 56%, transparent);
+  outline-offset: -2px;
   opacity: 1;
 }
 
@@ -489,6 +494,11 @@
 
 .model-picker-row-toggle:hover {
   background: color-mix(in srgb, var(--accent) 8%, var(--glass-bg-strong));
+}
+
+.model-picker-row-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 56%, transparent);
+  outline-offset: 2px;
 }
 
 .model-picker-row-toggle:disabled {

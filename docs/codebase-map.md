@@ -217,7 +217,10 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   `shell.css` blendet den schwebenden per `body:not(:has(.sidebar.collapsed))`
   (Overlay ≤1099px: `body:has(.sidebar.active)`) aus. `app-init.js` bindet
   **alle** `.sidebar-toggle`-Buttons an denselben Handler; `updateToggleButton`
-  pflegt aria/title auf allen. Darunter liegt `#newRunButton` („New
+  pflegt aria/title auf allen. Eine geschlossene Sidebar wird zusätzlich
+  `inert` + `aria-hidden`, damit ihre offscreen liegenden Controls weder in der
+  Tab-Reihenfolge noch im Accessibility-Tree bleiben. Darunter liegt
+  `#newRunButton` („New
   comparison“): derselbe saubere Ausgangszustand wie
   `firebase.js::resetLoadedRunAfterLogout` (Streams abbrechen, Lauf +
   Share-/Bookmark-Kontext leeren, `is-hero` zurück).
@@ -266,6 +269,11 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   In den Modellantworten bleiben es die Favicon-Chips `.source-link`.
   Ein Hover auf `.src-ref` oeffnet `#sourceTeaser` (Favicon, Host, Titel,
   Snippet); auf Touch/Keyboard traegt das `title`-Attribut dieselbe Info.
+  `normalizeTerminalSourceTagOrder` korrigiert Modell-Output der Form
+  `Aussage [S1].` zu `Aussage.[S1]`, damit die hochgestellte Fussnote nach
+  Satzendzeichen (und ggf. schliessendem Anfuehrungszeichen) steht. Der
+  DOM-Linkifier besitzt denselben Fallback fuer alte Bookmarks; das
+  serverseitige Pendant liegt in `app/services/public_markdown.py`.
 - **`attachments.js`** — Attachment-UI/Payload (Pro), inklusive Bild-Paste im
   Fragefeld und Bild-Drag-and-drop auf den Input-Container. Solange ein echter
   Anhang für die nächste Frage bereitliegt, wird DeepSeek temporär mit einem
@@ -280,7 +288,7 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   einen Request waren genau der Ueberschuss, den der gefuehrte Lauf abbaut.
   Agent Mode behaelt danach nur noch zwei Aufgaben: Modelle gruppieren und
   Auto-Consensus. Der session-lokale
-  „Show/Hide model answers"-Disclosure (`#agentModeAnswersRow`) ist ins Markup
+  „Model answers/Hide answers"-Disclosure (`#agentModeAnswersRow`) ist ins Markup
   der Provenance-Zeile gewandert — agent-mode.js adressiert ihn unveraendert
   per `getElementById`, die Position ist kein Vertrag — und gilt seither in
   **beiden Modi**: `body:not(.is-hero):not(.agent-mode-show-answers)` blendet
@@ -308,11 +316,13 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Am Ende klappt der Block zusammen und uebergibt an den **Provenance-Fuss**
   `#runProvenance` unter der Antwort. Seit 2026-07-27 sind das drei Zeilen
   (Mockup-Vorgabe): (1) Fakten „N models · X s · N contested passages" +
-  „Replay run" links, `#consensusFooterActions` mit Teilen/Beobachten/
+  „Run again" links (setzt über `#newRunButton` den normalen Hero-/Composer-
+  Ausgangszustand zurück und füllt die letzte Frage vor, sendet aber nicht
+  automatisch), `#consensusFooterActions` mit Teilen/Beobachten/
   Zitieren rechts; (2) der **Verdict** `#consensusVerdict`, der vorher UEBER
   der Antwort stand und sie damit bewertete, bevor sie gelesen war;
   (3) `#consensusFooterTabs` mit den drei Aufklapp-Flaechen
-  `#consensusDifferencesTab` / „Show model answers" (`#agentModeAnswersRow`,
+  `#consensusDifferencesTab` / „Model answers" (`#agentModeAnswersRow`,
   seit 2026-07-27 **nicht mehr agent-mode-gated**, siehe `agent-mode.js`) /
   `#consensusSourcesTab`. Bewusst rahmenlos: Text plus Zahl, aktiv per
   Schriftgewicht und Unterstreichung — ein Rechteck um ein Wort ist genau der
@@ -323,6 +333,9 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Differences-Trenner und `.consensus-divider` ist stillgelegt; die einzige
   Abschnittsgrenze zum Composer ist dessen auslaufender Horizont. Ein
   geoeffneter Differences-/Sources-Drawer behaelt intern eine feine Oberkante.
+  Auf ≤640 px wird der Verdict als kompakter Zweispaltenblock (Score + Text)
+  und die drei Tabs als gleich breite Dreierspalte gerendert; Fakten und
+  Aktionen umbrechen kontrolliert statt in zufällige Button-Zeilen.
   `onConsensusEnd()` rendert ihn auch ohne aktive Query-Pipeline (spaeter
   manuell gestarteter Consensus); `firebase.js::loadSingleBookmarkUI` tut
   dasselbe explizit fuer wiederhergestellte Bookmarks.
@@ -337,10 +350,10 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   (`consensus-run.js`).
 - **Thread-Layout: Composer unten (2026-07-27)** — ab dem ersten Lauf liest
   sich `/app` als Thread: Frage oben, Lauf, Antwort, Modellantworten, Composer
-  **unten am Viewport**. Das DOM behaelt die Reihenfolge Input → Consensus →
+  am unteren Bildrand. Das DOM behaelt die Reihenfolge Input → Consensus →
   Responses (die Hero-Zentrierung rechnet damit); `shell.css` dreht sie nur
   fuer `body:not(.is-hero)` per Flex-`order` und macht `.input-section`
-  `position:sticky; bottom:0` mit eigenem auslaufenden Horizont
+  zum letzten Flex-Abschnitt mit eigenem auslaufenden Horizont
   (`.consensus-section::before` ist in diesem Zustand aus). Die Frage steht im
   Thread-Kopf `#threadAsk` („Question“-Eyebrow + Serif-Text, 3-Zeilen-Clamp mit
   „Show full question“): `window.App.setThreadQuestion` (app-core.js), gefuellt
@@ -364,15 +377,28 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   (`.run-replay-btn`, `.thread-ask-more`, `.consensus-tab`,
   `.model-picker-row-toggle`) muessen in die globale
   `button:not(...)`-Kette in `components-input.css`.
-  **Der Composer haengt exakt am Viewport-Rand (2026-07-27):** dafuer muessen
-  drei Groessen zusammenpassen — `body { min-height: 100dvh; padding-bottom: 0 }`,
-  `.container { min-height: calc(100dvh - 10px); padding-bottom: 0 }` und
-  `.input-section { margin-bottom: 0 }`. Vorher blieben body-Padding, das
-  100vh von `base.css` (auf dem Handy hoeher als 100dvh) und der geerbte
-  20px-Aussenabstand als Rest-Scrollweg uebrig, in den die sticky Leiste
-  hineinwanderte. Aus demselben Grund oeffnen die Menues am Composer
-  (`.attach-menu`, der Consensus-Picker) im Thread nach **oben** — unter der
-  Leiste ist kein Platz mehr; im Hero bleibt es bei „nach unten".
+  Der Thread behält weiterhin `100dvh` und kein aeusseres Body-Bottom-Padding.
+  Auf Desktop ist der Composer sticky und wird bei kurzen Antworten durch
+  `margin-top:auto` an den unteren Rand geschoben. Auf ≤1099 px ist er dagegen
+  wirklich viewport-fixiert. `app-init.js::syncThreadComposerReserve()` misst
+  seine aktuelle Höhe mit `ResizeObserver` (normaler Composer, kompaktes Gate
+  oder Login-Hinweis) und schreibt sie als `--thread-composer-height`; dieselbe
+  Höhe wird als Bottom-Padding der Thread-`.container` reserviert. Dafür wird
+  dort `container-type` aufgehoben, da es ein `position:fixed`-Containing-Block
+  erzeugen würde. So endet der Ergebnis-Footer am vollständigen Scrollende
+  exakt oberhalb des Composers, ohne Lücke oder Überdeckung. Die Menues am
+  Composer (`.attach-menu`, Consensus-Picker)
+  oeffnen im Thread nach **oben** in Richtung des gelesenen Ergebnisses; im
+  Hero bleibt es bei „nach unten". Der mobile
+  Consensus-Picker richtet sich an `.consensus-switch-container` aus und ist
+  auf `100vw - 48px` begrenzt, damit er keinen horizontalen Dokument-Scroll
+  erzeugt. Auf ≤640 px werden der alte relative `bottom`-/`left`-Offset
+  explizit zurueckgesetzt und Plus, Picker sowie Send auf eine gemeinsame
+  36-px-Zeile gesetzt. Verborgene `.response-section`-Platzhalter sind im
+  mobilen Hero und im fertigen Thread bei geschlossenem „Model answers"
+  `display:none`; ebenso nimmt das geschlossene Differences-`<details>` keinen
+  Restplatz ein. Dadurch reservieren weder leere Wrapper noch Flex-Resthoehe
+  sichtbaren Leerraum zwischen Differences und Composer.
 - **Composer-Reduktion (2026-07-27)** — die Eingabezeile ist auf Anhang (+),
   EINEN Lauf-Schalter („N models · Preset", der bestehende Consensus-Picker mit
   vorangestellter Modellanzahl) und Senden reduziert. Entfallen sind dort
@@ -467,8 +493,9 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Quellenzahlen unterschieden; Neutral = Einigkeit, Bernstein
   (`has-dissent`) = Abweichung. Wenn Claim und Difference denselben Satz
   belegen, bleibt nur die Quote sichtbar; der zusaetzliche `.cx-marker` bleibt
-  verborgen im DOM, damit Passage-Klick, Preview und Zaehlung weiter auf die
-  Difference-Karte zeigen. Treffen mehrere Claims denselben Satz, bleibt
+  verborgen im DOM. Der Passage-Klick folgt in diesem Fall bewusst dem
+  **sichtbaren** Claim-Badge und öffnet dessen Agreement-Details; Preview und
+  Zaehlung kennen die Difference weiterhin. Treffen mehrere Claims denselben Satz, bleibt
   ebenfalls nur eine Marke sichtbar: die konservative Satzquote des am
   wenigsten gestuetzten Claims. Die Kopien in
   `landing.css` **und die Mockup-Markups** (`landing.html`,
@@ -480,13 +507,17 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   (Widersprüche laufen zuerst, Claims hängen sich an). Der Spalten-Balancer
   ist mit dem einspaltigen Layout entfallen; `window.balanceConsensusColumns`
   existiert nicht mehr.
-  Seit 2026-07-25 koppelt `attachControl` die Passage an ihr Steuerelement:
-  auf Zeigergeräten (`(hover: hover) and (pointer: fine)`, auf Touch bliebe
-  der Hover hängen) bekommt jeder `.cx-claim`-Span `is-interactive`, denselben
-  `title` wie Marker/Badge und einen Klick, der dieselbe Aktion auslöst. Der
+  `attachControl` koppelt die Passage an ihr Steuerelement: auf **allen**
+  Eingabegeräten bekommt jeder `.cx-claim`-Span `is-interactive`, denselben
+  `title` wie Marker/Badge und einen Klick, der dieselbe Aktion auslöst. Nur der
+  Hover ist auf echte Zeigergeräte (`(hover: hover) and (pointer: fine)`)
+  begrenzt, damit sein Zustand auf Touch nicht hängen bleibt. Der
   Hover wirkt in beide Richtungen: `.cx-claim.is-hovered` (Wash, nur im Hover)
   ↔ `.cx-marker/.claim-badge.is-linked-hover`. Fokussierbar bleibt allein das
   Steuerelement — die Passage ist ein zusätzlicher Mausweg, kein Tab-Stop.
+  Das Claim-Detail ist mobil ein echtes modales Dialogfenster (`aria-modal`,
+  Fokuswechsel/-falle/-rückgabe, inerter Hintergrund); Desktop bleibt ein
+  nichtmodaler Popover am Badge.
   `.diff-card.is-focused` markiert die geöffnete Karte mit einem verblassenden
   Bernstein-Wash (`diffCardFlash`), nicht mehr mit einem 2px-Ring: der Ring
   las sich über die volle Listenbreite wie ein grauer Rahmen um den ganzen

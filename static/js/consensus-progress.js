@@ -85,7 +85,7 @@
 
     // Demo responses do not use data-response-state. Their streaming class
     // and thinking element still provide a reliable completion signal.
-    // textContent, not innerText: the boxes sit behind "Show model answers"
+    // textContent, not innerText: the boxes sit behind "Model answers"
     // and innerText reports nothing for a display:none element.
     const content = box.querySelector(".collapsible-content");
     return Boolean(
@@ -461,9 +461,8 @@
 
     facts.innerHTML = parts.join(" · ");
 
-    // "Replay run" only means something while there is a run to replay.
-    const replay = $("runReplayButton");
-    if (replay) replay.hidden = !lastRunSummary;
+    const runAgain = $("runReplayButton");
+    if (runAgain) runAgain.hidden = !lastRunSummary || !String(window.lastQuestion || "").trim();
 
     syncTab(
       "consensusDifferencesTab",
@@ -601,7 +600,7 @@
   function onConsensusEnd() {
     // Ein manuell spaeter gestarteter Consensus und ein wiederhergestelltes
     // Ergebnis haben keine aktive Query-Pipeline mehr. Der Provenance-Fuss
-    // (inklusive "Show model answers") gehoert trotzdem immer zur fertigen
+    // (inklusive "Model answers") gehoert trotzdem immer zur fertigen
     // Antwort.
     if (stage !== "consensus" && stage !== "differences") {
       renderProvenance();
@@ -626,16 +625,17 @@
     hideNow();
   }
 
-  // "Replay run" puts the finished block back on screen without re-running
-  // anything: it is a record, not a second request.
-  function replay() {
-    const el = root();
-    if (!el || !lastRunSummary) return;
-    stage = "done";
-    render();
-    show();
-    vanish(3200);
-    stage = "idle";
+  // A fresh comparison with the same question follows the normal composer
+  // flow. It never sends automatically, so no run is started by surprise.
+  function prepareRunAgain() {
+    const question = String(window.lastQuestion || "").trim();
+    if (!question) return;
+    $("newRunButton")?.click();
+    const input = $("questionInput");
+    if (!input) return;
+    input.value = question;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.focus();
   }
 
   const responseSection = document.querySelector(".response-section");
@@ -652,7 +652,7 @@
 
   document.addEventListener("click", event => {
     if (event.target.closest("#runReplayButton")) {
-      replay();
+      prepareRunAgain();
       return;
     }
     const diffTab = event.target.closest("#consensusDifferencesTab");

@@ -38,7 +38,7 @@
       if (box.classList.contains("excluded")) return;
 
       const txtEl = box.querySelector(".collapsible-content");
-      // textContent: die Antwortboxen liegen hinter "Show model answers",
+      // textContent: die Antwortboxen liegen hinter "Model answers",
       // und innerText liefert fuer display:none nichts.
       const txt = txtEl ? txtEl.textContent.trim() : "";
       if (txt) {

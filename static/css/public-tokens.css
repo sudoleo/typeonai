@@ -26,7 +26,7 @@
   --well: #e6e4e0;
   --ink: #222428;
   --ink-2: #5c5f66;
-  --ink-3: #8a8d93;
+  --ink-3: #64676d;
   --line: rgba(34, 36, 40, 0.14);
   --line-soft: rgba(34, 36, 40, 0.07);
   --lift: 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 34px rgba(28, 30, 33, 0.08);
@@ -76,7 +76,7 @@
 
   --liquid-shadow: none;
   --liquid-shadow-hover: none;
-  --liquid-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  --liquid-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 50%, transparent);
   --shadow: none;
   --card-shadow: none;
   --card-shadow-lift: none;
@@ -103,7 +103,7 @@
   --well: #26282b;
   --ink: #ededed;
   --ink-2: #a7a9ad;
-  --ink-3: #7b7e83;
+  --ink-3: #94979b;
   --line: rgba(255, 255, 255, 0.14);
   --line-soft: rgba(255, 255, 255, 0.07);
   --lift: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 36px rgba(0, 0, 0, 0.34);
@@ -152,7 +152,7 @@
 
   --liquid-shadow: none;
   --liquid-shadow-hover: none;
-  --liquid-focus-ring: 0 0 0 3px rgba(255, 255, 255, 0.20);
+  --liquid-focus-ring: 0 0 0 3px rgba(255, 255, 255, 0.50);
   --shadow: none;
   --card-shadow: none;
   --card-shadow-lift: none;

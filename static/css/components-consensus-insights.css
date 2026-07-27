@@ -443,6 +443,11 @@
   cursor: pointer;
 }
 
+.claim-popover-close:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 2px;
+}
+
 .claim-popover-claim {
   margin-bottom: 10px;
   color: color-mix(in srgb, var(--text-color) 78%, var(--sidebar-text-muted));

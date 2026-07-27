@@ -76,10 +76,22 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 
 ## Agent Mode
 - [ ] Agent-Mode an/aus, Timer läuft, Status-Text korrekt, Auto-Consensus-Kopplung.
-- [ ] Nach der ersten fertigen Modellantwort erscheint dezent „Show model answers“
+- [ ] Nach der ersten fertigen Modellantwort erscheint dezent „Model answers“
       (auch im eingeklappten Mobile-Panel); der Toggle zeigt/versteckt die
       einzelnen Antwortboxen, ohne Agent Mode auszuschalten, und startet bei
       einer neuen Frage wieder in der cleanen, verborgenen Ansicht.
+- [ ] Mobile Consensus: Tipp auf eine unterstrichene Passage öffnet denselben
+      Agreement-Dialog wie die Quote; Fokus bleibt im Dialog und kehrt zurück.
+- [ ] Mobile Footer: Score, Aktionen und die drei Detail-Tabs bleiben kompakt,
+      gleichmäßig ausgerichtet und erzeugen keinen horizontalen Scroll.
+- [ ] Mobile Composer: Plus, Modell-Picker und Send-Pfeil liegen auf derselben
+      horizontalen Achse; der Composer bleibt am unteren Viewport-Rand fixiert.
+      Am vollständigen Scrollende liegen die geschlossenen Detail-Tabs direkt
+      darüber, ohne Leerraum oder verdeckten Inhalt.
+- [ ] Quellen-Fussnoten im Consensus stehen hinter Punkt, Frage- oder
+      Ausrufezeichen; dasselbe gilt auf öffentlichen Share-Seiten.
+- [ ] „Run again“ kehrt zum normalen Composer zurück, übernimmt die vorige
+      Frage, startet aber erst nach einem bewussten Klick auf Senden.
 
 ## Consensus Watch
 - [ ] Nach erfolgreichem Consensus erscheint „Watch“ neben Share; Aktivierung

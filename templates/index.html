@@ -58,7 +58,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260727-composercollapse2">
+  <link rel="stylesheet" href="/static/style.css?v=20260727-composerfix2">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
@@ -83,19 +83,19 @@
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
   <script src="/static/js/markdown-stream.js?v=20260727-thread12" defer></script>
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
-  <script src="/static/js/sources.js?v=20260727-thread12" defer></script>
+  <script src="/static/js/sources.js?v=20260727-composerfix1" defer></script>
   <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
   <script src="/static/js/attachments.js?v=20260727-thread12" defer></script>
   <!-- Agent Mode (aus index.html ausgelagert) -->
-  <script src="/static/js/agent-mode.js?v=20260727-answerjump3" defer></script>
+  <script src="/static/js/agent-mode.js?v=20260727-mobileaudit1" defer></script>
   <!-- Kompakte Zwei-Phasen-Anzeige fuer regulaere Laeufe (ohne Agent Mode). -->
-  <script src="/static/js/consensus-progress.js?v=20260727-uipolish1" defer></script>
+  <script src="/static/js/consensus-progress.js?v=20260727-mobileaudit1" defer></script>
   <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
-  <script src="/static/js/consensus-lifecycle.js?v=20260727-thread12" defer></script>
+  <script src="/static/js/consensus-lifecycle.js?v=20260727-mobileaudit1" defer></script>
   <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
   <script src="/static/js/share-dialog.js?v=20260727-thread12" defer></script>
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-actions.js?v=20260727-thread12" defer></script>
+  <script src="/static/js/consensus-actions.js?v=20260727-mobileaudit1" defer></script>
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
   <script src="/static/js/watch.js?v=20260727-thread12" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
@@ -103,8 +103,8 @@
   <!-- Kontingent-Ring + Panel im Sidebar-Footer; spiegelt nur #usageDisplay -->
   <script src="/static/js/sidebar-quota.js?v=20260727-thread12" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-insights.js?v=20260727-answerjump3" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260727-composercollapse1" defer></script>
+  <script src="/static/js/consensus-insights.js?v=20260727-mobileaudit1" defer></script>
+  <script src="/static/js/consensus-run.js?v=20260727-mobileaudit1" defer></script>
   <script src="/static/js/query-send.js?v=20260727-thread12" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
@@ -599,7 +599,8 @@
               <div id="runProvenance" class="run-provenance consensus-footer" hidden>
                 <div class="consensus-footer-facts">
                   <span class="run-provenance-facts" id="runProvenanceFacts"></span>
-                  <button type="button" id="runReplayButton" class="run-replay-btn">Replay run</button>
+                  <button type="button" id="runReplayButton" class="run-replay-btn"
+                    title="Start a new comparison with the same question">Run again</button>
                   <!-- Zielcontainer fuer Teilen/Beobachten/Zitieren. Die Buttons
                        hingen frueher absolut positioniert in der Ueberschrift;
                        consensus-actions.js + watch.js haengen ihre
@@ -621,7 +622,7 @@
                     <button type="button" id="agentModeAnswersToggle" class="consensus-tab agent-mode-answers-toggle"
                       aria-expanded="false"
                       aria-controls="openaiResponse mistralResponse claudeResponse geminiResponse deepseekResponse grokResponse">
-                      <span>Show model answers</span>
+                      <span>Model answers</span>
                     </button>
                   </div>
                   <button type="button" id="consensusSourcesTab" class="consensus-tab"
@@ -829,7 +830,7 @@
       </div>
     </div>
 
-  <script src="/static/js/app-init.js?v=20260727-composercollapse1" defer></script>
+  <script src="/static/js/app-init.js?v=20260727-composerfix2" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing

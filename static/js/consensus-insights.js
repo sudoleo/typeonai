@@ -338,6 +338,29 @@
           }
 
           // --- Popover / Bottom Sheet -------------------------------------
+          let claimPopoverTrigger = null;
+          let claimModalBackgroundState = [];
+
+          function claimPopoverFocusables(pop) {
+            return Array.from(pop?.querySelectorAll(
+              'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            ) || []).filter(element => !element.hidden && element.getClientRects().length > 0);
+          }
+
+          function setClaimModalBackgroundInert(active) {
+            if (active) {
+              claimModalBackgroundState = Array.from(document.body.children)
+                .filter(element => element.id !== "claimPopover" && element.id !== "claimSheetBackdrop")
+                .map(element => ({ element: element, inert: element.inert }));
+              claimModalBackgroundState.forEach(item => { item.element.inert = true; });
+              return;
+            }
+            claimModalBackgroundState.forEach(item => {
+              if (item.element.isConnected) item.element.inert = item.inert;
+            });
+            claimModalBackgroundState = [];
+          }
+
           function onDocClick(event) {
             const pop = $("claimPopover");
             if (!pop || pop.hidden) return;
@@ -347,7 +370,29 @@
           }
 
           function onKeyDown(event) {
-            if (event.key === "Escape") closeClaimPopover();
+            const pop = $("claimPopover");
+            if (!pop || pop.hidden) return;
+            if (event.key === "Escape") {
+              event.preventDefault();
+              closeClaimPopover();
+              return;
+            }
+            if (event.key !== "Tab" || !pop.classList.contains("is-modal")) return;
+            const focusables = claimPopoverFocusables(pop);
+            if (!focusables.length) {
+              event.preventDefault();
+              pop.focus();
+              return;
+            }
+            const first = focusables[0];
+            const last = focusables[focusables.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first.focus();
+            }
           }
 
           // Popover/Backdrop nach <body> verschieben: Vorfahren mit
@@ -360,18 +405,27 @@
             return el;
           }
 
-          function closeClaimPopover() {
+          function closeClaimPopover(options) {
+            const restoreFocus = options?.restoreFocus !== false;
             const pop = $("claimPopover");
             const backdrop = $("claimSheetBackdrop");
             if (pop) {
               pop.hidden = true;
               pop.classList.remove("is-modal");
+              pop.removeAttribute("aria-modal");
+              pop.removeAttribute("aria-labelledby");
+              pop.removeAttribute("tabindex");
               pop.innerHTML = "";
               pop.style.left = pop.style.top = pop.style.width = "";
             }
             if (backdrop) backdrop.hidden = true;
+            setClaimModalBackgroundInert(false);
             document.removeEventListener("click", onDocClick, true);
             document.removeEventListener("keydown", onKeyDown, true);
+            if (restoreFocus && claimPopoverTrigger?.isConnected) {
+              claimPopoverTrigger.focus();
+            }
+            claimPopoverTrigger = null;
           }
 
           function buildModelRow(model, quote, agreeing) {
@@ -390,7 +444,7 @@
               jump.className = "claim-jump-link";
               jump.textContent = "View answer";
               jump.addEventListener("click", function () {
-                closeClaimPopover();
+                closeClaimPopover({ restoreFocus: false });
                 jumpToModelAnswer(model, quote);
               });
               head.appendChild(jump);
@@ -410,7 +464,8 @@
             const pop = ensureOverlayOnBody($("claimPopover"));
             const backdrop = ensureOverlayOnBody($("claimSheetBackdrop"));
             if (!pop) return;
-            closeClaimPopover();
+            closeClaimPopover({ restoreFocus: false });
+            claimPopoverTrigger = anchorEl || document.activeElement;
 
             const agreeCount = claim.agree.length;
             const total = agreeCount + claim.dissent.length;
@@ -419,6 +474,7 @@
             header.className = "claim-popover-header";
             const title = document.createElement("span");
             title.className = "claim-popover-title";
+            title.id = "claimPopoverTitle";
             title.textContent = claim.dissent.length
               ? `${agreeCount} of ${total} models agree`
               : `All ${total} models agree`;
@@ -459,12 +515,17 @@
 
             const asModal = isMobileViewport();
             pop.classList.toggle("is-modal", asModal);
+            pop.setAttribute("aria-labelledby", title.id);
             pop.hidden = false;
             if (asModal) {
+              pop.setAttribute("aria-modal", "true");
+              pop.tabIndex = -1;
+              setClaimModalBackgroundInert(true);
               if (backdrop) {
                 backdrop.hidden = false;
                 backdrop.addEventListener("click", closeClaimPopover, { once: true });
               }
+              requestAnimationFrame(function () { close.focus(); });
             } else if (anchorEl) {
               // Direkt unter dem Badge, horizontal am Badge zentriert
               const rect = anchorEl.getBoundingClientRect();
@@ -867,27 +928,35 @@
           function passageGroup(spans) {
             if (spans[0].cxGroup) return spans[0].cxGroup;
             const group = { spans: spans, controls: [], hover: false };
+            const supportsHover = canHoverPassages();
             spans.forEach(function (span) {
               span.cxGroup = group;
               span.classList.add("is-interactive");
-              span.addEventListener("mouseenter", function () { setPassageHover(group, true); });
-              span.addEventListener("mouseleave", function () { setPassageHover(group, false); });
+              if (supportsHover) {
+                span.addEventListener("mouseenter", function () { setPassageHover(group, true); });
+                span.addEventListener("mouseleave", function () { setPassageHover(group, false); });
+              }
               span.addEventListener("click", function (event) {
                 // Quellenchips und [S1]-Links im Satz behalten Vorrang, und wer
                 // Text markiert, will ihn kopieren und nichts oeffnen.
                 if (event.target.closest("a, button")) return;
                 const selection = window.getSelection?.();
                 if (selection && !selection.isCollapsed) return;
-                const first = group.controls[0];
-                if (first) first.activate(event);
+                // Ueberlappende Markierungen haben mehrere Controls. Die Passage
+                // oeffnet dasselbe sichtbare Ziel wie der Badge daneben; ein
+                // zugunsten des Claims versteckter Difference-Marker darf den
+                // Touch-Klick nicht abfangen.
+                const target = group.controls.find(item =>
+                  !item.el.hidden && item.el.getAttribute("aria-hidden") !== "true"
+                ) || group.controls[0];
+                if (target) target.activate(event);
               });
             });
             return group;
           }
 
-          // Nur Geraete mit echtem Zeiger: auf Touch wuerde der Hover-Zustand
-          // nach dem Tippen haengen bleiben, und dort hat der Marker ohnehin
-          // schon eine 44px-Trefferflaeche.
+          // Hover nur auf Geraeten mit echtem Zeiger. Der Klick auf die Passage
+          // bleibt dagegen auch auf Touch aktiv.
           function canHoverPassages() {
             return !!window.matchMedia?.("(hover: hover) and (pointer: fine)").matches;
           }
@@ -1055,7 +1124,7 @@
           function attachControl(result, control, label, activate, preview) {
             insertAfterMark(result, control);
             const spans = result.spans;
-            if (!spans || !spans.length || !canHoverPassages()) return;
+            if (!spans || !spans.length) return;
             const group = passageGroup(spans);
             group.controls.push({ el: control, activate: activate, preview: preview });
             spans.forEach(function (span) {
@@ -1063,8 +1132,10 @@
               // Marker den Tooltip.
               if (!span.title) span.title = label;
             });
-            control.addEventListener("mouseenter", function () { setPassageHover(group, true); });
-            control.addEventListener("mouseleave", function () { setPassageHover(group, false); });
+            if (canHoverPassages()) {
+              control.addEventListener("mouseenter", function () { setPassageHover(group, true); });
+              control.addEventListener("mouseleave", function () { setPassageHover(group, false); });
+            }
           }
 
           function renderInlineMarkers(claims, differences) {
@@ -1090,8 +1161,8 @@
             // Wenn Claim und Difference denselben Satz meinen, soll dort nur
             // EIN sichtbares Signal stehen: die aussagekraeftigere Quote
             // (z. B. 4/6). Der Difference-Marker bleibt unsichtbar im DOM,
-            // damit Passage-Klick, Hover-Vorschau und Provenance-Zaehlung
-            // weiterhin auf die Difference-Karte zeigen.
+            // damit Hover-Vorschau und Provenance-Zaehlung die Difference
+            // weiterhin kennen. Der Passage-Klick folgt dem sichtbaren Badge.
             const differenceControls = [];
 
             // 1. Widersprüche zuerst: sie tragen die stärkere Markierung.

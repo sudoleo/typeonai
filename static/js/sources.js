@@ -181,6 +181,19 @@ function wantsNumberedRefs(containerEl) {
   );
 }
 
+// Modelle setzen Quellen-Tags nicht immer typografisch korrekt: häufig kommt
+// `[S1].`, obwohl eine Fussnote am Satzende hinter Punkt/Frage-/Ausrufezeichen
+// steht. Normalisiert nur echte Satzendzeichen und lässt Code sowie
+// satzinterne Referenzen unangetastet.
+function normalizeTerminalSourceTagOrder(markdown) {
+  const sourceRun = String.raw`\[((?:S?\d+)(?:,\s*S?\d+)*)\]`;
+  const pattern = new RegExp(
+    String.raw`[ \t]*(${sourceRun})([.!?]+(?:["'”’)\]}]+)?)(?=\s|$)`,
+    "gi"
+  );
+  return String(markdown || "").replace(pattern, "$3$1");
+}
+
 function createSourceListCluster(refs) {
   const uniqueRefs = [];
   const seen = new Set();
@@ -276,9 +289,25 @@ function linkifySourceTags(containerEl, sources) {
 
       const refs = getSourceRefs(match, sources);
       if (numbered) {
+        // Fallback fuer alte Bookmarks/Snapshots, deren Markdown noch
+        // `Aussage [S1].` enthaelt: Satzzeichen im selben Textknoten vor die
+        // hochgestellte Referenz ziehen und den Leerraum davor entfernen.
+        const tail = text.slice(offset + match.length);
+        const punctuation = tail.match(/^([.!?]+(?:["'”’)\]}]+)?)(?=\s|$)/);
+        if (punctuation) {
+          const previous = fragment.lastChild;
+          if (previous?.nodeType === Node.TEXT_NODE) {
+            previous.nodeValue = previous.nodeValue.replace(/[ \t]+$/, "");
+          }
+          fragment.appendChild(document.createTextNode(punctuation[1]));
+        }
         // Numbers never need a cluster: twelve raised digits still read as
         // one citation, twelve chips are a paragraph of their own.
         appendNumberedSourceRefs(fragment, refs);
+        if (punctuation) {
+          lastIndex = offset + match.length + punctuation[1].length;
+          return match;
+        }
       } else if (refs.length >= sourceGroupThreshold) {
         fragment.appendChild(createSourceListCluster(refs));
       } else {
@@ -345,8 +374,10 @@ function mergeEvidenceSources(incomingSources) {
 }
 
 function rewriteSourceTags(markdown, idMap) {
-  if (!markdown || !idMap || !Object.keys(idMap).length) return markdown;
-  return markdown.replace(/\[((?:S?\d+)(?:,\s*S?\d+)*)\]/g, (match, inner) => {
+  if (!markdown || !idMap || !Object.keys(idMap).length) {
+    return normalizeTerminalSourceTagOrder(markdown);
+  }
+  const rewritten = markdown.replace(/\[((?:S?\d+)(?:,\s*S?\d+)*)\]/g, (match, inner) => {
     const mapped = inner.split(",").map(part => {
       const token = part.trim();
       const numeric = token.replace(/^S/i, "");
@@ -354,6 +385,7 @@ function rewriteSourceTags(markdown, idMap) {
     }).filter(Boolean);
     return mapped.length ? `[${mapped.join(", ")}]` : match;
   });
+  return normalizeTerminalSourceTagOrder(rewritten);
 }
 
 function registerResponseSources(markdown, incomingSources) {

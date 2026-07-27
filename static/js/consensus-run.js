@@ -495,7 +495,7 @@
       if (box.classList.contains("excluded")) return;
 
       const contentEl = box.querySelector(".collapsible-content");
-      // textContent: die Boxen koennen hinter "Show model answers" liegen,
+      // textContent: die Boxen koennen hinter "Model answers" liegen,
       // und innerText ist fuer display:none leer.
       const text = contentEl ? contentEl.textContent.trim() : "";
       if (!text) return; // nur Modelle mit Antwort

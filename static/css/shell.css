@@ -981,12 +981,19 @@ body:not(.dark-mode) .chat-input-container {
   display: none;
 }
 
-.consensus-tab:hover,
+.consensus-tab:hover {
+  background: transparent;
+  color: var(--ink);
+  text-decoration-color: var(--line);
+}
+
 .consensus-tab:focus-visible {
   background: transparent;
   color: var(--ink);
   text-decoration-color: var(--line);
-  outline: none;
+  outline: 2px solid color-mix(in srgb, var(--accent) 56%, transparent);
+  outline-offset: 3px;
+  border-radius: 3px;
 }
 
 .consensus-tab[aria-expanded="true"] {
@@ -1019,9 +1026,16 @@ body:not(.dark-mode) .chat-input-container {
   text-decoration-color: var(--line);
 }
 
-.run-replay-btn:hover {
+.run-replay-btn:hover,
+.run-replay-btn:focus-visible {
   color: var(--ink);
   text-decoration-color: var(--ink-3);
+}
+
+.run-replay-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 56%, transparent);
+  outline-offset: 3px;
+  border-radius: 3px;
 }
 
 .run-provenance-actions {
@@ -1040,6 +1054,91 @@ body:not(.dark-mode) .chat-input-container {
 @media (max-width: 640px) {
   .run-model {
     grid-template-columns: minmax(62px, 88px) minmax(0, 1fr) 34px auto;
+  }
+
+  .run-provenance {
+    gap: 7px;
+    margin-top: 12px;
+    padding-top: 9px;
+  }
+
+  .consensus-footer-facts {
+    gap: 5px 8px;
+  }
+
+  .run-provenance-facts {
+    flex: 1 1 100%;
+  }
+
+  .run-replay-btn {
+    min-height: 30px;
+    padding: 0 4px;
+  }
+
+  .consensus-footer-actions {
+    margin-left: auto;
+  }
+
+  .consensus-footer-actions .consensus-share-pill,
+  .consensus-footer-actions .consensus-actions-toggle {
+    height: 30px;
+    padding-inline: 6px;
+    font-size: 0.72rem;
+  }
+
+  .run-provenance .consensus-verdict {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 2px;
+  }
+
+  .run-provenance .verdict-score,
+  .run-provenance .verdict-icon {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .run-provenance .verdict-main,
+  .run-provenance .verdict-judge {
+    grid-column: 2;
+  }
+
+  .run-provenance .verdict-judge {
+    margin-left: 0;
+    text-align: left;
+  }
+
+  .consensus-footer-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    width: 100%;
+  }
+
+  .consensus-tab {
+    width: 100%;
+    min-width: 0;
+    min-height: 36px;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 3px;
+    border-radius: 8px;
+    font-size: 0.74rem;
+    text-align: center;
+    text-decoration: none;
+  }
+
+  .consensus-tab:hover,
+  .consensus-tab[aria-expanded="true"] {
+    background: var(--raise);
+    text-decoration: none;
+  }
+
+  .consensus-tab:focus-visible {
+    outline-offset: -2px;
+    border-radius: 8px;
   }
 
   .run-provenance-actions {
@@ -1087,6 +1186,9 @@ body:not(.is-hero) .input-section {
   position: sticky;
   bottom: 0;
   z-index: 5;
+  /* Auf Desktop schiebt freie Resthoehe den Composer an den unteren Rand.
+     Mobile verwendet weiter unten eine echte Viewport-Fixierung mit exakt
+     gemessener Scroll-Reserve. */
   margin-top: auto;
   /* The 20px bottom margin from the hero layout left the column ending
      below the composer — exactly the slack the page could still scroll
@@ -1096,6 +1198,44 @@ body:not(.is-hero) .input-section {
   padding-top: 14px;
   padding-bottom: 10px;
   background: var(--ground);
+}
+
+/* Auf Overlay-/Mobile-Breiten bleibt der Composer unabhaengig von der
+   Antwortlaenge am sichtbaren unteren Bildrand. `.container` ist sonst durch
+   `container-type` ein eigener Containing Block fuer `position: fixed`; im
+   Thread gibt es keine Container Queries, daher heben wir das dort auf.
+   app-init.js schreibt die tatsaechliche Composer-Hoehe in die Custom
+   Property, sodass der Footer am Scrollende exakt oberhalb statt unterhalb
+   der fixierten Flaeche liegt. */
+@media (max-width: 1099px) {
+  body:not(.is-hero) .container {
+    container-type: normal;
+    padding-bottom: var(--thread-composer-height, 154px);
+  }
+
+  body:not(.is-hero) .input-section {
+    position: fixed;
+    left: 50%;
+    right: auto;
+    bottom: 0;
+    width: min(var(--app-container-width, 900px), calc(100vw - 20px));
+    box-sizing: border-box;
+    margin: 0;
+    transform: translateX(-50%);
+  }
+}
+
+@media (max-width: 640px) {
+  body:not(.is-hero) .input-section {
+    width: calc(100vw - 32px);
+  }
+}
+
+/* Die sechs Antwortboxen liegen standardmaessig hinter "Model answers".
+   Ist der Drawer zu, verschwindet auch ihr leerer Flex-Wrapper samt
+   margin-bottom; sonst bleiben zwischen Footer und Composer weitere 20px. */
+body:not(.is-hero):not(.agent-mode-show-answers) .response-section {
+  display: none;
 }
 
 /* The composer's upper edge is a horizon that fades out at both ends, not
@@ -1555,6 +1695,13 @@ a.consensus-source-title:hover {
   display: none;
 }
 
+/* Der Tab im Footer ist das einzige Disclosure-Control. Solange er zu ist,
+   darf das leere <details> weder Padding noch Resthoehe zwischen Tabs und
+   Composer reservieren. */
+.consensus-differences-panel:not([open]) {
+  display: none;
+}
+
 /* ---- Menus at the composer open upward -----------------------------------
    In the thread the composer is pinned to the bottom edge, so there is
    nothing below it to open into: the (+) menu and the run switch both ran
@@ -1818,6 +1965,43 @@ body.composer-locked .chat-input-container {
   border-radius: var(--radius-lg);
 }
 
+@media (max-width: 640px) {
+  .chat-input-container .consensus-switch-container {
+    position: relative;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    align-self: center;
+  }
+
+  .chat-input-container .input-actions-container {
+    align-self: center;
+  }
+
+  .chat-input-container .attach-trigger,
+  .chat-input-container .consensus-model .model-picker-display,
+  .chat-input-container .input-action-btn-primary {
+    width: 36px;
+    height: 36px;
+    min-height: 36px;
+  }
+
+  .chat-input-container .consensus-model .model-picker-display {
+    width: auto;
+  }
+
+  .chat-input-container .consensus-model .select-wrapper {
+    position: static;
+  }
+
+  .chat-input-container .consensus-model .select-wrapper .model-picker-menu {
+    left: 0;
+    right: auto;
+    width: min(320px, calc(100vw - 48px));
+    max-width: calc(100vw - 48px);
+  }
+}
+
 /* Die Gast-Demo hat statt der beiden Folgeaktionen nur einen ehrlichen Weg:
    anmelden. Sobald ihr Abschluss-Hinweis sichtbar ist, ersetzt er deshalb
    den gesamten (ohnehin deaktivierten) Composer. */
@@ -1942,4 +2126,16 @@ body.composer-locked .composer-gate-inner {
   .sidebar-toggle-square {
     transition: none;
   }
+}
+
+/* Verborgene Hero-Ergebnisse duerfen auf kleinen Screens weder Scrollraum
+   reservieren noch als leere zweite Seite unter dem Composer erscheinen. */
+@media (max-width: 1099px) {
+  body.is-hero .response-section {
+    display: none;
+  }
+}
+
+body.is-hero.agent-mode-enabled .response-section {
+  display: none;
 }

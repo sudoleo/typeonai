@@ -471,6 +471,15 @@ class PublicMarkdownTests(unittest.TestCase):
         self.assertIn(">example<", html)
         self.assertNotIn("[S1]", html)
 
+    def test_sentence_end_source_tags_follow_punctuation(self):
+        html = render_public_markdown(
+            'Fakt eins [S1]. Frage [S2]? "Zitat [S1]."',
+            self.SOURCES,
+        )
+        self.assertIn('Fakt eins.<a href="#src-1"', html)
+        self.assertIn('Frage?<a href="#src-2"', html)
+        self.assertIn('"Zitat."<a href="#src-1"', html)
+
     def test_source_tags_without_url_fall_back_to_id(self):
         html = render_public_markdown("Fakt. [S1]", [{"id": "S1", "url": ""}])
         self.assertIn('href="#src-1"', html)

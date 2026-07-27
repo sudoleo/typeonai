@@ -112,9 +112,33 @@ def test_latex_is_typeset_after_markdown_rendering(app_page):
     assert "KaTeX" in result["fontFamily"]
 
 
-def test_usage_display_is_stable_and_keeps_value_layout(app_page):
-    """Parallele Antworten ohne Usage-Metadaten duerfen weder auf 0
-    zurueckfallen noch den rechtsbuendigen, fetten Wert-Wrapper entfernen."""
+def test_consensus_citations_follow_terminal_punctuation(app_page):
+    result = app_page.evaluate(
+        """() => {
+          const host = document.getElementById("consensusAnswerBody");
+          window.currentEvidenceSources = [{
+            id: "S1",
+            title: "Example source",
+            url: "https://example.org/source",
+          }];
+          window.injectMarkdown(
+            host,
+            'Fact [S1]. Question [S1]? "Quote [S1]."'
+          );
+          return {
+            text: host.textContent,
+            previous: Array.from(host.querySelectorAll(".src-ref"))
+              .map(ref => ref.previousSibling?.textContent || ""),
+          };
+        }"""
+    )
+    assert result["text"].strip() == 'Fact.1 Question?1 "Quote."1'
+    assert result["previous"] == [".", "?", '."']
+
+
+def test_usage_display_is_stable_and_updates_visible_quota_panel(app_page):
+    """Leere Usage-Updates behalten den letzten Wert; das sichtbare
+    Sidebar-Panel spiegelt die versteckte Kompatibilitaetsquelle."""
     metrics = app_page.evaluate(
         """() => {
           window.App.renderUsageDisplay({
@@ -127,33 +151,65 @@ def test_usage_display_is_stable_and_keeps_value_layout(app_page):
 
           const line = document.getElementById('freeUsageDisplay');
           const value = line.querySelector('strong');
-          const lineRect = line.getBoundingClientRect();
-          const valueRect = value.getBoundingClientRect();
           return {
             text: line.textContent,
             deepText: document.getElementById('deepUsageDisplay').textContent,
             valueTag: value.tagName,
             valueWeight: Number.parseInt(getComputedStyle(value).fontWeight, 10),
-            rightGap: Math.abs(lineRect.right - valueRect.right),
           };
         }"""
+    )
+    app_page.wait_for_function(
+        "() => document.getElementById('quotaRunsValue').textContent.trim() === '2 / 3'"
     )
 
     assert metrics["text"] == "Runs: 2 / 3"
     assert metrics["deepText"] == "Deep Think: 0 / 0"
     assert metrics["valueTag"] == "STRONG"
     assert metrics["valueWeight"] >= 600
-    assert metrics["rightGap"] < 1
+    assert app_page.locator("#quotaRowRuns").evaluate("element => element.hidden") is False
+    expect(app_page.locator("#quotaRunsValue")).to_have_text("2 / 3")
 
 
 def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
+    app_page.set_viewport_size({"width": 390, "height": 844})
     page_metrics = app_page.evaluate(
         """() => ({
           scrollHeight: document.documentElement.scrollHeight,
           clientHeight: document.documentElement.clientHeight,
+          scrollWidth: document.documentElement.scrollWidth,
+          clientWidth: document.documentElement.clientWidth,
         })"""
     )
     assert page_metrics["scrollHeight"] <= page_metrics["clientHeight"]
+    assert page_metrics["scrollWidth"] <= page_metrics["clientWidth"]
+
+    control_metrics = app_page.evaluate(
+        """() => {
+          const selectors = [
+            "#attachTrigger",
+            ".consensus-model .model-picker-display",
+            "#sendButton",
+          ];
+          return selectors.map(selector => {
+            const rect = document.querySelector(selector).getBoundingClientRect();
+            return { selector, top: rect.top, height: rect.height, center: rect.top + rect.height / 2 };
+          });
+        }"""
+    )
+    centers = [control["center"] for control in control_metrics]
+    assert max(centers) - min(centers) <= 1
+    assert all(control["height"] == 36 for control in control_metrics)
+
+    sidebar = app_page.locator(".sidebar")
+    expect(sidebar).to_have_attribute("aria-hidden", "true")
+    assert sidebar.evaluate("element => element.inert") is True
+    app_page.locator(".app-nav-float .sidebar-toggle").click()
+    expect(sidebar).not_to_have_attribute("aria-hidden", "true")
+    assert sidebar.evaluate("element => element.inert") is False
+    app_page.locator("#sidebarToggleInner").click()
+    expect(sidebar).to_have_attribute("aria-hidden", "true")
+    assert sidebar.evaluate("element => element.inert") is True
 
     app_page.locator(".consensus-model .model-picker-display").click()
     menu_metrics = app_page.locator(".consensus-model .model-picker-menu").evaluate(
@@ -161,10 +217,17 @@ def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
           scrollWidth: element.scrollWidth,
           clientWidth: element.clientWidth,
           overflowX: getComputedStyle(element).overflowX,
+          left: element.getBoundingClientRect().left,
+          right: element.getBoundingClientRect().right,
+          viewportWidth: document.documentElement.clientWidth,
+          documentWidth: document.documentElement.scrollWidth,
         })"""
     )
     assert menu_metrics["scrollWidth"] <= menu_metrics["clientWidth"]
     assert menu_metrics["overflowX"] == "hidden"
+    assert menu_metrics["left"] >= 0
+    assert menu_metrics["right"] <= menu_metrics["viewportWidth"]
+    assert menu_metrics["documentWidth"] <= menu_metrics["viewportWidth"]
     app_page.locator(".consensus-model .model-picker-display").click()
 
 
@@ -195,6 +258,23 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     Consensus-Button gibt es im aktuellen UI nicht mehr."""
     app_page.set_viewport_size({"width": 390, "height": 844})
     app_page.evaluate("() => window.setAgentMode(false, { persist: true })")
+    # Passage-Interaktion explizit unter Touch-Bedingungen pruefen. Die alte
+    # Implementierung brach bei genau diesem Media Query vor dem Binding ab.
+    app_page.evaluate(
+        """() => {
+          const nativeMatchMedia = window.matchMedia.bind(window);
+          window.matchMedia = query => {
+            if (query.includes("(hover: hover)") || query.includes("(pointer: fine)")) {
+              return {
+                matches: false, media: query, onchange: null,
+                addListener() {}, removeListener() {},
+                addEventListener() {}, removeEventListener() {}, dispatchEvent() { return false; },
+              };
+            }
+            return nativeMatchMedia(query);
+          };
+        }"""
+    )
     _send_question(app_page)
 
     # Regulärer Modus: determinate Antwortphase -> indeterminate Synthese.
@@ -234,7 +314,49 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     # Agent Mode. Sie ist ein fester Teil jeder Consensus-Antwort.
     model_answers_toggle = app_page.locator("#agentModeAnswersToggle")
     expect(model_answers_toggle).to_be_visible(timeout=15000)
-    expect(model_answers_toggle).to_have_text("Show model answers")
+    expect(model_answers_toggle).to_have_text("Model answers")
+
+    footer_metrics = app_page.locator("#consensusFooterTabs").evaluate(
+        """element => ({
+          display: getComputedStyle(element).display,
+          columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth,
+          buttonHeights: Array.from(element.querySelectorAll(".consensus-tab:not([hidden])"))
+            .map(button => button.getBoundingClientRect().height),
+        })"""
+    )
+    assert footer_metrics["display"] == "grid"
+    assert footer_metrics["columns"] == 3
+    assert footer_metrics["scrollWidth"] <= footer_metrics["clientWidth"]
+    assert all(height <= 40 for height in footer_metrics["buttonHeights"])
+
+    app_page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+    app_page.wait_for_timeout(100)
+    result_gap = app_page.evaluate(
+        """() => {
+          const input = document.querySelector(".input-section");
+          const footer = document.getElementById("runProvenance").getBoundingClientRect();
+          const inputRect = input.getBoundingClientRect();
+          const responses = document.querySelector(".response-section");
+          const container = document.querySelector(".container");
+          return {
+            responsesDisplay: getComputedStyle(responses).display,
+            inputMarginTop: getComputedStyle(input).marginTop,
+            inputPosition: getComputedStyle(input).position,
+            gap: inputRect.top - footer.bottom,
+            bottomGap: window.innerHeight - inputRect.bottom,
+            reserve: parseFloat(getComputedStyle(container).paddingBottom),
+            inputHeight: inputRect.height,
+          };
+        }"""
+    )
+    assert result_gap["responsesDisplay"] == "none"
+    assert result_gap["inputMarginTop"] == "0px"
+    assert result_gap["inputPosition"] == "fixed"
+    assert abs(result_gap["bottomGap"]) <= 1
+    assert abs(result_gap["reserve"] - result_gap["inputHeight"]) <= 1
+    assert abs(result_gap["gap"]) <= 2
 
     # Nach der fertigen Antwort schrumpft der Composer zur Entscheidung:
     # kein leeres/deaktiviertes Fragefeld, nur die zwei ehrlichen Wege weiter.
@@ -276,20 +398,31 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
         overlap_marker.get_attribute("aria-label")
     ), "Marker braucht ein sprechendes aria-label"
 
-    # Desktop: die markierte Passage ist selbst das Ziel - gleicher Tooltip wie
-    # der Marker, und der Hover koppelt beide sichtbar aneinander.
+    # Touch: die markierte Passage selbst oeffnet dasselbe Agreement-Sheet wie
+    # der sichtbare Badge. Der Hintergrund ist inert und der Fokus bleibt im
+    # modalen Dialog.
     assert marked.get_attribute("title"), "Passage braucht denselben Tooltip wie der Marker"
     assert "is-interactive" in (marked.get_attribute("class") or "")
-    marked.hover()
-    expect(
-        app_page.locator("#consensusAnswerBody .claim-badge.is-linked-hover").first
-    ).to_be_visible(timeout=2000)
+    marked.click()
+    popover = app_page.locator("#claimPopover")
+    expect(popover).to_be_visible()
+    expect(popover).to_have_attribute("aria-modal", "true")
+    expect(popover).to_have_attribute("aria-labelledby", "claimPopoverTitle")
+    expect(app_page.locator("#claimPopover .claim-popover-close")).to_be_focused()
+    assert app_page.evaluate(
+        """() => Array.from(document.body.children)
+          .filter(el => !["claimPopover", "claimSheetBackdrop"].includes(el.id))
+          .every(el => el.inert)"""
+    )
+    app_page.keyboard.press("Escape")
+    expect(popover).to_be_hidden()
+    expect(claim_badges.first).to_be_focused()
 
     # Der vollstaendige Differences-Ueberblick liegt zugeklappt UNTER der
     # Antwort; die Karten bleiben erreichbar, sind aber nicht mehr die zweite
     # Spalte der Primaeransicht.
     panel = app_page.locator("#consensusDifferencesPanel")
-    expect(panel).to_be_visible(timeout=15000)
+    expect(panel).to_be_hidden(timeout=15000)
     assert panel.evaluate("el => el.open") is False, "Differences starten zugeklappt"
     expect(app_page.locator(".diff-card.is-contradiction").first).to_be_hidden()
 
@@ -303,7 +436,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     expect(diff_jump).to_be_visible()
     diff_jump.click()
     expect(app_page.locator("body.agent-mode-show-answers")).to_have_count(1)
-    expect(model_answers_toggle).to_have_text("Hide model answers")
+    expect(model_answers_toggle).to_have_text("Hide answers")
     expect(app_page.locator(".response-section mark.quote-flash, .response-section .quote-flash-block").first).to_be_visible()
     assert app_page.evaluate("() => window.isAgentModeEnabled()") is False
 
@@ -320,7 +453,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
 
     # Ausgangszustand für die bestehende Disclosure-/Reihenfolge-Prüfung.
     model_answers_toggle.click()
-    expect(model_answers_toggle).to_have_text("Show model answers")
+    expect(model_answers_toggle).to_have_text("Model answers")
 
     # Kopierter Text darf keine Marker-/Badge-Beschriftung enthalten.
     copied = app_page.evaluate(
@@ -348,6 +481,15 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     assert consensus_box["y"] < first_answer_box["y"]
     expect(pipeline).to_be_hidden(timeout=10000)
 
+    run_again = app_page.locator("#runReplayButton")
+    expect(run_again).to_be_visible()
+    expect(run_again).to_have_text("Run again")
+    run_again.click()
+    expect(app_page.locator("body.is-hero")).to_have_count(1)
+    expect(app_page.locator("#questionInput")).to_be_visible()
+    expect(app_page.locator("#questionInput")).to_have_value(QUESTION)
+    expect(app_page.locator("#questionInput")).to_be_focused()
+
     errors = get_console_errors()
     assert errors == [], f"Konsolen-Fehler im Consensus-Flow: {errors}"
 
@@ -366,16 +508,16 @@ def test_agent_mode_can_reveal_hidden_model_answers_on_mobile(app_page):
 
     toggle = app_page.locator("#agentModeAnswersToggle")
     expect(toggle).to_be_visible(timeout=15000)
-    expect(toggle).to_have_text("Show model answers")
+    expect(toggle).to_have_text("Model answers")
     expect(app_page.locator("#openaiResponse")).to_be_hidden()
 
     toggle.click()
     expect(app_page.locator("body.agent-mode-enabled.agent-mode-show-answers")).to_have_count(1)
-    expect(toggle).to_have_text("Hide model answers")
+    expect(toggle).to_have_text("Hide answers")
     expect(app_page.locator("#openaiResponse")).to_be_visible()
 
     toggle.click()
-    expect(toggle).to_have_text("Show model answers")
+    expect(toggle).to_have_text("Model answers")
     expect(app_page.locator("#openaiResponse")).to_be_hidden()
 
 
@@ -479,7 +621,7 @@ def test_query_first_watch_guides_question_then_configuration(app_page):
 
     app_page.click("#viewSwitchWatches")
     expect(app_page.locator("#watchDashCreate")).to_be_visible()
-    expect(app_page.locator("#watchDashLimit")).to_contain_text("Free plan")
+    expect(app_page.locator("#watchDashLimit")).to_contain_text("Standard access")
     expect(app_page.locator("#watchDashLimit")).to_contain_text("0 of 1 active")
     expect(app_page.locator("#watchDashLimit")).to_contain_text("Paused Watches do not count")
 
