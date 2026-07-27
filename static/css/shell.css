@@ -1800,6 +1800,41 @@ body.is-hero .consensus-section::before {
   background: var(--partial);
 }
 
+/* The rest of the watch surfaces: the plan pill, the dialog, the per-card
+   disclosure, the setup fields. They were the last things on this page still
+   drawing a rectangle (several of them an accent-tinted one) around content
+   that the tone already separates. */
+.watch-limit-plan,
+.watch-limit-summary.is-dialog,
+.watch-card-toggle,
+.watch-empty-flow b,
+.watch-example-chip,
+.watch-advanced-settings {
+  border: 0;
+  background: var(--raise);
+  color: var(--ink-2);
+  box-shadow: none;
+}
+
+.watch-card-toggle:hover,
+.watch-example-chip:hover {
+  border: 0;
+  background: var(--well);
+  color: var(--ink);
+}
+
+/* Input fields are wells, like the composer — not bordered boxes. */
+.watch-delivery-field {
+  border: 0;
+  background: var(--well);
+  color: var(--ink);
+}
+
+.watch-delivery-field:focus {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
 .watch-filter {
   background: transparent;
   border: 0;

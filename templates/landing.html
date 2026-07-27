@@ -17,8 +17,8 @@
   <meta name="twitter:description" content="See where leading AI answers contradict one another and when their positions change.">
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>Track Where AI Answers Disagree and Change | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260727-mobileaudit1">
-  <link rel="stylesheet" href="/static/css/benchmark.css?v=20260727-runflow4">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260727-shellv4">
+  <link rel="stylesheet" href="/static/css/benchmark.css?v=20260727-shellv2">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
@@ -88,7 +88,7 @@
             <span class="lp-attach" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </span>
-            <span class="lp-modes"><span class="lp-mode is-on lp-mode--agent"><i class="lp-switch"></i>Agent Mode</span></span>
+            <span class="lp-run-chip">6 models · Balanced<i aria-hidden="true"></i></span>
             <span class="lp-demo-btn">
               <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
               Try the demo
@@ -114,118 +114,147 @@
     </section>
 
     <!-- ====================================================== WALKTHROUGH -->
+    <!-- Scenes 01 and 02 are scroll-scrubbed: the stage pins while the section
+         scrolls past, and the scroll position IS the playhead. Scene 01 types
+         the question, scene 02 advances the real run through its four phases.
+         Both are exact rebuilds of the /app surfaces (composer well + guided
+         run block), so the mockup cannot drift away from the product.
+         Controller: static/js/landing-scenes.js. -->
     <!-- Scene 01 -->
     <section id="product" class="lp-section lp-section--grey lp-scene-01">
-      <div class="lp-shell">
-        <div class="lp-head lp-reveal">
-          <p class="lp-eyebrow">01 · Ask</p>
-          <h2 class="lp-h2">Start from one prompt.</h2>
-          <p class="lp-lead">One input surface, the same as the app: Agent Mode, consensus model selection, and one send action.</p>
-        </div>
-        <div class="lp-scene-visual lp-reveal">
-          <div class="lp-window">
-            <div class="lp-window-bar">
-              <span class="lp-mocklogo"><img src="/static/favicon.png" alt=""> consens.io</span>
-              <span class="lp-mock-login">About us</span>
+      <div class="lp-scroll-scene" data-scene="ask">
+        <div class="lp-scene-stage">
+          <div class="lp-shell">
+            <div class="lp-head lp-reveal">
+              <p class="lp-eyebrow">01 · Ask</p>
+              <h2 class="lp-h2">Start from one prompt.</h2>
+              <p class="lp-lead">One field, one run switch, one send. The app opens exactly here, with no modes to learn before the first question.</p>
             </div>
-            <div class="lp-window-body">
-              <div class="lp-prompt">
-                <span class="lp-prompt-text" data-type-loop="What is the longest river in the world?|Which programming language should I learn first?|Is intermittent fasting actually effective?"></span>
-                <div class="lp-prompt-bar">
-                  <button class="lp-attach" type="button" tabindex="-1" aria-label="Add attachment">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                  </button>
-                  <div class="lp-modes">
-                    <span class="lp-mode is-on lp-mode--agent"><i class="lp-switch"></i>Agent Mode</span>
-                  </div>
+            <div class="lp-scene-visual lp-reveal">
+              <div class="lp-app">
+                <div class="lp-app-bar">
+                  <span class="lp-mocklogo"><img src="/static/favicon.png" alt=""> consens.io</span>
+                  <span class="lp-mock-quota" aria-hidden="true">
+                    <span class="lp-mock-ring"></span>
+                    <span>18</span>
+                  </span>
                 </div>
-                <div class="lp-actions">
-                  <div class="lp-consensus-picker" aria-label="Consensus model">
-                    <span>Consensus</span>
-                    <button type="button" tabindex="-1">Balanced <i aria-hidden="true"></i></button>
+                <div class="lp-app-body">
+                  <p class="lp-app-greeting">What should the models cross-check?</p>
+                  <div class="lp-composer" data-ask-composer>
+                    <span class="lp-composer-text" data-ask-text></span>
+                    <div class="lp-composer-row">
+                      <span class="lp-icon-btn" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                      </span>
+                      <span class="lp-run-chip" data-ask-chip>6 models · Balanced<i aria-hidden="true"></i></span>
+                      <span class="lp-send" data-ask-send aria-hidden="true">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 3.6 21 12 3.4 20.4 7 12z" fill="currentColor"></path></svg>
+                      </span>
+                    </div>
                   </div>
-                  <button class="lp-clear" type="button" tabindex="-1" aria-label="Clear all responses">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                  </button>
-                  <button class="lp-send" type="button" tabindex="-1" aria-label="Send question">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                  </button>
+                  <p class="lp-composer-foot">Please avoid personal or sensitive data. AI models can make mistakes.</p>
                 </div>
               </div>
+              <ul class="lp-scene-notes">
+                <li data-ask-note="0"><b>The field.</b> One question, nothing to configure first.</li>
+                <li data-ask-note="1"><b>The run switch.</b> How many models answer, and who writes the consensus.</li>
+                <li data-ask-note="2"><b>Send.</b> The only filled control on the page.</li>
+              </ul>
             </div>
           </div>
+          <div class="lp-scene-rail" aria-hidden="true"><i></i></div>
         </div>
       </div>
     </section>
 
     <!-- Scene 02 -->
     <section id="agent-mode" class="lp-section lp-section--white lp-scene-02">
-      <div class="lp-shell">
-        <div class="lp-head lp-reveal">
-          <p class="lp-eyebrow">02 · Run</p>
-          <h2 class="lp-h2">Watch Agent Mode run.</h2>
-          <p class="lp-lead">Selected models are grouped into one run and queried in parallel, each answer kept intact.</p>
-        </div>
-        <div class="lp-scene-visual lp-reveal">
-          <div class="lp-window">
-            <div class="lp-window-body">
-              <div class="lp-agent">
-                <div class="lp-agent-head">
-                  <div>
-                    <span class="lp-agent-eyebrow">Agent Mode</span>
-                    <strong>Models are working</strong>
+      <div class="lp-scroll-scene" data-scene="run">
+        <div class="lp-scene-stage">
+          <div class="lp-shell">
+            <div class="lp-head lp-reveal">
+              <p class="lp-eyebrow">02 · Run</p>
+              <h2 class="lp-h2">One run, narrated end to end.</h2>
+              <p class="lp-lead">Six models answer in parallel, then the consensus is written and an uninvolved model checks it for contradictions. Scroll to move the run.</p>
+            </div>
+            <div class="lp-scene-visual lp-reveal">
+              <div class="lp-app">
+                <div class="lp-thread-ask">
+                  <div class="lp-thread-ask-label">Question</div>
+                  <div class="lp-thread-ask-text">What is the longest river in the world?</div>
+                </div>
+                <!-- The run and the answer it hands over to share one grid
+                     cell, so the panel is always as tall as the taller of the
+                     two and the handover is a cross-fade rather than a
+                     collapse. On a phone the scene's own height feeds the
+                     scroll progress, so a mock that resizes mid-run makes the
+                     animation chase itself. landing-scenes.js locks the stack
+                     to its tallest state on top of this. -->
+                <div class="lp-run-stack" data-run-stack>
+                <!-- Mirrors #consensusRun in /app: finished steps as a grey check
+                     line, one active label + bar, the next steps named. -->
+                <div class="lp-run" data-run data-stage="prepare">
+                  <div class="lp-run-past" data-run-past></div>
+                  <div class="lp-run-now">
+                    <span class="lp-run-pulse" aria-hidden="true"></span>
+                    <span class="lp-run-label" data-run-label>Preparing the question</span>
+                    <span class="lp-run-count" data-run-count></span>
+                    <span class="lp-run-time" data-run-time>0:00</span>
                   </div>
-                  <span class="lp-agent-count">6 models</span>
+                  <div class="lp-run-track" data-run-track><i></i></div>
+                  <p class="lp-run-next" data-run-next></p>
+                  <div class="lp-run-detail" data-run-detail>
+                    <span class="lp-run-model" data-model="0">
+                      <span class="lp-run-model-name">ChatGPT</span>
+                      <span class="lp-run-model-track"><i></i></span>
+                      <span class="lp-run-model-time">·</span>
+                    </span>
+                    <span class="lp-run-model" data-model="1">
+                      <span class="lp-run-model-name">Claude</span>
+                      <span class="lp-run-model-track"><i></i></span>
+                      <span class="lp-run-model-time">·</span>
+                    </span>
+                    <span class="lp-run-model" data-model="2">
+                      <span class="lp-run-model-name">Gemini</span>
+                      <span class="lp-run-model-track"><i></i></span>
+                      <span class="lp-run-model-time">·</span>
+                    </span>
+                    <span class="lp-run-model" data-model="3">
+                      <span class="lp-run-model-name">Mistral</span>
+                      <span class="lp-run-model-track"><i></i></span>
+                      <span class="lp-run-model-time">·</span>
+                    </span>
+                    <span class="lp-run-model" data-model="4">
+                      <span class="lp-run-model-name">DeepSeek</span>
+                      <span class="lp-run-model-track"><i></i></span>
+                      <span class="lp-run-model-time">·</span>
+                    </span>
+                    <span class="lp-run-model" data-model="5">
+                      <span class="lp-run-model-name">Grok</span>
+                      <span class="lp-run-model-track"><i></i></span>
+                      <span class="lp-run-model-time">·</span>
+                    </span>
+                  </div>
                 </div>
-                <div class="lp-chips">
-                  <span><img src="/static/icons/chat_icons/chatgpt.png" alt="">ChatGPT</span>
-                  <span><img src="/static/icons/chat_icons/mistral.png" alt="">Mistral</span>
-                  <span><img src="/static/icons/chat_icons/claude.png" alt="">Claude</span>
-                  <span><img src="/static/icons/chat_icons/gemini-icon.png" alt="">Gemini</span>
-                  <span><img src="/static/icons/chat_icons/deepseek.png" alt="">DeepSeek</span>
-                  <span><img src="/static/icons/chat_icons/grok.png" alt="">Grok</span>
+                <!-- What the run hands over to once it collapses. -->
+                <div class="lp-run-result" data-run-result>
+                  <h3>Consensus answer</h3>
+                  <p><strong>The Nile is the conventional longest river, but the Amazon has a credible claim.</strong></p>
+                  <div class="lp-run-provenance">
+                    <span><b>6 models</b> · 24 s · 1 contested passage</span>
+                    <span class="lp-run-provenance-tabs">
+                      <span>Differences <b>1</b></span>
+                      <span>Model answers <b>6</b></span>
+                      <span>Sources <b>9</b></span>
+                    </span>
+                  </div>
                 </div>
-                <div class="lp-pulse" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-                <p class="lp-agent-note">Querying selected models in parallel.</p>
-                <div class="lp-agent-disclosure">
-                  <span>Completed model answers stay hidden by default.</span>
-                  <button type="button" tabindex="-1">Show model answers</button>
-                </div>
-              </div>
-              <div class="lp-responses" hidden>
-                <div class="lp-response">
-                  <strong>ChatGPT</strong>
-                  <small><img src="/static/icons/chat_icons/chatgpt.png" alt=""> gpt-5.6-luna</small>
-                  <p>The Nile is traditionally listed first at about 6,650 km, the Amazon second.</p>
-                </div>
-                <div class="lp-response">
-                  <strong>Mistral</strong>
-                  <small><img src="/static/icons/chat_icons/mistral.png" alt=""> Mistral Small 4</small>
-                  <p>Most references name the Nile, though some studies argue the Amazon is longer.</p>
-                </div>
-                <div class="lp-response">
-                  <strong>Claude</strong>
-                  <small><img src="/static/icons/chat_icons/claude.png" alt=""> Claude Haiku 4.5</small>
-                  <p>It depends on measurement: counting the Pará estuary, the Amazon may exceed 7,000 km.</p>
-                </div>
-                <div class="lp-response">
-                  <strong>Gemini</strong>
-                  <small><img src="/static/icons/chat_icons/gemini-icon.png" alt=""> Gemini 3.1 Flash-Lite</small>
-                  <p>The Nile, ~6,650 km. A 2007 expedition measured the Amazon at 6,992 km.</p>
-                </div>
-                <div class="lp-response">
-                  <strong>DeepSeek</strong>
-                  <small><img src="/static/icons/chat_icons/deepseek.png" alt=""> DeepSeek V4 Flash</small>
-                  <p>Largest by discharge is the Amazon. By length the Nile is usually cited first.</p>
-                </div>
-                <div class="lp-response">
-                  <strong>Grok</strong>
-                  <small><img src="/static/icons/chat_icons/grok.png" alt=""> Grok 4.20</small>
-                  <p>Officially the Nile. Some expeditions put the Amazon ahead. It depends on the source.</p>
                 </div>
               </div>
             </div>
           </div>
+          <div class="lp-scene-rail" aria-hidden="true"><i></i></div>
         </div>
       </div>
     </section>
@@ -720,6 +749,7 @@
 
   {% include "partials/public_footer.html" %}
 
+  <script defer src="/static/js/landing-scenes.js?v=20260727-scenes2"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       // Lean scroll reveal: one fade-up per block when it enters the viewport.
@@ -740,8 +770,10 @@
         revealItems.forEach(el => observer.observe(el));
       }
 
-      // Hero + Scene 01: cycle a few example questions, typed in with a cursor.
-      // Each prompt loops gently only while it is in view, so it stays unobtrusive.
+      // Hero prompt: cycle a few example questions, typed in with a cursor.
+      // It loops gently only while in view, so it stays unobtrusive. Scenes 01
+      // and 02 do NOT type on a timer: their playhead is the scroll position
+      // (static/js/landing-scenes.js).
       document.querySelectorAll(".lp-prompt-text[data-type-loop], .lp-prompt-text[data-type-text]").forEach(typeTarget => {
         const list = (typeTarget.dataset.typeLoop || typeTarget.dataset.typeText || "")
           .split("|").map(s => s.trim()).filter(Boolean);
@@ -769,7 +801,7 @@
           const typeObserver = new IntersectionObserver(entries => {
             entries.forEach(entry => { visible = entry.isIntersecting; if (visible) loop(); });
           }, { threshold: 0.4 });
-          typeObserver.observe(typeTarget.closest(".lp-window, .lp-hero-prompt") || typeTarget);
+          typeObserver.observe(typeTarget.closest(".lp-hero-prompt") || typeTarget);
         }
       });
 

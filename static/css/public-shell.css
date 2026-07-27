@@ -1,0 +1,437 @@
+/* ==========================================================================
+   Public shell — the frameless surface (v2) for everything outside /app
+
+   The mirror of static/css/shell.css. It is loaded LAST on every public page,
+   so it wins on equal specificity and can carry the parts of the redesign
+   that are about *material* rather than about a single component:
+
+     1. elevation — nothing on a public page floats, so nothing casts
+     2. horizons — nav and footer are bounded by a hairline, not a rule
+     3. surfaces — panels are one tonal step off the page, never a frame
+     4. the traffic light — the only colour that carries meaning
+
+   The rule is the same one the app follows: separation comes from tone and
+   from a hairline that fades out at both ends, never from a rectangle drawn
+   around content. public-pages.css keeps its layout, spacing and type; only
+   the material is restated here, so the two files never have to be merged.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   0. The tonal step
+
+   The page canvas is --ground. A panel on it is --surface (one step up), and
+   anything nested inside that panel is --surface-2 (one step back toward the
+   page, so it reads as carved rather than stacked). Components ask for these
+   instead of naming a colour, exactly as the landing page's sections do.
+   -------------------------------------------------------------------------- */
+body {
+  --surface: var(--raise);
+  --surface-2: var(--ground);
+}
+
+/* --------------------------------------------------------------------------
+   1. Elevation
+
+   Public pages have no modals, menus or popovers — nothing here genuinely
+   floats above the page, so nothing here casts a shadow or blurs what is
+   behind it.
+   -------------------------------------------------------------------------- */
+.site-nav,
+.footer,
+.legal-panel,
+.notice,
+.model-card,
+.hub-item,
+.hub-cta,
+.diff-card,
+.diff-position,
+.share-scoreboard,
+.share-toggle,
+.share-model-chip,
+.share-related-item,
+.share-diff-teaser,
+.share-sources-toggle,
+.share-citation-toggle,
+.share-report-toggle,
+.share-follow-form input,
+.share-report-form input,
+.watch-drift-hero,
+.watch-position-map,
+.watch-position-cluster,
+.watch-chart-scroll,
+.watch-trajectory-scroll,
+.watch-awaiting-first,
+.watch-history-latest,
+.watch-drift-metrics,
+.button-primary,
+.button-secondary,
+.nav-cta,
+.hub-arrow,
+.share-follow-main,
+.watch-meta-compact {
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* --------------------------------------------------------------------------
+   2. Nav and footer — horizons, not ruled lines
+
+   The bar used to be translucent with a saturating blur. Text scrolling
+   underneath a half-transparent bar is unreadable and there is no glass left
+   in the system to justify it, so the bar is opaque and what marks its edge
+   is a hairline that fades out at both ends.
+   -------------------------------------------------------------------------- */
+.site-nav {
+  position: sticky;
+  background: var(--ground);
+  border-bottom: 0;
+}
+
+.site-nav::after,
+.footer::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--line);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+}
+
+.site-nav::after { bottom: 0; }
+
+.footer {
+  position: relative;
+  background: transparent;
+  border-top: 0;
+}
+
+.footer::before { top: 0; }
+
+.nav-links a:not(.nav-cta) { color: var(--ink-3); }
+.nav-links a:not(.nav-cta):hover { color: var(--ink); }
+
+/* The one filled control in the chrome keeps its fill and loses its glow. */
+.button-primary,
+.nav-cta {
+  border: 0;
+}
+
+/* --------------------------------------------------------------------------
+   3. Panels — a tone, not a box
+
+   Everything that used to be a bordered, gradient-filled, drop-shadowed card
+   keeps its padding and radius and gives up its frame.
+   -------------------------------------------------------------------------- */
+.legal-panel,
+.share-scoreboard,
+.share-related-item,
+.watch-awaiting-first,
+.watch-history-latest,
+.hub-cta {
+  border: 0;
+  background: var(--surface);
+}
+
+/* A notice is still a notice: it keeps a rail on its leading edge, which is
+   how this system flags something without drawing a coloured box. */
+.notice {
+  border: 0;
+  border-left: 2px solid var(--ink-3);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--surface);
+}
+
+/* Cards in a grid read as a flat list: a hairline above each entry instead of
+   a rectangle around it. */
+.model-card,
+.hub-item {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.model-card,
+.hub-item {
+  position: relative;
+}
+
+.model-card::before,
+.hub-item::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--line-soft);
+}
+
+.model-card { transition: background-color 0.18s ease; }
+.model-card:hover { transform: none; background: var(--surface); }
+.hub-item:hover { background: var(--surface); }
+
+/* --------------------------------------------------------------------------
+   4. Chips, toggles and pills
+
+   Inside a panel a chip steps back toward the page rather than lifting off
+   it — the same relationship the composer's controls have to its well.
+   -------------------------------------------------------------------------- */
+.share-model-chip,
+.share-sources-toggle,
+.share-citation-toggle,
+.share-report-toggle,
+.watch-meta-state,
+.watch-event-major,
+.watch-dimension-type {
+  border: 0;
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+
+.share-sources-toggle:hover,
+.share-citation-toggle:hover,
+.share-report-toggle:hover {
+  border: 0;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.share-toggle {
+  border: 0;
+  background: var(--surface);
+}
+
+.share-toggle a,
+.share-toggle button {
+  border: 0;
+  color: var(--ink-2);
+}
+
+.share-toggle [aria-current="page"],
+.share-toggle .is-active {
+  background: var(--ground);
+  color: var(--ink);
+  box-shadow: none;
+}
+
+/* Form fields are wells, like the composer. */
+.share-follow-form input,
+.share-report-form input,
+.share-report-form textarea {
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--well);
+  color: var(--ink);
+}
+
+.share-follow-form input:focus,
+.share-report-form input:focus,
+.share-report-form textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+/* --------------------------------------------------------------------------
+   5. The traffic light
+
+   Green / amber / red mean agreement, contested and contradicted — and
+   nothing else, anywhere. The public pages had grown their own reds
+   (#dc2626, rgba(220,60,60,…)) and their own accent-tinted "important"
+   panels; both are replaced by the shared three, so one colour never means
+   two things across the product.
+   -------------------------------------------------------------------------- */
+
+/* Drift on a watched question gets a rail, not a coloured box: a box that
+   changes colour reads as an error, a rail reads as a flag. */
+.watch-drift-hero {
+  border: 0;
+  border-left: 2px solid var(--partial);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  background: var(--partial-bg);
+}
+
+.watch-drift-pulse { background: var(--partial); }
+
+.watch-position-map {
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.watch-position-cluster {
+  border-left: 2px solid var(--agree);
+  background: var(--surface-2);
+}
+
+.watch-position-cluster:nth-child(even) { border-left-color: var(--partial); }
+
+/* The metrics strip drew its own grid out of 1px background bleed. Tone does
+   the same job: three panels on the page, separated by the gap itself. */
+.watch-drift-metrics {
+  border: 0;
+  gap: 2px;
+  background: transparent;
+}
+
+.watch-drift-metrics > div { background: var(--surface); }
+
+.watch-event-major {
+  background: var(--dispute-bg);
+  color: var(--dispute);
+}
+
+.dark-mode .watch-event-major { color: var(--dispute); }
+
+/* "The models contradict each other" teaser: amber rail, shared amber. */
+.share-diff-teaser {
+  border: 0;
+  border-left: 2px solid var(--partial);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--partial-bg);
+  color: var(--ink);
+}
+
+.share-diff-teaser-icon { color: var(--partial); }
+
+/* --------------------------------------------------------------------------
+   6. Differences on the share page
+
+   The same drawer the app renders, so it is built the same way: no card, no
+   gradient, and severity carried by a rail on the leading edge.
+   -------------------------------------------------------------------------- */
+.diff-card {
+  border: 0;
+  border-left: 2px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.diff-card.is-contradiction,
+.diff-card.is-major { border-left-color: var(--partial); }
+.diff-card.is-critical { border-left-color: var(--dispute); }
+
+.diff-position {
+  border: 0;
+  background: var(--surface);
+}
+
+.diff-verify {
+  border: 0;
+  border-left: 2px solid var(--partial);
+  border-radius: 0;
+  background: var(--partial-bg);
+}
+
+/* --------------------------------------------------------------------------
+   7. Charts and tables
+
+   Data surfaces keep their hairlines — a table without rules is unreadable —
+   but they use the shared --line-soft so they sit at the same weight as
+   every other hairline on the page.
+   -------------------------------------------------------------------------- */
+.watch-chart-scroll,
+.watch-trajectory-scroll {
+  border: 0;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+}
+
+.watch-grid { stroke: var(--line); }
+.watch-chart-line { stroke: var(--ink-2); }
+.watch-axis-label { fill: var(--ink-3); }
+
+.share-md th,
+.share-md td { border: 1px solid var(--line-soft); }
+.share-md pre,
+.share-md code { background: var(--surface); }
+
+.watch-versions,
+.watch-version-banner { border-color: var(--line-soft); }
+
+/* --------------------------------------------------------------------------
+   8. Topics (/topics, /topics/{slug})
+
+   topics.css already resolves its shadows to none through the shared tokens.
+   What is left are three things the rest of the product no longer does: a
+   framed card with an accent wash in its corner, two panels painted a
+   hardcoded near-black in BOTH themes, and a private amber for the
+   "superseded" notice.
+   -------------------------------------------------------------------------- */
+.topic-card {
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  transition: background-color 0.18s ease;
+}
+
+.topic-card:hover {
+  transform: none;
+  background: var(--well);
+}
+
+.src-embed {
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+/* An inverted panel is a fourth surface value the system does not have. Both
+   of these become ordinary panels that follow the theme like everything
+   else, so the page stops flipping to near-black in light mode. */
+.topic-explainer,
+.topic-follow-card {
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.topic-explainer-copy,
+.topic-follow-status { color: var(--ink-2); }
+
+.topic-follow-card input {
+  border: 0;
+  background: var(--well);
+  color: var(--ink);
+}
+
+.topic-follow-card input::placeholder { color: var(--ink-3); }
+
+.topic-follow-card button {
+  background: var(--accent);
+  color: var(--ground);
+}
+
+/* Superseded run: the shared amber, and a rail rather than a tinted box. */
+.topic-version-notice {
+  border-left: 2px solid var(--partial);
+  background: var(--partial-bg);
+  color: var(--ink-2);
+}
+
+/* An inline source chip is a chip, not an accent-tinted call-out. */
+.topic-card-link {
+  border: 0;
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+
+.topic-consensus th,
+.topic-consensus td { border: 1px solid var(--line-soft); }
+
+.topics-method i {
+  background: var(--agree);
+  box-shadow: none;
+}
+
+.timeline-dot { box-shadow: 0 0 0 1px var(--line); }
+.topic-timeline .is-selected .timeline-dot { box-shadow: 0 0 0 3px var(--line); }
+
+@media (prefers-reduced-motion: reduce) {
+  .model-card,
+  .hub-item,
+  .topic-card { transition: none; }
+}
