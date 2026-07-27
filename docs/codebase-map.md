@@ -764,6 +764,14 @@ Einzelantwortboxen verborgen; `#agentModeAnswersToggle` setzt ausschließlich di
 session-lokale Body-Klasse `.agent-mode-show-answers`, ohne Agent Mode oder dessen
 Auto-Consensus-Kopplung zu deaktivieren.
 
+**Default fuer neue Nutzer** (seit 2026-07-27 auf allen Geraeten, vorher nur
+mobil): `agentMode = "true"` und `agentModePanelCollapsed = "false"` werden beim
+Laden von `agent-mode.js` gesetzt, solange die localStorage-Keys fehlen. Der
+Einstieg zeigt damit die gebuendelte Modell-Liste statt sechs leerer
+Antwortboxen (`body.is-hero.agent-mode-enabled .response-section {display:none}`
+in `shell.css`); eine explizite Nutzerentscheidung (`setAgentMode(…, {persist:
+true})`) ueberschreibt den Default dauerhaft.
+
 ### Attachments (Pro)
 Frontend `attachments.js` baut Payload; Backend `app/services/llm/attachments.py`
 validiert: max **2** Dateien, je **5 MB**, MIMEs PDF/DOCX/TXT/PNG/JPEG/WebP

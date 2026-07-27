@@ -16,19 +16,17 @@
   const AGENT_MODE_STORAGE_KEY = "agentMode";
   const AGENT_PANEL_COLLAPSED_KEY = "agentModePanelCollapsed";
 
-  // Mobile-Default: Agent Mode aktiv und Panel AUSGEKLAPPT (die Modellnamen
-  // sind sofort sichtbar) — aber nur, wenn der Nutzer noch nie selbst gewählt
-  // hat (localStorage-Keys fehlen). Eine explizite Entscheidung (an/aus,
-  // auf/zu) bleibt auf allen Geräten erhalten.
+  // Default fuer neue Nutzer (seit 2026-07-27 auf ALLEN Geraeten, vorher nur
+  // mobil): Agent Mode aktiv und Panel AUSGEKLAPPT — die Modellnamen sind
+  // sofort sichtbar, die einzelnen Antwort-Boxen bleiben zu. Greift nur,
+  // solange der Nutzer nie selbst gewaehlt hat (localStorage-Keys fehlen);
+  // eine explizite Entscheidung (an/aus, auf/zu) bleibt erhalten.
   try {
-    const isMobileViewport = window.matchMedia("(max-width: 640px)").matches;
-    if (isMobileViewport) {
-      if (localStorage.getItem(AGENT_MODE_STORAGE_KEY) === null) {
-        localStorage.setItem(AGENT_MODE_STORAGE_KEY, "true");
-      }
-      if (localStorage.getItem(AGENT_PANEL_COLLAPSED_KEY) === null) {
-        localStorage.setItem(AGENT_PANEL_COLLAPSED_KEY, "false");
-      }
+    if (localStorage.getItem(AGENT_MODE_STORAGE_KEY) === null) {
+      localStorage.setItem(AGENT_MODE_STORAGE_KEY, "true");
+    }
+    if (localStorage.getItem(AGENT_PANEL_COLLAPSED_KEY) === null) {
+      localStorage.setItem(AGENT_PANEL_COLLAPSED_KEY, "false");
     }
   } catch (e) { /* localStorage gesperrt: Default bleibt aus */ }
 

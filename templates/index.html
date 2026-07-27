@@ -87,7 +87,7 @@
   <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
   <script src="/static/js/attachments.js?v=20260727-thread12" defer></script>
   <!-- Agent Mode (aus index.html ausgelagert) -->
-  <script src="/static/js/agent-mode.js?v=20260727-resultactions1" defer></script>
+  <script src="/static/js/agent-mode.js?v=20260727-agentdefault1" defer></script>
   <!-- Kompakte Zwei-Phasen-Anzeige fuer regulaere Laeufe (ohne Agent Mode). -->
   <script src="/static/js/consensus-progress.js?v=20260727-resultactions1" defer></script>
   <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
@@ -116,7 +116,17 @@
     // Desktop die Response-Boxen nur ohne Agent Mode — ohne diesen Vorgriff
     // würden sie für Agent-Mode-Nutzer kurz aufblitzen (agent-mode.js läuft
     // erst deferred).
+    // Der Default für neue Nutzer (Agent Mode an, Panel aufgeklappt) wird hier
+    // gesetzt und nicht erst in agent-mode.js — sonst blitzen die Boxen genau
+    // beim allerersten Besuch auf. agent-mode.js seedet identisch weiter, falls
+    // dieses Inline-Skript einmal nicht läuft.
     try {
+      if (localStorage.getItem("agentMode") === null) {
+        localStorage.setItem("agentMode", "true");
+      }
+      if (localStorage.getItem("agentModePanelCollapsed") === null) {
+        localStorage.setItem("agentModePanelCollapsed", "false");
+      }
       if (localStorage.getItem("agentMode") === "true") {
         document.body.classList.add("agent-mode-enabled");
       }
@@ -402,7 +412,7 @@
       <div class="sidebar-footer-meta">
         <a href="/about" class="sidebar-footer-link">About us</a>
         <span aria-hidden="true">&middot;</span>
-        <span id="version-number">v1.11.0</span>
+        <span id="version-number">v1.11.1</span>
       </div>
     </div>
   </div>
@@ -1348,7 +1358,7 @@
           </section>
 
           <div class="settings-version">
-            v1.11.0
+            v1.11.1
           </div>
         </div>
       </div>
