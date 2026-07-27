@@ -83,7 +83,11 @@
         <a id="heroDemoField" class="lp-prompt lp-hero-prompt" href="/app?demo=1"
            data-umami-event="landing_hero_demo_start"
            aria-label="Start the interactive demo: watch one question run across six AI models">
-          <span class="lp-prompt-text" data-type-loop="Should vegetarians take supplements? If yes, which ones?|Should social media be banned for kids under 16?|Will AI replace software developers?|Is intermittent fasting actually effective?"></span>
+          <!-- Every question here is one where a single confident answer is not
+               enough: the models plausibly disagree AND being wrong costs the
+               reader something. list[0] is what reduced-motion users see, so the
+               strongest case leads. -->
+          <span class="lp-prompt-text" data-type-loop="Is it safe to take ibuprofen with blood pressure medication?|Do I charge VAT to US clients as a German freelancer?|Is a 3-month notice period in my contract enforceable?|Is it safe to store JWTs in localStorage?|Postgres or DynamoDB for 50,000 writes per second?"></span>
           <span class="lp-hero-prompt-bar">
             <span class="lp-attach" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
