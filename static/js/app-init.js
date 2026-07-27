@@ -35,15 +35,12 @@
             <span class="thinking consensus-thinking">Synthesizing consensus</span>
           </span>
         `;
-        // Der Differences-Judge liefert JSON, das erst am Ende sichtbar wird:
-        // statt der Punkte trägt dieser Spinner eine Fortschrittsleiste, die
-        // consensus-run.js aus dem echten Stream speist (--diff-progress).
-        window.consensusDifferencesSpinnerHTML = `
-          <span class="thinking-wrap consensus-thinking-wrap" role="status" aria-live="polite" aria-busy="true">
-            <span class="thinking consensus-thinking">Comparing responses</span>
-            <span class="differences-progress" aria-hidden="true"></span>
-          </span>
-        `;
+        // Der Differences-Judge liefert JSON, das erst am Ende sichtbar wird.
+        // Frueher stand hier erst eine eigene Fortschrittsleiste, dann noch das
+        // Wort "Comparing responses". Beides sagte, was der gefuehrte Lauf
+        // ueber dem Thread ohnehin schon ansagt ("Checking for contradictions").
+        // Es gibt genau EINE Fortschrittsanzeige, also bleibt hier nichts.
+        window.consensusDifferencesSpinnerHTML = "";
 
         // Geteilte Config + Helfer kommen aus static/js/app-core.js (window.App).
         // Lokale Aliase, damit die bestehenden Aufrufstellen in initApp
@@ -179,6 +176,12 @@
             postDemoLoginPrompt.hidden = true;
             postDemoLoginPrompt.classList.remove("is-visible");
           }
+
+          // Ein beantworteter Lauf klappt den Composer fuer alle Nutzer zur
+          // naechsten Entscheidung zu (consens.io ist kein Chat). Diese
+          // Funktion laeuft nach jedem Auth-Update und wuerde das Feld sonst
+          // wieder aufmachen.
+          window.App?.followup?.syncInputLock?.();
 
           return canAsk;
         };
@@ -834,54 +837,81 @@
         // Funktion, um das Popup anzuzeigen
         // showPopup stammt aus app-core.js (window.App), siehe Alias oben.
 
+        // Quellenverzeichnis unter der Antwort. Die hochgestellten Zahlen im
+        // Konsenstext zeigen hierher, deshalb ist die Reihenfolge dieser Liste
+        // der Vertrag: Position n == [Sn]. Das Panel selbst bleibt zu, bis der
+        // Quellen-Chip in der Fusszeile es oeffnet.
         function renderEvidenceSources(sources) {
-          const container = document.getElementById("evidenceContainer");
-          const listEl = document.getElementById("evidenceList");
-
-          if (!container || !listEl) {
-            // Wenn du das UI noch nicht eingebaut hast, einfach leise aussteigen
-            return;
-          }
+          const panel = document.getElementById("consensusSourcesPanel");
+          const listEl = document.getElementById("consensusSourcesList");
+          if (!panel || !listEl) return;
 
           listEl.innerHTML = "";
 
           if (!sources || !sources.length) {
-            container.style.display = "none";
+            panel.hidden = true;
+            window.App?.consensusPipeline?.renderProvenance?.();
             return;
           }
 
           sources.forEach((src, idx) => {
+            const number = idx + 1;
             const li = document.createElement("li");
-            li.className = "evidence-item";
+            li.className = "consensus-source-item";
+            li.value = number;
 
-            const titleRow = document.createElement("div");
-            titleRow.className = "evidence-title-row";
+            const index = document.createElement("span");
+            index.className = "consensus-source-index";
+            index.textContent = String(number);
+            li.appendChild(index);
 
-            const indexSpan = document.createElement("span");
-            indexSpan.className = "evidence-index";
-            indexSpan.textContent = (idx + 1) + ". ";
+            const body = document.createElement("div");
+            body.className = "consensus-source-body";
 
-            const link = document.createElement("a");
-            link.href = src.url || "#";
-            link.target = "_blank";
-            link.rel = "noopener noreferrer";
-            link.textContent = src.title || src.url || "Source " + (idx + 1);
-
-            titleRow.appendChild(indexSpan);
-            titleRow.appendChild(link);
-            li.appendChild(titleRow);
-
-            if (src.snippet || src.text) {
-              const snippetDiv = document.createElement("div");
-              snippetDiv.className = "evidence-snippet";
-              snippetDiv.textContent = src.snippet || src.text;
-              li.appendChild(snippetDiv);
+            const url = String(src.url || "");
+            let safeHref = "";
+            let host = "";
+            try {
+              const parsed = new URL(url);
+              if (["http:", "https:"].includes(parsed.protocol)) {
+                safeHref = parsed.href;
+                host = parsed.hostname.replace(/^www\./, "");
+              }
+            } catch (e) {
+              // Ohne gueltige URL bleibt der Titel als reiner Text stehen.
             }
 
+            const title = safeHref ? document.createElement("a") : document.createElement("span");
+            title.className = "consensus-source-title";
+            title.textContent = src.title || url || "Source " + number;
+            if (safeHref) {
+              title.href = safeHref;
+              title.target = "_blank";
+              title.rel = "noopener noreferrer";
+            }
+            body.appendChild(title);
+
+            if (host) {
+              const meta = document.createElement("span");
+              meta.className = "consensus-source-host";
+              meta.textContent = host;
+              body.appendChild(meta);
+            }
+
+            if (src.snippet || src.text) {
+              const snippet = document.createElement("div");
+              snippet.className = "consensus-source-snippet";
+              snippet.textContent = src.snippet || src.text;
+              body.appendChild(snippet);
+            }
+
+            li.appendChild(body);
             listEl.appendChild(li);
           });
 
-          container.style.display = "block";
+          // Sichtbar wird das Panel erst ueber den Chip; hier zaehlt nur, dass
+          // es Inhalt hat, damit der Chip erscheinen kann.
+          window.App?.consensusPipeline?.renderProvenance?.();
         }
 
         // global machen, falls du es anderswo brauchst

@@ -117,11 +117,17 @@
   opacity: 0;
 }
 
-.agent-mode-enabled:not(.agent-mode-show-answers) .response-section > .response-box {
+/* Die Einzelantworten liegen in BEIDEN Modi hinter dem Schalter in der
+   Fusszeile (2026-07-27), nicht mehr nur im Agent Mode: der Thread liest
+   sich als Frage → Antwort → Composer, und sechs volle Modellboxen
+   dazwischen sind der Beleg, den man aufschlaegt, nicht der Standardweg.
+   Der Hero bleibt ausgenommen — dort sind die leeren Boxen die Vorschau auf
+   das, was gleich passiert. */
+body:not(.is-hero):not(.agent-mode-show-answers) .response-section > .response-box {
   display: none;
 }
 
-.agent-mode-enabled.agent-mode-show-answers .response-section > .response-box {
+body.agent-mode-show-answers .response-section > .response-box {
   animation: modelBoxesIn 0.28s cubic-bezier(0.2, 0, 0, 1);
 }
 

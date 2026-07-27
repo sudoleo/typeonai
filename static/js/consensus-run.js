@@ -49,68 +49,6 @@
     return match ? match[1].trim() : null;
   }
 
-  // --------- Fortschrittsleiste des Differences-Laufs ---------
-  // Der Judge streamt JSON, das bewusst nicht gerendert wird (siehe
-  // differencesPhaseRenderer weiter unten). Bei langen Konsensantworten steht
-  // der Spinner dadurch minutenlang stumm. Die Leiste schaetzt den Fortschritt
-  // wie der Agent-Mode-Balken aus dem echten Stream: solange nur
-  // Reasoning-Marker kommen, ein langsamer zeitbasierter Anlauf, danach
-  // asymptotisch aus der Laenge des empfangenen JSON. Monoton steigend und nie
-  // ganz voll — die 100 % gibt erst das final-Event mit dem fertigen Ergebnis.
-  const differencesProgress = (function () {
-    const RAMP_MS = 30000;    // Anlauf bis 12 %, solange kein Token da ist
-    const RAMP_MAX = 0.12;
-    const CHAR_SCALE = 2200;  // typische JSON-Laenge einer Judge-Antwort
-    const CEILING = 0.94;
-    let barEl = null;
-    let ticker = null;
-    let startedAt = 0;
-    let chars = 0;
-    let value = 0;
-
-    function write() {
-      if (barEl) barEl.style.setProperty("--diff-progress", value.toFixed(3));
-    }
-
-    function tick() {
-      const ramp = Math.min(RAMP_MAX, ((Date.now() - startedAt) / RAMP_MS) * RAMP_MAX);
-      const streamed = chars > 0
-        ? RAMP_MAX + (1 - Math.exp(-chars / CHAR_SCALE)) * (CEILING - RAMP_MAX)
-        : 0;
-      value = Math.min(CEILING, Math.max(value, ramp, streamed)); // monoton
-      write();
-    }
-
-    return {
-      // Neuer Lauf: Leiste im frisch eingesetzten Spinner suchen, Zaehler
-      // zuruecksetzen. Ohne Leiste (Fallback-Spinner) laufen alle weiteren
-      // Aufrufe ins Leere.
-      reset(container) {
-        this.stop();
-        barEl = container ? container.querySelector(".differences-progress") : null;
-        startedAt = 0;
-        chars = 0;
-        value = 0;
-        write();
-      },
-      // Erstes Lebenszeichen des Judges (Delta oder Reasoning-Marker): ab hier
-      // laeuft die Uhr. Vorher gehoert die Zeit noch der Konsens-Synthese.
-      begin() {
-        if (ticker || !barEl) return;
-        startedAt = Date.now();
-        tick();
-        ticker = window.setInterval(tick, 120);
-      },
-      push(text) {
-        chars += (text || "").length;
-      },
-      stop() {
-        window.clearInterval(ticker);
-        ticker = null;
-      }
-    };
-  })();
-
   // --------- Follow-up-Fragen (Pro): Kontext-State + Input-Affordance ---------
   // Genau eine Kontext-Ebene: das Frage/Konsens-Paar des letzten erfolgreichen
   // Laufs. offer() merkt sich das Paar und zeigt den "Ask a follow-up"-Button
@@ -197,32 +135,41 @@
       return ctx;
     },
 
-    // Zwei Orte, ein Zustand:
-    //   #followupBar      — das ANGEBOT, in der Provenance-Zeile an der
-    //                       Antwort, deren Kontext es mitnehmen wuerde
+    // Zwei Orte am Composer, ein Zustand:
+    //   #composerGate     — der Zustand NACH einer beantworteten Frage: der
+    //                       Lauf ist zu Ende, und hier steht, wie es
+    //                       weitergeht (neue Frage frei, Follow-up Pro).
+    //                       Das Angebot sass frueher in der Provenance-Zeile
+    //                       an der Antwort; es gehoert aber an das Feld, in
+    //                       das die naechste Frage getippt wird.
     //   #followupChipBar  — der aktivierte KONTEXT-CHIP, am Eingabefeld,
     //                       weil er beschreibt, was gleich rausgeht
     render() {
-      const offerBar = document.getElementById("followupBar");
+      const gate = document.getElementById("composerGate");
       const chipBar = document.getElementById("followupChipBar");
-      if (!offerBar && !chipBar) return;
-      if (offerBar) offerBar.innerHTML = "";
+      // Die alte Angebots-Leiste in der Provenance-Zeile bleibt im DOM (andere
+      // Module fragen sie ab), traegt aber nichts mehr.
+      const offerBar = document.getElementById("followupBar");
+      if (offerBar) {
+        offerBar.innerHTML = "";
+        offerBar.hidden = true;
+      }
       if (chipBar) {
         chipBar.innerHTML = "";
         chipBar.hidden = true;
       }
-
-      const input = document.getElementById("questionInput");
-      if (input) {
-        input.placeholder = (this.armed && this.lastExchange)
-          ? FOLLOWUP_INPUT_PLACEHOLDER
-          : DEFAULT_INPUT_PLACEHOLDER;
+      if (gate) {
+        gate.innerHTML = "";
+        gate.hidden = true;
       }
 
-      const bar = (this.armed && this.lastExchange) ? chipBar : offerBar;
-      if (!bar) return;
+      const armed = !!(this.armed && this.lastExchange);
+      const input = document.getElementById("questionInput");
+      if (input) {
+        input.placeholder = armed ? FOLLOWUP_INPUT_PLACEHOLDER : DEFAULT_INPUT_PLACEHOLDER;
+      }
 
-      if (this.armed && this.lastExchange) {
+      if (armed && chipBar) {
         const chip = document.createElement("div");
         chip.className = "followup-chip";
         chip.title = "Your next question is sent with the previous question and its consensus answer as context.";
@@ -244,40 +191,92 @@
         remove.addEventListener("click", () => this.discard());
 
         chip.append(icon, text, remove);
-        bar.appendChild(chip);
-        bar.hidden = false;
-      } else if (this.lastExchange) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "followup-offer-btn";
-        btn.innerHTML = FOLLOWUP_ICON + '<span class="followup-offer-label">Ask a follow-up</span>';
-
-        // Pro-Chip immer zeigen: Free-Nutzer sehen den Hinweis (Klick öffnet
-        // die Kosten-Erklaerung), Pro-Nutzer eine dezente Kennzeichnung.
-        const badge = document.createElement("span");
-        badge.className = "pro-badge followup-pro-badge";
-        badge.textContent = "Pro";
-        btn.appendChild(badge);
-
-        if (window.isUserPro) {
-          btn.title = "Ask a follow-up question. The previous question and its consensus answer go along as context.";
-          badge.classList.add("is-subtle");
-        } else {
-          btn.classList.add("is-pro-locked");
-          btn.title = "Off by default: each follow-up is a full six-model run again";
-        }
-        btn.addEventListener("click", () => this.arm());
-        bar.appendChild(btn);
-        bar.hidden = false;
-      } else {
-        bar.hidden = true;
+        chipBar.appendChild(chip);
+        chipBar.hidden = false;
+      } else if (this.lastExchange && gate) {
+        gate.appendChild(this.buildGate());
+        gate.hidden = false;
       }
 
-      // Die Provenance-Zeile traegt das Angebot. Sie kann leer sein (ein aus
-      // dem Bookmark geladener Konsens hatte hier keinen Lauf) — dann muss sie
-      // trotzdem aufmachen, sonst waere das Follow-up unerreichbar.
-      const provenance = document.getElementById("runProvenance");
-      if (provenance && bar === offerBar && !bar.hidden) provenance.hidden = false;
+      this.syncInputLock();
+    },
+
+    // Der Lauf ist beantwortet — und damit zu Ende. Das Eingabefeld klappt
+    // jetzt komplett zu; diese kompakte Zeile bietet nur die beiden ehrlichen
+    // Wege weiter an: frischer Vergleich oder Follow-up mit Kontext.
+    buildGate() {
+      const pro = !!window.isUserPro;
+      const wrap = document.createElement("div");
+      wrap.className = "composer-gate-inner" + (pro ? "" : " is-locked");
+
+      const copy = document.createElement("span");
+      copy.className = "composer-gate-copy";
+      copy.textContent = "What would you like to do next?";
+      wrap.appendChild(copy);
+
+      const actions = document.createElement("span");
+      actions.className = "composer-gate-actions";
+
+      const newBtn = document.createElement("button");
+      newBtn.type = "button";
+      newBtn.className = "composer-gate-new";
+      newBtn.textContent = "New comparison";
+      newBtn.title = "Clear this run and ask a fresh question";
+      newBtn.addEventListener("click", () => {
+        const trigger = document.getElementById("newRunButton");
+        if (trigger) trigger.click();
+        else window.clearResponseBoxes?.();
+        document.getElementById("questionInput")?.focus();
+      });
+      actions.appendChild(newBtn);
+
+      const followupBtn = document.createElement("button");
+      followupBtn.type = "button";
+      followupBtn.className = "followup-offer-btn composer-gate-followup";
+      followupBtn.innerHTML = FOLLOWUP_ICON + '<span class="followup-offer-label">Ask a follow-up</span>';
+      const badge = document.createElement("span");
+      badge.className = "pro-badge followup-pro-badge";
+      badge.textContent = "Pro";
+      followupBtn.appendChild(badge);
+      if (pro) {
+        followupBtn.title = "Ask a follow-up question. The previous question and its consensus answer go along as context.";
+        badge.classList.add("is-subtle");
+      } else {
+        followupBtn.classList.add("is-pro-locked");
+        followupBtn.title = "Off by default: each follow-up is a full six-model run again";
+      }
+      followupBtn.addEventListener("click", () => this.arm());
+      actions.appendChild(followupBtn);
+
+      wrap.appendChild(actions);
+      return wrap;
+    },
+
+    // Nach einer fertigen Antwort ist der Composer fuer ALLE Nutzer kompakt:
+    // auch Pro soll zuerst bewusst "Follow-up" waehlen, bevor das Feld mit
+    // Kontext wieder aufgeht. "New comparison" setzt es leer zurueck.
+    syncInputLock() {
+      const locked = !!this.lastExchange && !this.armed;
+      // Die Login-Schranke (updateQuestionInputAccess) bleibt die staerkere
+      // Bedingung: dieses Gate darf ein gesperrtes Feld nie oeffnen.
+      const canAsk = typeof window.userCanAskQuestions === "function"
+        ? window.userCanAskQuestions()
+        : true;
+      const disabled = locked || !canAsk;
+      const input = document.getElementById("questionInput");
+      const send = document.getElementById("sendButton");
+      document.body.classList.toggle("composer-locked", locked);
+      if (input) {
+        input.disabled = disabled;
+        input.setAttribute("aria-disabled", disabled ? "true" : "false");
+        if (locked) input.placeholder = "Follow-ups are Pro — or start a new comparison";
+      }
+      // Waehrend eines Laufs ist derselbe Knopf der Abbrechen-Knopf; der darf
+      // nicht gesperrt werden, sonst haengt der Nutzer im Lauf fest.
+      if (send && !send.classList.contains("is-cancel-action")) {
+        send.disabled = disabled;
+        send.setAttribute("aria-disabled", disabled ? "true" : "false");
+      }
     }
   };
   window.App.followup = followup;
@@ -450,9 +449,13 @@
     setConsensusSynthesizing(true);
     const spinnerBodyEl = window.App.consensusBodyEl(consensusDiv);
     if (spinnerBodyEl) spinnerBodyEl.innerHTML = window.consensusSpinnerHTML || window.spinnerHTML;
+    // Bewusst OHNE Fallback auf den Typing-Spinner: der gefuehrte Lauf ist die
+    // einzige Fortschrittsanzeige, das Differences-Panel bleibt bis zum
+    // Ergebnis leer statt eine zweite Ladeanzeige zu zeigen.
     const differencesSpinnerEl = consensusDiv.querySelector(".consensus-differences p");
-    differencesSpinnerEl.innerHTML = window.consensusDifferencesSpinnerHTML || window.spinnerHTML;
-    differencesProgress.reset(differencesSpinnerEl);
+    if (differencesSpinnerEl) {
+      differencesSpinnerEl.innerHTML = window.consensusDifferencesSpinnerHTML || "";
+    }
 
     // Die übrigen Parameter wie "excluded_models" werden wie bisher ermittelt
     const excludedModels = [];
@@ -492,7 +495,9 @@
       if (box.classList.contains("excluded")) return;
 
       const contentEl = box.querySelector(".collapsible-content");
-      const text = contentEl ? contentEl.innerText.trim() : "";
+      // textContent: die Boxen koennen hinter "Show model answers" liegen,
+      // und innerText ist fuer display:none leer.
+      const text = contentEl ? contentEl.textContent.trim() : "";
       if (!text) return; // nur Modelle mit Antwort
 
       const select = document.getElementById(selectId);
@@ -583,21 +588,18 @@
       // bis dahin stehen; Reasoning-Marker flippen nur sein Label.
       const differencesEl = consensusDiv.querySelector(".consensus-differences p");
       const differencesPhaseRenderer = {
-        append(text) {
+        append() {
           if (!isActiveConsensusRun(consensusRunId)) return;
-          differencesProgress.begin();
           // Erstes Differences-Byte = der Konsens steht, der Judge laeuft.
           // Der gefuehrte Lauf schaltet hier auf seinen letzten Schritt.
           window.App?.consensusPipeline?.onDifferencesStart?.();
-          differencesProgress.push(text);
         },
         markReasoning() {
           if (!isActiveConsensusRun(consensusRunId)) return;
-          differencesProgress.begin();
           window.App?.consensusPipeline?.onDifferencesStart?.();
           flipThinkingLabel(differencesEl, "Reasoning");
         },
-        stop() { differencesProgress.stop(); }
+        stop() {}
       };
       const consensusRequestResult = await streamSSERequest("/consensus", {
           id_token: id_token,
@@ -767,9 +769,6 @@
         included_models: includedAnswerCount
       });
     } finally {
-      // Auch bei Abbruch/Fehler: der Ticker darf den naechsten Lauf nicht
-      // mit dem Fortschritt des alten weiterschieben.
-      differencesProgress.stop();
       finishConsensusRun(consensusRunId);
     }
   };

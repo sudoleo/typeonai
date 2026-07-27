@@ -496,11 +496,14 @@ async function runDemoFlow() {
     await sleep(DEMO_PHASES.pauseAfterTypingAll);
   }
 
-  // Wie beim echten Lauf: Die Frage wandert in den Thread-Kopf, der
-  // Composer unten wird frei für die nächste Eingabe.
+  // Die Frage wandert in den Thread-Kopf. Während der animierten Demo bleibt
+  // sie zusätzlich im Composer stehen, damit der selbst getippte Text nicht
+  // mitten im Ablauf verschwindet. Nach dem Ergebnis ersetzt der bestehende
+  // Login-Hinweis den ganzen Composer (shell.css) — ein deaktiviertes Feld
+  // wäre dann kein sinnvoller nächster Schritt.
   window.App?.setThreadQuestion?.(DEMO_SCENARIO_PROMPT);
   if (qi) {
-    qi.value = "";
+    qi.value = DEMO_SCENARIO_PROMPT;
     qi.dispatchEvent(new Event("input", { bubbles: true }));
     window.syncDemoChipState?.();
   }

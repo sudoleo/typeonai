@@ -387,7 +387,8 @@
       state.menu.appendChild(item);
     });
 
-    // "Custom" oeffnet die volle Modell-Liste (bewusst ohne Beschreibungen —
+    // "Custom" oeffnet die Aufstellung des Laufs: antwortende Provider samt
+    // Modellwahl plus die Consensus-Engine (bewusst ohne Beschreibungen —
     // wer hier waehlt, kennt die Modelle).
     const customItem = document.createElement("button");
     customItem.type = "button";
@@ -406,9 +407,10 @@
     const customHint = document.createElement("span");
     customHint.className = "model-picker-preset-hint";
     const selectedOption = select.options[select.selectedIndex];
+    const modelCount = window.App.getSelectedModelCount?.() || 0;
     customHint.textContent = customActive
-      ? window.App.getModelOptionLabel(selectedOption)
-      : "Pick a specific model";
+      ? `${modelCount} models · ${window.App.getModelOptionLabel(selectedOption)}`
+      : "Choose each model yourself";
     customLabel.appendChild(customHint);
     customItem.appendChild(customLabel);
 
@@ -427,7 +429,7 @@
     state.menu.appendChild(customItem);
   }
 
-  function renderConsensusBackRow(select, state) {
+  function renderBackRow(select, state, label, targetView) {
     const back = document.createElement("button");
     back.type = "button";
     back.className = "model-picker-option model-picker-back-option";
@@ -435,19 +437,147 @@
     chevron.className = "model-picker-option-chevron is-back";
     chevron.setAttribute("aria-hidden", "true");
     back.appendChild(chevron);
-    const label = document.createElement("span");
-    label.className = "model-picker-option-label";
-    label.textContent = "Presets";
-    back.appendChild(label);
+    const labelEl = document.createElement("span");
+    labelEl.className = "model-picker-option-label";
+    labelEl.textContent = label;
+    back.appendChild(labelEl);
 
     back.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      state.view = "presets";
+      state.view = targetView;
       renderCustomModelPicker(select);
     });
 
     state.menu.appendChild(back);
+  }
+
+  function appendSectionLabel(menu, text) {
+    const label = document.createElement("div");
+    label.className = "model-picker-section-label";
+    label.textContent = text;
+    menu.appendChild(label);
+  }
+
+  // --- Custom: die ganze Aufstellung eines Laufs -------------------------
+  // "Custom" hiess bisher nur "nimm ein anderes Consensus-Modell". Die sechs
+  // antwortenden Modelle — also der eigentliche Lauf — waren im Composer gar
+  // nicht erreichbar; man musste die Antwortboxen finden, die im Agent Mode
+  // verborgen sind. Custom zeigt jetzt beides: wer antwortet (mit Ein-/
+  // Ausschluss und Modellwahl je Provider) und wer daraus den Konsens
+  // schreibt. Jede Zeile fuehrt in ihre eigene Modell-Liste und zurueck.
+
+  function providerViewId(pref) {
+    return "provider:" + pref.key;
+  }
+
+  // Views, die eine Modell-Liste zeigen: "engine" und "provider:<key>".
+  function isModelListView(view) {
+    return view === "engine" || String(view || "").startsWith("provider:");
+  }
+
+  function providerForView(view) {
+    if (!String(view || "").startsWith("provider:")) return null;
+    const key = String(view).slice("provider:".length);
+    return window.App.modelPrefs.find(pref => pref.key === key) || null;
+  }
+
+  function currentOptionLabel(targetSelect) {
+    const option = targetSelect?.options[targetSelect.selectedIndex];
+    return option ? window.App.getModelOptionLabel(option) : "";
+  }
+
+  function renderProviderRow(select, state, pref) {
+    const providerSelect = document.getElementById(pref.selectId);
+    if (!providerSelect) return;
+    const checkbox = document.getElementById(pref.checkId);
+    const included = checkbox ? checkbox.checked : true;
+
+    const row = document.createElement("div");
+    row.className = "model-picker-row";
+    row.classList.toggle("is-excluded", !included);
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "model-picker-row-toggle";
+    toggle.setAttribute("role", "switch");
+    toggle.setAttribute("aria-checked", String(included));
+    toggle.setAttribute(
+      "aria-label",
+      (included ? "Exclude " : "Include ") + pref.label
+    );
+    toggle.title = included
+      ? pref.label + " answers this run — click to leave it out"
+      : pref.label + " is left out — click to include it";
+    toggle.disabled = !!checkbox?.disabled;
+    toggle.innerHTML = '<span class="model-picker-row-check" aria-hidden="true"></span>';
+    toggle.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (toggle.disabled) return;
+      setModelSelectionState(pref, !included, { persist: true });
+      renderCustomModelPicker(select);
+    });
+
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "model-picker-option model-picker-row-open";
+    const label = document.createElement("span");
+    label.className = "model-picker-option-label model-picker-preset-label";
+    const name = document.createElement("span");
+    name.className = "model-picker-preset-name";
+    name.textContent = pref.label;
+    const hint = document.createElement("span");
+    hint.className = "model-picker-preset-hint";
+    hint.textContent = currentOptionLabel(providerSelect);
+    label.append(name, hint);
+    open.appendChild(label);
+    const chevron = document.createElement("span");
+    chevron.className = "model-picker-option-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    open.appendChild(chevron);
+    open.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.view = providerViewId(pref);
+      renderCustomModelPicker(select);
+    });
+
+    row.append(toggle, open);
+    state.menu.appendChild(row);
+  }
+
+  function renderCustomOverview(select, state) {
+    renderBackRow(select, state, "Presets", "presets");
+
+    appendSectionLabel(state.menu, "Answering models");
+    window.App.modelPrefs.forEach(pref => renderProviderRow(select, state, pref));
+
+    appendSectionLabel(state.menu, "Consensus engine");
+    const engine = document.createElement("button");
+    engine.type = "button";
+    engine.className = "model-picker-option model-picker-row-open";
+    const label = document.createElement("span");
+    label.className = "model-picker-option-label model-picker-preset-label";
+    const name = document.createElement("span");
+    name.className = "model-picker-preset-name";
+    name.textContent = "Writes the consensus";
+    const hint = document.createElement("span");
+    hint.className = "model-picker-preset-hint";
+    hint.textContent = currentOptionLabel(select);
+    label.append(name, hint);
+    engine.appendChild(label);
+    const chevron = document.createElement("span");
+    chevron.className = "model-picker-option-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    engine.appendChild(chevron);
+    engine.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.view = "engine";
+      renderCustomModelPicker(select);
+    });
+    state.menu.appendChild(engine);
   }
 
   function renderCustomModelPicker(select) {
@@ -457,21 +587,42 @@
     state.menu.innerHTML = "";
 
     // Preset-Ebene: Fast/Balanced/High Quality + Custom statt der Modell-Liste.
-    if (state.presets && state.view !== "custom") {
+    if (state.presets && state.view !== "custom" && !isModelListView(state.view)) {
       renderConsensusPresetMenu(select, state);
       syncCustomModelPicker(select);
       return;
     }
 
-    if (state.presets) {
-      renderConsensusBackRow(select, state);
+    if (state.presets && state.view === "custom") {
+      renderCustomOverview(select, state);
+      syncCustomModelPicker(select);
+      return;
     }
 
-    Array.from(select.options).forEach(option => {
+    // Modell-Liste: entweder die eines Providers oder die der Engine. Ohne
+    // Preset-Ebene (die Picker in den Antwortboxen) ist es unveraendert die
+    // Liste des eigenen Selects.
+    const pref = state.presets ? providerForView(state.view) : null;
+    const targetSelect = pref ? document.getElementById(pref.selectId) : select;
+    if (!targetSelect) {
+      state.view = "custom";
+      renderCustomOverview(select, state);
+      syncCustomModelPicker(select);
+      return;
+    }
+
+    if (state.presets) {
+      renderBackRow(select, state, pref ? pref.label : "Consensus engine", "custom");
+    }
+
+    Array.from(targetSelect.options).forEach(option => {
       const item = document.createElement("button");
       item.type = "button";
       item.className = "model-picker-option";
-      item.dataset.value = option.value;
+      // data-value ist der Sync-Haken fuer den EIGENEN Select (siehe
+      // syncCustomModelPicker). In der Liste eines fremden Provider-Selects
+      // waere er eine falsche Aussage ueber die Consensus-Auswahl.
+      if (targetSelect === select) item.dataset.value = option.value;
       item.setAttribute("role", "option");
       item.setAttribute("aria-selected", String(option.selected));
       item.disabled = option.disabled;
@@ -506,10 +657,21 @@
         event.stopPropagation();
         if (option.disabled) return;
 
-        select.selectedIndex = option.index;
-        select.value = option.value;
-        select.dispatchEvent(new Event("input", { bubbles: true }));
-        select.dispatchEvent(new Event("change", { bubbles: true }));
+        // Das change-Event traegt die ganze Persistenz (app-init.js speichert
+        // pref_select_* und schaltet auf "custom" um) — deshalb wird es auch
+        // fuer die Provider-Selects hier gefeuert, nicht nur fuer die Engine.
+        targetSelect.selectedIndex = option.index;
+        targetSelect.value = option.value;
+        targetSelect.dispatchEvent(new Event("input", { bubbles: true }));
+        targetSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+        // Ein Provider-Modell ist eine Zeile in der Aufstellung, kein Abschluss:
+        // zurueck in die Uebersicht statt das Menue zu schliessen.
+        if (pref) {
+          state.view = "custom";
+          renderCustomModelPicker(select);
+          return;
+        }
         collapseExpandedModelPicker(select);
       }
 
@@ -571,7 +733,8 @@
     }
 
     // Einstiegs-View: aktive Preset-Nutzer sehen die Presets, Custom-Nutzer
-    // landen ohne Umweg direkt in der vollen Modell-Liste.
+    // landen ohne Umweg in ihrer Aufstellung. Nie in einer Modell-Liste —
+    // die ist immer nur eine Ebene tiefer, die man selbst geoeffnet hat.
     if (state.presets) {
       state.view = getActiveConsensusPresetId() === "custom" ? "custom" : "presets";
     }

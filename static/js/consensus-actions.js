@@ -38,7 +38,9 @@
       if (box.classList.contains("excluded")) return;
 
       const txtEl = box.querySelector(".collapsible-content");
-      const txt = txtEl ? txtEl.innerText.trim() : "";
+      // textContent: die Antwortboxen liegen hinter "Show model answers",
+      // und innerText liefert fuer display:none nichts.
+      const txt = txtEl ? txtEl.textContent.trim() : "";
       if (txt) {
         const select = document.getElementById(selectId);
         const modelName = select
@@ -244,10 +246,15 @@
     const mainSection = consensusBox.querySelector(".consensus-main");
     if (!mainSection) return;
 
-    const heading = mainSection.querySelector("h2");
-    if (!heading) return;
+    // Share/Watch/Cite gehoeren zu der FERTIGEN Antwort, nicht zu ihrer
+    // Ueberschrift: sie leben in der Fusszeile (#consensusFooterActions), wo
+    // auch die Fakten des Laufs stehen. Faellt der Slot weg, bleibt die alte
+    // Position in der Ueberschrift als Rueckfall bestehen.
+    const host = document.getElementById("consensusFooterActions")
+      || mainSection.querySelector("h2");
+    if (!host) return;
 
-    if (heading.querySelector(".consensus-copy-inline")) return;
+    if (host.querySelector(".consensus-copy-inline")) return;
 
     const inlineBar = document.createElement("span");
     inlineBar.className = "consensus-copy-inline";
@@ -264,6 +271,7 @@
         <path d="M8.5 7.5 12 4l3.5 3.5"></path>
         <path d="M5 12v7a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-7"></path>
       </svg>
+      <span>Share</span>
     `;
     shareTopBtn.addEventListener("click", () => {
       if (!window.auth?.currentUser) {
@@ -286,12 +294,13 @@
       <svg class="quote-toggle-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
         <path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"></path>
       </svg>
+      <span>Cite</span>
     `;
 
     actionsWrapper.appendChild(toggleBtn);
     inlineBar.appendChild(shareTopBtn);
     inlineBar.appendChild(actionsWrapper);
-    heading.appendChild(inlineBar);
+    host.appendChild(inlineBar);
 
     const menu = ensureConsensusActionsMenu();
 

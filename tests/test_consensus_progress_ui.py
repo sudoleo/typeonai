@@ -86,6 +86,15 @@ def test_run_hands_over_to_a_provenance_line():
     assert "renderProvenance" in progress
 
 
+def test_result_footer_has_one_boundary_before_the_composer():
+    """Closed drawers and the legacy divider must not stack hairlines."""
+    css = read("static/css/shell.css")
+
+    assert ".consensus-differences-panel[open]" in css
+    assert ".consensus-divider {\n  display: none;" in css
+    assert "body:not(.is-hero) .input-section::before" in css
+
+
 def test_followup_offer_sits_with_the_answer_and_the_chip_with_the_input():
     """The offer belongs to the answer it would send as context; the armed
     context chip belongs to the field it will be sent from."""

@@ -6,10 +6,10 @@
 2. Die Chip-Ladebalken starten beim ZWEITEN Lauf wieder bei 0 (vorher las
    der erste Tick noch das "complete" des Vorlaufs; der monotone Balken
    rastete sofort auf 100 % ein und haengte dort fest).
-3. Die Fortschrittsleiste des Differences-Laufs faellt waehrend der
-   Konsens-Synthese noch nicht an und laeuft danach aus dem echten
-   Judge-Stream hoch (der Judge liefert JSON, das nicht gerendert wird -
-   ohne Leiste steht dort nur ein stummer Spinner).
+
+Die frueher hier gepruefte Fortschrittsleiste des Differences-Laufs ist
+entfallen: der gefuehrte Lauf ueber dem Thread zeigt dieselbe Phase schon
+mit einem Balken, zwei Balken fuer einen Vorgang waren zu viel.
 """
 
 from playwright.sync_api import expect
@@ -116,6 +116,13 @@ def test_chip_progress_bars_restart_from_zero_on_a_second_run(app_page):
         }"""
     )
 
+    # Nach einer beantworteten Frage sperrt das Composer-Gate das Eingabefeld
+    # (Free: eine Frage je Vergleich). Der zweite Lauf beginnt deshalb wie in
+    # der App mit "New comparison".
+    app_page.locator(".composer-gate-new").click()
+    expect(app_page.locator("#questionInput")).to_be_visible()
+    expect(app_page.locator("#questionInput")).to_be_enabled()
+
     _send_question(app_page)
     _wait_for_run_start(app_page)
     _wait_for_all_final_answers(app_page)
@@ -128,39 +135,3 @@ def test_chip_progress_bars_restart_from_zero_on_a_second_run(app_page):
         f"(kleinster Wert: {min(samples)})"
     )
     assert max(samples) > 0.99, "Ladebalken lief im zweiten Lauf nicht voll"
-
-
-def test_differences_progress_bar_fills_from_the_judge_stream(app_page):
-    # Ab dem Consensus-Start engmaschig mitschneiden: die Leiste muss bei 0
-    # anfangen (Synthese laeuft noch) und mit dem Judge-Stream hochlaufen.
-    app_page.evaluate(
-        """() => {
-          window.__diffSamples = [];
-          window.__diffSampler = setInterval(() => {
-            const bar = document.querySelector(".differences-progress");
-            if (bar) {
-              window.__diffSamples.push(
-                parseFloat(bar.style.getPropertyValue("--diff-progress") || "0")
-              );
-            }
-          }, 30);
-        }"""
-    )
-
-    _send_question(app_page)
-    _wait_for_all_final_answers(app_page)
-    _wait_for_consensus_start(app_page)
-    _wait_for_consensus_idle(app_page)
-    app_page.evaluate("() => clearInterval(window.__diffSampler)")
-
-    samples = app_page.evaluate("() => window.__diffSamples")
-    assert samples, "Differences-Spinner ohne Fortschrittsleiste gerendert"
-    assert samples[0] == 0, (
-        "Leiste startet nicht bei 0 - waehrend der Synthese darf sie noch "
-        f"nicht laufen (erster Wert: {samples[0]})"
-    )
-    assert max(samples) > 0, "Leiste blieb waehrend des Judge-Streams auf 0"
-    # Monoton: ein Ruecksprung waere fuer den Nutzer ein Fehlsignal.
-    assert all(b >= a for a, b in zip(samples, samples[1:])), (
-        f"Leiste sprang zurueck: {samples}"
-    )

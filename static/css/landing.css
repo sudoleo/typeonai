@@ -1255,46 +1255,44 @@ img { display: block; max-width: 100%; }
 }
 .claims-fallback-text { min-width: 0; overflow-wrap: anywhere; }
 
-/* Monochrome chips like the /app; dissent is only a small amber dot inside
-   the chip, no filled pill anymore. */
+/* Same micro-ratio as /app: immediately scanable, but quieter than the prose
+   and structurally distinct from superscript source numbers. */
 .claim-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  gap: 5px;
-  vertical-align: 2px;
+  vertical-align: 0.08em;
   margin: 0 2px 0 5px;
-  padding: 0 7px;
-  min-height: 18px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 90%, transparent);
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--glass-bg-strong) 55%, transparent);
-  color: var(--sidebar-text-muted);
-  font-size: 0.68rem;
-  font-weight: 600;
+  padding: 0 5px;
+  min-width: 26px;
+  height: 16px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 84%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
   font-family: inherit;
+  font-size: 0.62rem;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
   line-height: 1;
-  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
 .claims-fallback-row .claim-badge { margin: 0; }
 
-.claim-badge .claim-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #d99b46;
+.claim-badge.has-dissent {
+  border-color: color-mix(in srgb, var(--cx-major-line) 42%, var(--sidebar-border));
+  color: var(--cx-major-line);
 }
 
-.dark-mode .claim-badge .claim-dot { background: #e8b968; }
+.claim-ratio { pointer-events: none; }
 
 /* --------------------------------------------------------------------------
    Inline confidence — the marks inside the consensus answer
    Spellcheck metaphor, identical to /app: agreement stays undecorated, a
-   difference gets a fine dotted line, a contradiction an amber wavy one.
+   difference gets a fine solid rule, a contradiction a heavier amber one.
    Deliberately only text-decoration — no dimmed text, no background fill, so
    the contrast of the answer itself is untouched.
    -------------------------------------------------------------------------- */
@@ -1304,24 +1302,26 @@ img { display: block; max-width: 100%; }
 }
 
 .dark-mode {
-  /* Lighten the amber in dark mode, else the wavy line disappears. */
+  /* Lighten the amber in dark mode, else the rule disappears. */
   --cx-major-line: #e8b968;
   --cx-flash: rgba(243, 198, 111, 0.15);
 }
 
 .cx-claim { text-decoration: none; }
 
+/* Solid, not squiggly — mirrors components-consensus-insights.css. The wavy
+   rule read as a spell-checker error; weight and colour carry the severity. */
 .cx-claim.is-minor {
-  text-decoration: underline dotted
-    color-mix(in srgb, var(--text-color) 42%, transparent);
+  text-decoration: underline solid
+    color-mix(in srgb, var(--text-color) 38%, transparent);
   text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
+  text-underline-offset: 4px;
 }
 
 .cx-claim.is-major {
-  text-decoration: underline wavy var(--cx-major-line);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
+  text-decoration: underline solid var(--cx-major-line);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
 }
 
 /* The marked passage is the click target too: on the desktop the sentence is
@@ -1344,12 +1344,13 @@ img { display: block; max-width: 100%; }
 .cx-claim.is-major.is-interactive:hover,
 .cx-claim.is-major.is-interactive:has(+ .cx-marker:hover) {
   background: var(--cx-flash);
-  text-decoration-thickness: 2px;
+  text-decoration-thickness: 3px;
 }
 
 .cx-claim.is-minor.is-interactive:hover,
 .cx-claim.is-minor.is-interactive:has(+ .cx-marker:hover) {
   text-decoration-color: color-mix(in srgb, var(--text-color) 72%, transparent);
+  text-decoration-thickness: 2px;
 }
 
 /* Marker at a difference: compact dot button, no counting. */
@@ -1413,7 +1414,7 @@ img { display: block; max-width: 100%; }
    in one gesture — a plain answer, then the doubt written onto it. */
 @keyframes cxInkMinor {
   from { text-decoration-color: transparent; }
-  to { text-decoration-color: color-mix(in srgb, var(--text-color) 42%, transparent); }
+  to { text-decoration-color: color-mix(in srgb, var(--text-color) 38%, transparent); }
 }
 
 @keyframes cxInkMajor {

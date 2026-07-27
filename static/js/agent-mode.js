@@ -255,9 +255,16 @@
     const answersRow = document.getElementById("agentModeAnswersRow");
     const answersToggle = document.getElementById("agentModeAnswersToggle");
     const activeModels = getActiveAgentModels();
-    const hasModelAnswers = activeModels.some(model => model.hasAnswer || model.responseState === "complete");
 
-    if (!enabled || !hasModelAnswers) modelAnswersVisible = false;
+    // Seit 2026-07-27 haengt die Einzelantworten-Disclosure NICHT mehr am
+    // Agent Mode. Sie ist eine der drei Aufklapp-Flaechen in der Fusszeile
+    // ("Differences · Show model answers · Sources") und war dort in zwei von
+    // drei Faellen unsichtbar, obwohl sie das Wichtigste dahinter oeffnet:
+    // worauf die Antwort beruht. Der Footer selbst wird erst zusammen mit
+    // einer fertigen Consensus-Antwort sichtbar; innerhalb dieses Footers ist
+    // der Schalter deshalb immer da. Das vermeidet Sonderfaelle fuer manuell
+    // gestartete Consensuses, Bookmarks und nachtraeglich ausgeschlossene
+    // Modelle.
 
     document.body.classList.toggle("agent-mode-enabled", enabled);
     document.body.classList.toggle("agent-mode-running", enabled && agentModeStatus === "running");
@@ -268,10 +275,10 @@
     }
     document.body.classList.toggle(
       "agent-mode-show-answers",
-      enabled && hasModelAnswers && modelAnswersVisible
+      modelAnswersVisible
     );
 
-    if (answersRow) answersRow.hidden = !enabled || !hasModelAnswers;
+    if (answersRow) answersRow.hidden = false;
     if (answersToggle) {
       const label = modelAnswersVisible ? "Hide model answers" : "Show model answers";
       answersToggle.setAttribute("aria-expanded", String(modelAnswersVisible));
@@ -444,6 +451,19 @@
     window.App?.consensusPipeline?.onQueryStatus?.(status);
   }
 
+  function setModelAnswersVisible(visible, options = {}) {
+    const nextVisible = !!visible;
+    const changed = modelAnswersVisible !== nextVisible;
+    modelAnswersVisible = nextVisible;
+    if (changed && options.track) {
+      window.App?.trackAppEvent?.("app_agent_mode_answers_toggled", {
+        visible: modelAnswersVisible
+      });
+    }
+    updateAgentModeUI();
+    return changed;
+  }
+
   // Einklapp-Pfeil oben rechts im Panel (Zustand wird gemerkt).
   const agentCollapseBtn = document.getElementById("agentModeCollapseBtn");
   if (agentCollapseBtn) {
@@ -460,11 +480,7 @@
   const agentAnswersToggle = document.getElementById("agentModeAnswersToggle");
   if (agentAnswersToggle) {
     agentAnswersToggle.addEventListener("click", function () {
-      modelAnswersVisible = !modelAnswersVisible;
-      window.App?.trackAppEvent?.("app_agent_mode_answers_toggled", {
-        visible: modelAnswersVisible
-      });
-      updateAgentModeUI();
+      setModelAnswersVisible(!modelAnswersVisible, { track: true });
     });
   }
 
@@ -495,6 +511,11 @@
       });
       return out;
     },
-    resetStreamProgress: resetModelProgress
+    resetStreamProgress: resetModelProgress,
+    // Claim- und Difference-Spruenge muessen ein verborgenes Ziel zuerst
+    // idempotent aufdecken, ohne dafuer den Agent Mode umzuschalten.
+    showModelAnswers() {
+      return setModelAnswersVisible(true);
+    }
   };
 })();

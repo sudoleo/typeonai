@@ -199,15 +199,15 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
 
     # Regulärer Modus: determinate Antwortphase -> indeterminate Synthese.
     # Die rahmenlose Zeile bleibt mobil kompakt und clippt ihren Text nicht.
-    pipeline = app_page.locator("#consensusPipeline")
+    pipeline = app_page.locator("#consensusRun")
     expect(pipeline).to_be_visible(timeout=10000)
     expect(pipeline).to_have_attribute("data-stage", "answers")
     metrics = pipeline.evaluate(
         """(el) => {
-          const steps = el.querySelector('.consensus-pipeline-steps');
+          const current = el.querySelector('.run-now');
           return {
-            height: el.getBoundingClientRect().height,
-            clipped: steps.scrollWidth > steps.clientWidth,
+            height: current.getBoundingClientRect().height,
+            clipped: current.scrollWidth > current.clientWidth,
           };
         }"""
     )
@@ -223,16 +223,57 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     expect(verdict).to_be_visible(timeout=15000)
     expect(verdict).to_contain_text("/100")
 
-    expect(app_page.locator(".claim-badge").first).to_be_visible(timeout=15000)
+    claim_badges = app_page.locator("#consensusAnswerBody .claim-badge")
+    expect(claim_badges).to_have_count(1)
+    expect(claim_badges.first).to_be_visible(timeout=15000)
+    expect(claim_badges.first).to_have_text(
+        re.compile(r"^\d+/\d+$")
+    )
+
+    # Der fertige Footer zeigt die Einzelantworten-Disclosure auch ohne
+    # Agent Mode. Sie ist ein fester Teil jeder Consensus-Antwort.
+    model_answers_toggle = app_page.locator("#agentModeAnswersToggle")
+    expect(model_answers_toggle).to_be_visible(timeout=15000)
+    expect(model_answers_toggle).to_have_text("Show model answers")
+
+    # Nach der fertigen Antwort schrumpft der Composer zur Entscheidung:
+    # kein leeres/deaktiviertes Fragefeld, nur die zwei ehrlichen Wege weiter.
+    expect(app_page.locator("#composerGate")).to_be_visible(timeout=15000)
+    expect(app_page.locator("#questionInput")).to_be_hidden()
+    expect(app_page.locator(".chat-input-container .consensus-switch-container")).to_be_hidden()
+    expect(app_page.locator(".composer-gate-new")).to_be_visible()
+    expect(app_page.locator(".composer-gate-followup")).to_be_visible()
+    collapsed_composer = app_page.locator(".chat-input-container").bounding_box()
+    assert collapsed_composer is not None
+    assert collapsed_composer["height"] <= 64
+
+    # Auch Pro startet im kompakten Choice-State. Erst die bewusste
+    # Follow-up-Wahl öffnet das Feld wieder und hängt den Kontext-Chip an.
+    app_page.evaluate(
+        """() => {
+          window.isUserPro = true;
+          window.App.followup.render();
+        }"""
+    )
+    expect(app_page.locator("#questionInput")).to_be_hidden()
+    app_page.locator(".composer-gate-followup").click()
+    expect(app_page.locator("#questionInput")).to_be_visible()
+    expect(app_page.locator("#questionInput")).to_be_enabled()
+    expect(app_page.locator("#questionInput")).to_have_attribute(
+        "placeholder", "Ask a follow-up question"
+    )
+    expect(app_page.locator("#followupChipBar")).to_be_visible()
 
     # Inline-Confidence: der Widerspruch wird im Antworttext selbst markiert
-    # (Wellenlinie + Marker), nicht nur in einer Karte daneben.
+    # (Linie + Quote), nicht nur in einer Karte daneben.
     marked = app_page.locator("#consensusAnswerBody .cx-claim.is-major").first
     expect(marked).to_be_visible(timeout=15000)
-    expect(app_page.locator("#consensusAnswerBody .cx-marker").first).to_be_visible()
+    # Claim und Difference treffen im Fixture denselben Satz. Dort bleibt nur
+    # die aussagekraeftigere Quote sichtbar; der doppelte Punkt ist weg.
+    overlap_marker = app_page.locator("#consensusAnswerBody .cx-marker").first
+    expect(overlap_marker).to_be_hidden()
     assert (
-        app_page.locator("#consensusAnswerBody .cx-marker")
-        .first.get_attribute("aria-label")
+        overlap_marker.get_attribute("aria-label")
     ), "Marker braucht ein sprechendes aria-label"
 
     # Desktop: die markierte Passage ist selbst das Ziel - gleicher Tooltip wie
@@ -241,7 +282,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     assert "is-interactive" in (marked.get_attribute("class") or "")
     marked.hover()
     expect(
-        app_page.locator("#consensusAnswerBody .cx-marker.is-linked-hover").first
+        app_page.locator("#consensusAnswerBody .claim-badge.is-linked-hover").first
     ).to_be_visible(timeout=2000)
 
     # Der vollstaendige Differences-Ueberblick liegt zugeklappt UNTER der
@@ -252,8 +293,34 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     assert panel.evaluate("el => el.open") is False, "Differences starten zugeklappt"
     expect(app_page.locator(".diff-card.is-contradiction").first).to_be_hidden()
 
-    panel.locator(".consensus-differences-summary").click()
+    app_page.locator("#consensusDifferencesTab").click()
     expect(app_page.locator(".diff-card.is-contradiction").first).to_be_visible(timeout=5000)
+
+    # Beide Sprungpfade öffnen die standardmäßig verborgenen Modellantworten,
+    # fahren die Fundstelle an und markieren das Originalzitat. Der Modus darf
+    # sich dabei nicht als Seiteneffekt ändern.
+    diff_jump = app_page.locator(".diff-card.is-contradiction .diff-jump-link").first
+    expect(diff_jump).to_be_visible()
+    diff_jump.click()
+    expect(app_page.locator("body.agent-mode-show-answers")).to_have_count(1)
+    expect(model_answers_toggle).to_have_text("Hide model answers")
+    expect(app_page.locator(".response-section mark.quote-flash, .response-section .quote-flash-block").first).to_be_visible()
+    assert app_page.evaluate("() => window.isAgentModeEnabled()") is False
+
+    model_answers_toggle.click()
+    expect(app_page.locator("#openaiResponse")).to_be_hidden()
+
+    claim_badges.first.click()
+    claim_jump = app_page.locator("#claimPopover .claim-model-row.is-dissent .claim-jump-link")
+    expect(claim_jump).to_be_visible()
+    claim_jump.click()
+    expect(app_page.locator("body.agent-mode-show-answers")).to_have_count(1)
+    expect(app_page.locator("#grokResponse mark.quote-flash, #grokResponse .quote-flash-block").first).to_be_visible()
+    assert app_page.evaluate("() => window.isAgentModeEnabled()") is False
+
+    # Ausgangszustand für die bestehende Disclosure-/Reihenfolge-Prüfung.
+    model_answers_toggle.click()
+    expect(model_answers_toggle).to_have_text("Show model answers")
 
     # Kopierter Text darf keine Marker-/Badge-Beschriftung enthalten.
     copied = app_page.evaluate(
@@ -272,6 +339,8 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     )
     assert not re.search(r"\d+\s*/\s*\d+", copied), f"Badge-Zaehlung im Copy-Text: {copied!r}"
 
+    model_answers_toggle.click()
+    expect(app_page.locator("#openaiResponse")).to_be_visible()
     consensus_box = app_page.locator("#consensusOutput").bounding_box()
     first_answer_box = app_page.locator("#openaiResponse").bounding_box()
     assert consensus_box is not None
@@ -316,6 +385,12 @@ def test_watch_dialog_uses_safe_defaults_keeps_telegram_visible_and_reveals_cond
     _send_question(app_page)
     _wait_for_all_final_answers(app_page)
     expect(app_page.locator("#consensusResponse")).to_contain_text("Mock consensus", timeout=30000)
+
+    # Share/Watch/Cite haengen an der FERTIGEN Antwort: sie stehen in der
+    # Provenance-Fusszeile, die erst erscheint, wenn der Lauf uebergeben hat.
+    # Erst danach den Ergebnis-Kontext faelschen — das Final-Event des Streams
+    # ueberschreibt window.lastShareResultId sonst wieder.
+    expect(app_page.locator("#consensusWatchButton")).to_be_visible(timeout=30000)
 
     # Dieser Test prüft nur Client-Validierung/Layout und braucht keinen echten
     # Firestore-persistierten pending_result.

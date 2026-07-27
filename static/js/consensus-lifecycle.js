@@ -79,7 +79,11 @@
       if (box.dataset.responseError === "true") return false;
       const contentEl = box.querySelector(".collapsible-content");
       if (!contentEl || contentEl.querySelector(".thinking-wrap") || contentEl.classList.contains("is-streaming")) return false;
-      const text = contentEl.innerText.trim();
+      // textContent, nicht innerText: die Antwortboxen liegen jetzt in beiden
+      // Modi hinter dem "Show model answers"-Schalter, und innerText liefert
+      // fuer ein display:none-Element den leeren String — die vorhandene
+      // Antwort waere damit unsichtbar fuer die Zaehlung.
+      const text = contentEl.textContent.trim();
       return text && text !== "Request canceled.";
     }).length;
   }
@@ -128,9 +132,10 @@
     document
       .getElementById("consensusResponse")
       ?.classList.toggle("is-synthesizing", !!isSynthesizing);
-    // Waehrend der Synthese ist der Differences-Bereich offen (der Spinner
-    // gehoert sichtbar); danach entscheidet das Ergebnis, ob er zuklappt
-    // (strukturierte Karten) oder offen bleibt (Freitext-Fallback).
+    // Der Differences-Bereich bleibt waehrend der Synthese ZU: sein Spinner
+    // ist entfallen, ein offenes leeres Panel waere nur ein Loch unter der
+    // Antwort. Der gefuehrte Lauf sagt an, dass geprueft wird; das Panel
+    // meldet sich erst, wenn es Karten zu zeigen hat.
     if (isSynthesizing) window.App?.differencesPanel?.setSynthesizing?.();
   }
 

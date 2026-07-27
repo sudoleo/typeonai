@@ -446,6 +446,81 @@
   border-color: color-mix(in srgb, var(--sidebar-border) 80%, transparent);
 }
 
+/* --- Custom: die Aufstellung eines Laufs --------------------------------
+   Eine Zeile je Provider: links der Ein-/Ausschluss, rechts der Weg in
+   dessen Modell-Liste. Zwei Ziele in einer Zeile, weil es zwei getrennte
+   Entscheidungen sind — "antwortet mit" und "antwortet womit". */
+.model-picker-section-label {
+  padding: 8px 10px 4px;
+  color: var(--sidebar-text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.model-picker-row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.model-picker-row-open {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.model-picker-row.is-excluded .model-picker-row-open {
+  opacity: 0.55;
+}
+
+.model-picker-row-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.model-picker-row-toggle:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--glass-bg-strong));
+}
+
+.model-picker-row-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.model-picker-row-check {
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid color-mix(in srgb, var(--sidebar-border) 90%, transparent);
+  border-radius: 5px;
+  position: relative;
+}
+
+.model-picker-row-toggle[aria-checked="true"] .model-picker-row-check {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.model-picker-row-toggle[aria-checked="true"] .model-picker-row-check::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  width: 4px;
+  height: 8px;
+  border-right: 2px solid var(--button-text, #fff);
+  border-bottom: 2px solid var(--button-text, #fff);
+  transform: rotate(45deg);
+}
+
 /* Optik kommt zentral von .pro-badge (layout.css) — hier nur Flex/Abstand. */
 .model-picker-pro-badge {
   flex: 0 0 auto;

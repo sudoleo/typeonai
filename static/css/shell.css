@@ -77,10 +77,19 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   }
 }
 
-/* Wordmark in the footer, sized down: it identifies the app, it is not a
-   heading competing with the two actions at the top. The #logoLink id rule
-   (layout.css) centers and shrinks it — the id-qualified selector here wins,
-   so the mark sits flush left on its own line like every other row. */
+/* Wordmark at the top left, where a mark belongs — a quiet line of its own
+   ABOVE the actions, so the action row still holds nothing but the toggle
+   and "New comparison". Under the account icon it outweighed the account.
+   The #logoLink id rule (layout.css) centers and shrinks it; the
+   id-qualified selector here wins, so the mark sits flush left. */
+.sidebar-brand-row {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 2px 6px 0;
+  min-height: 22px;
+}
+
 .sidebar-brand-link,
 #logoLink.sidebar-brand-link {
   display: inline-flex;
@@ -88,8 +97,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   justify-content: flex-start;
   gap: 7px;
   min-width: 0;
-  flex: 1 1 100%;
-  margin-bottom: 6px;
+  margin-bottom: 0;
   text-decoration: none;
   color: var(--ink-2);
 }
@@ -124,6 +132,13 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   flex-shrink: 0;
   padding: 0 2px;
   min-height: 34px;
+}
+
+/* "New comparison" und die erste Navigation gehoeren enger zusammen als
+   zuvor. Der Sidebar-Flex-Gap liefert bereits 10px; 8px Zusatzabstand ergibt
+   einen ruhigen 20px-Schritt bis zur Models-Zeile statt knapp 30px. */
+.sidebar-pinned {
+  margin-top: 8px;
 }
 
 /* The in-sidebar toggle. Square, quiet, same footprint as the float one so
@@ -258,6 +273,25 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 
 .sidebar-separator {
   background: var(--line-soft);
+}
+
+/* Models and Leaderboard live in .sidebar-pinned, Bookmarks in the scrolling
+   .sidebar-content. That container boundary added 14px on top of the 22px
+   each section already carries — the sidebar's own 10px flex gap plus 2px of
+   scroll padding on either side — so the step down to Bookmarks was wider
+   than the one to Leaderboard. That reads as a grouping, and there is none:
+   the three sections are one list. */
+.sidebar > .sidebar-content {
+  margin-top: -14px;
+}
+
+/* Above the overlay breakpoint the pinned/content containers lose their
+   2px vertical padding (layout.css). Compensate those 4px here as well so
+   the three heading baselines keep exactly the same step on wide desktops. */
+@media (min-width: 1100px) {
+  .sidebar > .sidebar-content {
+    margin-top: -10px;
+  }
 }
 
 /* ---- Account + quota -----------------------------------------------------
@@ -582,7 +616,8 @@ body:not(.dark-mode) .chat-input-container {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 62ch;
+  /* The bars run the full width of the thread column. A progress bar that
+     stops halfway looks like it is reporting half a run. */
   margin: 2px 6px 14px;
   overflow: hidden;
   opacity: 0;
@@ -733,9 +768,37 @@ body:not(.dark-mode) .chat-input-container {
 
 .run-model {
   display: grid;
-  grid-template-columns: minmax(76px, 124px) minmax(0, 1fr) 38px;
+  grid-template-columns: minmax(76px, 124px) minmax(0, 1fr) 38px auto;
   gap: 10px;
   align-items: center;
+}
+
+/* The skip offer only takes room once it has something to say. */
+.run-model-skip:empty {
+  display: none;
+}
+
+.run-model-skip-btn {
+  border: 0;
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+  background: var(--raise);
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.run-model-skip-btn:hover {
+  background: var(--well);
+  color: var(--ink);
+}
+
+.run-model-skip-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .run-model-name {
@@ -776,17 +839,24 @@ body:not(.dark-mode) .chat-input-container {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- Provenance line -----------------------------------------------------
-   What the run leaves behind: what the answer was made of, and what you can
-   do next with it. Nothing is lost when the run collapses — it just stops
-   taking up the screen.
+/* ---- Provenance footer ---------------------------------------------------
+   What the run leaves behind, in three lines that read top to bottom:
+
+     1. facts — what the answer was made of — and the actions on it
+        (Share / Watch / Cite, pushed to the right edge)
+     2. the verdict: score ring + headline. It used to sit ABOVE the answer
+        and judged the text before it was read; it belongs behind it.
+     3. the three drawers: contradictions, model answers, sources
+
+   Nothing is lost when the run collapses — it just stops taking up screen.
    -------------------------------------------------------------------------- */
 .run-provenance {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 12px;
-  margin-top: 12px;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line-soft);
   font-size: 0.76rem;
   color: var(--ink-3);
 }
@@ -795,9 +865,145 @@ body:not(.dark-mode) .chat-input-container {
   display: none;
 }
 
+.consensus-footer-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
 .run-provenance-facts b {
   color: var(--ink-2);
   font-weight: 550;
+}
+
+/* Share / Watch / Cite: the three things you do WITH a finished answer, on
+   the same baseline as the facts about it. They used to hang absolutely
+   positioned off the "Consensus answer" eyebrow, where they competed with a
+   label rather than with each other. */
+.consensus-footer-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+.consensus-footer-actions:empty {
+  display: none;
+}
+
+.consensus-footer-actions .consensus-copy-inline {
+  position: static;
+  transform: none;
+  gap: 2px;
+}
+
+/* In the footer the icons carry their name — three unlabelled glyphs in a
+   row is a guessing game. */
+.consensus-footer-actions .consensus-share-pill {
+  width: auto;
+  height: 26px;
+  gap: 5px;
+  padding: 0 8px;
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+.consensus-footer-actions .consensus-actions-toggle {
+  /* The base rule sizes it as a 28px icon square with font-size:0 so the
+     label stays hidden. In the footer the label is the point. */
+  width: auto;
+  height: 26px;
+  gap: 5px;
+  padding: 0 8px;
+  font-size: 0.76rem;
+}
+
+.consensus-footer-actions .share-pill-icon,
+.consensus-footer-actions .quote-toggle-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* The verdict, now a line inside the footer rather than a banner above the
+   answer. shell.css already stripped its frame; here it only loses the
+   margin it needed as a standalone block. */
+.run-provenance .consensus-verdict {
+  margin-top: 0;
+  padding-inline: 0;
+  gap: 11px;
+  font-size: 0.83rem;
+}
+
+.run-provenance .consensus-verdict[hidden] {
+  display: none;
+}
+
+/* ---- The three drawers ---------------------------------------------------
+   One row of quiet labels. No pill, no border: the mockup treats them as a
+   line of words with a count beside each, and a rectangle drawn around a
+   word is exactly the frame this shell keeps removing. What marks an open
+   drawer is weight and an underline, not a filled box.
+   -------------------------------------------------------------------------- */
+.consensus-footer-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 18px;
+}
+
+.consensus-footer-tabs:empty {
+  display: none;
+}
+
+.consensus-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 0;
+  padding: 3px 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.79rem;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  box-shadow: none;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+.consensus-tab[hidden] {
+  display: none;
+}
+
+.consensus-tab:hover,
+.consensus-tab:focus-visible {
+  background: transparent;
+  color: var(--ink);
+  text-decoration-color: var(--line);
+  outline: none;
+}
+
+.consensus-tab[aria-expanded="true"] {
+  background: transparent;
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration-color: var(--ink-3);
+}
+
+.consensus-tab-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.consensus-tab-count:empty {
+  display: none;
 }
 
 .run-replay-btn {
@@ -833,7 +1039,7 @@ body:not(.dark-mode) .chat-input-container {
 
 @media (max-width: 640px) {
   .run-model {
-    grid-template-columns: minmax(62px, 88px) minmax(0, 1fr) 34px;
+    grid-template-columns: minmax(62px, 88px) minmax(0, 1fr) 34px auto;
   }
 
   .run-provenance-actions {
@@ -851,11 +1057,24 @@ body:not(.dark-mode) .chat-input-container {
    keeps the input first (the hero math depends on it); flex order does the
    turning, so the hero state stays untouched.
    -------------------------------------------------------------------------- */
+/* The thread page is exactly one viewport tall and no more. Two things used
+   to add slack below the fold: body's 100vh (on a phone that is taller than
+   the visible 100dvh) and its 10px bottom padding, which put the column's
+   last pixels — and therefore the sticky composer's resting place — below
+   the viewport. A composer pinned with `bottom: 0` inside a column that ends
+   off-screen drifts as you scroll into that slack. So: dvh everywhere, and
+   the bottom padding goes, leaving the column flush with the viewport. */
+body:not(.is-hero) {
+  min-height: 100dvh;
+  padding-bottom: 0;
+}
+
 body:not(.is-hero) .container {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
   min-height: calc(100dvh - 10px);
+  padding-bottom: 0;
 }
 
 .thread-ask { order: 1; }
@@ -869,7 +1088,13 @@ body:not(.is-hero) .input-section {
   bottom: 0;
   z-index: 5;
   margin-top: auto;
+  /* The 20px bottom margin from the hero layout left the column ending
+     below the composer — exactly the slack the page could still scroll
+     into. In the thread the composer IS the last thing; its breathing room
+     is padding (inside the sticky box), not margin (outside it). */
+  margin-bottom: 0;
   padding-top: 14px;
+  padding-bottom: 10px;
   background: var(--ground);
 }
 
@@ -897,7 +1122,6 @@ body:not(.is-hero) .consensus-section::before {
    that speaks in the user's words, so it gets the largest quiet type on the
    page. Long questions clamp to three lines; the link below unfolds them. */
 .thread-ask {
-  max-width: 60ch;
   margin: 10px 6px 18px;
 }
 
@@ -914,6 +1138,10 @@ body:not(.is-hero) .consensus-section::before {
 }
 
 .thread-ask-text {
+  /* The question is a heading, not a paragraph: it stays left-aligned and
+     stops short of the right edge so it reads as a title above the answer
+     rather than as the answer's first line. */
+  max-width: 70%;
   font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
   font-size: clamp(19px, 2vw, 23px);
   line-height: 1.34;
@@ -1006,18 +1234,28 @@ body:not(.is-hero) .consensus-section::before {
   display: none !important;
 }
 
+/* The answer, the drawer and the run all use the width the thread column
+   gives them. The column itself (--app-container-width) is the measure that
+   keeps the line length sane — a second cap inside it only left half the
+   page empty while the text kept wrapping. */
 .consensus-main > .consensus-answer-body {
-  max-width: 64ch;
+  max-width: none;
   font-size: 1.03rem;
   line-height: 1.7;
   letter-spacing: -0.003em;
   color: var(--ink);
 }
 
-/* The differences drawer and the verdict line hold the same column as the
-   answer text instead of stretching across the page. */
 .consensus-differences-panel {
-  max-width: 64ch;
+  max-width: none;
+}
+
+/* The tint behind the answer is a leftover from the card era: a diagonal
+   accent wash that made the consensus look like a panel laid on the page —
+   faint, but with a hard left edge where the column starts. The answer IS
+   the page now, so the wash goes. */
+.consensus-box::before {
+  background: none;
 }
 
 /* ---- Follow-up offer: a quiet action, not a call-out ---------------------
@@ -1071,13 +1309,26 @@ body:not(.is-hero) .consensus-section::before {
   color: var(--ink-3);
 }
 
-/* Differences drawer: a disclosure on the page, not a panel on a card. */
+/* Differences drawer: a disclosure on the page, not a panel on a card.
+   Closed, it contributes no line of its own: the footer tab already names
+   the drawer. Only opened content gets a subtle inner separator. */
 .consensus-differences,
 .consensus-differences-panel {
   background: none;
   border: 0;
-  border-top: 1px solid var(--line-soft);
   box-shadow: none;
+}
+
+.consensus-differences-panel[open] {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+/* The composer horizon below is the section boundary. Keeping this legacy
+   divider as well produced two adjacent rules below the footer tabs. */
+.consensus-divider {
+  display: none;
 }
 
 .diff-card {
@@ -1106,33 +1357,219 @@ body.agent-mode-enabled .agent-mode-panel,
   display: none;
 }
 
-/* Disclosure for the individual answers, now sitting in the provenance row. */
+/* ---- Numbered citations --------------------------------------------------
+   Inside the consensus a citation is a raised number, the way printed prose
+   does it: it points at the list in the sources drawer without interrupting
+   the sentence. The favicon chips stay in the model answers, where the text
+   is evidence to scan rather than prose to read.
+   -------------------------------------------------------------------------- */
+.src-ref {
+  display: inline-block;
+  vertical-align: super;
+  margin-left: 1px;
+  padding: 0 1px;
+  font-size: 0.66em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: 0;
+  color: var(--ink-3);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.14s ease;
+}
+
+.src-ref:hover,
+.src-ref:focus-visible {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  outline: none;
+}
+
+.src-ref-sep {
+  vertical-align: super;
+  font-size: 0.66em;
+  color: var(--ink-3);
+}
+
+/* Hover teaser: enough of the source to decide whether to leave the page. */
+.source-teaser {
+  position: absolute;
+  z-index: var(--z-modal);
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--raise);
+  box-shadow: var(--lift);
+  color: var(--ink);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  opacity: 0;
+  transform: translateY(3px);
+  pointer-events: none;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.source-teaser.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.source-teaser[hidden] {
+  display: none;
+}
+
+.source-teaser-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+  color: var(--ink-3);
+  font-size: 0.72rem;
+}
+
+.source-teaser-index {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.source-teaser-favicon {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+.source-teaser-host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-teaser-title {
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+
+.source-teaser-snippet {
+  margin-top: 4px;
+  color: var(--ink-2);
+  font-size: 0.74rem;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .source-teaser {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* ---- Sources drawer ------------------------------------------------------ */
+.consensus-sources-panel {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.consensus-sources-panel[hidden] {
+  display: none;
+}
+
+.consensus-sources-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.consensus-source-item {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.consensus-source-index {
+  flex: 0 0 auto;
+  min-width: 14px;
+  color: var(--ink-3);
+  font-size: 0.74rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.consensus-source-body {
+  min-width: 0;
+}
+
+.consensus-source-title {
+  color: var(--ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+a.consensus-source-title:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.consensus-source-host {
+  margin-left: 7px;
+  color: var(--ink-3);
+  font-size: 0.74rem;
+}
+
+.consensus-source-snippet {
+  margin-top: 2px;
+  color: var(--ink-2);
+  font-size: 0.76rem;
+}
+
+/* Disclosure for the individual answers. It is one of the three drawers in
+   the footer now, not a text link buried in the facts line — showing what
+   the six models actually said is too central to read as a footnote.
+   `display: contents` so the button is a direct child of the chip row: as
+   an inline-flex wrapper it sat on its own baseline and hung a few pixels
+   below "Differences" and "Sources". */
 .agent-mode-answers-row {
-  display: inline-flex;
+  display: contents;
 }
 
 .agent-mode-answers-row[hidden] {
   display: none;
 }
 
-.agent-mode-answers-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  padding: 4px 9px;
-  background: transparent;
-  color: var(--ink-3);
-  font: inherit;
-  font-size: 0.76rem;
-  cursor: pointer;
-  box-shadow: none;
+/* The chip is the affordance for the differences drawer, so the drawer's own
+   summary would be a second identical control right below it. */
+.consensus-differences-panel > .consensus-differences-summary {
+  display: none;
 }
 
-.agent-mode-answers-toggle:hover {
-  background: var(--raise);
-  color: var(--ink);
+/* ---- Menus at the composer open upward -----------------------------------
+   In the thread the composer is pinned to the bottom edge, so there is
+   nothing below it to open into: the (+) menu and the run switch both ran
+   off the screen. Above the composer is the whole thread, which is exactly
+   where a menu belonging to it has room. The hero keeps opening downward —
+   there the input is centred and the space is below it.
+   -------------------------------------------------------------------------- */
+body:not(.is-hero) .chat-input-container .attach-menu {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+body:not(.is-hero) .consensus-model .select-wrapper .model-picker-menu {
+  top: auto;
+  bottom: calc(100% + 6px);
 }
 
 .post-demo-login-prompt {
@@ -1222,6 +1659,281 @@ body.is-hero .consensus-section::before {
 
 .watch-page {
   background: var(--ground);
+}
+
+/* --------------------------------------------------------------------------
+   7. Plan, run switch, composer gate
+
+   Four small corrections to the frameless shell: the plan says its name next
+   to the numbers it explains, the run switch is as wide as its label, the
+   composer says out loud that a comparison ends with its answer, and a
+   hovered passage shows what is behind it before it is clicked.
+   -------------------------------------------------------------------------- */
+
+/* ---- Plan next to the allowance -----------------------------------------
+   The gold PRO badge used to sit beside "New comparison", where it competed
+   with the one action the sidebar head is for. It belongs to the account, so
+   it moved to the head of the allowance panel. */
+.sidebar-quota-plan {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-quota-plan #proBadge {
+  margin: 0;
+}
+
+/* ---- The run switch is a chip, not a form control ------------------------
+   It said "6 models · Balanced" inside a 230px field: a select-sized box for
+   a label half its width. It sizes to its text now and keeps the caret. */
+.consensus-model .select-wrapper .model-picker-display {
+  width: auto;
+  max-width: 240px;
+  min-height: 32px;
+  padding: 6px 26px 6px 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--ground);
+  color: var(--ink-2);
+  box-shadow: none;
+  font-size: 0.78rem;
+}
+
+.consensus-model .select-wrapper .model-picker-display:hover,
+.consensus-model .select-wrapper .model-picker-display:focus-visible {
+  background: var(--well);
+  border: 0;
+  color: var(--ink);
+  box-shadow: none;
+}
+
+.consensus-model .select-wrapper::after {
+  right: 10px;
+  border-top-color: var(--ink-3);
+}
+
+/* The row clipped its own children, so the picker opened into nothing. It
+   only needs to clip while nothing is open. */
+.consensus-switch-container:has(.model-picker-menu.is-open) {
+  overflow: visible;
+}
+
+/* In the thread the composer sits at the bottom edge, so the menu opens
+   upward; in the hero the composer is at the top and it opens downward.
+   Either way it opens into the page, not off it. */
+.chat-input-container .consensus-model .select-wrapper .model-picker-menu {
+  top: auto;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: auto;
+  width: min(320px, calc(100vw - 24px));
+}
+
+body.is-hero .chat-input-container .consensus-model .select-wrapper .model-picker-menu {
+  top: calc(100% + 8px);
+  bottom: auto;
+}
+
+/* ---- Composer gate -------------------------------------------------------
+   consens.io is not a chat: a comparison ends with its answer. Rather than
+   letting people type into a field that will silently start a second
+   six-model run, the composer says what happens next — a new comparison is
+   free, carrying this context along is Pro. The follow-up offer moved here
+   from the provenance line for the same reason: it belongs at the field
+   where the next question gets typed. */
+.composer-gate {
+  flex: 1 1 100%;
+  min-width: 0;
+  margin-top: 2px;
+}
+
+.composer-gate[hidden] {
+  display: none;
+}
+
+.composer-gate-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.composer-gate-copy {
+  flex: 1 1 260px;
+  min-width: 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  text-align: left;
+  color: var(--ink-3);
+}
+
+.composer-gate-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.composer-gate .followup-offer-btn {
+  border: 0;
+  border-radius: var(--radius-pill);
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 0.76rem;
+  gap: 6px;
+}
+
+.composer-gate .followup-offer-btn:hover {
+  background: var(--ground);
+  border: 0;
+  color: var(--ink);
+}
+
+.composer-gate-new {
+  border: 0;
+  border-radius: var(--radius-pill);
+  padding: 5px 12px;
+  background: var(--accent);
+  color: var(--ground);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.composer-gate-new:hover {
+  opacity: 0.88;
+}
+
+/* Nach der Antwort ist dies kein deaktiviertes Eingabefeld mehr, sondern eine
+   kompakte Entscheidung. Erst eine der beiden Aktionen öffnet den normalen
+   Composer wieder — leer oder mit Follow-up-Kontext. */
+body.composer-locked .chat-input-container {
+  gap: 0;
+  padding: 10px 12px;
+  min-height: 0;
+  border-radius: var(--radius-lg);
+}
+
+/* Die Gast-Demo hat statt der beiden Folgeaktionen nur einen ehrlichen Weg:
+   anmelden. Sobald ihr Abschluss-Hinweis sichtbar ist, ersetzt er deshalb
+   den gesamten (ohnehin deaktivierten) Composer. */
+body:has(#postDemoLoginPrompt:not([hidden])) .chat-input-container {
+  display: none;
+}
+
+body.composer-locked .chat-input-container .input-field,
+body.composer-locked .chat-input-container .consensus-switch-container,
+body.composer-locked .chat-input-container .input-actions-container,
+body.composer-locked .chat-input-container #attachmentBar,
+body.composer-locked .chat-input-container #followupChipBar,
+body.composer-locked .chat-input-container #attachMenu {
+  display: none;
+}
+
+body.composer-locked .composer-gate {
+  margin: 0;
+}
+
+body.composer-locked .composer-gate-inner {
+  min-height: 34px;
+  animation: composerGateIn 0.18s ease-out both;
+}
+
+@keyframes composerGateIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  /* Auf schmalen Screens sagen die zwei Buttons bereits alles. Die
+     Zwischenfrage wuerde nur eine dritte Zeile im Sticky-Fuss erzeugen. */
+  body.composer-locked .composer-gate-copy {
+    display: none;
+  }
+
+  body.composer-locked .composer-gate-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: center;
+  }
+}
+
+/* ---- Hover preview on a marked passage -----------------------------------
+   The underline says "something is here" but not what. Resting on it shows
+   the short version; the click still opens the full card. Purely a reading
+   aid, so it never takes the pointer. */
+.insight-preview {
+  position: absolute;
+  z-index: var(--z-popover, 1400);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px 13px;
+  border-radius: var(--radius-md);
+  background: var(--raise);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(28, 30, 33, 0.06), 0 14px 34px rgba(28, 30, 33, 0.12);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  pointer-events: none;
+}
+
+.dark-mode .insight-preview {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 36px rgba(0, 0, 0, 0.34);
+}
+
+.insight-preview[hidden] {
+  display: none;
+}
+
+.insight-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 650;
+}
+
+.insight-preview-claim {
+  color: var(--ink-2);
+}
+
+.insight-preview-row {
+  display: grid;
+  grid-template-columns: minmax(0, 84px) minmax(0, 1fr);
+  gap: 9px;
+  color: var(--ink-2);
+  font-size: 0.74rem;
+}
+
+.insight-preview-key {
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.insight-preview-quote {
+  margin: 2px 0 0;
+  padding-left: 9px;
+  border-left: 1px solid var(--line-soft);
+  color: var(--ink-3);
+  font-size: 0.74rem;
+  font-style: italic;
+}
+
+.insight-preview-foot {
+  margin-top: 2px;
+  color: var(--ink-3);
+  font-size: 0.7rem;
 }
 
 @media (prefers-reduced-motion: reduce) {

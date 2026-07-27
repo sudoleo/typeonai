@@ -119,8 +119,14 @@
     renderRow("quotaRowWatch", "quotaWatchValue", watches);
     renderRing(runs);
 
+    // Der Plan steht hier, nicht mehr neben "New comparison". Pro spricht
+    // ueber das goldene Badge daneben (user-tier.js blendet #proBadge ein),
+    // also weicht das Textlabel dann zurueck statt "Pro Pro" zu schreiben.
     var planLabel = el("quotaPlanLabel");
-    if (planLabel) planLabel.textContent = window.isUserPro ? "Pro" : "Free";
+    if (planLabel) {
+      planLabel.textContent = window.isUserPro ? "Pro" : "Free";
+      planLabel.hidden = !!window.isUserPro;
+    }
 
     // The countdown span carries the reset time ("Resets in 1 h 58 min").
     var countdown = el("countdownDisplay");

@@ -167,7 +167,12 @@
           // werden: Badges/Marker und die [S1]-Quellenchips sind UI (ihr Text
           // wuerde die Offsets verschieben), Code und KaTeX duerfen nicht
           // angefasst werden.
-          const MARK_SKIP_SELECTOR = ".claim-badge, .cx-marker, .source-link, code, pre, .katex";
+          // `.src-ref` sind die hochgestellten Quellenzahlen im Konsens. Ohne
+          // sie hier wurde die Zahl selbst als Satzteil gewrappt und trug dann
+          // die Unterstreichung der Passage — eine bernsteinfarbene "3" sieht
+          // aus wie ein Fehler, nicht wie eine Fussnote.
+          const MARK_SKIP_SELECTOR =
+            ".claim-badge, .cx-marker, .source-link, .src-ref, .src-ref-sep, code, pre, .katex";
           const BLOCK_SELECTOR = "p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, dd, dt";
 
           function findAnchorTarget(container, anchor) {
@@ -523,36 +528,33 @@
             const box = $(MODEL_BOX_IDS[model] || "");
             if (!box) return;
 
-            let delay = 0;
-            if (window.isAgentModeEnabled?.()) {
-              // Agent Mode blendet die Antwort-Boxen aus — erst deaktivieren,
-              // dann nach dem Layout-Übergang springen.
-              window.setAgentMode?.(false, { persist: true });
-              delay = 400;
-            }
+            // Einzelantworten liegen inzwischen in jedem Modus hinter derselben
+            // Disclosure. Den Zielbereich aufdecken, den Modus aber beibehalten.
+            window.App?.agentMode?.showModelAnswers?.();
 
-            window.setTimeout(function () {
-              const content = box.querySelector(".collapsible-content");
-              const highlight = (content && quote) ? flashQuote(content, quote) : null;
-              // Offset, damit der Box-Header ("Response from …") sichtbar bleibt
-              const headerY = box.getBoundingClientRect().top + window.scrollY - 84;
+            // Der Klassenwechsel ist synchron; die folgenden Geometrie-Abfragen
+            // erzwingen das Layout selbst. So hängt der Sprung auch in
+            // gedrosselten Hintergrund-Tabs weder an rAF noch an Timern.
+            const content = box.querySelector(".collapsible-content");
+            const highlight = (content && quote) ? flashQuote(content, quote) : null;
+            // Offset, damit der Box-Header ("Response from …") sichtbar bleibt
+            const headerY = box.getBoundingClientRect().top + window.scrollY - 84;
 
-              if (highlight) {
-                const quoteY = highlight.getBoundingClientRect().top + window.scrollY;
-                if (quoteY - headerY < window.innerHeight * 0.7) {
-                  // Zitat liegt nah am Boxanfang: Header und Zitat zusammen zeigen
-                  window.scrollTo({ top: Math.max(0, headerY), behavior: "smooth" });
-                } else {
-                  // Zitat liegt tief in der Antwort: Zitat mittig anfahren
-                  window.scrollTo({ top: Math.max(0, quoteY - window.innerHeight / 2), behavior: "smooth" });
-                }
-              } else {
+            if (highlight) {
+              const quoteY = highlight.getBoundingClientRect().top + window.scrollY;
+              if (quoteY - headerY < window.innerHeight * 0.7) {
+                // Zitat liegt nah am Boxanfang: Header und Zitat zusammen zeigen
                 window.scrollTo({ top: Math.max(0, headerY), behavior: "smooth" });
-                box.classList.add("jump-flash");
-                setTimeout(function () { box.classList.remove("jump-flash"); }, 2000);
+              } else {
+                // Zitat liegt tief in der Antwort: Zitat mittig anfahren
+                window.scrollTo({ top: Math.max(0, quoteY - window.innerHeight / 2), behavior: "smooth" });
               }
-              window.trackUmamiEvent?.("app_consensus_jump_to_answer", { model: model, found_quote: !!highlight });
-            }, delay);
+            } else {
+              window.scrollTo({ top: Math.max(0, headerY), behavior: "smooth" });
+              box.classList.add("jump-flash");
+              setTimeout(function () { box.classList.remove("jump-flash"); }, 2000);
+            }
+            window.trackUmamiEvent?.("app_consensus_jump_to_answer", { model: model, found_quote: !!highlight });
           }
 
           // --- Verdict: worüber, nicht wie viele -------------------------------
@@ -713,21 +715,25 @@
               : "All " + total + " models that address this agree") + " — open details";
           }
 
+          // Seit 2026-07-27 nur noch ein Punkt, kein "4/6" mehr. Neben den
+          // hochgestellten Quellenzahlen standen im selben Satz zwei
+          // konkurrierende Zahlensysteme — der Leser musste erst sortieren,
+          // welche Zahl worauf zeigt. Die Quote steht jetzt dort, wo sie
+          // ohnehin schon stand: in der Hover-Vorschau (buildClaimPreview),
+          // im Tooltip und in der Karte beim Klick. Der Punkt bleibt als
+          // fokussierbares, tippbares Steuerelement mit 44px-Trefferflaeche —
+          // dieselbe Sprache wie der Widerspruchs-Marker daneben.
           function makeBadge(claim) {
-            const agreeCount = claim.agree.length;
-            const total = agreeCount + claim.dissent.length;
             const badge = document.createElement("button");
             badge.type = "button";
             badge.className = "claim-badge" + (claim.dissent.length ? " has-dissent" : "");
-            // Dissens nur als kleiner Amber-Punkt im monochromen Chip,
-            // nicht mehr als gefüllte Pill.
-            if (claim.dissent.length) {
-              const dot = document.createElement("span");
-              dot.className = "claim-dot";
-              dot.setAttribute("aria-hidden", "true");
-              badge.appendChild(dot);
-            }
-            badge.appendChild(document.createTextNode(agreeCount + "/" + total));
+            const agreeCount = claim.agree.length;
+            const total = agreeCount + claim.dissent.length;
+            const ratio = document.createElement("span");
+            ratio.className = "claim-ratio";
+            ratio.textContent = agreeCount + "/" + total;
+            ratio.setAttribute("aria-hidden", "true");
+            badge.appendChild(ratio);
             badge.title = claimBadgeLabel(claim);
             badge.setAttribute("aria-haspopup", "dialog");
             // Tastatur/Screenreader: sprechendes Label statt nacktem "4/6".
@@ -846,8 +852,10 @@
             group.hover = on;
             if (on) {
               applyPassageHover(group);
+              scheduleHoverPreview(group);
               return;
             }
+            hideHoverPreview();
             // Der Weg von einem Span zum naechsten (ein Satz kann in mehrere
             // Spans zerfallen) oder zum Marker feuert leave/enter nacheinander.
             // Ein Frame Verzoegerung verhindert das Flackern dazwischen.
@@ -884,13 +892,172 @@
             return !!window.matchMedia?.("(hover: hover) and (pointer: fine)").matches;
           }
 
+          // --- Vorschau beim Hovern -------------------------------------------
+          // Die Unterstreichung sagt "hier ist etwas", aber nicht was. Wer mit
+          // der Maus darauf verweilt, bekommt deshalb sofort die Kurzfassung —
+          // wer klickt, weiterhin die ganze Karte. Reine Lesehilfe: die Karte
+          // faengt keine Maus (pointer-events: none), damit sie den Klick auf
+          // die Passage nicht abfaengt.
+          const HOVER_DELAY_MS = 130;
+          let hoverCard = null;
+          let hoverTimer = null;
+
+          function ensureHoverCard() {
+            if (hoverCard && hoverCard.isConnected) return hoverCard;
+            hoverCard = document.createElement("div");
+            hoverCard.className = "insight-preview";
+            hoverCard.setAttribute("aria-hidden", "true");
+            hoverCard.hidden = true;
+            document.body.appendChild(hoverCard);
+            return hoverCard;
+          }
+
+          function hideHoverPreview() {
+            window.clearTimeout(hoverTimer);
+            hoverTimer = null;
+            hoverGroup = null;
+            if (hoverCard) {
+              hoverCard.hidden = true;
+              hoverCard.innerHTML = "";
+            }
+          }
+
+          function placeHoverPreview(card, spans) {
+            const first = spans[0].getBoundingClientRect();
+            const last = spans[spans.length - 1].getBoundingClientRect();
+            const width = Math.min(360, window.innerWidth - 24);
+            card.style.width = width + "px";
+
+            const centered = first.left + (last.right - first.left) / 2 - width / 2;
+            const left = Math.max(12, Math.min(centered, window.innerWidth - width - 12));
+            card.style.left = (left + window.scrollX) + "px";
+
+            // Unter die Passage, solange darunter Platz ist — sonst darueber.
+            const height = card.offsetHeight;
+            const below = last.bottom + 8;
+            const fitsBelow = below + height <= window.innerHeight - 12;
+            const top = fitsBelow ? below : Math.max(12, first.top - height - 8);
+            card.style.top = (top + window.scrollY) + "px";
+          }
+
+          function showHoverPreview(group) {
+            const build = group.controls.find(function (c) { return c.preview; });
+            if (!build) return;
+            const card = ensureHoverCard();
+            card.innerHTML = "";
+            card.appendChild(build.preview());
+            card.hidden = false;
+            placeHoverPreview(card, group.spans);
+          }
+
+          function scheduleHoverPreview(group) {
+            window.clearTimeout(hoverTimer);
+            hoverTimer = window.setTimeout(function () {
+              if (group.hover) showHoverPreview(group);
+            }, HOVER_DELAY_MS);
+          }
+
+          // Die Karte klebt an einer Bildschirmposition, nicht am Dokument:
+          // sobald sich darunter etwas bewegt oder der Nutzer klickt (und
+          // damit die grosse Ansicht will), verschwindet sie.
+          window.addEventListener("scroll", hideHoverPreview, true);
+          window.addEventListener("resize", hideHoverPreview);
+          document.addEventListener("click", hideHoverPreview, true);
+
+          function previewHead(text, sevClass) {
+            const head = document.createElement("div");
+            head.className = "insight-preview-head";
+            if (sevClass) {
+              const dot = document.createElement("span");
+              dot.className = "sev-dot " + sevClass;
+              dot.setAttribute("aria-hidden", "true");
+              head.appendChild(dot);
+            }
+            const label = document.createElement("span");
+            label.textContent = text;
+            head.appendChild(label);
+            return head;
+          }
+
+          function previewRow(label, text) {
+            const row = document.createElement("div");
+            row.className = "insight-preview-row";
+            const key = document.createElement("span");
+            key.className = "insight-preview-key";
+            key.textContent = label;
+            const value = document.createElement("span");
+            value.className = "insight-preview-value";
+            value.textContent = text;
+            row.append(key, value);
+            return row;
+          }
+
+          function buildClaimPreview(claim) {
+            const frag = document.createDocumentFragment();
+            const agreeCount = claim.agree.length;
+            const total = agreeCount + claim.dissent.length;
+            frag.appendChild(previewHead(
+              claim.dissent.length
+                ? agreeCount + " of " + total + " models support this"
+                : "All " + total + " models agree",
+              claim.dissent.length ? "is-warn" : null
+            ));
+            if (claim.agree.length) {
+              frag.appendChild(previewRow(
+                "Agree", claim.agree.map(modelDisplayName).join(", ")));
+            }
+            if (claim.dissent.length) {
+              frag.appendChild(previewRow(
+                "Deviate", claim.dissent.map(function (d) { return modelDisplayName(d.model); }).join(", ")));
+              const quote = claim.dissent.find(function (d) { return d.quote; });
+              if (quote) {
+                const q = document.createElement("blockquote");
+                q.className = "insight-preview-quote";
+                q.textContent = quote.quote;
+                frag.appendChild(q);
+              }
+            }
+            const foot = document.createElement("div");
+            foot.className = "insight-preview-foot";
+            foot.textContent = "Click for the full breakdown";
+            frag.appendChild(foot);
+            return frag;
+          }
+
+          function buildDiffPreview(diff) {
+            const frag = document.createDocumentFragment();
+            const isMajor = diff.type === "contradiction" && diff.severity === "major";
+            let label = "Different emphasis";
+            if (diff.type === "contradiction") {
+              label = isMajor ? "Contradiction · critical" : "Contradiction · minor detail";
+            }
+            frag.appendChild(previewHead(label, isMajor ? "is-crit" : "is-warn"));
+
+            const claimEl = document.createElement("div");
+            claimEl.className = "insight-preview-claim";
+            claimEl.textContent = diff.claim;
+            frag.appendChild(claimEl);
+
+            (diff.positions || []).slice(0, 2).forEach(function (pos) {
+              frag.appendChild(previewRow(
+                pos.models.map(modelDisplayName).join(", "),
+                pos.stance || pos.quote || ""));
+            });
+
+            const foot = document.createElement("div");
+            foot.className = "insight-preview-foot";
+            foot.textContent = "Click to open the difference";
+            frag.appendChild(foot);
+            return frag;
+          }
+
           // Haengt das Steuerelement hinter die Passage und verbindet beide.
-          function attachControl(result, control, label, activate) {
+          function attachControl(result, control, label, activate, preview) {
             insertAfterMark(result, control);
             const spans = result.spans;
             if (!spans || !spans.length || !canHoverPassages()) return;
             const group = passageGroup(spans);
-            group.controls.push({ el: control, activate: activate });
+            group.controls.push({ el: control, activate: activate, preview: preview });
             spans.forEach(function (span) {
               // Bei einer doppelt belegten Passage gewinnt der erste (staerkere)
               // Marker den Tooltip.
@@ -920,20 +1087,30 @@
               return markSentence(body, anchor, severityClass, marksFor(probe.block));
             }
 
+            // Wenn Claim und Difference denselben Satz meinen, soll dort nur
+            // EIN sichtbares Signal stehen: die aussagekraeftigere Quote
+            // (z. B. 4/6). Der Difference-Marker bleibt unsichtbar im DOM,
+            // damit Passage-Klick, Hover-Vorschau und Provenance-Zaehlung
+            // weiterhin auf die Difference-Karte zeigen.
+            const differenceControls = [];
+
             // 1. Widersprüche zuerst: sie tragen die stärkere Markierung.
             differences.forEach(function (diff, index) {
               if (!diff.consensus_anchor) return;
               const isMajor = diff.type === "contradiction" && diff.severity === "major";
               const result = mark(diff.consensus_anchor, isMajor ? "is-major" : "is-minor");
               if (!result) return;
-              attachControl(result, makeDiffMarker(diff, index), diffMarkerLabel(diff), function () {
+              const marker = makeDiffMarker(diff, index);
+              differenceControls.push({ spans: result.spans, marker: marker });
+              attachControl(result, marker, diffMarkerLabel(diff), function () {
                 focusDifferenceCard(index);
-              });
+              }, function () { return buildDiffPreview(diff); });
             });
 
             // 2. Claims: is-unanimous ist bewusst dekorationslos (nur Badge),
             //    dient hier aber als präziser Einhängepunkt für das Badge.
             const unanchored = [];
+            const claimControls = [];
             claims.forEach(function (claim) {
               const result = mark(claim.anchor, claim.dissent.length ? "is-minor" : "is-unanimous");
               if (!result) {
@@ -941,9 +1118,46 @@
                 return;
               }
               const badge = makeBadge(claim);
+              const total = claim.agree.length + claim.dissent.length;
+              const support = total ? claim.agree.length / total : 1;
+              const existingClaim = claimControls.find(function (entry) {
+                return entry.spans === result.spans;
+              });
+
+              // Mehrere gepruefte Claims koennen im selben Satz liegen. Zwei
+              // Quoten hinter demselben Satz waeren wieder genau die
+              // Ueberladung, die diese Mikro-Marke vermeiden soll. Sichtbar
+              // bleibt deshalb die konservative Satzquote: der am wenigsten
+              // gestuetzte Claim.
+              if (existingClaim && support >= existingClaim.support) return;
+              if (existingClaim) {
+                existingClaim.badge.remove();
+                const group = result.spans[0]?.cxGroup;
+                if (group) {
+                  group.controls = group.controls.filter(function (control) {
+                    return control.el !== existingClaim.badge;
+                  });
+                }
+                existingClaim.badge = badge;
+                existingClaim.support = support;
+              } else {
+                claimControls.push({
+                  spans: result.spans,
+                  badge: badge,
+                  support: support
+                });
+              }
+              const overlappingDifference = differenceControls.find(function (entry) {
+                return entry.spans === result.spans;
+              });
+              if (overlappingDifference) {
+                overlappingDifference.marker.hidden = true;
+                overlappingDifference.marker.setAttribute("aria-hidden", "true");
+                overlappingDifference.marker.tabIndex = -1;
+              }
               attachControl(result, badge, claimBadgeLabel(claim), function () {
                 openClaimPopover(claim, badge);
-              });
+              }, function () { return buildClaimPreview(claim); });
             });
 
             if (unanchored.length) {
@@ -1360,7 +1574,10 @@
           }
 
           window.App.differencesPanel = {
-            setSynthesizing: function () { setPanelState(true, DIFF_SUMMARY_RUNNING); },
+            // Zu, nicht offen: der Spinner in diesem Panel ist entfallen, weil
+            // der gefuehrte Lauf dieselbe Phase schon ansagt. Ein aufgeklapptes
+            // leeres Panel waere die dritte Anzeige desselben Vorgangs.
+            setSynthesizing: function () { setPanelState(false, DIFF_SUMMARY_RUNNING); },
             // Freitext-Fallback: der alte Block muss sichtbar und aufgeklappt
             // erscheinen, sonst verschwindet die Analyse stillschweigend.
             expandForFallback: function () { setPanelState(true, DIFF_SUMMARY_DONE); }

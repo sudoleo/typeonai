@@ -1282,6 +1282,12 @@ function loadSingleBookmarkUI(bookmark) {
         // (rahmenlose) Bereich sichtbar und funktional (Copy, Quellen-Links).
         if (consensusText.trim()) {
             window.revealConsensusOutput?.();
+            // Bookmark-Restore durchlaeuft keinen Query-/Consensus-Lifecycle.
+            // Den fertigen Antwort-Footer daher explizit synchronisieren,
+            // damit "Show model answers" und die vorhandenen Drawer immer
+            // unter der wiederhergestellten Antwort stehen.
+            window.updateAgentModeUI?.();
+            window.App?.consensusPipeline?.renderProvenance?.();
         } else {
             window.hideConsensusOutput?.();
         }

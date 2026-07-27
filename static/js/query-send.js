@@ -164,9 +164,8 @@
         ? `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <rect x="8" y="8" width="8" height="8" rx="1.3"></rect>
         </svg>`
-        : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: 16px; height: 16px;">
-          <line x1="22" y1="2" x2="11" y2="13"></line>
-          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        : `<svg viewBox="0 0 24 24" aria-hidden="true" style="width: 13px; height: 13px;">
+          <path d="M3.4 3.6 21 12 3.4 20.4 7 12z" fill="currentColor"></path>
         </svg>`;
 
       if (!isRunning && typeof window.updateQuestionInputAccess === "function") {
@@ -468,6 +467,56 @@
 
       let queryHadBlockingError = false;
       let queryBlockingErrorMessage = "";
+
+      // --- Einzelne Modelle abbrechbar machen ---------------------------
+      // Ein Lauf ist so langsam wie sein langsamstes Modell. Damit ein
+      // haengendes Modell nicht den ganzen Lauf blockiert, bekommt jedes
+      // seinen eigenen Controller; der Lauf-Controller kaskadiert darauf.
+      // Ein uebersprungenes Modell zaehlt wie ein fehlgeschlagenes: der
+      // Konsens laeuft ohne es weiter.
+      const modelControllers = new Map();
+      const skippedBoxIds = new Set();
+
+      function signalFor(boxId) {
+        let controller = modelControllers.get(boxId);
+        if (!controller) {
+          controller = new AbortController();
+          modelControllers.set(boxId, controller);
+        }
+        return controller.signal;
+      }
+
+      querySignal.addEventListener("abort", () => {
+        modelControllers.forEach(controller => controller.abort());
+      });
+
+      window.App.skipModel = function (boxId) {
+        if (!isActiveQueryRun(queryRunId)) return false;
+        if (skippedBoxIds.has(boxId)) return false;
+        const box = document.getElementById(boxId);
+        const outputEl = box?.querySelector(".collapsible-content");
+        if (!box || !outputEl) return false;
+        if (box.dataset.responseState !== "pending") return false;
+
+        skippedBoxIds.add(boxId);
+        modelControllers.get(boxId)?.abort();
+        outputEl.classList.remove("is-streaming");
+        box.dataset.responseError = "true";
+        box.dataset.responseState = "error";
+        box.dataset.responseSkipped = "true";
+        outputEl.innerText = "Skipped — this model took too long, so the run went on without it.";
+        if (isAgentModeEnabled()) window.updateAgentModeUI?.();
+        trackAppEvent("app_model_skipped", { model: box.dataset.model || boxId });
+        checkAllResponses();
+        return true;
+      };
+
+      // Ein uebersprungenes Modell hat seinen checkAllResponses()-Aufruf schon
+      // verbraucht: die spaete Antwort darf den Zaehler nicht ein zweites Mal
+      // hochzaehlen und den fertigen Text nicht ueberschreiben.
+      function isSkipped(boxId) {
+        return skippedBoxIds.has(boxId);
+      }
 
       function unwrapApiError(data) {
         const detail = data?.detail;
@@ -882,7 +931,7 @@
           document.getElementById("openaiResponse").querySelector(".collapsible-content"),
           () => isActiveQueryRun(queryRunId)
         );
-        streamSSERequest('/ask_openai', payload, querySignal, { "delta": openaiStreamRenderer })
+        streamSSERequest('/ask_openai', payload, signalFor("openaiResponse"), { "delta": openaiStreamRenderer })
           .then(({ ok, status, data }) => {
             if (!ok) {
               const msg = getApiErrorMessage(data, `OpenAI HTTP ${status}`);
@@ -892,7 +941,7 @@
             return data;
           })
           .then((data) => {
-            if (!isActiveQueryRun(queryRunId)) return;
+            if (!isActiveQueryRun(queryRunId) || isSkipped("openaiResponse")) return;
             updateUsageDisplayFromData(data);
             const outputEl = document
               .getElementById("openaiResponse")
@@ -918,7 +967,7 @@
             checkAllResponses();
           })
           .catch((error) => {
-            if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
+            if (isAbortError(error) || !isActiveQueryRun(queryRunId) || isSkipped("openaiResponse")) return;
             const outputEl = document
               .getElementById("openaiResponse")
               .querySelector(".collapsible-content");
@@ -970,10 +1019,10 @@
           document.getElementById("mistralResponse").querySelector(".collapsible-content"),
           () => isActiveQueryRun(queryRunId)
         );
-        streamSSERequest('/ask_mistral', payload, querySignal, { "delta": mistralStreamRenderer })
+        streamSSERequest('/ask_mistral', payload, signalFor("mistralResponse"), { "delta": mistralStreamRenderer })
           .then(({ data }) => data)
           .then(data => {
-            if (!isActiveQueryRun(queryRunId)) return;
+            if (!isActiveQueryRun(queryRunId) || isSkipped("mistralResponse")) return;
             updateUsageDisplayFromData(data);
             let outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
             if (data.response) {
@@ -995,7 +1044,7 @@
             checkAllResponses();
           })
           .catch(error => {
-            if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
+            if (isAbortError(error) || !isActiveQueryRun(queryRunId) || isSkipped("mistralResponse")) return;
             const outputEl = document.getElementById("mistralResponse").querySelector(".collapsible-content");
             markModelError(outputEl, `Mistral error: ${error.message}`, { error: error.message });
             console.error("Error with Mistral:", error);
@@ -1043,10 +1092,10 @@
           document.getElementById("claudeResponse").querySelector(".collapsible-content"),
           () => isActiveQueryRun(queryRunId)
         );
-        streamSSERequest('/ask_claude', payload, querySignal, { "delta": claudeStreamRenderer })
+        streamSSERequest('/ask_claude', payload, signalFor("claudeResponse"), { "delta": claudeStreamRenderer })
           .then(({ data }) => data)
           .then(data => {
-            if (!isActiveQueryRun(queryRunId)) return;
+            if (!isActiveQueryRun(queryRunId) || isSkipped("claudeResponse")) return;
             updateUsageDisplayFromData(data);
             const outputEl = document.getElementById("claudeResponse").querySelector(".collapsible-content");
             if (data.response) {
@@ -1067,7 +1116,7 @@
             checkAllResponses();
           })
           .catch(error => {
-            if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
+            if (isAbortError(error) || !isActiveQueryRun(queryRunId) || isSkipped("claudeResponse")) return;
             const outputEl = document.getElementById("claudeResponse").querySelector(".collapsible-content");
             markModelError(outputEl, `Anthropic error: ${error.message}`, { error: error.message });
             console.error("Error with Anthropic:", error);
@@ -1115,10 +1164,10 @@
           document.getElementById("geminiResponse").querySelector(".collapsible-content"),
           () => isActiveQueryRun(queryRunId)
         );
-        streamSSERequest('/ask_gemini', payload, querySignal, { "delta": geminiStreamRenderer })
+        streamSSERequest('/ask_gemini', payload, signalFor("geminiResponse"), { "delta": geminiStreamRenderer })
           .then(({ data }) => data)
           .then(data => {
-            if (!isActiveQueryRun(queryRunId)) return;
+            if (!isActiveQueryRun(queryRunId) || isSkipped("geminiResponse")) return;
             updateUsageDisplayFromData(data);
             const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
             if (data.response) {
@@ -1139,7 +1188,7 @@
             checkAllResponses();
           })
           .catch(error => {
-            if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
+            if (isAbortError(error) || !isActiveQueryRun(queryRunId) || isSkipped("geminiResponse")) return;
             const outputEl = document.getElementById("geminiResponse").querySelector(".collapsible-content");
             markModelError(outputEl, `Gemini error: ${error.message}`, { error: error.message });
             console.error("Error with Gemini:", error);
@@ -1187,10 +1236,10 @@
           document.getElementById("deepseekResponse").querySelector(".collapsible-content"),
           () => isActiveQueryRun(queryRunId)
         );
-        streamSSERequest('/ask_deepseek', payload, querySignal, { "delta": deepseekStreamRenderer })
+        streamSSERequest('/ask_deepseek', payload, signalFor("deepseekResponse"), { "delta": deepseekStreamRenderer })
           .then(({ data }) => data)
           .then(data => {
-            if (!isActiveQueryRun(queryRunId)) return;
+            if (!isActiveQueryRun(queryRunId) || isSkipped("deepseekResponse")) return;
             updateUsageDisplayFromData(data);
             const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
             if (data.response) {
@@ -1211,7 +1260,7 @@
             checkAllResponses();
           })
           .catch(error => {
-            if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
+            if (isAbortError(error) || !isActiveQueryRun(queryRunId) || isSkipped("deepseekResponse")) return;
             const outputEl = document.getElementById("deepseekResponse").querySelector(".collapsible-content");
             markModelError(outputEl, `DeepSeek error: ${error.message}`, { error: error.message });
             console.error("Fehler bei DeepSeek:", error);
@@ -1258,10 +1307,10 @@
           document.getElementById("grokResponse").querySelector(".collapsible-content"),
           () => isActiveQueryRun(queryRunId)
         );
-        streamSSERequest('/ask_grok', payload, querySignal, { "delta": grokStreamRenderer })
+        streamSSERequest('/ask_grok', payload, signalFor("grokResponse"), { "delta": grokStreamRenderer })
           .then(({ data }) => data)
           .then(data => {
-            if (!isActiveQueryRun(queryRunId)) return;
+            if (!isActiveQueryRun(queryRunId) || isSkipped("grokResponse")) return;
             updateUsageDisplayFromData(data);
             const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
             if (data.response) {
@@ -1282,7 +1331,7 @@
             checkAllResponses();
           })
           .catch(error => {
-            if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
+            if (isAbortError(error) || !isActiveQueryRun(queryRunId) || isSkipped("grokResponse")) return;
             const outputEl = document.getElementById("grokResponse").querySelector(".collapsible-content");
             markModelError(outputEl, `Grok error: ${error.message}`, { error: error.message });
             console.error("Fehler bei Grok:", error);

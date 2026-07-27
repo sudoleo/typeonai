@@ -119,52 +119,66 @@
   color: var(--sidebar-text-muted);
 }
 
-/* --- Agreement-Badges in der Konsens-Antwort ------------------------------
-   Monochrome Chips mit dezentem Radius; Dissens ist nur noch ein kleiner
-   Amber-Punkt im Chip statt einer gefüllten Pill. */
+/* --- Agreement-Marken in der Konsens-Antwort ------------------------------
+   Die Quote ist die Kernbotschaft ("4/6"), aber visuell nur eine Mikro-Marke:
+   tabellarische Ziffern, transparente Flaeche, feine Kontur. Damit ist sie
+   sofort scanbar und zugleich klar von den hochgestellten Quellenzahlen
+   unterschieden. Wenn Claim und Difference denselben Satz markieren, bleibt
+   nur diese eine sichtbare Marke; der zusaetzliche Punkt wird ausgeblendet. */
 .claim-badge {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  vertical-align: 2px;
+  vertical-align: 0.08em;
   margin: 0 2px 0 5px;
-  padding: 0 7px;
-  min-height: 18px;
-  border-radius: 5px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 90%, transparent);
-  background: color-mix(in srgb, var(--glass-bg-strong) 55%, transparent);
-  color: var(--sidebar-text-muted);
-  font-size: 0.68rem;
-  font-weight: 600;
+  padding: 0 5px;
+  min-width: 26px;
+  height: 16px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 84%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
   font-family: inherit;
+  font-size: 0.62rem;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
   line-height: 1;
-  letter-spacing: 0.01em;
   cursor: pointer;
   white-space: nowrap;
-  transition: box-shadow 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
 }
 
 /* .is-linked-hover: die zugehoerige Passage wird gehovert (siehe .cx-claim). */
 .claim-badge:hover,
 .claim-badge:focus-visible,
 .claim-badge.is-linked-hover {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--sidebar-border));
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
   color: var(--text-color);
-  box-shadow: var(--liquid-focus-ring);
   outline: none;
 }
 
-.claim-badge .claim-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #d99b46;
+.claim-badge:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
-.dark-mode .claim-badge .claim-dot {
-  background: #e8b968;
+.claim-badge.has-dissent {
+  border-color: color-mix(in srgb, var(--cx-major-line) 42%, var(--sidebar-border));
+  color: var(--cx-major-line);
+}
+
+.claim-badge.has-dissent:hover,
+.claim-badge.has-dissent:focus-visible,
+.claim-badge.has-dissent.is-linked-hover {
+  border-color: color-mix(in srgb, var(--cx-major-line) 70%, var(--sidebar-border));
+  background: color-mix(in srgb, var(--cx-major-line) 7%, transparent);
+  color: var(--cx-major-line);
+}
+
+.claim-ratio {
+  pointer-events: none;
 }
 
 /* --- Inline-Marker im Antworttext -----------------------------------------
@@ -178,17 +192,22 @@
   text-decoration: none;
 }
 
+/* Solid, not squiggly: the wavy rule read as a spell-checker error and drew
+   more attention to itself than to the sentence it marks. A straight line
+   underneath says "look here" without shouting; weight and colour carry the
+   severity instead — 1px muted for a minor point, 2px amber for a major
+   contradiction. */
 .cx-claim.is-minor {
-  text-decoration: underline dotted
-    color-mix(in srgb, var(--text-color) 42%, transparent);
+  text-decoration: underline solid
+    color-mix(in srgb, var(--text-color) 38%, transparent);
   text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
+  text-underline-offset: 4px;
 }
 
 .cx-claim.is-major {
-  text-decoration: underline wavy var(--cx-major-line);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
+  text-decoration: underline solid var(--cx-major-line);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
 }
 
 :root {
@@ -224,11 +243,12 @@
 
 .cx-claim.is-major.is-hovered {
   background: var(--cx-flash);
-  text-decoration-thickness: 2px;
+  text-decoration-thickness: 3px;
 }
 
 .cx-claim.is-minor.is-hovered {
   text-decoration-color: color-mix(in srgb, var(--text-color) 72%, transparent);
+  text-decoration-thickness: 2px;
 }
 
 /* Marker an einem Widerspruch: kompakter Punkt-Button, keine Zaehlung. */
@@ -247,6 +267,12 @@
   line-height: 1;
   cursor: pointer;
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+/* Author-level display:inline-flex would otherwise override the browser's
+   [hidden] rule on an overlap marker. */
+.cx-marker[hidden] {
+  display: none;
 }
 
 /* Trefferflaeche >= 44px ohne Einfluss auf die Zeilenhoehe: das Pseudoelement
@@ -1113,10 +1139,11 @@ mark.quote-flash {
     text-align: left;
   }
 
+  /* Die Marke ist ein Punkt, kein Chip mehr — sie muss mobil nicht
+     aufgeblasen werden. Die Trefferflaeche liefert ohnehin das 44px-::after,
+     ohne die Zeilenhoehe anzufassen. */
   .claim-badge {
-    min-height: 24px;
-    padding: 2px 9px;
-    font-size: 0.72rem;
+    font-size: 0.64rem;
   }
 
   .claim-jump-link {

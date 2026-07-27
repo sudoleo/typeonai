@@ -188,9 +188,14 @@ In `consensus-insights.js`, aufbauend auf `findAnchorTarget`:
    - `is-minor` — Dissens ohne `severity: major`
    - `is-major` — Widerspruch mit `severity: major`
 3. **Visuelles Vokabular** (CSS, Rechtschreibprüfungs-Metapher):
-   - `is-unanimous`: keine Textdekoration; nur das bestehende kompakte Badge
-   - `is-minor`: feine gepunktete Unterlinie, neutral
-   - `is-major`: Wellenlinie in Bernstein (`text-decoration: underline wavy`)
+   - `is-unanimous`: keine Textdekoration; nur die Marke daneben — eine ruhige
+     Mikro-Quote wie „6/6" mit transparenter Flaeche und feiner Kontur. Die
+     tabellarischen Ziffern in einer kleinen Kapsel bleiben scanbar und sind
+     zugleich klar von hochgestellten Quellenzahlen unterschieden.
+   - `is-minor`: feine durchgezogene 1px-Unterlinie, neutral
+   - `is-major`: durchgezogene 2px-Unterlinie in Bernstein
+     (seit 2026-07-27 `underline solid` statt `underline wavy` — die
+     Wellenlinie las sich als Rechtschreibfehler, User-Vorgabe)
    - **Kein** reduzierter Textkontrast und **keine** Hintergrundfarbe —
      WCAG-Kontrast bleibt unangetastet.
 4. **Widersprüche (`differences[]`) ebenfalls inline verankern.** Bisher sind

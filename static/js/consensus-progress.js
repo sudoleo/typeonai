@@ -85,12 +85,14 @@
 
     // Demo responses do not use data-response-state. Their streaming class
     // and thinking element still provide a reliable completion signal.
+    // textContent, not innerText: the boxes sit behind "Show model answers"
+    // and innerText reports nothing for a display:none element.
     const content = box.querySelector(".collapsible-content");
     return Boolean(
       content
       && !content.querySelector(".thinking-wrap")
       && !content.classList.contains("is-streaming")
-      && content.innerText.trim()
+      && content.textContent.trim()
     );
   }
 
@@ -106,6 +108,20 @@
   // number that stays on screen is measured, not invented.
   const rowTimes = new Map();
 
+  // A run is only as fast as its slowest model. Once enough models have
+  // answered, a straggler is measurably late rather than merely slow — and
+  // from that point the reader gets the choice to go on without it. The
+  // offer stays quiet and only appears next to the row it belongs to.
+  const SKIP_MIN_DONE = 2;
+  const SKIP_LAG_MS = 8000;
+
+  function skipOfferReady() {
+    if (stage !== "answers" || !startedAt) return false;
+    if (rowTimes.size < SKIP_MIN_DONE) return false;
+    const lastFinished = Math.max(...rowTimes.values());
+    return Date.now() - startedAt - lastFinished >= SKIP_LAG_MS;
+  }
+
   function buildDetail() {
     const detail = $("runDetail");
     if (!detail) return;
@@ -116,10 +132,37 @@
         + '<span class="run-model-name">' + name + "</span>"
         + '<span class="run-model-track"><i></i></span>'
         + '<span class="run-model-time">·</span>'
+        + '<span class="run-model-skip"></span>'
         + "</span>";
     }).join("");
     detail.hidden = boxes.length === 0;
     detailBuilt = true;
+  }
+
+  function renderSkipOffer(row, box, done) {
+    const slot = row.querySelector(".run-model-skip");
+    if (!slot) return;
+    const offer = !done && skipOfferReady();
+    if (!offer) {
+      if (slot.firstChild) slot.innerHTML = "";
+      return;
+    }
+    if (slot.firstChild) return;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "run-model-skip-btn";
+    const name = box.dataset.shortLabel || box.dataset.model || "this model";
+    btn.textContent = "Taking longer — skip";
+    btn.title = "Go on without " + name + ". Its answer is dropped from this run.";
+    btn.setAttribute("aria-label", "Skip " + name + ", it is taking longer than expected");
+    btn.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      btn.disabled = true;
+      window.App?.skipModel?.(box.id);
+    });
+    slot.appendChild(btn);
   }
 
   function renderDetail() {
@@ -138,13 +181,16 @@
       if (bar) bar.style.setProperty("--p", (share * 100).toFixed(1) + "%");
 
       const time = row.querySelector(".run-model-time");
-      if (!time) return;
-      if (done) {
-        if (!rowTimes.has(box.id)) rowTimes.set(box.id, Date.now() - startedAt);
-        time.textContent = seconds(rowTimes.get(box.id)).toFixed(1) + "s";
-      } else {
-        time.textContent = "·";
+      if (time) {
+        if (done) {
+          if (!rowTimes.has(box.id)) rowTimes.set(box.id, Date.now() - startedAt);
+          time.textContent = seconds(rowTimes.get(box.id)).toFixed(1) + "s";
+        } else {
+          time.textContent = "·";
+        }
       }
+
+      renderSkipOffer(row, box, done);
     });
   }
 
@@ -322,10 +368,79 @@
 
   // ---- Provenance handover -------------------------------------------
 
+  // ---- The three drawers ---------------------------------------------
+  // Contradictions, model answers and sources are the everything-behind-the
+  // answer. Each chip owns one disclosure and reports how much is in it, so
+  // the reader can tell what is worth opening before opening it. The counts
+  // are read off the rendered DOM for the same reason the contested count
+  // is: a second tally could disagree with what is on screen.
+
+  // count > 0 shows the number next to the label; count === 0 with
+  // hasContent still offers the drawer but without a figure — the free-text
+  // differences fallback has something to show and nothing to count.
+  function syncTab(tabId, countId, panel, count, hasContent = count > 0) {
+    const tab = $(tabId);
+    if (!tab) return;
+    const available = Boolean(panel) && hasContent;
+    tab.hidden = !available;
+    if (!available) return;
+    const countEl = $(countId);
+    if (countEl) countEl.textContent = count > 0 ? String(count) : "";
+    tab.setAttribute("aria-expanded", String(isPanelOpen(panel)));
+  }
+
+  function isPanelOpen(panel) {
+    if (!panel) return false;
+    return panel.tagName === "DETAILS" ? panel.open : !panel.hidden;
+  }
+
+  function setPanelOpen(panel, open) {
+    if (!panel) return;
+    if (panel.tagName === "DETAILS") panel.open = open;
+    else panel.hidden = !open;
+  }
+
+  function togglePanel(tab, panel) {
+    if (!tab || !panel) return;
+    const open = !isPanelOpen(panel);
+    setPanelOpen(panel, open);
+    tab.setAttribute("aria-expanded", String(open));
+    if (open) panel.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  function countDifferences() {
+    const cards = $("differencesCards");
+    if (!cards || cards.hidden) return 0;
+    return cards.querySelectorAll(".diff-card").length;
+  }
+
+  // Anything in the drawer at all: cards, the "no contradictions" empty
+  // state, or the free-text fallback paragraph.
+  function differencesHasContent() {
+    const panel = $("consensusDifferencesPanel");
+    if (!panel) return false;
+    const cards = $("differencesCards");
+    if (cards && !cards.hidden && cards.childElementCount) return true;
+    const fallback = panel.querySelector(".consensus-differences-content > p");
+    return Boolean(fallback && !fallback.hidden && fallback.textContent.trim());
+  }
+
+  function countSources() {
+    return document.querySelectorAll("#consensusSourcesList > li").length;
+  }
+
   function renderProvenance() {
     const wrap = $("runProvenance");
     const facts = $("runProvenanceFacts");
     if (!wrap || !facts) return;
+
+    // The footer is what the run hands over to, so it never appears beside a
+    // running one. Sources land while the models are still answering; without
+    // this the "Sources" chip would show up under a half-written answer.
+    if (stage !== "idle" && stage !== "done") {
+      wrap.hidden = true;
+      return;
+    }
 
     const parts = [];
     if (lastRunSummary?.models) {
@@ -350,17 +465,43 @@
     const replay = $("runReplayButton");
     if (replay) replay.hidden = !lastRunSummary;
 
-    // The line also hosts the follow-up offer, so it stays open when it has
-    // no facts of its own but does carry an action.
+    syncTab(
+      "consensusDifferencesTab",
+      "consensusDifferencesTabCount",
+      $("consensusDifferencesPanel"),
+      countDifferences(),
+      differencesHasContent()
+    );
+    syncTab(
+      "consensusSourcesTab",
+      "consensusSourcesTabCount",
+      $("consensusSourcesPanel"),
+      countSources()
+    );
+
+    // The footer also hosts the follow-up offer and the drawers, so it stays
+    // open when it has no facts of its own but does carry an action.
     const actions = $("followupBar");
     const hasActions = Boolean(actions && !actions.hidden && actions.childElementCount);
-    wrap.hidden = parts.length === 0 && !hasActions;
+    const hasTabs = Boolean(
+      document.querySelector("#consensusFooterTabs .consensus-tab:not([hidden])")
+      || !$("agentModeAnswersRow")?.hidden
+    );
+    wrap.hidden = parts.length === 0 && !hasActions && !hasTabs;
   }
 
   function clearProvenance() {
     const wrap = $("runProvenance");
     if (wrap) wrap.hidden = true;
     lastRunSummary = null;
+    ["consensusDifferencesTab", "consensusSourcesTab"].forEach(id => {
+      const tab = $(id);
+      if (tab) {
+        tab.hidden = true;
+        tab.setAttribute("aria-expanded", "false");
+      }
+    });
+    setPanelOpen($("consensusSourcesPanel"), false);
   }
 
   // ---- Lifecycle hooks -----------------------------------------------
@@ -458,7 +599,14 @@
   }
 
   function onConsensusEnd() {
-    if (stage !== "consensus" && stage !== "differences") return;
+    // Ein manuell spaeter gestarteter Consensus und ein wiederhergestelltes
+    // Ergebnis haben keine aktive Query-Pipeline mehr. Der Provenance-Fuss
+    // (inklusive "Show model answers") gehoert trotzdem immer zur fertigen
+    // Antwort.
+    if (stage !== "consensus" && stage !== "differences") {
+      renderProvenance();
+      return;
+    }
     stopTicker();
 
     lastRunSummary = {
@@ -503,7 +651,25 @@
   }
 
   document.addEventListener("click", event => {
-    if (event.target.closest("#runReplayButton")) replay();
+    if (event.target.closest("#runReplayButton")) {
+      replay();
+      return;
+    }
+    const diffTab = event.target.closest("#consensusDifferencesTab");
+    if (diffTab) {
+      togglePanel(diffTab, $("consensusDifferencesPanel"));
+      return;
+    }
+    const sourcesTab = event.target.closest("#consensusSourcesTab");
+    if (sourcesTab) togglePanel(sourcesTab, $("consensusSourcesPanel"));
+  });
+
+  // The differences drawer is a <details>; anything that opens or closes it
+  // from elsewhere (the free-text fallback, a loaded bookmark) still has to
+  // leave the chip telling the truth.
+  document.getElementById("consensusDifferencesPanel")?.addEventListener("toggle", () => {
+    const tab = $("consensusDifferencesTab");
+    if (tab) tab.setAttribute("aria-expanded", String($("consensusDifferencesPanel").open));
   });
 
   window.App.consensusPipeline = {

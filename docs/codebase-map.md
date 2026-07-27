@@ -122,7 +122,7 @@ und die beiden Mockups in `consensus-engine.html`): eine Antwort in voller
 Breite, Uneinigkeit als `.cx-claim`/`.cx-marker` im Satz, die Differences als
 zugeklapptes `details.consensus-differences-panel` darunter. `landing.css`
 enthält dafür eine Kopie des Marker-Vokabulars (`--cx-major-line`,
-`--cx-flash`, gepunktet/wellig, `.diff-card.is-focused`) — sie muss bei
+`--cx-flash`, durchgezogene 1px-/2px-Linien, `.diff-card.is-focused`) — sie muss bei
 Änderungen an `components-consensus-insights.css` mitgezogen werden. Landing-
 spezifisch sind nur die Lesehilfe `.lp-mark-key` unter der Scene-03-Überschrift,
 das Einlaufen der Marker beim Scroll (`.lp-scene-visual.is-visible` /
@@ -177,6 +177,16 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   jedes change-Event am Dropdown); `pref_select_consensus` bleibt die
   Custom-Wahl. Bestandsnutzer mit gespeicherter Modellwahl migrieren zu
   "custom"; die volle Modell-Liste bleibt bewusst ohne Beschreibungen.
+  **Seit 2026-07-27 ist „Custom" die ganze Aufstellung eines Laufs**, nicht
+  mehr nur die Engine-Liste: `state.view` kennt `presets` → `custom`
+  (Uebersicht: sechs Provider-Zeilen mit Ein-/Ausschluss-Toggle + aktuellem
+  Modell, darunter die Consensus-Engine) → `provider:<key>` bzw. `engine`
+  (die jeweilige Modell-Liste, mit Rueckweg). Die Auswahl feuert `change` auf
+  dem ZIEL-Select, damit `app-init.js` wie bisher `pref_select_*` speichert
+  und auf „custom" umschaltet; nur Provider-Zeilen kehren danach in die
+  Uebersicht zurueck statt das Menue zu schliessen. Vorher waren die sechs
+  Antwortmodelle vom Composer aus gar nicht erreichbar (im Agent Mode sind
+  die Antwortboxen verborgen).
 - **Rahmenlose Shell (seit 2026-07-27)** — `static/css/shell.css` wird als
   **letztes** `@import` in `static/style.css` geladen und gewinnt damit bei
   gleicher Spezifität. Es trägt die Material-Ebene des Redesigns: Elevation
@@ -191,6 +201,17 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   identische Skala, deshalb sind Landing-/Public-Mockups aus demselben Material
   wie `/app` (Testvertrag: `tests/test_public_design_system.py`). Dark Mode
   überschreibt ausschließlich die fünf Werte + die Ampel.
+- **Sidebar-Rhythmus** — Models und Leaderboard liegen in `.sidebar-pinned`,
+  Bookmarks im scrollenden `.sidebar-content`. Diese Container-Grenze addierte
+  14 px (10 px Flex-`gap` der Sidebar + 2 × 2 px Scroll-Padding) auf die 22 px
+  Sektionsabstand, sodass der Sprung zu Bookmarks groesser war als der zu
+  Leaderboard — eine Gruppierung, die es nicht gibt. `shell.css` zieht sie mit
+  `.sidebar > .sidebar-content { margin-top: -14px }` wieder heraus; ab
+  1100 px sind es `-10px`, weil beide Container dort ihre je 2 px
+  Scroll-Padding verlieren. Der
+  Zusatzabstand vor `.sidebar-pinned` ist auf 8 px reduziert (plus 10 px
+  Container-Gap), damit `New comparison → Models` enger ist, waehrend
+  `Models → Leaderboard → Bookmarks` denselben 22-px-Sektionsrhythmus behaelt.
 - **Ein einziger Sidebar-Toggle** — `.app-nav-float .sidebar-toggle` erscheint
   nur bei geschlossener Sidebar, `#sidebarToggleInner` sitzt im Sidebar-Kopf.
   `shell.css` blendet den schwebenden per `body:not(:has(.sidebar.collapsed))`
@@ -206,6 +227,12 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   `app-core.js::renderUsageDisplay`, `firebase.js` und `watch.js` beschriebene
   Usage-Spalte `#usageDisplay`, die nur noch `visually-hidden` ist und die
   einzige Quelle bleibt. Bus: `window.App.sidebarQuota.{sync,setOpen}`.
+  Seit 2026-07-27 trägt der Panel-Kopf auch den **Plan**: `#quotaPlanLabel`
+  („Free") bzw. das goldene `#proBadge` — das Badge sass vorher neben „New
+  comparison" und konkurrierte dort mit der einzigen Aktion der Kopfzeile.
+  Pro zeigt nur das Badge (`planLabel.hidden`), nie „Pro Pro". Die **Wortmarke**
+  ist aus demselben Grund aus dem Footer (unter dem Account-Icon) nach oben in
+  `.sidebar-brand-row` gewandert; unten bleibt nur die Meta-Zeile.
 - **Navigation/Settings-Shell** (`templates/index.html`, `layout.css`,
   `shell.css`, `components-modals.css`, `app-init.js`, `firebase.js`) — Models,
   Leaderboard und Bookmarks sind ausschließlich Sidebar-Abschnitte mit
@@ -231,6 +258,14 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   gedrosselten Streaming-Render über `window.ConsensusMath`.
 - **`sources.js`** — Quellen/Evidence-Mapping; nutzt DOM-Datasets
   `dataset.consensusAnswer` / `dataset.consensusSources`; `window.currentEvidenceSources`.
+  Seit 2026-07-27 zwei Darstellungen: **im Konsenstext** (Container ist bzw.
+  liegt in `#consensusAnswerBody`) werden `[S3]`-Tags zu hochgestellten Zahlen
+  `.src-ref` — die Nummer ist die Position in `window.currentEvidenceSources`,
+  also identisch mit der Liste in `#consensusSourcesList`
+  (`app-init.js::renderEvidenceSources`, geoeffnet ueber den Quellen-Chip).
+  In den Modellantworten bleiben es die Favicon-Chips `.source-link`.
+  Ein Hover auf `.src-ref` oeffnet `#sourceTeaser` (Favicon, Host, Titel,
+  Snippet); auf Touch/Keyboard traegt das `title`-Attribut dieselbe Info.
 - **`attachments.js`** — Attachment-UI/Payload (Pro), inklusive Bild-Paste im
   Fragefeld und Bild-Drag-and-drop auf den Input-Container. Solange ein echter
   Anhang für die nächste Frage bereitliegt, wird DeepSeek temporär mit einem
@@ -243,11 +278,22 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Seit 2026-07-27 ist das Panel `#agentModePanel` als **Fortschrittsanzeige
   stillgelegt** (in `shell.css` auf `display:none`): zwei Progress-UIs fuer
   einen Request waren genau der Ueberschuss, den der gefuehrte Lauf abbaut.
-  Agent Mode behaelt sein Verhalten (Modelle gruppieren, Auto-Consensus,
-  Einzelantworten standardmaessig verborgen). Der session-lokale
+  Agent Mode behaelt danach nur noch zwei Aufgaben: Modelle gruppieren und
+  Auto-Consensus. Der session-lokale
   „Show/Hide model answers"-Disclosure (`#agentModeAnswersRow`) ist ins Markup
   der Provenance-Zeile gewandert — agent-mode.js adressiert ihn unveraendert
-  per `getElementById`, die Position ist kein Vertrag. Neu exportiert:
+  per `getElementById`, die Position ist kein Vertrag — und gilt seither in
+  **beiden Modi**: `body:not(.is-hero):not(.agent-mode-show-answers)` blendet
+  die Antwortboxen aus. Sobald der fertige Consensus-Fuss sichtbar ist, bleibt
+  `#agentModeAnswersRow` immer vorhanden; er haengt nicht mehr an einer
+  fehleranfaelligen Erkennung aktiver/abgeschlossener Modellboxen.
+  Vorher war der Schalter an den Agent Mode gebunden und damit in zwei von
+  drei Faellen unsichtbar, obwohl er das Wichtigste dahinter oeffnet.
+  **Folgefalle:** wer den Text einer Antwortbox liest, muss `textContent`
+  nehmen — `innerText` liefert fuer `display:none` den leeren String. Die
+  Zaehlung in `consensus-lifecycle.js`, die Zitations-Modelle in
+  `consensus-run.js`/`consensus-actions.js` und `isBoxDone` in
+  `consensus-progress.js` sind entsprechend umgestellt. Neu exportiert:
   `window.App.agentMode.streamProgressByResponseId()`, damit der gefuehrte Lauf
   dieselbe monotone Stream-Schaetzung nutzt statt sie zu duplizieren.
 - **`consensus-progress.js`** — der **gefuehrte Lauf** `#consensusRun` unter dem
@@ -259,12 +305,32 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   aus `window.App.agentMode.streamProgressByResponseId()`) existieren nur
   waehrend der Antwortphase, und Phasen ohne ehrlichen Prozentwert laufen
   indeterminiert (`.run-track.is-indeterminate`) statt einen zu erfinden.
-  Am Ende klappt der Block zusammen und uebergibt an die **Provenance-Zeile**
-  `#runProvenance` unter der Antwort ("N models · X s · N contested passages",
-  „Replay run", Follow-up-Angebot, „Show model answers"). Die strittigen
+  Am Ende klappt der Block zusammen und uebergibt an den **Provenance-Fuss**
+  `#runProvenance` unter der Antwort. Seit 2026-07-27 sind das drei Zeilen
+  (Mockup-Vorgabe): (1) Fakten „N models · X s · N contested passages" +
+  „Replay run" links, `#consensusFooterActions` mit Teilen/Beobachten/
+  Zitieren rechts; (2) der **Verdict** `#consensusVerdict`, der vorher UEBER
+  der Antwort stand und sie damit bewertete, bevor sie gelesen war;
+  (3) `#consensusFooterTabs` mit den drei Aufklapp-Flaechen
+  `#consensusDifferencesTab` / „Show model answers" (`#agentModeAnswersRow`,
+  seit 2026-07-27 **nicht mehr agent-mode-gated**, siehe `agent-mode.js`) /
+  `#consensusSourcesTab`. Bewusst rahmenlos: Text plus Zahl, aktiv per
+  Schriftgewicht und Unterstreichung — ein Rechteck um ein Wort ist genau der
+  Rahmen, den diese Shell sonst ueberall abbaut. Der Fuss erscheint
+  nur bei `stage === "idle"|"done"` — Quellen landen schon waehrend der
+  Antwortphase und wuerden ihn sonst unter einer halben Antwort aufmachen.
+  Unter den Tabs gibt es im geschlossenen Zustand keinen eigenen
+  Differences-Trenner und `.consensus-divider` ist stillgelegt; die einzige
+  Abschnittsgrenze zum Composer ist dessen auslaufender Horizont. Ein
+  geoeffneter Differences-/Sources-Drawer behaelt intern eine feine Oberkante.
+  `onConsensusEnd()` rendert ihn auch ohne aktive Query-Pipeline (spaeter
+  manuell gestarteter Consensus); `firebase.js::loadSingleBookmarkUI` tut
+  dasselbe explizit fuer wiederhergestellte Bookmarks.
+  Die strittigen
   Stellen werden aus den tatsaechlich gerenderten `.cx-marker` gezaehlt, nicht
   separat gebucht; `consensus-insights.js` ruft dafuer nach dem Markieren
-  `renderProvenance()` nach. Bruecke: `window.App.consensusPipeline.{onPrepare,
+  `renderProvenance()` nach; `app-init.js::renderEvidenceSources` ebenso fuer
+  den Quellen-Chip. Bruecke: `window.App.consensusPipeline.{onPrepare,
   onQueryStatus,onConsensusStart,onDifferencesStart,onConsensusEnd,
   renderProvenance,dismiss}`. `onPrepare` kommt aus `query-send.js` **vor**
   `/prepare`, `onDifferencesStart` aus dem ersten `differences.delta`
@@ -280,7 +346,13 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   „Show full question“): `window.App.setThreadQuestion` (app-core.js), gefuellt
   von `query-send.js` (send), `demo.js` (nach der Tipp-Phase) und
   `firebase.js::loadSingleBookmarkUI`; geleert von „New comparison“ und
-  `clearResponseBoxes`. Der Composer wird beim Senden **geleert** (erst nach
+  `clearResponseBoxes`. Der Text ist auf `max-width: 70%` begrenzt: die Frage
+  ist eine Ueberschrift ueber der Antwort, keine erste Zeile davon. Die
+  **Demo** laesst ihre Frage waehrend des animierten Laufs zusaetzlich im
+  Composer stehen (echte Laeufe leeren ihn), damit der selbst getippte Text
+  nicht mitten im Ablauf verschwindet. Nach der fertigen Antwort ersetzt bei
+  Gaesten `#postDemoLoginPrompt` den ganzen deaktivierten Composer; die Frage
+  bleibt im Thread-Kopf sichtbar. Der Composer wird beim Senden **geleert** (erst nach
   `/prepare`, damit Login-/Limit-Abbrueche den Text nicht fressen) — deshalb ist
   `window.lastQuestion` die Quelle fuer `getConsensus` und die Citation, nicht
   mehr `#questionInput`. Der gefuehrte Lauf `#consensusRun` liegt jetzt als
@@ -289,8 +361,18 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   1.7 auf max. 64ch; `.consensus-main` ist `overflow:visible`, weil der alte
   `overflow-x:auto` mit den -8px-Copy-Icons einen Quer-Scrollbalken unter der
   Provenance-Zeile malte. Achtung-Falle erneut bestaetigt: neue stille Buttons
-  (`.run-replay-btn`, `.thread-ask-more`) muessen in die globale
+  (`.run-replay-btn`, `.thread-ask-more`, `.consensus-tab`,
+  `.model-picker-row-toggle`) muessen in die globale
   `button:not(...)`-Kette in `components-input.css`.
+  **Der Composer haengt exakt am Viewport-Rand (2026-07-27):** dafuer muessen
+  drei Groessen zusammenpassen — `body { min-height: 100dvh; padding-bottom: 0 }`,
+  `.container { min-height: calc(100dvh - 10px); padding-bottom: 0 }` und
+  `.input-section { margin-bottom: 0 }`. Vorher blieben body-Padding, das
+  100vh von `base.css` (auf dem Handy hoeher als 100dvh) und der geerbte
+  20px-Aussenabstand als Rest-Scrollweg uebrig, in den die sticky Leiste
+  hineinwanderte. Aus demselben Grund oeffnen die Menues am Composer
+  (`.attach-menu`, der Consensus-Picker) im Thread nach **oben** — unter der
+  Leiste ist kein Platz mehr; im Hero bleibt es bei „nach unten".
 - **Composer-Reduktion (2026-07-27)** — die Eingabezeile ist auf Anhang (+),
   EINEN Lauf-Schalter („N models · Preset", der bestehende Consensus-Picker mit
   vorangestellter Modellanzahl) und Senden reduziert. Entfallen sind dort
@@ -363,15 +445,38 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Jump-to-answer, Resolve-Runde (Button an Widerspruchs-Karten → `POST
   /resolve`). Seit 2026-07-24 ist die Uneinigkeit *im* Antworttext markiert
   statt in einer zweiten Spalte daneben (Rechtschreibprüfungs-Metapher):
+  Claim-Popover und Difference-Karten laufen für den Sprung zur Fundstelle über
+  denselben `jumpToModelAnswer`-Pfad. Dieser deckt verborgene Einzelantworten
+  zuerst über `window.App.agentMode.showModelAnswers()` auf und
+  markiert/scrollt synchron zum Zitat; die Geometrie-Abfrage erzwingt das
+  aktualisierte Layout selbst. Der aktive Agent Mode wird dabei nicht
+  verändert.
   `findAnchorTarget` löst den verifizierten Anker auf, `sentenceBounds`
   dehnt ihn auf den umgebenden Satz aus, `wrapFlatRange` wrappt die
   betroffenen Textknoten in `<span class="cx-claim is-unanimous|is-minor|
   is-major">`. Gewrappt wird pro Textknoten (nicht per
   `Range.extractContents`), damit `<strong>`, `[S1]`-Links und KaTeX exakt an
   ihrem Platz bleiben; `code`/`pre`/`.katex`/Badges werden übersprungen.
-  `is-unanimous` ist bewusst dekorationslos (nur Badge), `is-minor` fein
-  gepunktet, `is-major` bernsteinfarbene Wellenlinie — kein reduzierter
-  Kontrast, keine Hintergrundfarbe. Ein Satz wird höchstens einmal dekoriert
+  `is-unanimous` ist bewusst dekorationslos (nur die Marke), `is-minor` eine
+  feine 1px-Linie, `is-major` eine 2px-Linie in Bernstein — beide
+  **durchgezogen** (die Wellenlinie las sich als Rechtschreibfehler,
+  User-Vorgabe 2026-07-27); kein reduzierter Kontrast, keine Hintergrundfarbe.
+  Das `.claim-badge` daneben zeigt seit 2026-07-27 wieder die scanbare Quote
+  „4/6", jetzt als ruhige Mikro-Marke mit tabellarischen Ziffern, transparenter
+  Flaeche und feiner Kontur. Sie ist damit klar von hochgestellten
+  Quellenzahlen unterschieden; Neutral = Einigkeit, Bernstein
+  (`has-dissent`) = Abweichung. Wenn Claim und Difference denselben Satz
+  belegen, bleibt nur die Quote sichtbar; der zusaetzliche `.cx-marker` bleibt
+  verborgen im DOM, damit Passage-Klick, Preview und Zaehlung weiter auf die
+  Difference-Karte zeigen. Treffen mehrere Claims denselben Satz, bleibt
+  ebenfalls nur eine Marke sichtbar: die konservative Satzquote des am
+  wenigsten gestuetzten Claims. Die Kopien in
+  `landing.css` **und die Mockup-Markups** (`landing.html`,
+  `consensus-engine.html`, `partials/product_result_mockup.html`) tragen
+  dieselbe Mikro-Quote.
+  Ausserdem steht `.src-ref` jetzt im `MARK_SKIP_SELECTOR` — ohne das wurde
+  die Quellenzahl selbst als Satzteil gewrappt und trug die Unterstreichung
+  der Passage (eine bernsteinfarbene „3" sieht aus wie ein Fehler). Ein Satz wird höchstens einmal dekoriert
   (Widersprüche laufen zuerst, Claims hängen sich an). Der Spalten-Balancer
   ist mit dem einspaltigen Layout entfallen; `window.balanceConsensusColumns`
   existiert nicht mehr.
@@ -460,21 +565,45 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
 4. Ohne Agent Mode begleitet `consensus-progress.js` den Lauf rahmenlos unter
    dem Input: Antwortfortschritt basiert auf `dataset.responseState`; nach dem
    Fan-out wechselt die Anzeige zur nicht prozentual geschätzten Synthesephase
-   und verschwindet bei Abschluss, Fehler oder Abbruch.
+   und verschwindet bei Abschluss, Fehler oder Abbruch. Es ist die EINZIGE
+   Fortschrittsanzeige des Laufs — der Differences-Spinner hatte bis
+   2026-07-27 eine eigene Leiste (`.differences-progress`), die mit ihr
+   dieselbe Phase doppelt zeigte und deshalb entfallen ist. Im zweiten
+   Schritt ist auch der verbliebene Text „Comparing responses" weg:
+   `window.consensusDifferencesSpinnerHTML` ist leer, `consensus-run.js`
+   faellt bewusst NICHT auf `window.spinnerHTML` zurueck, und
+   `differencesPanel.setSynthesizing()` laesst das Panel jetzt ZU (ein
+   aufgeklapptes leeres Panel waere die dritte Anzeige desselben Vorgangs).
+5. **Ein hängendes Modell blockiert den Lauf nicht**: jedes `/ask_*` bekommt in
+   `query-send.js` einen eigenen `AbortController` (der Lauf-Controller
+   kaskadiert darauf). Haben mindestens zwei Modelle geantwortet und wartet der
+   Lauf danach ≥ 8 s weiter, bietet die Modellzeile im gefuehrten Lauf
+   „Taking longer — skip" an; `window.App.skipModel(boxId)` bricht genau dieses
+   Modell ab, markiert die Box als `responseState="error"` +
+   `responseSkipped="true"` und zaehlt es einmalig als beantwortet.
 
 ### Follow-up-Fragen (Pro)
 Nach einem erfolgreichen Consensus kann eine Anschlussfrage mit Kontext
 gestellt werden. Kontext ist **genau eine Ebene**: das letzte Frage/Konsens-
 Paar (`{previous_question, previous_consensus}`) — bewusst NICHT die sechs
 Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
-- Frontend: `window.App.followup` (in `consensus-run.js`) rendert **zwei Orte,
-  einen Zustand** (seit 2026-07-27): Das **Angebot** „Ask a follow-up" steht in
-  `#followupBar` **innerhalb der Provenance-Zeile an der Antwort** — dort, deren
-  Kontext es mitnehmen wuerde —, Pro-gebadged; Free-Klick öffnet das Pro-Modal.
-  Aktivieren erzeugt den **Kontext-Chip** in `#followupChipBar` **am
-  Eingabefeld**, weil er beschreibt, was gleich rausgeht. `render()` waehlt
-  anhand von `armed` den Zielcontainer und macht `#runProvenance` auch dann
-  auf, wenn sie sonst leer waere (aus dem Bookmark geladener Konsens ohne Lauf).
+- Frontend: `window.App.followup` (in `consensus-run.js`) rendert **zwei Orte
+  am Composer, einen Zustand** (seit 2026-07-27, Angebot dorthin verschoben):
+  Das **Composer-Gate** `#composerGate` erscheint, sobald eine Frage beantwortet
+  ist, und sagt, wie es weitergeht — „New comparison" (frei) und „Ask a
+  follow-up" (Pro-gebadged, Free-Klick öffnet das Pro-Modal). Für alle Nutzer
+  **klappt `syncInputLock()` den gesamten Eingabe-Composer für Free UND Pro
+  zu** (`body.composer-locked`): Textarea, Anhang, Modellwahl und Senden
+  verschwinden; sichtbar bleibt nur die kompakte Entscheidung „New comparison“
+  / „Ask a follow-up“. consens.io ist kein Chat, ein Vergleich endet mit seiner
+  Antwort. „New comparison“ setzt den normalen leeren Composer zurück;
+  „Ask a follow-up“ öffnet ihn für Pro mit Kontext-Chip (Free: Pro-Modal).
+  Die Login-Schranke (`updateQuestionInputAccess`) bleibt die stärkere
+  Bedingung und ruft `syncInputLock()` am Ende selbst auf, sonst öffnete sie
+  das Feld nach jedem Lauf wieder. Aktivieren erzeugt den
+  **Kontext-Chip** in `#followupChipBar` **am Eingabefeld**, weil er
+  beschreibt, was gleich rausgeht. `#followupBar` in der Provenance-Zeile
+  bleibt als leerer DOM-Knoten bestehen (`consensus-progress.js` fragt ihn ab).
   `query-send.js` konsumiert den State beim
   Senden und legt `context` in den `/prepare`- und alle `/ask_*`-Payloads.
   **Follow-ups verketten sich nicht** (Kostenkontrolle): `consume()` markiert
@@ -1431,7 +1560,7 @@ ersten Check statt eines leeren Consensus-Panels.
   Follow-up-Kontext-State (`offer/arm/discard/consume/reset/render`).
   `query-send.js` (consume beim Senden), `app-init.js` (reset in
   `clearResponseBoxes`) und `user-tier.js` (render bei Tier-Wechsel) hängen
-  daran; DOM-Ziel ist `#followupBar` in `index.html`.
+  daran; DOM-Ziele sind `#composerGate` und `#followupChipBar` in `index.html`.
 - **`window.App.setAppTitle(question?)`** (definiert in `app-core.js`) hält den
   Standard- bzw. fragebezogenen Browser-Tab-Titel bei Query-Send, Bookmark-Open
   und Clear synchron zur aktuellen Ansicht.

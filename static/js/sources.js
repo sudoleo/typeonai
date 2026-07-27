@@ -121,6 +121,66 @@ function appendInlineSourceRefs(fragment, refs) {
   });
 }
 
+// --- Numbered citations in the consensus answer ---------------------------
+// The consensus is a page of prose, and a favicon chip in the middle of a
+// sentence is a piece of furniture inside it. There it gets what printed
+// prose uses: a raised number that points at the list underneath. The model
+// answers keep the chips — they are scannable evidence, not a read.
+
+function sourceNumberFromToken(token) {
+  const num = parseInt(String(token || "").replace(/^S/i, ""), 10);
+  return Number.isFinite(num) && num > 0 ? num : null;
+}
+
+function createSourceRef(ref) {
+  const number = sourceNumberFromToken(ref.token);
+  const href = getSafeSourceHref(ref.src);
+  const el = href ? document.createElement("a") : document.createElement("span");
+  el.className = "src-ref";
+  el.textContent = number ? String(number) : ref.token;
+  el.dataset.sourceNumber = number ? String(number) : "";
+  // The teaser is the explanation; the native tooltip is the fallback for
+  // keyboard and touch, where no hover exists.
+  el.title = getSourceTitle(ref.src, ref.token);
+  el.setAttribute("aria-label", `Source ${number || ref.token}: ${el.title}`);
+
+  if (href) {
+    el.href = href;
+    el.target = "_blank";
+    el.rel = "noopener noreferrer";
+  }
+
+  return el;
+}
+
+function appendNumberedSourceRefs(fragment, refs) {
+  const seen = new Set();
+  let written = 0;
+  refs.forEach(ref => {
+    const number = sourceNumberFromToken(ref.token);
+    const key = number || ref.token;
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (written > 0) {
+      const sep = document.createElement("span");
+      sep.className = "src-ref-sep";
+      sep.textContent = ",";
+      fragment.appendChild(sep);
+    }
+    fragment.appendChild(createSourceRef(ref));
+    written += 1;
+  });
+}
+
+function wantsNumberedRefs(containerEl) {
+  if (!containerEl || typeof containerEl.closest !== "function") return false;
+  return Boolean(
+    containerEl.id === "consensusAnswerBody"
+    || containerEl.closest("#consensusAnswerBody")
+    || containerEl.querySelector?.("#consensusAnswerBody")
+  );
+}
+
 function createSourceListCluster(refs) {
   const uniqueRefs = [];
   const seen = new Set();
@@ -181,6 +241,7 @@ function createSourceListCluster(refs) {
 function linkifySourceTags(containerEl, sources) {
   if (!containerEl || !sources || !sources.length) return;
 
+  const numbered = wantsNumberedRefs(containerEl);
   const ignoredParents = new Set(["A", "CODE", "PRE", "SCRIPT", "STYLE", "TEXTAREA"]);
   const sourceRunRegex = /(?:\[((?:S?\d+)(?:,\s*S?\d+)*)\](?:[\s,;:]*(?=\[S?\d))?)+/gi;
   const sourceGroupThreshold = 6;
@@ -214,7 +275,11 @@ function linkifySourceTags(containerEl, sources) {
       }
 
       const refs = getSourceRefs(match, sources);
-      if (refs.length >= sourceGroupThreshold) {
+      if (numbered) {
+        // Numbers never need a cluster: twelve raised digits still read as
+        // one citation, twelve chips are a paragraph of their own.
+        appendNumberedSourceRefs(fragment, refs);
+      } else if (refs.length >= sourceGroupThreshold) {
         fragment.appendChild(createSourceListCluster(refs));
       } else {
         appendInlineSourceRefs(fragment, refs);
@@ -340,8 +405,146 @@ function renderModelResponseWithSources(outputEl, markdown, incomingSources) {
   return prepared.markdown;
 }
 
+// --- Teaser on hover ------------------------------------------------------
+// A raised number says "there is a source", not "which one". Hovering it
+// answers that without leaving the sentence — the same bargain the marked
+// passages in the consensus already make: look closer, stay in place. Click
+// still opens the source, and the title attribute covers keyboard and touch,
+// where there is no hover to lean on.
+
+const sourceTeaser = (function () {
+  let el = null;
+  let anchor = null;
+  let hideTimer = null;
+
+  function ensure() {
+    if (el) return el;
+    el = document.createElement("div");
+    el.id = "sourceTeaser";
+    el.className = "source-teaser";
+    el.setAttribute("role", "tooltip");
+    el.hidden = true;
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function lookup(number) {
+    const list = Array.isArray(window.currentEvidenceSources) ? window.currentEvidenceSources : [];
+    return list[number - 1] || null;
+  }
+
+  function fill(node, src, number) {
+    node.innerHTML = "";
+
+    const head = document.createElement("div");
+    head.className = "source-teaser-head";
+
+    const index = document.createElement("span");
+    index.className = "source-teaser-index";
+    index.textContent = String(number);
+    head.appendChild(index);
+
+    const host = getSourceHost(src);
+    if (host) {
+      const fav = document.createElement("img");
+      fav.className = "source-teaser-favicon";
+      fav.src = "/api/topics/favicon?d=" + encodeURIComponent(host);
+      fav.alt = "";
+      fav.setAttribute("aria-hidden", "true");
+      fav.setAttribute("referrerpolicy", "no-referrer");
+      fav.width = 14;
+      fav.height = 14;
+      fav.addEventListener("error", () => fav.remove());
+      head.appendChild(fav);
+
+      const hostEl = document.createElement("span");
+      hostEl.className = "source-teaser-host";
+      hostEl.textContent = host;
+      head.appendChild(hostEl);
+    }
+
+    node.appendChild(head);
+
+    const title = document.createElement("div");
+    title.className = "source-teaser-title";
+    title.textContent = getSourceTitle(src, "Source " + number);
+    node.appendChild(title);
+
+    const snippet = src && (src.snippet || src.text);
+    if (snippet) {
+      const body = document.createElement("div");
+      body.className = "source-teaser-snippet";
+      body.textContent = String(snippet);
+      node.appendChild(body);
+    }
+  }
+
+  function place(node, target) {
+    const rect = target.getBoundingClientRect();
+    node.style.visibility = "hidden";
+    node.hidden = false;
+    const width = node.offsetWidth;
+    const height = node.offsetHeight;
+    const margin = 8;
+
+    let left = rect.left + rect.width / 2 - width / 2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
+
+    // Above the citation by default; below it when the top of the viewport
+    // is closer than the popup is tall.
+    let top = rect.top - height - 8;
+    node.classList.toggle("is-below", top < margin);
+    if (top < margin) top = rect.bottom + 8;
+
+    node.style.left = Math.round(left + window.scrollX) + "px";
+    node.style.top = Math.round(top + window.scrollY) + "px";
+    node.style.visibility = "";
+  }
+
+  function show(target) {
+    const number = parseInt(target.dataset.sourceNumber || "", 10);
+    if (!Number.isFinite(number)) return;
+    const src = lookup(number);
+    if (!src) return;
+
+    window.clearTimeout(hideTimer);
+    hideTimer = null;
+    anchor = target;
+    const node = ensure();
+    fill(node, src, number);
+    place(node, target);
+    node.classList.add("is-visible");
+  }
+
+  function hide() {
+    if (!el) return;
+    anchor = null;
+    el.classList.remove("is-visible");
+    window.clearTimeout(hideTimer);
+    hideTimer = window.setTimeout(() => {
+      if (el && !el.classList.contains("is-visible")) el.hidden = true;
+    }, 160);
+  }
+
+  document.addEventListener("pointerover", event => {
+    const ref = event.target.closest?.(".src-ref");
+    if (ref) {
+      if (ref !== anchor) show(ref);
+      return;
+    }
+    if (anchor && !event.target.closest?.("#sourceTeaser")) hide();
+  });
+
+  document.addEventListener("pointerdown", () => hide());
+  window.addEventListener("scroll", () => { if (anchor) hide(); }, { passive: true });
+  window.addEventListener("resize", () => { if (anchor) hide(); });
+
+  return { hide };
+})();
+
 window.mergeEvidenceSources = mergeEvidenceSources;
 window.rewriteSourceTags = rewriteSourceTags;
 window.registerResponseSources = registerResponseSources;
 window.prepareResponseSources = prepareResponseSources;
 window.renderModelResponseWithSources = renderModelResponseWithSources;
+window.hideSourceTeaser = sourceTeaser.hide;
