@@ -12,7 +12,7 @@ from app.services import share_snapshots
 from app.services.share_snapshots import sanitize_differences_data
 
 router = APIRouter()
-BOOKMARK_PAGE_SIZE = 30
+BOOKMARK_PAGE_SIZE = 35
 BOOKMARK_PAGE_SIZE_MAX = 50
 BOOKMARK_ID_RE = re.compile(r"[A-Za-z0-9_]{1,100}")
 

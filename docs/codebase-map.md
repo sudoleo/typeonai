@@ -229,7 +229,10 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   **nichts** selbst: ein MutationObserver spiegelt die weiterhin von
   `app-core.js::renderUsageDisplay`, `firebase.js` und `watch.js` beschriebene
   Usage-Spalte `#usageDisplay`, die nur noch `visually-hidden` ist und die
-  einzige Quelle bleibt. Bus: `window.App.sidebarQuota.{sync,setOpen}`.
+  einzige Quelle bleibt. Bus: `window.App.sidebarQuota.{sync,setOpen,runs}` —
+  `runs()` gibt dieselbe geparste Zeile zurück, aus der der Ring entsteht,
+  damit Module wie „Run again" den Preis eines Klicks benennen können, ohne
+  eine zweite Rechnung aufzumachen.
   Seit 2026-07-27 trägt der Panel-Kopf auch den **Plan**: `#quotaPlanLabel`
   („Free") bzw. das goldene `#proBadge` — das Badge sass vorher neben „New
   comparison" und konkurrierte dort mit der einzigen Aktion der Kopfzeile.
@@ -297,6 +300,16 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   fehleranfaelligen Erkennung aktiver/abgeschlossener Modellboxen.
   Vorher war der Schalter an den Agent Mode gebunden und damit in zwei von
   drei Faellen unsichtbar, obwohl er das Wichtigste dahinter oeffnet.
+  Seit 2026-07-28 haengt an diesem Disclosure auch die **Vorschau-Klammer** der
+  Antwortboxen (`syncAnswerPreviews`): statt sechs eigener Innen-Scrolls
+  (`.collapsible-content` mit `max-height` + `overflow-y`) bekommen
+  ueberlaufende Boxen `.is-clamped` (gleiche Hoehe, Ausblendkante) plus einen
+  `.response-answer-more`-Knopf; geklappt wird nur, was wirklich ueberlaeuft,
+  und nie waehrend des Streams (`is-streaming` / `dataset.responseState`).
+  Die Nutzerentscheidung steht in `dataset.answerOpen` und wird beim naechsten
+  Lauf verworfen. **Falle:** der globale `button:not(...)`-Selektor in
+  `components-input.css` musste den neuen Knopf ausnehmen, sonst wird aus dem
+  stillen Link eine schwarze Pille.
   **Folgefalle:** wer den Text einer Antwortbox liest, muss `textContent`
   nehmen — `innerText` liefert fuer `display:none` den leeren String. Die
   Zaehlung in `consensus-lifecycle.js`, die Zitations-Modelle in
@@ -314,28 +327,65 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   waehrend der Antwortphase, und Phasen ohne ehrlichen Prozentwert laufen
   indeterminiert (`.run-track.is-indeterminate`) statt einen zu erfinden.
   Am Ende klappt der Block zusammen und uebergibt an den **Provenance-Fuss**
-  `#runProvenance` unter der Antwort. Seit 2026-07-27 sind das drei Zeilen
-  (Mockup-Vorgabe): (1) Fakten „N models · X s · N contested passages" +
-  „Run again" links (setzt über `#newRunButton` den normalen Hero-/Composer-
-  Ausgangszustand zurück und füllt die letzte Frage vor, sendet aber nicht
-  automatisch), `#consensusFooterActions` mit Teilen/Beobachten/
-  Zitieren rechts; (2) der **Verdict** `#consensusVerdict`, der vorher UEBER
-  der Antwort stand und sie damit bewertete, bevor sie gelesen war;
-  (3) `#consensusFooterTabs` mit den drei Aufklapp-Flaechen
-  `#consensusDifferencesTab` / „Compare answers" (`#agentModeAnswersRow`,
-  seit 2026-07-27 **nicht mehr agent-mode-gated**, siehe `agent-mode.js`) /
-  `#consensusSourcesTab`. Bewusst rahmenlos: Text plus Zahl, aktiv per
-  Schriftgewicht und Unterstreichung — ein Rechteck um ein Wort ist genau der
-  Rahmen, den diese Shell sonst ueberall abbaut. Der Fuss erscheint
+  `#runProvenance` unter der Antwort. Seit **2026-07-28 zwei Zeilen statt drei**
+  — die Anordnung macht allein das Grid in `shell.css`
+  (`grid-template-areas`), die fuenf Bloecke liegen im Markup flach
+  nebeneinander: (1) **Verdict** `#consensusVerdict` (Score-Ring, einzeilige
+  Headline, EINE Meta-Zeile) links, `#consensusFooterActions` mit Teilen/
+  Beobachten/Zitieren rechts; (2) `#consensusFooterTabs` mit den drei
+  Aufklapp-Flaechen `#consensusDifferencesTab` / „Compare answers"
+  (`#agentModeAnswersRow`, seit 2026-07-27 **nicht mehr agent-mode-gated**,
+  siehe `agent-mode.js`) / `#consensusSourcesTab` links, Lauf-Fakten
+  „N models · X s" + „Run again" rechts (Letzteres setzt über `#newRunButton`
+  den normalen Hero-/Composer-Ausgangszustand zurück und füllt die letzte
+  Frage vor, sendet aber nicht automatisch). Eine Wiederholung ist ein
+  **vollstaendiger zweiter Lauf** und kostet entsprechend Kontingent; seit
+  2026-07-28 steht der Preis deshalb am Knopf (`#runReplayCost`, „· uses 1
+  run", bei unbegrenztem Plan leer) und nach dem Klick bis zum Absenden ueber
+  dem Eingabefeld (`#composerRunNotice`). Beides liest `labelRunAgain` /
+  `prepareRunAgain` in `consensus-progress.js` aus `window.App.sidebarQuota
+  .runs()` — derselben Quelle wie der Kontingent-Ring, damit hier nie ein
+  zweiter, falscher Preis entsteht; ein MutationObserver auf `#usageDisplay`
+  zieht das Label nach, wenn das Kontingent spaeter eintrifft.
+  `#followupBar` spannt darunter
+  ueber beide Spalten. Der Verdict stand vorher UEBER der Antwort und
+  bewertete sie, bevor sie gelesen war.
+  **Was dabei entfallen ist, ist Doppelung, keine Information:** die
+  Modellzahl stand in Fakten UND Verdict-Detail, „N contested passages" sagte
+  ein drittes Mal, was „N critical" und die Zahl an „Review differences"
+  schon sagen; die Judge-Fussnote war ein rechtsbuendiger Zweizeiler und ist
+  jetzt Nachsatz derselben Meta-Zeile (`.verdict-judge` inline, der Zusatz
+  „independent of the consensus engine" liegt im `title`). Die Headline zeigt
+  seither **genau ein** Thema (schwerwiegendstes zuerst, `TOPIC_MAX_SHOWN`)
+  und wird per CSS einzeilig gekuerzt — vorher kettete sie zwei abgeschnittene
+  Claim-Fragmente plus „+2 more" zu einem zweizeiligen Satzrest.
+  **Das Urteil ist die einzige Flaeche im Fuss (2026-07-28).** In lauter gleich
+  leisen Grautoenen wurde die eine Aussage, die der Leser nicht uebersehen darf,
+  zur Fussnote unter der Fussnote. Es bekommt deshalb einen Grundton
+  (`color-mix` aus `--verdict-ring` in `--raise`, kein Rahmen/Schatten/Glas),
+  eine groessere Headline in voller Textfarbe, einen 46px-Ring mit
+  Bildunterschrift „agreement" (`.verdict-gauge`, weil eine nackte 0 im Kreis
+  nicht sagt, wovon sie 0 ist) und eine **dritte Ampelstufe** `is-alert`
+  (mind. ein KRITISCHER Widerspruch, vorher war jeder Widerspruch bernstein).
+  Die ungefuellte Ringstrecke traegt 22 % derselben Farbe — bei Score 0 war der
+  Ring sonst ein leerer grauer Kreis und ausgerechnet im staerksten Fall stumm.
+  Teilen/Beobachten/Zitieren bleiben bewusst OHNE Flaeche auf dem Seitengrund
+  und damit sichtbar zweitrangig. Achtung: die Flaeche muss NACH dem
+  rahmenlosen Reset (`.consensus-verdict.is-warn { background: none }`) in
+  `shell.css` stehen — gleiche Spezifitaet, spaeter gewinnt.
+  Die Tabs bleiben rahmenlos (Text, Zahl, Chevron; aktiv per Schriftgewicht,
+  Unterstreichung und gedrehtem Chevron) — ein Rechteck um ein Wort ist genau
+  der Rahmen, den diese Shell sonst ueberall abbaut. Der Fuss erscheint
   nur bei `stage === "idle"|"done"` — Quellen landen schon waehrend der
   Antwortphase und wuerden ihn sonst unter einer halben Antwort aufmachen.
   Unter den Tabs gibt es im geschlossenen Zustand keinen eigenen
   Differences-Trenner und `.consensus-divider` ist stillgelegt; die einzige
   Abschnittsgrenze zum Composer ist dessen auslaufender Horizont. Ein
   geoeffneter Differences-/Sources-Drawer behaelt intern eine feine Oberkante.
-  Auf ≤640 px wird der Verdict als kompakter Zweispaltenblock (Score + Text)
-  und die drei Tabs als gleich breite Dreierspalte gerendert; Fakten und
-  Aktionen umbrechen kontrolliert statt in zufällige Button-Zeilen.
+  Auf ≤640 px ordnet dasselbe Grid um: Verdict ueber volle Breite, darunter
+  die drei Tabs als gleich breite Dreierspalte (Chevron aus, Kurzlabel aus
+  `data-short` via `::after`, damit die Knoepfe einzeilig bleiben), darunter
+  Aktionen und Fakten **gemeinsam** auf der letzten Zeile.
   `onConsensusEnd()` rendert ihn auch ohne aktive Query-Pipeline (spaeter
   manuell gestarteter Consensus); `firebase.js::loadSingleBookmarkUI` tut
   dasselbe explizit fuer wiederhergestellte Bookmarks.
@@ -456,7 +506,14 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   erstem Check, Material-Changes, E-Mail);
   Telegram-Verbindung und Kanalauswahl bleiben als zentrale Konfiguration offen
   sichtbar, während Zeitplan, Sichtbarkeit und erweiterte Alert-Regeln in einem
-  optionalen Details-Panel liegen. Dieser Pfad startet keinen
+  optionalen Details-Panel liegen. Dieses Panel `#watchAdvancedSettings` stand
+  bis 2026-07-28 als LETZTES Element im Dialog und wurde schlicht übersehen
+  („man kann ja nichts verstellen"). Es liegt jetzt direkt unter der Defaults-
+  Zusammenfassung, also **über** den Zustellkanälen, und die Zusammenfassung
+  selbst trägt den Weg dorthin: `#watchEditDefaults` („Edit"/„Done") rechts
+  neben „Ready with smart defaults", plus drei `.watch-setup-chip`-Buttons, die
+  per `data-edit-field` das Panel öffnen und ihr Feld fokussieren.
+  Dieser Pfad startet keinen
   normalen App-Consensus; `POST /api/watch` akzeptiert dafür alternativ zu
   `result_id`/`share_id` ein exklusives `question`-Feld. Dashboard und beide
   Create-Schritte zeigen vor der Aktion kompakt den serverseitigen Plan, aktive
@@ -480,13 +537,19 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   `findAnchorTarget` löst den verifizierten Anker auf, `sentenceBounds`
   dehnt ihn auf den umgebenden Satz aus, `wrapFlatRange` wrappt die
   betroffenen Textknoten in `<span class="cx-claim is-unanimous|is-minor|
-  is-major">`. Gewrappt wird pro Textknoten (nicht per
+  is-split|is-major">`. Gewrappt wird pro Textknoten (nicht per
   `Range.extractContents`), damit `<strong>`, `[S1]`-Links und KaTeX exakt an
   ihrem Platz bleiben; `code`/`pre`/`.katex`/Badges werden übersprungen.
   `is-unanimous` ist bewusst dekorationslos (nur die Marke), `is-minor` eine
-  feine 1px-Linie, `is-major` eine 2px-Linie in Bernstein — beide
+  feine neutrale 1px-Linie (Difference ohne `severity: major`), `is-split` eine
+  1px-Linie in Bernstein (Claim mit Dissens — dieselbe Farbe wie sein gelbes
+  Badge, seit 2026-07-28: vorher lief die Linie unter einer gelben „2/4"-Quote
+  neutral grau), `is-major` eine 2px-Linie in Bernstein — alle
   **durchgezogen** (die Wellenlinie las sich als Rechtschreibfehler,
   User-Vorgabe 2026-07-27); kein reduzierter Kontrast, keine Hintergrundfarbe.
+  Treffen zwei Marken denselben Satz, hebt `markSentence` die Linie über
+  `MARK_LEVELS` (unanimous < minor < split < major) auf die stärkere Stufe an,
+  statt die zuerst gesetzte Klasse zu behalten.
   Das `.claim-badge` daneben zeigt seit 2026-07-27 wieder die scanbare Quote
   „4/6", jetzt als ruhige Mikro-Marke mit tabellarischen Ziffern, transparenter
   Flaeche und feiner Kontur. Sie ist damit klar von hochgestellten

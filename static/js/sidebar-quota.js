@@ -187,6 +187,13 @@
     init();
   }
 
+  // Andere Module (z. B. "Run again") muessen sagen koennen, was ein Klick
+  // kostet. Sie lesen dafuer dieselbe Quelle wie der Ring, statt sich eine
+  // zweite Rechnung zu bauen: null = noch unbekannt (Gast oder ladend).
+  function runs() {
+    return parseLine(el("freeUsageDisplay"));
+  }
+
   window.App = window.App || {};
-  window.App.sidebarQuota = { sync: sync, setOpen: setOpen };
+  window.App.sidebarQuota = { sync: sync, setOpen: setOpen, runs: runs };
 })();

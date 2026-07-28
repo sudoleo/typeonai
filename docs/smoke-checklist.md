@@ -91,7 +91,12 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 - [ ] Quellen-Fussnoten im Consensus stehen hinter Punkt, Frage- oder
       Ausrufezeichen; dasselbe gilt auf öffentlichen Share-Seiten.
 - [ ] „Run again“ kehrt zum normalen Composer zurück, übernimmt die vorige
-      Frage, startet aber erst nach einem bewussten Klick auf Senden.
+      Frage, startet aber erst nach einem bewussten Klick auf Senden. Der Knopf
+      beziffert vorher den Preis („Run again · uses 1 run“, Tooltip mit Rest-
+      Kontingent); bei unbegrenztem Plan entfällt der Zusatz. Nach dem Klick
+      steht über dem Eingabefeld, dass Senden einen vollständigen neuen Lauf
+      startet — der Hinweis verschwindet mit dem Absenden oder mit
+      „New comparison“.
 
 ## Consensus Watch
 - [ ] Nach erfolgreichem Consensus erscheint „Watch“ neben Share; Aktivierung
@@ -100,6 +105,10 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       watching“ markiert fehlende Pflichtangaben direkt am jeweiligen Feld und scrollt
       zum ersten Fehler. Der Dialog bleibt auf iPhone-Größen vollständig im sichtbaren
       Bereich. Private Seiten sind in einem fremden oder ausgeloggten Browser nicht lesbar.
+- [ ] „Ready with smart defaults“ trägt rechts einen „Edit“-Schalter, die drei
+      Werte-Chips öffnen selbst ihr Feld (Fokus liegt danach darin), und
+      „Customize schedule and alerts“ steht direkt darunter — über den
+      Zustellkanälen, nicht am Dialogende.
 - [ ] Lokale Run-Uhrzeit ist bei Erstellung wählbar und zeigt die erkannte Zeitzone;
       Weekly bietet auch Free-Nutzern einen Wochentag-Picker und startet standardmäßig
       am morgigen Wochentag statt erst nach einer vollen Woche. „Watched“ erlaubt eine

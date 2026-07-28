@@ -204,6 +204,17 @@
   text-underline-offset: 4px;
 }
 
+/* Geteilte Zustimmung (2/4): dieselbe Bernstein-Note wie das Badge daneben.
+   Vorher lief die Linie hier neutral grau, waehrend die Quote schon gelb war -
+   zwei Signale fuer denselben Befund, die sich widersprachen. Die Staerke
+   trennt die Stufen weiter: 1px geteilt, 2px echter Widerspruch. */
+.cx-claim.is-split {
+  text-decoration: underline solid
+    color-mix(in srgb, var(--cx-major-line) 75%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
 .cx-claim.is-major {
   text-decoration: underline solid var(--cx-major-line);
   text-decoration-thickness: 2px;
@@ -248,6 +259,12 @@
 
 .cx-claim.is-minor.is-hovered {
   text-decoration-color: color-mix(in srgb, var(--text-color) 72%, transparent);
+  text-decoration-thickness: 2px;
+}
+
+.cx-claim.is-split.is-hovered {
+  background: var(--cx-flash);
+  text-decoration-color: var(--cx-major-line);
   text-decoration-thickness: 2px;
 }
 

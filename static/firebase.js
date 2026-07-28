@@ -1379,7 +1379,9 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
       if (container) container.innerHTML = "";
     }
     do {
-      const path = "/bookmarks?limit=30" + (cursor ? "&cursor=" + encodeURIComponent(cursor) : "");
+      // 35 statt 30: auf einem grossen Monitor stand der "Load more"-Button
+      // sonst dauerhaft unter einer Liste, die ohnehin komplett sichtbar war.
+      const path = "/bookmarks?limit=35" + (cursor ? "&cursor=" + encodeURIComponent(cursor) : "");
       const response = await fetch(path, { headers: { "Authorization": "Bearer " + idToken } });
       const data = await response.json();
       if (!response.ok) return false;

@@ -429,6 +429,46 @@
     return document.querySelectorAll("#consensusSourcesList > li").length;
   }
 
+  // "Run again" ist kein Zurueckspulen, sondern ein kompletter zweiter Lauf:
+  // alle Modelle antworten erneut, der Consensus wird neu geschrieben. Das
+  // kostet dasselbe wie die erste Frage, und genau das muss am Knopf stehen,
+  // bevor er geklickt wird — nicht erst im Zaehler danach.
+  function quotaRuns() {
+    try {
+      return window.App?.sidebarQuota?.runs?.() || null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function labelRunAgain(button) {
+    const runs = quotaRuns();
+    const cost = $("runReplayCost");
+    const unlimited = !!runs?.unlimited;
+
+    if (cost) cost.textContent = unlimited ? "" : " · uses 1 run";
+
+    const detail = ["Runs every model again and writes a new consensus."];
+    if (unlimited) {
+      detail.push("Your plan has unlimited runs.");
+    } else {
+      detail.push("It costs one run from your quota.");
+      if (runs) {
+        detail.push(runs.value > 0
+          ? runs.value + " of " + runs.limit + " left today."
+          : "No runs left today.");
+      }
+    }
+    button.title = detail.join(" ");
+  }
+
+  function setComposerRunNotice(text) {
+    const notice = $("composerRunNotice");
+    if (!notice) return;
+    notice.textContent = text || "";
+    notice.hidden = !text;
+  }
+
   function renderProvenance() {
     const wrap = $("runProvenance");
     const facts = $("runProvenanceFacts");
@@ -442,6 +482,11 @@
       return;
     }
 
+    // Die Fakten des Laufs: woraus und wie schnell. Die Zahl der strittigen
+    // Passagen stand hier bis 2026-07-28 als dritte Angabe — dieselbe Aussage
+    // wie "N critical" im Urteil und wie die Zahl an "Review differences",
+    // dreimal formuliert in drei Zeilen. Sie steht jetzt nur noch dort, wo man
+    // sie auch aufklappen kann.
     const parts = [];
     if (lastRunSummary?.models) {
       parts.push("<b>" + lastRunSummary.models + " models</b>");
@@ -449,20 +494,14 @@
     if (lastRunSummary?.durationMs) {
       parts.push(Math.round(lastRunSummary.durationMs / 1000) + " s");
     }
-    // Counted from what is actually on screen — the inline markers the
-    // insights pass wrote into the answer. No second bookkeeping that could
-    // disagree with what the reader can see.
-    const contested = document.querySelectorAll(
-      "#consensusAnswerBody .cx-marker"
-    ).length;
-    if (contested > 0) {
-      parts.push(contested === 1 ? "1 contested passage" : contested + " contested passages");
-    }
 
     facts.innerHTML = parts.join(" · ");
 
     const runAgain = $("runReplayButton");
-    if (runAgain) runAgain.hidden = !lastRunSummary || !String(window.lastQuestion || "").trim();
+    if (runAgain) {
+      runAgain.hidden = !lastRunSummary || !String(window.lastQuestion || "").trim();
+      if (!runAgain.hidden) labelRunAgain(runAgain);
+    }
 
     syncTab(
       "consensusDifferencesTab",
@@ -477,6 +516,18 @@
       $("consensusSourcesPanel"),
       countSources()
     );
+
+    // "Compare answers" bekommt dieselbe Zahl wie die anderen beiden
+    // Schubladen: wie viele Antworten dahinter liegen. Ohne sie war es die
+    // einzige der drei Flaechen, bei der man erst aufklappen musste, um zu
+    // wissen, was einen erwartet.
+    const answersCount = $("consensusAnswersTabCount");
+    if (answersCount) {
+      const boxes = document.querySelectorAll(
+        ".response-section > .response-box:not(.excluded)"
+      ).length;
+      answersCount.textContent = boxes > 0 ? String(boxes) : "";
+    }
 
     // The footer also hosts the follow-up offer and the drawers, so it stays
     // open when it has no facts of its own but does carry an action.
@@ -508,6 +559,7 @@
   function onPrepare() {
     resetState();
     clearProvenance();
+    setComposerRunNotice("");
     startedAt = Date.now();
     enter("prepare");
     show();
@@ -626,7 +678,10 @@
   }
 
   // A fresh comparison with the same question follows the normal composer
-  // flow. It never sends automatically, so no run is started by surprise.
+  // flow. It never sends automatically, so no run is started by surprise —
+  // aber es soll auch niemand glauben, ein Wiederholen sei gratis. Deshalb
+  // steht ab hier bis zum Absenden am Eingabefeld, was der Klick auf Senden
+  // kostet.
   function prepareRunAgain() {
     const question = String(window.lastQuestion || "").trim();
     if (!question) return;
@@ -636,6 +691,29 @@
     input.value = question;
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.focus();
+
+    const runs = quotaRuns();
+    if (runs?.unlimited) {
+      setComposerRunNotice("Same question, ready to send. Sending starts a complete new run — every model answers again.");
+    } else if (runs && runs.value <= 0) {
+      setComposerRunNotice("Same question, ready to send. A repeat is a complete new run, and you have no runs left today.");
+    } else {
+      setComposerRunNotice(
+        "Same question, ready to send. A repeat is a complete new run and uses 1 run"
+        + (runs ? " — " + runs.value + " left today." : " from your quota.")
+      );
+    }
+  }
+
+  // Das Kontingent kommt asynchron (Login, Antwort eines Laufs) und aendert
+  // sich waehrend die Antwort schon dasteht. Der Preis am Knopf haengt daran,
+  // also wird er nachgezogen statt einmal beim Rendern eingefroren.
+  const usageSource = document.getElementById("usageDisplay");
+  if (usageSource && typeof MutationObserver === "function") {
+    new MutationObserver(() => {
+      const button = $("runReplayButton");
+      if (button && !button.hidden) labelRunAgain(button);
+    }).observe(usageSource, { childList: true, subtree: true, characterData: true });
   }
 
   const responseSection = document.querySelector(".response-section");
@@ -655,6 +733,10 @@
       prepareRunAgain();
       return;
     }
+    // Ein bewusst neuer Vergleich raeumt den Hinweis weg; der Hinweis gehoert
+    // nur zu der einen vorbereiteten Wiederholung. (prepareRunAgain klickt
+    // #newRunButton selbst — und setzt den Hinweis danach.)
+    if (event.target.closest("#newRunButton")) setComposerRunNotice("");
     const diffTab = event.target.closest("#consensusDifferencesTab");
     if (diffTab) {
       togglePanel(diffTab, $("consensusDifferencesPanel"));

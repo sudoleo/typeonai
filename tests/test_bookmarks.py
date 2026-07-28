@@ -344,6 +344,6 @@ def test_bookmark_detail_is_owner_scoped_and_frontend_loads_on_open():
 
     firebase = (Path(__file__).resolve().parents[1] / "static" / "firebase.js").read_text(encoding="utf-8")
     assert 'fetch("/bookmarks/" + encodeURIComponent(bookmarkId)' in firebase
-    assert 'const path = "/bookmarks?limit=30"' in firebase
+    assert 'const path = "/bookmarks?limit=35"' in firebase
     assert "bookmarkDetailCache.clear()" in firebase
     assert "window.openBookmark(bookmark.id)" in firebase

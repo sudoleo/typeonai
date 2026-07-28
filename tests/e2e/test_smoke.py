@@ -314,7 +314,9 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     # Agent Mode. Sie ist ein fester Teil jeder Consensus-Antwort.
     model_answers_toggle = app_page.locator("#agentModeAnswersToggle")
     expect(model_answers_toggle).to_be_visible(timeout=15000)
-    expect(model_answers_toggle).to_have_text("Compare answers")
+    expect(model_answers_toggle.locator(".consensus-tab-label")).to_have_text("Compare answers")
+    # Wie die beiden anderen Schubladen sagt der Chip, wie viel dahinter liegt.
+    expect(model_answers_toggle.locator(".consensus-tab-count")).to_have_text("6")
 
     footer_metrics = app_page.locator("#consensusFooterTabs").evaluate(
         """element => ({
@@ -348,6 +350,8 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
             bottomGap: window.innerHeight - inputRect.bottom,
             reserve: parseFloat(getComputedStyle(container).paddingBottom),
             inputHeight: inputRect.height,
+            scrollable:
+              document.documentElement.scrollHeight - window.innerHeight > 2,
           };
         }"""
     )
@@ -356,7 +360,14 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     assert result_gap["inputPosition"] == "fixed"
     assert abs(result_gap["bottomGap"]) <= 1
     assert abs(result_gap["reserve"] - result_gap["inputHeight"]) <= 1
-    assert abs(result_gap["gap"]) <= 2
+    # Der Composer darf den Fuss nie ueberdecken. Dass er unmittelbar an ihm
+    # anschliesst, ist erst pruefbar, wenn die Seite ueberhaupt scrollt: seit
+    # der Fuss zwei statt drei Zeilen hat (2026-07-28), fuellt eine kurze
+    # Mock-Antwort den Viewport nicht mehr aus, und die verbleibende Luft ist
+    # dann keine scrollbare Strecke, sondern schlicht eine kurze Seite.
+    assert result_gap["gap"] >= -2
+    if result_gap["scrollable"]:
+        assert abs(result_gap["gap"]) <= 2
 
     # Nach der fertigen Antwort schrumpft der Composer zur Entscheidung:
     # kein leeres/deaktiviertes Fragefeld, nur die zwei ehrlichen Wege weiter.
@@ -398,10 +409,26 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
         overlap_marker.get_attribute("aria-label")
     ), "Marker braucht ein sprechendes aria-label"
 
+    # Linie und Quote sagen dasselbe: wo das Badge gelb ist (Dissens), darf die
+    # Unterlinie nicht neutral grau bleiben.
+    assert app_page.evaluate(
+        """() => Array.from(
+             document.querySelectorAll("#consensusAnswerBody .claim-badge.has-dissent")
+           ).every(badge => {
+             const span = badge.previousElementSibling;
+             return span && span.classList.contains("cx-claim")
+               && (span.classList.contains("is-split") || span.classList.contains("is-major"));
+           })"""
+    ), "Gelbe Quote braucht eine Bernstein-Linie, keine graue"
+
     # Touch: die markierte Passage selbst oeffnet dasselbe Agreement-Sheet wie
     # der sichtbare Badge. Der Hintergrund ist inert und der Fokus bleibt im
     # modalen Dialog.
-    assert marked.get_attribute("title"), "Passage braucht denselben Tooltip wie der Marker"
+    # Die Erklaerung liefert die formatierte Hover-Vorschau und der Dialog,
+    # NICHT zusaetzlich ein nativer Browser-Tooltip (bewusste Entscheidung an
+    # Badge und Marker, siehe makeBadge in consensus-insights.js). Geprueft
+    # wird deshalb, dass die Passage bedienbar ist - nicht, dass sie ein
+    # title-Attribut traegt.
     assert "is-interactive" in (marked.get_attribute("class") or "")
     marked.click()
     popover = app_page.locator("#claimPopover")
@@ -436,7 +463,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     expect(diff_jump).to_be_visible()
     diff_jump.click()
     expect(app_page.locator("body.agent-mode-show-answers")).to_have_count(1)
-    expect(model_answers_toggle).to_have_text("Hide answers")
+    expect(model_answers_toggle.locator(".consensus-tab-label")).to_have_text("Hide answers")
     expect(app_page.locator(".response-section mark.quote-flash, .response-section .quote-flash-block").first).to_be_visible()
     assert app_page.evaluate("() => window.isAgentModeEnabled()") is False
 
@@ -453,7 +480,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
 
     # Ausgangszustand für die bestehende Disclosure-/Reihenfolge-Prüfung.
     model_answers_toggle.click()
-    expect(model_answers_toggle).to_have_text("Compare answers")
+    expect(model_answers_toggle.locator(".consensus-tab-label")).to_have_text("Compare answers")
 
     # Kopierter Text darf keine Marker-/Badge-Beschriftung enthalten.
     copied = app_page.evaluate(
@@ -483,15 +510,67 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
 
     run_again = app_page.locator("#runReplayButton")
     expect(run_again).to_be_visible()
-    expect(run_again).to_have_text("Run again")
+    expect(run_again.locator(".run-replay-label")).to_have_text("Run again")
+    # Ein Wiederholen ist ein voller zweiter Lauf. Am Knopf muss stehen, was er
+    # kostet, und am Eingabefeld muss es stehen bleiben, bis abgeschickt wird.
+    # Der Mock-Nutzer laeuft ohne Limit; der Preis gehoert an den Zaehler, also
+    # bekommt er hier einen.
+    app_page.evaluate(
+        "() => window.App.renderUsageDisplay({remaining: 2, totalLimit: 3, deepRemaining: 0, deepLimit: 0})"
+    )
+    expect(run_again).to_contain_text("uses 1 run")
     run_again.click()
     expect(app_page.locator("body.is-hero")).to_have_count(1)
     expect(app_page.locator("#questionInput")).to_be_visible()
     expect(app_page.locator("#questionInput")).to_have_value(QUESTION)
     expect(app_page.locator("#questionInput")).to_be_focused()
+    expect(app_page.locator("#composerRunNotice")).to_be_visible()
+    expect(app_page.locator("#composerRunNotice")).to_contain_text("complete new run")
 
     errors = get_console_errors()
     assert errors == [], f"Konsolen-Fehler im Consensus-Flow: {errors}"
+
+
+def test_split_claim_underlines_in_the_colour_of_its_badge(app_page):
+    """Geteilte Zustimmung ohne Widerspruchs-Karte: Linie und Quote muessen
+    dieselbe Bernstein-Note tragen. Vorher lief die Linie hier neutral grau,
+    waehrend die 2/4-Quote daneben schon gelb war (User-Befund 2026-07-28).
+    Das Mock-Fixture deckt nur den Ueberlappungsfall (is-major) ab, deshalb
+    wird der Renderer hier direkt mit einem geteilten Claim gefuettert."""
+    app_page.evaluate(
+        """() => {
+          document.getElementById("consensusAnswerBody").innerHTML =
+            "<p>The tower stands 330 metres tall today.</p>";
+          window.renderConsensusInsights({
+            claims: [{
+              anchor: "stands 330 metres tall",
+              agree: [{model: "openai"}, {model: "gemini"}],
+              dissent: [{model: "grok", quote: "324 metres"},
+                        {model: "claude", quote: "300 metres"}]
+            }],
+            differences: [],
+            models_compared: ["openai", "gemini", "grok", "claude"]
+          }, 4);
+        }"""
+    )
+    marked = app_page.locator("#consensusAnswerBody .cx-claim").first
+    assert "is-split" in (marked.get_attribute("class") or "")
+    expect(app_page.locator("#consensusAnswerBody .claim-ratio")).to_have_text("2/4")
+    # Bernstein statt neutral: Rot deutlich ueber Blau, in derselben Richtung
+    # wie die Schriftfarbe des Badges.
+    tones = app_page.evaluate(
+        """() => {
+          const channels = (value) => (value.match(/[\\d.]+/g) || []).slice(0, 3).map(Number);
+          const span = document.querySelector("#consensusAnswerBody .cx-claim");
+          const badge = document.querySelector("#consensusAnswerBody .claim-badge");
+          return {
+            line: channels(getComputedStyle(span).textDecorationColor),
+            badge: channels(getComputedStyle(badge).color),
+          };
+        }"""
+    )
+    for name, (red, _green, blue) in tones.items():
+        assert red > blue * 1.5, f"{name} ist nicht bernsteinfarben: {tones[name]}"
 
 
 def test_agent_mode_can_reveal_hidden_model_answers_on_mobile(app_page):
@@ -508,16 +587,20 @@ def test_agent_mode_can_reveal_hidden_model_answers_on_mobile(app_page):
 
     toggle = app_page.locator("#agentModeAnswersToggle")
     expect(toggle).to_be_visible(timeout=15000)
-    expect(toggle).to_have_text("Compare answers")
+    # Der Chip traegt neben dem Label auch die Zahl der Antworten dahinter,
+    # deshalb wird gezielt das Label geprueft.
+    toggle_label = toggle.locator(".consensus-tab-label")
+    expect(toggle_label).to_have_text("Compare answers")
+    expect(toggle.locator(".consensus-tab-count")).to_have_text("6")
     expect(app_page.locator("#openaiResponse")).to_be_hidden()
 
     toggle.click()
     expect(app_page.locator("body.agent-mode-enabled.agent-mode-show-answers")).to_have_count(1)
-    expect(toggle).to_have_text("Hide answers")
+    expect(toggle_label).to_have_text("Hide answers")
     expect(app_page.locator("#openaiResponse")).to_be_visible()
 
     toggle.click()
-    expect(toggle).to_have_text("Compare answers")
+    expect(toggle_label).to_have_text("Compare answers")
     expect(app_page.locator("#openaiResponse")).to_be_hidden()
 
 
@@ -552,6 +635,28 @@ def test_watch_dialog_uses_safe_defaults_keeps_telegram_visible_and_reveals_cond
     assert dialog_box["y"] + dialog_box["height"] <= 844.5
     assert app_page.locator("#watchVisibility").input_value() == "private"
     expect(app_page.locator("#watchVisibilitySummary")).to_have_text("Private page")
+
+    # Die Defaults sahen aus wie feste Fakten. Der Weg zum Verstellen muss
+    # deshalb IN der Zusammenfassung stehen und ueber der Zustellzeile liegen —
+    # nicht als letzte Zeile des Dialogs, wo ihn niemand gesehen hat.
+    edit_box = app_page.locator("#watchEditDefaults").bounding_box()
+    summary_label_box = app_page.locator(".watch-setup-summary-label").bounding_box()
+    advanced_box = app_page.locator("#watchAdvancedSettings").bounding_box()
+    delivery_box = app_page.locator(".watch-delivery-field").bounding_box()
+    assert edit_box is not None and summary_label_box is not None
+    assert advanced_box is not None and delivery_box is not None
+    assert abs(edit_box["y"] - summary_label_box["y"]) < 20
+    assert advanced_box["y"] < delivery_box["y"]
+
+    # Jeder Chip ist selbst der Weg zu seinem Feld.
+    app_page.click("#watchScheduleSummary")
+    expect(app_page.locator("#watchAdvancedSettings")).to_have_attribute("open", "")
+    expect(app_page.locator("#watchInterval")).to_be_focused()
+    expect(app_page.locator("#watchEditDefaults")).to_have_text("Done")
+    app_page.click("#watchEditDefaults")
+    expect(app_page.locator("#watchAdvancedSettings")).not_to_have_attribute("open", "")
+    expect(app_page.locator("#watchEditDefaults")).to_have_text("Edit")
+
     app_page.click("#watchAdvancedSettings > summary")
     expect(app_page.locator("#watchVisibility")).to_be_visible()
     expect(app_page.locator("#watchRunTime")).to_have_value("09:00")

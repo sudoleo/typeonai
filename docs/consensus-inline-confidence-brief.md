@@ -185,7 +185,8 @@ In `consensus-insights.js`, aufbauend auf `findAnchorTarget`:
    7-Wort-Fragment mitten im Satz wirkt zufällig.
 2. Den Range in ein `<span class="cx-claim">` wrappen, mit Zustandsklasse:
    - `is-unanimous` — alle Modelle stützen die Aussage
-   - `is-minor` — Dissens ohne `severity: major`
+   - `is-minor` — Difference ohne `severity: major`
+   - `is-split` — Claim mit Dissens (z. B. 2/4)
    - `is-major` — Widerspruch mit `severity: major`
 3. **Visuelles Vokabular** (CSS, Rechtschreibprüfungs-Metapher):
    - `is-unanimous`: keine Textdekoration; nur die Marke daneben — eine ruhige
@@ -193,6 +194,9 @@ In `consensus-insights.js`, aufbauend auf `findAnchorTarget`:
      tabellarischen Ziffern in einer kleinen Kapsel bleiben scanbar und sind
      zugleich klar von hochgestellten Quellenzahlen unterschieden.
    - `is-minor`: feine durchgezogene 1px-Unterlinie, neutral
+   - `is-split`: durchgezogene 1px-Unterlinie in Bernstein — dieselbe Farbe wie
+     das `has-dissent`-Badge daneben (seit 2026-07-28; die graue Linie unter
+     einer gelben Quote war ein Widerspruch in sich)
    - `is-major`: durchgezogene 2px-Unterlinie in Bernstein
      (seit 2026-07-27 `underline solid` statt `underline wavy` — die
      Wellenlinie las sich als Rechtschreibfehler, User-Vorgabe)

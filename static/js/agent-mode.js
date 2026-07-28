@@ -119,6 +119,99 @@
     });
   }
 
+  // ---- Einzelantworten als Vorschau statt als Scroll-Schacht --------------
+  // Hinter "Compare answers" hatte jede Box ihren eigenen Innen-Scroll
+  // (max-height + overflow-y in components-misc.css). Sechs private
+  // Scroll-Bereiche in einer scrollenden Seite heissen: das Mausrad tut je
+  // nach Zeigerposition etwas anderes, die Spalten enden auf verschiedenen
+  // Hoehen, und lange Antworten sind abgeschnitten, ohne dass es jemand
+  // ansagt - ausgerechnet in der Ansicht, deren einziger Zweck der Vergleich
+  // ist. Stattdessen: gleich hohe Vorschauen mit Ausblendkante, und ein Knopf
+  // oeffnet genau die eine Antwort ganz.
+  //
+  // Geklappt wird nur, was wirklich ueberlaeuft, und nie waehrend des
+  // Streams: waehrend die Antwort noch waechst, will man sie wachsen sehen.
+  const ANSWER_PREVIEW_HEIGHT = 300;
+  const ANSWER_PREVIEW_SLACK = 48;
+
+  function isAnswerSettled(box) {
+    const content = box.querySelector(".collapsible-content");
+    if (!content) return false;
+    if (content.classList.contains("is-streaming")) return false;
+    if (content.querySelector(".thinking-wrap")) return false;
+    return isTerminalResponseState(box.dataset.responseState || "");
+  }
+
+  function answerToggleLabel(open) {
+    return open ? "Show less" : "Show full answer";
+  }
+
+  function ensureAnswerToggle(box) {
+    let btn = box.querySelector(".response-answer-more");
+    if (btn) return btn;
+    btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "response-answer-more";
+    btn.addEventListener("click", function () {
+      const open = box.dataset.answerOpen !== "1";
+      box.dataset.answerOpen = open ? "1" : "0";
+      box.classList.toggle("is-clamped", !open);
+      btn.textContent = answerToggleLabel(open);
+      btn.setAttribute("aria-expanded", String(open));
+      window.App?.trackAppEvent?.("app_model_answer_expanded", {
+        model: box.dataset.model || box.id,
+        open: open
+      });
+    });
+    box.appendChild(btn);
+    return btn;
+  }
+
+  function syncAnswerPreviews() {
+    document.querySelectorAll(".response-section > .response-box").forEach(box => {
+      const content = box.querySelector(".collapsible-content");
+      const existing = box.querySelector(".response-answer-more");
+      const eligible = modelAnswersVisible
+        && !box.classList.contains("excluded")
+        && isAnswerSettled(box);
+      if (!content || !eligible) {
+        box.classList.remove("is-clamped");
+        if (existing) existing.hidden = true;
+        return;
+      }
+      // scrollHeight bleibt auch im geklappten Zustand die volle Hoehe
+      // (overflow: hidden), der Test kippt also nicht hin und her.
+      const overflows = content.scrollHeight
+        > ANSWER_PREVIEW_HEIGHT + ANSWER_PREVIEW_SLACK;
+      if (!overflows) {
+        box.classList.remove("is-clamped");
+        if (existing) existing.hidden = true;
+        return;
+      }
+      const btn = ensureAnswerToggle(box);
+      const open = box.dataset.answerOpen === "1";
+      btn.hidden = false;
+      btn.textContent = answerToggleLabel(open);
+      btn.setAttribute("aria-expanded", String(open));
+      box.classList.toggle("is-clamped", !open);
+    });
+  }
+
+  let answerPreviewFrame = 0;
+  function scheduleAnswerPreviewSync() {
+    if (answerPreviewFrame) return;
+    answerPreviewFrame = window.requestAnimationFrame(() => {
+      answerPreviewFrame = 0;
+      syncAnswerPreviews();
+    });
+  }
+
+  let answerPreviewResizeTimer = 0;
+  window.addEventListener("resize", () => {
+    window.clearTimeout(answerPreviewResizeTimer);
+    answerPreviewResizeTimer = window.setTimeout(syncAnswerPreviews, 150);
+  });
+
   function isAgentModeEnabled() {
     return localStorage.getItem(AGENT_MODE_STORAGE_KEY) === "true";
   }
@@ -283,8 +376,15 @@
       answersToggle.setAttribute("aria-expanded", String(modelAnswersVisible));
       answersToggle.title = label;
       answersToggle.setAttribute("aria-label", label);
-      const labelEl = answersToggle.querySelector("span");
-      if (labelEl) labelEl.textContent = label;
+      // Gezielt das Label, nicht "das erste span": der Chip traegt seit
+      // 2026-07-28 auch einen Chevron und eine Zahl.
+      const labelEl = answersToggle.querySelector(".consensus-tab-label");
+      if (labelEl) {
+        labelEl.textContent = label;
+        // Kurzform fuer die Telefon-Leiste (siehe shell.css): dort steht das
+        // Substantiv allein, damit die drei Knoepfe einzeilig bleiben.
+        labelEl.dataset.short = modelAnswersVisible ? "Hide" : "Answers";
+      }
     }
 
     if (switchEl) switchEl.checked = enabled;
@@ -390,6 +490,10 @@
         modelsEl.appendChild(chip);
       });
     }
+
+    // Nach dem Layout messen: die Boxen sind in genau diesem Aufruf sichtbar
+    // geworden (agent-mode-show-answers), vorher ist ihre Hoehe 0.
+    scheduleAnswerPreviewSync();
   }
 
   function setAgentMode(enabled, options = {}) {
@@ -420,6 +524,10 @@
       if (agentModeStatus !== "running") {
         modelAnswersVisible = false;
         resetModelProgress();
+        // Ein neuer Lauf bringt neue Antworten: die Entscheidung, welche
+        // davon ganz aufgeklappt war, gilt fuer die alten.
+        document.querySelectorAll(".response-box[data-answer-open]")
+          .forEach(box => { delete box.dataset.answerOpen; });
       }
       agentModeStatusMessage = "";
       startAgentModeTimer();

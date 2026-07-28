@@ -467,22 +467,17 @@
       <div id="watchDialogLimit" class="watch-limit-summary is-dialog" aria-live="polite"><span>Checking Watch availability…</span></div>
       ${directQuestion ? `<div class="watch-question-preview"><span>Question</span><strong>${escapeHtml(directQuestion)}</strong></div>` : ""}
       <div class="watch-setup-summary" aria-label="Watch defaults">
-        <span class="watch-setup-summary-label">Ready with smart defaults</span>
+        <div class="watch-setup-summary-head">
+          <span class="watch-setup-summary-label">Ready with smart defaults</span>
+          <button type="button" id="watchEditDefaults" class="watch-setup-edit"
+            aria-controls="watchAdvancedSettings" aria-expanded="false">Edit</button>
+        </div>
         <div class="watch-setup-summary-chips">
-          <span id="watchScheduleSummary"></span>
-          <span id="watchAlertSummary"></span>
-          <span id="watchVisibilitySummary"></span>
+          <button type="button" class="watch-setup-chip" id="watchScheduleSummary" data-edit-field="watchInterval" title="Change interval, run day and run time"></button>
+          <button type="button" class="watch-setup-chip" id="watchAlertSummary" data-edit-field="watchEmailMode" title="Change when you get alerted"></button>
+          <button type="button" class="watch-setup-chip" id="watchVisibilitySummary" data-edit-field="watchVisibility" title="Change page visibility"></button>
         </div>
-      </div>
-      <div class="watch-config-field watch-delivery-field">
-        <span class="watch-interval-label">Delivery channels</span>
-        <div class="watch-channel-options">
-          <label class="watch-channel-option"><input type="checkbox" id="watchEmailEnabled" checked> E-mail</label>
-          <label class="watch-channel-option"><input type="checkbox" id="watchTelegramEnabled" disabled> Telegram</label>
-          <button type="button" id="watchTelegramConnect" class="share-link-btn">Connect Telegram</button>
-        </div>
-        <p id="watchTelegramNote" class="watch-data-note">Checking Telegram connection…</p>
-        <p id="watchChannelsError" class="watch-field-error" role="alert" hidden></p>
+        <p class="watch-setup-summary-hint">Every value here can be changed — tap a chip or “Edit”.</p>
       </div>
       <details id="watchAdvancedSettings" class="watch-advanced-settings">
         <summary><span>Customize schedule and alerts</span><small>Optional</small></summary>
@@ -520,6 +515,16 @@
           </div>
         </div>
       </details>
+      <div class="watch-config-field watch-delivery-field">
+        <span class="watch-interval-label">Delivery channels</span>
+        <div class="watch-channel-options">
+          <label class="watch-channel-option"><input type="checkbox" id="watchEmailEnabled" checked> E-mail</label>
+          <label class="watch-channel-option"><input type="checkbox" id="watchTelegramEnabled" disabled> Telegram</label>
+          <button type="button" id="watchTelegramConnect" class="share-link-btn">Connect Telegram</button>
+        </div>
+        <p id="watchTelegramNote" class="watch-data-note">Checking Telegram connection…</p>
+        <p id="watchChannelsError" class="watch-field-error" role="alert" hidden></p>
+      </div>
       <p class="watch-config-assurance"><span aria-hidden="true">✓</span> Attachments and follow-up context are never resent.</p>
       <div class="share-modal-actions">
         <button type="button" id="watchConfirmBtn" class="share-primary-btn">Start watching</button>
@@ -566,6 +571,38 @@
     });
     runTimeInput.addEventListener("input", updateSetupSummary);
     updateSetupSummary();
+
+    // Die Voreinstellungen sahen aus wie feste Fakten: das Aufklapp-Feld stand
+    // ganz unten und wurde schlicht uebersehen ("man kann nichts verstellen").
+    // Deshalb steht der Schalter jetzt IN der Zusammenfassung, und jeder Chip
+    // ist selbst der Weg zu seinem Feld.
+    const advanced = document.getElementById("watchAdvancedSettings");
+    const editToggle = document.getElementById("watchEditDefaults");
+    function syncEditToggle() {
+      editToggle.textContent = advanced.open ? "Done" : "Edit";
+      editToggle.setAttribute("aria-expanded", String(advanced.open));
+    }
+    function openAdvanced(focusId) {
+      advanced.open = true;
+      syncEditToggle();
+      const target = focusId ? document.getElementById(focusId) : null;
+      (target || advanced).scrollIntoView({ block: "nearest" });
+      if (target) requestAnimationFrame(() => target.focus());
+    }
+    advanced.addEventListener("toggle", syncEditToggle);
+    editToggle.addEventListener("click", () => {
+      if (advanced.open) {
+        advanced.open = false;
+        syncEditToggle();
+        return;
+      }
+      openAdvanced("watchInterval");
+    });
+    body.querySelectorAll(".watch-setup-chip").forEach(chip => {
+      chip.addEventListener("click", () => openAdvanced(chip.dataset.editField));
+    });
+    syncEditToggle();
+
     function syncTelegram(state) {
       telegramEnabledInput.disabled = !state.connected;
       telegramConnect.hidden = !!state.connected || !state.configured;

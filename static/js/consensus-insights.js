@@ -626,7 +626,12 @@
           const TOPIC_PREFIX =
             /^(?:the\s+models?\s+)?(?:dis)?agree(?:ment)?\s+(?:on|about)\s+|^(?:do|does|did|is|are|was|were|should|shall|can|could|will|would|has|have|whether|how|what|which|when|why)\b\s*/i;
           const TOPIC_MAX_WORDS = 7;
-          const TOPIC_MAX_SHOWN = 2;
+          // Genau EIN Thema. Zwei aneinandergereihte 7-Wort-Fragmente plus
+          // "+2 more" ergaben eine zweizeilige Headline aus abgeschnittenen
+          // Satzresten - das lauteste Element im Fuss und zugleich das am
+          // schwersten zu lesende. Die vollstaendige Liste steht eine Zeile
+          // tiefer hinter "Review differences".
+          const TOPIC_MAX_SHOWN = 1;
 
           function toTopic(claim) {
             let text = String(claim || "").trim().replace(/[.?!]+$/, "");
@@ -642,11 +647,17 @@
           }
 
           function topicList(entries) {
-            const topics = entries.map(d => toTopic(d.claim)).filter(Boolean);
+            // Schwerwiegendes zuerst: bleibt nur ein Thema sichtbar, muss es
+            // das sein, das den Leser am ehesten betrifft.
+            const sorted = entries.slice().sort(
+              (a, b) => (b.severity === "major") - (a.severity === "major")
+            );
+            const topics = sorted.map(d => toTopic(d.claim)).filter(Boolean);
             if (!topics.length) return "";
-            const shown = topics.slice(0, TOPIC_MAX_SHOWN).join(" · ");
-            const rest = topics.length - TOPIC_MAX_SHOWN;
-            return rest > 0 ? shown + " · +" + rest + " more" : shown;
+            // Kein "+N more": WIE VIELE sagt die Detailzeile, WORUEBER sagt
+            // dieses eine Thema. Beides in dieselbe Zeile zu quetschen war
+            // genau die Ueberfrachtung, die den Fuss unlesbar gemacht hat.
+            return topics.slice(0, TOPIC_MAX_SHOWN).join(" · ");
           }
 
           // --- Verdict-Balken --------------------------------------------------
@@ -661,21 +672,31 @@
             // "critical"-Aussage machen statt fälschlich "none critical".
             const hasSeverity = differences.some(d => d.severity === "major" || d.severity === "minor");
             const emphases = differences.length - contradictions;
-            const modelsLabel = modelCount + " model" + (modelCount === 1 ? "" : "s") + " compared";
             const hasScore = agreement && typeof agreement.score === "number";
 
-            const cls = contradictions === 0 ? "is-calm" : "is-warn";
-            verdict.classList.remove("is-calm", "is-warn");
+            // Ampel in DREI Stufen. Vorher war jeder Widerspruch bernstein —
+            // ein Lauf mit vier kritischen Widerspruechen sah damit aus wie
+            // einer mit einem Detailunterschied, und der Ring blieb bei Score 0
+            // komplett ungefaerbt. Die Stufe faerbt seit 2026-07-28 auch die
+            // Flaeche des Urteils, also traegt sie die Aussage selbst dann,
+            // wenn der Ring leer ist.
+            const cls = contradictions === 0
+              ? "is-calm"
+              : (critical > 0 ? "is-alert" : "is-warn");
+            verdict.classList.remove("is-calm", "is-warn", "is-alert");
             verdict.classList.add(cls);
             verdict.innerHTML = "";
 
             // Score-Ring; alte Bookmarks ohne Score behalten den kleinen Punkt.
             if (hasScore) {
               const score = Math.max(0, Math.min(100, agreement.score));
+              const gauge = document.createElement("span");
+              gauge.className = "verdict-gauge";
               const ring = document.createElement("span");
               ring.className = "verdict-score";
               ring.style.setProperty("--val", String(score));
-              ring.title = "Agreement score " + agreement.score + "/100";
+              ring.title = "Agreement score " + agreement.score + "/100 across "
+                + modelCount + " model" + (modelCount === 1 ? "" : "s");
               const fill = document.createElement("span");
               fill.className = "verdict-score-ring";
               fill.setAttribute("aria-hidden", "true");
@@ -688,7 +709,15 @@
               unit.textContent = "/100 agreement score";
               num.appendChild(unit);
               ring.append(fill, num);
-              verdict.appendChild(ring);
+              // Eine nackte Zahl im Kreis sagt nicht, WOVON sie 0 oder 64 ist.
+              // Die Bildunterschrift kostet eine Zeile Kleinschrift und macht
+              // aus der Zahl eine Aussage.
+              const caption = document.createElement("span");
+              caption.className = "verdict-score-caption";
+              caption.setAttribute("aria-hidden", "true");
+              caption.textContent = "agreement";
+              gauge.append(ring, caption);
+              verdict.appendChild(gauge);
             } else {
               const icon = document.createElement("span");
               icon.className = "verdict-icon";
@@ -716,52 +745,66 @@
             } else {
               headline.textContent = "The models contradict each other";
             }
+            // Die Zeile wird auf eine Zeile gekuerzt (CSS); der volle Satz
+            // bleibt im Tooltip erreichbar.
+            headline.title = headline.textContent;
             main.appendChild(headline);
 
+            // Detailzeile: erst wie schwer, dann wer geurteilt hat. Die
+            // Modellzahl steht seit 2026-07-28 nur noch in den Lauf-Fakten
+            // eine Zeile tiefer — sie zweimal in zwei grauen Zeilen
+            // untereinander zu wiederholen war der halbe Ballast im Fuss.
             const detail = document.createElement("span");
             detail.className = "verdict-detail";
             if (contradictions === 0) {
-              let note;
               if (emphases > 0) {
-                note = emphasisTopics
+                detail.textContent = emphasisTopics
                   ? "different emphasis on " + emphasisTopics + ", no contradictions"
                   : emphases + " difference" + (emphases === 1 ? "" : "s") + " in emphasis, no contradictions";
               } else {
-                note = "no contradictions found";
+                detail.textContent = "no contradictions found";
               }
-              detail.textContent = note + ", " + modelsLabel;
             } else if (hasSeverity && critical > 0) {
               const crit = document.createElement("span");
               crit.className = "verdict-detail-crit";
               crit.textContent = critical + " critical";
               detail.appendChild(crit);
               const minor = contradictions - critical;
-              detail.appendChild(document.createTextNode(
-                (minor > 0 ? " · " + minor + " minor detail" + (minor === 1 ? "" : "s") : "")
-                + ", " + modelsLabel));
+              if (minor > 0) {
+                detail.appendChild(document.createTextNode(
+                  " · " + minor + " minor detail" + (minor === 1 ? "" : "s")));
+              }
             } else if (hasSeverity) {
-              detail.textContent = "minor details, " + modelsLabel;
+              detail.textContent = contradictions + " minor detail"
+                + (contradictions === 1 ? "" : "s");
             } else {
-              detail.textContent = modelsLabel;
+              detail.textContent = contradictions + " disputed point"
+                + (contradictions === 1 ? "" : "s");
             }
-            main.appendChild(detail);
-            verdict.appendChild(main);
 
             // Transparenz: welche (unabhängige) Modellfamilie die Analyse
-            // geliefert hat. Alte Bookmarks/Snapshots ohne judges-Feld zeigen
-            // schlicht keine Fußnote.
+            // geliefert hat. Als Nachsatz derselben Zeile statt als rechts
+            // ausgerichteter Zweizeiler — eine Fußnote, die einen eigenen
+            // Block bekommt, liest sich wie eine zweite Überschrift.
             if (judge && judge.provider) {
               const note = document.createElement("span");
               note.className = "verdict-judge";
+              note.title = "The differences analysis runs on a different model"
+                + " family than the consensus engine.";
               const provider = document.createElement("span");
-              provider.textContent = "Analysis by " + judge.provider
+              provider.textContent = "analysis by " + judge.provider
                 + (judge.tier === "pro" ? " (Pro)" : "");
               const sub = document.createElement("span");
               sub.className = "verdict-judge-sub";
               sub.textContent = "independent of the consensus engine";
               note.append(provider, sub);
-              verdict.appendChild(note);
+              if (detail.childNodes.length) {
+                detail.appendChild(document.createTextNode(" · "));
+              }
+              detail.appendChild(note);
             }
+            main.appendChild(detail);
+            verdict.appendChild(main);
             verdict.hidden = false;
           }
 
@@ -859,6 +902,16 @@
             window.trackUmamiEvent?.("app_consensus_marker_opened", { kind: "difference" });
           }
 
+          // Stufen der Satzmarkierung, schwach nach stark. Treffen zwei Marken
+          // denselben Satz, gewinnt die staerkere die Linie - sonst stand
+          // neben einem gelben 2/4-Badge eine graue Linie.
+          const MARK_LEVELS = {
+            "is-unanimous": 0,
+            "is-minor": 1,
+            "is-split": 2,
+            "is-major": 3
+          };
+
           // Markiert eine Textstelle satzweise und liefert den letzten Span
           // zurück (dahinter wird der Marker/das Badge eingehängt).
           function markSentence(container, anchor, severityClass, marked) {
@@ -870,14 +923,26 @@
 
             // Derselbe Satz wird nicht zweimal dekoriert (ein Widerspruch und
             // ein Claim können auf dieselbe Stelle zeigen). Das zweite Element
-            // hängt sich an die bereits erzeugten Spans an.
+            // hängt sich an die bereits erzeugten Spans an - hebt die Linie
+            // aber auf seine Stufe an, wenn sie schwaecher ist als seine Marke.
             const existing = findOverlap(marked, bounds.start, bounds.end);
-            if (existing) return { spans: existing.spans, block: hit.block };
+            if (existing) {
+              if (MARK_LEVELS[severityClass] > MARK_LEVELS[existing.severity]) {
+                existing.spans.forEach(function (span) {
+                  span.classList.remove(existing.severity);
+                  span.classList.add(severityClass);
+                });
+                existing.severity = severityClass;
+              }
+              return { spans: existing.spans, block: hit.block };
+            }
 
             const spans = wrapFlatRange(
               hit.slices, bounds.start, bounds.end, "cx-claim " + severityClass
             );
-            marked.push({ start: bounds.start, end: bounds.end, spans: spans });
+            marked.push({
+              start: bounds.start, end: bounds.end, spans: spans, severity: severityClass
+            });
             return { spans, block: hit.block };
           }
 
@@ -1174,10 +1239,12 @@
 
             // 2. Claims: is-unanimous ist bewusst dekorationslos (nur Badge),
             //    dient hier aber als präziser Einhängepunkt für das Badge.
+            //    Ein Claim mit Dissens traegt dieselbe Bernstein-Note wie sein
+            //    Badge (is-split), nur eine Stufe leiser als der Widerspruch.
             const unanchored = [];
             const claimControls = [];
             claims.forEach(function (claim) {
-              const result = mark(claim.anchor, claim.dissent.length ? "is-minor" : "is-unanimous");
+              const result = mark(claim.anchor, claim.dissent.length ? "is-split" : "is-unanimous");
               if (!result) {
                 unanchored.push(claim);
                 return;

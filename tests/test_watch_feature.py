@@ -1293,9 +1293,24 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", css)
         self.assertIn(".watch-dash-heading-row .watch-limit-summary", css)
 
-    def test_watch_setup_keeps_telegram_primary_and_hides_advanced_defaults(self):
+    def test_watch_setup_offers_editing_next_to_the_defaults_it_describes(self):
+        """Die Defaults lasen sich wie feste Fakten: das Aufklapp-Feld stand als
+        letztes Element im Dialog und wurde uebersehen. Der Weg zum Verstellen
+        gehoert an die Zusammenfassung — und damit VOR die Zustellkanaele."""
         source = Path("static/js/watch.js").read_text(encoding="utf-8")
-        self.assertLess(source.index('id="watchTelegramEnabled"'), source.index('id="watchAdvancedSettings"'))
+        css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
+        self.assertLess(
+            source.index('id="watchAdvancedSettings"'),
+            source.index('id="watchTelegramEnabled"'),
+        )
+        self.assertLess(
+            source.index('id="watchEditDefaults"'),
+            source.index('id="watchAdvancedSettings"'),
+        )
+        # Jeder Chip ist selbst der Weg zu seinem Feld.
+        for field in ("watchInterval", "watchEmailMode", "watchVisibility"):
+            self.assertIn(f'data-edit-field="{field}"', source)
+        self.assertIn('.watch-setup-chip', css)
         self.assertIn('<option value="private" selected>', source)
         self.assertIn('class="watch-advanced-settings"', source)
         self.assertIn('Ready with smart defaults', source)

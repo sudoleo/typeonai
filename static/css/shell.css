@@ -840,20 +840,31 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 /* ---- Provenance footer ---------------------------------------------------
-   What the run leaves behind, in three lines that read top to bottom:
+   What the run leaves behind, in TWO lines that read top to bottom:
 
-     1. facts — what the answer was made of — and the actions on it
-        (Share / Watch / Cite, pushed to the right edge)
-     2. the verdict: score ring + headline. It used to sit ABOVE the answer
-        and judged the text before it was read; it belongs behind it.
-     3. the three drawers: contradictions, model answers, sources
+     1. the verdict (score ring + headline + one meta line) and, on the same
+        baseline at the right edge, the actions on it: Share / Watch / Cite.
+        The verdict used to sit ABOVE the answer and judged the text before it
+        was read; it belongs behind it.
+     2. the three drawers — contradictions, model answers, sources — with the
+        run's own facts and the restart at the right end.
+
+   It was three lines until 2026-07-28. The first of them was an actions row
+   whose left half was usually empty, and the model count appeared twice in
+   two rows that were both grey, small and full of dots. One row less, no
+   emptier: same information, half the noise.
 
    Nothing is lost when the run collapses — it just stops taking up screen.
    -------------------------------------------------------------------------- */
 .run-provenance {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "verdict actions"
+    "tabs    facts"
+    "offer   offer";
+  align-items: start;
+  gap: 9px 16px;
   margin-top: 16px;
   padding-top: 11px;
   border-top: 1px solid var(--line-soft);
@@ -865,11 +876,29 @@ body:not(.dark-mode) .chat-input-container {
   display: none;
 }
 
+.run-provenance > .consensus-verdict { grid-area: verdict; min-width: 0; }
+.run-provenance > .consensus-footer-actions { grid-area: actions; }
+.run-provenance > .consensus-footer-tabs { grid-area: tabs; }
+.run-provenance > .consensus-footer-facts { grid-area: facts; }
+.run-provenance > .run-provenance-actions { grid-area: offer; }
+
+.run-provenance > .consensus-footer-tabs,
+.run-provenance > .consensus-footer-facts,
+.run-provenance > .consensus-footer-actions {
+  align-self: center;
+}
+
 .consensus-footer-facts {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 12px;
+  justify-content: flex-end;
+  gap: 4px 10px;
+  text-align: right;
+}
+
+.run-provenance-facts:empty {
+  display: none;
 }
 
 .run-provenance-facts b {
@@ -925,12 +954,10 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 /* The verdict, now a line inside the footer rather than a banner above the
-   answer. shell.css already stripped its frame; here it only loses the
-   margin it needed as a standalone block. */
+   answer. Its surface is set further down, after the frameless reset. */
 .run-provenance .consensus-verdict {
   margin-top: 0;
-  padding-inline: 0;
-  gap: 11px;
+  gap: 12px;
   font-size: 0.83rem;
 }
 
@@ -938,11 +965,38 @@ body:not(.dark-mode) .chat-input-container {
   display: none;
 }
 
+/* The headline is a headline: one line. It used to chain two truncated
+   claim fragments plus "+2 more" into a two-line run-on that was the
+   loudest thing in the footer and the hardest to read. One topic, cut with
+   an ellipsis; the rest is what the differences drawer is for. */
+.run-provenance .verdict-headline {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The judge is a footnote, so it reads as one — at the end of the meta line
+   instead of as a right-aligned two-line block of its own. */
+.run-provenance .consensus-verdict .verdict-judge {
+  display: inline;
+  margin-left: 0;
+  font-size: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.run-provenance .verdict-judge-sub {
+  display: none;
+}
+
 /* ---- The three drawers ---------------------------------------------------
    One row of quiet labels. No pill, no border: the mockup treats them as a
    line of words with a count beside each, and a rectangle drawn around a
    word is exactly the frame this shell keeps removing. What marks an open
-   drawer is weight and an underline, not a filled box.
+   drawer is weight, an underline and the chevron turning — three words in a
+   row with nothing but hover to say they open anything was a guessing game
+   for the very functions this page exists for.
    -------------------------------------------------------------------------- */
 .consensus-footer-tabs {
   display: flex;
@@ -1012,6 +1066,24 @@ body:not(.dark-mode) .chat-input-container {
   text-decoration-color: var(--ink-3);
 }
 
+.consensus-tab-chevron {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  margin-right: -2px;
+  color: var(--ink-3);
+  transition: transform 0.18s ease, color 0.15s ease;
+}
+
+.consensus-tab[aria-expanded="true"] .consensus-tab-chevron {
+  transform: rotate(180deg);
+  color: inherit;
+}
+
+.consensus-tab:hover .consensus-tab-chevron {
+  color: inherit;
+}
+
 .consensus-tab-count {
   font-variant-numeric: tabular-nums;
   font-weight: 400;
@@ -1030,6 +1102,11 @@ body:not(.dark-mode) .chat-input-container {
   font: inherit;
   font-size: 0.76rem;
   cursor: pointer;
+}
+
+/* Unterstrichen wird das Label, nicht der ganze Knopf: der Kostenzusatz
+   dahinter soll mitlaufen, aber nicht wie ein zweiter Link aussehen. */
+.run-replay-label {
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-color: var(--line);
@@ -1038,7 +1115,22 @@ body:not(.dark-mode) .chat-input-container {
 .run-replay-btn:hover,
 .run-replay-btn:focus-visible {
   color: var(--ink);
+}
+
+.run-replay-btn:hover .run-replay-label,
+.run-replay-btn:focus-visible .run-replay-label {
   text-decoration-color: var(--ink-3);
+}
+
+/* Der Preis haengt am Label, ist aber nicht das Label: nicht unterstrichen,
+   eine Stufe leiser — sichtbar, ohne den Knopf zu einer Warnung zu machen. */
+.run-replay-cost {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.run-replay-cost:empty {
+  display: none;
 }
 
 .run-replay-btn:focus-visible {
@@ -1065,8 +1157,17 @@ body:not(.dark-mode) .chat-input-container {
     grid-template-columns: minmax(62px, 88px) minmax(0, 1fr) 34px auto;
   }
 
+  /* Phone: the verdict gets the full width (it is the one thing that has to
+     be readable), the drawers keep their three-column strip, and the two
+     action groups — what you do with the answer, what you do with the run —
+     share the last line instead of claiming one each. */
   .run-provenance {
-    gap: 7px;
+    grid-template-areas:
+      "verdict verdict"
+      "tabs    tabs"
+      "actions facts"
+      "offer   offer";
+    gap: 8px;
     margin-top: 12px;
     padding-top: 9px;
   }
@@ -1075,17 +1176,18 @@ body:not(.dark-mode) .chat-input-container {
     gap: 5px 8px;
   }
 
-  .run-provenance-facts {
-    flex: 1 1 100%;
-  }
-
   .run-replay-btn {
     min-height: 30px;
     padding: 0 4px;
   }
 
+  .run-provenance > .consensus-footer-actions,
+  .run-provenance > .consensus-footer-facts {
+    align-self: center;
+  }
+
   .consensus-footer-actions {
-    margin-left: auto;
+    margin-left: 0;
   }
 
   .consensus-footer-actions .consensus-share-pill,
@@ -1097,26 +1199,22 @@ body:not(.dark-mode) .chat-input-container {
 
   .run-provenance .consensus-verdict {
     display: grid;
-    grid-template-columns: 42px minmax(0, 1fr);
+    /* auto statt fester Breite: die Spalte traegt Ring UND Bildunterschrift. */
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
-    column-gap: 10px;
+    column-gap: 11px;
     row-gap: 2px;
+    padding: 10px 12px;
   }
 
-  .run-provenance .verdict-score,
+  .run-provenance .verdict-gauge,
   .run-provenance .verdict-icon {
     grid-column: 1;
-    grid-row: 1 / span 2;
+    grid-row: 1;
   }
 
-  .run-provenance .verdict-main,
-  .run-provenance .verdict-judge {
+  .run-provenance .verdict-main {
     grid-column: 2;
-  }
-
-  .run-provenance .verdict-judge {
-    margin-left: 0;
-    text-align: left;
   }
 
   .consensus-footer-tabs {
@@ -1143,6 +1241,25 @@ body:not(.dark-mode) .chat-input-container {
   .consensus-tab[aria-expanded="true"] {
     background: var(--raise);
     text-decoration: none;
+  }
+
+  /* Auf dem Telefon sind die drei Flaechen ohnehin Knoepfe — der Chevron
+     nimmt dort nur Platz weg. Und drei Verben in einer 390px-Zeile brechen
+     jedes Label auf zwei Zeilen: hier steht das Substantiv allein
+     ("Differences" statt "Review differences"), der Knopf drumherum sagt
+     bereits, dass man ihn druecken kann. Der volle Text bleibt im DOM (und
+     damit fuer Screenreader und Tests) erhalten. */
+  .consensus-tab-chevron {
+    display: none;
+  }
+
+  .consensus-tab-label[data-short] {
+    font-size: 0;
+  }
+
+  .consensus-tab-label[data-short]::after {
+    content: attr(data-short);
+    font-size: 0.76rem;
   }
 
   .consensus-tab:focus-visible {
@@ -1407,6 +1524,78 @@ body:not(.is-hero) .consensus-section::before {
   background: none;
 }
 
+/* ---- Model answers: previews, not six scroll wells -----------------------
+   Behind "Compare answers" every box used to carry its own scrollbar
+   (max-height + overflow-y in components-misc). Six private scroll regions
+   inside a scrolling page meant: the wheel did something different depending
+   on where the pointer was, the columns ended at unrelated heights, and long
+   answers were cut with nothing but a thin scrollbar to say so — in the one
+   view whose entire job is comparing those answers side by side.
+
+   Now each answer shows the same measure of itself, fading out at the same
+   line, and one button opens exactly the one you want to read in full.
+   agent-mode.js only clamps boxes that actually overflow, and never while
+   they are still streaming.
+   -------------------------------------------------------------------------- */
+.response-box:not(.is-clamped) .collapsible-content:not(.collapsed) {
+  max-height: none;
+  overflow: visible;
+}
+
+.response-box.is-clamped .collapsible-content {
+  max-height: var(--answer-preview-height, 300px);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 52px), transparent);
+  mask-image: linear-gradient(180deg, #000 calc(100% - 52px), transparent);
+}
+
+.response-answer-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 2px 0 0 8px;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line);
+}
+
+.response-answer-more[hidden] {
+  display: none;
+}
+
+.response-answer-more:hover,
+.response-answer-more:focus-visible {
+  color: var(--ink);
+  text-decoration-color: var(--ink-3);
+}
+
+.response-answer-more:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 56%, transparent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.response-answer-more::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 1.4px solid currentColor;
+  border-bottom: 1.4px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 0.18s ease;
+}
+
+.response-answer-more[aria-expanded="true"]::after {
+  transform: translateY(1px) rotate(225deg);
+}
+
 /* ---- Follow-up offer: a quiet action, not a call-out ---------------------
    The offer sits in the provenance line under the answer. It used to be a
    dashed accent chip — louder than everything around it. It reads as one of
@@ -1437,7 +1626,8 @@ body:not(.is-hero) .consensus-section::before {
    meaning rather than decoration. */
 .consensus-verdict,
 .consensus-verdict.is-calm,
-.consensus-verdict.is-warn {
+.consensus-verdict.is-warn,
+.consensus-verdict.is-alert {
   background: none;
   border: 0;
   box-shadow: none;
@@ -1453,8 +1643,84 @@ body:not(.is-hero) .consensus-section::before {
   --verdict-ring: var(--partial);
 }
 
+/* Dritte Ampelstufe: mindestens ein KRITISCHER Widerspruch. Vorher war das
+   dieselbe Farbe wie ein Detailunterschied. */
+.consensus-verdict.is-alert {
+  --verdict-ring: #cf5a4a;
+}
+
+.dark-mode .consensus-verdict.is-alert {
+  --verdict-ring: #e58a79;
+}
+
 .verdict-detail,
 .verdict-judge {
+  color: var(--ink-3);
+}
+
+/* ---- Das Urteil als ruhige Flaeche ---------------------------------------
+   Der Fuss besteht aus lauter gleich leisen Grautoenen; die eine Aussage, die
+   der Leser NICHT uebersehen darf — wie einig sich die Modelle sind — sah
+   darin aus wie eine Fussnote unter der Fussnote. Sie bekommt deshalb als
+   einziges Element des Fusses eine eigene Flaeche: kein Rahmen, kein Schatten,
+   kein Glas (die Shell baut Rahmen ueberall ab), sondern ein Grundton, der die
+   Ampelfarbe nur ahnen laesst. Das traegt die Semantik auch dann, wenn der
+   Ring bei Score 0 leer bleibt — genau der Fall, in dem sie am meisten zaehlt.
+
+   Bewusst nur das Urteil, nicht die ganze Zeile: Teilen/Beobachten/Zitieren
+   daneben bleiben auf dem Seitengrund und damit sichtbar zweitrangig.
+   -------------------------------------------------------------------------- */
+.run-provenance .consensus-verdict {
+  padding: 11px 15px 11px 12px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--verdict-ring, var(--ink-3)) 8%, var(--raise));
+}
+
+/* Die Headline ist die Ueberschrift des Ergebnisses, nicht ein weiterer
+   Fussnotentext: eine Stufe groesser und in voller Textfarbe. */
+.run-provenance .verdict-headline {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* Score-Anzeige: Ring plus Bildunterschrift. Eine nackte "0" im Kreis sagt
+   nicht, wovon sie 0 ist. */
+.run-provenance .verdict-gauge {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.run-provenance .verdict-score {
+  width: 46px;
+  height: 46px;
+}
+
+/* Die ungefuellte Strecke des Rings traegt einen Hauch derselben Farbe. Bei
+   Score 0 — dem Fall, in dem die Aussage am staerksten ist — war der Ring
+   sonst ein leerer grauer Kreis und damit ausgerechnet dann stumm. */
+.run-provenance .verdict-score-ring {
+  background: conic-gradient(
+    var(--verdict-ring, var(--accent)) calc(var(--val, 0) * 1%),
+    color-mix(in srgb, var(--verdict-ring, var(--ink-3)) 22%, transparent) 0
+  );
+}
+
+.run-provenance .verdict-score-num {
+  font-size: 0.89rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.verdict-score-caption {
+  font-size: 0.53rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1;
   color: var(--ink-3);
 }
 
@@ -1823,6 +2089,25 @@ body.is-hero .consensus-section::before {
   color: var(--ink);
 }
 
+/* The defaults block is the one place a reader decides whether this dialog is
+   configurable at all. Both the "Edit" switch and the three value chips are
+   therefore filled surfaces you can tell apart from the label above them —
+   frameless, but not flat text. */
+.watch-setup-edit,
+.watch-setup-chip {
+  border: 0;
+  background: var(--well);
+  color: var(--ink);
+  box-shadow: none;
+}
+
+.watch-setup-edit:hover,
+.watch-setup-chip:hover {
+  border: 0;
+  background: var(--line);
+  color: var(--ink);
+}
+
 /* Input fields are wells, like the composer — not bordered boxes. */
 .watch-delivery-field {
   border: 0;
@@ -1940,6 +2225,22 @@ body.is-hero .chat-input-container .consensus-model .select-wrapper .model-picke
 }
 
 .composer-gate[hidden] {
+  display: none;
+}
+
+/* "Run again" fuellt die Frage nur vor. Was das Absenden kostet, steht bis
+   dahin hier — an dem Feld, das gleich abgeschickt wird. */
+.composer-run-notice {
+  flex: 1 1 100%;
+  min-width: 0;
+  margin: 0 0 4px;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  text-align: left;
+  color: var(--ink-3);
+}
+
+.composer-run-notice[hidden] {
   display: none;
 }
 

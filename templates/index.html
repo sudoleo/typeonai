@@ -58,7 +58,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260727-shellv2">
+  <link rel="stylesheet" href="/static/style.css?v=20260728-splitline1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
@@ -89,7 +89,7 @@
   <!-- Agent Mode (aus index.html ausgelagert) -->
   <script src="/static/js/agent-mode.js?v=20260727-agentdefault1" defer></script>
   <!-- Kompakte Zwei-Phasen-Anzeige fuer regulaere Laeufe (ohne Agent Mode). -->
-  <script src="/static/js/consensus-progress.js?v=20260727-resultactions1" defer></script>
+  <script src="/static/js/consensus-progress.js?v=20260728-editcost1" defer></script>
   <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
   <script src="/static/js/consensus-lifecycle.js?v=20260727-resultactions1" defer></script>
   <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
@@ -97,11 +97,11 @@
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-actions.js?v=20260727-resultactions1" defer></script>
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
-  <script src="/static/js/watch.js?v=20260727-thread12" defer></script>
+  <script src="/static/js/watch.js?v=20260728-editcost1" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260727-thread12" defer></script>
   <!-- Kontingent-Ring + Panel im Sidebar-Footer; spiegelt nur #usageDisplay -->
-  <script src="/static/js/sidebar-quota.js?v=20260727-thread12" defer></script>
+  <script src="/static/js/sidebar-quota.js?v=20260728-editcost1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-insights.js?v=20260727-resultactions1" defer></script>
   <script src="/static/js/consensus-run.js?v=20260727-resultactions1" defer></script>
@@ -456,6 +456,10 @@
              erscheint der Kontext-Chip hier — er gehoert zu dem, was gleich
              abgeschickt wird. Beides rendert window.App.followup. -->
         <div id="followupChipBar" class="followup-bar" hidden></div>
+        <!-- "Run again" fuellt nur vor, abgeschickt wird bewusst. Genau
+             dazwischen steht hier, was das Abschicken kostet. Gesetzt und
+             wieder geleert von consensus-progress.js. -->
+        <p id="composerRunNotice" class="composer-run-notice" role="status" hidden></p>
         <textarea class="input-field" id="questionInput" placeholder="Enter your question"></textarea>
         <!-- Composer-Gate: die Stelle, an der die App sagt, dass sie kein Chat
              ist. Nach einer beantworteten Frage ist der Lauf zu Ende — hier
@@ -599,29 +603,31 @@
               <p id="consensusMarkerLegend" class="consensus-marker-legend" hidden>
                 Marked passages are checked key claims. Unmarked text was not compared individually.
               </p>
-              <!-- Beleg-Fuss: uebernimmt, wenn der Lauf sich ausblendet. Drei
-                   Zeilen in fester Reihenfolge (Mockup 2026-07-27):
-                     1. woraus die Antwort entstand + was man mit ihr tun kann
-                     2. das Urteil (Score-Ring + Headline)
-                     3. die drei Aufklapp-Flaechen dahinter
+              <!-- Beleg-Fuss: uebernimmt, wenn der Lauf sich ausblendet. Seit
+                   2026-07-28 zwei Zeilen statt drei (Grid in shell.css):
+                     1. das Urteil (Score-Ring + Headline + eine Meta-Zeile)
+                        und rechts, was man mit der Antwort tut
+                     2. die Aufklapp-Flaechen und rechts die Lauf-Fakten
                    Der Verdict stand vorher UEBER der Antwort und hat sie damit
                    bewertet, bevor sie gelesen war; er gehoert hinter den Text. -->
               <div id="runProvenance" class="run-provenance consensus-footer" hidden>
-                <div class="consensus-footer-facts">
-                  <span class="run-provenance-facts" id="runProvenanceFacts"></span>
-                  <button type="button" id="runReplayButton" class="run-replay-btn"
-                    title="Start a new comparison with the same question">Run again</button>
-                  <!-- Zielcontainer fuer Teilen/Beobachten/Zitieren. Die Buttons
-                       hingen frueher absolut positioniert in der Ueberschrift;
-                       consensus-actions.js + watch.js haengen ihre
-                       .consensus-copy-inline jetzt hier ein. -->
-                  <span class="consensus-footer-actions" id="consensusFooterActions"></span>
-                </div>
+                <!-- Fuenf Bloecke, deren Anordnung allein das Grid in shell.css
+                     bestimmt (Desktop zwei Zeilen, Mobil drei). Deshalb liegen
+                     sie flach nebeneinander statt in Zeilen-Wrappern:
+                       Urteil | Aktionen
+                       Schubladen | Lauf-Fakten
+                       Follow-up-Angebot -->
                 <div id="consensusVerdict" class="consensus-verdict" hidden aria-live="polite"></div>
+                <!-- Zielcontainer fuer Teilen/Beobachten/Zitieren. Die Buttons
+                     hingen frueher absolut positioniert in der Ueberschrift;
+                     consensus-actions.js + watch.js haengen ihre
+                     .consensus-copy-inline jetzt hier ein. -->
+                <span class="consensus-footer-actions" id="consensusFooterActions"></span>
                 <div class="consensus-footer-tabs" id="consensusFooterTabs">
                   <button type="button" id="consensusDifferencesTab" class="consensus-tab"
                     aria-expanded="false" aria-controls="consensusDifferencesPanel" hidden>
-                    <span class="consensus-tab-label">Review differences</span>
+                    <svg class="consensus-tab-chevron" viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>
+                    <span class="consensus-tab-label" data-short="Differences">Review differences</span>
                     <span class="consensus-tab-count" id="consensusDifferencesTabCount"></span>
                   </button>
                   <!-- Die Einzelantworten-Disclosure ist aus dem Agent-Mode-Panel
@@ -632,14 +638,26 @@
                     <button type="button" id="agentModeAnswersToggle" class="consensus-tab agent-mode-answers-toggle"
                       aria-expanded="false"
                       aria-controls="openaiResponse mistralResponse claudeResponse geminiResponse deepseekResponse grokResponse">
-                      <span>Compare answers</span>
+                      <svg class="consensus-tab-chevron" viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>
+                      <span class="consensus-tab-label" data-short="Answers">Compare answers</span>
+                      <span class="consensus-tab-count" id="consensusAnswersTabCount"></span>
                     </button>
                   </div>
                   <button type="button" id="consensusSourcesTab" class="consensus-tab"
                     aria-expanded="false" aria-controls="consensusSourcesPanel" hidden>
-                    <span class="consensus-tab-label">Verify sources</span>
+                    <svg class="consensus-tab-chevron" viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>
+                    <span class="consensus-tab-label" data-short="Sources">Verify sources</span>
                     <span class="consensus-tab-count" id="consensusSourcesTabCount"></span>
                   </button>
+                </div>
+                <div class="consensus-footer-facts">
+                  <span class="run-provenance-facts" id="runProvenanceFacts"></span>
+                  <!-- "Run again" ist ein vollstaendiger neuer Lauf und kostet
+                       entsprechend Kontingent. Label und Titel schreibt
+                       consensus-progress.js (renderProvenance) aus dem echten
+                       Zaehler, damit hier nie ein falscher Preis steht. -->
+                  <button type="button" id="runReplayButton" class="run-replay-btn"
+                    title="Start a new comparison with the same question"><span class="run-replay-label">Run again</span><span class="run-replay-cost" id="runReplayCost"></span></button>
                 </div>
                 <span class="run-provenance-actions" id="followupBar"></span>
               </div>
