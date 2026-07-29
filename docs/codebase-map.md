@@ -382,10 +382,18 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Differences-Trenner und `.consensus-divider` ist stillgelegt; die einzige
   Abschnittsgrenze zum Composer ist dessen auslaufender Horizont. Ein
   geoeffneter Differences-/Sources-Drawer behaelt intern eine feine Oberkante.
-  Auf ≤640 px ordnet dasselbe Grid um: Verdict ueber volle Breite, darunter
-  die drei Tabs als gleich breite Dreierspalte (Chevron aus, Kurzlabel aus
-  `data-short` via `::after`, damit die Knoepfe einzeilig bleiben), darunter
-  Aktionen und Fakten **gemeinsam** auf der letzten Zeile.
+  Verdict und Teilen/Beobachten/Zitieren liegen auf Desktop in einer
+  gemeinsamen, dezent getoenten Summary-Flaeche; die Aktionen sind an deren
+  Oberkante statt vertikal mittig ausgerichtet. Auf ≤640 px ordnet dasselbe
+  Grid um: Verdict ueber volle Breite, darunter die drei Tabs als gleich
+  breite Dreierspalte (Chevron aus, Kurzlabel aus `data-short` via `::after`,
+  damit die Knoepfe einzeilig bleiben), danach Aktionen und Lauf-Fakten in
+  **getrennten** Zeilen. So kann keine Kombination aus Watch, Modellzahl,
+  Citation und Run-again-Kosten horizontal ueberlappen.
+  Beim Oeffnen fahren alle drei Disclosures ihren jeweiligen Inhaltsanfang
+  nach dem Layout per sanftem `scrollIntoView({block:"nearest"})` an:
+  Differences den Drawer, Sources den ersten Quellen-Eintrag und Compare
+  answers die erste eingeschlossene Modellantwort.
   `onConsensusEnd()` rendert ihn auch ohne aktive Query-Pipeline (spaeter
   manuell gestarteter Consensus); `firebase.js::loadSingleBookmarkUI` tut
   dasselbe explizit fuer wiederhergestellte Bookmarks.

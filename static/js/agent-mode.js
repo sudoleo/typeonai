@@ -568,6 +568,17 @@
       });
     }
     updateAgentModeUI();
+    if (changed && nextVisible) {
+      // Derselbe dezente Reveal wie bei Differences/Sources: erst nachdem die
+      // CSS-Klasse die Boxen sichtbar gemacht hat, den Anfang der ersten
+      // Antwort mit "nearest" ins Bild holen.
+      requestAnimationFrame(() => {
+        const firstAnswer = document.querySelector(
+          ".response-section > .response-box:not(.excluded)"
+        );
+        firstAnswer?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      });
+    }
     return changed;
   }
 

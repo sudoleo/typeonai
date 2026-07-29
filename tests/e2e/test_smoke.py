@@ -333,6 +333,50 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     assert footer_metrics["scrollWidth"] <= footer_metrics["clientWidth"]
     assert all(height <= 40 for height in footer_metrics["buttonHeights"])
 
+    # Mobile: Aktionen und Lauf-Fakten leben in getrennten Zeilen. Zuvor
+    # teilten sie sich eine Grid-Zeile und Watch/Cite kollidierten bei langen
+    # Laufdaten sichtbar mit "6 models" und "Run again".
+    footer_layout = app_page.locator("#runProvenance").evaluate(
+        """element => {
+          const actions = element.querySelector("#consensusFooterActions").getBoundingClientRect();
+          const facts = element.querySelector(".consensus-footer-facts").getBoundingClientRect();
+          const verdict = element.querySelector("#consensusVerdict").getBoundingClientRect();
+          const tabs = element.querySelector("#consensusFooterTabs").getBoundingClientRect();
+          const overlaps = (a, b) =>
+            a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+          return {
+            scrollWidth: element.scrollWidth,
+            clientWidth: element.clientWidth,
+            actionsFactsOverlap: overlaps(actions, facts),
+            ordered:
+              verdict.bottom <= tabs.top + 1
+              && tabs.bottom <= actions.top + 1
+              && actions.bottom <= facts.top + 1,
+          };
+        }"""
+    )
+    assert footer_layout["scrollWidth"] <= footer_layout["clientWidth"]
+    assert footer_layout["actionsFactsOverlap"] is False
+    assert footer_layout["ordered"] is True
+
+    # Desktop/tablet: Share/Watch/Cite sitzen an der Oberkante der gemeinsamen
+    # Summary-Flaeche und nicht mehr vertikal in der Mitte des hohen Verdicts.
+    app_page.set_viewport_size({"width": 1000, "height": 844})
+    desktop_footer = app_page.locator("#runProvenance").evaluate(
+        """element => {
+          const actions = element.querySelector("#consensusFooterActions").getBoundingClientRect();
+          const verdict = element.querySelector("#consensusVerdict").getBoundingClientRect();
+          const surface = getComputedStyle(element, "::before");
+          return {
+            topDelta: actions.top - verdict.top,
+            hasSummarySurface: surface.backgroundImage !== "none",
+          };
+        }"""
+    )
+    assert 0 <= desktop_footer["topDelta"] <= 12
+    assert desktop_footer["hasSummarySurface"] is True
+    app_page.set_viewport_size({"width": 390, "height": 844})
+
     app_page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
     app_page.wait_for_timeout(100)
     result_gap = app_page.evaluate(
@@ -452,6 +496,61 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     expect(panel).to_be_hidden(timeout=15000)
     assert panel.evaluate("el => el.open") is False, "Differences starten zugeklappt"
     expect(app_page.locator(".diff-card.is-contradiction").first).to_be_hidden()
+
+    # Alle drei Disclosures geben denselben sanften Scroll-Hinweis auf den
+    # neu sichtbaren Inhalt. Sources zielt auf den ersten Beleg, Compare
+    # answers auf die erste eingeschlossene Antwort (jeweils nach dem Layout).
+    app_page.evaluate(
+        """() => {
+          window.currentEvidenceSources = [{
+            id: "S1",
+            title: "Disclosure scroll fixture",
+            url: "https://example.org/source",
+            snippet: "A source rendered specifically for the disclosure behavior test.",
+          }];
+          window.renderEvidenceSources(window.currentEvidenceSources);
+          window.__disclosureScrollTargets = [];
+          window.__originalScrollIntoView = Element.prototype.scrollIntoView;
+          Element.prototype.scrollIntoView = function (options) {
+            window.__disclosureScrollTargets.push({
+              id: this.id || "",
+              tag: this.tagName,
+              options,
+              visible: this.getBoundingClientRect().height > 0,
+            });
+            return window.__originalScrollIntoView.call(this, options);
+          };
+        }"""
+    )
+
+    sources_tab = app_page.locator("#consensusSourcesTab")
+    sources_tab.click()
+    expect(app_page.locator("#consensusSourcesPanel li").first).to_be_visible()
+    app_page.wait_for_timeout(100)
+    source_scroll = app_page.evaluate(
+        "() => window.__disclosureScrollTargets.find(item => item.tag === 'LI')"
+    )
+    assert source_scroll["visible"] is True
+    assert source_scroll["options"]["block"] == "nearest"
+    sources_tab.click()
+
+    model_answers_toggle.click()
+    expect(app_page.locator("#openaiResponse")).to_be_visible()
+    app_page.wait_for_timeout(100)
+    answer_scroll = app_page.evaluate(
+        "() => window.__disclosureScrollTargets.find(item => item.id === 'openaiResponse')"
+    )
+    assert answer_scroll["visible"] is True
+    assert answer_scroll["options"]["block"] == "nearest"
+    model_answers_toggle.click()
+
+    app_page.evaluate(
+        """() => {
+          Element.prototype.scrollIntoView = window.__originalScrollIntoView;
+          delete window.__originalScrollIntoView;
+          delete window.__disclosureScrollTargets;
+        }"""
+    )
 
     app_page.locator("#consensusDifferencesTab").click()
     expect(app_page.locator(".diff-card.is-contradiction").first).to_be_visible(timeout=5000)

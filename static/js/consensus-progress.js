@@ -405,7 +405,18 @@
     const open = !isPanelOpen(panel);
     setPanelOpen(panel, open);
     tab.setAttribute("aria-expanded", String(open));
-    if (open) panel.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (open) {
+      // Erst nach dem Layout scrollen: bei hidden -> sichtbar hatte der
+      // Sources-Drawer sonst noch keine belastbare Geometrie. Bei langen
+      // Quellenlisten fahren wir gezielt den ersten Eintrag an, damit nur ein
+      // kleiner Inhaltsanfang ins Bild kommt statt der ganze Drawer zu springen.
+      requestAnimationFrame(() => {
+        const target = panel.id === "consensusSourcesPanel"
+          ? panel.querySelector(".consensus-sources-list > li") || panel
+          : panel;
+        target.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      });
+    }
   }
 
   function countDifferences() {

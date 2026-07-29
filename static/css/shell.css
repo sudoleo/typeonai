@@ -857,6 +857,9 @@ body:not(.dark-mode) .chat-input-container {
    Nothing is lost when the run collapses — it just stops taking up screen.
    -------------------------------------------------------------------------- */
 .run-provenance {
+  --footer-verdict-ring: var(--ink-3);
+  position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
@@ -872,20 +875,73 @@ body:not(.dark-mode) .chat-input-container {
   color: var(--ink-3);
 }
 
+.run-provenance:has(.consensus-verdict.is-calm) {
+  --footer-verdict-ring: var(--agree);
+}
+
+.run-provenance:has(.consensus-verdict.is-warn) {
+  --footer-verdict-ring: var(--partial);
+}
+
+.run-provenance:has(.consensus-verdict.is-alert) {
+  --footer-verdict-ring: #cf5a4a;
+}
+
+.dark-mode .run-provenance:has(.consensus-verdict.is-alert) {
+  --footer-verdict-ring: #e58a79;
+}
+
+/* Verdict und Antwort-Aktionen bilden auf breiten Screens eine gemeinsame
+   Summary-Zeile. Die Flaeche ueber die volle Breite vermeidet den unfertigen
+   Eindruck einer farbigen Karte, die direkt vor den Aktionen abbricht. */
+.run-provenance::before {
+  content: "";
+  z-index: 0;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  align-self: stretch;
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--footer-verdict-ring) 7%, var(--raise)),
+      color-mix(in srgb, var(--footer-verdict-ring) 3%, var(--raise))
+    );
+  pointer-events: none;
+}
+
+.run-provenance:has(.consensus-verdict[hidden])::before {
+  display: none;
+}
+
 .run-provenance[hidden] {
   display: none;
 }
 
-.run-provenance > .consensus-verdict { grid-area: verdict; min-width: 0; }
-.run-provenance > .consensus-footer-actions { grid-area: actions; }
+.run-provenance > .consensus-verdict {
+  z-index: 1;
+  grid-area: verdict;
+  min-width: 0;
+}
+
+.run-provenance > .consensus-footer-actions {
+  z-index: 1;
+  grid-area: actions;
+}
+
 .run-provenance > .consensus-footer-tabs { grid-area: tabs; }
 .run-provenance > .consensus-footer-facts { grid-area: facts; }
 .run-provenance > .run-provenance-actions { grid-area: offer; }
 
 .run-provenance > .consensus-footer-tabs,
-.run-provenance > .consensus-footer-facts,
-.run-provenance > .consensus-footer-actions {
+.run-provenance > .consensus-footer-facts {
   align-self: center;
+}
+
+.run-provenance > .consensus-footer-actions {
+  align-self: start;
+  margin-top: 8px;
+  margin-right: 6px;
 }
 
 .consensus-footer-facts {
@@ -906,10 +962,9 @@ body:not(.dark-mode) .chat-input-container {
   font-weight: 550;
 }
 
-/* Share / Watch / Cite: the three things you do WITH a finished answer, on
-   the same baseline as the facts about it. They used to hang absolutely
-   positioned off the "Consensus answer" eyebrow, where they competed with a
-   label rather than with each other. */
+/* Share / Watch / Cite: the three things you do WITH a finished answer.
+   Desktop verankert sie oben in der Summary-Flaeche; mobil bekommen sie eine
+   eigene Zeile. Sie hingen frueher absolut positioniert an der Ueberschrift. */
 .consensus-footer-actions {
   margin-left: auto;
   display: inline-flex;
@@ -924,6 +979,7 @@ body:not(.dark-mode) .chat-input-container {
   position: static;
   transform: none;
   gap: 2px;
+  white-space: nowrap;
 }
 
 /* In the footer the icons carry their name — three unlabelled glyphs in a
@@ -1158,22 +1214,28 @@ body:not(.dark-mode) .chat-input-container {
   }
 
   /* Phone: the verdict gets the full width (it is the one thing that has to
-     be readable), the drawers keep their three-column strip, and the two
-     action groups — what you do with the answer, what you do with the run —
-     share the last line instead of claiming one each. */
+     be readable), the drawers keep their three-column strip, and actions
+     sowie run facts get separate rows so neither can overlap the other. */
   .run-provenance {
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "verdict verdict"
-      "tabs    tabs"
-      "actions facts"
-      "offer   offer";
+      "verdict"
+      "tabs"
+      "actions"
+      "facts"
+      "offer";
     gap: 8px;
     margin-top: 12px;
     padding-top: 9px;
   }
 
   .consensus-footer-facts {
+    box-sizing: border-box;
+    width: 100%;
+    justify-content: flex-start;
     gap: 5px 8px;
+    padding-inline: 4px;
+    text-align: left;
   }
 
   .run-replay-btn {
@@ -1183,11 +1245,21 @@ body:not(.dark-mode) .chat-input-container {
 
   .run-provenance > .consensus-footer-actions,
   .run-provenance > .consensus-footer-facts {
-    align-self: center;
+    align-self: start;
   }
 
-  .consensus-footer-actions {
+  .run-provenance > .consensus-footer-actions {
+    width: 100%;
     margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    padding-inline: 0;
+  }
+
+  .consensus-footer-actions .consensus-copy-inline {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
   .consensus-footer-actions .consensus-share-pill,
@@ -1672,8 +1744,8 @@ body:not(.is-hero) .consensus-section::before {
    -------------------------------------------------------------------------- */
 .run-provenance .consensus-verdict {
   padding: 11px 15px 11px 12px;
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--verdict-ring, var(--ink-3)) 8%, var(--raise));
+  border-radius: 0;
+  background: transparent;
 }
 
 /* Die Headline ist die Ueberschrift des Ergebnisses, nicht ein weiterer
