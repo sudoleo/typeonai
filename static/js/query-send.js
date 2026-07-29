@@ -413,6 +413,21 @@
         return { name: att.name, mime: att.mime, size: att.size || 0 };
       });
 
+      // DeepSeek's chat API cannot consume the supported attachment inputs.
+      // Keep this as a hard send-time invariant, not merely UI state: a stale
+      // checkbox or another renderer must never put DeepSeek back into the
+      // request fan-out while files are attached.
+      const deepSeekBlockedByAttachments = attachmentsPayload.length > 0;
+      function enforceDeepSeekAttachmentBlock() {
+        if (!deepSeekBlockedByAttachments) return;
+        window.App.setModelSelectionState?.("deepseekResponse", false, {
+          persist: false,
+          syncCheckbox: true,
+          animate: false
+        });
+      }
+      enforceDeepSeekAttachmentBlock();
+
       const baseSpinnerHTML = window.spinnerHTML;
 
       // Nur Boxen der aktuell ausgewählten Modelle
@@ -434,7 +449,7 @@
         const box = document.getElementById("geminiResponse");
         if (box) modelBoxes.push(box);
       }
-      if (document.getElementById("selectDeepSeek")?.checked) {
+      if (!deepSeekBlockedByAttachments && document.getElementById("selectDeepSeek")?.checked) {
         const box = document.getElementById("deepseekResponse");
         if (box) modelBoxes.push(box);
       }
@@ -711,6 +726,11 @@
         window.syncDemoChipState?.();
       }
 
+      // /prepare refreshes the authoritative user tier. That refresh restores
+      // persisted model selections, so reassert the attachment invariant
+      // before answer counting and request fan-out.
+      enforceDeepSeekAttachmentBlock();
+
       window.spinnerHTML = baseSpinnerHTML;
       modelBoxes.forEach(box => window.setSpinnerEl(box));
 
@@ -741,7 +761,9 @@
       if (document.getElementById("selectMistral").checked) activeModels.push("Mistral");
       if (document.getElementById("selectClaude").checked) activeModels.push("Anthropic");
       if (document.getElementById("selectGemini").checked) activeModels.push("Gemini");
-      if (document.getElementById("selectDeepSeek").checked) activeModels.push("DeepSeek");
+      if (!deepSeekBlockedByAttachments && document.getElementById("selectDeepSeek").checked) {
+        activeModels.push("DeepSeek");
+      }
       if (document.getElementById("selectGrok").checked) activeModels.push("Grok");
       setAgentModeStatus(activeModels.length > 0 ? "running" : "idle");
 

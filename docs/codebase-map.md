@@ -111,7 +111,10 @@ Alle öffentlichen HTML-Seiten teilen Navigation und Footer über
 ist seit 2026-07-17 demo-first: Ein klickbares Input-Feld (Look des /app-Inputs,
 "Try the demo"-Pill, Provider-Chips darunter) verlinkt auf `/app?demo=1`;
 `static/demo.js` erkennt den Parameter und startet die Demo automatisch in der
-echten App. Die Produktgeschichte führt danach über Ask/Run/Decide zum vierten
+echten App. Dabei wird zuerst die vollständige Frage in den Composer getippt;
+beim simulierten Absenden wandert sie in den Thread-Kopf, der Composer wird
+geleert und erst danach beginnen Fortschrittsanzeige und Modell-Spinner. Die
+Produktgeschichte führt danach über Ask/Run/Decide zum vierten
 Landing-Schritt `#watch`: Eine kompakte Baseline→Change→Telegram-Visualisierung
 erklärt Consensus Watch und verlinkt direkt auf `/app/watches`; derselbe Anker
 ist in der öffentlichen Navigation erreichbar. Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
@@ -278,10 +281,14 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   DOM-Linkifier besitzt denselben Fallback fuer alte Bookmarks; das
   serverseitige Pendant liegt in `app/services/public_markdown.py`.
 - **`attachments.js`** — Attachment-UI/Payload (Pro), inklusive Bild-Paste im
-  Fragefeld und Bild-Drag-and-drop auf den Input-Container. Solange ein echter
+  Fragefeld und Drag-and-drop aller unterstützten Dateitypen auf den
+  Input-Container. Solange ein echter
   Anhang für die nächste Frage bereitliegt, wird DeepSeek temporär mit einem
   sichtbaren Kompatibilitätshinweis deaktiviert, weil dessen Chat-API keine
-  Datei-/Bild-Inputs akzeptiert; nach Entfernen wird die vorherige Auswahl
+  Datei-/Bild-Inputs akzeptiert; `query-send.js` erzwingt dieselbe Sperre
+  zusätzlich nach dem Tier-Refresh von `/prepare` und direkt beim
+  Request-Fan-out. Der Auswahl-Restore darf den dabei deaktivierten Provider
+  nicht reaktivieren. Nach Entfernen wird die vorherige Auswahl
   wiederhergestellt. `window.pendingAttachments`, `getAttachmentsPayload`.
 - **`agent-mode.js`** — Agent-Mode-**Zustand**, Status-Hub und Timer; einzige
   Stelle, die den Auto-Consensus-Toggle erzwingt/sperrt, und `setAgentModeStatus`
@@ -366,7 +373,7 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   eine groessere Headline in voller Textfarbe, einen 46px-Ring mit
   Bildunterschrift „agreement" (`.verdict-gauge`, weil eine nackte 0 im Kreis
   nicht sagt, wovon sie 0 ist) und eine **dritte Ampelstufe** `is-alert`
-  (mind. ein KRITISCHER Widerspruch, vorher war jeder Widerspruch bernstein).
+  (Agreement unter 40; Widerspruchsschwere steht separat in der Detailzeile).
   Die ungefuellte Ringstrecke traegt 22 % derselben Farbe — bei Score 0 war der
   Ring sonst ein leerer grauer Kreis und ausgerechnet im staerksten Fall stumm.
   Teilen/Beobachten/Zitieren bleiben bewusst OHNE Flaeche auf dem Seitengrund
@@ -447,7 +454,12 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   exakt oberhalb des Composers, ohne Lücke oder Überdeckung. Die Menues am
   Composer (`.attach-menu`, Consensus-Picker)
   oeffnen im Thread nach **oben** in Richtung des gelesenen Ergebnisses; im
-  Hero bleibt es bei „nach unten". Der mobile
+  Hero bleibt es bei „nach unten". Das Fragefeld wächst über
+  `app-init.js::resizeQuestionInput()` automatisch mit seinem Inhalt: bis
+  220 px auf Desktop bzw. 180 px auf Mobile; danach scrollt nur noch die
+  Textarea. Programmatische Leerungen/Füllungen lösen dafür ein `input`-Event
+  aus. Der vorhandene `ResizeObserver` zieht die mobile Thread-Reserve bei
+  jeder Höhenänderung mit. Der mobile
   Consensus-Picker richtet sich an `.consensus-switch-container` aus und ist
   auf `100vw - 48px` begrenzt, damit er keinen horizontalen Dokument-Scroll
   erzeugt. Auf ≤640 px werden der alte relative `bottom`-/`left`-Offset
@@ -542,6 +554,11 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   markiert/scrollt synchron zum Zitat; die Geometrie-Abfrage erzwingt das
   aktualisierte Layout selbst. Der aktive Agent Mode wird dabei nicht
   verändert.
+  Der Verdict leitet Farbe und Überschrift aus derselben Score-Skala ab wie das
+  Backend: 85+ „High", 65–84 „Strong", 40–64 „Partial", 20–39 „Low", darunter
+  „Very low agreement"; Grün beginnt erst bei 65. Contradictions und Emphasis
+  stehen getrennt davon in der Detailzeile. Alte Snapshots ohne Score fallen
+  weiterhin auf die Difference-Schwere zurück.
   `findAnchorTarget` löst den verifizierten Anker auf, `sentenceBounds`
   dehnt ihn auf den umgebenden Satz aus, `wrapFlatRange` wrappt die
   betroffenen Textknoten in `<span class="cx-claim is-unanimous|is-minor|
@@ -805,7 +822,9 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   `differences_data.agreement` im Payload/Snapshot; der Legacy-Credibility-Satz
   wird daraus abgeleitet (nie divergierende Verdicts). Widersprüche tragen
   `severity` ("major"/"minor", Default major); Frontend zeigt Score im
-  Verdict-Header und "critical"/"minor detail"-Tags (rote bzw. Bernstein-Stufe),
+  Verdict-Header; dessen Überschrift und Ampelfarbe folgen ausschließlich dem
+  Score, während "critical"/"minor detail" und das betroffene Thema separat
+  den Widerspruchsstatus zeigen,
   alte Bookmarks/Snapshots ohne die Felder degradieren aufs bisherige Rendering.
 - Consensus-Fehlerpfad: `query/stream_consensus` versuchen es bei Provider-
   Fehlern (503, Timeout, ...) ein zweites Mal (`CONSENSUS_MAX_ATTEMPTS`);
@@ -859,9 +878,11 @@ openai/anthropic/gemini/grok; PDF-Support: openai/anthropic/gemini (sonst
 Text-Fallback/PDF-Extraktion). **In Firestore landen nie Datei-Bytes**, nur
 Metadaten (Name/Typ/Größe) — siehe `bookmarks.py::sanitize_attachment_meta`.
 Bilder können zusätzlich zum Dateiauswahldialog per Paste im `#questionInput`
-oder per Drag-and-drop auf `.chat-input-container` angehängt werden; beide Wege
-nutzen dasselbe Pro-Gate sowie dieselben Anzahl-/Größenlimits und die bestehende
-Whitelist für Bild-MIME-Typen.
+angehängt werden. Drag-and-drop auf `.chat-input-container` akzeptiert wie der
+Dateiauswahldialog die vollständige PDF/DOCX/TXT/MD/CSV/PNG/JPEG/WebP-Whitelist;
+alle Wege nutzen dasselbe Pro-Gate sowie dieselben Anzahl-/Größenlimits.
+Solange ein sendbarer Anhang vorliegt, schließt der Client DeepSeek sowohl im
+sichtbaren Auswahlzustand als auch defensiv im tatsächlichen Request-Fan-out aus.
 
 ### Auth / Usage / Tier
 - Firebase-ID-Token wird mit `verify_user_token` geprüft (Standard: nur

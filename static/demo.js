@@ -199,6 +199,13 @@ const DEMO_DATA = {
   differencesData: {
     models_compared: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"],
     best_model: "Anthropic",
+    agreement: {
+      score: 41,
+      level: "partially",
+      model_count: 6,
+      major_contradictions: 1,
+      minor_contradictions: 0
+    },
     claims: [
       {
         anchor: "routine supplement or reliably fortified foods",
@@ -479,7 +486,6 @@ async function runDemoFlow() {
   if (consensusBtn) consensusBtn.disabled = true;
   // Neue Demo-Runde: Konsens-Bereich zunächst ausblenden.
   window.hideConsensusOutput?.();
-  window.setAgentModeStatus?.("running");
 
   window.currentEvidenceSources = [];
   window.renderEvidenceSources?.([]);
@@ -496,14 +502,12 @@ async function runDemoFlow() {
     await sleep(DEMO_PHASES.pauseAfterTypingAll);
   }
 
-  // Die Frage wandert in den Thread-Kopf. Während der animierten Demo bleibt
-  // sie zusätzlich im Composer stehen, damit der selbst getippte Text nicht
-  // mitten im Ablauf verschwindet. Nach dem Ergebnis ersetzt der bestehende
-  // Login-Hinweis den ganzen Composer (shell.css) — ein deaktiviertes Feld
-  // wäre dann kein sinnvoller nächster Schritt.
+  // Die fertig getippte Frage wird jetzt "abgeschickt": Sie wandert in den
+  // Thread-Kopf und verschwindet wie bei einem echten Lauf aus dem Composer.
+  // Erst danach beginnen Fortschrittsanzeige und Modell-Spinner.
   window.App?.setThreadQuestion?.(DEMO_SCENARIO_PROMPT);
   if (qi) {
-    qi.value = DEMO_SCENARIO_PROMPT;
+    qi.value = "";
     qi.dispatchEvent(new Event("input", { bubbles: true }));
     window.syncDemoChipState?.();
   }

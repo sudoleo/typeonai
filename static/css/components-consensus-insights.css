@@ -35,8 +35,14 @@
   background: color-mix(in srgb, #b97718 4%, var(--glass-bg-strong));
 }
 
+.consensus-verdict.is-alert {
+  --verdict-ring: #cf5a4a;
+  background: color-mix(in srgb, #cf5a4a 4%, var(--glass-bg-strong));
+}
+
 .dark-mode .consensus-verdict.is-calm { --verdict-ring: #6fcf9a; }
 .dark-mode .consensus-verdict.is-warn { --verdict-ring: #e8b968; }
+.dark-mode .consensus-verdict.is-alert { --verdict-ring: #e58a79; }
 
 /* Score-Ring: Conic-Gauge, Füllstand kommt als --val (0–100) aus dem JS. */
 .verdict-score {

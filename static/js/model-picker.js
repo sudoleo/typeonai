@@ -88,11 +88,17 @@
       : prefOrResponseId;
     if (!pref) return;
 
-    const checked = !!isChecked;
     const checkbox = document.getElementById(pref.checkId);
     const box = document.getElementById(pref.responseId);
     const label = document.querySelector(`label[for='${pref.checkId}']`);
     const { persist = false, syncCheckbox = true, animate = persist } = options;
+    // Tier refreshes restore persisted selections after /prepare. A provider
+    // disabled by the attachment compatibility gate must stay excluded during
+    // that restore; otherwise progress and consensus wait for an answer whose
+    // request was intentionally never started.
+    const attachmentBlocked = checkbox?.disabled
+      && checkbox.getAttribute("aria-describedby") === "attachmentProviderNotice";
+    const checked = attachmentBlocked ? false : !!isChecked;
 
     if (checkbox && syncCheckbox) {
       checkbox.checked = checked;
@@ -135,6 +141,9 @@
       window.updateConsensusButtonAvailability();
     }
 
+    // The composer trigger includes the selected provider count. Temporary
+    // compatibility exclusions must update it just like a manual toggle.
+    window.syncCustomModelPickers?.();
     window.updateAgentModeUI();
   }
 

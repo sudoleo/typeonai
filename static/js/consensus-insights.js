@@ -121,6 +121,68 @@
             return window.matchMedia("(max-width: 768px)").matches;
           }
 
+          // --- Markdown-Auszeichnung entfernen -------------------------------
+          // Anker und Zitate sind woertliche Kopien aus dem MARKDOWN-QUELLTEXT
+          // der Antworten ("1. **Weltklasse:** ca. 1.300 Watt"). Gesucht und
+          // angezeigt wird aber der GERENDERTE Text, in dem die Sternchen
+          // laengst ein <strong> sind. Ein solcher Anker fand deshalb nie seine
+          // Stelle im Konsens - und landete mitsamt sichtbarer Sternchen in der
+          // Fallback-Liste "Key claims". Hier faellt dieselbe Auszeichnung weg,
+          // die auch der Renderer schluckt.
+          function inlineMarkdownSource(value) {
+            return String(value || "")
+              // Ein Anker aus einem Listenelement enthaelt haeufig dessen
+              // Markdown-Zaehler. Im gerenderten <li> ist er kein Textknoten.
+              .replace(/(^|\n)[ \t]*(?:>[ \t]*)*(?:[-*+][ \t]+|\d+[.)][ \t]+|#{1,6}[ \t]+)?/g, "$1")
+              .trim();
+          }
+
+          function stripMarkdown(value) {
+            const source = inlineMarkdownSource(value);
+            if (!source) return "";
+
+            // Dieselbe Markdown-Engine wie fuer den Konsens liefert die
+            // tatsaechlich sichtbare Textform. So bleiben literale Sternchen
+            // erhalten, waehrend **fett** und Links korrekt reduziert werden.
+            if (window.marked?.parseInline && window.DOMPurify?.sanitize) {
+              const template = document.createElement("template");
+              template.innerHTML = window.DOMPurify.sanitize(
+                window.marked.parseInline(source),
+                { ALLOWED_TAGS: ["strong", "em", "del", "code", "br"], ALLOWED_ATTR: [] }
+              );
+              return (template.content.textContent || "").replace(/[ \t]{2,}/g, " ").trim();
+            }
+
+            // Defensive Degradation, falls eine CDN-Library nicht geladen ist.
+            return source
+              .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+              .replace(/\*\*\*|\*\*|___|__|~~|`/g, "")
+              .replace(/\*/g, "")
+              .replace(/(^|[\s(["'])_([^_\n]+)_(?=$|[\s).,;:!?\]"'])/g, "$1$2")
+              .replace(/[ \t]{2,}/g, " ")
+              .trim();
+          }
+
+          function renderInlineMarkdown(element, value, prefix, suffix) {
+            if (!element) return;
+            const source = inlineMarkdownSource(value);
+            const before = prefix || "";
+            const after = suffix || "";
+            element.textContent = before;
+
+            if (source && window.marked?.parseInline && window.DOMPurify?.sanitize) {
+              const content = document.createElement("span");
+              content.innerHTML = window.DOMPurify.sanitize(
+                window.marked.parseInline(source),
+                { ALLOWED_TAGS: ["strong", "em", "del", "code", "br"], ALLOWED_ATTR: [] }
+              );
+              element.appendChild(content);
+            } else {
+              element.appendChild(document.createTextNode(stripMarkdown(source)));
+            }
+            if (after) element.appendChild(document.createTextNode(after));
+          }
+
           // --- Textsuche: Whitespace kollabieren, Anführungszeichen vereinheitlichen
           function normalizeForSearch(value) {
             return String(value || "")
@@ -154,13 +216,28 @@
             return findRangeInText(node.nodeValue || "", normNeedle);
           }
 
+          // Erst die vollen Varianten (ohne und mit Auszeichnung), dann die
+          // gekuerzten. Eine auf acht Woerter gestutzte Variante darf nie vor
+          // einem vollstaendigen Treffer gewinnen.
           function searchVariants(text) {
-            const norm = normalizeForSearch(text).replace(/^(\.{3}|…)\s*/, "").replace(/\s*(\.{3}|…)$/, "");
-            if (!norm) return [];
-            const variants = [norm];
-            const words = norm.split(" ");
-            if (words.length > 8) variants.push(words.slice(0, 8).join(" "));
-            return variants;
+            const full = [];
+            const short = [];
+            const seen = new Set();
+            [stripMarkdown(text), text].forEach(function (candidate) {
+              const norm = normalizeForSearch(candidate)
+                .replace(/^(\.{3}|…)\s*/, "").replace(/\s*(\.{3}|…)$/, "");
+              if (!norm || seen.has(norm)) return;
+              seen.add(norm);
+              full.push(norm);
+              const words = norm.split(" ");
+              if (words.length > 8) {
+                const head = words.slice(0, 8).join(" ");
+                if (seen.has(head)) return;
+                seen.add(head);
+                short.push(head);
+              }
+            });
+            return full.concat(short);
           }
 
           // Textknoten, die beim Markieren und bei der Ankersuche uebersprungen
@@ -454,7 +531,7 @@
             if (quote) {
               const q = document.createElement("blockquote");
               q.className = "claim-model-quote";
-              q.textContent = quote;
+              renderInlineMarkdown(q, quote);
               row.appendChild(q);
             }
             return row;
@@ -489,7 +566,7 @@
 
             const claimText = document.createElement("div");
             claimText.className = "claim-popover-claim";
-            claimText.textContent = "“" + claim.anchor + "”";
+            renderInlineMarkdown(claimText, claim.anchor, "“", "”");
             pop.appendChild(claimText);
 
             if (claim.agree.length) {
@@ -674,27 +751,27 @@
             const emphases = differences.length - contradictions;
             const hasScore = agreement && typeof agreement.score === "number";
 
-            // Ampel in DREI Stufen. Vorher war jeder Widerspruch bernstein —
-            // ein Lauf mit vier kritischen Widerspruechen sah damit aus wie
-            // einer mit einem Detailunterschied, und der Ring blieb bei Score 0
-            // komplett ungefaerbt. Die Stufe faerbt seit 2026-07-28 auch die
-            // Flaeche des Urteils, also traegt sie die Aussage selbst dann,
-            // wenn der Ring leer ist.
-            const cls = contradictions === 0
-              ? "is-calm"
-              : (critical > 0 ? "is-alert" : "is-warn");
+            const boundedScore = hasScore
+              ? Math.max(0, Math.min(100, agreement.score))
+              : null;
+            // Farbe und Text muessen dieselbe 0-100-Aussage tragen. Der
+            // Widerspruchsstatus bleibt als getrennte Detailzeile sichtbar.
+            // Nur alte Snapshots ohne Score fallen auf die Difference-Ampel
+            // zurueck.
+            const cls = hasScore
+              ? (boundedScore >= 65 ? "is-calm" : (boundedScore >= 40 ? "is-warn" : "is-alert"))
+              : (contradictions === 0 ? "is-calm" : (critical > 0 ? "is-alert" : "is-warn"));
             verdict.classList.remove("is-calm", "is-warn", "is-alert");
             verdict.classList.add(cls);
             verdict.innerHTML = "";
 
             // Score-Ring; alte Bookmarks ohne Score behalten den kleinen Punkt.
             if (hasScore) {
-              const score = Math.max(0, Math.min(100, agreement.score));
               const gauge = document.createElement("span");
               gauge.className = "verdict-gauge";
               const ring = document.createElement("span");
               ring.className = "verdict-score";
-              ring.style.setProperty("--val", String(score));
+              ring.style.setProperty("--val", String(boundedScore));
               ring.title = "Agreement score " + agreement.score + "/100 across "
                 + modelCount + " model" + (modelCount === 1 ? "" : "s");
               const fill = document.createElement("span");
@@ -736,12 +813,20 @@
             main.className = "verdict-main";
             const headline = document.createElement("span");
             headline.className = "verdict-headline";
-            // Inhalt statt Zählung: WORÜBER die Modelle uneinig sind. Die
-            // Zählung bleibt in der Detailzeile (Severity) und im Score.
-            if (contradictions === 0) {
+            if (hasScore && boundedScore >= 85) {
               headline.textContent = "High agreement";
+            } else if (hasScore && boundedScore >= 65) {
+              headline.textContent = "Strong agreement";
+            } else if (hasScore && boundedScore >= 40) {
+              headline.textContent = "Partial agreement";
+            } else if (hasScore && boundedScore >= 20) {
+              headline.textContent = "Low agreement";
+            } else if (hasScore) {
+              headline.textContent = "Very low agreement";
+            } else if (contradictions === 0) {
+              headline.textContent = "No direct contradictions";
             } else if (contradictionTopics) {
-              headline.textContent = "Agreement on the core · Disputed: " + contradictionTopics;
+              headline.textContent = "Disputed: " + contradictionTopics;
             } else {
               headline.textContent = "The models contradict each other";
             }
@@ -780,6 +865,10 @@
             } else {
               detail.textContent = contradictions + " disputed point"
                 + (contradictions === 1 ? "" : "s");
+            }
+            if (contradictions > 0 && contradictionTopics) {
+              detail.appendChild(document.createTextNode(
+                " · disputed: " + contradictionTopics));
             }
 
             // Transparenz: welche (unabhängige) Modellfamilie die Analyse
@@ -1146,7 +1235,7 @@
               if (quote) {
                 const q = document.createElement("blockquote");
                 q.className = "insight-preview-quote";
-                q.textContent = quote.quote;
+                renderInlineMarkdown(q, quote.quote);
                 frag.appendChild(q);
               }
             }
@@ -1172,9 +1261,13 @@
             frag.appendChild(claimEl);
 
             (diff.positions || []).slice(0, 2).forEach(function (pos) {
-              frag.appendChild(previewRow(
+              const row = previewRow(
                 pos.models.map(modelDisplayName).join(", "),
-                pos.stance || pos.quote || ""));
+                "");
+              renderInlineMarkdown(
+                row.querySelector(".insight-preview-value"),
+                pos.stance || pos.quote || "");
+              frag.appendChild(row);
             });
 
             const foot = document.createElement("div");
@@ -1303,7 +1396,7 @@
                 row.className = "claims-fallback-row";
                 const text = document.createElement("span");
                 text.className = "claims-fallback-text";
-                text.textContent = claim.anchor;
+                renderInlineMarkdown(text, claim.anchor);
                 row.append(text, makeBadge(claim));
                 fallbackBox.appendChild(row);
               });
@@ -1796,13 +1889,13 @@
                   if (pos.stance) {
                     const stance = document.createElement("div");
                     stance.className = "diff-position-stance";
-                    stance.textContent = pos.stance;
+                    renderInlineMarkdown(stance, pos.stance);
                     posEl.appendChild(stance);
                   }
                   if (pos.quote) {
                     const quote = document.createElement("blockquote");
                     quote.className = "diff-position-quote";
-                    quote.textContent = pos.quote;
+                    renderInlineMarkdown(quote, pos.quote);
                     posEl.appendChild(quote);
                   }
 

@@ -404,7 +404,7 @@ body:not(.dark-mode) .chat-input-container::before {
 }
 
 .chat-input-container.is-image-dragover::after {
-  content: "Drop image to attach";
+  content: "Drop file to attach";
   position: absolute;
   inset: 6px;
   z-index: 3;
@@ -436,12 +436,21 @@ body:not(.dark-mode) .chat-input-container::before {
   outline: none;
   padding: 10px;
   box-sizing: border-box;
-  resize: vertical;
+  /* Die Hoehe folgt dem Inhalt per app-init.js. Ab der Maximalhoehe scrollt
+     nur noch der Text im Feld, damit der Composer den Thread nicht verdraengt. */
+  resize: none;
+  overflow-y: hidden;
   text-align: left;
   vertical-align: top;
   font-family: inherit;
   min-height: 80px;
-  max-height: 300px;
+  max-height: 220px;
+}
+
+@media (max-width: 1099px) {
+  .chat-input-container .input-field {
+    max-height: 180px;
+  }
 }
 
 .chat-input-container .input-field:disabled {

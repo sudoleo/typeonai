@@ -67,6 +67,9 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 - [ ] Credibility-Frame-Farbe (cred-very … cred-not) wird gesetzt.
 - [ ] Consensus-Insights: Claim-Badges, Difference-Karten, Klick öffnet Popover,
       „Jump to model answer" highlightet die Originalantwort.
+- [ ] Verdict-Semantik: Score 85+/65+/40+/20+/<20 zeigt High/Strong/Partial/
+      Low/Very low agreement; Grün beginnt erst bei 65. „No contradictions"
+      bzw. disputed/critical/minor bleiben als getrennte Detailaussage sichtbar.
 - [ ] Resolve-Runde: „Resolve with the models"-Button an Widerspruchs-Karten
       (nur Contradictions mit ≥2 beteiligten Modellen), Klick zeigt Outcome-Badge
       + Modell-Zeilen, Usage-Counter aktualisiert sich, Fehlerfall reaktiviert
@@ -86,6 +89,8 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       gleichmäßig ausgerichtet und erzeugen keinen horizontalen Scroll.
 - [ ] Mobile Composer: Plus, Modell-Picker und Send-Pfeil liegen auf derselben
       horizontalen Achse; der Composer bleibt am unteren Viewport-Rand fixiert.
+      Das Fragefeld wächst beim Tippen bis 180 px, scrollt danach intern und
+      schrumpft beim Löschen wieder auf seine Ausgangshöhe.
       Am vollständigen Scrollende liegen die geschlossenen Detail-Tabs direkt
       darüber, ohne Leerraum oder verdeckten Inhalt.
 - [ ] Quellen-Fussnoten im Consensus stehen hinter Punkt, Frage- oder
@@ -233,8 +238,11 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 - [ ] Datei anhängen → Chip erscheint, Vorschau öffnet, Entfernen funktioniert.
 - [ ] PNG/JPG/WebP mit Strg+V im Fragefeld einfügen → Bild-Chip erscheint;
       normaler Text-Paste bleibt unverändert möglich.
-- [ ] PNG/JPG/WebP auf den Input ziehen → Drop-Hinweis erscheint und nach dem
-      Ablegen wird ein Bild-Chip angelegt.
+- [ ] PDF/DOCX/TXT/MD/CSV/PNG/JPG/WebP auf den Input ziehen → Drop-Hinweis
+      erscheint und nach dem Ablegen wird der passende Datei-Chip angelegt.
+- [ ] Mit einem echten Anhang zeigt der Modell-Picker 5 statt 6 Modelle und
+      beim Senden entsteht kein `/ask_deepseek`-Request; nach Entfernen wird
+      die vorherige DeepSeek-Auswahl wiederhergestellt.
 - [ ] Bookmark-Attachments werden angezeigt.
 
 ## Auth / Usage / Tier
@@ -253,9 +261,11 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 
 ## Demo & Sonstiges
 - [ ] „Demo"-Query startet den Demo-Flow (demo.js Integration intakt).
-- [ ] Nach Abschluss der Demo sieht ein ausgeloggter Nutzer unter dem gefüllten
-      Eingabefeld eine Login-/Registrierungs-Aufforderung; deren Button öffnet
-      das Login-Modal. Nach erfolgreichem Login verschwindet die Aufforderung.
+- [ ] Die Demo tippt erst die vollständige Frage, leert beim simulierten
+      Absenden das Eingabefeld und startet danach die Modell-Ladeanimation.
+      Nach Abschluss sieht ein ausgeloggter Nutzer eine
+      Login-/Registrierungs-Aufforderung; deren Button öffnet das Login-Modal.
+      Nach erfolgreichem Login verschwindet die Aufforderung.
 - [ ] Dark/Light-Toggle in Settings (Desktop und Mobile).
 - [ ] Mobile-Layout (< 768px): Overlay-Sidebar, Info-Popups.
 - [ ] System-Prompt-Modal + Help-Modal (app-ui.js) öffnen/speichern.

@@ -29,6 +29,26 @@ class DemoLoginPromptContractTests(unittest.TestCase):
         self.assertIn('document.getElementById("loginModal")', demo_module)
         self.assertIn("postDemoLoginPrompt.hidden = true;", app_init)
 
+    def test_question_is_cleared_before_model_loading_starts(self):
+        demo_module = (ROOT / "static" / "demo.js").read_text(encoding="utf-8")
+        flow = demo_module.split("async function runDemoFlow()", 1)[1]
+        typed = flow.index("await typeIntoInput")
+        cleared = flow.index('qi.value = "";')
+        loading = flow.index('window.setAgentModeStatus?.("running");')
+
+        self.assertLess(typed, cleared)
+        self.assertLess(cleared, loading)
+        self.assertNotIn(
+            'window.setAgentModeStatus?.("running");',
+            flow[:cleared],
+        )
+
+    def test_demo_result_has_an_agreement_score(self):
+        demo_module = (ROOT / "static" / "demo.js").read_text(encoding="utf-8")
+
+        self.assertIn("agreement: {", demo_module)
+        self.assertIn("score: 41,", demo_module)
+
 
 if __name__ == "__main__":
     unittest.main()

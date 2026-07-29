@@ -58,7 +58,7 @@
   </script>
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260729-verdictfooter2">
+  <link rel="stylesheet" href="/static/style.css?v=20260729-composerautogrow1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
@@ -72,12 +72,12 @@
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
   <script type="module" src="/static/firebase.js?v=20260727-uipolish1"></script>
-  <script type="module" src="/static/demo.js?v=20260727-composercollapse1"></script>
+  <script type="module" src="/static/demo.js?v=20260729-demosequence1"></script>
   <script src="/static/app-ui.js?v=20260727-thread12" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
   <script src="/static/js/app-core.js?v=20260727-thread12" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
-  <script src="/static/js/model-picker.js?v=20260727-thread12" defer></script>
+  <script src="/static/js/model-picker.js?v=20260729-attachmentfanout2" defer></script>
   <!-- Gemeinsame LaTeX-Aufbereitung; muss vor markdown-stream.js laden. -->
   <script src="/static/js/math-render.js?v=20260727-thread12" defer></script>
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
@@ -85,7 +85,7 @@
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
   <script src="/static/js/sources.js?v=20260727-composerfix1" defer></script>
   <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
-  <script src="/static/js/attachments.js?v=20260727-thread12" defer></script>
+  <script src="/static/js/attachments.js?v=20260729-attachmentfanout1" defer></script>
   <!-- Agent Mode (aus index.html ausgelagert) -->
   <script src="/static/js/agent-mode.js?v=20260729-disclosurescroll1" defer></script>
   <!-- Kompakte Zwei-Phasen-Anzeige fuer regulaere Laeufe (ohne Agent Mode). -->
@@ -103,9 +103,9 @@
   <!-- Kontingent-Ring + Panel im Sidebar-Footer; spiegelt nur #usageDisplay -->
   <script src="/static/js/sidebar-quota.js?v=20260728-editcost1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-insights.js?v=20260727-resultactions1" defer></script>
+  <script src="/static/js/consensus-insights.js?v=20260729-agreementsignal1" defer></script>
   <script src="/static/js/consensus-run.js?v=20260729-judgefallback1" defer></script>
-  <script src="/static/js/query-send.js?v=20260727-thread12" defer></script>
+  <script src="/static/js/query-send.js?v=20260729-attachmentfanout2" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
@@ -460,7 +460,7 @@
              dazwischen steht hier, was das Abschicken kostet. Gesetzt und
              wieder geleert von consensus-progress.js. -->
         <p id="composerRunNotice" class="composer-run-notice" role="status" hidden></p>
-        <textarea class="input-field" id="questionInput" placeholder="Enter your question"></textarea>
+        <textarea class="input-field" id="questionInput" rows="1" placeholder="Enter your question"></textarea>
         <!-- Composer-Gate: die Stelle, an der die App sagt, dass sie kein Chat
              ist. Nach einer beantworteten Frage ist der Lauf zu Ende — hier
              steht, wie es weitergeht: eine neue Frage (frei) oder ein
@@ -858,7 +858,7 @@
       </div>
     </div>
 
-  <script src="/static/js/app-init.js?v=20260727-composerfix2" defer></script>
+  <script src="/static/js/app-init.js?v=20260729-composerautogrow1" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing

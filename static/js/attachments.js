@@ -375,7 +375,7 @@
         if (!mime || (imagesOnly && mime.indexOf("image/") !== 0)) {
           if (!unsupportedShown) {
             alert(imagesOnly
-              ? "Only PNG, JPG, and WebP images can be pasted or dropped here."
+              ? "Only PNG, JPG, and WebP images can be pasted here."
               : "'" + (file.name || "This file") + "' is not supported. Allowed: " + ATTACH_TYPES_LABEL + ".");
             unsupportedShown = true;
           }
@@ -484,7 +484,10 @@
         event.preventDefault();
         const files = transferFiles(event.dataTransfer);
         clearDragState();
-        addFiles(files, { source: "drop", imagesOnly: true });
+        // Drag-and-drop supports the same whitelist as the file picker.
+        // Only clipboard paste stays image-only so normal text paste keeps
+        // behaving like text input.
+        addFiles(files, { source: "drop", imagesOnly: false });
       });
 
       window.addEventListener("dragend", clearDragState);

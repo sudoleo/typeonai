@@ -87,6 +87,51 @@ def test_app_loads_without_console_errors(app_page, get_console_errors):
     assert errors == [], f"Konsolen-Fehler beim Laden: {errors}"
 
 
+def test_question_input_grows_and_caps_on_desktop_and_mobile(app_page):
+    input_box = app_page.locator("#questionInput")
+
+    input_box.fill("")
+    base_height = input_box.bounding_box()["height"]
+
+    input_box.fill("\n".join(f"Line {index}" for index in range(6)))
+    grown_height = input_box.bounding_box()["height"]
+    assert grown_height > base_height
+    assert grown_height < 220
+
+    input_box.fill("\n".join(f"Line {index}" for index in range(40)))
+    desktop = input_box.evaluate(
+        """el => ({
+          height: el.getBoundingClientRect().height,
+          scrollHeight: el.scrollHeight,
+          clientHeight: el.clientHeight,
+          overflowY: getComputedStyle(el).overflowY,
+        })"""
+    )
+    assert desktop["height"] == 220
+    assert desktop["scrollHeight"] > desktop["clientHeight"]
+    assert desktop["overflowY"] == "auto"
+
+    app_page.set_viewport_size({"width": 390, "height": 844})
+    mobile = input_box.evaluate(
+        """el => ({
+          height: el.getBoundingClientRect().height,
+          overflowY: getComputedStyle(el).overflowY,
+        })"""
+    )
+    assert mobile["height"] == 180
+    assert mobile["overflowY"] == "auto"
+
+    input_box.fill("")
+    reset = input_box.evaluate(
+        """el => ({
+          height: el.getBoundingClientRect().height,
+          overflowY: getComputedStyle(el).overflowY,
+        })"""
+    )
+    assert reset["height"] == base_height
+    assert reset["overflowY"] == "hidden"
+
+
 def test_latex_is_typeset_after_markdown_rendering(app_page):
     result = app_page.evaluate(
         r"""() => {
@@ -672,6 +717,68 @@ def test_split_claim_underlines_in_the_colour_of_its_badge(app_page):
         assert red > blue * 1.5, f"{name} ist nicht bernsteinfarben: {tones[name]}"
 
 
+def test_claim_anchor_with_markdown_syntax_marks_the_rendered_sentence(app_page):
+    """Anker sind woertliche Kopien aus dem MARKDOWN-Quelltext ("1. **World
+    class:** about 1,300 watts"), markiert und angezeigt wird aber der
+    GERENDERTE Text. Ohne Entfernen der Auszeichnung fand der Anker seine
+    Stelle nie und landete mitsamt sichtbarer Sternchen in der Fallback-Liste
+    "Key claims" (User-Befund 2026-07-29)."""
+    app_page.evaluate(
+        """() => {
+          document.getElementById("consensusAnswerBody").innerHTML =
+            "<ol><li><strong>World class:</strong> about 1,300 to 1,500 watts.</li></ol>";
+          window.renderConsensusInsights({
+            claims: [{
+              anchor: "1. **World class:** about 1,300 to 1,500 watts.",
+              agree: [{model: "openai"}, {model: "gemini"}, {model: "grok"}],
+              dissent: [{model: "claude", quote: "**about 1,200 watts**"}]
+            }],
+            differences: [],
+            models_compared: ["openai", "gemini", "grok", "claude"]
+          }, 4);
+        }"""
+    )
+    # Der Anker haengt jetzt am Satz - die Fallback-Liste bleibt leer. Die
+    # Markierung laeuft ueber die <strong>-Grenze und damit ueber mehrere
+    # Textknoten, ist also bewusst nicht ein einzelner Span.
+    marked = app_page.locator("#consensusAnswerBody .cx-claim")
+    assert marked.count() >= 1
+    assert "World class" in "".join(marked.all_inner_texts())
+    expect(app_page.locator("#consensusClaimsFallback")).to_be_hidden()
+    expect(app_page.locator("#consensusAnswerBody .claim-ratio")).to_have_text("3/4")
+
+    # Und wo der Anker doch als Text erscheint, als sicheres Inline-Markdown
+    # statt mit sichtbaren Sternchen. dispatch_event ist hier bewusst: Das
+    # isolierte Renderer-Fixture haelt den aeusseren Ergebniscontainer hidden.
+    app_page.locator("#consensusAnswerBody .claim-badge").dispatch_event("click")
+    claim_text = app_page.locator(".claim-popover-claim")
+    expect(claim_text).to_be_visible()
+    assert "*" not in claim_text.inner_text()
+    expect(claim_text.locator("strong")).to_have_text("World class:")
+    expect(app_page.locator(".claim-model-quote")).to_have_text("about 1,200 watts")
+    expect(app_page.locator(".claim-model-quote strong")).to_have_text("about 1,200 watts")
+
+    # Ein wirklich nicht auffindbarer Anker bleibt als Key-Claims-Fallback
+    # sichtbar, rendert die Auszeichnung dort aber ebenfalls korrekt.
+    app_page.evaluate(
+        """() => {
+          window.renderConsensusInsights({
+            claims: [{
+              anchor: "2. **Unmatched claim:** still readable.",
+              agree: [{model: "openai"}],
+              dissent: []
+            }],
+            differences: [],
+            models_compared: ["openai"]
+          }, 1);
+        }"""
+    )
+    fallback = app_page.locator("#consensusClaimsFallback")
+    assert fallback.get_attribute("hidden") is None
+    expect(fallback.locator("strong")).to_have_text("Unmatched claim:")
+    assert "*" not in fallback.inner_text()
+
+
 def test_agent_mode_can_reveal_hidden_model_answers_on_mobile(app_page):
     """The compact mobile Agent Mode panel explains and toggles hidden answers."""
     app_page.set_viewport_size({"width": 390, "height": 844})
@@ -1100,6 +1207,31 @@ def test_attachment_pauses_deepseek_and_restores_previous_selection(app_page):
             disabled: checkbox.disabled,
             notice: document.getElementById("attachmentProviderNotice")?.textContent || "",
             responseExcluded: document.getElementById("deepseekResponse").classList.contains("excluded"),
+            pickerText: document.querySelector(
+              ".consensus-model .model-picker-display-text"
+            )?.textContent || "",
+          };
+
+          // /prepare liefert den autoritativen Tier-Status und loest genau
+          // diesen Restore aus. Der gespeicherte DeepSeek-Wert darf die
+          // Attachment-Sperre dabei nicht ueberschreiben.
+          window.updatePremiumModelsState(window.isUserPro === true);
+          const afterTierRefresh = {
+            checked: checkbox.checked,
+            disabled: checkbox.disabled,
+            responseExcluded: document.getElementById("deepseekResponse").classList.contains("excluded"),
+            includedProgressModels: document.querySelectorAll(
+              ".response-section > .response-box:not(.excluded)"
+            ).length,
+            canGenerateWithTwoAnswers: (() => {
+              for (const id of ["openaiResponse", "mistralResponse"]) {
+                const box = document.getElementById(id);
+                box.dataset.responseState = "complete";
+                box.dataset.consensusAnswer = id + " answer";
+                box.querySelector(".collapsible-content").textContent = id + " answer";
+              }
+              return window.canGenerateConsensus();
+            })(),
           };
 
           window.clearPendingAttachments();
@@ -1121,6 +1253,7 @@ def test_attachment_pauses_deepseek_and_restores_previous_selection(app_page):
             persistedBefore,
             persistedAfter: localStorage.getItem("pref_check_DeepSeek"),
             whileAttached,
+            afterTierRefresh,
             withBookmarkPreview,
             afterRemoval: {
               checked: checkbox.checked,
@@ -1136,6 +1269,14 @@ def test_attachment_pauses_deepseek_and_restores_previous_selection(app_page):
     assert result["whileAttached"]["disabled"] is True
     assert "cannot read attachments" in result["whileAttached"]["notice"]
     assert result["whileAttached"]["responseExcluded"] is True
+    assert result["whileAttached"]["pickerText"].startswith("5 models")
+    assert result["afterTierRefresh"] == {
+        "checked": False,
+        "disabled": True,
+        "responseExcluded": True,
+        "includedProgressModels": 5,
+        "canGenerateWithTwoAnswers": True,
+    }
     assert result["withBookmarkPreview"] == {
         "checked": True,
         "disabled": False,
@@ -1148,6 +1289,115 @@ def test_attachment_pauses_deepseek_and_restores_previous_selection(app_page):
         "responseExcluded": False,
     }
     assert result["persistedAfter"] == result["persistedBefore"]
+
+
+def test_pdf_drop_uses_full_attachment_whitelist(app_page):
+    """Drag-and-drop akzeptiert dieselben Dokumenttypen wie der Dateidialog."""
+    dialogs = []
+
+    def dismiss_dialog(dialog):
+        dialogs.append(dialog.message)
+        dialog.dismiss()
+
+    app_page.on("dialog", dismiss_dialog)
+    app_page.evaluate(
+        """() => {
+          window.isUserPro = true;
+          const input = document.querySelector(".chat-input-container");
+          const transfer = new DataTransfer();
+          transfer.items.add(new File(
+            [new Uint8Array([37, 80, 68, 70, 45, 49, 46, 55, 10])],
+            "brief.pdf",
+            { type: "application/pdf" }
+          ));
+          input.dispatchEvent(new DragEvent("dragenter", {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer: transfer,
+          }));
+          window.__attachmentDropOverlayText =
+            getComputedStyle(input, "::after").content;
+          input.dispatchEvent(new DragEvent("drop", {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer: transfer,
+          }));
+        }"""
+    )
+    app_page.wait_for_function(
+        "() => window.pendingAttachments?.some(att => att.name === 'brief.pdf')"
+    )
+
+    result = app_page.evaluate(
+        """() => ({
+          attachment: window.pendingAttachments.find(att => att.name === "brief.pdf"),
+          chipName: document.querySelector(".attachment-chip-name")?.textContent || "",
+          deepSeekChecked: document.getElementById("selectDeepSeek").checked,
+          deepSeekDisabled: document.getElementById("selectDeepSeek").disabled,
+          dropOverlayText: window.__attachmentDropOverlayText,
+        })"""
+    )
+    assert dialogs == []
+    assert result["attachment"]["mime"] == "application/pdf"
+    assert result["chipName"] == "brief.pdf"
+    assert result["dropOverlayText"] == '"Drop file to attach"'
+    assert result["deepSeekChecked"] is False
+    assert result["deepSeekDisabled"] is True
+
+
+def test_attachment_send_hard_blocks_stale_deepseek_selection(app_page):
+    """Auch veralteter Checkbox-State darf keinen DeepSeek-Request erzeugen."""
+    ask_requests = []
+    app_page.on(
+        "request",
+        lambda request: ask_requests.append(request.url)
+        if "/ask_" in request.url else None,
+    )
+    app_page.evaluate(
+        """() => {
+          window.isUserPro = true;
+          for (const pref of window.App.modelPrefs) {
+            window.App.setModelSelectionState(pref, true, {
+              persist: false,
+              syncCheckbox: true,
+              animate: false,
+            });
+          }
+          for (const key of [
+            "openaiKey", "mistralKey", "anthropicKey",
+            "geminiKey", "deepseekKey", "grokKey",
+          ]) {
+            localStorage.setItem(key, "e2e-dummy-key");
+          }
+          document.getElementById("useOwnKeysSwitch").checked = true;
+          window.pendingAttachments = [{
+            name: "brief.pdf",
+            mime: "application/pdf",
+            size: 9,
+            data: "JVBERi0xLjcK",
+          }];
+          window.renderAttachmentChips();
+
+          // Simuliert einen veralteten/extern wieder gesetzten UI-State.
+          document.getElementById("selectDeepSeek").checked = true;
+          document.getElementById("deepseekResponse").classList.remove("excluded");
+        }"""
+    )
+    app_page.fill("#questionInput", QUESTION)
+    app_page.click("#sendButton")
+    app_page.wait_for_timeout(1500)
+
+    paths = [url.split("?", 1)[0].rsplit("/", 1)[-1] for url in ask_requests]
+    assert sorted(paths) == sorted([
+        "ask_openai",
+        "ask_mistral",
+        "ask_claude",
+        "ask_gemini",
+        "ask_grok",
+    ])
+    assert "ask_deepseek" not in paths
+    assert app_page.locator("#selectDeepSeek").is_checked() is False
+    expect(app_page.locator("#deepseekResponse")).to_have_class(re.compile(r"\bexcluded\b"))
 
 
 def test_tier_upgrade_applies_pro_defaults_but_keeps_explicit_picker_choice(app_page):

@@ -1212,7 +1212,8 @@ img { display: block; max-width: 100%; }
    mockups have to be made of the same material as the product. */
 .consensus-verdict,
 .consensus-verdict.is-calm,
-.consensus-verdict.is-warn {
+.consensus-verdict.is-warn,
+.consensus-verdict.is-alert {
   display: flex;
   align-items: center;
   gap: 14px;
@@ -1229,6 +1230,7 @@ img { display: block; max-width: 100%; }
 
 .consensus-verdict.is-calm { --verdict-ring: var(--agree); }
 .consensus-verdict.is-warn { --verdict-ring: var(--partial); }
+.consensus-verdict.is-alert { --verdict-ring: var(--dispute); }
 
 /* Score ring: conic gauge, fill level comes from --val (0–100). */
 .verdict-score {

@@ -1012,7 +1012,10 @@ body:not(.dark-mode) .chat-input-container {
 /* The verdict, now a line inside the footer rather than a banner above the
    answer. Its surface is set further down, after the frameless reset. */
 .run-provenance .consensus-verdict {
-  margin-top: 0;
+  /* components-consensus.css gives the old topbar an 18px bottom margin.
+     In the footer grid that margin enlarged the tinted summary row only
+     below the content, so its vertical padding looked off-centre. */
+  margin: 0;
   gap: 12px;
   font-size: 0.83rem;
 }
@@ -1715,8 +1718,8 @@ body:not(.is-hero) .consensus-section::before {
   --verdict-ring: var(--partial);
 }
 
-/* Dritte Ampelstufe: mindestens ein KRITISCHER Widerspruch. Vorher war das
-   dieselbe Farbe wie ein Detailunterschied. */
+/* Dritte Score-Stufe: Agreement unter 40. Kritische Widersprueche bleiben
+   unabhaengig davon in der Detailzeile markiert. */
 .consensus-verdict.is-alert {
   --verdict-ring: #cf5a4a;
 }

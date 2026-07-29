@@ -148,6 +148,30 @@
         const questionInput = document.getElementById("questionInput");
         const defaultQuestionPlaceholder = "Enter your question";
         const lockedQuestionPlaceholder = "Sign in to start asking questions for free.";
+
+        // Der Composer beginnt kompakt, waechst mit jeder Textzeile und wird ab
+        // der CSS-Maximalhoehe zum intern scrollenden Feld. Die Grenze bleibt im
+        // CSS, damit Desktop und Mobile sie unabhaengig setzen koennen.
+        function resizeQuestionInput() {
+          if (!questionInput) return;
+
+          questionInput.style.height = "0px";
+          questionInput.style.overflowY = "hidden";
+          const styles = window.getComputedStyle(questionInput);
+          const minHeight = Number.parseFloat(styles.minHeight) || 52;
+          const maxHeight = Number.parseFloat(styles.maxHeight) || 220;
+          const contentHeight = questionInput.scrollHeight;
+          const nextHeight = Math.max(minHeight, Math.min(contentHeight, maxHeight));
+
+          questionInput.style.height = `${Math.ceil(nextHeight)}px`;
+          questionInput.style.overflowY = contentHeight > maxHeight + 1 ? "auto" : "hidden";
+        }
+
+        window.App.resizeQuestionInput = resizeQuestionInput;
+        questionInput?.addEventListener("input", resizeQuestionInput);
+        window.addEventListener("resize", resizeQuestionInput, { passive: true });
+        requestAnimationFrame(resizeQuestionInput);
+
         function hasVerifiedSession() {
           return Boolean(window.auth?.currentUser?.emailVerified);
         }
@@ -805,6 +829,7 @@
           if (input) {
             input.value = "";
             input.disabled = false;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
           }
           document.body.classList.add("is-hero");
           window.syncHeroResponseAccess?.();

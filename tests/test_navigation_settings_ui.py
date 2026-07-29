@@ -69,6 +69,22 @@ def test_chat_textarea_does_not_keep_the_generic_inset_frame():
     assert "box-shadow: none;" in chat_rule
 
 
+def test_chat_textarea_grows_until_responsive_height_limit():
+    template = read("templates/index.html")
+    input_css = read("static/css/components-input.css")
+    app_init = read("static/js/app-init.js")
+
+    assert 'id="questionInput" rows="1"' in template
+    assert "resize: none;" in input_css
+    assert "overflow-y: hidden;" in input_css
+    assert "max-height: 220px;" in input_css
+    assert "@media (max-width: 1099px)" in input_css
+    assert "max-height: 180px;" in input_css
+    assert "function resizeQuestionInput()" in app_init
+    assert 'questionInput?.addEventListener("input", resizeQuestionInput)' in app_init
+    assert 'contentHeight > maxHeight + 1 ? "auto" : "hidden"' in app_init
+
+
 def test_hero_greeting_requires_agent_mode_and_available_space():
     template = read("templates/index.html")
     input_css = read("static/css/components-input.css")
