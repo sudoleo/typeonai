@@ -34,6 +34,7 @@ from app.services.llm.engines import (
     query_mistral,
     query_openai,
 )
+from app.services.llm.credentials import enable_gemini_adc
 from app.services.llm.mock_llm import mock_ask_result, mock_llm_enabled
 
 
@@ -56,7 +57,10 @@ PROVIDER_ENV = {
 
 
 def _developer_keys() -> dict:
-    return {PROVIDER_LABELS[p]: os.environ.get(env, "").strip() for p, env in PROVIDER_ENV.items()}
+    return enable_gemini_adc({
+        PROVIDER_LABELS[p]: os.environ.get(env, "").strip()
+        for p, env in PROVIDER_ENV.items()
+    })
 
 
 def _selected_models(keys: dict, is_pro: bool, excluded_providers=None,

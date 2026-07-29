@@ -60,6 +60,16 @@ def test_run_covers_every_phase_and_terminal_state():
     assert "onDifferencesStart" in read("static/js/consensus-run.js")
 
 
+def test_completed_consensus_survives_differences_or_transport_failure():
+    run = read("static/js/consensus-run.js")
+    chat = read("app/api/routers/chat.py")
+
+    assert 'sse_pack("consensus.final"' in chat
+    assert '"consensus.final": consensusFinalPhaseRenderer' in run
+    assert "const preservedConsensus = completedConsensusText || streamedConsensusText" in run
+    assert "differences analysis could not be completed" in run
+
+
 def test_run_is_compact_and_unknowable_phases_stay_indeterminate():
     css = read("static/css/shell.css")
 

@@ -43,3 +43,10 @@ def test_gemini_ok_with_adc_without_key(monkeypatch):
 def test_gemini_missing_without_key_and_adc(monkeypatch):
     monkeypatch.setattr(credentials, "gemini_adc_available", lambda: False)
     assert credentials.missing_credentials({"Gemini": None}, ["Gemini"]) == ["Gemini"]
+
+
+def test_adc_runtime_hint_is_explicit_and_preserves_byok_boundary(monkeypatch):
+    monkeypatch.setattr(credentials, "gemini_adc_available", lambda: True)
+    server_keys = credentials.enable_gemini_adc({"Gemini": None})
+    assert credentials.gemini_engine_credentials_available(server_keys) is True
+    assert credentials.gemini_engine_credentials_available({"Gemini": None}) is False

@@ -15,6 +15,7 @@ from urllib.parse import quote
 
 import app.core.config as cfg
 from app.core.config import GEMINI_FLASH_MODEL
+from app.services.llm.credentials import gemini_engine_credentials_available
 from app.services.llm.engines import _merge_nested_config
 from app.services.llm.mock_llm import mock_engine_stream, mock_engine_text, mock_llm_enabled
 
@@ -1406,7 +1407,7 @@ def _provider_error_is_retryable(error: Exception) -> bool:
 
 def _provider_key_available(provider: str, api_keys: dict) -> bool:
     if provider == "gemini":
-        return bool(_gemini_engine_key(api_keys))
+        return gemini_engine_credentials_available(api_keys)
     value = api_keys.get(_PROVIDER_KEY_NAMES[provider])
     return bool(str(value or "").strip())
 
@@ -1556,18 +1557,21 @@ def _judge_metadata(provider: str, api_model: str, tier: str, attempts: int = 0,
     }
 
 
-def _judge_effort(judge_tier: str) -> str | None:
+def _judge_effort(provider: str, api_model: str, judge_tier: str) -> str | None:
     """Thinking-Kappung für Judge-Calls: Der Judge-Task (Zitate verbatim
     extrahieren und vergleichen) braucht kein tiefes Denken. Unbegrenztes
     Thinking verzögert den Differences-Schritt dagegen minutenlang und frisst
-    das Token-Budget des JSON auf — daher immer effort "low" (Gemini
-    thinkingLevel, OpenAI/Mistral reasoning_effort; die übrigen Provider kennen
-    den Parameter nicht und ignorieren ihn).
+    das Token-Budget des JSON auf. Gemini/OpenAI nutzen deshalb "low".
+    Mistral Small und Medium 3.5 akzeptieren fuer diesen Modus dagegen "none"
+    (nicht "low"); die uebrigen Provider bekommen den Parameter im Dispatch
+    ohnehin nicht.
 
     Gilt bewusst für BEIDE Stufen: die Standard-Judges sind zwar die günstigen
     Basis-Modelle, aber längst selbst Reasoning-Modelle (Gemini Flash, das
     OpenAI-Mini) — und Gemini steht in JUDGE_FAMILY_PRIORITY vorn, ist also der
     häufigste Judge überhaupt. Das Modell selbst wird dabei nie getauscht."""
+    if provider == "mistral":
+        return "none"
     return "low"
 
 
@@ -1630,7 +1634,7 @@ def query_differences(
                 max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
                 temperature=DIFFERENCES_TEMPERATURE,
                 json_mode=True,
-                effort=_judge_effort(judge_tier),
+                effort=_judge_effort(provider, api_model, judge_tier),
                 json_schema=DIFFERENCES_JSON_SCHEMA,
             )
         except Exception as e:
@@ -1709,7 +1713,8 @@ def query_consensus_change(old_consensus: str, new_consensus: str, api_keys: dic
             raw = _call_engine_text(
                 provider, api_model, model_ref, api_keys,
                 system="Return valid JSON only.", prompt=prompt, max_tokens=512,
-                temperature=0.0, json_mode=True, effort=_judge_effort(judge_tier),
+                temperature=0.0, json_mode=True,
+                effort=_judge_effort(provider, api_model, judge_tier),
             )
             data = _extract_json_object(raw)
             if not isinstance(data, dict) or not isinstance(data.get("changed"), bool):
@@ -1882,7 +1887,7 @@ def stream_differences(
                 max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
                 temperature=DIFFERENCES_TEMPERATURE,
                 json_mode=True,
-                effort=_judge_effort(judge_tier),
+                effort=_judge_effort(provider, api_model, judge_tier),
                 json_schema=DIFFERENCES_JSON_SCHEMA,
             ):
                 if event.get("type") == "reasoning":

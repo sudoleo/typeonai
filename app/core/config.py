@@ -289,7 +289,9 @@ PRO_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_PRO_JUDGE_BY_PROVIDER)
 
 # Familien-Prioritaet der Judge-Wahl: primaerer und Fallback-Judge nehmen die
 # erste Familie mit verfuegbarem Key, die nicht die der Consensus-Engine ist.
-JUDGE_FAMILY_PRIORITY = ["gemini", "openai", "mistral", "deepseek", "grok", "anthropic"]
+# Gemini/OpenAI remain the preferred independent judges. Mistral is a working
+# emergency fallback, but intentionally comes after every other family.
+JUDGE_FAMILY_PRIORITY = ["gemini", "openai", "deepseek", "grok", "anthropic", "mistral"]
 
 # Optionales Admin-Mapping Engine-Familie -> bevorzugte Judge-Familie
 # (Firestore-Feld "judge_families"). Fehlt ein Eintrag oder ist der Key der

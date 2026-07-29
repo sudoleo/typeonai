@@ -27,7 +27,7 @@ from app.services.llm.engines import (
     query_openai, query_mistral, query_claude, query_gemini, query_deepseek, query_grok
 )
 from app.services.llm.citations import coerce_text, source_response
-from app.services.llm.credentials import resolve_developer_api_keys
+from app.services.llm.credentials import enable_gemini_adc, resolve_developer_api_keys
 from app.services.llm.mock_llm import mock_ask_result, mock_ask_stream, mock_llm_enabled
 from app.services.llm.streaming import (
     SSE_HEADERS,
@@ -187,7 +187,7 @@ def build_engine_api_keys(data: dict, use_own_keys: bool) -> dict:
         # Eine gemeinsame Quelle fuer App, API und Benchmark verhindert, dass
         # ein Provider im Answer-Fan-out verfuegbar ist, im Judge-Plan aber
         # wegen abweichender Env-Namen oder Leerwert-Behandlung fehlt.
-        return resolve_developer_api_keys()
+        return enable_gemini_adc(resolve_developer_api_keys())
 
     # Im Own-Key-Modus Developer-Keys strikt ignorieren. Sonst koennte der
     # Differences-Fallback unbemerkt einen Server-Key verwenden.
@@ -846,6 +846,11 @@ def consensus(request: Request, data: dict = Body(...)):
                     differences_text = DIFFERENCES_SKIPPED_TEXT
                     differences_data = None
                 else:
+                    # Consensus completion is its own successful phase. Send
+                    # the authoritative text before the slower Differences
+                    # judge so a later mobile/network interruption cannot
+                    # erase an answer the user already received.
+                    yield sse_pack("consensus.final", {"text": consensus_text})
                     last_reasoning_at = None
                     for item in stream_differences(
                         answer_openai,

@@ -44,6 +44,7 @@
   }
 
   function parseBestModel(differencesText) {
+    if (typeof differencesText !== "string") return null;
     const regex = /BestModel:\s*(.*)/i;
     const match = differencesText.match(regex);
     return match ? match[1].trim() : null;
@@ -549,6 +550,8 @@
     // damit eine Resolve-Runde nie in ein fremdes Bookmark schreibt.
     window.lastConsensusBookmarkPayload = null;
     const shareModelLabels = {};
+    let streamedConsensusText = "";
+    let completedConsensusText = "";
     [["OpenAI", "openaiModelSelect"], ["Mistral", "mistralModelSelect"],
      ["Anthropic", "claudeModelSelect"], ["Gemini", "geminiModelSelect"],
      ["DeepSeek", "deepseekModelSelect"], ["Grok", "grokModelSelect"]
@@ -575,6 +578,12 @@
         consensusMainEl,
         () => isActiveConsensusRun(consensusRunId)
       );
+      const appendConsensusDelta = consensusMainRenderer.append.bind(consensusMainRenderer);
+      consensusMainRenderer.append = (chunk) => {
+        const text = typeof chunk === "string" ? chunk : "";
+        if (text) streamedConsensusText += text;
+        appendConsensusDelta(chunk);
+      };
       // Der Konsens-Spinner nutzt .consensus-thinking statt .typing-indicator,
       // daher das generische markReasoning des Renderers ersetzen.
       consensusMainRenderer.markReasoning = () => {
@@ -599,6 +608,19 @@
           window.App?.consensusPipeline?.onDifferencesStart?.();
           flipThinkingLabel(differencesEl, "Reasoning");
         },
+        stop() {}
+      };
+      const consensusFinalPhaseRenderer = {
+        append(text) {
+          if (!isActiveConsensusRun(consensusRunId) || typeof text !== "string" || !text.trim()) return;
+          completedConsensusText = text;
+          // Replace the throttled delta render with the authoritative complete
+          // answer before Differences starts. From here on, Judge/transport
+          // failures must never blank the finished synthesis.
+          injectMarkdown(consensusMainEl, completedConsensusText);
+          window.App?.consensusPipeline?.onDifferencesStart?.();
+        },
+        markReasoning() {},
         stop() {}
       };
       const consensusRequestResult = await streamSSERequest("/consensus", {
@@ -626,9 +648,13 @@
           keepalive: true
         }, consensusSignal, {
           "consensus.delta": consensusMainRenderer,
+          "consensus.final": consensusFinalPhaseRenderer,
           "differences.delta": differencesPhaseRenderer
         });
-      const data = consensusRequestResult.data;
+      const data = consensusRequestResult.data || {};
+      if (!data.consensus_response && completedConsensusText) {
+        data.consensus_response = completedConsensusText;
+      }
       if (data?.usage_run_status) {
         window.App.usageRun?.mark?.(data.usage_run_status);
       }
@@ -664,7 +690,7 @@
         deepLimit: data?.deep_limit ?? consensusErrorDetail?.deep_limit ?? window.currentDeepLimit
       });
 
-      if (consensusRequestResult.ok) {
+      if (consensusRequestResult.ok && data.consensus_response) {
         // Share-Feature: nur mit result_id aus dem Final-Event ist
         // Teilen möglich (serverseitiger Snapshot vorhanden).
         window.lastShareResultId = data.result_id || null;
@@ -680,15 +706,25 @@
         if (diffEl) {
           // Strukturierte Auswertung (Verdict-Header, Badges, Karten),
           // fällt bei fehlenden/ungültigen Daten auf den Freitext zurück.
-          const structuredRendered = window.renderConsensusInsights
-            ? window.renderConsensusInsights(data.differences_data, includedAnswerCount)
-            : false;
+          let structuredRendered = false;
+          try {
+            structuredRendered = window.renderConsensusInsights
+              ? window.renderConsensusInsights(data.differences_data, includedAnswerCount)
+              : false;
+          } catch (renderError) {
+            // A malformed/legacy Judge payload may degrade the comparison UI,
+            // but it must never replace a valid Consensus answer.
+            console.error("Error rendering consensus differences:", renderError);
+            window.resetConsensusInsights?.();
+          }
 
           if (!structuredRendered) {
             // Ohne strukturierte Daten ist der Freitext die einzige Analyse:
             // Panel sichtbar aufklappen statt sie zuzuklappen.
             window.App.differencesPanel?.expandForFallback?.();
-            const diffsMD = data.differences || "No differences found.";
+            const diffsMD = data.differences || (data.error
+              ? "The consensus answer is complete, but the differences analysis could not be completed."
+              : "No differences found.");
             if (window.applyCredibilityFrame) {
               window.applyCredibilityFrame(diffEl, diffsMD);
             }
@@ -723,7 +759,7 @@
           );
         }
         trackAppEvent("app_consensus_completed", {
-          status: "success",
+          status: data.error ? "partial" : "success",
           trigger,
           included_models: includedAnswerCount
         });
@@ -757,14 +793,30 @@
         return;
       }
       console.error("Error fetching consensus:", error);
-      if (window.resetCredibilityFrame) {
-        window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
-      }
       const failBodyEl = window.App.consensusBodyEl(consensusDiv);
-      if (failBodyEl) failBodyEl.innerText = "Error in the consensus calculation.";
-      consensusDiv.querySelector(".consensus-differences p").innerText = "";
+      const preservedConsensus = completedConsensusText || streamedConsensusText;
+      if (preservedConsensus) {
+        if (failBodyEl) injectMarkdown(failBodyEl, preservedConsensus);
+        window.resetConsensusInsights?.();
+        window.App.differencesPanel?.expandForFallback?.();
+        const diffEl = consensusDiv.querySelector(".consensus-differences p");
+        if (diffEl) {
+          injectMarkdown(
+            diffEl,
+            completedConsensusText
+              ? "The consensus answer is complete, but the differences analysis could not be completed."
+              : "The connection ended before the consensus response could be confirmed as complete."
+          );
+        }
+      } else {
+        if (window.resetCredibilityFrame) {
+          window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
+        }
+        if (failBodyEl) failBodyEl.innerText = "Error in the consensus calculation.";
+        consensusDiv.querySelector(".consensus-differences p").innerText = "";
+      }
       trackAppEvent("app_consensus_completed", {
-        status: "error",
+        status: preservedConsensus ? "partial" : "error",
         trigger,
         included_models: includedAnswerCount
       });

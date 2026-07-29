@@ -747,9 +747,14 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   (`cap_engine_text`, Limits `consensus_max_answer_chars` /
   `consensus_max_question_chars` — Kosten-/Abuse-Schutz, da die Texte vom
   Client kommen), prüft Engine-Keys, dann `stream_consensus` gefolgt von
-  `stream_differences`. **SSE-Events**: `consensus.delta`, `differences.delta`
-  (Frontend rendert Differences-Deltas nicht), dann `final {consensus_response,
-  differences, differences_data, result_id?, …usage}`. Während Reasoning-Phasen
+  `stream_differences`. **SSE-Events**: `consensus.delta`, danach unmittelbar
+  `consensus.final {text}` als autoritativer Abschluss der Synthese, anschließend
+  `differences.delta` (Frontend rendert Differences-Deltas nicht), dann
+  `final {consensus_response,
+  differences, differences_data, result_id?, …usage}`. Das Frontend sichert
+  `consensus.final` sofort: ein späterer Judge-, Rendering- oder Mobilnetzabbruch
+  darf die fertige Antwort nicht mehr durch den generischen Consensus-Fehler
+  ersetzen, sondern degradiert nur die Differences-Anzeige. Während Reasoning-Phasen
   tragen die Delta-Events gedrosselt `{reasoning: true}`; ein SSE-Wrapper sendet
   zusätzlich Kommentar-Keepalives, wenn eine Engine länger keine Bytes liefert.
   `differences_data` ist
@@ -778,7 +783,8 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   unparsbares JSON dürfen weiter retryen. Der tatsächlich
   genutzte Judge steht als `differences_data.judges.differences`
   ({provider, model, tier, attempts, duration_ms}) im Payload/Snapshot und in
-  der Telemetrie. Pro-Judges laufen mit niedriger Reasoning-Effort-Kappung;
+  der Telemetrie. Judges laufen mit providerkompatibler niedriger
+  Reasoning-Effort-Kappung (`low` für OpenAI/Gemini, `none` für Mistral);
   die Consensus-Synthese selbst behält die volle Modell-Denktiefe.
   das Frontend zeigt ihn als Fußnote im Verdict-Header. Außerdem:
   JSON-Truncation-Repair, serverseitige Anchor-/Quote-Verifikation gegen
@@ -1252,10 +1258,14 @@ Wichtige Verträge im Backend:
   Resolve-Judge je Provider (`apply_judge_models`/`apply_pro_judge_models` in
   config.py, in-place — consensus_engine/resolve_engine aliasen dieselben
   dicts; entfernte Legacy-Aliasse sind ausgeschlossen; Fallbacks kommen nur aus
-  der jeweiligen konfigurierten Providerliste; Pro-Judges
-  laufen unverändert mit effort=low). `judge_families` mappt Engine-Familie →
-  bevorzugte Judge-Familie (`apply_judge_families`; nie die eigene Familie,
-  ohne Eintrag/Key Auto über `JUDGE_FAMILY_PRIORITY`).
+  der jeweiligen konfigurierten Providerliste; Judges laufen mit gekappter
+  Denktiefe: OpenAI/Gemini `low`, Mistral wegen dessen API-Vertrag `none`).
+  `judge_families` mappt Engine-Familie → bevorzugte Judge-Familie
+  (`apply_judge_families`; nie die eigene Familie, ohne Eintrag/Credential Auto
+  über `JUDGE_FAMILY_PRIORITY`). Auto priorisiert Gemini, dann OpenAI; Mistral
+  steht als funktionsfähiger Notfall-Judge ganz hinten. In Serverpfaden zählt
+  für Gemini neben dem Developer-Key auch explizit freigegebenes ADC, im
+  Own-Key-Modus niemals.
 - `app_config/scheduled_consensus_publisher` — Admin-Steuerung für den GitHub-
   Publisher: `enabled`, Themen-Brief, automatische Indexfreigabe sowie
   Aktivierung, lokaler Wochentag, Uhrzeit und IANA-Zeitzone des Weekly-Watches.
@@ -1493,7 +1503,7 @@ Snapshot-Publishing berühren die bestehenden Shared-Pages-/Watch-Tabs nicht.
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **718 passed** (2026-07-24; inklusive der neuen
+  Letzte bekannte Baseline: **750 passed** (2026-07-29; inklusive der neuen
   Differences-`consensus_anchor`-Tests sowie der bisherigen
   Search-Console-/SEO-Dossier-, Query-, Recommendation-, LLM-Schema-,
   Weekly-Portfolio-Review-, Action-, Publisher-Lineage-/Watch-Capacity-,

@@ -224,7 +224,7 @@ class ExistingModelFlowTests(unittest.TestCase):
             cfg.apply_judge_families({})
             self.assertEqual(
                 consensus_engine._judge_families("openai", all_keys, count=2),
-                ["gemini", "mistral"],
+                ["gemini", "deepseek"],
             )
             # Mapping bevorzugt die gewaehlte Familie vor der Prioritaet.
             cfg.apply_judge_families({"openai": "anthropic"})

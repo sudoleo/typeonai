@@ -26,6 +26,7 @@ DEVELOPER_API_KEY_ENV: dict[str, str] = {
 }
 
 GEMINI_SCOPES = ["https://www.googleapis.com/auth/generative-language"]
+GEMINI_ADC_ALLOWED = "_gemini_adc_allowed"
 
 
 def resolve_developer_api_keys(providers: list[str] | None = None) -> dict[str, str | None]:
@@ -36,6 +37,18 @@ def resolve_developer_api_keys(providers: list[str] | None = None) -> dict[str, 
         env_name = DEVELOPER_API_KEY_ENV[name]
         keys[name] = (os.environ.get(env_name) or "").strip() or None
     return keys
+
+
+def enable_gemini_adc(api_keys: dict) -> dict:
+    """Mark a server-owned credential dict as allowed to use Gemini ADC.
+
+    The marker separates developer/worker paths from BYOK. Without it, a
+    missing Gemini user key must never fall back to the operator's service
+    account.
+    """
+    marked = dict(api_keys)
+    marked[GEMINI_ADC_ALLOWED] = True
+    return marked
 
 
 def gemini_adc_available() -> bool:
@@ -49,6 +62,13 @@ def gemini_adc_available() -> bool:
         return creds is not None
     except Exception:
         return False
+
+
+def gemini_engine_credentials_available(api_keys: dict) -> bool:
+    """Return whether this engine request may actually call Gemini."""
+    if str(api_keys.get("Gemini") or "").strip():
+        return True
+    return bool(api_keys.get(GEMINI_ADC_ALLOWED)) and gemini_adc_available()
 
 
 def gemini_adc_headers() -> dict:

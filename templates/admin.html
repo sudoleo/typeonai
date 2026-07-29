@@ -1319,7 +1319,7 @@
 
             const head = document.createElement('div');
             head.className = 'judge-row judge-head';
-            ['Family', 'Standard judge', 'Pro judge (low effort)'].forEach(text => {
+            ['Family', 'Standard judge', 'Pro judge (reduced effort)'].forEach(text => {
                 const cell = document.createElement('span');
                 cell.textContent = text;
                 head.appendChild(cell);
@@ -2977,7 +2977,7 @@
                 <p class="section-hint">
                     Judge models per provider family for the Differences engine and the Resolve round.
                     Standard engines get the <strong>Standard</strong> judge, Pro engines the
-                    <strong>Pro</strong> judge (always run at low effort).
+                    <strong>Pro</strong> judge (always run at provider-compatible reduced effort).
                 </p>
                 <div id="judgeModelsContainer">
                     <!-- Populated by JavaScript -->

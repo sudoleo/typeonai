@@ -5,6 +5,7 @@ from unittest import mock
 from fastapi import HTTPException
 
 import app.core.config as cfg
+from app.services.llm.credentials import GEMINI_ADC_ALLOWED
 from app.api.routers import admin as admin_router
 from app.api.routers.admin import (
     get_models,
@@ -39,7 +40,12 @@ class ModelConfigurationTests(unittest.TestCase):
             "app.api.routers.chat.resolve_developer_api_keys",
             return_value=expected,
         ) as resolver:
-            self.assertEqual(build_engine_api_keys({}, False), expected)
+            resolved = build_engine_api_keys({}, False)
+            self.assertEqual(
+                {key: value for key, value in resolved.items() if key != GEMINI_ADC_ALLOWED},
+                expected,
+            )
+            self.assertTrue(resolved[GEMINI_ADC_ALLOWED])
         resolver.assert_called_once_with()
 
     def test_engine_own_keys_are_stripped_and_never_use_developer_keys(self):
@@ -58,6 +64,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(keys["OpenAI"], "user-openai")
         self.assertIsNone(keys["Gemini"])
         self.assertIsNone(keys["Mistral"])
+        self.assertNotIn(GEMINI_ADC_ALLOWED, keys)
 
     def test_admin_models_get_is_read_only_and_preserves_judge_family(self):
         raw = {

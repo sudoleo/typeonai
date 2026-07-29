@@ -8,6 +8,7 @@ from app.services.llm.consensus_engine import (
     _differences_attempts,
     _gemini_engine_payload,
     _legacy_differences_text,
+    _judge_effort,
     _provider_error_is_retryable,
     _resolve_differences_engine,
     compute_agreement_score,
@@ -296,10 +297,10 @@ class JudgePolicyTests(unittest.TestCase):
         (p1, _, _), retry1, tier1 = attempts[0]
         (p2, _, _), retry2, tier2 = attempts[1]
         (p3, _, _), retry3, tier3 = attempts[2]
-        # Judge nie auf der Engine-Familie (openai): Mistral primär, dann Anthropic.
-        self.assertEqual((p1, retry1, tier1), ("mistral", False, "standard"))
-        self.assertEqual((p2, retry2, tier2), ("mistral", True, "standard"))
-        self.assertEqual((p3, retry3, tier3), ("anthropic", True, "standard"))
+        # Mistral ist die letzte Notfall-Familie: Anthropic kommt hier zuerst.
+        self.assertEqual((p1, retry1, tier1), ("anthropic", False, "standard"))
+        self.assertEqual((p2, retry2, tier2), ("anthropic", True, "standard"))
+        self.assertEqual((p3, retry3, tier3), ("mistral", True, "standard"))
 
     def test_pro_attempts_fail_open_to_standard_judge(self):
         with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
@@ -310,10 +311,10 @@ class JudgePolicyTests(unittest.TestCase):
         (p1, m1, _), _, tier1 = attempts[0]
         (p3, m3, _), _, tier3 = attempts[2]
         (p4, m4, _), _, tier4 = attempts[3]
-        self.assertEqual((p1, m1, tier1), ("mistral", cfg.MISTRAL_PRO_MODEL, "pro"))
-        self.assertEqual((p3, m3, tier3), ("anthropic", cfg.ANTHROPIC_PRO_MODEL, "pro"))
+        self.assertEqual((p1, m1, tier1), ("anthropic", cfg.ANTHROPIC_PRO_MODEL, "pro"))
+        self.assertEqual((p3, m3, tier3), ("mistral", cfg.MISTRAL_PRO_MODEL, "pro"))
         # Letzte Stufe: Standard-Judge der Fallback-Familie
-        self.assertEqual((p4, m4, tier4), ("anthropic", cfg.DEFAULT_ANTHROPIC_MODEL, "standard"))
+        self.assertEqual((p4, m4, tier4), ("mistral", cfg.DEFAULT_MISTRAL_MODEL, "standard"))
 
     def test_single_cross_family_appends_own_standard_judge(self):
         with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
@@ -347,6 +348,32 @@ class JudgePolicyTests(unittest.TestCase):
         self.assertEqual(
             set(generation["responseJsonSchema"]["required"]),
             {"claims", "differences", "best_model"},
+        )
+
+    def test_server_adc_counts_for_gemini_but_byok_does_not(self):
+        from app.services.llm.credentials import enable_gemini_adc
+
+        with mock.patch(
+            "app.services.llm.credentials.gemini_adc_available",
+            return_value=True,
+        ):
+            server_keys = enable_gemini_adc({"OpenAI": "sk-1", "Gemini": None})
+            (provider, _, _), _tier = _resolve_differences_engine("OpenAI", server_keys)
+            self.assertEqual(provider, "gemini")
+
+            (provider, _, _), _tier = _resolve_differences_engine(
+                "OpenAI", {"OpenAI": "sk-1", "Gemini": None}
+            )
+            self.assertEqual(provider, "openai")
+
+    def test_mistral_judge_uses_supported_none_effort(self):
+        self.assertEqual(
+            _judge_effort("mistral", cfg.MISTRAL_PRO_MODEL, "pro"),
+            "none",
+        )
+        self.assertEqual(
+            _judge_effort("gemini", cfg.GEMINI_PRO_MODEL, "pro"),
+            "low",
         )
 
     def test_only_retryable_provider_errors_repeat_same_call(self):
@@ -403,7 +430,7 @@ class JudgeMetadataTests(unittest.TestCase):
         payload = json.dumps({"claims": [], "differences": [], "best_model": ""})
 
         def flaky(provider, *args, **kwargs):
-            if provider == "mistral":
+            if provider == "anthropic":
                 raise RuntimeError("503")
             return payload
 
@@ -411,7 +438,7 @@ class JudgeMetadataTests(unittest.TestCase):
             {"OpenAI": "sk-1", "Mistral": "sk-2", "Anthropic": "sk-3"}, flaky,
         )
         self.assertIsNotNone(data)
-        self.assertEqual(data["judges"]["differences"]["provider"], "Anthropic")
+        self.assertEqual(data["judges"]["differences"]["provider"], "Mistral")
 
     def test_non_retryable_primary_error_skips_duplicate_call(self):
         payload = json.dumps({"claims": [], "differences": [], "best_model": ""})
@@ -419,8 +446,8 @@ class JudgeMetadataTests(unittest.TestCase):
 
         def invalid_key_then_fallback(provider, *args, **kwargs):
             providers.append(provider)
-            if provider == "mistral":
-                raise RuntimeError("Mistral: 401 - invalid API key")
+            if provider == "anthropic":
+                raise RuntimeError("Anthropic: 401 - invalid API key")
             return payload
 
         _, data = self._run_query(
@@ -428,15 +455,17 @@ class JudgeMetadataTests(unittest.TestCase):
             invalid_key_then_fallback,
         )
         self.assertIsNotNone(data)
-        self.assertEqual(providers, ["mistral", "anthropic"])
-        self.assertEqual(data["judges"]["differences"]["provider"], "Anthropic")
+        self.assertEqual(providers, ["anthropic", "mistral"])
+        self.assertEqual(data["judges"]["differences"]["provider"], "Mistral")
         self.assertEqual(data["judges"]["differences"]["attempts"], 2)
 
     def test_stream_differences_reports_judge(self):
         from app.services.llm.consensus_engine import stream_differences
         payload = json.dumps({"claims": [], "differences": [], "best_model": ""})
+        efforts = []
 
         def fake_stream(provider, *args, **kwargs):
+            efforts.append((provider, kwargs.get("effort")))
             # _stream_engine_text liefert Event-Dicts; Reasoning-Marker
             # dürfen das Parsen des JSON-Ergebnisses nicht stören.
             yield {"type": "reasoning"}
@@ -456,6 +485,7 @@ class JudgeMetadataTests(unittest.TestCase):
         final = events[-1]
         self.assertEqual(final["type"], "final")
         self.assertEqual(final["data"]["judges"]["differences"]["provider"], "Mistral")
+        self.assertEqual(efforts, [("mistral", "none")])
 
 
 FOUR_MODELS = ["OpenAI", "Gemini", "Grok", "Mistral"]
