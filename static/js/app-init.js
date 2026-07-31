@@ -1143,12 +1143,47 @@
           });
         };
 
+        const bookmarkSearchHead = document.querySelector(".sidebar-bookmarks-head");
+        const bookmarkSearchTrigger = document.getElementById("bookmarkSearchTrigger");
+        const bookmarkSearchInput = document.getElementById("chatSearch");
+
+        function setBookmarkSearchOpen(isOpen, { focus = false, clear = false } = {}) {
+          if (!bookmarkSearchHead || !bookmarkSearchTrigger || !bookmarkSearchInput) return;
+          if (clear) {
+            bookmarkSearchInput.value = "";
+            window.filterBookmarks("");
+          }
+          bookmarkSearchHead.classList.toggle("is-searching", isOpen);
+          bookmarkSearchTrigger.setAttribute("aria-expanded", String(isOpen));
+          if (isOpen && focus) requestAnimationFrame(() => bookmarkSearchInput.focus());
+        }
+
+        bookmarkSearchTrigger?.addEventListener("click", function (event) {
+          event.stopPropagation();
+          setBookmarkSearchOpen(true, { focus: true });
+        });
+
         // Search operates on compact metadata only. When needed, remaining
         // metadata pages are fetched without loading full bookmark answers.
-        document.getElementById("chatSearch")?.addEventListener("input", async function () {
+        bookmarkSearchInput?.addEventListener("input", async function () {
           const query = this.value;
           if (query.trim()) await window.loadAllBookmarkMetadata?.();
           window.filterBookmarks(query);
+        });
+
+        bookmarkSearchInput?.addEventListener("keydown", function (event) {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          setBookmarkSearchOpen(false, { clear: true });
+          document.getElementById("bookmarksToggle")?.focus();
+        });
+
+        bookmarkSearchHead?.addEventListener("focusout", function () {
+          setTimeout(() => {
+            if (!bookmarkSearchHead.contains(document.activeElement) && !bookmarkSearchInput?.value.trim()) {
+              setBookmarkSearchOpen(false);
+            }
+          }, 0);
         });
 
         window.toggleBookmarks = function () {
@@ -1160,6 +1195,7 @@
           const isCollapsed = section.classList.toggle("is-collapsed");
           container.classList.toggle("hidden", isCollapsed);
           toggle.setAttribute("aria-expanded", String(!isCollapsed));
+          if (isCollapsed) setBookmarkSearchOpen(false, { clear: true });
           localStorage.setItem("bookmarks_collapsed", String(isCollapsed));
           trackAppEvent("app_sidebar_section_toggled", { section: "bookmarks", open: !isCollapsed });
         };

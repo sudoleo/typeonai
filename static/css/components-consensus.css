@@ -999,27 +999,6 @@ body.agent-mode-running .agent-mode-chip[data-response-state="pending"]::before 
   opacity: 0;
 }
 
-.consensus-box.is-synthesizing::after {
-  content: "";
-  position: absolute;
-  right: auto;
-  bottom: 0;
-  left: 0;
-  z-index: 2;
-  width: 24%;
-  height: 2px;
-  border-radius: var(--radius-pill);
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--button-bg) 58%, var(--sidebar-text-muted)),
-    transparent
-  );
-  opacity: 0.52;
-  pointer-events: none;
-  animation: consensusLoadingLine 2.35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
 .consensus-box.is-synthesizing .consensus-main,
 .consensus-box.is-synthesizing .consensus-differences {
   min-height: 86px;

@@ -35,7 +35,13 @@ def test_sidebar_navigation_is_self_contained_and_guest_login_is_top_only():
     assert 'class="sidebar-bookmarks-head"' in template
     assert 'class="sidebar-section bookmarks-section is-locked"' in template
     assert 'id="bookmarksToggle"' in template and 'aria-disabled="true" disabled' in template
-    assert '.sidebar-bookmarks-head:hover .sidebar-search-box' in shell
+    assert 'id="bookmarkSearchTrigger"' in template
+    assert 'aria-label="Search bookmarks"' in template
+    assert 'aria-disabled="true" disabled' in template
+    assert ".sidebar-bookmarks-head.is-searching .sidebar-search-box" in shell
+    assert ".sidebar-bookmarks-head:hover .sidebar-search-box" not in shell
+    assert "setBookmarkSearchOpen(true, { focus: true })" in app_init
+    assert 'event.key !== "Escape"' in app_init
     assert ".sidebar-bookmarks-head .sidebar-toggle-btn" in shell
     assert ".sidebar-bookmarks-head .sidebar-heading-label span" in shell
     assert "justify-self: start" in shell
@@ -56,6 +62,7 @@ def test_sidebar_navigation_is_self_contained_and_guest_login_is_top_only():
     assert "window.App.openModelPicker(consensusSelect)" in app_init
     assert "function syncSidebarModelCount()" in model_picker
     assert ":not(.sidebar-model-entry)" in input_css
+    assert ":not(.sidebar-search-trigger)" in input_css
 
 
 def test_public_navigation_is_compact_and_learning_links_live_in_footer():
@@ -233,6 +240,7 @@ def test_logout_clears_the_loaded_run_and_aborts_active_streams():
     assert "if (previousAuthUid) clearLocalProviderKeys();" in firebase
     assert "function isCurrentAuthenticatedUser(uid, generation)" in firebase
     assert "setBookmarksAccess(false);" in firebase
+    assert 'searchHead?.classList.remove("is-searching");' in firebase
     assert 'document.body.classList.add("is-hero")' in firebase
     assert "window.clearResponseBoxes = function (options = {})" in app_init
     assert "window.consensusCitationMeta = null" in app_init

@@ -113,8 +113,30 @@ def test_sidebar_header_hover_search_and_provider_picker(app_page):
     assert abs(metrics["newRunWidth"] - metrics["sidebarInnerWidth"]) <= 1
 
     search = app_page.locator(".sidebar-search-box")
+    search_trigger = app_page.locator("#bookmarkSearchTrigger")
     expect(search).to_have_css("opacity", "0")
     app_page.locator(".sidebar-bookmarks-head").hover()
+    expect(search).to_have_css("opacity", "0")
+    expect(search_trigger).to_have_css("opacity", "1")
+    trigger_metrics = search_trigger.evaluate(
+        """element => {
+          const style = getComputedStyle(element);
+          const rect = element.getBoundingClientRect();
+          return {
+            width: rect.width,
+            height: rect.height,
+            paddingLeft: style.paddingLeft,
+            paddingRight: style.paddingRight,
+          };
+        }"""
+    )
+    assert trigger_metrics == {
+        "width": 28,
+        "height": 28,
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+    }
+    search_trigger.click()
     expect(search).to_have_css("opacity", "1")
     expect(search).to_have_css("pointer-events", "auto")
 

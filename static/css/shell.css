@@ -197,8 +197,8 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   flex: none;
 }
 
-/* The bookmark heading doubles as the search affordance: hover/focus replaces
-   the label with the input without spending a permanent row on search. */
+/* Bookmarks stays visible as the navigation label. Hover reveals a dedicated
+   search affordance; only clicking it replaces the row with the input. */
 .sidebar-bookmarks-head {
   position: relative;
   min-height: 44px;
@@ -273,6 +273,50 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   display: none;
 }
 
+.sidebar-search-trigger {
+  position: absolute;
+  top: 50%;
+  right: 29px;
+  z-index: 3;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--ink-3);
+  opacity: 0;
+  transform: translateY(-50%);
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity 0.14s ease, color 0.14s ease, background-color 0.14s ease;
+}
+
+.sidebar-search-trigger svg {
+  width: 14px;
+  height: 14px;
+}
+
+.bookmarks-section:not(.is-collapsed):not(.is-locked) .sidebar-bookmarks-head:hover .sidebar-search-trigger,
+.bookmarks-section:not(.is-collapsed):not(.is-locked) .sidebar-search-trigger:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sidebar-search-trigger:hover,
+.sidebar-search-trigger:focus-visible {
+  background: var(--well);
+  color: var(--ink);
+  outline: none;
+}
+
+.sidebar-bookmarks-head.is-searching .sidebar-search-trigger {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .sidebar-search-box {
   position: absolute;
   inset: -4px;
@@ -320,19 +364,16 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   box-shadow: inset 0 0 0 1px var(--line);
 }
 
-.sidebar-bookmarks-head:hover .sidebar-search-box,
-.sidebar-bookmarks-head:focus-within .sidebar-search-box,
-.sidebar-bookmarks-head:has(#chatSearch:not(:placeholder-shown)) .sidebar-search-box {
+.sidebar-bookmarks-head.is-searching .sidebar-search-box {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
 }
 
-/* Touch has no hover; keep the same control reachable without adding JS. */
+/* Touch has no hover, so expose the explicit search trigger immediately. */
 @media (hover: none) {
-  .sidebar-bookmarks-head .sidebar-search-box {
+  .bookmarks-section:not(.is-collapsed):not(.is-locked) .sidebar-search-trigger {
     opacity: 1;
-    transform: none;
     pointer-events: auto;
   }
 }

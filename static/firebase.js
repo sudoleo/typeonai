@@ -195,6 +195,8 @@ function isCurrentAuthenticatedUser(uid, generation) {
 function setBookmarksAccess(isLoggedIn) {
   const section = document.querySelector(".bookmarks-section");
   const toggle = document.getElementById("bookmarksToggle");
+  const searchHead = document.querySelector(".sidebar-bookmarks-head");
+  const searchTrigger = document.getElementById("bookmarkSearchTrigger");
   const search = document.getElementById("chatSearch");
   section?.classList.toggle("is-locked", !isLoggedIn);
   if (toggle) {
@@ -202,9 +204,17 @@ function setBookmarksAccess(isLoggedIn) {
     toggle.setAttribute("aria-disabled", String(!isLoggedIn));
     toggle.title = isLoggedIn ? "Open or close bookmarks" : "Log in to use bookmarks";
   }
+  if (searchTrigger) {
+    searchTrigger.disabled = !isLoggedIn;
+    searchTrigger.setAttribute("aria-disabled", String(!isLoggedIn));
+  }
   if (search) {
     search.disabled = !isLoggedIn;
     if (!isLoggedIn) search.value = "";
+  }
+  if (!isLoggedIn) {
+    searchHead?.classList.remove("is-searching");
+    searchTrigger?.setAttribute("aria-expanded", "false");
   }
 }
 

@@ -38,6 +38,18 @@ window.currentDeepLimit = window.LIMITS.FREE.DEEP;
 window.isUserPro = false;
 window.bookmarksData = [];
 
+// Mirror the real firebase.js access setup for an authenticated user.
+const bookmarksSection = document.querySelector(".bookmarks-section");
+const bookmarksToggle = document.getElementById("bookmarksToggle");
+const bookmarkSearchTrigger = document.getElementById("bookmarkSearchTrigger");
+const bookmarkSearchInput = document.getElementById("chatSearch");
+bookmarksSection?.classList.remove("is-locked");
+for (const control of [bookmarksToggle, bookmarkSearchTrigger, bookmarkSearchInput]) {
+  if (!control) continue;
+  control.disabled = false;
+  control.setAttribute("aria-disabled", "false");
+}
+
 window.recordModelVote = () => {};
 window.saveBookmark = () => {};
 window.saveBookmarkConsensus = () => {};
