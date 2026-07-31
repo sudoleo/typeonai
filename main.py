@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from starlette.background import BackgroundTask
-from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY
+from starlette.status import HTTP_422_UNPROCESSABLE_CONTENT
 
 # Init Environment
 load_dotenv()
@@ -196,7 +196,7 @@ async def handle_http_exception(request, exc: HTTPException):
 @app.exception_handler(RequestValidationError)
 async def handle_validation_exception(request, exc: RequestValidationError):
     return JSONResponse(
-        status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=HTTP_422_UNPROCESSABLE_CONTENT,
         content={"error": "Validation failed", "details": exc.errors()},
     )
 
@@ -223,14 +223,23 @@ async def handle_unexpected_exception(request, exc: Exception):
     )
 
 # Include Routers
-app.include_router(auth.router)
-app.include_router(users.router)
-app.include_router(bookmarks.router)
-app.include_router(chat.router)
-app.include_router(client_errors.router)
-app.include_router(pages.router)
-app.include_router(admin.router)
-app.include_router(share.router)
-app.include_router(watch.router)
-app.include_router(topics.router)
+#
+# Nur /api/v1 ist die dokumentierte, oeffentliche Consensus-API und erscheint
+# in /docs bzw. /openapi.json. Alle uebrigen Router sind interne App- und
+# Admin-Endpunkte: sie sind zwar einzeln autorisiert, muessen einem Angreifer
+# aber nicht als fertige Landkarte samt Parametern serviert werden.
+for internal_router in (
+    auth.router,
+    users.router,
+    bookmarks.router,
+    chat.router,
+    client_errors.router,
+    pages.router,
+    admin.router,
+    share.router,
+    watch.router,
+    topics.router,
+):
+    app.include_router(internal_router, include_in_schema=False)
+
 app.include_router(api_v1.router)

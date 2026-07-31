@@ -1,0 +1,34 @@
+rules_version = '2';
+
+// consens.io Firestore-Regeln
+//
+// GRUNDPRINZIP: Kein Browser-Client spricht jemals direkt mit Firestore.
+// Jeder Datenzugriff laeuft ueber das FastAPI-Backend, das mit dem
+// Firebase-Admin-SDK arbeitet -- und das Admin-SDK umgeht diese Regeln
+// vollstaendig. Diese Datei ist daher reine Absicherung gegen direkte
+// Zugriffe auf die Firestore-REST-/Web-API mit einem geklauten oder
+// selbst erzeugten ID-Token.
+//
+// Deshalb gilt: alles verbieten. Kein Client braucht hier ein Recht.
+// static/firebase.js laedt zwar das Firestore-SDK, benutzt es aber nicht
+// (die Variable `db` ist toter Code) -- ein Deny-all bricht nichts.
+//
+// WARUM DAS FRUEHER OFFEN WAR UND WARUM DAS GEFAEHRLICH IST:
+// Die vorherige Regel erlaubte `write` auf /users/{userId} fuer den
+// eingeloggten Eigentuemer. Genau aus diesem Dokument liest
+// app/core/security.py die Felder `tier` (Pro) und `role` (Admin).
+// Ein beliebiger eingeloggter Nutzer konnte sich damit per
+//   setDoc(doc(db, "users", uid), { role: "admin" }, { merge: true })
+// selbst zum Admin machen. Schreibrechte auf /users/ duerfen daher NIE
+// wieder geoeffnet werden, solange Rollen in diesem Dokument stehen.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Kein Client-Zugriff -- weder lesend noch schreibend, auf nichts.
+    // Das Backend (Admin-SDK) ist von dieser Regel nicht betroffen.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

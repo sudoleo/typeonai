@@ -15,6 +15,33 @@ from firebase_admin import credentials, auth, firestore
 E2E_MOCK_TOKEN = "e2e-mock-token"
 E2E_MOCK_UID = "e2e-mock-user"
 
+# Test-Flags, die Sicherheitskontrollen abschalten. Ein Kommentar "nie in
+# Produktion setzen" ist keine Kontrolle - ein einziges versehentlich in Render
+# gesetztes MOCK_AUTH=1 wuerde jedem Besucher Admin-Zugriff geben. Deshalb
+# verweigert der Prozess in Produktion den Start, statt unsicher weiterzulaufen.
+_UNSAFE_TEST_FLAGS = ("MOCK_AUTH", "MOCK_ADMIN", "MOCK_LLM", "DISABLE_RATE_LIMIT")
+
+
+def _is_production() -> bool:
+    """Render setzt RENDER_SERVICE_NAME in jedem Deploy automatisch."""
+    if os.environ.get("RENDER_SERVICE_NAME"):
+        return True
+    return os.environ.get("ENVIRONMENT", "").strip().lower() in {"production", "prod"}
+
+
+def _assert_no_unsafe_test_flags_in_production() -> None:
+    enabled = [flag for flag in _UNSAFE_TEST_FLAGS if os.environ.get(flag) == "1"]
+    if enabled and _is_production():
+        raise RuntimeError(
+            "Refusing to start: the test-only flag(s) "
+            + ", ".join(enabled)
+            + " are set in a production environment. They disable authentication, "
+            "admin checks or rate limiting. Unset them in the Render dashboard."
+        )
+
+
+_assert_no_unsafe_test_flags_in_production()
+
 
 def _mock_auth_enabled() -> bool:
     return os.environ.get("MOCK_AUTH") == "1"
@@ -71,7 +98,11 @@ class CustomSecurityMiddleware:
                 headers[b"X-Content-Type-Options"] = b"nosniff"
                 headers[b"X-Frame-Options"] = b"DENY"
                 headers[b"Strict-Transport-Security"] = b"max-age=31536000; includeSubDomains"
-                headers[b"Referrer-Policy"] = b"no-referrer-when-downgrade"
+                # strict-origin-when-cross-origin: an fremde Seiten geht nur noch
+                # die Origin, nicht der volle Pfad. Private Watch-Seiten
+                # (/s/{id}) sind Secret-URLs - ihr Pfad darf nie im
+                # Referer-Header eines ausgehenden Klicks landen.
+                headers[b"Referrer-Policy"] = b"strict-origin-when-cross-origin"
                 if sensitive_api_response:
                     headers[b"Cache-Control"] = b"private, no-store"
                     headers[b"Pragma"] = b"no-cache"

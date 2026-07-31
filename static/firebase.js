@@ -850,6 +850,12 @@ confirmRegisterBtn.addEventListener("click", () => {
             setRegisterPending(false);
             trackAppEvent("auth_register_result", { status: "error" });
           });
+      } else if (data.status === "check_inbox") {
+        // Die Adresse ist bereits registriert. Das Backend verraet das bewusst
+        // nicht (Konto-Enumeration), also zeigen wir denselben Screen wie nach
+        // einer echten Registrierung - der Text deckt beide Faelle ab.
+        showRegistrationSuccess(email);
+        trackAppEvent("auth_register_result", { status: "success" });
       } else if (data.detail) {
         registerErr.textContent = data.detail;
         setRegisterPending(false);
@@ -1616,10 +1622,18 @@ function addBookmarkToDOM(bookmark, { prepend = true } = {}) {
   div.className = "bookmark";
   div.dataset.id = bookmark.id;
   div.style.position = "relative";
-  div.innerHTML = `
-    <p>${truncateText(bookmark.query)}</p>
-    <span class="delete-bookmark" role="button" tabindex="0" aria-label="Delete bookmark" title="Delete bookmark">x</span>
-  `;
+  // Die Frage kommt als freier Nutzertext und darf nie als HTML interpretiert
+  // werden - deshalb textContent statt Template-Interpolation in innerHTML.
+  const label = document.createElement("p");
+  label.textContent = truncateText(bookmark.query);
+  const deleteSpan = document.createElement("span");
+  deleteSpan.className = "delete-bookmark";
+  deleteSpan.setAttribute("role", "button");
+  deleteSpan.setAttribute("tabindex", "0");
+  deleteSpan.setAttribute("aria-label", "Delete bookmark");
+  deleteSpan.setAttribute("title", "Delete bookmark");
+  deleteSpan.textContent = "x";
+  div.append(label, deleteSpan);
 
   // Delete-Event
   const deleteControl = div.querySelector(".delete-bookmark");

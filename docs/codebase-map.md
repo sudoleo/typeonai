@@ -1290,6 +1290,19 @@ Wichtige Verträge im Backend:
 
 ## 6. Datenhaltung / Firebase / Konfiguration
 
+**Firestore-Sicherheitsregeln** (`firestore.rules`, Quelle der Wahrheit im Repo;
+Deploy manuell über die Firebase Console):
+- **Deny-all für alle Clients.** Kein Browser-Code spricht direkt mit Firestore —
+  `static/firebase.js` initialisiert zwar `getFirestore()`, benutzt die Variable
+  `db` aber nirgends. Sämtlicher Datenzugriff läuft über das Backend mit dem
+  Firebase-Admin-SDK, und das umgeht die Regeln vollständig.
+- **Schreibrechte auf `users/{uid}` dürfen NIE wieder geöffnet werden.**
+  `app/core/security.py` liest Pro- (`tier`) und Admin-Status (`role`) aus genau
+  diesem Dokument. Eine frühere Regel erlaubte dem eingeloggten Eigentümer
+  `write` — damit konnte sich jeder Nutzer per `setDoc(..., {role:"admin"})`
+  selbst zum Admin machen. Wer Rollen künftig client-schreibbar braucht, muss
+  sie vorher aus `users/{uid}` herauslösen (z. B. Firebase Custom Claims).
+
 **Firestore-Collections** (verifiziert über Code):
 - `users/{uid}` — `tier`, `role`; Subcollections `bookmarks`, `counters` sowie
   die produktive run-basierte Usage:
@@ -1765,6 +1778,20 @@ ersten Check statt eines leeren Consensus-Panels.
 
 ## 8. Kritische Verträge & Stolperfallen
 
+- **Nur `/api/v1` steht in `/openapi.json`.** Alle übrigen Router werden in
+  `main.py` mit `include_in_schema=False` eingebunden, damit die interne App-
+  und Admin-Oberfläche nicht als fertige Landkarte veröffentlicht wird. Ein neuer
+  interner Router muss in diese Schleife — sonst taucht er öffentlich auf.
+- **Test-Flags sind in Produktion ein harter Startfehler.** `MOCK_AUTH`,
+  `MOCK_ADMIN`, `MOCK_LLM` und `DISABLE_RATE_LIMIT` schalten Auth, Admin-Checks
+  bzw. Rate-Limits ab. `app/core/security.py` verweigert den Start, wenn eines
+  davon zusammen mit `RENDER_SERVICE_NAME` oder `ENVIRONMENT=production` gesetzt
+  ist. Lokal und in der E2E-Suite ändert sich nichts.
+- **`/register` darf nie verraten, ob eine E-Mail existiert.** Beide Fälle geben
+  `{"status": "check_inbox"}` zurück; nur der echte Neuzugang bekommt zusätzlich
+  ein `customToken`. `static/firebase.js` zeigt in beiden Fällen denselben
+  Erfolgs-Screen, dessen Text beide Fälle abdeckt. Eine spezifische Fehlermeldung
+  wie „already registered" wäre eine Konto-Enumeration.
 - **Script-Ladereihenfolge in `templates/index.html` ist ein Vertrag.**
   `app-core.js` definiert `window.App` und muss vor allen Feature-Modulen laufen;
   KaTeX + Auto-Render müssen vor `math-render.js`, dieses wiederum vor

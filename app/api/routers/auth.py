@@ -18,19 +18,31 @@ async def register_user(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=400, detail="Email and password must be provided.")
 
     try:
-        # Überprüfe, ob die E-Mail bereits existiert
+        # Konto-Enumeration vermeiden: eine bereits registrierte Adresse darf
+        # NICHT als solche gemeldet werden, sonst kann jeder durchprobieren, wer
+        # hier Kunde ist. Beide Faelle liefern dieselbe neutrale Antwort; nur der
+        # echte Neuzugang bekommt zusaetzlich ein customToken. Der Client zeigt
+        # in beiden Faellen denselben "Check your inbox"-Screen.
         try:
-            existing_user = auth.get_user_by_email(email)
-            # Falls kein Fehler auftritt, existiert der Nutzer bereits
-            raise HTTPException(status_code=400, detail="This email is already registered.")
+            auth.get_user_by_email(email)
+            return {"status": "check_inbox"}
         except firebase_admin.auth.UserNotFoundError:
             # Keine Registrierung mit dieser E-Mail gefunden, also weiter
             pass
 
-        user = auth.create_user(email=email, password=password)
+        try:
+            user = auth.create_user(email=email, password=password)
+        except firebase_admin.auth.EmailAlreadyExistsError:
+            # Wettlauf zwischen Pruefung und Anlage: ebenfalls neutral bleiben.
+            return {"status": "check_inbox"}
         custom_token = auth.create_custom_token(user.uid)
         custom_token_str = custom_token.decode("utf-8")
-        return {"uid": user.uid, "email": user.email, "customToken": custom_token_str}
+        return {
+            "status": "check_inbox",
+            "uid": user.uid,
+            "email": user.email,
+            "customToken": custom_token_str,
+        }
 
     except HTTPException:
         # bereits bewusst gesetzte Meldungen durchreichen
