@@ -60,6 +60,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 |---|---|
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache), `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (Pro, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
+| `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP) und übergibt sie als nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). |
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. |
@@ -174,6 +175,11 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
 
 **Modul-Verantwortlichkeiten** (alle in `static/js/` außer markiert):
 
+- **`error-reporter.js`** — lädt vor allen App-Modulen, fängt ungefangene
+  Browserfehler, Promise-Rejections und relevante Asset-Ladefehler ab und stellt
+  `window.App.reportCriticalError` für explizite Run-Abbrüche bereit. Erwartete
+  `AbortError`-Abbrüche werden ignoriert; Session-Deduplizierung verhindert
+  Wiederholungen desselben Fehlers.
 - **`app-core.js`** — MUSS zuerst laden. Definiert `window.App`-Bus, `modelPrefs`
   (zentrales Mapping Provider→DOM-IDs), `deepThinkModelLabels`, gemeinsame Helfer
   (`getModelOptionLabel`, `getSelectedModelCount`, `setAppTitle`, `showPopup`,
@@ -830,6 +836,15 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   **geleert** — das Frontend markiert damit den Satz inline. `positions[].quote`
   bleibt unverändert ein Zitat aus der jeweiligen Modellantwort. Alte
   Bookmarks/Snapshots ohne das Feld degradieren auf „nur Karte".
+- Kritische Fehleralarmierung: Schlagen alle ausgewählten Modellrequests fehl,
+  meldet `query-send.js` genau einen zusammengefassten `run_failed`-Alert. Ein
+  Consensus-Abbruch wird nur gemeldet, wenn kein verwertbarer Consensus-Text
+  erhalten blieb; bewusste Stop-/Skip-Aktionen und Usage-Limits bleiben ruhig.
+  Ungefangene Backend-Exceptions erzeugen zusätzlich über den globalen
+  Exception-Handler einen serverseitigen Alert und antworten weiterhin nur mit
+  einem neutralen HTTP 500. `telegram_notifier.py` entfernt Secrets, dedupliziert
+  identische Alerts zehn Minuten und begrenzt pro Prozess auf zehn Alerts in
+  zehn Minuten.
 - Robustheit Differences (`consensus_engine.py`): einheitlicher Engine-Dispatch
   (`_resolve_engine`/`_call_engine_text`/`_stream_engine_text`), Structured
   Output je Provider (json_object / Gemini-`responseMimeType` plus
@@ -1496,6 +1511,10 @@ Wichtige Verträge im Backend:
   `SEO_ADMIN_URL` (Default `https://www.consens.io/admin#seo`). Jeder terminale
   Review versucht genau eine nicht-fatale Nachricht; Ergebnis/Skip wird im Run
   gespeichert.
+- Kritische App-/Serverfehler verwenden `TELEGRAM_BOT_TOKEN` und optional
+  `CRITICAL_ERROR_TELEGRAM_CHAT_ID`; ohne eigene Ziel-ID fällt der Versand auf
+  `TELEGRAM_CHAT_ID` zurück. Fehlende Konfiguration deaktiviert Alerts
+  best-effort, ohne App-Flows zu beeinflussen.
 - User-Telegram-Watches verwenden denselben `TELEGRAM_BOT_TOKEN` plus
   `TELEGRAM_BOT_USERNAME` (ohne `@`) und `TELEGRAM_WEBHOOK_SECRET`. Sind alle
   drei gesetzt, registriert der Startup-Einmal-Task automatisch
@@ -1762,7 +1781,8 @@ ersten Check statt eines leeren Consensus-Panels.
   `window.lastShareResultId`, `window.currentBookmarkShareResultContext`,
   `window.currentBookmarkShareResultPromise`,
   `window.resolveCurrentShareResultId`, `window.clearPreparedBookmarkShareResult`,
-  `window.isUserPro`, `window.pendingAttachments`, `window.ConsensusMath`.
+  `window.isUserPro`, `window.pendingAttachments`, `window.ConsensusMath`,
+  `window.App.reportCriticalError`.
 - **`window.App.followup`** (definiert in `consensus-run.js`) ist der
   Follow-up-Kontext-State (`offer/arm/discard/consume/reset/render`).
   `query-send.js` (consume beim Senden), `app-init.js` (reset in

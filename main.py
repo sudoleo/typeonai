@@ -1,6 +1,7 @@
 import asyncio
 import os
 import logging
+import traceback
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -9,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
+from starlette.background import BackgroundTask
 from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY
 
 # Init Environment
@@ -26,6 +28,7 @@ from app.api.routers import (
     auth,
     bookmarks,
     chat,
+    client_errors,
     pages,
     share,
     topics,
@@ -45,6 +48,7 @@ from app.services.watch_scheduler import watch_scheduler_loop
 from app.services.watch_service import backfill_publisher_watch_lineage
 from app.services.seo_weekly_review import seo_review_scheduler_loop
 from app.services.telegram_watch import run_startup_maintenance as telegram_startup_maintenance
+from app.services.telegram_notifier import send_critical_error_notification
 
 
 def _startup_job_timeout_seconds() -> int:
@@ -196,11 +200,34 @@ async def handle_validation_exception(request, exc: RequestValidationError):
         content={"error": "Validation failed", "details": exc.errors()},
     )
 
+@app.exception_handler(Exception)
+async def handle_unexpected_exception(request, exc: Exception):
+    logging.exception(
+        "Unhandled request exception for %s %s",
+        request.method,
+        request.url.path,
+        exc_info=exc,
+    )
+    report = {
+        "source": "server",
+        "type": type(exc).__name__,
+        "phase": "request",
+        "message": str(exc) or "Unhandled server exception",
+        "path": f"{request.method} {request.url.path}",
+        "stack": "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+    }
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Internal server error"},
+        background=BackgroundTask(send_critical_error_notification, report),
+    )
+
 # Include Routers
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(bookmarks.router)
 app.include_router(chat.router)
+app.include_router(client_errors.router)
 app.include_router(pages.router)
 app.include_router(admin.router)
 app.include_router(share.router)

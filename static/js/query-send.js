@@ -483,6 +483,7 @@
         delete box.dataset.consensusAnswer;
         delete box.dataset.consensusSources;
         delete box.dataset.responseError;
+        delete box.dataset.responseSkipped;
         box.dataset.responseState = "pending";
         window.setSpinnerEl(box);
       });
@@ -492,6 +493,7 @@
 
       let queryHadBlockingError = false;
       let queryBlockingErrorMessage = "";
+      let successfulResponses = 0;
 
       // --- Einzelne Modelle abbrechbar machen ---------------------------
       // Ein Lauf ist so langsam wie sein langsamstes Modell. Damit ein
@@ -612,6 +614,7 @@
         if (box) {
           delete box.dataset.responseError;
           box.dataset.responseState = "complete";
+          successfulResponses++;
         }
         if (isAgentModeEnabled()) {
           window.updateAgentModeUI?.();
@@ -817,6 +820,23 @@
         if (responsesReceived === totalActive) {
           // Sende-Button immer wieder freischalten
           finishQueryRun(queryRunId);
+          if (successfulResponses === 0 && !queryHadBlockingError) {
+            const failedModels = modelBoxes
+              .filter(box => box.dataset.responseState === "error" && box.dataset.responseSkipped !== "true")
+              .map(box => {
+                const label = box.dataset.model || box.id || "model";
+                const reason = box.querySelector(".collapsible-content")?.textContent?.trim() || "failed";
+                return `${label}: ${reason.slice(0, 240)}`;
+              });
+            if (failedModels.length) {
+              window.App.reportCriticalError?.({
+                type: "run_failed",
+                phase: "model_fanout",
+                message: `All ${totalActive} selected model requests failed.`,
+                details: failedModels.join(" | ")
+              });
+            }
+          }
           if (queryHadBlockingError) {
             setAgentModeStatus("error", queryBlockingErrorMessage);
             trackAppEvent("app_query_completed", {

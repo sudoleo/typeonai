@@ -11,6 +11,9 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 ## Browser-Konsole
 - [ ] Beim Laden **keine** JS-Fehler in der Konsole (besonders: keine
       `ReferenceError: X is not defined`, keine `window.X is not a function`).
+- [ ] Ein absichtlich ausgelöster ungefangener Testfehler erzeugt genau einen
+      same-origin `POST /api/client-errors`; ein bewusster Stop des laufenden
+      Runs erzeugt keinen Fehlerreport.
 
 ## Öffentliche Seiten
 - [ ] `/`, `/about`, `/ai-model-comparison`, `/consensus-engine`, `/benchmark`,

@@ -786,6 +786,14 @@
           trigger,
           included_models: includedAnswerCount
         });
+        if (consensusRequestResult.status >= 500 || (consensusRequestResult.ok && data.error)) {
+          window.App.reportCriticalError?.({
+            type: "consensus_failed",
+            phase: "consensus",
+            message: String(consensusErrorMessage || "Consensus completed without a usable result."),
+            details: `HTTP ${consensusRequestResult.status}; included models: ${includedAnswerCount}`
+          });
+        }
       }
 
     } catch (error) {
@@ -814,6 +822,12 @@
         }
         if (failBodyEl) failBodyEl.innerText = "Error in the consensus calculation.";
         consensusDiv.querySelector(".consensus-differences p").innerText = "";
+        window.App.reportCriticalError?.({
+          type: "consensus_failed",
+          phase: "consensus_connection",
+          message: error?.message || "The consensus request was interrupted without a result.",
+          error
+        });
       }
       trackAppEvent("app_consensus_completed", {
         status: preservedConsensus ? "partial" : "error",
