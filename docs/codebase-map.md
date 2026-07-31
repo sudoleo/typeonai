@@ -108,7 +108,10 @@ und SEO-Erklärseiten wie `ai-model-comparison.html` / `consensus-engine.html`.
 Timeline-/Evidence-Detailseite; die Topic-Redaktion liegt als eigener Tab in
 `admin.html` unter `/admin#topics` (`/admin/topics` redirectet dorthin).
 Alle öffentlichen HTML-Seiten teilen Navigation und Footer über
-`templates/partials/public_nav.html` und `public_footer.html`. Die primäre
+`templates/partials/public_nav.html` und `public_footer.html`. Das Umami-Snippet
+liegt seit 2026-07-31 ebenfalls zentral in `templates/partials/analytics.html`
+(einzige Stelle mit der Website-ID) und bringt den Selbst-Ausschluss per
+`?notrack=1` mit; die Admin-Templates tracken gar nicht mehr. Die primäre
 Navigation beschränkt sich auf Product, Watches, Topics, Questions, Benchmark
 und die App-CTA; Model guide und About liegen im Footer. Der Landing-Hero
 ist seit 2026-07-17 demo-first: Ein klickbares Input-Feld (Look des /app-Inputs,
