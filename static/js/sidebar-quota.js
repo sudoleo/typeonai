@@ -194,6 +194,13 @@
     return parseLine(el("freeUsageDisplay"));
   }
 
+  // Dieselbe Lesart fuer den Deep-Think-Topf. usage-limit.js braucht ihn, um
+  // vor dem Absenden sagen zu koennen, WELCHES Kontingent fehlt — und darf
+  // sich dafuer keine zweite Parse-Regel bauen.
+  function deep() {
+    return parseLine(el("deepUsageDisplay"));
+  }
+
   window.App = window.App || {};
-  window.App.sidebarQuota = { sync: sync, setOpen: setOpen, runs: runs };
+  window.App.sidebarQuota = { sync: sync, setOpen: setOpen, runs: runs, deep: deep };
 })();

@@ -76,6 +76,9 @@
     // Follow-ups duerfen sich nicht verketten (Kostenkontrolle): der Konsens
     // einer Follow-up-Frage bietet keine weitere Follow-up-Affordance an.
     followupInFlight: false,
+    // Was consume() zuletzt ausgegeben hat. Nur dafuer da, den Kontext
+    // zurueckzuholen, wenn der Lauf gar nicht stattgefunden hat.
+    spentExchange: null,
 
     offer(question, consensusText) {
       // Der aktuelle Konsens ist selbst die Antwort auf eine Follow-up-Frage:
@@ -91,6 +94,8 @@
       if (!question || !consensusText) return;
       this.lastExchange = { question: question, consensus: consensusText };
       this.armed = false;
+      // Ein Lauf ist durchgelaufen: nichts mehr zurueckzuholen.
+      this.spentExchange = null;
       this.render();
     },
 
@@ -113,12 +118,27 @@
       this.render();
     },
 
+    // Ein Lauf, der gar nicht stattgefunden hat (Kontingent leer), darf den
+    // Follow-up-Chip nicht gefressen haben: consume() ist beim Absenden
+    // passiert, gesendet wurde aber nichts. Sonst waere der Kontext weg,
+    // waehrend die Absage-Karte sagt "nichts wurde gesendet" — und die
+    // naechste Frage ginge stillschweigend ohne Kontext raus.
+    restoreAfterBlockedRun() {
+      if (!this.spentExchange) return;
+      this.lastExchange = this.spentExchange;
+      this.spentExchange = null;
+      this.followupInFlight = false;
+      this.armed = true;
+      this.render();
+    },
+
     // Neuer Lauf ohne Kontext bzw. Clear: Affordance und Chip verschwinden.
     // Loescht auch das In-Flight-Flag (frische Frage darf wieder anbieten).
     reset() {
       this.lastExchange = null;
       this.armed = false;
       this.followupInFlight = false;
+      this.spentExchange = null;
       this.render();
     },
 
@@ -131,8 +151,11 @@
         previous_question: this.lastExchange.question,
         previous_consensus: this.lastExchange.consensus
       };
+      const spent = this.lastExchange;
       this.reset();
       this.followupInFlight = true;
+      // Nach reset(), sonst raeumt es sich selbst wieder weg.
+      this.spentExchange = spent;
       return ctx;
     },
 
@@ -775,8 +798,25 @@
         if (window.resetCredibilityFrame) {
           window.resetCredibilityFrame(consensusDiv.querySelector(".consensus-differences"));
         }
-        if (consensusErrorDetail?.error_code === "usage_limit_exceeded" && typeof window.setAgentModeStatus === "function" && window.isAgentModeEnabled?.()) {
-          window.setAgentModeStatus("error", consensusErrorMessage);
+        // Der Server sendet "total_usage_limit_exceeded" bzw.
+        // "deep_think_usage_limit_exceeded" (chat.py). Der frühere Vergleich
+        // auf "usage_limit_exceeded" traf deshalb nie — die Absage blieb
+        // stumm. Erkennung liegt jetzt zentral in usage-limit.js.
+        const consensusHitUsageLimit = window.App.usageLimit
+          ? window.App.usageLimit.isLimitError(consensusErrorDetail || data, consensusErrorMessage)
+          : false;
+        if (consensusHitUsageLimit) {
+          if (typeof window.setAgentModeStatus === "function" && window.isAgentModeEnabled?.()) {
+            window.setAgentModeStatus("error", consensusErrorMessage);
+          }
+          // Die Antworten der Modelle stehen schon da; was fehlt, ist die
+          // Synthese. Die Karte sagt genau das, statt den Nutzer vor einer
+          // Fehlerzeile im Konsens-Feld raten zu lassen.
+          window.App.usageLimit.show({
+            data: consensusErrorDetail || data,
+            source: "consensus",
+            phase: "consensus"
+          });
         }
         const errorBodyEl = window.App.consensusBodyEl(consensusDiv);
         if (errorBodyEl) errorBodyEl.innerText = "Error: " + consensusErrorMessage;

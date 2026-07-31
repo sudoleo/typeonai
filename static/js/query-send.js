@@ -288,12 +288,35 @@
       if (!window.validateInputText()) {
         return;
       }
+
       const question = document.getElementById("questionInput").value;
       window.lastQuestion = question;  // Speichern in einer globalen Variable (auch von consensus-run.js gelesen)
 
       if (!question.trim()) {
         alert("Please enter a question.");
         return;
+      }
+
+      // Kontingent VOR dem ersten sichtbaren Schritt pruefen — aber nach dem
+      // Demo-Check unten wuerde es zu spaet sein, also hier mit derselben
+      // Ausnahme: die Demo kostet nichts. Ohne diese Schranke sah ein leeres
+      // Kontingent so aus, als liefe der Vergleich los: onPrepare() zeigt den
+      // gefuehrten Lauf, und der 403 aus /prepare nahm ihn per dismiss()
+      // gleich wieder weg. Der Server bleibt die Autoritaet (siehe den
+      // /prepare-Zweig weiter unten); das hier ist nur die Zusage, dass
+      // nichts zu laufen scheint, was gar nicht laeuft.
+      if (!isDemoQuery(question)) {
+        if (window.App.usageLimit?.blockIfExhausted?.({
+          useOwnKeys: document.getElementById("useOwnKeysSwitch")?.checked === true,
+          deepThink: document.getElementById("deepSearchToggle")?.checked === true,
+          source: "send"
+        })) {
+          trackAppEvent("app_query_blocked", { reason: "usage_limit" });
+          return;
+        }
+        // Ein neuer Versuch raeumt die alte Absage weg: sie gehoert zu dem
+        // Lauf, der nicht stattgefunden hat, nicht zu diesem hier.
+        window.App.usageLimit?.hide?.();
       }
 
       // Ab dem ersten echten Lauf wird die Seite zum Thread: Frage oben,
@@ -573,7 +596,13 @@
         return fallback;
       }
 
+      // Ein Detektor fuer die ganze App (usage-limit.js). Der lokale Fallback
+      // bleibt, damit ein fehlgeschlagenes Modul-Laden den Limit-Pfad nicht
+      // stillschweigend in "unbekannter Fehler" kippen laesst.
       function isUsageLimitError(data, message = "") {
+        if (window.App.usageLimit?.isLimitError) {
+          return window.App.usageLimit.isLimitError(data, message);
+        }
         const normalized = unwrapApiError(data);
         const code = String(normalized.error_code || normalized.code || "").toLowerCase();
         const text = String(message || normalized.error || normalized.detail || "").toLowerCase();
@@ -601,11 +630,22 @@
       }
 
       function markQueryBlockingError(message, data = {}) {
+        // Sechs parallele Modell-Calls koennen dieselbe Absage sechsmal
+        // melden. Die Karte wird deshalb nur beim ersten Mal aufgebaut,
+        // sonst springt der Scroll bei jeder Antwort erneut.
+        const first = !queryHadBlockingError;
         queryHadBlockingError = true;
         queryBlockingErrorMessage = message || queryBlockingErrorMessage || "The request could not be completed.";
         updateUsageDisplayFromData(data);
         if (isAgentModeEnabled()) {
           setAgentModeStatus("error", queryBlockingErrorMessage);
+        }
+        if (first && isUsageLimitError(data, message)) {
+          window.App.usageLimit?.show?.({
+            data,
+            source: "ask",
+            phase: "answers"
+          });
         }
       }
 
@@ -702,14 +742,33 @@
         } else {
           if (isUsageLimitError(prepareData)) {
             const message = getApiErrorMessage(prepareData, "Usage limit reached.");
+            // Die Zahlen aus der Absage sind die frischesten, die es gibt:
+            // erst den Ring korrigieren, dann die Karte bauen, die daraus
+            // liest.
+            updateUsageDisplayFromData(prepareData);
             modelBoxes.forEach(box => {
               const outputEl = box.querySelector(".collapsible-content");
               if (outputEl) markModelError(outputEl, message, prepareData);
             });
             finishQueryRun(queryRunId);
+            // Raeumt den gefuehrten Lauf ab (dismiss); die bleibende Meldung
+            // steht danach in #runBlocked — sonst faellt die Seite in genau
+            // das leere Nichts zurueck, das dieser Pfad frueher hinterliess.
             setAgentModeStatus("error", message);
             setConsensusGate(true);
             window.App.usageRun?.clear?.();
+            window.App.usageLimit?.show?.({
+              data: prepareData,
+              source: "prepare",
+              phase: "prepare"
+            });
+            // Der Composer bleibt bedienbar: die Frage steht noch im Feld
+            // (geleert wird erst nach diesem Zweig), und der Nutzer soll sie
+            // nach dem Reset unveraendert abschicken koennen. Bei einem
+            // Follow-up hat consume() den Chip aber schon verbraucht — ohne
+            // diese Ruecknahme sperrt syncInputLock das Feld zu, in dem die
+            // Frage laut Karte noch stehen soll.
+            window.App.followup?.restoreAfterBlockedRun?.();
             return;
           }
           console.warn("No valid system_prompt from /prepare, keeping base.");

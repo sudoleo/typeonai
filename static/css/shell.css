@@ -1053,6 +1053,161 @@ body:not(.dark-mode) .chat-input-container {
   font-variant-numeric: tabular-nums;
 }
 
+/* ---- The run that did not happen -----------------------------------------
+   Der Gegenzustand zum gefuehrten Lauf, und deshalb an derselben Stelle im
+   Thread: dort, wo gleich die Antwort stuende. Er blinkt nicht und er
+   verschwindet nicht von selbst — eine Absage, die nach 600 ms wieder weg
+   ist, ist keine Absage.
+
+   Die Ampelfarbe kommt aus derselben Skala wie alles andere (--dispute fuer
+   "geht nicht", --partial fuer "geht anders"): kein eigener Fehler-Rotton,
+   nur die Rolle, die die Skala dafuer schon hat.
+   -------------------------------------------------------------------------- */
+.run-blocked {
+  --blocked-tone: var(--dispute);
+  --blocked-tone-bg: var(--dispute-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 2px 6px 14px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--blocked-tone) 26%, transparent);
+  border-left: 2px solid var(--blocked-tone);
+  border-radius: var(--radius-md);
+  background: var(--blocked-tone-bg);
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Deep Think ist aufgebraucht, ein normaler Lauf aber nicht: das ist ein
+   Umweg, kein Stopp — und liest sich deshalb als Warnung, nicht als Absage. */
+.run-blocked[data-bucket="deep_think"] {
+  --blocked-tone: var(--partial);
+  --blocked-tone-bg: var(--partial-bg);
+}
+
+.run-blocked[hidden] {
+  display: none;
+}
+
+.run-blocked.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.run-blocked-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.run-blocked-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--blocked-tone);
+}
+
+.run-blocked-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.run-blocked-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  /* Ueberschriften sind global zentriert; in einer Meldung, die man von
+     links nach rechts liest, gehoert der Titel auf dieselbe Kante wie der
+     Text darunter. */
+  text-align: left;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--ink);
+}
+
+.run-blocked-close {
+  flex: none;
+  padding: 2px 6px;
+  border: none;
+  background: none;
+  font-size: var(--font-size-xs);
+  line-height: 1;
+  color: var(--ink-3);
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+}
+
+.run-blocked-close:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--blocked-tone) 12%, transparent);
+}
+
+.run-blocked-body {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+  color: var(--ink-2);
+}
+
+.run-blocked-meta {
+  margin: 0;
+  font-size: var(--font-size-micro);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.run-blocked-meta[hidden] {
+  display: none;
+}
+
+.run-blocked-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.run-blocked-actions:empty {
+  display: none;
+}
+
+.run-blocked-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--raise);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.run-blocked-btn:hover {
+  color: var(--ink);
+  border-color: var(--ink-3);
+}
+
+.run-blocked-btn.is-primary {
+  border-color: transparent;
+  background: var(--ink);
+  color: var(--ground);
+}
+
+.run-blocked-btn.is-primary:hover {
+  border-color: transparent;
+  background: var(--ink-2);
+  color: var(--ground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .run-blocked {
+    transition: none;
+  }
+}
+
 /* ---- Provenance footer ---------------------------------------------------
    What the run leaves behind, in TWO lines that read top to bottom:
 
@@ -1593,6 +1748,10 @@ body:not(.is-hero) .container {
 
 .thread-ask { order: 1; }
 body:not(.is-hero) #consensusRun { order: 2; }
+/* Die Absage steht dort, wo der Lauf gestanden haette: unter der Frage,
+   ueber dem (leeren) Konsens. Ohne eigenen order-Wert waere sie in dieser
+   Flex-Spalte nach ganz oben gerutscht, noch vor die Frage. */
+body:not(.is-hero) #runBlocked { order: 2; }
 body:not(.is-hero) .consensus-section { order: 3; }
 body:not(.is-hero) .response-section { order: 4; }
 

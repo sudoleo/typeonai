@@ -7,7 +7,7 @@
 @import url('./css/base.css?v=20260731-inter1');
 @import url('./css/layout.css?v=20260731-inter1');
 /* components.css was split by section into the files below (same cascade order). */
-@import url('./css/components-input.css?v=20260731-bookmarksearch2');
+@import url('./css/components-input.css?v=20260801-quotablock1');
 @import url('./css/components-attachment-viewer.css?v=20260731-inter1');
 @import url('./css/components-consensus.css?v=20260731-consensusloader1');
 @import url('./css/components-controls.css?v=20260731-inter1');
@@ -19,4 +19,4 @@
 @import url('./css/components-watch.css?v=20260731-inter1');
 /* Shell layer — loaded LAST so the frameless redesign wins on equal
    specificity. Elevation, sidebar, topbar, composer and thread material. */
-@import url('./css/shell.css?v=20260731-bookmarksearch2');
+@import url('./css/shell.css?v=20260801-quotablock1');
