@@ -57,8 +57,7 @@
     };
   </script>
   <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260729-composerautogrow1">
+  <link rel="stylesheet" href="/static/style.css?v=20260731-sidebar-tight2">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
@@ -71,13 +70,13 @@
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.js" integrity="sha384-AtrdNsnxl/75rvBneBVH7DtOvCxSVahR2zWqle1coBKd8DEmLoviqNeJSx64gNAs" crossorigin="anonymous"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260727-uipolish1"></script>
-  <script type="module" src="/static/demo.js?v=20260729-demosequence1"></script>
+  <script type="module" src="/static/firebase.js?v=20260731-logout-polish2"></script>
+  <script type="module" src="/static/demo.js?v=20260731-ui-polish1"></script>
   <script src="/static/app-ui.js?v=20260727-thread12" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
   <script src="/static/js/app-core.js?v=20260727-thread12" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
-  <script src="/static/js/model-picker.js?v=20260729-attachmentfanout2" defer></script>
+  <script src="/static/js/model-picker.js?v=20260731-pickercompact1" defer></script>
   <!-- Gemeinsame LaTeX-Aufbereitung; muss vor markdown-stream.js laden. -->
   <script src="/static/js/math-render.js?v=20260727-thread12" defer></script>
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
@@ -97,7 +96,7 @@
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-actions.js?v=20260727-resultactions1" defer></script>
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
-  <script src="/static/js/watch.js?v=20260728-editcost1" defer></script>
+  <script src="/static/js/watch.js?v=20260731-logout-polish2" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260727-thread12" defer></script>
   <!-- Kontingent-Ring + Panel im Sidebar-Footer; spiegelt nur #usageDisplay -->
@@ -105,7 +104,7 @@
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-insights.js?v=20260729-agreementsignal1" defer></script>
   <script src="/static/js/consensus-run.js?v=20260729-judgefallback1" defer></script>
-  <script src="/static/js/query-send.js?v=20260729-attachmentfanout2" defer></script>
+  <script src="/static/js/query-send.js?v=20260731-modelmin2" defer></script>
   <!-- Umami Cloud Tracking -->
   <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
 </head>
@@ -176,21 +175,13 @@
     </button>
   </nav>
   <div class="sidebar">
-    <!-- Die Wortmarke steht oben links, wo eine Marke hingehört, und bleibt
-         damit unabhängig vom Login-Zustand sichtbar. Sie ist eine eigene,
-         leise Zeile über den Aktionen — die Kopfzeile darunter gehört
-         weiterhin ausschliesslich Toggle + "New comparison". -->
+    <!-- Kompakter Sidebar-Kopf: Wortmarke links, Collapse-Aktion rechts. Der
+         schwebende Toggle erscheint weiterhin nur bei geschlossener Sidebar. -->
     <div class="sidebar-brand-row">
       <a href="/" id="logoLink" aria-label="consens.io home" class="sidebar-brand-link">
         <img src="/static/favicon.png" alt="" class="app-favicon">
         <span class="sidebar-brand-title">consens.io</span>
       </a>
-    </div>
-    <!-- Kopfzeile: DER Sidebar-Toggle (genau einer im ganzen Shell — der
-         schwebende in .app-nav-float erscheint nur bei geschlossener Sidebar),
-         daneben die Primäraktion. Der Plan-Status lebt unten beim
-         Kontingent, nicht hier. -->
-    <div class="sidebar-top">
       <button id="sidebarToggleInner" class="sidebar-toggle sidebar-toggle-square" type="button"
         aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
@@ -199,16 +190,17 @@
           <line x1="3" y1="18" x2="21" y2="18"></line>
         </svg>
       </button>
-      <!-- Neuer Vergleich: leert den Lauf und setzt den Hero-Zustand zurück. -->
-      <button type="button" id="newRunButton" class="sidebar-new-run" title="Start a new comparison">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <line x1="5" y1="12" x2="19" y2="12"></line>
-        </svg>
-        <span>New comparison</span>
-      </button>
     </div>
-    <!-- Pinned: Models, Leaderboard — does not scroll with bookmarks.
+    <!-- Neuer Vergleich: eigenständiges Navigationselement; leert den Lauf
+         und setzt den Hero-Zustand zurück. -->
+    <button type="button" id="newRunButton" class="sidebar-new-run" title="Start a new comparison">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+      <span>New comparison</span>
+    </button>
+    <!-- Pinned: model controls — does not scroll with bookmarks.
          Usage lebt jetzt im Kontingent-Panel über dem Account-Footer. -->
     <div class="sidebar-pinned">
 
@@ -222,62 +214,32 @@
         </div>
       </div>
 
-      <!-- Verwendete Modelle (einklappbar) -->
-      <div class="sidebar-section models-section is-collapsed">
-        <h2 class="sidebar-toggle-heading">
-          <button id="toggleModelSelection" class="sidebar-toggle-btn" type="button" onclick="toggleModelSelection()" aria-expanded="false" aria-controls="modelSelectionArea" data-tooltip="Choose the models you want to use.">
-            <span class="sidebar-heading-label">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-                <polyline points="2 17 12 22 22 17"></polyline>
-                <polyline points="2 12 12 17 22 12"></polyline>
-              </svg>
-              <span>Models</span>
-            </span>
-            <span class="sidebar-toggle-arrow" aria-hidden="true">&#8250;</span>
-          </button>
-        </h2>
-        <div id="modelSelectionArea" class="model-selection hidden">
-          <label for="selectOpenAI">
-            <input type="checkbox" id="selectOpenAI" checked> OpenAI
-          </label>
-          <label for="selectMistral">
-            <input type="checkbox" id="selectMistral" checked> Mistral
-          </label>
-          <label for="selectClaude">
-            <input type="checkbox" id="selectClaude" checked> Anthropic Claude
-          </label>
-          <label for="selectGemini">
-            <input type="checkbox" id="selectGemini" checked> Gemini
-          </label>
-          <label for="selectDeepSeek">
-            <input type="checkbox" id="selectDeepSeek" checked> DeepSeek
-          </label>
-          <label for="selectGrok">
-            <input type="checkbox" id="selectGrok" checked> Grok
-          </label>
-        </div>
-      </div>
+      <!-- Models stays a single navigation row. Detailed provider controls
+           open on the composer's run picker, where they have enough room. -->
+      <div class="sidebar-section models-section">
+        <button id="sidebarModelPicker" class="sidebar-model-entry" type="button"
+          aria-haspopup="listbox" data-tooltip="Choose providers, models and the consensus engine.">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+            <polyline points="2 17 12 22 22 17"></polyline>
+            <polyline points="2 12 12 17 22 12"></polyline>
+          </svg>
+          <span class="sidebar-model-copy">
+            <strong>Models</strong>
+            <span id="sidebarModelCount" aria-live="polite">6 providers selected</span>
+          </span>
+          <span class="sidebar-model-chevron" aria-hidden="true">&#8250;</span>
+        </button>
 
-      <div class="sidebar-separator"></div>
-
-      <!-- Leaderboard -->
-      <div class="sidebar-section leaderboard-section is-collapsed">
-        <h2 class="sidebar-toggle-heading">
-          <button id="toggleLeaderboard" class="sidebar-toggle-btn" type="button" onclick="toggleLeaderboard()" aria-expanded="false" aria-controls="leaderboardContentContainer" data-tooltip="For every query, the best model answer is picked by the consensus engine. This process is completely anonymized.">
-            <span class="sidebar-heading-label">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <line x1="6" y1="20" x2="6" y2="14"></line>
-                <line x1="12" y1="20" x2="12" y2="8"></line>
-                <line x1="18" y1="20" x2="18" y2="4"></line>
-              </svg>
-              <span>Leaderboard</span>
-            </span>
-            <span class="sidebar-toggle-arrow" aria-hidden="true">&#8250;</span>
-          </button>
-        </h2>
-        <div id="leaderboardContentContainer" class="hidden">
-          <div id="leaderboardContent"></div>
+        <!-- DOM state only. The accessible visual controls live in the
+             composer picker; these checkbox IDs remain the app contract. -->
+        <div id="modelSelectionArea" hidden aria-hidden="true">
+          <label for="selectOpenAI"><input type="checkbox" id="selectOpenAI" checked>OpenAI</label>
+          <label for="selectMistral"><input type="checkbox" id="selectMistral" checked>Mistral</label>
+          <label for="selectClaude"><input type="checkbox" id="selectClaude" checked>Anthropic Claude</label>
+          <label for="selectGemini"><input type="checkbox" id="selectGemini" checked>Gemini</label>
+          <label for="selectDeepSeek"><input type="checkbox" id="selectDeepSeek" checked>DeepSeek</label>
+          <label for="selectGrok"><input type="checkbox" id="selectGrok" checked>Grok</label>
         </div>
       </div>
 
@@ -287,24 +249,26 @@
 
     <!-- Scrollable: Bookmarks with search -->
     <div class="sidebar-content">
-      <div class="sidebar-section bookmarks-section">
-        <h2 class="sidebar-toggle-heading">
-          <button id="bookmarksToggle" class="sidebar-toggle-btn" type="button" onclick="toggleBookmarks()" aria-expanded="true" aria-controls="bookmarksContainer" data-tooltip="All your chats if you are logged in.">
-            <span class="sidebar-heading-label">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
-              </svg>
-              <span>Bookmarks</span>
-            </span>
-            <span class="sidebar-toggle-arrow" aria-hidden="true">&#8250;</span>
-          </button>
-        </h2>
-        <div class="sidebar-search-box">
-          <svg class="sidebar-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-            <circle cx="11" cy="11" r="7"></circle>
-            <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
-          </svg>
-          <input type="search" id="chatSearch" placeholder="Search chats…" autocomplete="off" aria-label="Search chats">
+      <div class="sidebar-section bookmarks-section is-locked">
+        <div class="sidebar-bookmarks-head">
+          <h2 class="sidebar-toggle-heading">
+            <button id="bookmarksToggle" class="sidebar-toggle-btn" type="button" onclick="toggleBookmarks()" aria-expanded="true" aria-controls="bookmarksContainer" aria-disabled="true" disabled data-tooltip="All your chats if you are logged in.">
+              <span class="sidebar-heading-label">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <span>Bookmarks</span>
+              </span>
+              <span class="sidebar-toggle-arrow" aria-hidden="true">&#8250;</span>
+            </button>
+          </h2>
+          <div class="sidebar-search-box">
+            <svg class="sidebar-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7"></circle>
+              <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
+            </svg>
+            <input type="search" id="chatSearch" placeholder="Search chats…" autocomplete="off" aria-label="Search chats" disabled>
+          </div>
         </div>
         <div id="bookmarksContainer"></div>
       </div>
@@ -858,7 +822,7 @@
       </div>
     </div>
 
-  <script src="/static/js/app-init.js?v=20260729-composerautogrow1" defer></script>
+  <script src="/static/js/app-init.js?v=20260731-pickercompact1" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing
@@ -1000,7 +964,7 @@
       display: inline-flex; align-items: center; justify-content: center;
       width: 30px; height: 30px; padding: 0; border: 0; border-radius: var(--radius-xs);
       background: transparent; color: var(--sidebar-text-muted); font: inherit;
-      font-size: 1.25rem; font-weight: 400; line-height: 1; cursor: pointer;
+      font-size: var(--font-size-lg); font-weight: var(--font-weight-regular); line-height: var(--line-height-solid); cursor: pointer;
     }
     #shareModal .close:hover, #shareModal .close:focus-visible {
       background: color-mix(in srgb, var(--sidebar-hover) 72%, transparent);
@@ -1009,7 +973,7 @@
     .share-modal-content h2 {
       flex: 0 0 auto; margin: 0; padding: 18px 52px 15px 20px;
       border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 62%, transparent);
-      text-align: left; font-size: 1.12rem; line-height: 1.3;
+      text-align: left; font-size: var(--font-size-lg); line-height: var(--line-height-heading);
     }
     #shareModalBody {
       min-height: 0; padding: 17px 20px 20px; overflow-y: auto;
@@ -1017,14 +981,14 @@
       scrollbar-color: color-mix(in srgb, var(--sidebar-text-muted) 34%, transparent) transparent;
     }
     .share-modal-content p { margin: 0 0 12px; }
-    .share-modal-notes { margin: 12px 0; padding-left: 18px; font-size: 0.88rem; line-height: 1.5; color: color-mix(in srgb, var(--text-color) 86%, var(--sidebar-text-muted)); }
+    .share-modal-notes { margin: 12px 0; padding-left: 18px; font-size: var(--font-size-sm); line-height: var(--line-height-ui); color: color-mix(in srgb, var(--text-color) 86%, var(--sidebar-text-muted)); }
     .share-modal-notes li { margin-bottom: 6px; padding-left: 2px; }
     .share-modal-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 18px; }
     .share-modal-actions .share-link-btn { margin-left: auto; }
     .share-primary-btn, .share-secondary-btn, .share-danger-btn, .share-link-btn {
       display: inline-flex; align-items: center; justify-content: center; min-height: 36px;
-      border-radius: var(--radius-sm); padding: 0 15px; font: inherit; font-size: 0.88rem; font-weight: 650;
-      line-height: 1; cursor: pointer; text-decoration: none;
+      border-radius: var(--radius-sm); padding: 0 15px; font: inherit; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold);
+      line-height: var(--line-height-solid); cursor: pointer; text-decoration: none;
       transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease;
     }
     .share-primary-btn {
@@ -1044,44 +1008,44 @@
     .share-secondary-btn:hover { border-color: color-mix(in srgb, var(--accent) 32%, var(--sidebar-border)); background: color-mix(in srgb, var(--accent) 7%, var(--glass-bg-strong)); }
     .share-danger-btn { border: 1px solid color-mix(in srgb, var(--clear-button-text) 36%, transparent); background: transparent; color: var(--clear-button-text); }
     .share-danger-btn:hover { background: color-mix(in srgb, var(--clear-button-bg) 64%, transparent); border-color: color-mix(in srgb, var(--clear-button-text) 52%, transparent); }
-    .share-link-btn { border: none; background: transparent; color: var(--sidebar-text-muted); text-decoration: underline; text-underline-offset: 2px; padding: 0 4px; font-weight: 550; }
+    .share-link-btn { border: none; background: transparent; color: var(--sidebar-text-muted); text-decoration: underline; text-underline-offset: 2px; padding: 0 4px; font-weight: var(--font-weight-medium); }
     .share-link-btn:hover { color: var(--text-color); }
     .share-url-row { display: flex; gap: 8px; margin: 10px 0; }
     .share-url-row input {
       flex: 1; min-width: 0; padding: 8px 11px; border-radius: var(--radius-sm);
       border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent);
-      background: color-mix(in srgb, var(--input-bg) 84%, transparent); color: inherit; font-size: 0.85rem;
+      background: color-mix(in srgb, var(--input-bg) 84%, transparent); color: inherit; font-size: var(--font-size-sm);
       box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
     }
     .share-url-row input:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border)); box-shadow: var(--liquid-focus-ring); }
     .share-list { list-style: none; margin: 0; padding: 0; max-height: none; overflow: visible; }
     .share-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent); }
     .share-list li:last-child { border-bottom: none; }
-    .share-list-question { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-size: 0.9rem; }
+    .share-list-question { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-size: var(--font-size-sm); }
     .share-list-actions { display: flex; gap: 6px; flex-shrink: 0; }
-    .share-list-actions .share-secondary-btn, .share-list-actions .share-danger-btn { min-height: 30px; padding: 0 11px; font-size: 0.8rem; }
-    .watch-public-note { margin: 14px 0; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--sidebar-border)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 7%, transparent); font-size: .87rem; line-height: 1.45; }
-    .watch-config-intro { color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted)); font-size: .88rem; line-height: 1.5; }
+    .share-list-actions .share-secondary-btn, .share-list-actions .share-danger-btn { min-height: 30px; padding: 0 11px; font-size: var(--font-size-xs); }
+    .watch-public-note { margin: 14px 0; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--sidebar-border)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 7%, transparent); font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
+    .watch-config-intro { color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted)); font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
     .watch-config-field { min-width: 0; margin-top: 14px; }
     .watch-config-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
-    .watch-interval-label { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: .8rem; font-weight: 680; }
+    .watch-interval-label { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); }
     .watch-interval-select, .watch-time-input {
       width: 100%; min-height: 38px; box-sizing: border-box; padding: 0 10px;
       border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent);
       border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-color);
-      font: inherit; font-size: .82rem;
+      font: inherit; font-size: var(--font-size-sm);
     }
     .watch-time-input { color-scheme: light dark; }
     .watch-interval-select:focus, .watch-time-input:focus {
       outline: none; border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border));
       box-shadow: var(--liquid-focus-ring);
     }
-    .watch-condition-input { width: 100%; box-sizing: border-box; resize: vertical; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent); border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-color); font: inherit; font-size: .84rem; line-height: 1.4; }
+    .watch-condition-input { width: 100%; box-sizing: border-box; resize: vertical; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent); border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-color); font: inherit; font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
     .watch-condition-input:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border)); box-shadow: var(--liquid-focus-ring); }
     .watch-interval-select[aria-invalid="true"], .watch-time-input[aria-invalid="true"], .watch-condition-input[aria-invalid="true"] {
       border-color: #c2413a; box-shadow: 0 0 0 3px color-mix(in srgb, #c2413a 16%, transparent);
     }
-    .watch-field-error { margin: 6px 0 0 !important; color: #b42318; font-size: .73rem; font-weight: 620; line-height: 1.35; }
+    .watch-field-error { margin: 6px 0 0 !important; color: #b42318; font-size: var(--font-size-micro); font-weight: var(--font-weight-semibold); line-height: var(--line-height-ui); }
     .dark-mode .watch-field-error { color: #ff9b94; }
     .watch-field-error[hidden] { display: none; }
     .watch-weekday-wrap { margin-top: 10px; }
@@ -1090,14 +1054,14 @@
     .watch-condition-editor { flex: 1 1 100%; display: flex; align-items: flex-end; gap: 7px; }
     .watch-condition-editor[hidden] { display: none; }
     .watch-condition-editor .watch-condition-input { flex: 1; }
-    .watch-data-note { margin: 6px 0 0 !important; color: var(--sidebar-text-muted); font-size: .72rem; line-height: 1.4; }
+    .watch-data-note { margin: 6px 0 0 !important; color: var(--sidebar-text-muted); font-size: var(--font-size-micro); line-height: var(--line-height-ui); }
     .watch-config-assurance {
       display: flex; align-items: flex-start; gap: 8px; margin: 16px 0 0 !important;
       padding: 10px 11px; border-radius: var(--radius-sm);
       background: color-mix(in srgb, var(--accent) 6%, transparent);
-      color: var(--sidebar-text-muted); font-size: .74rem; line-height: 1.4;
+      color: var(--sidebar-text-muted); font-size: var(--font-size-micro); line-height: var(--line-height-ui);
     }
-    .watch-config-assurance > span { color: var(--accent); font-weight: 750; }
+    .watch-config-assurance > span { color: var(--accent); font-weight: var(--font-weight-bold); }
     #shareModal.is-watch-dialog .share-modal-actions {
       position: sticky; z-index: 2; bottom: -20px; margin: 18px -20px -20px;
       padding: 12px 20px 14px;
@@ -1518,19 +1482,6 @@
             <div class="faq-item">
               <h3>
                 <span class="faq-number">10.</span>
-                How do Bookmarks and Leaderboards work?
-                <span class="faq-toggle-icon">＋</span>
-              </h3>
-              <p>
-                Logged-in users can bookmark specific queries and revisit them later. The Leaderboard ranks the models
-                by how often the consensus engine picks their answer as the best one for a query. This tally is fully
-                anonymized and never tied to individual users or prompts.
-              </p>
-            </div>
-
-            <div class="faq-item">
-              <h3>
-                <span class="faq-number">11.</span>
                 How many queries can I make?
                 <span class="faq-toggle-icon">＋</span>
               </h3>
@@ -1543,7 +1494,7 @@
 
             <div class="faq-item">
               <h3>
-                <span class="faq-number">12.</span>
+                <span class="faq-number">11.</span>
                 What does consens.io cost?
                 <span class="faq-toggle-icon">＋</span>
               </h3>

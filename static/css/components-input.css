@@ -6,9 +6,9 @@
    Buttons & Inputs
    -------------------------------------------------------------------------- */
 .button,
-button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(.sidebar-toggle-btn):not(#clearButton):not(#consensusButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.consensus-share-pill):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle):not(.model-picker-display):not(.model-picker-option):not(.mode-explainer-trigger):not(.mode-explainer-dismiss):not(.attach-trigger):not(.attach-menu-item):not(.attachment-chip-remove):not(.attachment-viewer-close):not(.claim-badge):not(.cx-marker):not(.claim-jump-link):not(.diff-jump-link):not(.claim-popover-close):not(.diff-resolve-btn):not(.resolve-model-toggle):not(.resolve-prompt-toggle):not(.agent-mode-collapse-btn):not(.agent-mode-answers-toggle):not(.response-code-copy):not(.followup-offer-btn):not(.followup-chip-remove):not(.post-demo-login-action):not(.exclude-btn):not(.delete-bookmark):not(#editSystemPromptBtn):not(.share-primary-btn):not(.share-secondary-btn):not(.share-danger-btn):not(.share-link-btn):not(.watch-page-back):not(.view-switch-btn):not(.watch-filter):not(.watch-example-chip):not(.watch-limit-upgrade):not(.watch-setup-edit):not(.watch-setup-chip):not(.watch-card-toggle):not(.sidebar-rail-btn):not(.auth-top-login):not(.auth-top-signup):not(.settings-danger-btn):not(.sidebar-new-run):not(.quota-trigger):not(.run-replay-btn):not(.thread-ask-more):not(.composer-gate-new):not(.run-model-skip-btn):not(.consensus-tab):not(.model-picker-row-toggle):not(.response-answer-more) {
+button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(.sidebar-toggle-btn):not(#clearButton):not(#consensusButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.consensus-share-pill):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle):not(.model-picker-display):not(.model-picker-option):not(.mode-explainer-trigger):not(.mode-explainer-dismiss):not(.attach-trigger):not(.attach-menu-item):not(.attachment-chip-remove):not(.attachment-viewer-close):not(.claim-badge):not(.cx-marker):not(.claim-jump-link):not(.diff-jump-link):not(.claim-popover-close):not(.diff-resolve-btn):not(.resolve-model-toggle):not(.resolve-prompt-toggle):not(.agent-mode-collapse-btn):not(.agent-mode-answers-toggle):not(.response-code-copy):not(.followup-offer-btn):not(.followup-chip-remove):not(.post-demo-login-action):not(.exclude-btn):not(.delete-bookmark):not(#editSystemPromptBtn):not(.share-primary-btn):not(.share-secondary-btn):not(.share-danger-btn):not(.share-link-btn):not(.watch-page-back):not(.view-switch-btn):not(.watch-filter):not(.watch-example-chip):not(.watch-limit-upgrade):not(.watch-setup-edit):not(.watch-setup-chip):not(.watch-card-toggle):not(.sidebar-rail-btn):not(.auth-top-login):not(.auth-top-signup):not(.settings-danger-btn):not(.sidebar-new-run):not(.sidebar-model-entry):not(.quota-trigger):not(.run-replay-btn):not(.thread-ask-more):not(.composer-gate-new):not(.run-model-skip-btn):not(.consensus-tab):not(.model-picker-row-toggle):not(.response-answer-more):not(.demo-chip) {
   padding: 10px 16px;
-  font-size: 1em;
+  font-size: var(--font-size-base);
   background:
     linear-gradient(180deg, color-mix(in srgb, #ffffff 12%, transparent), transparent 52%),
     var(--button-bg);
@@ -31,7 +31,7 @@ button:disabled {
 input[type="text"],
 textarea {
   padding: 10px 12px;
-  font-size: 1em;
+  font-size: var(--font-size-base);
   border: 1px solid var(--input-border);
   border-radius: var(--radius-sm);
   background-color: var(--input-bg);
@@ -76,9 +76,9 @@ body.is-hero .input-section {
   left: 0;
   right: 0;
   margin: 0 0 20px;
-  font-size: 1.4rem;
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-regular);
+  letter-spacing: var(--tracking-tight);
   color: var(--text-color);
   opacity: 0;
   visibility: hidden;
@@ -225,10 +225,10 @@ body:not(.dark-mode) .chat-input-container::before {
   min-width: 0;
   height: 21px;
   color: color-mix(in srgb, var(--sidebar-text-muted) 74%, transparent);
-  font-size: 0.7rem;
-  font-weight: 550;
-  letter-spacing: 0.005em;
-  line-height: 1;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--tracking-normal);
+  line-height: var(--line-height-solid);
   white-space: nowrap;
 }
 
@@ -254,7 +254,7 @@ body:not(.dark-mode) .chat-input-container::before {
   margin-left: -2px;
   color: var(--sidebar-text-muted);
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .consensus-pipeline-arrow {
@@ -352,7 +352,7 @@ body:not(.dark-mode) .chat-input-container::before {
   }
 
   .consensus-pipeline-steps {
-    font-size: 0.66rem;
+    font-size: var(--font-size-micro);
   }
 
   .consensus-pipeline-arrow {
@@ -415,9 +415,9 @@ body:not(.dark-mode) .chat-input-container::before {
   border-radius: calc(var(--radius-lg) - 5px);
   background: color-mix(in srgb, var(--response-bg) 88%, transparent);
   color: var(--text-color);
-  font-size: 0.88rem;
-  font-weight: 650;
-  letter-spacing: 0.01em;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-normal);
   pointer-events: none;
 }
 
@@ -432,7 +432,7 @@ body:not(.dark-mode) .chat-input-container::before {
   border: none;
   box-shadow: none;
   color: var(--text-color);
-  font-size: 16px;
+  font-size: var(--font-size-base);
   outline: none;
   padding: 10px;
   box-sizing: border-box;
@@ -524,14 +524,14 @@ body:not(.dark-mode) .chat-input-container::before {
 }
 
 .post-demo-login-copy strong {
-  font-size: 0.86rem;
-  line-height: 1.25;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-heading);
 }
 
 .post-demo-login-copy span {
   color: var(--sidebar-text-muted);
-  font-size: 0.76rem;
-  line-height: 1.35;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
 }
 
 .post-demo-login-action {
@@ -543,9 +543,9 @@ body:not(.dark-mode) .chat-input-container::before {
   background: var(--button-bg);
   color: var(--button-text);
   font-family: inherit;
-  font-size: 0.78rem;
-  font-weight: 650;
-  line-height: 1.2;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
   cursor: pointer;
   white-space: nowrap;
   transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s ease;
@@ -614,10 +614,10 @@ body:not(.dark-mode) .chat-input-container::before {
     color-mix(in srgb, var(--glass-bg-strong) 62%, transparent);
   color: color-mix(in srgb, var(--sidebar-text-muted) 78%, var(--text-color));
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 44%, transparent);
-  font-size: 0.64rem;
-  font-weight: 700;
-  letter-spacing: 0.045em;
-  line-height: 1;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-wide);
+  line-height: var(--line-height-solid);
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -641,8 +641,8 @@ body:not(.dark-mode) .chat-input-container::before {
   justify-content: center;
   gap: 6px;
   border-radius: var(--radius-sm);
-  font-size: 0.9em;
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   transition: all 0.2s ease;
   font-family: inherit;
@@ -663,9 +663,9 @@ body:not(.dark-mode) .chat-input-container::before {
   display: inline-flex;
   align-items: center;
   align-self: stretch;
-  font-size: 0.66rem;
-  line-height: 1;
-  letter-spacing: 0.06em;
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-solid);
+  letter-spacing: var(--tracking-wide);
 }
 
 .input-actions-container .consensus-model-inline .select-wrapper select,
@@ -674,7 +674,7 @@ body:not(.dark-mode) .chat-input-container::before {
   max-width: 160px;
   min-height: 32px;
   padding: 6px 28px 6px 11px;
-  font-size: 0.78rem;
+  font-size: var(--font-size-xs);
   border-radius: var(--radius-md);
   /* Liquid Glass */
   border: 1px solid color-mix(in srgb, var(--glass-border) 66%, var(--sidebar-border));
@@ -814,8 +814,8 @@ body:not(.dark-mode) .chat-input-container::before {
   background: transparent;
   color: var(--text-color);
   font-family: inherit;
-  font-size: 0.9rem;
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   text-align: left;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
@@ -842,8 +842,8 @@ body:not(.dark-mode) .chat-input-container::before {
 .attach-menu-hint {
   padding: 5px 10px 6px;
   color: var(--sidebar-text-muted);
-  font-size: 0.72rem;
-  line-height: 1.3;
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-heading);
 }
 
 /* --------------------------------------------------------------------------
@@ -907,20 +907,20 @@ body:not(.dark-mode) .chat-input-container::before {
 }
 
 .attach-menu-toggle-text .deep-switch-label {
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-color);
 }
 
 .attach-menu-toggle-sub {
-  font-size: 0.72rem;
-  line-height: 1.3;
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-heading);
   color: var(--sidebar-text-muted);
 }
 
 .attach-menu-toggle .deepthink-disclaimer {
-  font-size: 0.72rem;
-  line-height: 1.3;
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-heading);
   margin: 0;
 }
 
@@ -1015,9 +1015,9 @@ body:not(.dark-mode) .chat-input-container::before {
   border-radius: 9px;
   background: color-mix(in srgb, #f59e0b 7%, var(--glass-bg-strong));
   color: color-mix(in srgb, var(--text-color) 82%, #92400e 18%);
-  font-size: 0.72rem;
-  font-weight: 500;
-  line-height: 1.35;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-ui);
 }
 
 .attachment-chip {
@@ -1056,9 +1056,9 @@ body:not(.dark-mode) .chat-input-container::before {
   background: color-mix(in srgb, #dc2626 14%, transparent);
   border: 1px solid color-mix(in srgb, #dc2626 30%, transparent);
   color: color-mix(in srgb, #b91c1c 80%, var(--text-color) 20%);
-  font-size: 0.58rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-wide);
 }
 
 .dark-mode .attachment-chip-icon {
@@ -1078,15 +1078,15 @@ body:not(.dark-mode) .chat-input-container::before {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-color);
-  font-size: 0.78rem;
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
 }
 
 .attachment-chip-size {
   color: var(--sidebar-text-muted);
-  font-size: 0.68rem;
-  line-height: 1.2;
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-heading);
 }
 
 .attachment-chip-remove {
@@ -1101,8 +1101,8 @@ body:not(.dark-mode) .chat-input-container::before {
   border-radius: 50%;
   background: transparent;
   color: var(--sidebar-text-muted);
-  font-size: 0.7rem;
-  line-height: 1;
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-solid);
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
@@ -1165,9 +1165,9 @@ body:not(.dark-mode) .chat-input-container::before {
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--accent) 6%, transparent);
   color: color-mix(in srgb, var(--accent) 68%, var(--text-color));
-  font-size: 0.78rem;
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
@@ -1213,9 +1213,9 @@ body:not(.dark-mode) .chat-input-container::before {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-color);
-  font-size: 0.78rem;
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
 }
 
 .followup-chip-remove {
@@ -1230,8 +1230,8 @@ body:not(.dark-mode) .chat-input-container::before {
   border-radius: 50%;
   background: transparent;
   color: var(--sidebar-text-muted);
-  font-size: 0.7rem;
-  line-height: 1;
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-solid);
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
 }

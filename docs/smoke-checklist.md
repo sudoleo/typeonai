@@ -34,20 +34,30 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       vollständig deckenden, gut lesbaren Hintergrund.
       Das Eingabefeld steht mit Begrüßung mittig; nach dem ersten Senden gleitet
       es nach oben und die unveränderten Modell-Antwortboxen blenden ein.
-- [ ] Sidebar-Navigation: Models, Leaderboard und Bookmarks tragen ihre Icons
-      direkt in der jeweiligen Überschrift; außerhalb der Sidebar gibt es keine
-      zweite Icon-Leiste. Bei offener Desktop-Sidebar bleibt das Eingabefeld in
-      der Viewport-Mitte; mobil verschwindet die schwebende Brand vollständig.
+- [ ] Sidebar-Navigation: Models ist eine einzelne kompakte Zeile mit
+      Providerzahl und öffnet den Run-Picker am Composer; sie klappt keine
+      sechs Providerzeilen auf. Der Custom-Picker nutzt Checkboxen statt
+      Toggle-Switches und bleibt in Light/Dark vollständig deckend und lesbar.
+      Bei offener Desktop-Sidebar bleibt das Eingabefeld in der Viewport-Mitte;
+      mobil verschwindet die schwebende Brand vollständig.
+- [ ] Die Landingpage verlinkt direkt im Hero mit einer schmalen Live-Zeile auf
+      `/model-pulse`. Die eigene Seite erklärt „Best answer“ als anonymisierte
+      Judge-Auswahl (kein Benchmark/User-Vote/Accuracy-Score), führt
+      Anthropic/Claude nicht doppelt und verlinkt den kontrollierten Benchmark;
+      `/benchmark` verlinkt seinerseits sichtbar zurück auf den Model pulse.
 - [ ] Settings: Experience, Connections, Model behavior und Account sind als
       klar getrennte Kategorien erkennbar; alle Schalter, API-Key-Felder,
       System Prompt und Account-Löschung funktionieren weiterhin.
 - [ ] Frage eingeben + senden → alle ausgewählten Modelle streamen Antworten.
+- [ ] Bei null oder einem ausgewählten Modell ist Senden deaktiviert; Sidebar-
+      Zähler und Custom-Picker nennen „choose at least 2“. Ab zwei Modellen startet
+      der Lauf normal und endet in Consensus + Differences.
 - [ ] Ohne Agent Mode erscheint direkt unter dem Input die kompakte Pipeline:
       Zähler folgt den fertigen Modellantworten, danach wird „Consensus &
       differences“ ohne falsche Prozent-/Zeitprognose aktiv; Abschluss, Fehler
       und Stop blenden die Zeile wieder aus. Light/Dark und Mobile ohne Clipping.
 - [ ] Senden während Lauf abbrechen (Stop) funktioniert.
-- [ ] Modell ein-/ausschließen (Checkbox/Toggle) blendet Antwortbox korrekt ein/aus.
+- [ ] Modell per Checkbox ein-/ausschließen blendet die Antwortbox korrekt ein/aus.
 - [ ] Echter Bild-/PDF-Anhang pausiert DeepSeek mit sichtbarer Erklärung; nach
       Entfernen aller Anhänge wird die vorherige DeepSeek-Auswahl wiederhergestellt.
 - [ ] Quellen-Chips / Evidence-Links erscheinen und sind klickbar.
@@ -162,10 +172,13 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 - [ ] Ohne Watch ist der Morning-Brief-Toggle deaktiviert und erklärt „Create a
       watch first“; ein direkter Aktivierungs-Request wird abgelehnt. Nach dem
       Löschen der letzten Watch ist ein zuvor aktiver Brief ausgeschaltet.
-- [ ] Aktive Watch-Seite zeigt bereits vor dem ersten History-Punkt in einer
-      kompakten Metazeile Status, Intervall, letzten und nächsten Lauf. Mit History rendert
+- [ ] Aktive Watch-Seite erklärt vor dem ersten Vergleich verständlich, dass
+      erst eine Baseline vorliegt; Status bleibt sichtbar, Zeitplan/letzter/
+      nächster Lauf sind über „Schedule and check dates“ erreichbar. Mit History rendert
       sie den neuesten gespeicherten Consensus statt des ursprünglichen Texts,
-      einen Stable/Changed-Drift-Header, SVG-Linie/Punkte und Change-Liste in
+      einen Stable/Changed-Drift-Header; Direction Shift und Agreement Change
+      stehen erst in „advanced change metrics“. Die komplette Timeline mit
+      SVG-Linie/Punkten und Change-Liste startet eingeklappt und funktioniert in
       Light/Dark ohne Mobile-Overflow. Jede neue Vollversion ist über „Browse saved
       consensus versions“ erreichbar; `?version=original` zeigt unverändert die
       Ausgangsversion. Eine normale Shared Page ohne Watch bleibt unverändert.
@@ -201,10 +214,13 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       Suche und Kategorie-Filter funktionieren ohne Reload. Navigation, Footer,
       Light/Dark, Focus States und Mobile-Layout bleiben ohne horizontalen
       Overflow.
-- [ ] `/topics/{slug}` zeigt den aktuellen Consensus, Agreement-Score,
-      Change-Summary, wichtige Modellbewegungen, Modelle und den nach Snapshot
-      gruppierten Evidence Feed. X-, Official-, GitHub-, Documentation- und
-      Press-Links öffnen sicher in einem neuen Tab.
+- [ ] `/topics/{slug}` zeigt das vollständige Dossier und die Timeline beim
+      ersten Laden bereits geöffnet. Die fünf bestgereihten aktuellen Quellen
+      sind sichtbar, alle weiteren starten in einem eigenen Detail eingeklappt;
+      ältere Evidence bleibt separat eingeklappt. Quellen tragen die Rollen
+      Primary source, Research paper, Documentation, Reporting, Community oder
+      Rumor und sind nach Qualität sortiert. Alle Links öffnen sicher in einem
+      neuen Tab.
 - [ ] Die visuelle Timeline zeigt alle versionierten Stände und ihre Agreement-
       Entwicklung. Ein historischer `?version=<run_id>`-Link rendert den
       unveränderlichen alten Consensus samt damaligen Modellen/Evidence,
@@ -247,20 +263,30 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 
 ## Auth / Usage / Tier
 - [ ] Login (E-Mail + Google), Logout.
+- [ ] Nach Logout verschwinden Account-Label, Kontingent-Ring/-Panel, Usage-
+      Zahlen, Watch-Kontingent und Bookmark-Inhalte sofort; Bookmarks und Suche
+      sind als Gast nicht klick- bzw. fokussierbar. Auch eine vor dem Logout
+      gestartete langsame Usage-/Bookmark-Antwort darf nichts wieder einblenden.
 - [ ] Free-User: Usage-Counter + Limit-Anzeige korrekt, Limit-Fehler greift.
 - [ ] Pro-User: Premium-Modelle freigeschaltet, UI-Status korrekt.
 
 ## Bookmarks / Sidebar
+- [ ] Models und Bookmarks beginnen auf derselben Icon-/Textachse und verwenden
+      dieselbe Titelgröße/-stärke; im Gastzustand bleibt Bookmarks deaktiviert.
 - [ ] Bookmarks laden/aufklappen, Chat-Suche filtert.
 - [ ] Bookmark aus dem frischen Leerzustand öffnen: Input dockt ohne Hero-Sprung
       oben an und die gespeicherten Antworten sind direkt sichtbar.
 - [ ] Einen gespeicherten Consensus nach Reload öffnen: Share-Link und Watch
       lassen sich ohne erneuten Consensus-Lauf erstellen (während der kurzen
       Vorbereitung zeigt der Dialog einen deaktivierten Ladezustand).
-- [ ] Leaderboard auf/zu.
+- [ ] Model insights über Help → FAQ öffnen/schließen; im Thread bleibt es verborgen.
 
 ## Demo & Sonstiges
 - [ ] „Demo"-Query startet den Demo-Flow (demo.js Integration intakt).
+- [ ] Demo zeigt 83/100, genau einen kleinen Omega-3-Widerspruch und jede
+      Quellenmarke öffnet den fachlich passenden Eintrag (inkl. Creatine S8).
+- [ ] Demo erzeugt weder einen Best-answer-Vote noch einen Eintrag in der
+      Differences-Telemetrie oder einen Bookmark-Persistenzaufruf.
 - [ ] Die Demo tippt erst die vollständige Frage, leert beim simulierten
       Absenden das Eingabefeld und startet danach die Modell-Ladeanimation.
       Nach Abschluss sieht ein ausgeloggter Nutzer eine

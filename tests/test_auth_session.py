@@ -31,6 +31,7 @@ class AuthSessionTests(unittest.TestCase):
         self.assertIn("session=firebase-id-token", cookie)
         self.assertIn("httponly", cookie)
         self.assertIn("samesite=lax", cookie)
+        self.assertEqual(response.headers.get("cache-control"), "no-store")
 
     def test_logout_clears_session_cookie(self):
         response = self.client.delete("/auth/session")
@@ -38,6 +39,7 @@ class AuthSessionTests(unittest.TestCase):
         cookie = response.headers.get("set-cookie", "").lower()
         self.assertIn("session=", cookie)
         self.assertIn("max-age=0", cookie)
+        self.assertEqual(response.headers.get("cache-control"), "no-store")
 
 
 if __name__ == "__main__":

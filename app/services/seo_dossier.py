@@ -24,6 +24,7 @@ STATIC_TEMPLATE_BY_PATH = {
     "/questions": "questions.html",
     "/topics": "topics.html",
     "/benchmark": "benchmark.html",
+    "/model-pulse": "model-pulse.html",
     "/about": "about.html",
 }
 

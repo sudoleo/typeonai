@@ -45,9 +45,9 @@
 /* --------------------------------------------------------------------------
    2. Sidebar
 
-   Top row is toggle + "New comparison". The toggle lives HERE and only here
-   while the sidebar is open; .app-nav-float supplies it when it is closed —
-   so the shell never shows two burgers at once.
+   Brand and collapse control share one compact header. "New comparison"
+   follows as a full-width navigation row; .app-nav-float supplies the toggle
+   only while the sidebar is closed.
    -------------------------------------------------------------------------- */
 .sidebar {
   background: var(--ground);
@@ -77,17 +77,17 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   }
 }
 
-/* Wordmark at the top left, where a mark belongs — a quiet line of its own
-   ABOVE the actions, so the action row still holds nothing but the toggle
-   and "New comparison". Under the account icon it outweighed the account.
-   The #logoLink id rule (layout.css) centers and shrinks it; the
-   id-qualified selector here wins, so the mark sits flush left. */
+/* Wordmark and collapse control form one deliberate header. The #logoLink id
+   rule (layout.css) centers and shrinks it; the id-qualified selector here
+   wins, so the mark sits flush left. */
 .sidebar-brand-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   flex-shrink: 0;
-  padding: 2px 6px 0;
-  min-height: 22px;
+  padding: 0 2px 2px 6px;
+  min-height: 34px;
 }
 
 .sidebar-brand-link,
@@ -107,8 +107,8 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 }
 
 .sidebar-brand-link .sidebar-brand-title {
-  font-size: 0.86rem;
-  font-weight: 600;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
 }
 
 .sidebar-brand-link .app-favicon {
@@ -123,15 +123,6 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   text-align: left;
   gap: 5px;
   padding: 0 4px;
-}
-
-.sidebar-top {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  padding: 0 2px;
-  min-height: 34px;
 }
 
 /* "New comparison" und die erste Navigation gehoeren enger zusammen als
@@ -169,32 +160,35 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   display: block;
 }
 
-/* Primary action of the whole sidebar: start a fresh comparison. */
-/* Sits next to the toggle in .sidebar-top and takes the rest of the row.
-   flex-basis 0 rather than width:100% — the latter would measure against the
-   whole row and push itself past the right edge. */
+/* Primary action of the whole sidebar: a real navigation row, not a control
+   squeezed into the brand header. */
 .sidebar-new-run {
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 100%;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 8px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: var(--raise);
   color: var(--ink);
-  padding: 9px 12px;
+  padding: 10px 12px;
   font: inherit;
-  font-size: 0.845rem;
-  font-weight: 550;
-  line-height: 1;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-solid);
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.sidebar-new-run:hover {
+.sidebar-new-run:hover,
+.sidebar-new-run:focus-visible {
   background: var(--well);
+  border-color: var(--line-soft);
+  outline: none;
 }
 
 .sidebar-new-run svg {
@@ -203,12 +197,95 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   flex: none;
 }
 
-/* Chat search: a real magnifier, not an emoji — emoji render as somebody
-   else's artwork (colour, weight, platform) inside a monochrome shell. */
-.sidebar-search-box {
+/* The bookmark heading doubles as the search affordance: hover/focus replaces
+   the label with the input without spending a permanent row on search. */
+.sidebar-bookmarks-head {
   position: relative;
+  min-height: 44px;
+  margin-bottom: 5px;
+}
+
+.sidebar-bookmarks-head .sidebar-toggle-heading {
+  margin-bottom: 0 !important;
+}
+
+/* Models and Bookmarks are sibling navigation rows. Match their icon/text
+   columns and title typography even though Bookmarks also owns the search
+   overlay and collapse affordance. */
+.sidebar-bookmarks-head .sidebar-toggle-btn {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: normal;
+  line-height: var(--line-height-tight);
+  text-transform: none;
+}
+
+.sidebar-bookmarks-head .sidebar-heading-label {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+}
+
+.sidebar-bookmarks-head .sidebar-heading-label span {
+  min-width: 0;
+  justify-self: start;
+  text-align: left;
+}
+
+.sidebar-bookmarks-head .sidebar-heading-label svg {
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+}
+
+/* Keep the collapse affordance clickable while the full-width search overlay
+   covers the old button background. */
+.sidebar-bookmarks-head .sidebar-toggle-arrow {
+  position: relative;
+  left: 0.25px;
+  z-index: 2;
+  justify-self: end;
+  pointer-events: auto;
+}
+
+.sidebar-bookmarks-head .sidebar-toggle-btn:hover,
+.sidebar-bookmarks-head .sidebar-toggle-btn:focus-visible {
+  background: var(--raise);
+  color: var(--ink);
+}
+
+.bookmarks-section.is-locked .sidebar-toggle-btn {
+  color: var(--ink-3);
+  cursor: default;
+  opacity: 0.58;
+}
+
+.bookmarks-section.is-locked .sidebar-search-box {
+  display: none;
+}
+
+.sidebar-search-box {
+  position: absolute;
+  inset: -4px;
+  margin: 0;
   display: flex;
   align-items: center;
+  z-index: 1;
+  border-radius: var(--radius-sm);
+  background: var(--ground);
+  opacity: 0;
+  transform: translateY(2px);
+  pointer-events: none;
+  transition: opacity 0.14s ease, transform 0.14s ease;
 }
 
 .sidebar-search-icon {
@@ -223,12 +300,13 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 .sidebar-search-box input {
   width: 100%;
   border: 0;
-  background: transparent;
+  background: var(--raise);
   color: var(--ink);
   border-radius: var(--radius-sm);
-  padding: 7px 10px 7px 32px;
-  font-size: 0.82rem;
-  transition: background-color 0.15s ease;
+  min-height: 32px;
+  padding: 7px 32px 7px 32px;
+  font-size: var(--font-size-sm);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .sidebar-search-box input::placeholder {
@@ -237,9 +315,26 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 
 .sidebar-search-box input:hover,
 .sidebar-search-box input:focus {
-  background: var(--raise);
+  background: var(--well);
   outline: none;
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.sidebar-bookmarks-head:hover .sidebar-search-box,
+.sidebar-bookmarks-head:focus-within .sidebar-search-box,
+.sidebar-bookmarks-head:has(#chatSearch:not(:placeholder-shown)) .sidebar-search-box {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Touch has no hover; keep the same control reachable without adding JS. */
+@media (hover: none) {
+  .sidebar-bookmarks-head .sidebar-search-box {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
 }
 
 /* Section headings shrink to quiet eyebrows — the list is the content. */
@@ -249,9 +344,88 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 }
 
 .sidebar-section h2 {
-  font-size: 0.655rem;
-  letter-spacing: 0.09em;
+  font-size: var(--font-size-micro);
+  letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
+}
+
+/* Models is one navigation row. Provider configuration belongs to the
+   composer's run picker, not to an expanding settings panel in the sidebar. */
+.models-section {
+  margin-bottom: 8px;
+}
+
+.sidebar-model-entry {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-model-entry:hover,
+.sidebar-model-entry:focus-visible {
+  background: var(--raise);
+  color: var(--ink);
+  outline: none;
+}
+
+.sidebar-model-entry > svg {
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+}
+
+.sidebar-model-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-model-copy strong {
+  color: currentColor;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+.sidebar-model-copy span {
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-heading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-model-entry.is-invalid .sidebar-model-copy span {
+  color: var(--partial, #a8791b);
+}
+
+.sidebar-model-chevron {
+  justify-self: end;
+  color: var(--ink-3);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-solid);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-model-entry:hover .sidebar-model-chevron,
+.sidebar-model-entry:focus-visible .sidebar-model-chevron {
+  color: currentColor;
+  transform: translateX(2px);
 }
 
 /* Bookmarks read as a flat list: hover is a tint, the active row a tint that
@@ -275,11 +449,10 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   background: var(--line-soft);
 }
 
-/* Models and Leaderboard live in .sidebar-pinned, Bookmarks in the scrolling
-   .sidebar-content. That container boundary added 14px on top of the 22px
-   each section already carries — the sidebar's own 10px flex gap plus 2px of
-   scroll padding on either side — so the step down to Bookmarks was wider
-   than the one to Leaderboard. That reads as a grouping, and there is none:
+/* Models live in .sidebar-pinned, Bookmarks in the scrolling
+   .sidebar-content. That container boundary adds the sidebar's own flex gap
+   plus scroll padding, so compensate it here and keep both controls in one
+   even navigation rhythm:
    the three sections are one list. */
 .sidebar > .sidebar-content {
   margin-top: -14px;
@@ -343,7 +516,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.72rem;
+  font-size: var(--font-size-micro);
   color: var(--ink-3);
 }
 
@@ -356,18 +529,18 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 .quota-top {
   display: flex;
   justify-content: space-between;
-  font-size: 0.76rem;
+  font-size: var(--font-size-xs);
 }
 
 .quota-top b {
-  font-weight: 550;
+  font-weight: var(--font-weight-medium);
   color: var(--ink);
 }
 
 .quota-top span {
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
-  font-size: 0.72rem;
+  font-size: var(--font-size-micro);
 }
 
 .quota-track {
@@ -396,7 +569,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 }
 
 .sidebar-quota-foot {
-  font-size: 0.72rem;
+  font-size: var(--font-size-micro);
   color: var(--ink-3);
 }
 
@@ -437,10 +610,10 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 .quota-trigger-value {
   position: relative;
   color: var(--ink);
-  font-size: 0.7rem;
-  font-weight: 650;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
-  line-height: 1;
+  line-height: var(--line-height-solid);
 }
 
 /* --------------------------------------------------------------------------
@@ -461,7 +634,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 .view-switch-btn.is-active {
   background: var(--ground);
   color: var(--ink);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   box-shadow: none;
 }
 
@@ -552,7 +725,7 @@ body:not(.dark-mode) .chat-input-container {
 .model-picker-display {
   border-radius: var(--radius-pill);
   padding: 6px 12px;
-  font-size: 0.78rem;
+  font-size: var(--font-size-xs);
 }
 
 .consensus-model-inline {
@@ -652,7 +825,7 @@ body:not(.dark-mode) .chat-input-container {
   display: flex;
   flex-wrap: wrap;
   gap: 3px 12px;
-  font-size: 0.76rem;
+  font-size: var(--font-size-xs);
   color: var(--ink-3);
 }
 
@@ -690,21 +863,21 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 .run-label {
-  font-size: 0.88rem;
-  font-weight: 600;
-  letter-spacing: -0.005em;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
   color: var(--ink);
 }
 
 .run-count {
-  font-size: 0.75rem;
+  font-size: var(--font-size-xs);
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
 
 .run-time {
   margin-left: auto;
-  font-size: 0.72rem;
+  font-size: var(--font-size-micro);
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
@@ -741,7 +914,7 @@ body:not(.dark-mode) .chat-input-container {
 
 .run-next {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: var(--font-size-xs);
   color: var(--ink-3);
 }
 
@@ -751,7 +924,7 @@ body:not(.dark-mode) .chat-input-container {
 
 .run-next b {
   color: var(--ink-2);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 /* Per-model rows: present only while the models are actually answering. */
@@ -785,7 +958,7 @@ body:not(.dark-mode) .chat-input-container {
   background: var(--raise);
   color: var(--ink-3);
   font: inherit;
-  font-size: 0.7rem;
+  font-size: var(--font-size-micro);
   white-space: nowrap;
   cursor: pointer;
   transition: color 0.15s ease, background-color 0.15s ease;
@@ -802,7 +975,7 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 .run-model-name {
-  font-size: 0.74rem;
+  font-size: var(--font-size-micro);
   color: var(--ink-3);
   white-space: nowrap;
   overflow: hidden;
@@ -833,7 +1006,7 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 .run-model-time {
-  font-size: 0.68rem;
+  font-size: var(--font-size-micro);
   color: var(--ink-3);
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -871,7 +1044,7 @@ body:not(.dark-mode) .chat-input-container {
   margin-top: 16px;
   padding-top: 11px;
   border-top: 1px solid var(--line-soft);
-  font-size: 0.76rem;
+  font-size: var(--font-size-xs);
   color: var(--ink-3);
 }
 
@@ -959,7 +1132,7 @@ body:not(.dark-mode) .chat-input-container {
 
 .run-provenance-facts b {
   color: var(--ink-2);
-  font-weight: 550;
+  font-weight: var(--font-weight-medium);
 }
 
 /* Share / Watch / Cite: the three things you do WITH a finished answer.
@@ -989,8 +1162,8 @@ body:not(.dark-mode) .chat-input-container {
   height: 26px;
   gap: 5px;
   padding: 0 8px;
-  font-size: 0.76rem;
-  font-weight: 500;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
 }
 
 .consensus-footer-actions .consensus-actions-toggle {
@@ -1000,7 +1173,7 @@ body:not(.dark-mode) .chat-input-container {
   height: 26px;
   gap: 5px;
   padding: 0 8px;
-  font-size: 0.76rem;
+  font-size: var(--font-size-xs);
 }
 
 .consensus-footer-actions .share-pill-icon,
@@ -1017,7 +1190,7 @@ body:not(.dark-mode) .chat-input-container {
      below the content, so its vertical padding looked off-centre. */
   margin: 0;
   gap: 12px;
-  font-size: 0.83rem;
+  font-size: var(--font-size-sm);
 }
 
 .run-provenance .consensus-verdict[hidden] {
@@ -1087,9 +1260,9 @@ body:not(.dark-mode) .chat-input-container {
   background: transparent;
   color: var(--ink-2);
   font: inherit;
-  font-size: 0.79rem;
-  font-weight: 500;
-  line-height: 1.2;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-heading);
   cursor: pointer;
   box-shadow: none;
   text-decoration: underline;
@@ -1121,7 +1294,7 @@ body:not(.dark-mode) .chat-input-container {
 .consensus-tab[aria-expanded="true"] {
   background: transparent;
   color: var(--ink);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   text-decoration-color: var(--ink-3);
 }
 
@@ -1145,7 +1318,7 @@ body:not(.dark-mode) .chat-input-container {
 
 .consensus-tab-count {
   font-variant-numeric: tabular-nums;
-  font-weight: 400;
+  font-weight: var(--font-weight-regular);
   color: var(--ink-3);
 }
 
@@ -1159,7 +1332,7 @@ body:not(.dark-mode) .chat-input-container {
   background: none;
   color: var(--ink-3);
   font: inherit;
-  font-size: 0.76rem;
+  font-size: var(--font-size-xs);
   cursor: pointer;
 }
 
@@ -1269,7 +1442,7 @@ body:not(.dark-mode) .chat-input-container {
   .consensus-footer-actions .consensus-actions-toggle {
     height: 30px;
     padding-inline: 6px;
-    font-size: 0.72rem;
+    font-size: var(--font-size-micro);
   }
 
   .run-provenance .consensus-verdict {
@@ -1307,7 +1480,7 @@ body:not(.dark-mode) .chat-input-container {
     gap: 4px;
     padding: 6px 3px;
     border-radius: 8px;
-    font-size: 0.74rem;
+    font-size: var(--font-size-micro);
     text-align: center;
     text-decoration: none;
   }
@@ -1334,7 +1507,7 @@ body:not(.dark-mode) .chat-input-container {
 
   .consensus-tab-label[data-short]::after {
     content: attr(data-short);
-    font-size: 0.76rem;
+    font-size: var(--font-size-xs);
   }
 
   .consensus-tab:focus-visible {
@@ -1472,8 +1645,8 @@ body:not(.is-hero) .consensus-section::before {
 
 .thread-ask-label {
   margin-bottom: 7px;
-  font-size: 0.655rem;
-  letter-spacing: 0.09em;
+  font-size: var(--font-size-micro);
+  letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
   color: var(--ink-3);
 }
@@ -1483,10 +1656,10 @@ body:not(.is-hero) .consensus-section::before {
      stops short of the right edge so it reads as a title above the answer
      rather than as the answer's first line. */
   max-width: 70%;
-  font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  font-size: clamp(19px, 2vw, 23px);
-  line-height: 1.34;
-  letter-spacing: -0.01em;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-xl);
+  line-height: var(--line-height-heading);
+  letter-spacing: var(--tracking-tight);
   color: var(--ink);
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -1507,7 +1680,7 @@ body:not(.is-hero) .consensus-section::before {
   padding: 0;
   background: none;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: var(--font-size-xs);
   color: var(--ink-3);
   cursor: pointer;
   text-decoration: underline;
@@ -1564,9 +1737,9 @@ body:not(.is-hero) .consensus-section::before {
   justify-content: flex-start;
   margin: 0 0 9px;
   padding-inline: 0;
-  font-size: 0.655rem;
-  font-weight: 600;
-  letter-spacing: 0.09em;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
   color: var(--ink-3);
 }
@@ -1581,9 +1754,9 @@ body:not(.is-hero) .consensus-section::before {
    page empty while the text kept wrapping. */
 .consensus-main > .consensus-answer-body {
   max-width: none;
-  font-size: 1.03rem;
-  line-height: 1.7;
-  letter-spacing: -0.003em;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-reading);
+  letter-spacing: var(--tracking-tight);
   color: var(--ink);
 }
 
@@ -1634,7 +1807,7 @@ body:not(.is-hero) .consensus-section::before {
   background: none;
   color: var(--ink-3);
   font: inherit;
-  font-size: 0.78rem;
+  font-size: var(--font-size-xs);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -1681,7 +1854,7 @@ body:not(.is-hero) .consensus-section::before {
   border-radius: var(--radius-xs);
   padding: 4px 9px;
   color: var(--ink-3);
-  font-size: 0.76rem;
+  font-size: var(--font-size-xs);
   gap: 6px;
 }
 
@@ -1754,8 +1927,8 @@ body:not(.is-hero) .consensus-section::before {
 /* Die Headline ist die Ueberschrift des Ergebnisses, nicht ein weiterer
    Fussnotentext: eine Stufe groesser und in voller Textfarbe. */
 .run-provenance .verdict-headline {
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
   color: var(--ink);
 }
 
@@ -1785,17 +1958,17 @@ body:not(.is-hero) .consensus-section::before {
 }
 
 .run-provenance .verdict-score-num {
-  font-size: 0.89rem;
-  font-weight: 700;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
   color: var(--ink);
 }
 
 .verdict-score-caption {
-  font-size: 0.53rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
-  line-height: 1;
+  line-height: var(--line-height-solid);
   color: var(--ink-3);
 }
 
@@ -1858,11 +2031,11 @@ body.agent-mode-enabled .agent-mode-panel,
   vertical-align: super;
   margin-left: 1px;
   padding: 0 1px;
-  font-size: 0.66em;
-  font-weight: 600;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
-  line-height: 1;
-  letter-spacing: 0;
+  line-height: var(--line-height-solid);
+  letter-spacing: var(--tracking-normal);
   color: var(--ink-3);
   text-decoration: none;
   cursor: pointer;
@@ -1879,7 +2052,7 @@ body.agent-mode-enabled .agent-mode-panel,
 
 .src-ref-sep {
   vertical-align: super;
-  font-size: 0.66em;
+  font-size: var(--font-size-micro);
   color: var(--ink-3);
 }
 
@@ -1896,8 +2069,8 @@ body.agent-mode-enabled .agent-mode-panel,
   background: var(--raise);
   box-shadow: var(--lift);
   color: var(--ink);
-  font-size: 0.78rem;
-  line-height: 1.45;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
   opacity: 0;
   transform: translateY(3px);
   pointer-events: none;
@@ -1919,11 +2092,11 @@ body.agent-mode-enabled .agent-mode-panel,
   gap: 6px;
   margin-bottom: 3px;
   color: var(--ink-3);
-  font-size: 0.72rem;
+  font-size: var(--font-size-micro);
 }
 
 .source-teaser-index {
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1940,14 +2113,14 @@ body.agent-mode-enabled .agent-mode-panel,
 }
 
 .source-teaser-title {
-  font-weight: 550;
+  font-weight: var(--font-weight-medium);
   overflow-wrap: anywhere;
 }
 
 .source-teaser-snippet {
   margin-top: 4px;
   color: var(--ink-2);
-  font-size: 0.74rem;
+  font-size: var(--font-size-micro);
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
@@ -1985,16 +2158,16 @@ body.agent-mode-enabled .agent-mode-panel,
   display: flex;
   align-items: baseline;
   gap: 9px;
-  font-size: 0.82rem;
-  line-height: 1.45;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
 }
 
 .consensus-source-index {
   flex: 0 0 auto;
   min-width: 14px;
   color: var(--ink-3);
-  font-size: 0.74rem;
-  font-weight: 650;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2016,13 +2189,13 @@ a.consensus-source-title:hover {
 .consensus-source-host {
   margin-left: 7px;
   color: var(--ink-3);
-  font-size: 0.74rem;
+  font-size: var(--font-size-micro);
 }
 
 .consensus-source-snippet {
   margin-top: 2px;
   color: var(--ink-2);
-  font-size: 0.76rem;
+  font-size: var(--font-size-xs);
 }
 
 /* Disclosure for the individual answers. It is one of the three drawers in
@@ -2124,16 +2297,21 @@ body.is-hero .consensus-section::before {
   -webkit-backdrop-filter: none;
 }
 
-/* Drift is the one thing on this page worth a colour. It gets a rail on the
-   leading edge rather than a coloured border all the way around — a box that
-   changes colour reads as an error, a rail reads as a flag. */
+/* Drift is the one thing on this page worth a colour. The tint carries that
+   meaning without the generic leading-edge accent rail. */
 .watch-dash-stat.is-drift,
 .watch-drift-feed {
   border: 0;
-  border-left: 2px solid var(--partial);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  border-radius: var(--radius-md);
   background: var(--partial-bg);
   box-shadow: none;
+}
+
+.watch-dash-heading-row .watch-limit-summary {
+  box-sizing: border-box;
+  width: fit-content;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
 }
 
 .watch-card-drift-dot,
@@ -2248,7 +2426,7 @@ body.is-hero .consensus-section::before {
   background: var(--ground);
   color: var(--ink-2);
   box-shadow: none;
-  font-size: 0.78rem;
+  font-size: var(--font-size-xs);
 }
 
 .consensus-model .select-wrapper .model-picker-display:hover,
@@ -2309,8 +2487,8 @@ body.is-hero .chat-input-container .consensus-model .select-wrapper .model-picke
   flex: 1 1 100%;
   min-width: 0;
   margin: 0 0 4px;
-  font-size: 0.74rem;
-  line-height: 1.45;
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-ui);
   text-align: left;
   color: var(--ink-3);
 }
@@ -2329,8 +2507,8 @@ body.is-hero .chat-input-container .consensus-model .select-wrapper .model-picke
 .composer-gate-copy {
   flex: 1 1 260px;
   min-width: 0;
-  font-size: 0.76rem;
-  line-height: 1.45;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
   text-align: left;
   color: var(--ink-3);
 }
@@ -2348,7 +2526,7 @@ body.is-hero .chat-input-container .consensus-model .select-wrapper .model-picke
   padding: 5px 10px;
   background: transparent;
   color: var(--ink-3);
-  font-size: 0.76rem;
+  font-size: var(--font-size-xs);
   gap: 6px;
 }
 
@@ -2365,8 +2543,8 @@ body.is-hero .chat-input-container .consensus-model .select-wrapper .model-picke
   background: var(--accent);
   color: var(--ground);
   font: inherit;
-  font-size: 0.76rem;
-  font-weight: 550;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
   white-space: nowrap;
   cursor: pointer;
 }
@@ -2487,8 +2665,8 @@ body.composer-locked .composer-gate-inner {
   background: var(--raise);
   color: var(--ink);
   box-shadow: 0 1px 2px rgba(28, 30, 33, 0.06), 0 14px 34px rgba(28, 30, 33, 0.12);
-  font-size: 0.78rem;
-  line-height: 1.45;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
   pointer-events: none;
 }
 
@@ -2504,7 +2682,7 @@ body.composer-locked .composer-gate-inner {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
 }
 
 .insight-preview-claim {
@@ -2516,7 +2694,7 @@ body.composer-locked .composer-gate-inner {
   grid-template-columns: minmax(0, 84px) minmax(0, 1fr);
   gap: 9px;
   color: var(--ink-2);
-  font-size: 0.74rem;
+  font-size: var(--font-size-micro);
 }
 
 .insight-preview-key {
@@ -2530,14 +2708,14 @@ body.composer-locked .composer-gate-inner {
   padding-left: 9px;
   border-left: 1px solid var(--line-soft);
   color: var(--ink-3);
-  font-size: 0.74rem;
+  font-size: var(--font-size-micro);
   font-style: italic;
 }
 
 .insight-preview-foot {
   margin-top: 2px;
   color: var(--ink-3);
-  font-size: 0.7rem;
+  font-size: var(--font-size-micro);
 }
 
 @media (prefers-reduced-motion: reduce) {

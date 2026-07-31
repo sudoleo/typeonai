@@ -82,6 +82,21 @@
     );
   }
 
+  function syncSidebarModelCount() {
+    const count = window.App.modelPrefs.reduce((total, pref) => {
+      return total + (document.getElementById(pref.checkId)?.checked ? 1 : 0);
+    }, 0);
+    const counter = document.getElementById("sidebarModelCount");
+    if (counter) {
+      const providerLabel = count === 1 ? "provider" : "providers";
+      counter.textContent = count >= 2
+        ? `${count} ${providerLabel} selected`
+        : `${count} ${providerLabel} · choose at least 2`;
+      counter.classList.toggle("is-invalid", count < 2);
+    }
+    document.getElementById("sidebarModelPicker")?.classList.toggle("is-invalid", count < 2);
+  }
+
   function setModelSelectionState(prefOrResponseId, isChecked, options = {}) {
     const pref = typeof prefOrResponseId === "string"
       ? getModelPrefByResponseId(prefOrResponseId)
@@ -137,8 +152,13 @@
       });
     }
 
+    syncSidebarModelCount();
+
     if (typeof window.updateConsensusButtonAvailability === "function") {
       window.updateConsensusButtonAvailability();
+    }
+    if (typeof window.updateQuestionInputAccess === "function") {
+      window.updateQuestionInputAccess();
     }
 
     // The composer trigger includes the selected provider count. Temporary
@@ -322,12 +342,13 @@
       // Der Consensus-Trigger ist im rahmenlosen Composer der EINZIGE
       // Lauf-Schalter. Er sagt deshalb beides: wie viele Modelle antworten
       // und welche Stufe den Konsens schreibt ("6 models · Balanced").
-      const count = window.App.getSelectedModelCount?.();
-      if (count) {
-        lastPresetDisplayLabel = displayLabel;
-        displayLabel = `${count} models · ${displayLabel}`;
-        displayTitle = `${count} models · ${displayTitle}`;
-      }
+      const count = window.App.getSelectedModelCount?.() || 0;
+      const countLabel = `${count} ${count === 1 ? "model" : "models"}`;
+      lastPresetDisplayLabel = displayLabel;
+      displayLabel = `${countLabel} · ${displayLabel}`;
+      displayTitle = count < 2
+        ? `${countLabel} selected · Choose at least 2 models to run consensus`
+        : `${countLabel} · ${displayTitle}`;
     }
 
     if (state.displayButton) {
@@ -418,7 +439,7 @@
     const selectedOption = select.options[select.selectedIndex];
     const modelCount = window.App.getSelectedModelCount?.() || 0;
     customHint.textContent = customActive
-      ? `${modelCount} models · ${window.App.getModelOptionLabel(selectedOption)}`
+      ? `${modelCount} ${modelCount === 1 ? "model" : "models"} · ${window.App.getModelOptionLabel(selectedOption)}`
       : "Choose each model yourself";
     customLabel.appendChild(customHint);
     customItem.appendChild(customLabel);
@@ -509,7 +530,7 @@
     const toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "model-picker-row-toggle";
-    toggle.setAttribute("role", "switch");
+    toggle.setAttribute("role", "checkbox");
     toggle.setAttribute("aria-checked", String(included));
     toggle.setAttribute(
       "aria-label",
@@ -560,6 +581,14 @@
     renderBackRow(select, state, "Presets", "presets");
 
     appendSectionLabel(state.menu, "Answering models");
+    const selectedCount = window.App.getSelectedModelCount?.() || 0;
+    if (selectedCount < 2) {
+      const requirement = document.createElement("p");
+      requirement.className = "model-picker-requirement";
+      requirement.setAttribute("role", "status");
+      requirement.textContent = `Select at least 2 models to run consensus · ${selectedCount} selected`;
+      state.menu.appendChild(requirement);
+    }
     window.App.modelPrefs.forEach(pref => renderProviderRow(select, state, pref));
 
     appendSectionLabel(state.menu, "Consensus engine");

@@ -473,7 +473,64 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {}
 
 
 def _fallback_label(model_id: str) -> str:
-    return MODEL_LABEL_OVERRIDES.get(model_id, model_id)
+    override = MODEL_LABEL_OVERRIDES.get(model_id)
+    if override:
+        return override
+    raw = str(model_id or "").strip()
+    if not raw or " " in raw:
+        return raw
+    parts = [part for part in raw.lower().split("-") if part]
+    if not parts:
+        return raw
+    family = parts.pop(0)
+    family_labels = {
+        "gpt": "GPT",
+        "claude": "Claude",
+        "mistral": "Mistral",
+        "gemini": "Gemini",
+        "deepseek": "DeepSeek",
+        "grok": "Grok",
+    }
+    if family not in family_labels:
+        return raw
+    ignored = {"latest", "preview"}
+    words = []
+    number_parts = []
+    for part in parts:
+        if part in ignored:
+            continue
+        if part.isdigit():
+            number_parts.append(part)
+            continue
+        if number_parts:
+            words.append(".".join(number_parts))
+            number_parts = []
+        words.append({
+            "non": "No",
+            "no": "No",
+            "reasoning": "reasoning",
+            "mini": "mini",
+            "flash": "Flash",
+            "lite": "Lite",
+            "small": "Small",
+            "medium": "Medium",
+            "large": "Large",
+            "haiku": "Haiku",
+            "sonnet": "Sonnet",
+            "opus": "Opus",
+            "chat": "Chat",
+            "pro": "Pro",
+        }.get(part, part.capitalize()))
+    if number_parts:
+        words.append(".".join(number_parts))
+    if family == "gpt" and words:
+        label = "GPT-" + words[0]
+        if len(words) > 1:
+            label += " " + " ".join(words[1:])
+    else:
+        label = " ".join([family_labels[family], *words]).strip()
+    label = label.replace("No reasoning", "· No reasoning")
+    return label
 
 
 def _provider_allowed_sets() -> dict[str, set]:

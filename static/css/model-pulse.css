@@ -1,0 +1,237 @@
+/* Dedicated model-pulse page. The ranking component itself lives in
+   landing.css so it shares the public design language; this file only shapes
+   the page-level hierarchy and methodology content. */
+
+.pulse-hero {
+  padding-top: clamp(96px, 13vw, 160px);
+}
+
+.pulse-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
+  align-items: end;
+  gap: clamp(42px, 7vw, 92px);
+}
+
+.pulse-hero .lp-head {
+  max-width: 780px;
+}
+
+.pulse-hero .lp-display {
+  font-size: var(--font-size-display-lg);
+}
+
+.pulse-live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--agree);
+  box-shadow: 0 0 0 3px var(--agree-bg);
+  vertical-align: 1px;
+}
+
+.pulse-hero-note {
+  padding: 18px 0 2px 20px;
+  border-left: 1px solid var(--line);
+}
+
+.pulse-hero-note strong {
+  color: var(--ink);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.pulse-hero-note p {
+  margin: 7px 0 0;
+  color: var(--ink-3);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
+}
+
+.pulse-board-section {
+  padding-top: clamp(68px, 9vw, 112px);
+}
+
+.pulse-board-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+  align-items: start;
+  gap: clamp(34px, 6vw, 76px);
+}
+
+.pulse-board {
+  padding: clamp(24px, 4vw, 42px);
+  background: var(--surface, var(--raise));
+}
+
+.pulse-board .lp-model-pulse-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.pulse-board .lp-model-pulse-list {
+  gap: 5px;
+  margin-top: 30px;
+}
+
+.pulse-board .lp-model-pulse-row {
+  grid-template-columns: 26px 32px minmax(0, 1fr) auto;
+  gap: 12px;
+  min-height: 54px;
+  padding: 7px 4px;
+}
+
+.pulse-board .lp-model-pulse-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+.pulse-board .lp-model-pulse-icon img {
+  width: 18px;
+  height: 18px;
+}
+
+.pulse-board .lp-model-pulse-name {
+  font-size: var(--font-size-sm);
+}
+
+.pulse-board .lp-model-pulse-value {
+  font-size: var(--font-size-sm);
+}
+
+.pulse-board .lp-model-pulse-foot {
+  align-items: flex-start;
+  margin-top: 12px;
+}
+
+.pulse-board .lp-model-pulse-foot p {
+  max-width: 52ch;
+}
+
+.pulse-explainer {
+  padding-top: 8px;
+}
+
+.pulse-explainer-item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 14px;
+  padding: 20px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.pulse-explainer-item > span {
+  color: var(--ink-3);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-wide);
+}
+
+.pulse-explainer-item h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.pulse-explainer-item p {
+  margin: 7px 0 0;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+}
+
+.pulse-lenses {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: clamp(34px, 5vw, 58px);
+  background: var(--line-soft);
+}
+
+.pulse-lenses > article {
+  padding: clamp(24px, 3.5vw, 38px);
+  background: var(--surface, var(--raise));
+}
+
+.pulse-lens-label {
+  color: var(--ink-3);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.pulse-lenses h3 {
+  max-width: 24ch;
+  margin: 9px 0 24px;
+  color: var(--ink);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.pulse-lenses dl {
+  margin: 0;
+}
+
+.pulse-lenses dl > div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-soft);
+  font-size: var(--font-size-xs);
+}
+
+.pulse-lenses dt {
+  color: var(--ink-3);
+}
+
+.pulse-lenses dd {
+  margin: 0;
+  color: var(--ink-2);
+  font-weight: var(--font-weight-medium);
+}
+
+.pulse-lenses .lp-link {
+  display: inline-flex;
+  margin-top: 22px;
+}
+
+@media (max-width: 820px) {
+  .pulse-hero-grid,
+  .pulse-board-grid,
+  .pulse-lenses {
+    grid-template-columns: 1fr;
+  }
+
+  .pulse-hero-note {
+    max-width: 58ch;
+  }
+}
+
+@media (max-width: 520px) {
+  .pulse-board .lp-model-pulse-row {
+    grid-template-columns: 22px 28px minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .pulse-board .lp-model-pulse-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .pulse-lenses dl > div {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+}

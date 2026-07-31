@@ -260,6 +260,38 @@ def test_slug_uniqueness_and_evidence_url_validation():
         )
 
 
+@pytest.mark.parametrize(("url", "expected"), [
+    ("https://openai.com/index/update", "primary"),
+    ("https://arxiv.org/abs/2607.12345", "research"),
+    ("https://github.com/example/project/releases/tag/v1", "documentation"),
+    ("https://www.reuters.com/technology/example", "reporting"),
+    ("https://www.youtube.com/watch?v=example", "community"),
+    ("https://kalshi.com/markets/example", "rumor"),
+])
+def test_evidence_sources_receive_specific_public_roles(url, expected):
+    assert topics.classify_evidence(url)["role"] == expected
+
+
+def test_google_redirects_are_unwrapped_or_flagged_as_indirect():
+    direct = "https://openai.com/index/update"
+    wrapped = "https://www.google.com/url?q=https%3A%2F%2Fopenai.com%2Findex%2Fupdate"
+    assert topics.canonical_evidence_url(wrapped) == direct
+    indirect = topics.classify_evidence(
+        "https://vertexaisearch.cloud.google.com/grounding-api-redirect/signed"
+    )
+    assert indirect["is_indirect"] is True
+    assert indirect["quality"] == "low"
+
+
+def test_automatic_evidence_orders_direct_sources_before_rumors():
+    evidence = topic_runner.evidence_from_sources([
+        {"title": "Prediction market", "url": "https://kalshi.com/markets/gpt6"},
+        {"title": "Official update", "url": "https://openai.com/index/update"},
+        {"title": "Paper", "url": "https://arxiv.org/abs/2607.12345"},
+    ], topics.normalize_source_rules({}))
+    assert [item["type"] for item in evidence] == ["primary", "research", "rumor"]
+
+
 def test_topic_followers_use_separate_collection_and_double_opt_in(monkeypatch):
     monkeypatch.setenv("WATCH_UNSUBSCRIBE_SECRET", "topic-test-secret")
     db = FakeFirestore()
@@ -323,6 +355,12 @@ def test_topic_templates_expose_timeline_evidence_follow_and_admin_controls():
     assert 'class="topic-timeline"' in detail
     assert 'id="evidence"' in detail
     assert 'id="topicFollowForm"' in detail
+    assert 'class="topic-now-grid"' not in detail
+    assert 'class="legal-panel topic-analysis-disclosure" open' in detail
+    assert 'class="legal-panel topic-timeline-card" open' in detail
+    assert "selected.evidence[:5]" in detail
+    assert "selected.evidence[5:]" in detail
+    assert 'item.role_label' in detail
     assert 'rel="canonical" href="https://www.consens.io/topics"' in hub
     assert 'id="tab-topics"' in admin
     assert 'id="runAdminTopicBtn"' in admin
@@ -400,7 +438,7 @@ def test_automatic_topic_run_researches_sources_and_builds_timeline_point():
 
     assert run["run_mode"] == "automatic"
     assert run["evidence"][0]["url"] == "https://openai.com/index/current-update"
-    assert run["evidence"][0]["type"] == "official"
+    assert run["evidence"][0]["type"] == "primary"
     assert topics.get_topic(topic["id"], db=db)["last_run_status"] == "success"
 
 

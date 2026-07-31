@@ -58,7 +58,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
+| `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache), `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (Pro, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). |
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
@@ -104,20 +104,32 @@ Template + Firebase-Auth-Modul wie `admin.html`), `share.html` (öffentliche
 Consensus-Seite), `share_unavailable.html`, plus statische Rechts-/SEO-Seiten
 und SEO-Erklärseiten wie `ai-model-comparison.html` / `consensus-engine.html`.
 `topics.html` und `topic.html` bilden den öffentlichen Topics-Hub bzw. die
-Timeline-/Evidence-Detailseite; `admin_topics.html` ist der getrennte,
-Firebase-authentifizierte Redaktionsbereich unter `/admin/topics`.
+Timeline-/Evidence-Detailseite; die Topic-Redaktion liegt als eigener Tab in
+`admin.html` unter `/admin#topics` (`/admin/topics` redirectet dorthin).
 Alle öffentlichen HTML-Seiten teilen Navigation und Footer über
-`templates/partials/public_nav.html` und `public_footer.html`. Der Landing-Hero
+`templates/partials/public_nav.html` und `public_footer.html`. Die primäre
+Navigation beschränkt sich auf Product, Watches, Topics, Questions, Benchmark
+und die App-CTA; Model guide und About liegen im Footer. Der Landing-Hero
 ist seit 2026-07-17 demo-first: Ein klickbares Input-Feld (Look des /app-Inputs,
 "Try the demo"-Pill, Provider-Chips darunter) verlinkt auf `/app?demo=1`;
 `static/demo.js` erkennt den Parameter und startet die Demo automatisch in der
 echten App. Dabei wird zuerst die vollständige Frage in den Composer getippt;
 beim simulierten Absenden wandert sie in den Thread-Kopf, der Composer wird
 geleert und erst danach beginnen Fortschrittsanzeige und Modell-Spinner. Die
+Vegetarier-Demo nutzt dieselben globalen Source-IDs in Text und Quellenliste;
+ein einzelner kleiner Omega-3-Widerspruch ergibt 83/100 statt eines künstlich
+niedrigen 41/100-Scores. Sie bleibt vollständig clientseitig und ruft weder
+`recordModelVote` noch `/consensus`/Bookmark-Persistenz auf; Demo-Läufe verändern
+damit weder das Best-answer-Nutzungssignal noch `differences_stats`.
 Produktgeschichte führt danach über Ask/Run/Decide zum vierten
 Landing-Schritt `#watch`: Eine kompakte Baseline→Change→Telegram-Visualisierung
 erklärt Consensus Watch und verlinkt direkt auf `/app/watches`; derselbe Anker
-ist in der öffentlichen Navigation erreichbar. Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
+ist in der öffentlichen Navigation erreichbar. Eine schmale Live-Zeile direkt
+im Landing-Hero verlinkt auf die eigenständige Seite `/model-pulse`; dort liest
+`static/js/model-pulse.js` `/api/model-leaderboard`, zeigt die
+familienaggregierten, anonymisierten Best-answer-Auswahlen aus echten Runs und
+trennt dieses Judge-Signal ausdrücklich vom kontrollierten Accuracy-Benchmark.
+`/benchmark` verlinkt im Hero zurück auf diese zweite Perspektive. Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
 aus `partials/product_result_mockup.html`. **Seit 2026-07-25 spiegeln alle
 Marketing-Mockups die Inline-Confidence-Darstellung der App** (Scene 03 in
 `landing.html` inkl. der drei Slider-Beispiele, `product_result_mockup.html`
@@ -138,9 +150,16 @@ bleiben. Die gemeinsamen, an `/app`
 ausgerichteten Light-/Dark-Tokens liegen in `static/css/public-tokens.css` und
 werden von `landing.css` sowie `public-pages.css` importiert; seitenbezogene
 Layouts bleiben in diesen beiden Dateien bzw. in `benchmark.css` und
-`consensus-engine.css`. `topics.css` ergänzt ausschließlich Hub-, Timeline-,
-Evidence- und Follow-Komponenten der beiden Topic-Templates und importiert
+`consensus-engine.css`. `topics.css` ergänzt ausschließlich Hub-, Dossier-,
+Timeline-, Evidence- und Follow-Komponenten der beiden Topic-Templates und importiert
 dieselbe Token-Schicht mit eigenem Cache-Buster.
+Die gemeinsame Typografie-Grundlage liegt in `static/css/typography.css` und
+wird von `variables.css` (App/Admin) sowie `public-tokens.css` (Marketing/Public)
+importiert. Sie hostet Inter Variable lokal als normale und kursive WOFF2-Datei,
+definiert die verbindlichen Größen-, Gewichts-, Zeilenhöhen- und Laufweiten-Tokens
+und lässt Formularelemente die Produktschrift erben. Google-Fonts-Links und deren
+CSP-Freigaben existieren nicht mehr; Monospace bleibt ausschließlich für Code und
+technische Identifikatoren, KaTeX behält seine eigene Mathematikschrift.
 **`index.html` enthält kein App-JS inline mehr**
 — nur den Jinja-Config-Block im `<head>` und die Modul-`<script>`-Tags.
 
@@ -204,27 +223,29 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   identische Skala, deshalb sind Landing-/Public-Mockups aus demselben Material
   wie `/app` (Testvertrag: `tests/test_public_design_system.py`). Dark Mode
   überschreibt ausschließlich die fünf Werte + die Ampel.
-- **Sidebar-Rhythmus** — Models und Leaderboard liegen in `.sidebar-pinned`,
-  Bookmarks im scrollenden `.sidebar-content`. Diese Container-Grenze addierte
-  14 px (10 px Flex-`gap` der Sidebar + 2 × 2 px Scroll-Padding) auf die 22 px
-  Sektionsabstand, sodass der Sprung zu Bookmarks groesser war als der zu
-  Leaderboard — eine Gruppierung, die es nicht gibt. `shell.css` zieht sie mit
+- **Sidebar-Rhythmus** — Models liegt in `.sidebar-pinned`, Bookmarks im
+  scrollenden `.sidebar-content`. Diese Container-Grenze addiert 14 px (10 px
+  Flex-`gap` der Sidebar + 2 × 2 px Scroll-Padding) auf den Sektionsabstand;
+  `shell.css` zieht sie mit
   `.sidebar > .sidebar-content { margin-top: -14px }` wieder heraus; ab
   1100 px sind es `-10px`, weil beide Container dort ihre je 2 px
   Scroll-Padding verlieren. Der
   Zusatzabstand vor `.sidebar-pinned` ist auf 8 px reduziert (plus 10 px
-  Container-Gap), damit `New comparison → Models` enger ist, waehrend
-  `Models → Leaderboard → Bookmarks` denselben 22-px-Sektionsrhythmus behaelt.
+  Container-Gap), damit `New comparison → Models` enger bleibt. Models und
+  Bookmarks teilen dieselben Icon-/Textspalten und dieselbe Titeltypografie;
+  der Bookmark-Toggle sowie seine Suche sind bis zum verifizierten Login
+  nativ deaktiviert.
 - **Ein einziger Sidebar-Toggle** — `.app-nav-float .sidebar-toggle` erscheint
-  nur bei geschlossener Sidebar, `#sidebarToggleInner` sitzt im Sidebar-Kopf.
+  nur bei geschlossener Sidebar, `#sidebarToggleInner` sitzt rechts neben der
+  Wortmarke in `.sidebar-brand-row`.
   `shell.css` blendet den schwebenden per `body:not(:has(.sidebar.collapsed))`
   (Overlay ≤1099px: `body:has(.sidebar.active)`) aus. `app-init.js` bindet
   **alle** `.sidebar-toggle`-Buttons an denselben Handler; `updateToggleButton`
   pflegt aria/title auf allen. Eine geschlossene Sidebar wird zusätzlich
   `inert` + `aria-hidden`, damit ihre offscreen liegenden Controls weder in der
   Tab-Reihenfolge noch im Accessibility-Tree bleiben. Darunter liegt
-  `#newRunButton` („New
-  comparison“): derselbe saubere Ausgangszustand wie
+  `#newRunButton` („New comparison“) liegt darunter als vollbreites
+  Navigationselement: derselbe saubere Ausgangszustand wie
   `firebase.js::resetLoadedRunAfterLogout` (Streams abbrechen, Lauf +
   Share-/Bookmark-Kontext leeren, `is-hero` zurück).
 - **`sidebar-quota.js`** — Kontingent-Ring im Sidebar-Footer (`#quotaTrigger`)
@@ -243,9 +264,17 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   ist aus demselben Grund aus dem Footer (unter dem Account-Icon) nach oben in
   `.sidebar-brand-row` gewandert; unten bleibt nur die Meta-Zeile.
 - **Navigation/Settings-Shell** (`templates/index.html`, `layout.css`,
-  `shell.css`, `components-modals.css`, `app-init.js`, `firebase.js`) — Models,
-  Leaderboard und Bookmarks sind ausschließlich Sidebar-Abschnitte mit
-  integrierten Icons. Bei offener Desktop-Sidebar begrenzen symmetrische
+  `shell.css`, `components-modals.css`, `app-init.js`, `firebase.js`) — Models
+  und Bookmarks sind Sidebar-Abschnitte mit integrierten Icons. Models bleibt
+  eine einzelne kompakte Zeile mit Providerzahl; Klick öffnet den bestehenden
+  Run-Picker am Composer, statt sechs Providerzeilen in der Navigation
+  aufzuklappen. Die Provider-Inklusion im Custom-Picker nutzt klare
+  Checkboxen statt Toggle-Switches. Die Chat-Suche belegt keine
+  permanente Zeile mehr, sondern ersetzt bei Hover/Fokus den Bookmarks-Titel
+  (auf Touch-Geräten bleibt sie dauerhaft erreichbar). Die frühere Sidebar-/
+  Help-FAQ-Rangliste lebt jetzt ausschließlich auf `/model-pulse`; die
+  Landingpage verlinkt oben dezent dorthin und die App-Shell lädt keinen
+  Firestore-Live-Listener mehr. Bei offener Desktop-Sidebar begrenzen symmetrische
   Gutters die Contentbreite und halten den Input in der Viewport-Mitte; mobil
   bleibt außerhalb der Sidebar nur der Burger sichtbar. Gast-Login/-Sign-up
   sitzt oben rechts, während der Sidebar-Footer nur für eingeloggte Accounts
@@ -518,7 +547,8 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Der gemeinsame Notifications-Bereich ist ein einklappbares `<details>`-Panel;
   dessen lokaler Offen-/Zu-Zustand liegt in `consensus_watch_notifications_open`.
   `window.App.watch.resetAfterLogout()` leert und schließt das bereits geladene
-  Dashboard beim Session-Ende.
+  Dashboard beim Session-Ende; ein Session-Epoch verwirft danach eintreffende
+  Watch-/Telegram-/Limit-Antworten und verhindert accountübergreifende Caches.
   Das Dashboard bietet zusätzlich einen professionell geführten Query-first-
   Einstieg: Ohne Watch ersetzen ein dreistufiger Empty State und optionale
   Beispielfragen die leeren KPI-/Notification-Flächen. Nach der Frage verwendet
@@ -615,7 +645,11 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
 - **`query-send.js`** — `window.sendQuestion`: `/prepare` + `/ask_*`-Fan-out,
   Streaming-Rendering, Usage/Tier-UI, Auto-Consensus-Trigger, Query-Run-State
   (`isQueryRequestRunning`, `cancelCurrentQuery`). Ein valider erster Lauf
-  beendet über `window.exitHeroMode()` den zentrierten Input-Leerzustand.
+  beendet über `window.exitHeroMode()` den zentrierten Input-Leerzustand. Vor
+  `/prepare` gilt eine harte Mindestzahl von zwei ausgewählten Modellen;
+  `app-init.js::updateQuestionInputAccess` deaktiviert den Send-Button bereits
+  synchron dazu, während `query-send.js` programmgesteuerte Starts nochmals
+  abweist.
   Der Send-Button spiegelt den GANZEN Lauf: `window.isRunActive()` = Modell-
   Phase ODER Consensus-Phase; `window.App.syncSendButtonRunning()` wird von
   `consensus-lifecycle.js` bei Start/Ende der Consensus-Phase gerufen, damit
@@ -639,8 +673,14 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Metadatenseiten, nicht deren Antworten. Saves reduzieren das serverseitige
   Merge-Ergebnis sofort wieder auf Listenmetadaten. Nach einer E-Mail-Registrierung zeigt
   das Auth-Modal einen eigenen Verifizierungs-Erfolgszustand statt eines Browser-Alerts.
-  Logout bricht laufende Query-/Consensus-Streams ab, leert den geladenen Run
-  samt Bookmark-/Share-Kontext und stellt den Hero-Ausgangszustand wieder her.
+  Logout löscht zuerst erfolgreich die HttpOnly-Session und wartet danach
+  Firebase `signOut()` ab; erst dann wird der ausgeloggte Zustand gezeigt.
+  Dabei werden laufende Query-/Consensus-Streams abgebrochen, Run-, Usage-,
+  Watch-, Bookmark-/Share-UI und Detail-Caches sowie lokal gespeicherte eigene
+  Provider-API-Keys geleert und der Hero-
+  Ausgangszustand wiederhergestellt. Auth-Generationen verhindern, dass spät
+  eintreffende Usage-/Bookmark-Antworten Daten einer beendeten oder gewechselten
+  Sitzung erneut rendern.
 - **`static/demo.js`** (ES-Modul) — Demo-Flow (`runDemoFlow`) für die „Demo"-Query;
   zeigt Gästen nach Abschluss der Demo am Eingabebereich eine Login-/Registrierungs-
   Aufforderung, ohne die Demo-Frage aus dem deaktivierten Feld zu entfernen, und
@@ -1073,8 +1113,17 @@ sichtbaren Auswahlzustand als auch defensiv im tatsächlichen Request-Fan-out au
   beansprucht fällige Topics per Firestore-Lease; manuelle Admin-Runs benutzen
   denselben Claim. Paused/archived Topics werden nicht ausgeführt.
 - `/topics/{slug}` rendert SSR, sanitisiertes Markdown, JSON-LD, Current- und
-  historische `?version=`-Ansichten sowie eine visuelle Agreement-/Change-
-  Timeline und einen pro Snapshot zugeordneten Evidence Feed. Nur Topics mit
+  historische `?version=`-Ansichten. Das vollständige Dossier mit Consensus,
+  Position Map, Agreement-Verlauf und aktuellen Quellen sowie die Timeline
+  starten geöffnet; die schwer scanbaren separaten „What holds now / What
+  changed / Why“-Karten sind entfallen. Von den nach Qualität sortierten
+  aktuellen Quellen sind die besten fünf direkt sichtbar, der Rest und ältere
+  Evidence starten separat eingeklappt. Die
+  Hub-Karte verwendet den letzten Snapshot-/Change-Status statt freien
+  redaktionellen Beschreibungstexts. Evidence bekommt die Rollen
+  `primary|research|documentation|reporting|community|rumor`, wird nach Rolle
+  sortiert und trennt direkte Quellen von nachrangigen Community-/Gerüchte-/
+  Redirect-Signalen. Nur Topics mit
   Run und Status Active/Paused erscheinen im Hub; `seo.noindex` entfernt sie
   zusätzlich aus `sitemap-topics.xml`. Historische Query-Ansichten sind
   `noindex`, aber immutable gecacht.
@@ -1532,12 +1581,13 @@ Snapshot-Publishing berühren die bestehenden Shared-Pages-/Watch-Tabs nicht.
   ```powershell
   .\venv\Scripts\python.exe -m pytest tests
   ```
-  Letzte bekannte Baseline: **750 passed** (2026-07-29; inklusive der neuen
+  Letzte bekannte Baseline: **772 passed** (2026-07-31; inklusive der neuen
   Differences-`consensus_anchor`-Tests sowie der bisherigen
   Search-Console-/SEO-Dossier-, Query-, Recommendation-, LLM-Schema-,
   Weekly-Portfolio-Review-, Action-, Publisher-Lineage-/Watch-Capacity-,
   Idempotenz- und Admin-Schutztests sowie
-  run-basierter Usage-, Consensus-API-Publishing-/Scope-/Vertrags- sowie
+  run-basierter Usage-, Consensus-API-Publishing-/Scope-/Vertrags-, der
+  selbst gehosteten Inter-Typografie-Verträge sowie
   Scheduled-Publisher-, Query-first-Watch-, versionierten Watch-/Drift- sowie
   kuratierten Topic-/Snapshot-/Follower-/SSR-Tests).
 - **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
@@ -1641,8 +1691,12 @@ Neu angelegte Watches bekommen eine lokale Ausführungszeit; das Backend berechn
 Fehler-Retries und Resume bei. Weekly-Watches können einen lokalen Wochentag wählen;
 Legacy-Watches ohne Wochentag bzw. Zeitfelder nutzen weiter die bisherige reine
 Intervalladdition.
-Watch-Seiten zeigen für aktuelle oder historische Watches eine kompakte Metazeile
-mit Intervall sowie letztem und ggf. nächstem Fragenlauf. Die normale Watch-URL
+Watch-Seiten beginnen mit einer einfachen Erklärung („erste Baseline“ bzw.
+„seit dem letzten Check“). Zeitplan und Check-Daten stehen im Kopf stets
+sichtbar; nur Direction-/Agreement-Metriken liegen in einklappbaren
+Expertendetails. Vor der ersten echten Vergleichsstufe
+werden keine Entwicklungsmetriken suggeriert. Die vollständige History-/
+Position-Analyse startet ebenfalls immer eingeklappt. Die normale Watch-URL
 rendert serverseitig die neueste Vollversion über dem unveränderten Share-Baseline-
 Dokument; `?version=<run_id>` öffnet eine immutable historische Vollversion und
 `?version=original` den Ausgangs-Consensus. Shared Pages ohne Watch behalten ihr
@@ -1650,9 +1704,9 @@ bisheriges Snapshot-Verhalten. Ein Backend-`display_version` ist die einzige
 Quelle für Consensus, Differences, Agreement, Modelle, Quellen, Answer-Zeit und
 Citation; kompakte History-Metadaten werden nie in den Share-Snapshot gemischt.
 Fehlt die aktuelle Vollversion (auch bei Legacy-History), zeigt die Seite einen
-klaren Hinweis und rendert den Original-Snapshot vollständig konsistent. Die
-umfangreiche History-/Position-Map ist bei längeren Verläufen einklappbar. Der Drift-Header trennt Direction Shift und
-Agreement Change und stellt Stable/Changed sowie den Change-Summary vor den Text.
+klaren Hinweis und rendert den Original-Snapshot vollständig konsistent. Der
+Drift-Header stellt Stable/Changed sowie den Change-Summary vor den Text; seine
+Expertendetails trennen Direction Shift und Agreement Change.
 Die öffentliche Watch-History rendert zusätzlich eine **Position Map**: statt
 einer universellen Ja/Nein-Achse zeigt sie frage-spezifische Standpunkt-
 Dimensionen, Provider-Bewegungen über die Läufe und den gemeinsamen

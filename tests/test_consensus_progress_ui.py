@@ -142,15 +142,16 @@ def test_composer_row_is_reduced_to_attach_run_switch_and_send():
     assert 'id="newRunButton"' in template
 
 
-def test_sidebar_top_row_is_toggle_plus_new_comparison():
+def test_sidebar_header_groups_brand_and_toggle_before_new_comparison():
     template = read("templates/index.html")
 
-    top = template.index('class="sidebar-top"')
+    brand = template.index('class="sidebar-brand-row"')
     toggle = template.index('id="sidebarToggleInner"')
     new_run = template.index('id="newRunButton"')
     search = template.index('id="chatSearch"')
 
-    assert top < toggle < new_run < search
+    assert brand < toggle < new_run < search
+    assert 'class="sidebar-top"' not in template
     # Exactly one sidebar toggle in the markup besides the floating one.
     assert template.count('id="sidebarToggleInner"') == 1
     assert template.count('id="toggleSidebarButton"') == 1

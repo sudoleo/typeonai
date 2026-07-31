@@ -9,7 +9,7 @@
   background-color: transparent;
   border-radius: 4px;
   margin-top: 5px;
-  font-size: 0.9em;
+  font-size: var(--font-size-sm);
 }
 
 .source-link {
@@ -22,10 +22,10 @@
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--accent) 7%, transparent);
   color: color-mix(in srgb, var(--accent) 70%, var(--text-color));
-  font-size: 0.68rem;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-  line-height: 1.45;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-normal);
+  line-height: var(--line-height-ui);
   text-decoration: none;
   vertical-align: baseline;
   white-space: nowrap;
@@ -92,9 +92,9 @@
   min-height: 24px;
   padding: 2px 0;
   color: var(--sidebar-text-muted);
-  font-size: 0.78rem;
-  font-weight: 650;
-  line-height: 1.35;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-ui);
   cursor: pointer;
   list-style: none;
 }
@@ -106,8 +106,8 @@
 .source-list-summary::after {
   content: "show";
   color: color-mix(in srgb, var(--accent) 76%, var(--text-color));
-  font-size: 0.72rem;
-  font-weight: 650;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
 }
 
 .source-list-cluster[open] .source-list-summary::after {
@@ -122,7 +122,7 @@
   padding: 0 0 0 20px;
   overflow: auto;
   color: var(--sidebar-text-muted);
-  font-size: 0.82rem;
+  font-size: var(--font-size-sm);
 }
 
 .source-list-item {
@@ -131,8 +131,8 @@
 
 .source-list-link {
   color: color-mix(in srgb, var(--text-color) 90%, var(--accent));
-  font-weight: 600;
-  line-height: 1.35;
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-ui);
   text-decoration: none;
 }
 
@@ -153,8 +153,8 @@
   display: inline-block;
   margin-left: 8px;
   color: var(--sidebar-text-muted);
-  font-size: 0.74rem;
-  font-weight: 500;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-medium);
 }
 
 .collapsible-content.collapsed {
@@ -188,8 +188,8 @@
 }
 
 .collapse-btn .arrow {
-  font-size: 14px;
-  line-height: 1;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-solid);
   color: var(--text-color);
   transition: transform .2s ease, opacity .15s ease;
   position: relative;
@@ -255,9 +255,9 @@ header .sidebar-toggle.collapse-btn {
   display: inline-block;
   padding: 2px 7px 3px;
   border-radius: var(--radius-sm);
-  font-weight: 650;
-  font-size: 0.86rem;
-  line-height: 1.28;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-heading);
   border: 1px solid var(--cred-border);
   background: var(--cred-bg);
   color: var(--cred-fg);
@@ -354,34 +354,24 @@ header .sidebar-toggle.collapse-btn {
   all: unset;
   box-sizing: border-box;
   display: inline-flex;
-  position: absolute;
-  left: 20px;
-  top: 50%;
-  transform: translateY(-50%);
-  height: 34px;
-  padding: 0 15px 0 7px;
+  position: static;
+  height: 36px;
+  padding: 0 11px;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  line-height: 1;
+  gap: 7px;
+  line-height: var(--line-height-solid);
   font-family: inherit;
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.005em;
-  color: var(--button-text);
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--button-bg) 92%, var(--accent) 8%), var(--button-bg));
-  border: 1px solid color-mix(in srgb, var(--button-bg) 80%, white 20%);
-  border-radius: 999px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-normal);
+  color: var(--ink-2, var(--text-color));
+  background: transparent;
+  border: 1px solid var(--line, var(--sidebar-border));
+  border-radius: var(--radius-sm);
   cursor: pointer;
   user-select: none;
-  z-index: 5;
-  transition: transform .18s ease, box-shadow .22s ease, border-color .22s ease, background .22s ease;
-  box-shadow:
-    0 1px 1px color-mix(in srgb, var(--button-bg) 28%, transparent),
-    0 6px 16px color-mix(in srgb, var(--button-bg) 14%, transparent),
-    inset 0 1px 0 color-mix(in srgb, white 15%, transparent);
-  animation: demoChipIn .42s cubic-bezier(.22, 1, .36, 1) both;
+  transition: color .15s ease, background-color .15s ease, border-color .15s ease;
 }
 
 /* Play glyph — a crisp, recognizable demo affordance. Drawn in the chip's own
@@ -391,40 +381,30 @@ header .sidebar-toggle.collapse-btn {
   flex: none;
   width: 0;
   height: 0;
-  margin-left: 2px;
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
-  border-left: 8px solid currentColor;
+  margin-left: 1px;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 7px solid currentColor;
   border-radius: 1px;
 }
 
 .demo-chip:hover {
-  transform: translateY(calc(-50% - 1px));
-  border-color: color-mix(in srgb, var(--button-bg) 64%, white 36%);
-  box-shadow:
-    0 2px 3px color-mix(in srgb, var(--button-bg) 24%, transparent),
-    0 10px 24px color-mix(in srgb, var(--button-bg) 20%, transparent),
-    inset 0 1px 0 color-mix(in srgb, white 20%, transparent);
+  color: var(--ink, var(--text-color));
+  border-color: color-mix(in srgb, var(--ink) 24%, var(--line));
+  background: var(--raise, var(--container-bg));
 }
 
 .demo-chip:active {
-  transform: translateY(-50%);
-  box-shadow:
-    0 1px 1px color-mix(in srgb, var(--button-bg) 28%, transparent),
-    inset 0 1px 2px color-mix(in srgb, var(--button-bg) 30%, transparent);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
 }
 
 .demo-chip:focus-visible {
-  outline: none;
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent),
-    0 6px 16px color-mix(in srgb, var(--button-bg) 14%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 68%, transparent);
+  outline-offset: 2px;
 }
 
 .chat-input-container.has-question-input .demo-chip,
 .demo-chip[hidden] {
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-50%) scale(.96);
 }
-

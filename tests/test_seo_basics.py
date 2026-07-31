@@ -56,6 +56,7 @@ class SeoBasicsTests(unittest.TestCase):
         self.assertIn(f"<loc>{SITE_URL}/consensus-engine</loc>", content)
         self.assertIn(f"<loc>{SITE_URL}/questions</loc>", content)
         self.assertIn(f"<loc>{SITE_URL}/topics</loc>", content)
+        self.assertIn(f"<loc>{SITE_URL}/model-pulse</loc>", content)
         self.assertIn(f"<loc>{SITE_URL}/about</loc>", content)
         self.assertNotIn(f"<loc>{SITE_URL}/app</loc>", content)
         self.assertNotIn(f"<loc>{SITE_URL}/privacy</loc>", content)
@@ -100,6 +101,16 @@ class SeoBasicsTests(unittest.TestCase):
         self.assertIn('property="og:title"', template)
         self.assertIn('type="application/ld+json"', template)
 
+    def test_model_pulse_page_has_seo_metadata_and_public_route(self):
+        template = (ROOT / "templates" / "model-pulse.html").read_text(encoding="utf-8")
+
+        self.assertIn('<link rel="canonical" href="https://www.consens.io/model-pulse">', template)
+        self.assertIn('<meta name="robots" content="index, follow">', template)
+        self.assertIn('property="og:title"', template)
+        response = self.client.get("/model-pulse")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Live model pulse", response.text)
+
     def test_public_nav_and_footer_link_to_questions_hub(self):
         # SEO-Kern des Hubs: indexierte Shares hängen nicht mehr nur in der
         # Sitemap, sondern sind aus Nav + Footer jeder Public-Seite erreichbar.
@@ -110,6 +121,7 @@ class SeoBasicsTests(unittest.TestCase):
         self.assertIn('href="/questions"', footer)
         self.assertIn('href="/topics"', nav)
         self.assertIn('href="/topics"', footer)
+        self.assertIn('href="/model-pulse"', footer)
 
     def test_app_template_is_noindex(self):
         template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")

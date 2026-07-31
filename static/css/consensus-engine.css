@@ -67,10 +67,10 @@
 .ce-step-number,
 .ce-footnote {
   color: var(--text-secondary);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  line-height: 1.2;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-wide);
+  line-height: var(--line-height-heading);
   text-transform: uppercase;
 }
 
@@ -99,8 +99,8 @@
   border-radius: var(--radius-pill);
   background: var(--surface-2, var(--ground));
   color: var(--text-primary);
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
   min-width: 0;
 }
 
@@ -174,8 +174,8 @@
   align-items: center;
   gap: 8px;
   color: var(--sidebar-text-muted);
-  font-size: 0.92rem;
-  line-height: 1.2;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-heading);
   white-space: nowrap;
 }
 
@@ -191,13 +191,13 @@
   align-items: center;
   gap: 10px;
   color: color-mix(in srgb, var(--button-bg) 72%, var(--text-color));
-  font-size: 0.94rem;
-  font-weight: 650;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
   white-space: normal;
 }
 
 .consensus-thinking {
-  line-height: 1.25;
+  line-height: var(--line-height-heading);
   white-space: normal;
 }
 
@@ -301,8 +301,8 @@
   gap: 10px;
   padding: 12px 14px;
   color: var(--text-secondary);
-  font-size: 0.86rem;
-  font-weight: 650;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
   box-shadow: none;
 }
 
@@ -379,17 +379,19 @@
   display: inline-flex;
   margin-bottom: 8px;
   color: var(--accent);
-  font: 700 0.76rem ui-monospace, "SFMono-Regular", Consolas, monospace;
-  letter-spacing: 0.02em;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-normal);
 }
 
 .ce-flow-entry strong,
 .ce-flow-output strong {
   display: block;
   color: var(--text-primary);
-  font-size: 1.05rem;
-  font-weight: 700;
-  line-height: 1.35;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-ui);
 }
 
 .ce-flow-entry p,
@@ -397,8 +399,8 @@
   max-width: 80ch;
   margin: 8px 0 0;
   color: var(--text-secondary);
-  font-size: 0.95rem;
-  line-height: 1.5;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-ui);
 }
 
 .ce-flow-lanes {
@@ -436,7 +438,7 @@
   border-radius: 50%;
   background: color-mix(in srgb, var(--accent) 13%, var(--response-bg));
   color: var(--accent);
-  font-weight: 800;
+  font-weight: var(--font-weight-bold);
 }
 
 .ce-flow-lane--differences .ce-flow-lane-title > span {
@@ -447,21 +449,22 @@
 .ce-flow-lane-title h3 {
   margin: 0;
   color: var(--text-primary);
-  font-size: 1.04rem;
-  font-weight: 750;
-  line-height: 1.2;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-heading);
 }
 
 .ce-flow-lane-title p {
   margin: 3px 0 0;
   color: var(--text-secondary);
-  font-size: 0.82rem;
+  font-size: var(--font-size-sm);
 }
 
 .ce-flow-lane-title code,
 .ce-flow-output code {
   color: inherit;
-  font: 0.95em ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-base);
 }
 
 .ce-flow-nodes {
@@ -482,8 +485,8 @@
   border-radius: var(--radius-sm);
   background: var(--surface-2, var(--ground));
   color: var(--text-secondary);
-  font-size: 0.92rem;
-  line-height: 1.45;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
 }
 
 .ce-flow-nodes li::before {
@@ -498,8 +501,8 @@
   border-radius: 50%;
   background: var(--accent);
   color: var(--button-text);
-  font-size: 0.74rem;
-  font-weight: 800;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-bold);
 }
 
 .ce-flow-lane--differences .ce-flow-nodes li::before {
@@ -520,9 +523,9 @@
   display: block;
   margin-bottom: 6px;
   color: var(--text-primary);
-  font-size: 0.98rem;
-  font-weight: 700;
-  line-height: 1.25;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-heading);
 }
 
 .ce-flow-nodes span {
@@ -550,10 +553,10 @@
   position: absolute;
   right: 8px;
   bottom: -20px;
-  font-size: 5.6rem;
-  font-weight: 800;
-  letter-spacing: -0.05em;
-  line-height: 1;
+  font-size: var(--font-size-display-lg);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--line-height-solid);
   color: color-mix(in srgb, var(--accent) 9%, transparent);
   pointer-events: none;
 }
@@ -616,9 +619,9 @@
 .ce-faq-list h3 {
   margin: 0;
   color: var(--text-primary);
-  font-size: 1.14rem;
-  font-weight: 650;
-  line-height: 1.28;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
 }
 
 .ce-step p,
@@ -628,14 +631,14 @@
 .ce-faq-list p {
   margin: 12px 0 0;
   color: var(--text-secondary);
-  font-size: 0.96rem;
-  line-height: 1.52;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-ui);
 }
 
 .ce-tech-note {
   padding-top: 12px;
   border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 52%, transparent);
-  font-size: 0.86rem !important;
+  font-size: var(--font-size-sm) !important;
 }
 
 .ce-tech-note code {
@@ -644,7 +647,8 @@
   border-radius: var(--radius-xs);
   background: var(--surface-2, var(--ground));
   color: var(--text-primary);
-  font: 0.88em ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
 }
 
 .ce-diff-payload {
@@ -673,14 +677,15 @@
 
 .ce-schema-list b {
   color: var(--text-primary);
-  font: 0.84rem ui-monospace, "SFMono-Regular", Consolas, monospace;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
 }
 
 .ce-schema-list span {
   color: var(--text-secondary);
-  font-size: 0.93rem;
-  line-height: 1.45;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
 }
 
 .ce-render-panel {
@@ -714,10 +719,10 @@
 .ce-panel-title {
   margin: 0 0 8px;
   color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
-  font-size: 0.74rem;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: 0.04em;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-heading);
+  letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
 }
 
@@ -781,15 +786,15 @@
 .ce-answer .consensus-marker-legend {
   margin: 12px 0 0;
   color: var(--text-secondary);
-  font-size: 0.78rem;
-  line-height: 1.5;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
 }
 
 .ce-footnote {
   margin-top: 16px;
-  line-height: 1.45;
+  line-height: var(--line-height-ui);
   text-transform: none;
-  letter-spacing: 0;
+  letter-spacing: var(--tracking-normal);
 }
 
 .ce-use-grid .lp-card {
@@ -951,8 +956,8 @@
 
   .ce-hero-copy .lp-lead {
     margin-top: 16px;
-    font-size: 1rem;
-    line-height: 1.45;
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-ui);
   }
 
   .ce-hero-copy .lp-hero-actions {
@@ -1003,7 +1008,7 @@
   .ce-model-strip span {
     gap: 5px;
     padding: 5px 7px;
-    font-size: 0.68rem;
+    font-size: var(--font-size-micro);
   }
 
   .ce-model-strip img {
@@ -1017,7 +1022,7 @@
   }
 
   .consensus-thinking-wrap {
-    font-size: 0.86rem;
+    font-size: var(--font-size-sm);
   }
 
   .consensus-loader {

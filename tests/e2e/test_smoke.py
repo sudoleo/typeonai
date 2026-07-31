@@ -87,6 +87,47 @@ def test_app_loads_without_console_errors(app_page, get_console_errors):
     assert errors == [], f"Konsolen-Fehler beim Laden: {errors}"
 
 
+def test_sidebar_header_hover_search_and_provider_picker(app_page):
+    sidebar = app_page.locator(".sidebar")
+    if sidebar.get_attribute("aria-hidden") == "true":
+        app_page.locator(".app-nav-float .sidebar-toggle").click()
+
+    metrics = app_page.evaluate(
+        """() => {
+          const sidebar = document.querySelector('.sidebar');
+          const brand = document.querySelector('.sidebar-brand-link').getBoundingClientRect();
+          const toggle = document.querySelector('#sidebarToggleInner').getBoundingClientRect();
+          const newRun = document.querySelector('#newRunButton').getBoundingClientRect();
+          return {
+            brandCenter: brand.top + brand.height / 2,
+            toggleCenter: toggle.top + toggle.height / 2,
+            headerBottom: Math.max(brand.bottom, toggle.bottom),
+            newRunTop: newRun.top,
+            newRunWidth: newRun.width,
+            sidebarInnerWidth: sidebar.clientWidth - 24,
+          };
+        }"""
+    )
+    assert abs(metrics["brandCenter"] - metrics["toggleCenter"]) <= 1
+    assert metrics["newRunTop"] >= metrics["headerBottom"]
+    assert abs(metrics["newRunWidth"] - metrics["sidebarInnerWidth"]) <= 1
+
+    search = app_page.locator(".sidebar-search-box")
+    expect(search).to_have_css("opacity", "0")
+    app_page.locator(".sidebar-bookmarks-head").hover()
+    expect(search).to_have_css("opacity", "1")
+    expect(search).to_have_css("pointer-events", "auto")
+
+    app_page.locator("#sidebarModelPicker").click()
+    picker = app_page.locator("#consensusModelDropdown").locator("xpath=..")
+    expect(picker.locator(".model-picker-menu")).to_have_class(re.compile(r"\bis-open\b"))
+    assert sidebar.evaluate("element => element.scrollTop") == 0
+    expect(app_page.locator("#sidebarModelCount")).to_have_text("6 providers selected")
+    picker.locator(".model-picker-custom-option").click()
+    picker.locator(".model-picker-row-toggle").nth(5).click()
+    expect(app_page.locator("#sidebarModelCount")).to_have_text("5 providers selected")
+
+
 def test_question_input_grows_and_caps_on_desktop_and_mobile(app_page):
     input_box = app_page.locator("#questionInput")
 

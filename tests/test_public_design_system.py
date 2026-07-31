@@ -9,6 +9,7 @@ PUBLIC_TEMPLATES = (
     "ai-model-comparison.html",
     "consensus-engine.html",
     "benchmark.html",
+    "model-pulse.html",
     "privacy.html",
     "terms.html",
     "imprint.html",
@@ -62,6 +63,41 @@ def test_public_styles_share_the_app_aligned_token_layer():
         assert contract in public_tokens
 
 
+def test_typography_is_self_hosted_and_shared_by_every_surface():
+    typography = read("static/css/typography.css")
+    app_tokens = read("static/css/variables.css")
+    public_tokens = read("static/css/public-tokens.css")
+
+    assert typography.count('@font-face {') == 2
+    assert "../fonts/inter/InterVariable.woff2" in typography
+    assert "../fonts/inter/InterVariable-Italic.woff2" in typography
+    for contract in (
+        '--font-sans: "Inter Variable"',
+        "--font-weight-regular: 400;",
+        "--font-weight-medium: 500;",
+        "--font-weight-semibold: 600;",
+        "--font-weight-bold: 700;",
+        "--font-size-display-lg:",
+    ):
+        assert contract in typography
+
+    typography_import = re.compile(r"@import url\('\./typography\.css\?v=[\w.-]+'\);")
+    assert typography_import.search(app_tokens)
+    assert typography_import.search(public_tokens)
+
+    font_dir = ROOT / "static" / "fonts" / "inter"
+    assert (font_dir / "InterVariable.woff2").stat().st_size > 300_000
+    assert (font_dir / "InterVariable-Italic.woff2").stat().st_size > 300_000
+    assert "SIL OPEN FONT LICENSE" in (font_dir / "OFL.txt").read_text(encoding="utf-8")
+
+    for template_path in (ROOT / "templates").rglob("*.html"):
+        assert "fonts.googleapis.com" not in template_path.read_text(encoding="utf-8")
+
+    security = read("app/core/security.py")
+    assert "fonts.googleapis.com" not in security
+    assert "fonts.gstatic.com" not in security
+
+
 def test_product_result_mockup_is_reused_and_public_copy_has_no_em_dash():
     # The landing hero is demo-first (input field CTA) since 2026-07-17 and no
     # longer embeds the result mockup; the consensus-engine page still does.
@@ -78,6 +114,16 @@ def test_share_page_loads_the_common_math_renderer():
     assert "katex@0.17.0/dist/katex.min.js" in template
     assert "/static/js/math-render.js?v=20260720-math1" in template
     assert '<main class="page-shell" data-math-render>' in template
+
+
+def test_watch_header_keeps_intro_left_aligned_and_dates_visible():
+    template = read("templates/share.html")
+    public_css = read("static/css/public-pages.css")
+    intro_rule = public_css.split(".watch-plain-intro {", 1)[1].split("}", 1)[0]
+
+    assert "margin: 16px 0 0" in intro_rule
+    assert "Schedule and check dates" not in template
+    assert 'class="watch-meta-compact is-{{ watch_page.status }}"' in template
 
 
 def test_landing_explains_consensus_watch_as_fourth_product_step():

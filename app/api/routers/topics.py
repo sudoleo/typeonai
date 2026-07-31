@@ -80,6 +80,14 @@ def _topic_scoreboard(topic: dict, selected: dict, runs) -> dict:
         ),
         "position_count": len(dimensions),
         "source_count": len(selected.get("evidence") or []),
+        "direct_source_count": sum(
+            1 for item in selected.get("evidence") or []
+            if item.get("quality") == "high"
+        ),
+        "context_source_count": sum(
+            1 for item in selected.get("evidence") or []
+            if item.get("quality") != "high"
+        ),
         "version_count": len(runs),
         "tracked_since": (first_run or {}).get("date_display") or "",
     }
@@ -143,13 +151,25 @@ def _host_of(url) -> str:
     return re.sub(r"^www\.", "", host)
 
 
-def _enrich_evidence(item: dict) -> None:
+def _enrich_evidence(item: dict, preferred_domains=None) -> None:
     """Attach self-hosted embed hints (no third-party requests at view time)."""
+    classification = topics.classify_evidence(
+        item.get("url"), item.get("type"), preferred_domains,
+        title=str(item.get("title") or ""),
+        publisher=str(item.get("publisher") or ""),
+    )
+    item["url"] = classification["url"]
+    item["role"] = classification["role"]
+    item["role_label"] = classification["role_label"]
+    item["quality"] = classification["quality"]
+    item["quality_label"] = classification["quality_label"]
+    item["quality_rank"] = classification["rank"]
+    item["is_indirect"] = classification["is_indirect"]
     url = item.get("url")
     item["site"] = source_site_name(url)
     item["host"] = _host_of(url)
     item["is_video"] = _is_video_url(url)
-    handle = _x_handle(url) if item.get("type") == "x" else ""
+    handle = _x_handle(url) if item.get("role") == "community" else ""
     item["handle"] = handle
     seed = str(item.get("publisher") or handle.lstrip("@") or item.get("site") or "X")
     initial = next((ch for ch in seed if ch.isalnum()), "X")
@@ -287,6 +307,7 @@ async def topic_page(
     if not selected:
         raise HTTPException(status_code=404, detail="Topic version not found")
     current = selected["id"] == topic["latest_run_id"]
+    preferred_domains = (topic.get("source_rules") or {}).get("preferred_domains") or []
     for run in runs:
         run["date_display"] = _date_label(run["observed_at"])
         run["consensus_excerpt"] = markdown_to_plaintext(
@@ -294,7 +315,10 @@ async def topic_page(
         )
         run["is_selected"] = run["id"] == selected["id"]
         for item in run["evidence"]:
-            _enrich_evidence(item)
+            _enrich_evidence(item, preferred_domains)
+        run["evidence"].sort(key=lambda item: (
+            item.get("quality_rank", 99), item.get("published_at") or "", item.get("title") or ""
+        ))
     runs_desc = list(reversed(runs))
     history = _topic_history_view(runs_raw, int(selected.get("version") or 0))
     scoreboard = _topic_scoreboard(topic, selected, runs)

@@ -25,18 +25,52 @@
   background: var(--surface, var(--raise));
   box-shadow: none;
   color: var(--ink-2);
-  font-size: 0.86rem;
-  font-weight: 600;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
 }
 
-.bench-pill b { color: var(--accent); font-weight: 700; }
+.bench-pill b { color: var(--accent); font-weight: var(--font-weight-bold); }
+
+.bench-related-signal {
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  max-width: 620px;
+  margin-top: 22px;
+  padding: 11px 2px;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.bench-related-signal:hover {
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.bench-related-signal > span:first-child {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--agree);
+  box-shadow: 0 0 0 3px var(--agree-bg);
+}
+
+.bench-related-signal b {
+  color: var(--ink);
+  font-weight: var(--font-weight-semibold);
+}
 
 /* --- Section headers reuse .lp-head; add a soft eyebrow note ------------- */
 .bench-note {
   margin: 14px 0 0;
   color: var(--text-secondary);
-  font-size: 0.95rem;
-  line-height: 1.5;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-ui);
   max-width: 60ch;
 }
 
@@ -79,16 +113,16 @@
 
 .bench-chart-title {
   margin: 0 0 4px;
-  font-size: 1.18rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
   color: var(--text-primary);
 }
 
 .bench-chart-sub {
   margin: 0 0 20px;
   color: var(--text-secondary);
-  font-size: 0.92rem;
+  font-size: var(--font-size-sm);
 }
 
 /* --- Plot area: y-axis title + gridlines + bars ------------------------- */
@@ -104,16 +138,16 @@
   align-self: center;
   justify-self: center;
   color: var(--text-secondary);
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-normal);
 }
 
 .bench-yaxis {
   position: relative;
   height: calc(100 * var(--scale));
   color: var(--text-secondary);
-  font-size: 0.72rem;
+  font-size: var(--font-size-micro);
   font-variant-numeric: tabular-nums;
 }
 
@@ -121,7 +155,7 @@
   position: absolute;
   right: 8px;
   transform: translateY(-50%);
-  line-height: 1;
+  line-height: var(--line-height-solid);
 }
 
 /* Bars track sits in the third column and hosts the gridlines behind bars. */
@@ -197,16 +231,16 @@
   transform: translateX(-50%);
   white-space: nowrap;
   color: var(--text-primary);
-  font-size: 0.9rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
   font-variant-numeric: tabular-nums;
   opacity: 0;
   transition: opacity 0.4s ease;
   transition-delay: calc(var(--i, 0) * 65ms + 0.5s);
 }
 .bench-chart.is-visible .bench-val { opacity: 1; }
-.bench-col.is-consensus .bench-val { color: var(--accent); font-weight: 700; }
+.bench-col.is-consensus .bench-val { color: var(--accent); font-weight: var(--font-weight-bold); }
 
 /* Confidence whisker (95% CI) overlaid on the bar. */
 .bench-ci {
@@ -267,17 +301,17 @@
   justify-content: center;
   width: 22px;
   height: 22px;
-  font-size: 1rem;
+  font-size: var(--font-size-base);
   color: var(--text-secondary);
 }
 
 .bench-xlabel span {
-  font-size: 0.74rem;
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
   color: var(--text-secondary);
 }
-.bench-xlabel.is-consensus span { color: var(--accent); font-weight: 700; }
+.bench-xlabel.is-consensus span { color: var(--accent); font-weight: var(--font-weight-bold); }
 
 /* --- Icon theming (mirrors the /app + public-pages convention) ----------
    The consens.io mark (favicon.png) is white → invert it to dark on light
@@ -303,7 +337,7 @@
   padding-top: 16px;
   border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent);
   color: var(--text-secondary);
-  font-size: 0.82rem;
+  font-size: var(--font-size-sm);
 }
 .bench-legend span { display: inline-flex; align-items: center; gap: 8px; }
 .bench-swatch { width: 14px; height: 14px; border-radius: 4px; flex: 0 0 auto; }
@@ -331,10 +365,10 @@
 .bench-stat { min-width: 120px; }
 .bench-stat b {
   display: block;
-  font-size: clamp(2rem, 5vw, 2.8rem);
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.02em;
+  font-size: var(--font-size-display-sm);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-solid);
+  letter-spacing: var(--tracking-tight);
   color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
@@ -342,8 +376,8 @@
   display: block;
   margin-top: 8px;
   color: var(--text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.4;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
 }
 
 /* --- Fine print ---------------------------------------------------------- */
@@ -354,15 +388,15 @@
   border: 0;
   background: var(--surface, var(--raise));
   color: var(--text-secondary);
-  font-size: 0.86rem;
-  line-height: 1.6;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-reading);
 }
 .bench-fineprint h3 {
   margin: 0 0 10px;
   color: var(--text-primary);
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
 }
 .bench-fineprint ul { margin: 0; padding-left: 18px; }
@@ -395,12 +429,12 @@
 
 .bench-mini-title {
   margin: 0 0 3px;
-  font-size: 1.02rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
   color: var(--text-primary);
 }
-.bench-mini-sub { margin: 0 0 20px; color: var(--text-secondary); font-size: 0.84rem; }
+.bench-mini-sub { margin: 0 0 20px; color: var(--text-secondary); font-size: var(--font-size-sm); }
 
 .bench-mini-plot {
   display: flex;
@@ -422,8 +456,8 @@
 
 .bench-mini-val {
   margin-bottom: 6px;
-  font-size: 0.74rem;
-  font-weight: 700;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-bold);
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
   opacity: 0;
@@ -468,8 +502,8 @@
   padding-top: 14px;
   border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent);
   color: var(--text-secondary);
-  font-size: 0.8rem;
-  line-height: 1.4;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
 }
 .bench-mini-foot b { color: var(--text-primary); }
 
@@ -487,6 +521,6 @@
   .bench-plot { min-width: 600px; }
   .bench-xrow { min-width: 546px; }
   .bench-bar { border-radius: 2px 2px 0 0; }
-  .bench-xlabel span { font-size: 0.7rem; }
+  .bench-xlabel span { font-size: var(--font-size-micro); }
   .bench-xlabel img, .bench-xlabel .bench-vote { width: 20px; height: 20px; }
 }

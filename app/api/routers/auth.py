@@ -60,6 +60,7 @@ async def confirm_registration(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=400, detail="E-mail address not yet verified.")
 
     response = JSONResponse({"status": "registered"})
+    response.headers["Cache-Control"] = "no-store"
     forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
     response.set_cookie(
         "session",
@@ -76,5 +77,6 @@ async def confirm_registration(request: Request, data: dict = Body(...)):
 @router.delete("/auth/session")
 async def clear_session():
     response = JSONResponse({"status": "signed_out"})
+    response.headers["Cache-Control"] = "no-store"
     response.delete_cookie("session", path="/", httponly=True, samesite="lax")
     return response

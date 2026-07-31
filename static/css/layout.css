@@ -129,10 +129,10 @@ body:has(.sidebar.active) .brand-float {
 .brand-float-title,
 .sidebar-brand-title {
   color: var(--text-color);
-  font-size: 1.05rem;
-  font-weight: 650;
-  letter-spacing: -0.022em;
-  line-height: 1;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--line-height-solid);
   white-space: nowrap;
   font-feature-settings: "kern" 1;
 }
@@ -166,10 +166,10 @@ body:has(.sidebar.active) .brand-float {
   border-radius: var(--radius-pill);
   background: linear-gradient(180deg, color-mix(in srgb, #ffffff 24%, transparent), transparent 60%), #c9a232;
   color: #ffffff;
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  line-height: 1;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-wide);
+  line-height: var(--line-height-solid);
   text-transform: uppercase;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 2px 6px rgba(201, 162, 50, 0.22);
 }
@@ -191,7 +191,7 @@ body:has(.sidebar.active) .brand-float {
 #proBadge {
   display: none;
   padding: 2px 7px;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-wide);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 4px 12px rgba(201, 162, 50, 0.24);
 }
 
@@ -203,10 +203,10 @@ body:has(.sidebar.active) .brand-float {
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--glass-bg-strong) 60%, transparent);
   color: var(--sidebar-text-muted);
-  font-size: 0.67rem;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-  line-height: 1;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-normal);
+  line-height: var(--line-height-solid);
   white-space: nowrap;
   cursor: pointer;
   box-shadow: inset 0 1px 0 var(--glass-highlight);
@@ -222,8 +222,8 @@ body:has(.sidebar.active) .brand-float {
 /* Ehemalige Topbar-Link-Optik; lebt weiter in den Links des Account-Popups
    (#emailPopup, firebase.js rendert .top-bar-about-Klassen). */
 .top-bar-about {
-  font-size: 0.9rem;
-  font-weight: 550;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   color: color-mix(in srgb, var(--text-color) 76%, var(--sidebar-text-muted));
   white-space: nowrap;
   transition: color .15s ease;
@@ -259,9 +259,9 @@ body:has(.sidebar.active) .brand-float {
   padding: 0 14px;
   border-radius: var(--radius-pill);
   font-family: inherit;
-  font-size: 0.85rem;
-  font-weight: 650;
-  line-height: 1;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-solid);
   white-space: nowrap;
   cursor: pointer;
   transition: color .15s ease, border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
@@ -304,7 +304,7 @@ body:has(.sidebar.active) .brand-float {
   .auth-top-signup {
     min-height: 29px;
     padding-inline: 11px;
-    font-size: 0.8rem;
+    font-size: var(--font-size-xs);
   }
 }
 
@@ -326,9 +326,9 @@ body:has(.sidebar.active) .brand-float {
     linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 36%, transparent), transparent 62%),
     color-mix(in srgb, var(--glass-bg-strong) 62%, transparent);
   color: var(--text-color);
-  font-size: 0.86rem;
-  font-weight: 650;
-  line-height: 1;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-solid);
   white-space: nowrap;
   cursor: pointer;
   box-shadow: inset 0 1px 0 var(--glass-highlight), 0 1px 3px rgba(20, 21, 23, 0.05);
@@ -490,7 +490,7 @@ body:has(.sidebar.active) .brand-float {
   border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--sidebar-hover) 80%, transparent);
   color: var(--text-color);
-  font-size: 0.8rem;
+  font-size: var(--font-size-xs);
   outline: none;
   transition: background-color .15s ease;
 }
@@ -567,7 +567,7 @@ body:has(.sidebar.active) .brand-float {
   width: 34px;
   height: 34px;
   line-height: 34px;
-  font-size: 19px;
+  font-size: var(--font-size-lg);
   text-align: center;
   color: var(--icon-color);
 }
@@ -591,11 +591,11 @@ body:has(.sidebar.active) .brand-float {
   text-align: left;
   margin: 0 0 9px;
   padding: 0;
-  font-size: 0.72rem;
+  font-size: var(--font-size-micro);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-wide);
   color: var(--sidebar-text-muted);
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 .sidebar-settings {
@@ -638,8 +638,8 @@ body:has(.sidebar.active) .brand-float {
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-color);
 }
 
@@ -652,7 +652,7 @@ body:has(.sidebar.active) .brand-float {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  font-size: 0.7rem;
+  font-size: var(--font-size-micro);
   color: var(--sidebar-text-muted);
   opacity: 0.85;
 }
@@ -715,11 +715,11 @@ body:has(.sidebar.active) .brand-float {
   text-align: left;
   margin: 0;
   padding: 0;
-  font-size: 0.72rem;
+  font-size: var(--font-size-micro);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-wide);
   color: var(--sidebar-text-muted);
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 /* Geoeffnete Sections: etwas Abstand zwischen Heading und Inhalt */
@@ -776,8 +776,8 @@ body:has(.sidebar.active) .brand-float {
 .sidebar-toggle-arrow {
   display: inline-block;
   color: var(--sidebar-text-muted);
-  font-size: 0.95rem;
-  line-height: 1;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-solid);
   opacity: 0.45;
   transform: rotate(90deg); /* points down when open */
   transition: opacity .15s ease, transform .18s ease, color .15s ease;
@@ -805,11 +805,11 @@ body:has(.sidebar.active) .brand-float {
   flex-grow: 1;
   text-align: left;
   margin: 0;
-  font-size: 0.75rem;
+  font-size: var(--font-size-xs);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--tracking-wide);
   color: var(--sidebar-text-muted);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 .sidebar-title {
@@ -820,7 +820,7 @@ body:has(.sidebar.active) .brand-float {
 }
 
 .sidebar-title h1 {
-  font-size: 1.2em;
+  font-size: var(--font-size-lg);
   margin: 5px 0;
 }
 
@@ -845,8 +845,8 @@ body:has(.sidebar.active) .brand-float {
   color: color-mix(in srgb, #0f6e56 72%, var(--text-color));
   text-align: center;
   line-height: 30px;
-  font-weight: 700;
-  font-size: 14px;
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-sm);
   cursor: pointer;
   box-sizing: border-box;
   transition: background-color .15s ease, border-color .15s ease;
@@ -898,8 +898,8 @@ body:has(.sidebar.active) .brand-float {
   overflow: hidden;
   border-bottom: 1px solid rgba(0, 0, 0, 0.09);
   color: var(--text-color);
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -945,7 +945,7 @@ body:has(.sidebar.active) .brand-float {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  font-size: 0.78rem;
+  font-size: var(--font-size-xs);
   font-family: inherit;
   color: var(--text-color);
 }
@@ -955,7 +955,7 @@ body:has(.sidebar.active) .brand-float {
   align-items: center;
   gap: 10px;
   min-height: 22px;
-  line-height: 1.25;
+  line-height: var(--line-height-heading);
   color: var(--sidebar-text-muted);
 }
 #usageDisplay span:empty {
@@ -963,7 +963,7 @@ body:has(.sidebar.active) .brand-float {
 }
 #usageDisplay strong {
   color: var(--text-color);
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
 }
 #usageDisplay br { display: none; }
@@ -983,8 +983,8 @@ body:has(.sidebar.active) .brand-float {
   width: 100%;
   min-height: 30px;
   padding: 5px 8px;
-  font-size: 0.8rem;
-  font-weight: 550;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
   border: 0;
   border-radius: var(--radius-xs);
   background: transparent;
@@ -999,7 +999,7 @@ body:has(.sidebar.active) .brand-float {
   min-height: 30px;
   justify-content: flex-start;
   color: var(--sidebar-text-muted);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   background: transparent;
   opacity: 1;
 }
@@ -1025,7 +1025,7 @@ body:has(.sidebar.active) .brand-float {
   width: calc(100% - 12px); margin: 8px 6px 4px; padding: 8px 10px;
   border: 1px solid var(--sidebar-border); border-radius: var(--radius-sm);
   background: transparent; color: var(--sidebar-text-muted); font: inherit;
-  font-size: .75rem; cursor: pointer;
+  font-size: var(--font-size-xs); cursor: pointer;
 }
 .bookmarks-load-more:hover { color: var(--sidebar-text); border-color: var(--accent); }
 .bookmark.is-loading { opacity: .58; pointer-events: none; }
@@ -1034,7 +1034,7 @@ body:has(.sidebar.active) .brand-float {
 .bookmark {
   cursor: pointer;
   background: transparent;
-  font-size: 0.8rem;
+  font-size: var(--font-size-xs);
   margin-bottom: 1px;
   padding: 7px 30px 7px 8px;
   border: 0;
@@ -1054,7 +1054,7 @@ body:has(.sidebar.active) .brand-float {
   text-overflow: ellipsis;
   padding-right: 0;
   margin: 0;
-  line-height: 1.35;
+  line-height: var(--line-height-ui);
 }
 .sidebar .bookmark:hover {
   background-color: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
@@ -1073,7 +1073,7 @@ body:has(.sidebar.active) .brand-float {
   color: var(--sidebar-text-muted);
   cursor: pointer;
   font-size: 0;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   opacity: 0;
   transform: translateY(-50%) !important;
   transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
@@ -1087,8 +1087,8 @@ body:has(.sidebar.active) .brand-float {
 }
 .delete-bookmark::before {
   content: "\00d7";
-  font-size: 15px;
-  line-height: 1;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-solid);
 }
 .bookmark:hover .delete-bookmark,
 .delete-bookmark:focus-visible {
@@ -1176,7 +1176,7 @@ body:has(.sidebar.active) .brand-float {
   .login-text {
     min-height: 29px;
     padding-inline: 12px;
-    font-size: 0.83rem;
+    font-size: var(--font-size-sm);
   }
 
   .container {

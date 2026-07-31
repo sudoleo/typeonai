@@ -269,6 +269,16 @@
         return;
       }
 
+      const selectedModelCount = getSelectedModelCount();
+      if (selectedModelCount < 2) {
+        window.updateQuestionInputAccess?.();
+        trackAppEvent("app_query_blocked", {
+          reason: "minimum_models",
+          selected_models: selectedModelCount
+        });
+        return;
+      }
+
       // Überprüfe zuerst das Wortlimit. Falls überschritten, wird die Funktion beendet.
       if (typeof window.updateQuestionInputAccess === "function" && !window.updateQuestionInputAccess()) {
         return;

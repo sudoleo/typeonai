@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="See which AI provider families most often earn the independent consensus judge's best-answer selection across real consens.io runs.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://www.consens.io/model-pulse">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="consens.io">
+  <meta property="og:title" content="Live AI Model Pulse | consens.io">
+  <meta property="og:description" content="An anonymized, all-time signal showing which individual model answers stand out in real consensus runs.">
+  <meta property="og:url" content="https://www.consens.io/model-pulse">
+  <meta property="og:image" content="https://www.consens.io/static/favicon-square.png">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Live AI Model Pulse | consens.io">
+  <meta name="twitter:description" content="Which model answers most often earn the independent judge's pick in real consens.io runs?">
+  <title>Live AI Model Pulse | consens.io</title>
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260731-ui-polish1">
+  <link rel="stylesheet" href="/static/css/model-pulse.css?v=20260731-inter1">
+  <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
+  <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
+  <script>
+    (function () {
+      const savedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
+        document.documentElement.classList.add("dark-mode");
+      }
+    })();
+  </script>
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
+</head>
+<body>
+  {% include "partials/public_nav.html" %}
+
+  <main>
+    <section class="lp-section lp-section--white pulse-hero">
+      <div class="lp-shell pulse-hero-grid">
+        <div class="lp-head">
+          <p class="lp-eyebrow"><span class="pulse-live-dot" aria-hidden="true"></span> Live model pulse</p>
+          <h1 class="lp-display">Which model answers stand out in real runs?</h1>
+          <p class="lp-lead">A running, anonymized signal from consens.io: every time the independent judge identifies the strongest individual answer behind a consensus, that provider family earns one selection.</p>
+        </div>
+        <div class="pulse-hero-note">
+          <strong>Useful signal, honest limits.</strong>
+          <p>This is not a popularity vote and it is not an accuracy benchmark. It shows which answers the judge finds most useful across the changing mix of questions people actually ask.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-section lp-section--grey pulse-board-section">
+      <div class="lp-shell pulse-board-grid">
+        <article class="lp-model-pulse pulse-board" id="modelLeaderboard" aria-labelledby="modelLeaderboardTitle">
+          <div class="lp-model-pulse-head">
+            <p class="lp-eyebrow">All-time ranking</p>
+            <h2 id="modelLeaderboardTitle">Best-answer selections</h2>
+            <p>Provider and product aliases are combined into one family, so Claude and Anthropic never appear as separate competitors.</p>
+          </div>
+          <div id="modelLeaderboardRows" class="lp-model-pulse-list is-loading" aria-live="polite" aria-busy="true">
+            <span class="lp-model-pulse-skeleton"></span>
+            <span class="lp-model-pulse-skeleton"></span>
+            <span class="lp-model-pulse-skeleton"></span>
+          </div>
+          <div class="lp-model-pulse-foot">
+            <p><span id="modelLeaderboardTotal">Loading real-run selections…</span> No prompt text or user identity is shown in this tally.</p>
+          </div>
+        </article>
+
+        <aside class="pulse-explainer" aria-label="How to read the model pulse">
+          <p class="lp-eyebrow">How to read it</p>
+          <div class="pulse-explainer-item">
+            <span>01</span>
+            <div><h3>One run can produce one pick</h3><p>The judge compares the completed answers and may identify the strongest individual response used behind the consensus.</p></div>
+          </div>
+          <div class="pulse-explainer-item">
+            <span>02</span>
+            <div><h3>Counts show recurring usefulness</h3><p>A higher total means that provider's answers have stood out more often across real consens.io questions.</p></div>
+          </div>
+          <div class="pulse-explainer-item">
+            <span>03</span>
+            <div><h3>The question mix is not controlled</h3><p>Models, topics and difficulty vary between runs. Use the ranking as a product pulse, not a scientific league table.</p></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="lp-section lp-section--white">
+      <div class="lp-shell">
+        <div class="lp-head">
+          <p class="lp-eyebrow">Two different lenses</p>
+          <h2 class="lp-h2">Live behavior and controlled accuracy answer different questions.</h2>
+        </div>
+        <div class="pulse-lenses">
+          <article>
+            <span class="pulse-lens-label">Model pulse</span>
+            <h3>What stands out in everyday runs?</h3>
+            <dl>
+              <div><dt>Questions</dt><dd>Real, changing prompts</dd></div>
+              <div><dt>Signal</dt><dd>Independent judge selections</dd></div>
+              <div><dt>Best used for</dt><dd>Product behavior and model momentum</dd></div>
+            </dl>
+          </article>
+          <article>
+            <span class="pulse-lens-label">MMLU-Pro benchmark</span>
+            <h3>What is correct under fixed conditions?</h3>
+            <dl>
+              <div><dt>Questions</dt><dd>314 known-answer exam items</dd></div>
+              <div><dt>Signal</dt><dd>Measured accuracy</dd></div>
+              <div><dt>Best used for</dt><dd>Controlled model and consensus comparison</dd></div>
+            </dl>
+            <a href="/benchmark" class="lp-link" data-umami-event="pulse_open_benchmark">Open the full benchmark&nbsp;›</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-section lp-section--grey">
+      <div class="lp-shell lp-final">
+        <div class="lp-head">
+          <p class="lp-eyebrow">Run your own comparison</p>
+          <h2 class="lp-h2">Ask once. See every answer. Keep the consensus.</h2>
+        </div>
+        <a href="/app" class="lp-btn lp-btn--primary" data-umami-event="pulse_open_app">Open app</a>
+      </div>
+    </section>
+  </main>
+
+  {% include "partials/public_footer.html" %}
+  <script defer src="/static/js/model-pulse.js?v=20260731-pulsepage2"></script>
+</body>
+</html>

@@ -95,7 +95,7 @@ const DEMO_DATA = {
   <ul>
     <li>Iron: supplement when deficiency is shown or a clinician recommends it, not as a default [S5].</li>
     <li>Calcium: aim to meet the daily target from food first; fortified plant milks, tofu and dairy can change the answer [S6].</li>
-    <li>Creatine: optional, mainly for strength or high-intensity training goals [S7].</li>
+    <li>Creatine: optional, mainly for strength or high-intensity training goals [S8].</li>
   </ul>
   <p><small>General information only; individual needs depend on labs, medical history, medication and pregnancy status.</small></p>
 </div>`,
@@ -106,11 +106,11 @@ const DEMO_DATA = {
   <ol>
     <li>If you are vegetarian most days, make B12 the first check. Food sources can be inconsistent unless you regularly use fortified foods [S1].</li>
     <li>If you get little sun or live through long winters, vitamin D becomes a practical candidate; a 25-OH-D blood test can guide dosing [S2].</li>
-    <li>If you never eat fish, flax, chia and walnuts cover ALA, and for most healthy adults that is enough — a routine algae-oil supplement is optional rather than essential [S3].</li>
-    <li>If your salt is non-iodized and seaweed is rare, iodine may be a gap, especially around pregnancy planning [S4].</li>
+    <li>If you never eat fish, flax, chia and walnuts cover ALA, and for most healthy adults that is enough — a routine algae-oil supplement is optional rather than essential [S4].</li>
+    <li>If your salt is non-iodized and seaweed is rare, iodine may be a gap, especially around pregnancy planning [S3].</li>
     <li>If fatigue or heavy periods are part of the picture, check ferritin or an iron panel before taking iron [S5].</li>
-    <li>If you train hard, creatine monohydrate at a small daily dose is a reasonable performance-oriented add-on [S6].</li>
-    <li>If dairy and fortified plant drinks are low, calculate calcium intake before buying a pill [S7].</li>
+    <li>If you train hard, creatine monohydrate at a small daily dose is a reasonable performance-oriented add-on [S8].</li>
+    <li>If dairy and fortified plant drinks are low, calculate calcium intake before buying a pill [S6].</li>
   </ol>
   <p><small>Start with the smallest set that solves a real gap, then review symptoms and labs after several weeks.</small></p>
 </div>`,
@@ -122,8 +122,8 @@ const DEMO_DATA = {
   <ul>
     <li>Core: B12 through supplement or fortified foods.</li>
     <li>Common gaps: iodine, vitamin D and long-chain omega-3, depending on salt choice, sun exposure and fish avoidance [S2] [S3] [S4].</li>
-    <li>Lab-driven: iron status, ferritin and sometimes zinc should guide extra supplementation [S5] [S6].</li>
-    <li>Optional performance layer: creatine may help people doing resistance training or repeated high-intensity work [S7].</li>
+    <li>Lab-driven: iron status, ferritin and sometimes zinc should guide extra supplementation [S5] [S7].</li>
+    <li>Optional performance layer: creatine may help people doing resistance training or repeated high-intensity work [S8].</li>
   </ul>
   <p>The practical workflow is diet review, targeted labs, one or two changes, then recheck rather than stacking many products at once.</p>
   <p><small>This is educational context and not a diagnosis or prescription.</small></p>
@@ -134,8 +134,8 @@ const DEMO_DATA = {
   <p>Pick the profile that fits best</p>
   <ul>
     <li>Busy office vegetarian: B12 as the anchor; vitamin D is worth checking when most daylight hours are indoors [S1] [S2].</li>
-    <li>Strength or endurance athlete: keep the nutrition basics, then consider creatine; monitor iron if performance drops or recovery worsens [S3] [S4].</li>
-    <li>Pregnancy planning or pregnant: discuss a prenatal approach with folate, B12 and iodine; iron should follow labs and clinician advice [S1] [S5].</li>
+    <li>Strength or endurance athlete: keep the nutrition basics, then consider creatine; monitor iron if performance drops or recovery worsens [S8] [S5].</li>
+    <li>Pregnancy planning or pregnant: discuss a prenatal approach with folate, B12 and iodine; iron should follow labs and clinician advice [S1] [S3] [S5].</li>
     <li>Dairy-light or dairy-free: count calcium from fortified drinks, tofu, dairy alternatives and greens before adding a supplement [S6].</li>
     <li>Grain-and-legume-heavy pattern: zinc absorption can be lower in high-phytate diets, so food planning matters [S7].</li>
   </ul>
@@ -147,18 +147,18 @@ const DEMO_DATA = {
   <p>Risk and safety checklist</p>
   <h4>Before buying</h4>
   <ul>
-    <li>List medication, thyroid history and recent labs. Iron and calcium can interact with some medicines, so timing matters [S1] [S2].</li>
-    <li>Write down a normal week of meals; this quickly reveals whether B12, D, iodine, omega-3 or calcium are actually low [S3] [S4] [S5] [S6].</li>
+    <li>List medication, thyroid history and recent labs. Iron and calcium can interact with some medicines, so timing matters [S5] [S6].</li>
+    <li>Write down a normal week of meals; this quickly reveals whether B12, D, iodine, omega-3 or calcium are actually low [S1] [S2] [S3] [S4] [S6].</li>
   </ul>
   <h4>Commonly sensible</h4>
   <ul>
-    <li>B12 for most vegetarians, D when sun exposure is low, iodine when iodized salt and seaweed are absent, and algae EPA/DHA for fish-free diets [S3] [S4] [S5] [S6].</li>
-    <li>Creatine is a specific performance tool, not a universal health requirement [S7].</li>
+    <li>B12 for most vegetarians, D when sun exposure is low, iodine when iodized salt and seaweed are absent, and algae EPA/DHA for fish-free diets [S1] [S2] [S3] [S4].</li>
+    <li>Creatine is a specific performance tool, not a universal health requirement [S8].</li>
   </ul>
   <h4>Avoid</h4>
   <ul>
     <li>High-dose shotgun multis without a reason.</li>
-    <li>Iron just in case; overdose risk and side effects make labs important [S1].</li>
+    <li>Iron just in case; overdose risk and side effects make labs important [S5].</li>
     <li>Overlapping products that quietly add multiple doses of the same nutrient.</li>
   </ul>
   <p><small>Use supplements as precise tools: one gap, one intervention, one follow-up check.</small></p>
@@ -170,10 +170,10 @@ const DEMO_DATA = {
   <ul>
     <li>B12: yes, treat it as the boring baseline. Vegetarian diets can miss it unless fortified foods are deliberate [S1].</li>
     <li>Vitamin D: if your lifestyle is mostly indoors or your winters are long, test or supplement thoughtfully [S2].</li>
-    <li>Omega-3: if fish is off the menu, algae oil is the direct EPA/DHA route [S3].</li>
-    <li>Iodine: trendy non-iodized salts do not help your thyroid; check your actual iodine sources [S4].</li>
+    <li>Omega-3: if fish is off the menu, algae oil is the direct EPA/DHA route [S4].</li>
+    <li>Iodine: trendy non-iodized salts do not help your thyroid; check your actual iodine sources [S3].</li>
     <li>Iron: blood work first. Guessing with iron is unnecessary risk [S5].</li>
-    <li>Creatine: useful if you lift, sprint or train hard; not mandatory for everyone [S6].</li>
+    <li>Creatine: useful if you lift, sprint or train hard; not mandatory for everyone [S8].</li>
   </ul>
   <p><small>Internet guidance can help you ask better questions; your labs and clinician still settle the personal answer.</small></p>
 </div>`
@@ -200,11 +200,11 @@ const DEMO_DATA = {
     models_compared: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"],
     best_model: "Anthropic",
     agreement: {
-      score: 41,
-      level: "partially",
+      score: 83,
+      level: "largely",
       model_count: 6,
-      major_contradictions: 1,
-      minor_contradictions: 0
+      major_contradictions: 0,
+      minor_contradictions: 1
     },
     claims: [
       {
@@ -232,7 +232,7 @@ const DEMO_DATA = {
         // Marker). Muss woertlich im Antworttext oben vorkommen.
         consensus_anchor: "algae EPA/DHA is the direct fish-free option",
         type: "contradiction",
-        severity: "major",
+        severity: "minor",
         positions: [
           {
             stance: "Algae EPA/DHA is the recommended route.",
@@ -251,7 +251,7 @@ const DEMO_DATA = {
   },
 
   differences:
-`The consensus answer is partially credible.
+`The consensus answer is largely credible.
 
 The models broadly agree on the hierarchy: B12 first; vitamin D, iodine and omega-3 as diet and lifestyle indicate; iron only with labs; calcium by intake calculation; creatine mainly for training goals. They differ on one substantive point — whether a fish-free vegetarian really needs an algae-based omega-3 supplement, or whether plant ALA is enough for most people.
 
@@ -467,10 +467,9 @@ async function renderDemoConsensus(mainP, diffP) {
     diffP.innerHTML = DOMPurify.sanitize(html);
   }
 
-  const best =
-    DEMO_DATA.differencesData?.best_model ||
-    (DEMO_DATA.differences.match(/BestModel:\s*(.*)/i)?.[1] || "").trim();
-  if (best) window.recordModelVote?.(best, "BestModel");
+  // Demo-Ergebnisse sind reine lokale Produktvorschau. Sie dürfen weder das
+  // Best-answer-Nutzungssignal noch die serverseitige Differences-Telemetrie
+  // beeinflussen; deshalb gibt es hier bewusst keinen Persistenz-/Vote-Aufruf.
   window.App?.consensusPipeline?.onConsensusEnd?.();
   showPostDemoLoginPrompt();
 }
@@ -575,7 +574,14 @@ function createStartDemoChip() {
   btn.className = "demo-chip";
   btn.type = "button";
   btn.setAttribute("aria-label", "Start interactive demo");
-  btn.textContent = "Try Demo";
+  btn.textContent = "Watch demo";
+
+  const inputActions = container.querySelector(".input-actions-container");
+  if (inputActions) {
+    inputActions.prepend(btn);
+  } else {
+    container.appendChild(btn);
+  }
 
   const syncChipState = () => {
     const hasQuestionText = Boolean(questionInput?.value.length);
@@ -603,7 +609,6 @@ function createStartDemoChip() {
     await runDemoFlow();
   });
 
-  container.appendChild(btn);
   syncChipState();
 }
 

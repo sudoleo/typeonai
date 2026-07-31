@@ -12,7 +12,7 @@ import hashlib
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import app.core.config as cfg
 from app.core.security import db_firestore
@@ -28,7 +28,48 @@ CONFIRM_TOKEN_MAX_AGE_DAYS = 3
 TOPIC_STATUSES = {"active", "paused", "archived"}
 UPDATE_INTERVALS = {"manual", "daily", "weekly", "biweekly", "monthly"}
 CHANGE_TYPES = {"stable", "minor", "major"}
-EVIDENCE_TYPES = {"x", "official", "github", "documentation", "press"}
+EVIDENCE_TYPES = (
+    "primary", "research", "documentation", "reporting", "community", "rumor"
+)
+LEGACY_EVIDENCE_TYPE_MAP = {
+    "official": "primary",
+    "github": "documentation",
+    "press": "reporting",
+    "x": "community",
+}
+EVIDENCE_ROLE_LABELS = {
+    "primary": "Primary source",
+    "research": "Research paper",
+    "documentation": "Documentation",
+    "reporting": "Reporting",
+    "community": "Community",
+    "rumor": "Rumor",
+}
+EVIDENCE_ROLE_ORDER = {
+    "primary": 0,
+    "documentation": 1,
+    "research": 2,
+    "reporting": 3,
+    "community": 4,
+    "rumor": 5,
+}
+_PRIMARY_SOURCE_DOMAINS = {
+    "openai.com", "anthropic.com", "mistral.ai", "deepmind.google",
+    "blog.google", "ai.google.dev", "developers.google.com", "x.ai",
+    "docs.x.ai", "deepseek.com", "cursor.com",
+}
+_RESEARCH_DOMAINS = {
+    "arxiv.org", "doi.org", "biorxiv.org", "medrxiv.org", "ssrn.com",
+    "acm.org", "ieee.org", "jmlr.org",
+}
+_COMMUNITY_DOMAINS = {
+    "x.com", "twitter.com", "reddit.com", "youtube.com", "youtu.be",
+    "news.ycombinator.com", "medium.com", "substack.com",
+}
+_RUMOR_DOMAINS = {
+    "kalshi.com", "polymarket.com", "manifold.markets", "myriad.markets",
+}
+_INDIRECT_HOSTS = {"vertexaisearch.cloud.google.com"}
 PROVIDER_ORDER = ("openai", "mistral", "anthropic", "gemini", "deepseek", "grok")
 PROVIDER_LABELS = {
     "openai": "OpenAI",
@@ -91,7 +132,7 @@ def _public_datetime(value):
 
 
 def _valid_url(value) -> str:
-    url = str(value or "").strip()
+    url = canonical_evidence_url(value)
     try:
         parsed = urlsplit(url)
     except ValueError:
@@ -104,6 +145,94 @@ def _valid_url(value) -> str:
     ):
         raise TopicError("bad_request", "Each evidence item needs a valid http(s) URL.")
     return url
+
+
+def _matches_domain(host: str, domains) -> bool:
+    return any(host == domain or host.endswith("." + domain) for domain in domains)
+
+
+def canonical_evidence_url(value) -> str:
+    """Unwrap ordinary Google redirect URLs when they expose their target.
+
+    Signed grounding redirects do not expose a destination and therefore stay
+    intact, but are explicitly classified as indirect/low-confidence below.
+    """
+    url = str(value or "").strip()
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return url
+    host = (parsed.hostname or "").lower().removeprefix("www.")
+    if host in {"google.com", "googleusercontent.com"} and parsed.path == "/url":
+        query = parse_qs(parsed.query)
+        target = (query.get("q") or query.get("url") or [""])[0]
+        if str(target).startswith(("http://", "https://")):
+            return str(target).strip()
+    return url
+
+
+def classify_evidence(
+    url: str,
+    declared_type: str = "",
+    preferred_domains=None,
+    *,
+    title: str = "",
+    publisher: str = "",
+) -> dict:
+    """Return a public source role and confidence tier from URL + provenance."""
+    canonical_url = canonical_evidence_url(url)
+    try:
+        parsed = urlsplit(canonical_url)
+        host = (parsed.hostname or "").lower().removeprefix("www.")
+        path = (parsed.path or "").lower()
+    except ValueError:
+        host, path = "", ""
+    preferred = {
+        str(domain or "").lower().removeprefix("www.")
+        for domain in (preferred_domains or []) if domain
+    }
+    declared = LEGACY_EVIDENCE_TYPE_MAP.get(
+        str(declared_type or "").strip().lower(),
+        str(declared_type or "").strip().lower(),
+    )
+    haystack = f"{host} {path} {title} {publisher}".lower()
+    indirect = _matches_domain(host, _INDIRECT_HOSTS)
+
+    if indirect:
+        role = "rumor"
+    elif _matches_domain(host, _RUMOR_DOMAINS) or re.search(
+        r"(?:^|[.\-/])(leak|rumou?r|prediction[-_ ]?market)", haystack
+    ):
+        role = "rumor"
+    elif _matches_domain(host, _RESEARCH_DOMAINS) or path.endswith(".pdf") and "paper" in haystack:
+        role = "research"
+    elif host == "github.com" or host.endswith(".github.com") or "docs" in host or "/docs" in path or "/documentation" in path:
+        role = "documentation"
+    elif _matches_domain(host, preferred) or _matches_domain(host, _PRIMARY_SOURCE_DOMAINS):
+        role = "primary"
+    elif _matches_domain(host, _COMMUNITY_DOMAINS):
+        role = "community"
+    elif declared in EVIDENCE_TYPES:
+        role = declared
+    else:
+        role = "reporting"
+
+    quality = "high" if role in {"primary", "research", "documentation"} else (
+        "standard" if role == "reporting" else "low"
+    )
+    return {
+        "url": canonical_url,
+        "role": role,
+        "role_label": EVIDENCE_ROLE_LABELS[role],
+        "quality": quality,
+        "quality_label": {
+            "high": "Direct evidence",
+            "standard": "Independent context",
+            "low": "Unverified / indirect" if indirect or role == "rumor" else "Community signal",
+        }[quality],
+        "rank": EVIDENCE_ROLE_ORDER[role] + (10 if indirect else 0),
+        "is_indirect": indirect,
+    }
 
 
 def normalize_models(value) -> list[str]:
@@ -202,6 +331,7 @@ def normalize_source_rules(value) -> dict:
     allowed_types = []
     for item in allowed:
         item = str(item or "").strip().lower()
+        item = LEGACY_EVIDENCE_TYPE_MAP.get(item, item)
         if item not in EVIDENCE_TYPES:
             raise TopicError("bad_request", f"Unsupported evidence type: {item}")
         if item not in allowed_types:
@@ -236,6 +366,7 @@ def normalize_evidence(value) -> list[dict]:
         if url in seen:
             continue
         kind = str(raw.get("type") or "").strip().lower()
+        kind = LEGACY_EVIDENCE_TYPE_MAP.get(kind, kind)
         if kind not in EVIDENCE_TYPES:
             raise TopicError("bad_request", f"Unsupported evidence type: {kind}")
         evidence.append({

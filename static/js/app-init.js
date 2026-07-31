@@ -182,6 +182,9 @@
 
         window.updateQuestionInputAccess = function () {
           const canAsk = window.userCanAskQuestions();
+          const selectedModelCount = window.App.getSelectedModelCount?.() || 0;
+          const hasMinimumModels = selectedModelCount >= 2;
+          const canStartRun = canAsk && hasMinimumModels;
           const sendButton = document.getElementById("sendButton");
           const postDemoLoginPrompt = document.getElementById("postDemoLoginPrompt");
 
@@ -192,8 +195,14 @@
           }
 
           if (sendButton && !sendButton.classList.contains("is-cancel-action")) {
-            sendButton.disabled = !canAsk;
-            sendButton.title = canAsk ? "Send question" : "Sign in to ask questions or use your own API keys";
+            sendButton.disabled = !canStartRun;
+            sendButton.title = !canAsk
+              ? "Sign in to ask questions or use your own API keys"
+              : hasMinimumModels
+                ? "Send question"
+                : "Select at least two models to run consensus";
+            sendButton.setAttribute("aria-label", sendButton.title);
+            sendButton.setAttribute("aria-disabled", String(!canStartRun));
           }
 
           if (canAsk && postDemoLoginPrompt) {
@@ -207,7 +216,7 @@
           // wieder aufmachen.
           window.App?.followup?.syncInputLock?.();
 
-          return canAsk;
+          return canStartRun;
         };
 
         window.updateQuestionInputAccess();
@@ -701,33 +710,23 @@
           }
         });
 
-        // Toggle FAQ items with icons
+        // Toggle FAQ items with icons. Most answers are a single paragraph;
+        // richer answers (such as model insights) use the same direct-child
+        // contract via .faq-answer.
         document.querySelectorAll('.faq-item h3').forEach((question) => {
+          question.setAttribute('aria-expanded', 'false');
           question.addEventListener('click', () => {
             const answer = question.nextElementSibling;
             const icon = question.querySelector('.faq-toggle-icon');
-            if (!answer.style.display || answer.style.display === 'none') {
-              answer.style.display = 'block';
-              icon.textContent = '－';
-            } else {
-              answer.style.display = 'none';
-              icon.textContent = '＋';
-            }
+            if (!answer || !icon) return;
+            const shouldOpen = !answer.style.display || answer.style.display === 'none';
+            answer.style.display = shouldOpen ? 'block' : 'none';
+            icon.textContent = shouldOpen ? '−' : '+';
+            question.setAttribute('aria-expanded', String(shouldOpen));
           });
         });
 
-        // Standardmäßig Antworten ausgeblendet (optional)
-        document.querySelectorAll('.faq-item h3').forEach((question) => {
-          question.addEventListener('click', () => {
-            const answer = question.nextElementSibling;
-            const icon = question.querySelector('.faq-toggle-icon');
-            if (answer && icon) {
-              icon.textContent = answer.style.display === 'block' ? '-' : '+';
-            }
-          });
-        });
-
-        document.querySelectorAll('.faq-item p').forEach((answer) => {
+        document.querySelectorAll('.faq-item > p, .faq-item > .faq-answer').forEach((answer) => {
           answer.style.display = 'none';
         });
 
@@ -989,18 +988,28 @@
           }
         };
 
-        // Modelle-Auswahl umschalten (für den Pfeil in der Modelle Section)
-        window.toggleModelSelection = function () {
-          const section = document.querySelector(".models-section");
-          const area = document.getElementById("modelSelectionArea");
-          const toggle = document.getElementById("toggleModelSelection");
-          if (!section || !area || !toggle) return;
+        // Models remains one compact sidebar row. Its detailed controls open
+        // on the composer's existing run picker instead of expanding the
+        // navigation into a six-row settings panel.
+        document.getElementById("sidebarModelPicker")?.addEventListener("click", function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          const consensusSelect = document.getElementById("consensusModelDropdown");
+          if (!consensusSelect) return;
 
-          const isCollapsed = section.classList.toggle("is-collapsed");
-          area.classList.toggle("hidden", isCollapsed);
-          toggle.setAttribute("aria-expanded", String(!isCollapsed));
-          trackAppEvent("app_sidebar_section_toggled", { section: "models", open: !isCollapsed });
-        };
+          const openPicker = () => {
+            window.App.openModelPicker(consensusSelect);
+            consensusSelect._customModelPicker?.displayButton?.focus({ preventScroll: true });
+          };
+
+          if (usesOverlaySidebar()) {
+            closeOverlaySidebar();
+            window.setTimeout(openPicker, 180);
+          } else {
+            openPicker();
+          }
+          trackAppEvent("app_model_picker_opened", { source: "sidebar" });
+        });
 
         window.toggleAllResponses = function () {
           setAgentMode(!isAgentModeEnabled(), { persist: true });
@@ -1125,20 +1134,6 @@
             this.blur();
           });
         }
-
-        let leaderboardInterval; // Variable zum Speichern des Interval-IDs
-
-        window.toggleLeaderboard = function () {
-          const section = document.querySelector(".leaderboard-section");
-          const container = document.getElementById("leaderboardContentContainer");
-          const toggle = document.getElementById("toggleLeaderboard");
-          if (!section || !container || !toggle) return;
-
-          const isCollapsed = section.classList.toggle("is-collapsed");
-          container.classList.toggle("hidden", isCollapsed);
-          toggle.setAttribute("aria-expanded", String(!isCollapsed));
-          trackAppEvent("app_sidebar_section_toggled", { section: "leaderboard", open: !isCollapsed });
-        };
 
         window.filterBookmarks = function (query) {
           const q = String(query || "").trim().toLowerCase();

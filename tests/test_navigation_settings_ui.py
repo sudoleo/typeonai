@@ -10,17 +10,114 @@ def read(path: str) -> str:
 
 def test_sidebar_navigation_is_self_contained_and_guest_login_is_top_only():
     template = read("templates/index.html")
+    landing = read("templates/landing.html")
     app_init = read("static/js/app-init.js")
+    model_picker = read("static/js/model-picker.js")
+    shell = read("static/css/shell.css")
+    input_css = read("static/css/components-input.css")
 
     assert 'id="sidebarRail"' not in template
     assert "sidebar-rail-btn" not in template
     assert "sidebar-rail-btn" not in app_init
-    assert template.count('class="sidebar-heading-label"') == 3
-    for label in ("Models", "Leaderboard", "Bookmarks"):
-        assert f'<span class="sidebar-heading-label">' in template
-        assert f"<span>{label}</span>" in template
+    assert template.count('class="sidebar-heading-label"') == 1
+    assert "<span>Bookmarks</span>" in template
+    assert 'id="sidebarModelPicker"' in template
+    assert '<strong>Models</strong>' in template
+    assert '<span>Leaderboard</span>' not in template
+    assert 'id="modelInsights"' not in template
+    assert 'class="faq-answer faq-model-insights"' not in template
+    assert 'id="leaderboardContent"' not in template
+    assert 'class="lp-hero-pulse" href="/model-pulse"' in landing
+    assert 'id="modelLeaderboard"' not in landing
+    assert ".faq-item > p, .faq-item > .faq-answer" in app_init
     assert 'id="authTopActions"' in template
     assert 'id="loginContainer" class="login-text" hidden></div>' in template
+    assert 'class="sidebar-bookmarks-head"' in template
+    assert 'class="sidebar-section bookmarks-section is-locked"' in template
+    assert 'id="bookmarksToggle"' in template and 'aria-disabled="true" disabled' in template
+    assert '.sidebar-bookmarks-head:hover .sidebar-search-box' in shell
+    assert ".sidebar-bookmarks-head .sidebar-toggle-btn" in shell
+    assert ".sidebar-bookmarks-head .sidebar-heading-label span" in shell
+    assert "justify-self: start" in shell
+    assert ".models-section {\n  margin-bottom: 8px;\n}" in shell
+    search_rule = shell.split("\n.sidebar-search-box {\n", 1)[1].split("}", 1)[0]
+    assert "inset: -4px" in search_rule
+    assert "24px" not in search_rule
+    assert ".sidebar-bookmarks-head .sidebar-toggle-arrow" in shell
+    arrow_rule = shell.split(".sidebar-bookmarks-head .sidebar-toggle-arrow {", 1)[1].split("}", 1)[0]
+    assert "justify-self: end" in arrow_rule
+    assert "left: 0.25px" in arrow_rule
+    assert "padding: 7px 32px 7px 32px" in shell
+    assert "grid-template-columns: 18px minmax(0, 1fr)" in shell
+    assert ".bookmarks-section.is-locked .sidebar-search-box" in shell
+    assert 'id="sidebarModelCount"' in template
+    assert 'class="model-selection-check"' not in template
+    assert 'id="modelSelectionArea" hidden' in template
+    assert "window.App.openModelPicker(consensusSelect)" in app_init
+    assert "function syncSidebarModelCount()" in model_picker
+    assert ":not(.sidebar-model-entry)" in input_css
+
+
+def test_public_navigation_is_compact_and_learning_links_live_in_footer():
+    nav = read("templates/partials/public_nav.html")
+    footer = read("templates/partials/public_footer.html")
+    assert ">Models</a>" not in nav
+    assert ">About</a>" not in nav
+    assert 'href="/ai-model-comparison">Model guide</a>' in footer
+    assert 'href="/model-pulse">Model pulse</a>' in footer
+    assert 'href="/about">About</a>' in footer
+    assert '{% set public_nav_cta_href = "/app" %}' in read("templates/share.html")
+    assert '<a href="/app" class="button-primary">Ask your own question</a>' in read("templates/share.html")
+
+
+def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract():
+    demo = read("static/demo.js")
+    misc_css = read("static/css/components-misc.css")
+    watch = read("static/js/watch.js")
+    leaderboard = read("static/js/model-pulse.js")
+    pulse_page = read("templates/model-pulse.html")
+    assert "score: 83" in demo
+    assert 'btn.textContent = "Watch demo"' in demo
+    assert "inputActions.prepend(btn)" in demo
+    demo_rule = misc_css.split(".demo-chip {", 1)[1].split("}", 1)[0]
+    assert "position: static" in demo_rule
+    assert 'severity: "minor"' in demo
+    assert '[S8].</li>' in demo
+    assert 'class="watch-feature-nudge-close" aria-label="Dismiss new feature tip"></button>' in watch
+    assert '[/anthropic|claude/i, "/static/icons/chat_icons/claude.png"]' in leaderboard
+    assert 'id="modelLeaderboard"' in pulse_page
+    assert "not a popularity vote" in pulse_page.lower()
+    assert 'href="/benchmark"' in pulse_page
+
+
+def test_consensus_run_requires_two_selected_models_before_starting():
+    app_init = read("static/js/app-init.js")
+    query_send = read("static/js/query-send.js")
+    model_picker = read("static/js/model-picker.js")
+
+    assert "const hasMinimumModels = selectedModelCount >= 2" in app_init
+    assert "sendButton.disabled = !canStartRun" in app_init
+    assert "if (selectedModelCount < 2)" in query_send
+    assert 'reason: "minimum_models"' in query_send
+    assert "choose at least 2" in model_picker
+
+
+def test_cross_check_greeting_uses_the_same_light_typography_in_app_and_landing():
+    app_css = read("static/css/components-input.css")
+    landing_css = read("static/css/landing.css")
+
+    app_rule = app_css.split(".hero-greeting {", 1)[1].split("}", 1)[0]
+    landing_rule = landing_css.split(".lp-app-greeting {", 1)[1].split("}", 1)[0]
+    assert "font-weight: var(--font-weight-regular)" in app_rule
+    assert "font-weight: var(--font-weight-regular)" in landing_rule
+
+
+def test_demo_never_writes_product_usage_signals():
+    demo = read("static/demo.js")
+
+    assert "recordModelVote" not in demo
+    assert "saveBookmarkConsensus" not in demo
+    assert 'fetch("/consensus"' not in demo
 
 
 def test_mobile_brand_and_desktop_input_centering_contract():
@@ -126,6 +223,37 @@ def test_logout_clears_the_loaded_run_and_aborts_active_streams():
     assert "window.cancelCurrentConsensus?.();" in firebase
     assert "window.clearResponseBoxes?.({ silent: true });" in firebase
     assert "window.App?.watch?.resetAfterLogout?.();" in firebase
+    assert "await signOut(auth);" in firebase
+    assert "function clearAuthenticatedUiState()" in firebase
+    assert '["freeUsageDisplay", "deepUsageDisplay", "watchUsageDisplay", "countdownDisplay"]' in firebase
+    assert "window.App?.sidebarQuota?.setOpen?.(false);" in firebase
+    assert "window.App?.sharedModal?.close?.();" in firebase
+    assert "function clearLocalProviderKeys()" in firebase
+    assert '["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey", "grokKey"]' in firebase
+    assert "if (previousAuthUid) clearLocalProviderKeys();" in firebase
+    assert "function isCurrentAuthenticatedUser(uid, generation)" in firebase
+    assert "setBookmarksAccess(false);" in firebase
     assert 'document.body.classList.add("is-hero")' in firebase
     assert "window.clearResponseBoxes = function (options = {})" in app_init
     assert "window.consensusCitationMeta = null" in app_init
+
+
+def test_watch_change_surfaces_use_tint_without_a_left_rail():
+    shell = read("static/css/shell.css")
+    drift_rule = shell.split(".watch-dash-stat.is-drift,", 1)[1].split("}", 1)[0]
+    limit_rule = shell.split(".watch-dash-heading-row .watch-limit-summary {", 1)[1].split("}", 1)[0]
+
+    assert "border-left" not in drift_rule
+    assert "border-radius: var(--radius-md)" in drift_rule
+    assert "border-radius: var(--radius-sm)" in limit_rule
+    assert "padding: 8px 10px" in limit_rule
+
+
+def test_watch_requests_cannot_repopulate_account_state_after_logout():
+    watch = read("static/js/watch.js")
+
+    assert "let watchSessionEpoch = 0;" in watch
+    assert "requestEpoch !== watchSessionEpoch" in watch
+    assert "window.auth?.currentUser?.uid !== userUid" in watch
+    assert "watchSessionEpoch += 1;" in watch
+    assert "telegramState = null;" in watch

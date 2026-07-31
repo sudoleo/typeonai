@@ -1,0 +1,70 @@
+/* ========================================================================== 
+   Typography foundation
+
+   One typeface, four weights and a deliberately small scale shared by the
+   product, marketing pages, public results and admin surfaces. Code and math
+   remain functional exceptions.
+   ========================================================================== */
+
+@font-face {
+  font-family: "Inter Variable";
+  src: url('../fonts/inter/InterVariable.woff2') format('woff2-variations');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter Variable";
+  src: url('../fonts/inter/InterVariable-Italic.woff2') format('woff2-variations');
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  --font-sans: "Inter Variable", Inter, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New",
+    monospace;
+  --font: var(--font-sans);
+
+  --font-size-micro: 0.6875rem;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.5rem;
+  --font-size-2xl: 2rem;
+  --font-size-display-sm: clamp(2rem, 4.4vw, 3rem);
+  --font-size-display-lg: clamp(2.75rem, 7vw, 4.25rem);
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-solid: 1;
+  --line-height-tight: 1.1;
+  --line-height-heading: 1.25;
+  --line-height-ui: 1.45;
+  --line-height-reading: 1.6;
+
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.06em;
+}
+
+html {
+  font-family: var(--font-sans);
+  font-optical-sizing: auto;
+  font-feature-settings: "liga" 1, "calt" 1;
+}
+
+button,
+input,
+textarea,
+select,
+summary {
+  font: inherit;
+}

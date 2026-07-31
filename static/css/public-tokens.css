@@ -1,3 +1,5 @@
+@import url('./typography.css?v=20260731-inter1');
+
 /* ==========================================================================
    Public design foundation
    Shared by landing.css and public-pages.css. Values intentionally mirror
@@ -6,8 +8,6 @@
 
 :root {
   color-scheme: light;
-
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
   --radius-xs: 8px;
   --radius-sm: 10px;
@@ -171,7 +171,7 @@
 
 :where(.site-nav, .lp-nav) a[aria-current="page"]:not(.nav-cta):not(.lp-nav-cta) {
   color: var(--heading, var(--text-primary));
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
 }
 
 ::selection {

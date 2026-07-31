@@ -6,7 +6,7 @@ import openai
 from mistralai import Mistral
 import google.generativeai as genai
 from fastapi import APIRouter, Request, Body, HTTPException
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 import requests
 
 from app.core.rate_limit import limiter
@@ -30,6 +30,7 @@ SITEMAP_URLS = (
     {"loc": f"{SITE_URL}/questions", "lastmod": "2026-07-19", "changefreq": "weekly", "priority": "0.8"},
     {"loc": f"{SITE_URL}/topics", "lastmod": "2026-07-23", "changefreq": "weekly", "priority": "0.9"},
     {"loc": f"{SITE_URL}/benchmark", "lastmod": "2026-06-30", "changefreq": "monthly", "priority": "0.7"},
+    {"loc": f"{SITE_URL}/model-pulse", "lastmod": "2026-07-31", "changefreq": "weekly", "priority": "0.8"},
     {"loc": f"{SITE_URL}/about", "lastmod": "2026-06-03", "changefreq": "monthly", "priority": "0.6"},
 )
 
@@ -120,6 +121,57 @@ def consensus_engine_page(req: Request):
 @router.get("/benchmark", response_class=HTMLResponse)
 def benchmark(req: Request):
     return templates.TemplateResponse("benchmark.html", {"request": req})
+
+
+@router.get("/model-pulse", response_class=HTMLResponse)
+def model_pulse(req: Request):
+    return templates.TemplateResponse("model-pulse.html", {"request": req})
+
+
+def _leaderboard_family(model: str) -> str:
+    """Collapse model/product aliases into the provider families shown publicly."""
+    key = str(model or "").strip().lower()
+    if "anthropic" in key or "claude" in key:
+        return "Anthropic / Claude"
+    if "openai" in key or "chatgpt" in key or key.startswith("gpt"):
+        return "OpenAI / ChatGPT"
+    if "google" in key or "gemini" in key:
+        return "Google / Gemini"
+    if "mistral" in key:
+        return "Mistral"
+    if "deepseek" in key:
+        return "DeepSeek"
+    if "grok" in key or "xai" in key or "x.ai" in key:
+        return "xAI / Grok"
+    return "Other"
+
+
+@router.get("/api/model-leaderboard")
+@limiter.limit("30/minute")
+def public_model_leaderboard(request: Request):
+    """Return anonymized best-answer selections for the public model pulse."""
+    try:
+        totals = {}
+        for snapshot in db_firestore.collection("leaderboard").stream():
+            selections = int(snapshot.to_dict().get("BestModel") or 0)
+            if selections <= 0:
+                continue
+            family = _leaderboard_family(snapshot.id)
+            totals[family] = totals.get(family, 0) + selections
+    except Exception:
+        logging.exception("public model leaderboard read failed")
+        raise HTTPException(status_code=503, detail="Model leaderboard is temporarily unavailable")
+
+    rows = [
+        {"family": family, "selections": selections}
+        for family, selections in sorted(totals.items(), key=lambda item: (-item[1], item[0]))
+    ]
+    response = JSONResponse({
+        "rows": rows,
+        "total_selections": sum(row["selections"] for row in rows),
+    })
+    response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=300"
+    return response
 
 @router.get("/app", response_class=HTMLResponse)
 # Deep-Link auf das Watch-Dashboard: gleiche App-Shell, das Frontend öffnet

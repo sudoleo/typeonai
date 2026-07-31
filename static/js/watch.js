@@ -10,6 +10,7 @@
   let telegramState = null;
   let watchLimitState = null;
   let watchLimitRequest = null;
+  let watchSessionEpoch = 0;
 
   function featureNudgeWasDismissed() {
     try {
@@ -64,7 +65,7 @@
       nudge.setAttribute("role", "status");
       nudge.setAttribute("aria-label", "New Consensus Watch feature");
       nudge.innerHTML = `
-        <button type="button" class="watch-feature-nudge-close" aria-label="Dismiss new feature tip">&times;</button>
+        <button type="button" class="watch-feature-nudge-close" aria-label="Dismiss new feature tip"></button>
         <span class="watch-feature-nudge-label">New</span>
         <strong>Keep this answer current</strong>
         <span class="watch-feature-nudge-copy">We will recheck this question and notify you only when the consensus materially changes.</span>
@@ -104,7 +105,12 @@
   async function api(method, path, body) {
     const user = window.auth?.currentUser;
     if (!user) throw new Error("Please log in first.");
+    const userUid = user.uid;
+    const requestEpoch = watchSessionEpoch;
     const token = await user.getIdToken();
+    if (requestEpoch !== watchSessionEpoch || window.auth?.currentUser?.uid !== userUid) {
+      throw new Error("Authentication changed.");
+    }
     const response = await fetch(path, {
       method,
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
@@ -112,6 +118,9 @@
     });
     let data = {};
     try { data = await response.json(); } catch (_) { /* empty body */ }
+    if (requestEpoch !== watchSessionEpoch || window.auth?.currentUser?.uid !== userUid) {
+      throw new Error("Authentication changed.");
+    }
     if (!response.ok) {
       const error = new Error(data.error || data.detail || ("HTTP " + response.status));
       error.status = response.status;
@@ -158,13 +167,16 @@
   async function loadWatchLimits(force) {
     if (watchLimitState && !force) return watchLimitState;
     if (watchLimitRequest && !force) return watchLimitRequest;
-    watchLimitRequest = api("GET", "/api/my/watches")
+    const request = api("GET", "/api/my/watches")
       .then(data => {
         watchLimitState = normalizeWatchLimits(data.limits, data.watches);
         renderSidebarWatchQuota(watchLimitState);
         return watchLimitState;
       })
-      .finally(() => { watchLimitRequest = null; });
+      .finally(() => {
+        if (watchLimitRequest === request) watchLimitRequest = null;
+      });
+    watchLimitRequest = request;
     return watchLimitRequest;
   }
 
@@ -1804,11 +1816,13 @@
 
   function resetAfterLogout() {
     const { page, body } = dashEls();
+    watchSessionEpoch += 1;
     if (body) body.innerHTML = "";
+    telegramState = null;
     watchLimitState = null;
     watchLimitRequest = null;
     const quota = document.getElementById("watchUsageDisplay");
-    if (quota) quota.innerHTML = "Watches: <strong>...</strong>";
+    if (quota) quota.textContent = "";
     if (page) page.hidden = true;
     setViewSwitchState(false);
     if (onWatchPagePath()) window.history.replaceState(null, "", APP_PATH);

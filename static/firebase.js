@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getFirestore, collection, query, orderBy, onSnapshot, doc, setDoc, getDoc, increment, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, increment, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithCustomToken, signOut, onAuthStateChanged, sendPasswordResetEmail, sendEmailVerification, onIdTokenChanged } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 import {
   GoogleAuthProvider,
@@ -46,15 +46,32 @@ function closeLogoutConfirm() {
 }
 
 async function performLogout() {
+  if (performLogout.inProgress) return;
+  performLogout.inProgress = true;
   trackAppEvent("auth_logout_click");
   closeLogoutConfirm();
-  resetLoadedRunAfterLogout();
   try {
-    await fetch("/auth/session", { method: "DELETE" });
-  } catch (_) {
-    // Firebase logout still proceeds; the short-lived server cookie expires.
+    // Clear the HttpOnly server session before dropping the Firebase identity.
+    // If this request fails, keeping Firebase signed in avoids presenting a
+    // false "logged out" state while the cookie could still authorize calls.
+    const response = await fetch("/auth/session", {
+      method: "DELETE",
+      credentials: "same-origin",
+      cache: "no-store"
+    });
+    if (!response.ok) throw new Error(`Session cleanup failed (${response.status})`);
+
+    await signOut(auth);
+    setActiveAuthIdentity(null);
+    resetLoadedRunAfterLogout();
+    clearAuthenticatedUiState();
+    clearLocalProviderKeys();
+  } catch (error) {
+    console.error("Logout failed:", error);
+    window.App?.showPopup?.("Logout could not be completed. You are still signed in. Please try again.");
+  } finally {
+    performLogout.inProgress = false;
   }
-  signOut(auth).catch(err => console.error("Logout-Fehler", err));
 }
 
 function openLogoutConfirm() {
@@ -78,6 +95,7 @@ function resetLoadedRunAfterLogout() {
   window.clearPreparedBookmarkShareResult?.();
   window.currentEvidenceSources = [];
   window.consensusCitationMeta = null;
+  window.App?.sharedModal?.close?.();
   window.App?.watch?.resetAfterLogout?.();
   document.body.classList.add("is-hero");
   window.syncHeroResponseAccess?.();
@@ -155,8 +173,77 @@ let bookmarksNextCursor = null;
 let bookmarksLoading = false;
 let openedBookmarkId = null;
 const bookmarkDetailCache = new Map();
+let activeAuthUid = null;
+let authGeneration = 0;
 
-async function checkUserStatusOnLoad(user, token) {
+function setActiveAuthIdentity(uid) {
+  const normalizedUid = uid || null;
+  if (normalizedUid !== activeAuthUid) {
+    activeAuthUid = normalizedUid;
+    authGeneration += 1;
+  }
+  return authGeneration;
+}
+
+function isCurrentAuthenticatedUser(uid, generation) {
+  return generation === authGeneration
+    && !!uid
+    && activeAuthUid === uid
+    && auth.currentUser?.uid === uid;
+}
+
+function setBookmarksAccess(isLoggedIn) {
+  const section = document.querySelector(".bookmarks-section");
+  const toggle = document.getElementById("bookmarksToggle");
+  const search = document.getElementById("chatSearch");
+  section?.classList.toggle("is-locked", !isLoggedIn);
+  if (toggle) {
+    toggle.disabled = !isLoggedIn;
+    toggle.setAttribute("aria-disabled", String(!isLoggedIn));
+    toggle.title = isLoggedIn ? "Open or close bookmarks" : "Log in to use bookmarks";
+  }
+  if (search) {
+    search.disabled = !isLoggedIn;
+    if (!isLoggedIn) search.value = "";
+  }
+}
+
+function clearLocalProviderKeys() {
+  ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey", "grokKey"]
+    .forEach(key => {
+      localStorage.removeItem(key);
+      const input = document.getElementById(key);
+      if (input) input.value = "";
+    });
+}
+
+function clearAuthenticatedUiState() {
+  localStorage.removeItem("id_token");
+  window.App?.usageRun?.clear?.();
+  window.isUserPro = false;
+  window.currentMaxLimit = window.LIMITS.FREE.NORMAL;
+  window.currentDeepLimit = window.LIMITS.FREE.DEEP;
+
+  ["freeUsageDisplay", "deepUsageDisplay", "watchUsageDisplay", "countdownDisplay"]
+    .forEach(id => {
+      const node = document.getElementById(id);
+      if (node) node.textContent = "";
+    });
+  window.App?.sidebarQuota?.setOpen?.(false);
+  window.App?.sidebarQuota?.sync?.();
+
+  const container = document.getElementById("bookmarksContainer");
+  if (container) container.innerHTML = "";
+  bookmarksLoaded = false;
+  bookmarksNextCursor = null;
+  bookmarksLoading = false;
+  openedBookmarkId = null;
+  bookmarkDetailCache.clear();
+  window.bookmarksData = [];
+  setBookmarksAccess(false);
+}
+
+async function checkUserStatusOnLoad(user, token, generation) {
   if (!user || !token) return;
 
   try {
@@ -170,6 +257,7 @@ async function checkUserStatusOnLoad(user, token) {
 
     if (response.ok) {
       const data = await response.json();
+      if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
 
       // 1. Globale Limits sofort aktualisieren.
       window.currentMaxLimit = data.limit;
@@ -230,15 +318,26 @@ async function checkUserStatusOnLoad(user, token) {
 onIdTokenChanged(auth, async (user) => {
   const loginContainer = document.getElementById("loginContainer");
   const usageOptions   = document.getElementById("usageOptions");
+  const previousAuthUid = activeAuthUid;
+  const generation = setActiveAuthIdentity(user?.emailVerified ? user.uid : null);
 
   if (user) {
     // **NEU: Harte Client-Gate—kein Token persistieren, keine Calls, wenn unverified**
     if (!user.emailVerified) {
-      localStorage.removeItem("id_token");
+      resetLoadedRunAfterLogout();
+      clearAuthenticatedUiState();
+      if (previousAuthUid) clearLocalProviderKeys();
+      fetch("/auth/session", {
+        method: "DELETE",
+        credentials: "same-origin",
+        cache: "no-store"
+      }).catch(() => {});
+      signOut(auth).catch(error => console.error("Could not clear unverified auth state:", error));
       if (typeof window.updateQuestionInputAccess === "function") {
         window.updateQuestionInputAccess();
       }
       if (usageOptions) usageOptions.style.display = "none";
+      setBookmarksAccess(false);
       if (loginContainer) {
         loginContainer.innerHTML = "";
         loginContainer.hidden = true;
@@ -246,8 +345,15 @@ onIdTokenChanged(auth, async (user) => {
       return; // <--- ganz wichtig
     }
 
+    if (previousAuthUid && previousAuthUid !== user.uid) {
+      resetLoadedRunAfterLogout();
+      clearAuthenticatedUiState();
+      clearLocalProviderKeys();
+    }
+
     // ab hier nur noch verifizierte Nutzer
     const token = await user.getIdToken(/* forceRefresh= */ false);
+    if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
     localStorage.setItem("id_token", token);
     if (typeof window.updateQuestionInputAccess === "function") {
       window.updateQuestionInputAccess();
@@ -270,15 +376,18 @@ onIdTokenChanged(auth, async (user) => {
       console.error("Error during confirm-registration:", err);
     }
 
-    await checkUserStatusOnLoad(user, token);
+    await checkUserStatusOnLoad(user, token, generation);
+    if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
 
     // 2) Usage laden
-    fetchUsageData(token);
+    fetchUsageData(token, user.uid, generation);
 
     // 3) Bookmarks einmal pro Login laden
     if (!bookmarksLoaded) {
       bookmarksLoaded = await loadBookmarks();
     }
+    if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
+    setBookmarksAccess(true);
     window.App?.watch?.refreshQuota?.().catch(() => {});
 
     // 4) Usage-UI anzeigen
@@ -385,9 +494,13 @@ onIdTokenChanged(auth, async (user) => {
     } else {
         // Cleanup bei Logout
         resetLoadedRunAfterLogout();
-        window.clearPreparedBookmarkShareResult?.();
-        fetch("/auth/session", { method: "DELETE" }).catch(() => {});
-        localStorage.removeItem("id_token");
+        clearAuthenticatedUiState();
+        if (previousAuthUid) clearLocalProviderKeys();
+        fetch("/auth/session", {
+          method: "DELETE",
+          credentials: "same-origin",
+          cache: "no-store"
+        }).catch(() => {});
         if (typeof window.updateQuestionInputAccess === "function") {
           window.updateQuestionInputAccess();
         }
@@ -415,14 +528,6 @@ onIdTokenChanged(auth, async (user) => {
         const accountSection = document.getElementById("accountSettingsSection");
         if (accountSection) accountSection.style.display = "none";
 
-        document.getElementById("bookmarksContainer").innerHTML = "";
-        bookmarksLoaded = false;
-        bookmarksNextCursor = null;
-        bookmarksLoading = false;
-        openedBookmarkId = null;
-        bookmarkDetailCache.clear();
-        window.bookmarksData = [];
-        
         // A) Badge verstecken (Direkter Zugriff)
         const badge = document.getElementById("proBadge");
         if (badge) badge.style.display = "none";
@@ -452,7 +557,7 @@ onIdTokenChanged(auth, async (user) => {
       }
     });
 
-function fetchUsageData(token) {
+function fetchUsageData(token, uid, generation) {
   // DOM-Elemente innerhalb der Funktion abrufen:
   const freeDisplay = document.getElementById("freeUsageDisplay");
   const deepDisplay = document.getElementById("deepUsageDisplay");
@@ -469,8 +574,9 @@ function fetchUsageData(token) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id_token: token })
   })
-    .then(response => response.json())
-    .then(data => {
+    .then(async response => ({ response, data: await response.json() }))
+    .then(({ response, data }) => {
+      if (!response.ok || !isCurrentAuthenticatedUser(uid, generation)) return;
       if (typeof window.setCurrentUsageLimits === "function") {
         window.setCurrentUsageLimits(data.is_pro === true, data);
       } else {
@@ -887,47 +993,6 @@ async function afterGoogleLogin(user) {
   // Jetzt *nach* erfolgreichem/versuchtem POST navigieren
   location.replace("/app");
 }
-
-// Restlicher Firebase-Code (z.B. Leaderboard, Funktionen, etc.)
-const leaderboardRef = collection(db, "leaderboard");
-const leaderboardQuery = query(
-  leaderboardRef,
-  orderBy("BestModel", "desc")
-);
-onSnapshot(leaderboardQuery, (snapshot) => {
-  const leaderboardEl = document.getElementById("leaderboardContent");
-  if (!leaderboardEl) return;
-
-  const escapeHtml = (value) => {
-    const div = document.createElement("div");
-    div.textContent = String(value);
-    return div.innerHTML;
-  };
-
-  let hasRows = false;
-  let rank = 0;
-  let html = '<div class="leaderboard-list" role="list"><div class="leaderboard-caption">Consensus leaders</div>';
-  snapshot.forEach((doc) => {
-    const data = doc.data();
-    const bestModelVotes = data.BestModel || 0;
-    if (!bestModelVotes) return;
-
-    hasRows = true;
-    rank += 1;
-    const modelName = escapeHtml(doc.id);
-    const voteLabel = bestModelVotes === 1 ? "pick" : "picks";
-
-    html += `<div class="leaderboard-row" role="listitem">
-      <span class="leaderboard-rank">${rank}</span>
-      <span class="leaderboard-model">${modelName}</span>
-      <span class="vote BestModel" title="BestModel">${bestModelVotes}<span>${voteLabel}</span></span>
-    </div>`;
-  });
-  html += '</div>';
-  leaderboardEl.innerHTML = hasRows
-    ? html
-    : '<div class="leaderboard-empty">No BestModel votes yet.</div>';
-});
 
 async function recordModelVote(model, type) {
   // Prüfe, ob der Nutzer eingeloggt ist.
@@ -1368,10 +1433,14 @@ function renderBookmarksLoadMore() {
 
 async function loadBookmarks({ append = false, loadAll = false } = {}) {
   if (!auth.currentUser || bookmarksLoading) return false;
+  const requestUser = auth.currentUser;
+  const requestUid = requestUser.uid;
+  const requestGeneration = authGeneration;
   bookmarksLoading = true;
   const container = document.getElementById("bookmarksContainer");
-  const idToken = await auth.currentUser.getIdToken(false);
   try {
+    const idToken = await requestUser.getIdToken(false);
+    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return false;
     let cursor = append ? bookmarksNextCursor : null;
     if (!append) {
       window.bookmarksData = [];
@@ -1384,7 +1453,7 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
       const path = "/bookmarks?limit=35" + (cursor ? "&cursor=" + encodeURIComponent(cursor) : "");
       const response = await fetch(path, { headers: { "Authorization": "Bearer " + idToken } });
       const data = await response.json();
-      if (!response.ok) return false;
+      if (!response.ok || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return false;
       (data.bookmarks || []).forEach(item => upsertBookmarkMeta(item, { prepend: false }));
       bookmarksNextCursor = data.next_cursor || null;
       cursor = bookmarksNextCursor;
@@ -1404,11 +1473,17 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
 async function loadBookmarkDetail(bookmarkId) {
   if (!auth.currentUser) throw new Error("Authentication required");
   if (bookmarkDetailCache.has(bookmarkId)) return bookmarkDetailCache.get(bookmarkId);
-  const idToken = await auth.currentUser.getIdToken(false);
+  const requestUser = auth.currentUser;
+  const requestUid = requestUser.uid;
+  const requestGeneration = authGeneration;
+  const idToken = await requestUser.getIdToken(false);
   const response = await fetch("/bookmarks/" + encodeURIComponent(bookmarkId), {
     headers: { "Authorization": "Bearer " + idToken }
   });
   const data = await response.json();
+  if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
+    throw new Error("Authentication changed while loading bookmark");
+  }
   if (!response.ok) throw new Error(data.detail || "Could not load bookmark");
   bookmarkDetailCache.clear();
   bookmarkDetailCache.set(bookmarkId, data.bookmark);

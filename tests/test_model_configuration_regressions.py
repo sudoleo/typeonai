@@ -297,6 +297,11 @@ class ExistingModelFlowTests(unittest.TestCase):
         # Ohne Label faellt die UI auf die rohe ID zurueck.
         self.assertEqual(cfg.get_model_label("grok-4.5"), "Grok 4.5")
 
+    def test_unknown_allowed_style_ids_get_public_product_labels(self):
+        self.assertEqual(cfg.get_model_label("mistral-medium-latest"), "Mistral Medium")
+        self.assertEqual(cfg.get_model_label("claude-haiku-4-5"), "Claude Haiku 4.5")
+        self.assertEqual(cfg.get_model_label("gpt-5.1"), "GPT-5.1")
+
     def test_admin_meta_exposes_virtual_api_models(self):
         """Die UI muss zeigen koennen, was tatsaechlich beim Provider ankommt."""
         from app.api.routers.admin import _admin_meta

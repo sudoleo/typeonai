@@ -340,7 +340,7 @@ class SanitizerTests(unittest.TestCase):
             ["OpenAI: gpt-5.1", "Google Gemini", "Grok"]
         )
         self.assertEqual(view[0]["provider"], "OpenAI")
-        self.assertEqual(view[0]["model"], "gpt-5.1")
+        self.assertEqual(view[0]["model"], "GPT-5.1")
         self.assertTrue(view[0]["icon"].endswith("chatgpt.png"))
         # Eintrag ohne Modellname behält Provider-Label, kein Icon-Verlust:
         self.assertEqual(view[1]["provider"], "Gemini")
@@ -1176,6 +1176,7 @@ class SharePageRouteTests(unittest.TestCase):
             response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
         body = response.text
         self.assertIn('class="watch-meta-compact is-active"', body)
+        self.assertNotIn("Schedule and check dates", body)
         self.assertIn("<b>Last</b>", body)
         self.assertIn("2026-07-12 08:30 UTC", body)
         self.assertIn("<b>Next</b>", body)

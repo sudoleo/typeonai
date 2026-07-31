@@ -43,22 +43,13 @@ def _research_question(topic: dict) -> str:
     return str(topic.get("lead_question") or "").strip() + "\n\n" + "\n".join(guidance)
 
 
-def _source_type(url: str, allowed: list[str], preferred: list[str]) -> str:
-    host = (urlsplit(url).hostname or "").lower().removeprefix("www.")
-    path = (urlsplit(url).path or "").lower()
-    if host in {"x.com", "twitter.com"} or host.endswith(".x.com"):
-        candidate = "x"
-    elif host == "github.com" or host.endswith(".github.com"):
-        candidate = "github"
-    elif "docs" in host or "/docs" in path or "documentation" in path:
-        candidate = "documentation"
-    elif any(host == domain or host.endswith("." + domain) for domain in preferred):
-        candidate = "official"
-    else:
-        candidate = "press"
+def _source_type(url: str, allowed: list[str], preferred: list[str], *, title="", publisher="") -> str:
+    candidate = topics.classify_evidence(
+        url, preferred_domains=preferred, title=title, publisher=publisher
+    )["role"]
     if candidate in allowed:
         return candidate
-    return allowed[0] if allowed else "press"
+    return allowed[0] if allowed else "reporting"
 
 
 def evidence_from_sources(sources, source_rules: dict) -> list[dict]:
@@ -71,20 +62,27 @@ def evidence_from_sources(sources, source_rules: dict) -> list[dict]:
     for source in sources or []:
         if not isinstance(source, dict) or not source.get("url"):
             continue
-        url = str(source["url"])
+        url = topics.canonical_evidence_url(source["url"])
         host = (urlsplit(url).hostname or "").removeprefix("www.")
         # Web-search tools sometimes hand back a bare citation index ("7") as
         # the title; fall back to the host so cards never show a lonely number.
         raw_title = str(source.get("title") or "").strip()
         title = raw_title if raw_title and not raw_title.isdigit() else host or url
+        publisher = str(source.get("provider") or host)[:120]
         evidence.append({
-            "type": _source_type(url, allowed, preferred),
+            "type": _source_type(
+                url, allowed, preferred, title=title, publisher=publisher
+            ),
             "title": title[:240],
             "url": url,
-            "publisher": str(source.get("provider") or host)[:120],
+            "publisher": publisher,
             "published_at": "",
             "excerpt": "",
         })
+    evidence.sort(key=lambda item: topics.classify_evidence(
+        item["url"], item["type"], preferred, title=item["title"],
+        publisher=item["publisher"],
+    )["rank"])
     return evidence
 
 

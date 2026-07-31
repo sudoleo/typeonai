@@ -350,10 +350,13 @@ def consulted_models_view(included_models):
         label = label.strip()
         provider = _CITATION_LABEL_TO_PROVIDER.get(label)
         icon = PROVIDER_ICONS.get(provider) if provider else None
+        model_name = model_name.strip()
+        if model_name and "-" in model_name and " " not in model_name:
+            model_name = cfg.get_model_label(model_name)
         view.append({
             "provider": provider or "",
             "label": label,
-            "model": model_name.strip(),
+            "model": model_name,
             "icon": ("/static/icons/chat_icons/%s" % icon) if icon else "",
         })
     return view

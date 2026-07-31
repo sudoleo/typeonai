@@ -6,8 +6,8 @@
 {%- endmacro %}
 {% macro source_embed(item, anchored=false) -%}
 {% set num = item.id[1:] if item.id and item.id[0] in 'Ss' else item.id %}
-<a class="src-embed src-{{ item.type }}{% if item.is_video %} src-video{% endif %}"{% if anchored %} id="src-{{ num }}"{% endif %} href="{{ item.url }}" target="_blank" rel="nofollow noopener noreferrer">
-  {% if item.type == 'x' %}
+<a class="src-embed src-{{ item.role }} is-quality-{{ item.quality }}{% if item.is_video %} src-video{% endif %}"{% if anchored %} id="src-{{ num }}"{% endif %} href="{{ item.url }}" target="_blank" rel="nofollow noopener noreferrer">
+  {% if item.role == 'community' and item.host in ('x.com', 'twitter.com') %}
   <span class="src-embed-head">
     <span class="src-x-avatar" aria-hidden="true">{{ item.initial }}</span>
     <span class="src-x-author">
@@ -24,7 +24,7 @@
     <span class="src-embed-head">
       {{ src_favicon(item) }}
       <span class="src-site">{{ item.site or item.host or item.publisher }}</span>
-      <span class="src-badge">Video</span>
+      <span class="src-badge">{{ item.role_label }}</span>
     </span>
     {% if item.show_title %}<strong class="src-title">{{ item.title }}</strong>{% endif %}
     {% if item.excerpt %}<p class="src-excerpt">{{ item.excerpt }}</p>{% endif %}
@@ -35,7 +35,7 @@
     <span class="src-embed-head">
       {{ src_favicon(item) }}
       <span class="src-site">{{ item.site or item.host or item.publisher }}</span>
-      <span class="src-badge">{{ 'GitHub' if item.type == 'github' else item.type | capitalize }}</span>
+      <span class="src-badge">{{ item.role_label }}</span>
     </span>
     {% if item.show_title %}<strong class="src-title">{{ item.title }}</strong>{% endif %}
     {% if item.excerpt %}<p class="src-excerpt">{{ item.excerpt }}</p>{% endif %}
@@ -45,6 +45,7 @@
     </span>
   </span>
   {% endif %}
+  <span class="src-quality-label">{{ item.quality_label }}</span>
 </a>
 {%- endmacro %}
 <!DOCTYPE html>
@@ -66,10 +67,9 @@
   <meta name="twitter:description" content="{{ meta_description }}">
   <title>{{ page_title }} | consens.io</title>
   <script type="application/ld+json">{{ jsonld | safe }}</script>
-  <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260727-shellv2">
-  <link rel="stylesheet" href="/static/css/topics.css?v=20260727-shellv2">
-  <link rel="stylesheet" href="/static/css/public-shell.css?v=20260727-shellv2">
+<link rel="stylesheet" href="/static/css/public-pages.css?v=20260731-ui-polish1">
+  <link rel="stylesheet" href="/static/css/topics.css?v=20260731-inter1">
+  <link rel="stylesheet" href="/static/css/public-shell.css?v=20260731-inter1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <script>
@@ -99,7 +99,6 @@
           </div>
           <h1>{{ topic.title }}</h1>
           <p class="topic-lead-question">{{ topic.lead_question }}</p>
-          {% if topic.summary %}<p class="topic-summary">{{ topic.summary }}</p>{% endif %}
         </div>
         <div class="topic-current-score{% if selected.agreement_score >= 75 %} is-high{% elif selected.agreement_score >= 50 %} is-mid{% else %} is-low{% endif %}">
           <span>Agreement</span>
@@ -124,6 +123,12 @@
 
     <div class="topic-detail-layout">
       <article class="topic-main-column">
+        <details class="legal-panel topic-analysis-disclosure" open>
+          <summary>
+            <span><small>Full dossier</small><strong>Consensus, model positions, score history and current sources</strong></span>
+            <b aria-hidden="true">+</b>
+          </summary>
+          <div class="topic-analysis-stack">
         <section class="legal-panel topic-panel topic-consensus-panel">
           <div class="topic-panel-head">
             <div>
@@ -288,21 +293,34 @@
             {% if selected.evidence %}<span class="topic-sources-count">{{ selected.evidence | length }} source{{ "s" if selected.evidence | length != 1 }}</span>{% endif %}
           </div>
           {% if selected.evidence %}
-          <div class="src-embed-grid">
-            {% for item in selected.evidence %}{{ source_embed(item, true) }}{% endfor %}
-          </div>
+          {% set featured_evidence = selected.evidence[:5] %}
+          {% set remaining_evidence = selected.evidence[5:] %}
+          {% if featured_evidence %}
+            <h3 class="topic-source-group-title">Best available sources</h3>
+            <div class="src-embed-grid">
+              {% for item in featured_evidence %}{{ source_embed(item, true) }}{% endfor %}
+            </div>
+          {% endif %}
+          {% if remaining_evidence %}
+            <details class="topic-secondary-sources">
+              <summary>Show {{ remaining_evidence | length }} more source{{ "s" if remaining_evidence | length != 1 }}</summary>
+              <div class="src-embed-grid">
+                {% for item in remaining_evidence %}{{ source_embed(item, true) }}{% endfor %}
+              </div>
+            </details>
+          {% endif %}
           {% else %}
           <p class="topic-empty">No sources were attached to this snapshot yet.</p>
           {% endif %}
         </section>
+          </div>
+        </details>
 
         {% set history_runs = runs | selectattr("evidence") | rejectattr("is_selected") | list %}
         {% if history_runs %}
-        <section class="legal-panel topic-panel">
-          <div class="topic-panel-head">
-            <div><p class="eyebrow">Evidence timeline</p><h2>What moved earlier snapshots</h2></div>
-          </div>
-          <div class="evidence-run-list">
+        <details class="legal-panel topic-panel topic-history-evidence">
+          <summary><span><small>Older sources</small><strong>Browse evidence from {{ history_runs | length }} earlier snapshot{{ "s" if history_runs | length != 1 }}</strong></span><b aria-hidden="true">+</b></summary>
+          <div class="evidence-run-list topic-disclosure-body">
             {% for run in history_runs %}
             <section class="evidence-run">
               <div class="evidence-run-date">
@@ -315,7 +333,7 @@
             </section>
             {% endfor %}
           </div>
-        </section>
+        </details>
         {% endif %}
       </article>
 
@@ -336,11 +354,8 @@
           {% endif %}
         </section>
 
-        <section class="legal-panel topic-timeline-card">
-          <div class="topic-timeline-head">
-            <p class="eyebrow">Timeline</p>
-            <span>Agreement</span>
-          </div>
+        <details class="legal-panel topic-timeline-card" open>
+          <summary><span><small>Timeline</small><strong>Browse {{ runs | length }} saved snapshot{{ "s" if runs | length != 1 }}</strong></span><b aria-hidden="true">+</b></summary>
           <ol class="topic-timeline">
             {% for run in runs %}
             <li class="is-{{ run.change_type }}{% if run.is_selected %} is-selected{% endif %}">
@@ -359,7 +374,7 @@
             </li>
             {% endfor %}
           </ol>
-        </section>
+        </details>
 
         <section class="legal-panel topic-side-link-card">
           <span>Want a one-off answer?</span>

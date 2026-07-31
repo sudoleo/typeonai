@@ -112,8 +112,8 @@
 .settings-theme-row p {
   margin: 0;
   color: var(--sidebar-text-muted);
-  font-size: 0.85rem;
-  line-height: 1.35;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
 }
 
 .switch {
@@ -246,9 +246,9 @@ input:checked+.slider:before {
   color: #fff;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
-  font-size: 12px;
-  line-height: 1.4;
-  font-weight: normal;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+  font-weight: var(--font-weight-regular);
   max-width: 220px;
   pointer-events: none;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);

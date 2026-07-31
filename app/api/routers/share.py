@@ -801,6 +801,15 @@ async def share_page(request: Request, slug_id: str):
         "watch_history": watch_history,
         "watch_page": watch_page,
         "watch_awaiting_first_run": watch_awaiting_first_run,
+        "watch_has_comparison": bool(
+            watch_page
+            and display_version["kind"] not in {"original", "fallback"}
+            and (
+                len(history_points) > 1
+                if data.get("watch_query_only")
+                else len(history_points) > 0
+            )
+        ),
         "watch_drift": watch_drift,
         "watch_versions": watch_versions,
         "watch_selected_version": {

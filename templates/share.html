@@ -22,9 +22,8 @@
   <meta name="twitter:description" content="{{ meta_description }}">
   {% if og_is_card %}<meta name="twitter:image" content="{{ og_image }}">{% endif %}
   <script type="application/ld+json">{{ jsonld | safe }}</script>
-  <link href="https://fonts.googleapis.com/css?family=Inter:400,600,700,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/public-pages.css?v=20260727-shellv2">
-  <link rel="stylesheet" href="/static/css/public-shell.css?v=20260727-shellv2">
+<link rel="stylesheet" href="/static/css/public-pages.css?v=20260731-ui-polish1">
+  <link rel="stylesheet" href="/static/css/public-shell.css?v=20260731-inter1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -46,20 +45,31 @@
   <!-- Share-Seiten-Styles liegen konsolidiert in public-pages.css (Abschnitt "Share page") -->
 </head>
 <body>
-  {% set public_nav_cta_href = "/" %}
+  {% set public_nav_cta_href = "/app" %}
   {% set public_nav_cta_label = "Ask your own question" %}
   {% set public_nav_event = "share_page_cta" %}
   {% include "partials/public_nav.html" %}
 
   <main class="page-shell" data-math-render>
     <header class="page-header share-header">
-      <p class="eyebrow">{% if watch_page %}Consensus Watch{% else %}Shared consensus{% endif %}{% if is_private %} · Private{% endif %}</p>
+      <p class="eyebrow">{% if watch_page %}Tracked question{% else %}Shared consensus{% endif %}{% if is_private %} · Private{% endif %}</p>
       <h1 class="share-question{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}">{{ question }}</h1>
+      {% if watch_page %}
+      <p class="watch-plain-intro">
+        {% if watch_awaiting_first_run %}
+          This question is scheduled for repeated checks. The first result will become the baseline; there is no development to report yet.
+        {% elif watch_has_comparison %}
+          The latest answer is shown below. We compare every check with the previous result and call out only meaningful movement.
+        {% else %}
+          This is the first saved result. Future checks will be compared with it, so there is no trend to interpret yet.
+        {% endif %}
+      </p>
+      {% endif %}
       <div class="share-meta">
         {% if date_display %}<span>{% if watch_awaiting_first_run %}Created {% elif watch_page %}{% if watch_selected_version.is_original %}Original consensus {% elif watch_selected_version.is_historical %}Historical consensus {% else %}Current consensus {% endif %}{% endif %}{{ date_display }}</span>{% endif %}
         {% if watch_page %}
-        <div class="watch-meta-compact is-{{ watch_page.status }}" aria-label="Consensus Watch status">
-          <span class="watch-meta-state"><i aria-hidden="true"></i>{{ watch_page.status_label }}</span>
+        <span class="watch-simple-status is-{{ watch_page.status }}"><i aria-hidden="true"></i>{{ watch_page.status_label }}</span>
+        <div class="watch-meta-compact is-{{ watch_page.status }}" aria-label="Tracking schedule and check dates">
           {% if watch_page.schedule_label %}<span class="watch-meta-item"><b>Runs</b> {{ watch_page.schedule_label }}</span>{% endif %}
           <span class="watch-meta-item"><b>Last</b> {% if watch_page.last_run.display %}<time datetime="{{ watch_page.last_run.iso }}">{{ watch_page.last_run.display }}</time>{% else %}Not yet{% endif %}</span>
           {% if watch_page.is_active %}<span class="watch-meta-item"><b>Next</b> {% if watch_page.next_run.display %}<time datetime="{{ watch_page.next_run.iso }}">{{ watch_page.next_run.display }}</time>{% else %}Pending{% endif %}</span>{% endif %}
@@ -73,6 +83,7 @@
       </div>
       {% endif %}
       {% if watch_page and watch_drift and not watch_awaiting_first_run %}
+      {% if watch_has_comparison %}
       <section class="watch-drift-hero is-{{ watch_drift.trigger }}" aria-labelledby="watchDriftHeading">
         <div class="watch-drift-status">
           <span class="watch-drift-pulse" aria-hidden="true"></span>
@@ -82,6 +93,8 @@
           </div>
         </div>
         <p class="watch-drift-summary">{{ watch_drift.summary }}</p>
+        <details class="watch-analysis-details">
+          <summary>Open advanced change metrics</summary>
         <dl class="watch-drift-metrics">
           <div>
             <dt>Direction shift</dt>
@@ -99,6 +112,7 @@
         {% if watch_drift.baseline_changed and watch_drift.baseline_summary %}
         <p class="watch-drift-baseline"><strong>Since tracking began:</strong> {{ watch_drift.baseline_summary }}</p>
         {% endif %}
+        </details>
         {% if watch_selected_version.is_historical %}
         <div class="watch-version-banner">
           <span>You are viewing {% if watch_selected_version.is_original %}the original baseline{% else %}a historical version{% endif %}.</span>
@@ -106,6 +120,13 @@
         </div>
         {% endif %}
       </section>
+      {% else %}
+      <section class="watch-baseline-card" aria-labelledby="watchBaselineHeading">
+        <p class="eyebrow">{% if watch_selected_version.is_original %}Original baseline{% else %}First result{% endif %}</p>
+        <h2 id="watchBaselineHeading">This is the baseline</h2>
+        <p>There is no earlier check to compare yet. The next completed check will show whether the answer, model positions, or agreement changed.</p>
+      </section>
+      {% endif %}
       {% endif %}
       {% if scoreboard and (scoreboard.score is not none or scoreboard.model_count) %}
       <div class="share-scoreboard" role="group" aria-label="Consensus verdict at a glance">
@@ -274,7 +295,7 @@
                 aria-controls="shareCitationText" aria-expanded="true" hidden>Show full citation</button>
         <div class="links">
           <button type="button" id="copyCitationBtn" class="button-secondary" data-umami-event="share_page_copy_citation">Copy citation</button>
-          <a href="/" class="button-primary">Ask your own question</a>
+          <a href="/app" class="button-primary">Ask your own question</a>
         </div>
       </section>
       {% endif %}
@@ -288,8 +309,8 @@
           </div>
           <strong class="watch-history-latest">{{ watch_history.latest_score }}<span>/100</span><small> latest agreement</small></strong>
         </div>
-        <details class="watch-history-details"{% if watch_history.points | length <= 3 %} open{% endif %}>
-        <summary>Explore agreement history, position movement and saved versions</summary>
+        <details class="watch-history-details">
+        <summary>Open advanced timeline analysis, position movement and saved versions</summary>
         {% if watch_history.position_map %}
         <div class="watch-position-map" aria-labelledby="watchPositionHeading">
           <div class="watch-position-intro">
