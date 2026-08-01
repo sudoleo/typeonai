@@ -2156,6 +2156,35 @@ canvas {
   font-weight: var(--font-weight-bold);
 }
 
+/* Eingeklappte Frage — dieselbe Geste wie #threadAsk in /app: drei Zeilen,
+   darunter ein leiser Link. Die Klammer setzt erst das Skript (is-clamped),
+   damit ohne JS die vollstaendige Frage stehen bleibt. */
+.share-question.is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.share-question-more {
+  margin: 9px 0 0;
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--font-size-xs);
+  color: var(--muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--border);
+}
+
+.share-question-more:hover {
+  color: var(--text-color);
+  text-decoration-color: var(--muted);
+}
+
 .share-meta {
   display: flex;
   flex-wrap: wrap;

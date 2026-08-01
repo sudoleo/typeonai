@@ -22,7 +22,7 @@
   <meta name="twitter:description" content="{{ meta_description }}">
   {% if og_is_card %}<meta name="twitter:image" content="{{ og_image }}">{% endif %}
   <script type="application/ld+json">{{ jsonld | safe }}</script>
-<link rel="stylesheet" href="/static/css/public-pages.css?v=20260731-ui-polish1">
+<link rel="stylesheet" href="/static/css/public-pages.css?v=20260801-question-clamp1">
   <link rel="stylesheet" href="/static/css/public-shell.css?v=20260731-inter1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
@@ -52,7 +52,11 @@
   <main class="page-shell" data-math-render>
     <header class="page-header share-header">
       <p class="eyebrow">{% if watch_page %}Tracked question{% else %}Shared consensus{% endif %}{% if is_private %} · Private{% endif %}</p>
-      <h1 class="share-question{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}">{{ question }}</h1>
+      <!-- Lange Fragen klappen wie in /app (#threadAsk) auf drei Zeilen ein.
+           Ohne JS bleibt der volle Text sichtbar: die Klammer setzt erst das
+           Skript unten, das auch prüft, ob überhaupt etwas abgeschnitten ist. -->
+      <h1 id="shareQuestion" class="share-question{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}">{{ question }}</h1>
+      <button type="button" id="shareQuestionMore" class="share-question-more" aria-expanded="false" aria-controls="shareQuestion" hidden>Show full question</button>
       {% if watch_page %}
       <p class="watch-plain-intro">
         {% if watch_awaiting_first_run %}
@@ -545,6 +549,40 @@
       });
     })();
     {% endif %}
+
+    // Lange Fragen: auf drei Zeilen einklappen, wie #threadAsk in /app.
+    // Erst klammern, dann messen – ist nichts abgeschnitten, bleibt der
+    // Link versteckt und die Klammer wird wieder entfernt.
+    (function () {
+      const question = document.getElementById("shareQuestion");
+      const more = document.getElementById("shareQuestionMore");
+      if (!question || !more) return;
+
+      question.classList.add("is-clamped");
+      // Beide Hoehen vergleichen statt scrollHeight zu trauen: bei
+      // -webkit-line-clamp meldet scrollHeight auch dann ein paar Pixel
+      // mehr, wenn gar nichts abgeschnitten ist.
+      function measure() {
+        const clamped = question.getBoundingClientRect().height;
+        question.classList.remove("is-clamped");
+        const full = question.getBoundingClientRect().height;
+        const clipped = full - clamped > 4;
+        if (clipped) question.classList.add("is-clamped");
+        more.hidden = !clipped;
+      }
+      requestAnimationFrame(measure);
+      window.addEventListener("resize", function () {
+        if (more.getAttribute("aria-expanded") === "true") return;
+        question.classList.add("is-clamped");
+        requestAnimationFrame(measure);
+      });
+
+      more.addEventListener("click", function () {
+        const open = question.classList.toggle("is-clamped") === false;
+        more.setAttribute("aria-expanded", String(open));
+        more.textContent = open ? "Collapse question" : "Show full question";
+      });
+    })();
 
     // Lange Quellenlisten: eingeklappt starten, "Show all" klappt auf.
     // Anker-Sprünge aus Inline-Citations (#src-N) klappen automatisch auf.

@@ -173,10 +173,12 @@ def test_deep_think_exhaustion_offers_the_cheaper_run():
 
 def test_css_cache_busting_was_bumped():
     """Ohne neue ?v= liefert der Server altes CSS aus und die Karte erscheint
-    ungestylt (Projektregel)."""
+    ungestylt (Projektregel). Die Teildateien tragen den Stand ihres letzten
+    Eingriffs; style.css selbst muss mit JEDER Aenderung neu versioniert
+    werden, sonst sieht der Browser die neuen Import-URLs nie."""
     style = read("static/style.css")
     template = read("templates/index.html")
 
     assert "shell.css?v=20260801-quotablock1" in style
     assert "components-input.css?v=20260801-quotablock1" in style
-    assert "style.css?v=20260801-quotablock1" in template
+    assert "style.css?v=20260801-question-clamp1" in template

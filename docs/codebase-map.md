@@ -1726,8 +1726,23 @@ Neu angelegte Watches bekommen eine lokale Ausführungszeit; das Backend berechn
 Fehler-Retries und Resume bei. Weekly-Watches können einen lokalen Wochentag wählen;
 Legacy-Watches ohne Wochentag bzw. Zeitfelder nutzen weiter die bisherige reine
 Intervalladdition.
+Alle Benachrichtigungen (Change, Every-run, Condition, Follower, Topic, Morning
+Brief, Telegram) folgen derselben Reihenfolge: **was sich geändert hat** (erster
+Satz hervorgehoben) → **Zahlenstreifen** (Agreement alt → neu inkl. Delta,
+Direction-Shift-Label aus der Position Map, Major/Minor) → **Frage** → Button.
+Bausteine dafür liegen zentral in `mailer.py` (`_change_block_html`,
+`_facts_html`, `_question_html`, `_shell_html` inkl. Preheader für die
+Inbox-Vorschau); lange Fragen werden auf ~200 Zeichen gekürzt und verlinken auf
+die Seite. Der Textteil bleibt bewusst ASCII (`_ascii`), sonst landet die
+komplette Plaintext-Hälfte in Base64 und URLs sind nicht mehr klickbar.
+Telegram sendet dieselbe Struktur als HTML (`parse_mode=HTML`), Frage und langer
+Consensus stehen in `<blockquote expandable>`; wird die Auszeichnung abgelehnt
+(HTTP 400), geht dieselbe Nachricht als Klartext raus.
 Watch-Seiten beginnen mit einer einfachen Erklärung („erste Baseline“ bzw.
-„seit dem letzten Check“). Zeitplan und Check-Daten stehen im Kopf stets
+„seit dem letzten Check“). Lange Fragen klappen im Seitenkopf auf drei Zeilen
+ein (`#shareQuestion` + `#shareQuestionMore`, gleiche Geste wie `#threadAsk` in
+/app; ohne JS bleibt der volle Text stehen), in der eingeklappten Dashboard-Karte
+auf zwei. Zeitplan und Check-Daten stehen im Kopf stets
 sichtbar; nur Direction-/Agreement-Metriken liegen in einklappbaren
 Expertendetails. Vor der ersten echten Vergleichsstufe
 werden keine Entwicklungsmetriken suggeriert. Die vollständige History-/

@@ -86,12 +86,15 @@ def call_bot_api(method: str, payload: dict, *, timeout: int = 30) -> dict:
     }
 
 
-def send_bot_message(chat_id, text: str, *, reply_markup: dict | None = None) -> dict:
+def send_bot_message(chat_id, text: str, *, reply_markup: dict | None = None,
+                     parse_mode: str = "") -> dict:
     payload = {
         "chat_id": str(chat_id),
         "text": str(text or "")[:4096],
         "disable_web_page_preview": True,
     }
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
     if reply_markup:
         payload["reply_markup"] = reply_markup
     return call_bot_api("sendMessage", payload)

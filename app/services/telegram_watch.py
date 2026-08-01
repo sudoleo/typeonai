@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import html
 import logging
 import os
 import re
@@ -279,26 +280,88 @@ def _watch_url(watch: dict) -> str:
     )
 
 
-def _notification_text(kind: str, watch: dict, result: dict) -> str:
-    question = " ".join(str(watch.get("question") or "Consensus Watch").split())[:300]
+def _escape(value, *, limit: int = 1_200) -> str:
+    """Escape first, cut second — and never leave half an entity behind,
+    which Telegram would reject as broken markup."""
+    escaped = html.escape(" ".join(str(value or "").split()), quote=False)
+    if len(escaped) <= limit:
+        return escaped
+    return re.sub(r"&[#\w]*$", "", escaped[:limit]).rstrip() + "…"
+
+
+def _quote_block(text: str, *, limit: int = 1_200) -> str:
+    """Telegram's own collapse: long text folds behind "expand" in the chat."""
+    escaped = html.escape(str(text or "").strip(), quote=False)
+    expandable = " expandable" if len(escaped) > 220 else ""
+    if len(escaped) > limit:
+        escaped = re.sub(r"&[#\w]*$", "", escaped[:limit]).rstrip() + "…"
+    return f"<blockquote{expandable}>{escaped}</blockquote>"
+
+
+def _facts_line(watch: dict, result: dict) -> str:
+    """One line of numbers: agreement movement and how far models moved."""
     score = result.get("agreement_score")
     old_score = watch.get("last_agreement_score")
+    parts = []
+    if isinstance(score, (int, float)) and isinstance(old_score, (int, float)):
+        delta = int(score) - int(old_score)
+        movement = "unchanged" if not delta else f"{'+' if delta > 0 else '−'}{abs(delta)}"
+        parts.append(f"Agreement {int(old_score)} → {int(score)} ({movement})")
+    elif isinstance(score, (int, float)):
+        parts.append(f"Agreement {int(score)}/100")
+    position = result.get("opinion_map") or {}
+    label = " ".join(str(position.get("shift_label") or "").split())
+    shift = position.get("shift_score")
+    if label:
+        parts.append(
+            f"Positions {label}"
+            + (f" ({int(shift)}/100)" if isinstance(shift, (int, float)) else "")
+        )
+    return " · ".join(parts)
+
+
+def _strip_markup(text: str) -> str:
+    return html.unescape(re.sub(r"<[^>]+>", "", str(text or "")))
+
+
+def _notification_text(kind: str, watch: dict, result: dict) -> str:
+    """Headline, then what changed, then the numbers, then the question.
+
+    Same order as the e-mails: the first two lines carry the news, the
+    question sits at the bottom in a quote that Telegram folds when long.
+    """
+    question = str(watch.get("question") or "Consensus Watch")
     if kind == "condition":
         title = "🎯 Watch condition met"
-        detail = str(result.get("condition_reason") or result.get("change_summary") or "The condition is now met.")
+        change_label = "Why it triggered"
+        detail = str(result.get("condition_reason") or result.get("change_summary")
+                     or "The condition is now met.")
     elif kind == "every_run":
         title = "🧭 Consensus Watch updated"
-        detail = str(result.get("consensus") or result.get("change_summary") or "A new consensus is available.")
+        change_label = "What changed"
+        detail = str(
+            result.get("change_summary")
+            or ("This check found a material change." if result.get("changed")
+                else "No material change since the last check.")
+        )
     elif kind == "paused_error":
         title = "⚠️ Consensus Watch paused"
+        change_label = "What happened"
         detail = "Three consecutive checks failed. Open the dashboard to review or resume this watch."
     else:
         title = "🔄 Consensus changed"
+        change_label = "What changed"
         detail = str(result.get("change_summary") or "The consensus changed materially.")
-    score_line = ""
-    if isinstance(score, (int, float)):
-        score_line = f"\nAgreement: {old_score} → {score}" if isinstance(old_score, (int, float)) else f"\nAgreement: {score}/100"
-    return f"{title}\n\n{question}{score_line}\n\n{detail[:1_800]}"
+
+    blocks = [f"<b>{title}</b>", f"<b>{change_label}</b>\n{_escape(detail)}"]
+    # A failed run has no numbers worth quoting — they would be the old ones.
+    facts = "" if kind == "paused_error" else _facts_line(watch, result)
+    if facts:
+        blocks.append(_escape(facts))
+    if kind == "every_run" and str(result.get("consensus") or "").strip():
+        blocks.append("<b>New consensus</b>\n" + _quote_block(result["consensus"]))
+    blocks.append("<b>Question</b>\n" + _quote_block(question, limit=900))
+    return "\n\n".join(blocks)
 
 
 def _watch_keyboard(watch_id: str, watch: dict) -> dict:
@@ -340,10 +403,18 @@ def send_watch_notification(watch_id: str, run_id: str, kind: str, watch: dict,
         "kind": kind, "status": "sending", "created_at": now,
     }, db):
         return False
+    text = _notification_text(kind, watch, result)
+    keyboard = _watch_keyboard(watch_id, watch)
     result_status = telegram_notifier.send_bot_message(
-        connection["chat_id"], _notification_text(kind, watch, result),
-        reply_markup=_watch_keyboard(watch_id, watch),
+        connection["chat_id"], text, reply_markup=keyboard, parse_mode="HTML",
     )
+    # A rejected entity must never cost the user the alert itself: resend the
+    # same message as plain text if Telegram refuses the markup.
+    if result_status.get("http_status") == 400 or result_status.get("error_code") == 400:
+        logging.warning("Telegram Watch message rejected as HTML; retrying as plain text")
+        result_status = telegram_notifier.send_bot_message(
+            connection["chat_id"], _strip_markup(text), reply_markup=keyboard,
+        )
     updates = {
         "status": result_status.get("status") or "failed",
         "attempted_at": now,

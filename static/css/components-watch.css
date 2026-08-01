@@ -369,6 +369,14 @@
   line-height: var(--line-height-ui);
   overflow-wrap: anywhere;
 }
+/* Lange Fragen klappen mit der Karte ein: zwei Zeilen im Listenblick,
+   voller Text sobald die Karte offen ist (gleiche Geste wie in /app). */
+.watch-card.is-collapsed .watch-card-question a {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
 .watch-card-question a { color: inherit; text-decoration: none; }
 .watch-card-question a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .watch-card-chips { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }

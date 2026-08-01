@@ -273,6 +273,8 @@ async def _send_change_mail(watch_id: str, watch: dict, result: dict):
         recipient=user.email, question=watch.get("question") or "",
         old_score=watch.get("last_agreement_score"), new_score=result["agreement_score"],
         summary=summary, share_url=share_url, unsubscribe_url=unsubscribe_url,
+        severity=result.get("severity") or "major",
+        direction=result.get("opinion_map"),
     )
     return await mailer.send_message(message)
 
@@ -296,6 +298,8 @@ async def _send_run_mail(watch_id: str, watch: dict, result: dict):
         summary=result.get("change_summary") or "",
         share_url=share_url,
         unsubscribe_url=unsubscribe_url,
+        old_score=watch.get("last_agreement_score"),
+        direction=result.get("opinion_map"),
     ))
 
 
@@ -317,6 +321,8 @@ async def _send_condition_mail(watch_id: str, watch: dict, result: dict):
         consensus=result.get("consensus") or "",
         share_url=share_url,
         unsubscribe_url=unsubscribe_url,
+        old_score=watch.get("last_agreement_score"),
+        direction=result.get("opinion_map"),
     ))
 
 
@@ -354,6 +360,8 @@ async def _send_follower_mails(watch_id: str, watch: dict, result: dict) -> int:
                 new_score=result["agreement_score"], summary=summary,
                 share_url=share_url,
                 unsubscribe_url=SITE_URL + "/watch/follow/unsubscribe?token=" + token,
+                severity=result.get("severity") or "major",
+                direction=result.get("opinion_map"),
             )
             if await mailer.send_message(message):
                 sent += 1

@@ -814,6 +814,73 @@ class MailerTests(unittest.TestCase):
         self.assertIn("15 September", rendered)
         self.assertIn("The launch is scheduled", rendered)
 
+    def test_change_mail_leads_with_the_change_not_with_prose(self):
+        """Die Aenderung ist die Nachricht: sie steht vor Zahlen und Frage,
+        die Zahlen stehen als Fakten daneben statt im Fliesstext."""
+        message = mailer.build_change_message(
+            recipient="owner@example.test", question="A question", old_score=54,
+            new_score=78, summary="Two models flipped. The rest stayed put.",
+            share_url="https://consens.io/s/q-id",
+            unsubscribe_url="https://consens.io/watch/unsubscribe?token=x",
+            severity="major", direction={"shift_label": "Turning", "shift_score": 58},
+        )
+        plain = message.get_body(preferencelist=("plain",)).get_content()
+        body = message.get_body(preferencelist=("html",)).get_content()
+
+        self.assertLess(plain.index("WHAT CHANGED"), plain.index("Agreement:"))
+        self.assertLess(plain.index("Agreement:"), plain.index("QUESTION"))
+        self.assertIn("Agreement: 54 -> 78 (+24 points)", plain)
+        self.assertIn("Model positions: Turning (58/100 movement)", plain)
+        # Erster Satz traegt die Nachricht und wird hervorgehoben.
+        self.assertIn("font-weight:600;line-height:1.45", body)
+        self.assertIn("Two models flipped.", body)
+        # Preheader: die Inbox-Vorschau zeigt die Aenderung, nicht den Footer.
+        self.assertLess(body.index("Two models flipped."), body.index("What changed"))
+
+    def test_long_question_is_collapsed_and_links_to_the_page(self):
+        long_question = "Will " + ("this very specific policy question " * 12) + "change?"
+        message = mailer.build_change_message(
+            recipient="owner@example.test", question=long_question, old_score=54,
+            new_score=78, summary="A central conclusion changed.",
+            share_url="https://consens.io/s/q-id",
+            unsubscribe_url="https://consens.io/watch/unsubscribe?token=x",
+        )
+        plain = message.get_body(preferencelist=("plain",)).get_content()
+        body = message.get_body(preferencelist=("html",)).get_content()
+
+        self.assertNotIn(long_question, body)
+        self.assertNotIn(long_question, plain)
+        self.assertIn("Read the full question", body)
+        self.assertIn("...", plain)
+
+    def test_short_question_stays_whole_and_without_a_link(self):
+        message = mailer.build_change_message(
+            recipient="owner@example.test", question="Will the guidance change?",
+            old_score=54, new_score=78, summary="A central conclusion changed.",
+            share_url="https://consens.io/s/q-id",
+            unsubscribe_url="https://consens.io/watch/unsubscribe?token=x",
+        )
+        body = message.get_body(preferencelist=("html",)).get_content()
+        self.assertIn("Will the guidance change?", body)
+        self.assertNotIn("Read the full question", body)
+
+    def test_brief_puts_changed_watches_first(self):
+        quiet = {"question": "Quiet watch", "share_path": "/s/a", "status": "active",
+                 "score": 61, "previous_score": 61, "interval": "weekly", "new_points": []}
+        moved = {"question": "Moved watch", "share_path": "/s/b", "status": "active",
+                 "score": 78, "previous_score": 54, "interval": "daily",
+                 "new_points": [{"notable": True, "change_summary": "A date was announced."}]}
+        message = mailer.build_brief_message(
+            recipient="owner@example.test", date_label="Monday, 13 July 2026",
+            items=[quiet, moved], changes_count=1, site_url="https://consens.io",
+            unsubscribe_url="https://consens.io/watch/brief/unsubscribe?token=x",
+        )
+        plain = message.get_body(preferencelist=("plain",)).get_content()
+        self.assertLess(plain.index("Moved watch"), plain.index("Quiet watch"))
+        self.assertIn("CHANGED: A date was announced.", plain)
+        # Die URLs muessen im Text-Teil klickbar bleiben: keine Base64-Wand.
+        self.assertIn("https://consens.io/s/b", plain)
+
     def test_admin_test_mail_is_multipart_and_does_not_claim_a_watch(self):
         message = mailer.build_test_message(recipient="admin@example.test")
         self.assertTrue(message.is_multipart())
@@ -1206,6 +1273,54 @@ class TelegramWatchTests(unittest.TestCase):
         self.assertIn("wp:w1", callbacks)
         self.assertEqual(len(self.db.stores[telegram_watch.DELIVERIES_COLLECTION]), 1)
 
+    def test_notification_text_leads_with_the_change_and_folds_the_question(self):
+        """Telegram bekommt dieselbe Reihenfolge wie die Mail; die lange Frage
+        steht unten in einem aufklappbaren Zitat statt vor der Nachricht."""
+        long_question = "Will " + ("this very specific policy question " * 12) + "change?"
+        watch = {"question": long_question, "last_agreement_score": 54}
+        result = {
+            "agreement_score": 78,
+            "change_summary": "Two models flipped.",
+            "opinion_map": {"shift_label": "Turning", "shift_score": 58},
+        }
+        text = telegram_watch._notification_text("change", watch, result)
+
+        self.assertLess(text.index("What changed"), text.index("Agreement 54 → 78 (+24)"))
+        self.assertLess(text.index("Agreement 54 → 78 (+24)"), text.index("<b>Question</b>"))
+        self.assertIn("Positions Turning (58/100)", text)
+        self.assertIn("<blockquote expandable>", text)
+
+        short = telegram_watch._notification_text(
+            "change", {"question": "Will it change?"}, result,
+        )
+        self.assertIn("<blockquote>Will it change?</blockquote>", short)
+        # Der Klartext-Fallback verliert nur die Auszeichnung, nicht den Inhalt.
+        self.assertIn("Will it change?", telegram_watch._strip_markup(short))
+        self.assertNotIn("<b>", telegram_watch._strip_markup(short))
+
+    def test_html_rejection_falls_back_to_plain_text(self):
+        self.db.stores[telegram_watch.CONNECTIONS_COLLECTION]["u1"] = {
+            "uid": "u1", "chat_id": "123", "telegram_user_id": "123", "enabled": True,
+        }
+        watch = {
+            "owner_uid": "u1", "share_id": "A" * 16, "share_slug": "question",
+            "visibility": "public", "question": "Will this change?",
+            "last_agreement_score": 60, "telegram_enabled": True,
+        }
+        result = {"agreement_score": 40, "change_summary": "The conclusion flipped."}
+        with patch.object(
+            telegram_watch.telegram_notifier, "send_bot_message",
+            side_effect=[{"status": "failed_http", "http_status": 400}, {"status": "sent"}],
+        ) as send:
+            self.assertTrue(telegram_watch.send_watch_notification(
+                "w1", "run1", "change", watch, result, now=self.now, db=self.db,
+            ))
+        self.assertEqual(send.call_count, 2)
+        self.assertEqual(send.call_args_list[0].kwargs.get("parse_mode"), "HTML")
+        retry_text = send.call_args_list[1].args[1]
+        self.assertNotIn("<b>", retry_text)
+        self.assertIn("The conclusion flipped.", retry_text)
+
     def test_mute_and_confirmed_pause_actions_are_owner_scoped(self):
         share_id = "A" * 16
         self.db.stores["shares"][share_id] = share()
@@ -1377,6 +1492,26 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertNotIn('id="viewSwitch" class="view-switch" hidden', html_source)
         firebase_source = Path("static/firebase.js").read_text(encoding="utf-8")
         self.assertEqual(firebase_source.count('getElementById("viewSwitch")'), 0)
+
+    def test_long_questions_collapse_on_the_page_like_in_the_app(self):
+        """Eine lange Frage darf die Seite nicht aufblaehen: drei Zeilen plus
+        Aufklapp-Link auf Share-/Watch-Seiten, zwei Zeilen in der
+        eingeklappten Karte — dieselbe Geste wie #threadAsk in /app."""
+        share_html = Path("templates/share.html").read_text(encoding="utf-8")
+        public_css = Path("static/css/public-pages.css").read_text(encoding="utf-8")
+        watch_css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
+
+        self.assertIn('id="shareQuestion"', share_html)
+        self.assertIn('id="shareQuestionMore"', share_html)
+        self.assertIn('aria-controls="shareQuestion"', share_html)
+        # Der Link startet versteckt und erscheint erst, wenn wirklich etwas
+        # abgeschnitten ist; ohne JS bleibt die Frage vollstaendig.
+        self.assertIn('class="share-question-more" aria-expanded="false"', share_html)
+        self.assertIn('question.classList.add("is-clamped")', share_html)
+        self.assertIn("Collapse question", share_html)
+        self.assertIn(".share-question.is-clamped", public_css)
+        self.assertIn("-webkit-line-clamp: 3", public_css)
+        self.assertIn(".watch-card.is-collapsed .watch-card-question a", watch_css)
 
     def test_collapsed_watch_cards_keep_a_centered_themed_toggle_and_summary(self):
         watch_source = Path("static/js/watch.js").read_text(encoding="utf-8")
