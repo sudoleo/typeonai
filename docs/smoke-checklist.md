@@ -76,6 +76,11 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       Reveal scrollt nur dann sanft zum Ergebnis, wenn es außerhalb des
       relevanten Viewports liegt.
 - [ ] Consensus manuell generieren → Antwort + Differences erscheinen.
+- [ ] Beim Lesen eines Consensus verschwinden der fixierte
+      Consensus/Watches-Schalter und der schwebende Burger nach deutlichem
+      Herunterscrollen; Aufwärtsscrollen, Seitenanfang oder Tastatur-Navigation
+      bringen beide ohne Flackern zurück. Dasselbe gilt im scrollenden
+      Watch-Dashboard für den View-Schalter.
 - [ ] Auto-Consensus (Toggle an) triggert automatisch nach Abschluss.
 - [ ] Credibility-Frame-Farbe (cred-very … cred-not) wird gesetzt.
 - [ ] Consensus-Insights: Claim-Badges, Difference-Karten, Klick öffnet Popover,

@@ -5,7 +5,7 @@
 
 @import url('./css/variables.css?v=20260731-inter1');
 @import url('./css/base.css?v=20260731-inter1');
-@import url('./css/layout.css?v=20260731-inter1');
+@import url('./css/layout.css?v=20260802-readingchrome1');
 /* components.css was split by section into the files below (same cascade order). */
 @import url('./css/components-input.css?v=20260801-quotablock1');
 @import url('./css/components-attachment-viewer.css?v=20260731-inter1');
@@ -16,7 +16,7 @@
 @import url('./css/components-model-picker.css?v=20260731-ui-polish1');
 @import url('./css/components-feedback.css?v=20260731-inter1');
 @import url('./css/components-consensus-insights.css?v=20260731-inter1');
-@import url('./css/components-watch.css?v=20260801-question-clamp1');
+@import url('./css/components-watch.css?v=20260802-readingchrome1');
 /* Shell layer — loaded LAST so the frameless redesign wins on equal
    specificity. Elevation, sidebar, topbar, composer and thread material. */
 @import url('./css/shell.css?v=20260801-quotablock1');

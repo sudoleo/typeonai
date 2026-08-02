@@ -137,6 +137,22 @@ def test_mobile_brand_and_desktop_input_centering_contract():
     assert "body:has(.sidebar.collapsed) .brand-float" in layout
 
 
+def test_fixed_navigation_yields_while_consensus_or_watch_content_is_read():
+    app_init = read("static/js/app-init.js")
+    layout = read("static/css/layout.css")
+    watch_css = read("static/css/components-watch.css")
+
+    assert "function initReadingChrome()" in app_init
+    assert 'window.addEventListener("scroll", () => handleScroll(window, mainState)' in app_init
+    assert 'watchPage?.addEventListener("scroll", () => handleScroll(watchPage, watchState)' in app_init
+    assert 'body.classList.toggle("is-reading-chrome-hidden"' in app_init
+    assert '["Tab", "Home", "PageUp", "ArrowUp"]' in app_init
+    assert "body.is-reading-chrome-hidden .app-nav-float" in layout
+    assert "body.is-reading-chrome-hidden .view-switch" in layout
+    assert "prefers-reduced-motion: reduce" in layout
+    assert "transition: transform 0.22s ease" in watch_css
+
+
 def test_disclaimer_stays_attached_below_the_moving_input_section():
     template = read("templates/index.html")
     input_css = read("static/css/components-input.css")

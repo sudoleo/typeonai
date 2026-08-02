@@ -181,4 +181,4 @@ def test_css_cache_busting_was_bumped():
 
     assert "shell.css?v=20260801-quotablock1" in style
     assert "components-input.css?v=20260801-quotablock1" in style
-    assert "style.css?v=20260801-question-clamp1" in template
+    assert "style.css?v=20260802-readingchrome1" in template

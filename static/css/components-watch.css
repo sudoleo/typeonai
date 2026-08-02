@@ -25,6 +25,8 @@
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   z-index: var(--z-header);
+  transition: transform 0.22s ease, opacity 0.18s ease, background-color .15s ease,
+    color .15s ease, visibility 0s linear 0s;
 }
 .view-switch[hidden] { display: none; }
 

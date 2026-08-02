@@ -613,6 +613,37 @@
           || text.includes("exhausted");
       }
 
+      function isUsageStorageBusyError(data) {
+        const normalized = unwrapApiError(data);
+        return String(normalized.error_code || normalized.code || "").toLowerCase()
+          === "usage_storage_busy";
+      }
+
+      async function prepareWithUsageRetry(payload, signal) {
+        const maxAttempts = 3;
+        let result = null;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          const response = await fetch("/prepare", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            signal
+          });
+          let data = {};
+          try {
+            data = await response.json();
+          } catch (_) {
+            data = { error: `Request failed with HTTP ${response.status}.` };
+          }
+          result = { response, data };
+          if (response.ok || !isUsageStorageBusyError(data) || attempt === maxAttempts) {
+            return result;
+          }
+          await new Promise(resolve => window.setTimeout(resolve, attempt * 350));
+        }
+        return result;
+      }
+
       function updateUsageDisplayFromData(data) {
         const normalized = unwrapApiError(data);
         if (normalized.usage_run_status) {
@@ -723,14 +754,9 @@
           preparePayload.context = followupContext;
         }
 
-        const prepareResp = await fetch("/prepare", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(preparePayload),
-          signal: querySignal
-        });
-
-        const prepareData = await prepareResp.json();
+        const { response: prepareResp, data: prepareData } = await prepareWithUsageRetry(
+          preparePayload, querySignal
+        );
 
         if (prepareResp.ok && prepareData.system_prompt) {
           updateUsageDisplayFromData(prepareData);
@@ -740,6 +766,22 @@
           }
           // Wenn sie gleich sind: Nichts tun, nichts loggen (effectiveSystemPrompt ist ja schon gesetzt).
         } else {
+          if (isUsageStorageBusyError(prepareData)) {
+            const message = getApiErrorMessage(
+              prepareData,
+              "The usage service is busy right now. Please try again in a moment."
+            );
+            modelBoxes.forEach(box => {
+              const outputEl = box.querySelector(".collapsible-content");
+              if (outputEl) markModelError(outputEl, message, prepareData);
+            });
+            finishQueryRun(queryRunId);
+            setAgentModeStatus("error", message);
+            setConsensusGate(true);
+            window.App.usageLimit?.showTemporaryStorageBusy?.();
+            window.App.followup?.restoreAfterBlockedRun?.();
+            return;
+          }
           if (isUsageLimitError(prepareData)) {
             const message = getApiErrorMessage(prepareData, "Usage limit reached.");
             // Die Zahlen aus der Absage sind die frischesten, die es gibt:

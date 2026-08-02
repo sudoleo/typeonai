@@ -9,11 +9,42 @@
 // window.currentEvidenceSources.
 // =====================================================================
 
+function escapeHtml(value) {
+  const node = document.createElement("div");
+  node.textContent = value || "";
+  return node.innerHTML;
+}
+
+function reportMarkdownFallback(missingDependency) {
+  window.App?.reportCriticalError?.({
+    type: "dependency_unavailable",
+    phase: "markdown_render",
+    message: "Markdown renderer unavailable; displaying unformatted text.",
+    details: missingDependency
+  });
+}
+
 function renderMarkdownHtml(md) {
   const prepared = window.ConsensusMath
     ? window.ConsensusMath.prepareMarkdown(md)
     : (md || "");
-  return DOMPurify.sanitize(marked.parse(prepared));
+  const missing = [
+    typeof window.marked?.parse !== "function" ? "marked" : "",
+    typeof window.DOMPurify?.sanitize !== "function" ? "DOMPurify" : ""
+  ].filter(Boolean);
+  if (missing.length) {
+    // A CDN or local-network failure must not turn a usable model answer into
+    // an unhandled Promise rejection. Plain text is safe and keeps the run
+    // readable until the dependency is available again.
+    reportMarkdownFallback(missing.join(", "));
+    return escapeHtml(prepared);
+  }
+  try {
+    return window.DOMPurify.sanitize(window.marked.parse(prepared));
+  } catch (error) {
+    reportMarkdownFallback("render error");
+    return escapeHtml(prepared);
+  }
 }
 
 // Utils: Markdown → HTML (sanitised) + deine Addons

@@ -859,6 +859,122 @@
         window.addEventListener("resize", checkWindowSize);
         checkWindowSize(); // Initial
 
+        // Fixed navigation should make room while a result is being read. The
+        // main app scrolls the window, whereas the Watch dashboard owns an
+        // independent scroll container, so both sources feed the same small
+        // direction-aware controller. A little accumulated travel prevents
+        // touchpad jitter from flickering the controls on and off.
+        function initReadingChrome() {
+          const body = document.body;
+          const consensusOutput = document.getElementById("consensusOutput");
+          const watchPage = document.getElementById("watchDashboard");
+          const topRevealDistance = 64;
+          const directionTravel = 14;
+          const mainState = { lastY: window.scrollY, direction: 0, travel: 0, frame: 0 };
+          const watchState = { lastY: watchPage?.scrollTop || 0, direction: 0, travel: 0, frame: 0 };
+
+          function watchIsOpen() {
+            return Boolean(watchPage && !watchPage.hidden);
+          }
+
+          function consensusIsReadable() {
+            return Boolean(
+              !watchIsOpen()
+              && consensusOutput
+              && !consensusOutput.classList.contains("is-hidden")
+              && document.getElementById("consensusAnswerBody")?.textContent?.trim()
+            );
+          }
+
+          function canAutoHide(source) {
+            return source === watchPage ? watchIsOpen() : consensusIsReadable();
+          }
+
+          function setChromeHidden(hidden) {
+            body.classList.toggle("is-reading-chrome-hidden", Boolean(hidden));
+          }
+
+          function resetState(state, y) {
+            state.lastY = y;
+            state.direction = 0;
+            state.travel = 0;
+          }
+
+          function readScrollY(source) {
+            return source === watchPage ? source.scrollTop : window.scrollY;
+          }
+
+          function handleScroll(source, state) {
+            if (state.frame) return;
+            state.frame = requestAnimationFrame(() => {
+              state.frame = 0;
+              const y = readScrollY(source);
+              const delta = y - state.lastY;
+              state.lastY = y;
+
+              if (!canAutoHide(source) || y <= topRevealDistance) {
+                state.direction = 0;
+                state.travel = 0;
+                setChromeHidden(false);
+                return;
+              }
+              if (Math.abs(delta) < 0.5) return;
+
+              const nextDirection = delta > 0 ? 1 : -1;
+              if (nextDirection !== state.direction) {
+                state.direction = nextDirection;
+                state.travel = 0;
+              }
+              state.travel += Math.abs(delta);
+              if (state.travel < directionTravel) return;
+
+              setChromeHidden(nextDirection > 0);
+              state.travel = 0;
+            });
+          }
+
+          function revealAndResync() {
+            setChromeHidden(false);
+            resetState(mainState, window.scrollY);
+            resetState(watchState, watchPage?.scrollTop || 0);
+          }
+
+          window.addEventListener("scroll", () => handleScroll(window, mainState), { passive: true });
+          watchPage?.addEventListener("scroll", () => handleScroll(watchPage, watchState), { passive: true });
+
+          // Hidden controls never trap keyboard users: starting keyboard
+          // navigation reveals them before focus advances.
+          document.addEventListener("keydown", event => {
+            if (!body.classList.contains("is-reading-chrome-hidden")) return;
+            if (["Tab", "Home", "PageUp", "ArrowUp"].includes(event.key)) {
+              revealAndResync();
+            }
+          }, true);
+          document.querySelector(".app-nav-float")?.addEventListener("focusin", revealAndResync);
+          document.getElementById("viewSwitch")?.addEventListener("focusin", revealAndResync);
+
+          // Opening/closing Watches, clearing a result, or returning to the
+          // hero can happen without a scroll event. Keep the chrome state in
+          // sync with those view transitions as well.
+          const syncEligibility = () => {
+            if (!watchIsOpen() && !consensusIsReadable()) revealAndResync();
+            else {
+              resetState(mainState, window.scrollY);
+              resetState(watchState, watchPage?.scrollTop || 0);
+            }
+          };
+          const observer = new MutationObserver(syncEligibility);
+          observer.observe(body, { attributes: true, attributeFilter: ["class"] });
+          if (consensusOutput) {
+            observer.observe(consensusOutput, { attributes: true, attributeFilter: ["class"] });
+          }
+          if (watchPage) {
+            observer.observe(watchPage, { attributes: true, attributeFilter: ["hidden"] });
+          }
+        }
+
+        initReadingChrome();
+
         // Aktualisiert den Pfeil des Sidebar-Toggle-Buttons
         function updateToggleButton() {
           const sidebar = document.querySelector(".sidebar");

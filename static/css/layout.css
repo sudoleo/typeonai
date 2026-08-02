@@ -67,7 +67,8 @@ body:has(.sidebar.collapsed) .main-wrapper {
   align-items: center;
   gap: 8px;
   z-index: var(--z-header);
-  transition: left 0.3s ease;
+  transition: left 0.3s ease, transform 0.22s ease, opacity 0.18s ease,
+    visibility 0s linear 0s;
 }
 
 body:has(.sidebar.collapsed) .app-nav-float {
@@ -93,6 +94,33 @@ body:has(.sidebar.collapsed) .app-nav-float {
    Navigation — Burger/Brand wuerden unter dem Overlay nichts bewirken. */
 body:has(.watch-page:not([hidden])) .app-nav-float {
   display: none;
+}
+
+/* Reading mode: fixed navigation yields to the answer while scrolling down.
+   JS removes this state near the top, on upward travel and before keyboard
+   focus moves into the controls. Visibility follows the fade so an invisible
+   button can neither intercept pointers nor receive focus. */
+body.is-reading-chrome-hidden .app-nav-float {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(calc(-100% - 20px));
+  transition-delay: 0s, 0s, 0s, 0.22s;
+}
+
+body.is-reading-chrome-hidden .view-switch {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 20px));
+  transition-delay: 0s, 0s, 0s, 0s, 0.22s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-nav-float,
+  .view-switch {
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .brand-float {

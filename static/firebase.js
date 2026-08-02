@@ -123,8 +123,20 @@ setPersistence(auth, browserLocalPersistence)
   });
 
 function renderMarkdownSafe(md) {
-  const html = marked.parse(md || "");
-  return DOMPurify.sanitize(html, {
+  const text = md || "";
+  if (typeof window.marked?.parse !== "function" || typeof window.DOMPurify?.sanitize !== "function") {
+    const node = document.createElement("div");
+    node.textContent = text;
+    window.App?.reportCriticalError?.({
+      type: "dependency_unavailable",
+      phase: "markdown_render",
+      message: "Markdown renderer unavailable; displaying unformatted text.",
+      details: "bookmark markdown"
+    });
+    return node.innerHTML;
+  }
+  const html = window.marked.parse(text);
+  return window.DOMPurify.sanitize(html, {
     // nur sichere Protokolle für Links erlauben
     ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:)/i
   });

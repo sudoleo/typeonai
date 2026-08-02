@@ -257,6 +257,13 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Navigationselement: derselbe saubere Ausgangszustand wie
   `firebase.js::resetLoadedRunAfterLogout` (Streams abbrechen, Lauf +
   Share-/Bookmark-Kontext leeren, `is-hero` zurück).
+- **Reading Chrome** — `app-init.js` beobachtet beim lesbaren Consensus den
+  Window-Scroll und im geöffneten Watch-Dashboard dessen eigenen
+  Scroll-Container. Nach deutlichem Abwärtsscrollen fahren der fixierte
+  `#viewSwitch` und der schwebende `.app-nav-float` aus dem Lesebereich;
+  Aufwärtsscrollen, Seitenanfang und Tastatur-Navigation blenden sie wieder ein.
+  Der Zustand ist rein transient als `body.is-reading-chrome-hidden` und
+  verändert weder Sidebar-Persistenz noch Watch-/Consensus-Daten.
 - **`sidebar-quota.js`** — Kontingent-Ring im Sidebar-Footer (`#quotaTrigger`)
   + Panel `#sidebarQuota` (Runs / Deep Think / Watches + Reset-Zeit). Rechnet
   **nichts** selbst: ein MutationObserver spiegelt die weiterhin von
@@ -302,7 +309,9 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   exponiert `window.ConsensusMath.{prepareMarkdown,render}`.
 - **`markdown-stream.js`** — Markdown-Rendering (`injectMarkdown`) + SSE-Helfer
   (`createStreamRenderer`, `streamSSERequest`); setzt LaTeX nach jedem
-  gedrosselten Streaming-Render über `window.ConsensusMath`.
+  gedrosselten Streaming-Render über `window.ConsensusMath`. Fehlt `marked`
+  oder `DOMPurify` nach einem Asset-Ladefehler, rendert es sicher als Plaintext
+  und meldet den degradierten Zustand, statt eine Promise-Rejection auszulösen.
 - **`sources.js`** — Quellen/Evidence-Mapping; nutzt DOM-Datasets
   `dataset.consensusAnswer` / `dataset.consensusSources`; `window.currentEvidenceSources`.
   Seit 2026-07-27 zwei Darstellungen: **im Konsenstext** (Container ist bzw.
@@ -659,6 +668,10 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   `app-init.js::updateQuestionInputAccess` deaktiviert den Send-Button bereits
   synchron dazu, während `query-send.js` programmgesteuerte Starts nochmals
   abweist.
+  Ein `usage_storage_busy` aus `/prepare` wird mit demselben Idempotency-Key
+  kurz erneut versucht; bleibt Firestore beschäftigt, endet der Lauf vor dem
+  Fan-out mit einer erneut versuchbaren Thread-Karte (kein falscher
+  Provider-Gesamtausfall).
   Der Send-Button spiegelt den GANZEN Lauf: `window.isRunActive()` = Modell-
   Phase ODER Consensus-Phase; `window.App.syncSendButtonRunning()` wird von
   `consensus-lifecycle.js` bei Start/Ende der Consensus-Phase gerufen, damit
@@ -707,18 +720,21 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
 
 ### Anfrage an Modelle (Streaming)
 1. Frontend `sendQuestion` (`query-send.js`) ruft zuerst **`POST /prepare`**:
-   Auth + Follow-up-Gate und transaktionale Usage-Reservierung anhand des vom
-   Client erzeugten, kostenfreien `usage_run_key`; Antwort: finaler
+   Auth + Follow-up-Gate sowie transaktionale Usage-Reservierung und sofortiger
+   Verbrauch anhand des vom Client erzeugten, kostenfreien `usage_run_key`; Antwort: finaler
    `system_prompt` + persistenter UTC-Tagesstand.
    Echtzeitdaten holen sich die Modelle selbst über die native Web-Suche in jedem
    Provider-Call (`engines.py`), daher kein Intent-Router/Realtime-Injektion mehr.
+   Bei `usage_storage_busy` wiederholt der Client `/prepare` kurz mit demselben
+   Key. Bleibt Firestore beschäftigt, bleibt die Frage erhalten und der Lauf
+   endet vor dem Fan-out mit einer Retry-Karte.
 2. Fan-out an die ausgewählten **`/ask_<provider>`**-Endpoints (parallel), je mit
    `stream:true`. Backend prüft Auth, Pro-Status, Deep-Search-Berechtigung,
    Wortlimit (`validate_question_word_limit`) und Modell (`validate_model`),
-   parst Attachments und konsumiert den reservierten Run idempotent. Alle
-   parallelen Provider teilen denselben Key: der erste `/ask_*`-Aufruf wechselt
-   `reserved→consumed`, alle weiteren sehen `consumed` und kosten nichts
-   zusätzlich. Clientseitige Modellanzahl/Kosten werden nicht akzeptiert.
+   parst Attachments und bestätigt den bereits konsumierten Run idempotent.
+   Alle parallelen Provider teilen denselben Key und sehen `consumed`; sie
+   kosten nichts zusätzlich. Clientseitige Modellanzahl/Kosten werden nicht
+   akzeptiert.
    Eigene Provider-Keys dürfen nur verifizierte Nutzer verwenden; sie umgehen
    die Usage-Zählung, aber nicht Auth/Pro-Gates.
 3. **SSE-Protokoll Modellantwort** (`streaming_model_response` in `streaming.py`):

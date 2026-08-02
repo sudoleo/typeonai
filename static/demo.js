@@ -461,10 +461,15 @@ async function renderDemoConsensus(mainP, diffP) {
   if (!structuredRendered && diffP) {
     window.App.differencesPanel?.expandForFallback?.();
     window.applyCredibilityFrame?.(diffP, DEMO_DATA.differences);
-    const html = marked.parse(
-      (window.colorizeCredibility?.(DEMO_DATA.differences) ?? DEMO_DATA.differences)
-    );
-    diffP.innerHTML = DOMPurify.sanitize(html);
+    const differences = window.colorizeCredibility?.(DEMO_DATA.differences)
+      ?? DEMO_DATA.differences;
+    if (window.injectMarkdown) {
+      window.injectMarkdown(diffP, differences);
+    } else {
+      // This only happens while the app's deferred helpers are not available.
+      // Keep the demo readable instead of depending on a CDN global directly.
+      diffP.textContent = differences;
+    }
   }
 
   // Demo-Ergebnisse sind reine lokale Produktvorschau. Sie dürfen weder das

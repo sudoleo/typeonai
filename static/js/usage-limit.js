@@ -305,6 +305,29 @@
     return view;
   }
 
+  // Firestore can abort a hot transaction even after its own retry budget.
+  // This is deliberately separate from quota exhaustion: nothing has been
+  // denied permanently and the user should be able to retry the same question.
+  function showTemporaryStorageBusy() {
+    render({
+      bucket: "temporary",
+      title: "Temporarily unable to start this run",
+      body: "The usage service is busy right now. No model was asked; please try this question again in a moment.",
+      actions: [{
+        label: "Try again",
+        variant: "primary",
+        title: "Retry this question with a fresh usage reservation.",
+        onClick: function () {
+          hide();
+          if (typeof window.sendQuestion === "function") window.sendQuestion();
+        }
+      }]
+    });
+    try {
+      window.App.trackAppEvent && window.App.trackAppEvent("app_usage_storage_busy");
+    } catch (err) { /* Telemetrie darf die Meldung nie verhindern */ }
+  }
+
   /* Vor dem Absenden: gibt einen Grund zurueck, wenn der Lauf sicher nicht
      durchgeht, sonst null. Bewusst konservativ — bei unbekanntem Stand
      (Gast, noch nicht geladen, eigene Keys) entscheidet weiterhin der
@@ -357,6 +380,7 @@
     isLimitError: isLimitError,
     bucketOf: bucketOf,
     show: show,
+    showTemporaryStorageBusy: showTemporaryStorageBusy,
     hide: hide,
     preflight: preflight,
     blockIfExhausted: blockIfExhausted
