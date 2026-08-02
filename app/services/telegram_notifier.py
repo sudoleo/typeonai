@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -22,6 +23,9 @@ _CRITICAL_RATE_LIMIT = 10
 _critical_lock = threading.Lock()
 _critical_seen: dict[str, float] = {}
 _critical_sent_at: deque[float] = deque()
+_REGISTRATION_DEDUPE_SECONDS = 24 * 60 * 60
+_registration_lock = threading.Lock()
+_registration_seen: dict[str, float] = {}
 
 _SECRET_PATTERNS = (
     re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s,;]+"),
@@ -192,6 +196,73 @@ def send_critical_error_notification(report: Mapping) -> dict:
         # second failure or log secrets from a Telegram request URL.
         logging.warning("Critical Telegram notification failed safely")
         return {"status": "failed_safely", "attempted_at": attempted_at}
+    result.pop("result", None)
+    return result
+
+
+def _new_user_registration_message(registration_method: str) -> str:
+    method = _scrub_alert_text(registration_method or "unknown", limit=60)
+    environment_name = (
+        os.environ.get("RENDER_SERVICE_NAME")
+        or os.environ.get("ENVIRONMENT")
+        or "production"
+    )
+    environment = _scrub_alert_text(environment_name, limit=80)
+    return "\n".join((
+        "👤 consens.io new user registered",
+        f"Method: {method}",
+        f"Environment: {environment}",
+        f"Time: {datetime.now(timezone.utc).isoformat(timespec='seconds')}",
+    ))
+
+
+def _reserve_registration_delivery(dedupe_key: str) -> tuple[str, str]:
+    if not dedupe_key:
+        return "reserved", ""
+    fingerprint = hashlib.sha256(str(dedupe_key).encode("utf-8")).hexdigest()
+    now = time.monotonic()
+    with _registration_lock:
+        for key, seen_at in list(_registration_seen.items()):
+            if seen_at <= now - _REGISTRATION_DEDUPE_SECONDS:
+                _registration_seen.pop(key, None)
+        if fingerprint in _registration_seen:
+            return "deduplicated", fingerprint
+        _registration_seen[fingerprint] = now
+    return "reserved", fingerprint
+
+
+def _release_registration_delivery(fingerprint: str) -> None:
+    if not fingerprint:
+        return
+    with _registration_lock:
+        _registration_seen.pop(fingerprint, None)
+
+
+def send_new_user_registration_notification(
+    registration_method: str,
+    dedupe_key: str = "",
+) -> dict:
+    """Send a PII-free registration alert without affecting sign-up."""
+    attempted_at = datetime.now(timezone.utc).isoformat()
+    chat_id = _critical_chat_id()
+    if not bot_token() or not chat_id:
+        return {"status": "skipped_not_configured", "attempted_at": attempted_at}
+
+    reservation, fingerprint = _reserve_registration_delivery(dedupe_key)
+    if reservation != "reserved":
+        return {"status": reservation, "attempted_at": attempted_at}
+
+    try:
+        result = send_bot_message(
+            chat_id,
+            _new_user_registration_message(registration_method),
+        )
+    except Exception:
+        _release_registration_delivery(fingerprint)
+        logging.warning("New-user Telegram notification failed safely")
+        return {"status": "failed_safely", "attempted_at": attempted_at}
+    if result.get("status") != "sent":
+        _release_registration_delivery(fingerprint)
     result.pop("result", None)
     return result
 

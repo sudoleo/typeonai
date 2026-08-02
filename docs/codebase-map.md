@@ -61,7 +61,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache), `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (Pro, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP) und übergibt sie als nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
-| `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). |
+| `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). Nach einem tatsächlich neu angelegten E-Mail/Passwort-Konto plant `/register` außerdem einen PII-freien, nicht-blockierenden Telegram-Admin-Alert ein; `/confirm-registration` erkennt damit auch gerade neu angelegte Google-Konten serverseitig. Normale Logins, Reloads und neutrale Antworten für bereits bestehende Adressen bleiben ruhig. |
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
@@ -693,7 +693,12 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Vollinhalte kommen erst beim Öffnen über `GET /bookmarks/{id}` und nur das
   aktuell geöffnete Detail bleibt im Cache. Suche lädt bei Bedarf weitere
   Metadatenseiten, nicht deren Antworten. Saves reduzieren das serverseitige
-  Merge-Ergebnis sofort wieder auf Listenmetadaten. Nach einer E-Mail-Registrierung zeigt
+  Merge-Ergebnis sofort wieder auf Listenmetadaten. Beim Restore stammen die
+  sichtbaren Namen der Einzelantworten und die Citation-Metadaten aus den
+  gespeicherten `model_labels`; die aktuellen Modell-Selects und `localStorage`
+  bleiben unverändert und werden erst für einen neuen Lauf wieder in die UI
+  gespiegelt. Alte Bookmarks ohne Provenienz zeigen keinen erfundenen aktuellen
+  Modellnamen. Nach einer E-Mail-Registrierung zeigt
   das Auth-Modal einen eigenen Verifizierungs-Erfolgszustand statt eines Browser-Alerts.
   Logout löscht zuerst erfolgreich die HttpOnly-Session und wartet danach
   Firebase `signOut()` ab; erst dann wird der ausgeloggte Zustand gezeigt.
@@ -1547,6 +1552,12 @@ Deploy manuell über die Firebase Console):
   `CRITICAL_ERROR_TELEGRAM_CHAT_ID`; ohne eigene Ziel-ID fällt der Versand auf
   `TELEGRAM_CHAT_ID` zurück. Fehlende Konfiguration deaktiviert Alerts
   best-effort, ohne App-Flows zu beeinflussen.
+- Neue E-Mail/Passwort- und Google-Registrierungen verwenden denselben
+  Telegram-Admin-Kanal. Eine prozesslokale, gehashte UID-Deduplizierung für 24
+  Stunden verhindert Doppelmeldungen zwischen Create- und Confirm-Flow.
+  Die Hintergrundnachricht enthält nur Registrierungsart, Umgebung und UTC-Zeit,
+  weder E-Mail-Adresse noch UID; Telegram-Fehler beeinflussen die Registrierung
+  nicht.
 - User-Telegram-Watches verwenden denselben `TELEGRAM_BOT_TOKEN` plus
   `TELEGRAM_BOT_USERNAME` (ohne `@`) und `TELEGRAM_WEBHOOK_SECRET`. Sind alle
   drei gesetzt, registriert der Startup-Einmal-Task automatisch

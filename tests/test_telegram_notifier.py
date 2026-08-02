@@ -82,3 +82,45 @@ def test_critical_error_notification_redacts_and_deduplicates(monkeypatch):
     assert "secret-value" not in captured[0]["text"]
     assert "abc.def.ghi" not in captured[0]["text"]
     assert captured[0]["text"].startswith("🚨 consens.io critical error")
+
+
+def test_new_user_registration_notification_is_pii_free(monkeypatch):
+    captured = []
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "123")
+    monkeypatch.setenv("CRITICAL_ERROR_TELEGRAM_CHAT_ID", "456")
+    monkeypatch.setenv("ENVIRONMENT", "staging")
+    telegram_notifier._registration_seen.clear()
+
+    def fake_urlopen(request, timeout):
+        captured.append(json.loads(request.data))
+        return Response()
+
+    monkeypatch.setattr(telegram_notifier, "urlopen", fake_urlopen)
+    result = telegram_notifier.send_new_user_registration_notification(
+        "email/password", "private-firebase-uid"
+    )
+    duplicate = telegram_notifier.send_new_user_registration_notification(
+        "email/password", "private-firebase-uid"
+    )
+
+    assert result["status"] == "sent"
+    assert duplicate["status"] == "deduplicated"
+    assert len(captured) == 1
+    assert captured[0]["chat_id"] == "456"
+    assert captured[0]["text"].startswith("👤 consens.io new user registered")
+    assert "Method: email/password" in captured[0]["text"]
+    assert "Environment: staging" in captured[0]["text"]
+    assert "@" not in captured[0]["text"]
+
+
+def test_new_user_registration_notification_is_skipped_without_config(monkeypatch):
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+    monkeypatch.delenv("CRITICAL_ERROR_TELEGRAM_CHAT_ID", raising=False)
+
+    result = telegram_notifier.send_new_user_registration_notification(
+        "email/password", "private-firebase-uid"
+    )
+
+    assert result["status"] == "skipped_not_configured"

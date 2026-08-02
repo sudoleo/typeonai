@@ -1,17 +1,48 @@
 import logging
+import time
+
 import firebase_admin
 from firebase_admin import auth
-from fastapi import APIRouter, Request, Body, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Request, Body, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.core.rate_limit import limiter
 from app.core.security import verify_user_token
+from app.services.telegram_notifier import send_new_user_registration_notification
 
 router = APIRouter()
+_NEW_USER_WINDOW_MS = 10 * 60 * 1000
+
+
+def _recent_registration_method(user) -> str:
+    """Return the provider only while Firebase still identifies a new account."""
+    metadata = getattr(user, "user_metadata", None)
+    created_ms = getattr(metadata, "creation_timestamp", None)
+    try:
+        age_ms = (time.time() * 1000) - float(created_ms)
+    except (TypeError, ValueError):
+        return ""
+    if age_ms < -60_000 or age_ms > _NEW_USER_WINDOW_MS:
+        return ""
+
+    provider_ids = {
+        str(getattr(item, "provider_id", "") or "").strip()
+        for item in (getattr(user, "provider_data", None) or [])
+    }
+    if "google.com" in provider_ids:
+        return "google"
+    if "password" in provider_ids:
+        return "email/password"
+    return "firebase"
+
 
 @router.post("/register")
 @limiter.limit("3/minute")
-async def register_user(request: Request, data: dict = Body(...)):    
+async def register_user(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    data: dict = Body(...),
+):
     email = data.get("email")
     password = data.get("password")
     if not email or not password:
@@ -37,6 +68,11 @@ async def register_user(request: Request, data: dict = Body(...)):
             return {"status": "check_inbox"}
         custom_token = auth.create_custom_token(user.uid)
         custom_token_str = custom_token.decode("utf-8")
+        background_tasks.add_task(
+            send_new_user_registration_notification,
+            "email/password",
+            user.uid,
+        )
         return {
             "status": "check_inbox",
             "uid": user.uid,
@@ -55,7 +91,11 @@ async def register_user(request: Request, data: dict = Body(...)):
     
 
 @router.post("/confirm-registration")
-async def confirm_registration(request: Request, data: dict = Body(...)):
+async def confirm_registration(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    data: dict = Body(...),
+):
     token = data.get("id_token")
     if not token:
         raise HTTPException(status_code=400, detail="Authentication failed")
@@ -70,6 +110,14 @@ async def confirm_registration(request: Request, data: dict = Body(...)):
     if not user.email_verified:
         # Diese Info ist okay, weil sie nichts über Passwort / Existenz aussagt
         raise HTTPException(status_code=400, detail="E-mail address not yet verified.")
+
+    registration_method = _recent_registration_method(user)
+    if registration_method:
+        background_tasks.add_task(
+            send_new_user_registration_notification,
+            registration_method,
+            uid,
+        )
 
     response = JSONResponse({"status": "registered"})
     response.headers["Cache-Control"] = "no-store"
