@@ -67,7 +67,11 @@ class SeoBasicsTests(unittest.TestCase):
 
         self.assertIn('<link rel="canonical" href="https://www.consens.io/">', template)
         self.assertIn('property="og:title"', template)
-        self.assertIn('name="twitter:card"', template)
+        self.assertIn('name="twitter:card" content="summary_large_image"', template)
+        self.assertIn('property="og:image:width" content="1200"', template)
+        self.assertIn('property="og:image:height" content="630"', template)
+        self.assertIn('/static/og-home-v2.png?v=20260802', template)
+        self.assertTrue((ROOT / "static" / "og-home-v2.png").is_file())
         self.assertIn('type="application/ld+json"', template)
         self.assertIn('"@type": "WebApplication"', template)
 
