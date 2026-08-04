@@ -50,11 +50,13 @@
     return match ? match[1].trim() : null;
   }
 
-  // --------- Follow-up-Fragen (Pro): Kontext-State + Input-Affordance ---------
+  // --------- Follow-up-Fragen: Kontext-State + Input-Affordance ---------
   // Genau eine Kontext-Ebene: das Frage/Konsens-Paar des letzten erfolgreichen
   // Laufs. offer() merkt sich das Paar und zeigt den "Ask a follow-up"-Button
-  // im Input-Bereich, arm() aktiviert den Kontext-Chip (Free: Pro-Teaser),
-  // consume() liefert den context-Payload für query-send.js und räumt auf.
+  // im Input-Bereich, arm() aktiviert den Kontext-Chip, consume() liefert den
+  // context-Payload für query-send.js und räumt auf.
+  // Kein Tier-Gate: ein Follow-up ist ein vollwertiger Lauf und zaehlt wie
+  // jede andere Frage gegen das Tagesbudget — mehr kostet es niemanden.
   const FOLLOWUP_ICON =
     '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" ' +
     'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -101,12 +103,6 @@
 
     arm() {
       if (!this.lastExchange) return;
-      if (!window.isUserPro) {
-        trackAppEvent("app_followup_pro_teaser_click");
-        const shown = window.App.showProFeatureModal?.("Follow-up questions");
-        if (!shown) window.App.showPopup?.("Follow-ups are off here. Each one is a full six-model run again.");
-        return;
-      }
       this.armed = true;
       trackAppEvent("app_followup_armed");
       this.render();
@@ -229,9 +225,8 @@
     // jetzt komplett zu; diese kompakte Zeile bietet nur die beiden ehrlichen
     // Wege weiter an: frischer Vergleich oder Follow-up mit Kontext.
     buildGate() {
-      const pro = !!window.isUserPro;
       const wrap = document.createElement("div");
-      wrap.className = "composer-gate-inner" + (pro ? "" : " is-locked");
+      wrap.className = "composer-gate-inner";
 
       const copy = document.createElement("span");
       copy.className = "composer-gate-copy";
@@ -258,17 +253,7 @@
       followupBtn.type = "button";
       followupBtn.className = "followup-offer-btn composer-gate-followup";
       followupBtn.innerHTML = FOLLOWUP_ICON + '<span class="followup-offer-label">Ask a follow-up</span>';
-      const badge = document.createElement("span");
-      badge.className = "pro-badge followup-pro-badge";
-      badge.textContent = "Pro";
-      followupBtn.appendChild(badge);
-      if (pro) {
-        followupBtn.title = "Ask a follow-up question. The previous question and its consensus answer go along as context.";
-        badge.classList.add("is-subtle");
-      } else {
-        followupBtn.classList.add("is-pro-locked");
-        followupBtn.title = "Off by default: each follow-up is a full six-model run again";
-      }
+      followupBtn.title = "Ask a follow-up question. The previous question and its consensus answer go along as context. Counts as one run.";
       followupBtn.addEventListener("click", () => this.arm());
       actions.appendChild(followupBtn);
 
@@ -276,24 +261,30 @@
       return wrap;
     },
 
-    // Nach einer fertigen Antwort ist der Composer fuer ALLE Nutzer kompakt:
-    // auch Pro soll zuerst bewusst "Follow-up" waehlen, bevor das Feld mit
-    // Kontext wieder aufgeht. "New comparison" setzt es leer zurueck.
+    // Nach einer fertigen Antwort ist der Composer kompakt: der naechste
+    // Schritt wird bewusst gewaehlt ("Follow-up" nimmt den Kontext mit,
+    // "New comparison" setzt das Feld leer zurueck).
     syncInputLock() {
       const locked = !!this.lastExchange && !this.armed;
       // Die Login-Schranke (updateQuestionInputAccess) bleibt die staerkere
-      // Bedingung: dieses Gate darf ein gesperrtes Feld nie oeffnen.
+      // Bedingung: dieses Gate darf ein gesperrtes Feld nie oeffnen. Tippen
+      // und Absenden sind dabei zwei Rechte: wer auf die E-Mail-Bestaetigung
+      // wartet, darf seine Frage schon schreiben.
       const canAsk = typeof window.userCanAskQuestions === "function"
         ? window.userCanAskQuestions()
         : true;
+      const canType = typeof window.userCanTypeQuestions === "function"
+        ? window.userCanTypeQuestions()
+        : canAsk;
       const disabled = locked || !canAsk;
+      const inputDisabled = locked || !canType;
       const input = document.getElementById("questionInput");
       const send = document.getElementById("sendButton");
       document.body.classList.toggle("composer-locked", locked);
       if (input) {
-        input.disabled = disabled;
-        input.setAttribute("aria-disabled", disabled ? "true" : "false");
-        if (locked) input.placeholder = "Follow-ups are Pro — or start a new comparison";
+        input.disabled = inputDisabled;
+        input.setAttribute("aria-disabled", inputDisabled ? "true" : "false");
+        if (locked) input.placeholder = "Ask a follow-up — or start a new comparison";
       }
       // Waehrend eines Laufs ist derselbe Knopf der Abbrechen-Knopf; der darf
       // nicht gesperrt werden, sonst haengt der Nutzer im Lauf fest.

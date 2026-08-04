@@ -64,21 +64,117 @@
       nudge.className = "watch-feature-nudge";
       nudge.setAttribute("role", "status");
       nudge.setAttribute("aria-label", "New Consensus Watch feature");
+      // Der Hinweis war frueher nur ein Hinweis: er erklaerte die Funktion und
+      // liess den Nutzer dann den Watch-Knopf suchen. Jetzt steht die Aktion
+      // selbst darin — ein Klick, fertige Voreinstellungen. Der Preis dafuer
+      // ist Ehrlichkeit ueber die Benachrichtigung: nur bei einer echten
+      // Aenderung, sonst nie. Genau das steht neben dem Knopf.
       nudge.innerHTML = `
-        <button type="button" class="watch-feature-nudge-close" aria-label="Dismiss new feature tip"></button>
+        <button type="button" class="watch-feature-nudge-close" aria-label="Dismiss new feature tip">&#10005;</button>
         <span class="watch-feature-nudge-label">New</span>
         <strong>Keep this answer current</strong>
-        <span class="watch-feature-nudge-copy">We will recheck this question and notify you only when the consensus materially changes.</span>
+        <span class="watch-feature-nudge-copy">We re-run this exact question every week. You hear from us only if the models change their mind — no change, no message.</span>
+        <button type="button" class="watch-nudge-btn" id="watchNudgeStart">Watch this question</button>
+        <span class="watch-nudge-meta">Weekly &middot; e-mail on material change only &middot; stop anytime</span>
+        <button type="button" class="watch-nudge-skip" id="watchNudgeCustomize">Pick a different schedule</button>
       `;
       nudge.querySelector(".watch-feature-nudge-close").addEventListener("click", event => {
         event.stopPropagation();
         dismissWatchFeatureNudge("dismissed");
+      });
+      nudge.querySelector("#watchNudgeStart").addEventListener("click", event => {
+        event.stopPropagation();
+        startWatchFromNudge(event.currentTarget);
+      });
+      nudge.querySelector("#watchNudgeCustomize").addEventListener("click", event => {
+        event.stopPropagation();
+        dismissWatchFeatureNudge("customize");
+        openWatchDialog("confirm");
       });
       anchor.classList.add("has-feature-nudge");
       anchor.closest("h2")?.classList.add("has-watch-feature-nudge");
       anchor.appendChild(nudge);
       window.App?.trackAppEvent?.("app_watch_feature_nudge_shown");
     }, 650);
+  }
+
+  // Ein Klick, fertige Voreinstellungen: woechentlich, morgen, 09:00 lokal,
+  // privat, E-Mail nur bei materieller Aenderung. Genau die Werte, die der
+  // Dialog ohnehin vorschlaegt — der Dialog bleibt fuer alles andere da
+  // ("Pick a different schedule").
+  function nudgeWatchDefaults() {
+    return {
+      interval: "weekly",
+      run_weekday: browserTomorrowWeekday(),
+      email_mode: "changes_only",
+      email_enabled: true,
+      telegram_enabled: false,
+      condition: "",
+      visibility: "private",
+      run_time: "09:00",
+      timezone: browserTimezone()
+    };
+  }
+
+  async function startWatchFromNudge(button) {
+    if (!button || button.disabled) return;
+    if (!window.auth?.currentUser) {
+      popup("Please log in to use Consensus Watch.");
+      return;
+    }
+    button.disabled = true;
+    button.textContent = "Starting…";
+    window.App?.trackAppEvent?.("app_watch_nudge_start_click");
+    try {
+      const resultId = await (window.resolveCurrentShareResultId?.()
+        || Promise.resolve(window.lastShareResultId));
+      if (!resultId) throw new Error("This consensus is not saved yet.");
+      const payload = Object.assign(nudgeWatchDefaults(), { result_id: resultId });
+      const data = await api("POST", "/api/watch", payload);
+      watchLimitState = null;
+      window.App?.trackAppEvent?.("app_watch_created", {
+        interval: data.watch.interval,
+        source: "nudge"
+      });
+      renderNudgeSuccess(data.watch);
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = "Watch this question";
+      // Kontingent voll oder Server-Fehler: der Dialog kann mehr erklaeren
+      // (Limits, Upgrade, Telegram) als dieser Streifen.
+      if (error.status === 429) {
+        watchLimitState = null;
+        dismissWatchFeatureNudge("limit");
+        openWatchDialog("confirm");
+        return;
+      }
+      popup("Watch could not be started: " + error.message);
+    }
+  }
+
+  // Der Hinweis bleibt stehen und wird zur Bestaetigung: der Nutzer soll
+  // sehen, was er gerade ausgeloest hat — vor allem, dass er nur bei einer
+  // Aenderung etwas hoert.
+  function renderNudgeSuccess(watch) {
+    const nudge = document.getElementById("watchFeatureNudge");
+    if (!nudge) return;
+    nudge.innerHTML = `
+      <button type="button" class="watch-feature-nudge-close" aria-label="Dismiss">&#10005;</button>
+      <span class="watch-feature-nudge-label is-active">Watching</span>
+      <strong>You are set</strong>
+      <span class="watch-feature-nudge-copy">First check: ${escapeHtml(formatWatchSchedule(watch))}. We only write if the consensus materially changes.</span>
+      <button type="button" class="watch-nudge-skip" id="watchNudgeOpenDash">Manage your watches</button>
+    `;
+    nudge.querySelector(".watch-feature-nudge-close").addEventListener("click", event => {
+      event.stopPropagation();
+      dismissWatchFeatureNudge("created");
+    });
+    nudge.querySelector("#watchNudgeOpenDash").addEventListener("click", event => {
+      event.stopPropagation();
+      dismissWatchFeatureNudge("created");
+      openWatchDashboard();
+    });
+    loadWatchLimits(true).catch(() => {});
   }
 
   function els() {

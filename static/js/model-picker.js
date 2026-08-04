@@ -8,7 +8,7 @@
 //   2) Custom-Model-Picker: das eigene, getunte Listbox-Dropdown, das die
 //      nativen <select> ueberlagert (expandedModelPicker ist modul-privat).
 //   3) Consensus-Presets: der Consensus-Picker zeigt primaer die Presets
-//      Fast/Balanced/High Quality (window.CONSENSUS_PRESETS) plus "Custom" fuer
+//      Daily/Balanced/High Quality (window.CONSENSUS_PRESETS) plus "Custom" fuer
 //      die volle Modell-Liste. Ein Preset setzt die sechs Antwortmodelle und
 //      die Consensus-Engine gemeinsam. High Quality bleibt Pro-only.
 // Extrahiert aus templates/index.html (initApp-Closure), verhaltenserhaltend.
@@ -208,7 +208,7 @@
     }
   };
 
-  // --- CONSENSUS-PRESETS (Fast/Balanced/High Quality + Custom) ---
+  // --- CONSENSUS-PRESETS (Daily/Balanced/High Quality + Custom) ---
 
   const CONSENSUS_PRESET_STORAGE_KEY = "pref_consensus_preset";
 
@@ -624,7 +624,7 @@
 
     state.menu.innerHTML = "";
 
-    // Preset-Ebene: Fast/Balanced/High Quality + Custom statt der Modell-Liste.
+    // Preset-Ebene: Daily/Balanced/High Quality + Custom statt der Modell-Liste.
     if (state.presets && state.view !== "custom" && !isModelListView(state.view)) {
       renderConsensusPresetMenu(select, state);
       syncCustomModelPicker(select);

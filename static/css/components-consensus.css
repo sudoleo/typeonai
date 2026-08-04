@@ -1305,51 +1305,99 @@ body.agent-mode-running .agent-mode-chip[data-response-state="pending"]::before 
   line-height: var(--line-height-ui);
 }
 
+/* Die Aktion liegt IM Hinweis: ein voll breiter Knopf, darunter in einer
+   Zeile die drei Fakten, die ihn ehrlich machen (Rhythmus, Anlass, Ausstieg).
+   Der Weg in den Dialog bleibt als leiser Textlink daneben. */
+.watch-nudge-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 88%, var(--text-color));
+  color: var(--bg-color);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
+  cursor: pointer;
+  transition: background-color .15s ease, opacity .15s ease;
+}
+
+.watch-nudge-btn:hover:not(:disabled) {
+  background: var(--text-color);
+}
+
+.watch-nudge-btn:disabled {
+  opacity: .65;
+  cursor: default;
+}
+
+.watch-nudge-meta {
+  display: block;
+  margin-top: 6px;
+  color: var(--sidebar-text-muted);
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-ui);
+}
+
+.watch-nudge-skip {
+  display: inline-block;
+  margin-top: 7px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sidebar-text-muted);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-medium);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.watch-nudge-skip:hover {
+  color: var(--text-color);
+}
+
+.watch-feature-nudge-label.is-active {
+  background: color-mix(in srgb, var(--agree) 16%, transparent);
+  color: color-mix(in srgb, var(--agree) 82%, var(--text-color));
+}
+
+/* Gleiche Sprache wie die Close-Buttons der Modals (`.auth-modal .close`):
+   quadratisch, flaechenlos, gedaempft, Hover fuellt dezent. Zwei Dinge liessen
+   ihn vorher als graue Pille erscheinen: die fehlende Ausnahme in der
+   `button:not(...)`-Kette (components-input.css) und ein aus zwei gedrehten
+   Pseudo-Elementen gebautes Kreuz. Jetzt: ein echtes Glyph, an der oberen
+   Kante der Ueberschriftszeile ausgerichtet. */
 .watch-feature-nudge-close {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  /* top = Innenabstand des Hinweises: die Box beginnt auf derselben Kante wie
+     die erste Zeile, ihr Zentrum liegt damit auf der Mitte der
+     Ueberschriftszeile („NEW  Keep this answer current"). */
+  top: 13px;
+  right: 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
+  border-radius: var(--radius-sm);
+  background: none;
   color: var(--sidebar-text-muted);
   font: inherit;
-  font-size: 0;
+  font-size: var(--font-size-sm);
   line-height: var(--line-height-solid);
-  opacity: .62;
   cursor: pointer;
-  transition: opacity .15s ease, background-color .15s ease, color .15s ease;
-}
-
-.watch-feature-nudge-close::before,
-.watch-feature-nudge-close::after {
-  content: "";
-  position: absolute;
-  width: 8px;
-  height: 1.25px;
-  border-radius: 999px;
-  background: currentColor;
-}
-
-.watch-feature-nudge-close::before {
-  transform: rotate(45deg);
-}
-
-.watch-feature-nudge-close::after {
-  transform: rotate(-45deg);
+  transition: background-color .15s ease, color .15s ease;
 }
 
 .watch-feature-nudge-close:hover,
 .watch-feature-nudge-close:focus-visible {
-  background: color-mix(in srgb, var(--sidebar-hover) 58%, transparent);
+  background: var(--sidebar-hover);
   color: var(--text-color);
-  opacity: .9;
   outline: none;
 }
 

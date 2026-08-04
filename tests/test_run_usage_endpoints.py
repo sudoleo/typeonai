@@ -55,6 +55,12 @@ def run_api(monkeypatch):
     return TestClient(app), repository
 
 
+# Das Free-Limit ist eine Produktentscheidung und wurde schon einmal
+# angehoben (3 -> 12). Die Erwartungen leiten sich deshalb aus der Konfiguration
+# ab statt aus einer festen Zahl.
+FREE_TOTAL = cfg.get_consensus_run_limit(False)
+
+
 def _limits(is_pro=False):
     return UsageLimits(
         total=cfg.get_consensus_run_limit(is_pro),
@@ -97,7 +103,7 @@ def test_prepare_and_parallel_models_consume_exactly_one_run(run_api):
     # Reserve+Consume pro Lauf); der Fan-out unten trifft danach nur noch die
     # idempotenten No-Write-Pfade und erzeugt keine Firestore-Contention mehr.
     assert prepared.json()["usage_run_status"] == "consumed"
-    assert prepared.json()["free_usage_remaining"] == 2
+    assert prepared.json()["free_usage_remaining"] == FREE_TOTAL - 1
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         responses = list(
@@ -115,7 +121,7 @@ def test_prepare_and_parallel_models_consume_exactly_one_run(run_api):
     snapshot = repository.snapshot(UID, _limits())
     assert snapshot.total.reserved == 0
     assert snapshot.total.consumed == 1
-    assert snapshot.total.remaining == 2
+    assert snapshot.total.remaining == FREE_TOTAL - 1
 
 
 def test_consensus_reuses_consumed_run_without_second_charge(run_api):
@@ -142,7 +148,7 @@ def test_consensus_reuses_consumed_run_without_second_charge(run_api):
     assert response.json()["usage_run_status"] == "consumed"
     snapshot = repository.snapshot(UID, _limits())
     assert snapshot.total.consumed == 1
-    assert snapshot.total.remaining == 2
+    assert snapshot.total.remaining == FREE_TOTAL - 1
 
 
 def test_usage_endpoint_reads_persistent_snapshot_and_release_frees_reservation(run_api):
@@ -155,7 +161,7 @@ def test_usage_endpoint_reads_persistent_snapshot_and_release_frees_reservation(
 
     usage = client.post("/usage", json={"id_token": "test-token"})
     assert usage.status_code == 200
-    assert usage.json()["remaining"] == 2
+    assert usage.json()["remaining"] == FREE_TOTAL - 1
     assert usage.json()["reserved"] == 1
     assert usage.json()["consumed"] == 0
 
@@ -168,7 +174,7 @@ def test_usage_endpoint_reads_persistent_snapshot_and_release_frees_reservation(
     snapshot = repository.snapshot(UID, _limits())
     assert snapshot.total.reserved == 0
     assert snapshot.total.consumed == 0
-    assert snapshot.total.remaining == 3
+    assert snapshot.total.remaining == FREE_TOTAL
 
 
 def test_requests_without_run_key_are_rejected_before_provider_call(run_api):

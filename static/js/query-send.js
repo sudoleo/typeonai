@@ -297,6 +297,11 @@
         return;
       }
 
+      // Die Frage geht raus — der Entwurf aus der Bestaetigungsphase hat
+      // seinen Zweck erfuellt und darf beim naechsten Laden nicht wieder
+      // im Feld stehen.
+      window.App.clearQuestionDraft?.();
+
       // Kontingent VOR dem ersten sichtbaren Schritt pruefen — aber nach dem
       // Demo-Check unten wuerde es zu spaet sein, also hier mit derselben
       // Ausnahme: die Demo kostet nichts. Ohne diese Schranke sah ein leeres
@@ -318,6 +323,11 @@
         // Lauf, der nicht stattgefunden hat, nicht zu diesem hier.
         window.App.usageLimit?.hide?.();
       }
+
+      // A restored bookmark temporarily shows the immutable model labels from
+      // that historical run. A fresh run must display the current picker/Deep
+      // Think labels again without the bookmark ever mutating those controls.
+      window.App.updateDeepThinkText?.();
 
       // Ab dem ersten echten Lauf wird die Seite zum Thread: Frage oben,
       // Composer unten. Der Demo-Pfad nutzt denselben Übergang.

@@ -3,8 +3,9 @@ System-Prompt-Aufbau.
 
 Nagelt die Vertraege fest: genau eine Kontext-Ebene ({previous_question,
 previous_consensus}), serverseitige Caps (Kostenkontrolle — der Kontext geht
-in alle /ask_*-Prompts gleichzeitig), Pro-Gate in /prepare UND handle_ask,
-Injektion nur in handle_ask (nicht doppelt via /prepare).
+in alle /ask_*-Prompts gleichzeitig), KEIN Tier-Gate (ein Follow-up ist ein
+normaler Lauf und zaehlt gegen das Tagesbudget), Injektion nur in handle_ask
+(nicht doppelt via /prepare).
 """
 
 from unittest.mock import patch
@@ -154,24 +155,34 @@ class TestBuildFollowupSystemPrompt:
 # Endpoint-Gates + Injektion in handle_ask
 # ---------------------------------------------------------------------------
 
-def test_ask_with_context_is_pro_only():
+def test_ask_with_context_works_for_free_users():
+    """Follow-ups sind nicht mehr Pro-only: der Kontext wird auch fuer Free
+    injiziert. Bezahlt wird er ueber das normale Tagesbudget."""
     client = make_client()
+    captured = {}
+
+    def fake_run_ask(provider, **kwargs):
+        captured.update(kwargs)
+        return {"ok": True}
+
     p1, p2 = auth_patches(is_pro=False)
-    with p1, p2:
+    with p1, p2, patch.object(chat_router, "_run_ask", side_effect=fake_run_ask):
         response = client.post(
             "/ask_gemini",
             headers=AUTH_HEADER,
             json={
                 "question": "and how is it used?",
                 "model": free_model("gemini"),
+                "system_prompt": "BASE PROMPT",
                 "context": VALID_CONTEXT,
             },
         )
-    assert response.status_code == 403
-    assert response.json()["detail"]["error_code"] == "pro_required"
+    assert response.status_code == 200
+    assert FOLLOWUP_CONTEXT_HEADER in captured["system_prompt"]
+    assert "What is quantum entanglement?" in captured["system_prompt"]
 
 
-def test_prepare_with_context_is_pro_only():
+def test_prepare_with_context_works_for_free_users():
     client = make_client()
     p1, p2 = auth_patches(is_pro=False)
     with p1, p2:
@@ -180,8 +191,7 @@ def test_prepare_with_context_is_pro_only():
             headers=AUTH_HEADER,
             json={"question": "and how is it used?", "context": VALID_CONTEXT},
         )
-    assert response.status_code == 403
-    assert response.json()["detail"]["error_code"] == "pro_required"
+    assert response.status_code == 200
 
 
 def test_ask_injects_capped_context_into_system_prompt_for_pro():

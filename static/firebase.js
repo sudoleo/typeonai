@@ -11,6 +11,11 @@ import {
   browserSessionPersistence,
 } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 
+import {
+  showEmailVerificationGate,
+  hideEmailVerificationGate,
+} from "/static/js/email-verify.js?v=20260804-verify1";
+
 const googleProvider = new GoogleAuthProvider();
 // Optional: Kontoauswahl erzwingen
 googleProvider.setCustomParameters({ prompt: "select_account" });
@@ -35,6 +40,33 @@ function trackAppEvent(eventName, eventData = {}) {
   if (typeof window.trackUmamiEvent === "function") {
     window.trackUmamiEvent(eventName, eventData);
   }
+}
+
+// Der Bestaetigungslink soll nicht in einer Firebase-Sackgasse enden, sondern
+// zurueck in die App fuehren — dort steht die getippte Frage noch im Feld.
+function verificationEmailSettings() {
+  return {
+    url: `${window.location.origin}/app?verified=1`,
+    handleCodeInApp: false,
+  };
+}
+
+function sendVerificationMail(user) {
+  return sendEmailVerification(user, verificationEmailSettings());
+}
+
+// Firebase haelt emailVerified aus dem zuletzt geholten Token. Wer den Link
+// gerade in einem anderen Tab geklickt hat, ist also serverseitig laengst
+// bestaetigt, waehrend das lokale Objekt noch "false" sagt. reload() holt den
+// echten Stand; das erzwungene Token loest onIdTokenChanged neu aus und die
+// App faehrt ohne Neuladen in den verifizierten Zustand.
+async function refreshVerificationState() {
+  const current = auth.currentUser;
+  if (!current) return false;
+  await current.reload();
+  if (!auth.currentUser?.emailVerified) return false;
+  await auth.currentUser.getIdToken(true);
+  return true;
 }
 
 // Logout-Bestätigung als In-App-Modal (#logoutConfirmModal in index.html)
@@ -344,8 +376,23 @@ onIdTokenChanged(auth, async (user) => {
   const generation = setActiveAuthIdentity(user?.emailVerified ? user.uid : null);
 
   if (user) {
-    // **NEU: Harte Client-Gate—kein Token persistieren, keine Calls, wenn unverified**
+    // Unbestaetigt: kein Token persistieren, keine authentifizierten Calls —
+    // aber auch KEIN Rauswurf mehr. Der Nutzer bleibt angemeldet, sieht die
+    // App und den Bestaetigungs-Streifen. Ausgeloggt zu werden, waehrend man
+    // im Postfach sucht, war der teuerste Moment im ganzen Funnel.
     if (!user.emailVerified) {
+      // Kann sein, dass der Link gerade geklickt wurde und nur das lokale
+      // Objekt veraltet ist. Ergibt der frische Stand "bestaetigt", laeuft
+      // dieser Handler gleich noch einmal — dann durch den verifizierten Ast.
+      let becameVerified = false;
+      try {
+        becameVerified = await refreshVerificationState();
+      } catch (_) {
+        // Offline oder gedrosselt: dann eben der Streifen.
+      }
+      if (becameVerified) return;
+
+      try { localStorage.removeItem("id_token"); } catch (_) {}
       resetLoadedRunAfterLogout();
       clearAuthenticatedUiState();
       if (previousAuthUid) clearLocalProviderKeys();
@@ -354,18 +401,43 @@ onIdTokenChanged(auth, async (user) => {
         credentials: "same-origin",
         cache: "no-store"
       }).catch(() => {});
-      signOut(auth).catch(error => console.error("Could not clear unverified auth state:", error));
+      showEmailVerificationGate({
+        email: user.email || "",
+        onResend: () => {
+          trackAppEvent("auth_verification_resend");
+          return sendVerificationMail(auth.currentUser || user);
+        },
+        onRecheck: async () => {
+          const verified = await refreshVerificationState();
+          trackAppEvent("auth_verification_recheck", { verified });
+          return verified;
+        },
+        onSignOut: () => {
+          trackAppEvent("auth_verification_gate_sign_out");
+          signOut(auth).catch(error => console.error("Sign-out from verification gate failed:", error));
+        },
+      });
+      trackAppEvent("auth_verification_gate_shown");
       if (typeof window.updateQuestionInputAccess === "function") {
         window.updateQuestionInputAccess();
       }
+      // resetLoadedRunAfterLogout() hat den Composer eben geleert; die Frage,
+      // auf die dieser Nutzer wartet, gehoert wieder hinein.
+      window.App?.restoreQuestionDraft?.();
       if (usageOptions) usageOptions.style.display = "none";
       setBookmarksAccess(false);
       if (loginContainer) {
         loginContainer.innerHTML = "";
         loginContainer.hidden = true;
       }
+      // Die Gast-Buttons oben rechts waeren hier tote Knoepfe (openAuthModal
+      // steigt bei bestehender Session aus). Der Ausweg steht im Streifen.
+      const unverifiedTopActions = document.getElementById("authTopActions");
+      if (unverifiedTopActions) unverifiedTopActions.hidden = true;
       return; // <--- ganz wichtig
     }
+
+    hideEmailVerificationGate();
 
     if (previousAuthUid && previousAuthUid !== user.uid) {
       resetLoadedRunAfterLogout();
@@ -515,6 +587,7 @@ onIdTokenChanged(auth, async (user) => {
 
     } else {
         // Cleanup bei Logout
+        hideEmailVerificationGate();
         resetLoadedRunAfterLogout();
         clearAuthenticatedUiState();
         if (previousAuthUid) clearLocalProviderKeys();
@@ -698,9 +771,11 @@ document.getElementById("loginButton").addEventListener("click", () => {
           window.location.href = "/app";
         });
       } else {
+        // Unbestaetigt heisst nicht mehr "raus": das Modal geht zu, die App
+        // ist da, und der Streifen (onIdTokenChanged) erklaert den einen
+        // fehlenden Schritt inklusive Resend.
         try { localStorage.removeItem("id_token"); } catch {}
-        alert("Please verify your e-mail address first. Check your inbox for the confirmation link.");
-        signOut(auth);
+        document.getElementById("loginModal").style.display = "none";
       }
       trackAppEvent("auth_email_login_result", { status: user.emailVerified ? "success" : "unverified" });
     })
@@ -841,11 +916,15 @@ confirmRegisterBtn.addEventListener("click", () => {
         // Nutzer mit dem Custom Token anmelden
         signInWithCustomToken(auth, data.customToken)
           .then(() => {
-            sendEmailVerification(auth.currentUser)
+            sendVerificationMail(auth.currentUser)
               .then(() => {
-                showRegistrationSuccess(email);
+                // Angemeldet bleiben: das Modal geht zu, die App wird
+                // sichtbar, und der Bestaetigungs-Streifen uebernimmt. Der
+                // frueher hier stehende signOut() war der Moment, in dem die
+                // meisten Neuregistrierungen verloren gingen.
+                setRegisterPending(false);
+                document.getElementById("loginModal").style.display = "none";
                 trackAppEvent("auth_register_result", { status: "success" });
-                signOut(auth).catch((error) => console.error("Post-registration sign-out failed:", error));
               })
               .catch((error) => {
                 // Keine rohen Firebase-Texte
@@ -1255,8 +1334,50 @@ window.resolveCurrentShareResultId = async function () {
   return await requestBookmarkShareResult();
 };
 
+const BOOKMARK_MODEL_PRESENTATION = [
+  { provider: "OpenAI", textId: "openaiModelText", citationLabel: "OpenAI" },
+  { provider: "Mistral", textId: "mistralModelText", citationLabel: "Mistral" },
+  { provider: "Anthropic", textId: "claudeModelText", citationLabel: "Anthropic Claude" },
+  { provider: "Gemini", textId: "geminiModelText", citationLabel: "Google Gemini" },
+  { provider: "DeepSeek", textId: "deepseekModelText", citationLabel: "DeepSeek" },
+  { provider: "Grok", textId: "grokModelText", citationLabel: "Grok" }
+];
+
+function applyBookmarkModelPresentation(bookmark) {
+  const responses = bookmark?.responses && typeof bookmark.responses === "object"
+    ? bookmark.responses
+    : {};
+  const storedLabels = bookmark?.model_labels && typeof bookmark.model_labels === "object"
+    ? bookmark.model_labels
+    : {};
+  const citationModels = [];
+
+  BOOKMARK_MODEL_PRESENTATION.forEach(({ provider, textId, citationLabel }) => {
+    if (!String(responses[provider] || "").trim()) return;
+
+    // model_labels is the immutable run provenance saved with the consensus.
+    // Only change the response heading: selects/localStorage remain the source
+    // of truth for the next run and must never be rewritten while browsing history.
+    const storedLabel = typeof storedLabels[provider] === "string"
+      ? storedLabels[provider].trim()
+      : "";
+    const visibleLabel = storedLabel || "Model not recorded";
+    const labelEl = document.getElementById(textId);
+    if (labelEl) {
+      labelEl.textContent = visibleLabel;
+      labelEl.title = storedLabel
+        ? `Model used for this saved answer: ${storedLabel}`
+        : "The exact model was not recorded for this older bookmark.";
+    }
+    citationModels.push(storedLabel ? `${citationLabel}: ${storedLabel}` : citationLabel);
+  });
+
+  return citationModels;
+}
+
 // Diese Funktion füllt die UI mit den Daten eines Bookmarks
 function loadSingleBookmarkUI(bookmark) {
+    let bookmarkCitationModels = [];
     // Ein geladenes Bookmark zeigt sofort Antworten und startet daher nie im
     // zentrierten Leerzustand.
     window.exitHeroMode?.();
@@ -1397,6 +1518,11 @@ function loadSingleBookmarkUI(bookmark) {
                 if (deepToggle && !deepToggle.checked) deepToggle.click();
             }
         }
+
+        // Historische Modellnamen erst nach allen Mode-Synchronisierungen
+        // anwenden, weil updateDeepThinkText sonst wieder die aktuelle Picker-
+        // Auswahl in die Antworttitel schreiben würde.
+        bookmarkCitationModels = applyBookmarkModelPresentation(bookmark);
         
         // Die Frage steht im Thread-Kopf über der Antwort; das Eingabefeld
         // unten bleibt frei für die nächste Frage.
@@ -1420,9 +1546,9 @@ function loadSingleBookmarkUI(bookmark) {
     }
     // === NEU: Citation-Meta immer nach dem Rendern setzen ===
     try {
-        let includedModels = [];
+        let includedModels = bookmarkCitationModels;
 
-        if (typeof window.getIncludedModelNamesForCitation === "function") {
+        if (!includedModels.length && typeof window.getIncludedModelNamesForCitation === "function") {
             // liest aus dem DOM (nur Boxen mit Inhalt & nicht "excluded")
             includedModels = window.getIncludedModelNamesForCitation();
         }
@@ -1430,8 +1556,7 @@ function loadSingleBookmarkUI(bookmark) {
         window.consensusCitationMeta = {
             question: bookmark.query || "",
             includedModels: includedModels,
-            // falls du irgendwann das echte Consensus-Modell speicherst, hier ersetzen
-            consensusModel: "GPT-5",
+            consensusModel: bookmark.consensus_model || "",
             url: window.location.href.split("#")[0],
             dateISO:
                 bookmark.created_at ||

@@ -22,7 +22,7 @@
     window.PRO_DEFAULT_MODELS = JSON.parse('{{ pro_default_models | tojson | safe }}');
     // Consensus-Engine, auf die Deep Think umschaltet (Admin-konfigurierbar).
     window.DEEP_THINK_CONSENSUS_MODEL = JSON.parse('{{ deep_think_consensus_model | tojson | safe }}');
-    // Preset-Ebene des Consensus-Pickers (Fast/Balanced/High Quality + Custom).
+    // Preset-Ebene des Consensus-Pickers (Daily/Balanced/High Quality + Custom).
     window.CONSENSUS_PRESETS = JSON.parse('{{ consensus_presets | tojson | safe }}');
     window.DEFAULT_CONSENSUS_PRESET = JSON.parse('{{ default_consensus_preset | tojson | safe }}');
     // Fallback-Limit für app-init.js (ausgelagertes initApp kann kein Jinja rendern).
@@ -57,7 +57,7 @@
     };
   </script>
   <!-- Google Fonts -->
-  <link rel="stylesheet" href="/static/style.css?v=20260802-readingchrome1">
+  <link rel="stylesheet" href="/static/style.css?v=20260804-verifygate1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
@@ -71,8 +71,8 @@
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.js" integrity="sha384-AtrdNsnxl/75rvBneBVH7DtOvCxSVahR2zWqle1coBKd8DEmLoviqNeJSx64gNAs" crossorigin="anonymous"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260802-markdownfallback1"></script>
-  <script type="module" src="/static/demo.js?v=20260802-markdownfallback1"></script>
+  <script type="module" src="/static/firebase.js?v=20260804-verifygate1"></script>
+  <script type="module" src="/static/demo.js?v=20260803-demorunstages1"></script>
   <script src="/static/app-ui.js?v=20260727-thread12" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
   <script src="/static/js/app-core.js?v=20260727-thread12" defer></script>
@@ -97,9 +97,9 @@
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-actions.js?v=20260727-resultactions1" defer></script>
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
-  <script src="/static/js/watch.js?v=20260731-logout-polish2" defer></script>
+  <script src="/static/js/watch.js?v=20260804-verifygate1" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
-  <script src="/static/js/user-tier.js?v=20260727-thread12" defer></script>
+  <script src="/static/js/user-tier.js?v=20260804-verifygate1" defer></script>
   <!-- Kontingent-Ring + Panel im Sidebar-Footer; spiegelt nur #usageDisplay -->
   <script src="/static/js/sidebar-quota.js?v=20260801-quotablock1" defer></script>
   <!-- Aufgebrauchtes Kontingent: Erkennung, Vorab-Pruefung und die bleibende
@@ -107,8 +107,8 @@
   <script src="/static/js/usage-limit.js?v=20260802-storagebusy1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-insights.js?v=20260729-agreementsignal1" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260801-quotablock1" defer></script>
-  <script src="/static/js/query-send.js?v=20260802-storagebusy1" defer></script>
+  <script src="/static/js/consensus-run.js?v=20260804-verifygate1" defer></script>
+  <script src="/static/js/query-send.js?v=20260804-verifygate1" defer></script>
   {% include "partials/analytics.html" %}
 </head>
 
@@ -392,6 +392,35 @@
     </div>
   </div>
   <div class="container">
+    <!-- E-Mail-Bestaetigung. Der Zustand zwischen Registrierung und erstem
+         Lauf war frueher ein Rauswurf: unbestaetigt hiess sofort ausloggen,
+         und wer den Link nicht sofort fand, war weg. Jetzt bleibt die Session
+         stehen, die App ist sichtbar, das Fragefeld nimmt Text an — nur der
+         Lauf wartet. Gefuellt von static/js/email-verify.js (angesteuert aus
+         firebase.js, das die Firebase-Aufrufe kennt). -->
+    <section id="verifyBanner" class="verify-banner" role="status" aria-live="polite" hidden>
+      <span class="verify-banner-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+          stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+          <path d="m3.5 7 8.5 6 8.5-6"></path>
+        </svg>
+      </span>
+      <div class="verify-banner-copy">
+        <strong class="verify-banner-title">Confirm your e-mail to get started</strong>
+        <p class="verify-banner-body">
+          We sent a confirmation link to <span id="verifyBannerEmail" class="verify-banner-email"></span>.
+          Click it and you land right back here — your question stays in the field.
+        </p>
+        <p class="verify-banner-hint">No mail after a minute? Check your spam or promotions folder.</p>
+        <p id="verifyBannerStatus" class="verify-banner-status" hidden></p>
+      </div>
+      <div class="verify-banner-actions">
+        <button type="button" id="verifyBannerResend" class="verify-banner-btn">Resend the link</button>
+        <button type="button" id="verifyBannerRecheck" class="verify-banner-link">I&rsquo;ve confirmed it</button>
+        <button type="button" id="verifyBannerSignOut" class="verify-banner-link">Use a different address</button>
+      </div>
+    </section>
     <!-- Kopf des Threads: die gestellte Frage. Wird von window.App.setThreadQuestion
          (app-core.js) gefüllt, sobald ein Lauf startet oder ein Bookmark lädt.
          Lange Fragen clampen auf drei Zeilen; der Link darunter klappt auf. -->
@@ -464,8 +493,8 @@
         <textarea class="input-field" id="questionInput" rows="1" placeholder="Enter your question"></textarea>
         <!-- Composer-Gate: die Stelle, an der die App sagt, dass sie kein Chat
              ist. Nach einer beantworteten Frage ist der Lauf zu Ende — hier
-             steht, wie es weitergeht: eine neue Frage (frei) oder ein
-             Follow-up, das den Kontext mitnimmt (Pro). Das Follow-up-Angebot
+             steht, wie es weitergeht: eine neue Frage oder ein Follow-up, das
+             den Kontext mitnimmt (beides frei, beides ein Lauf). Das Angebot
              ist deshalb aus der Provenance-Zeile hierher gewandert: es gehoert
              an das Feld, in das die naechste Frage getippt wird.
              Gefuellt von window.App.followup.render() (consensus-run.js). -->
@@ -859,7 +888,7 @@
       </div>
     </div>
 
-  <script src="/static/js/app-init.js?v=20260802-readingchrome1" defer></script>
+  <script src="/static/js/app-init.js?v=20260804-verifygate1" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing

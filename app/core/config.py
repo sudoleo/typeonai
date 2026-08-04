@@ -21,9 +21,10 @@ class ModelConfig:
 
 DEFAULT_LIMITS = {
     # Persistente, run-basierte UTC-Tageslimits. Das Total zaehlt jeden
-    # serverfinanzierten logischen Run genau einmal; Deep Think fuehrt
-    # zusaetzlich ein separates Teilkontingent.
-    "free_consensus_run_limit": 3,
+    # serverfinanzierten logischen Run genau einmal (Follow-ups eingeschlossen);
+    # Deep Think fuehrt zusaetzlich ein separates Teilkontingent.
+    # Drei Runs erlaubten einen Test, keine Gewohnheit — seit 2026-08-04 zwoelf.
+    "free_consensus_run_limit": 12,
     "pro_consensus_run_limit": 500,
     "free_deep_think_run_limit": 0,
     "pro_deep_think_run_limit": 50,
@@ -188,13 +189,15 @@ ALLOWED_CONSENSUS_MODELS = list(DEFAULT_CONSENSUS_MODELS)
 # Produktdefinition der Model-Set-Presets. Die sechs Antwortmodelle plus
 # Consensus-Engine koennen getrennt davon aus Firestore ueberschrieben werden;
 # "Custom" oeffnet weiterhin die volle Engine-Liste.
-# High Quality (interne ID: thorough) bleibt als Produktregel Pro-only; Fast
-# und Balanced werden bei der
+# High Quality (interne ID: thorough) bleibt als Produktregel Pro-only; Daily
+# (interne ID: fast) und Balanced werden bei der
 # Admin-Normalisierung strikt auf Free-faehige Modelle begrenzt.
+# Die IDs sind Vertrag (Firestore-Overrides, gespeicherte Nutzerauswahl) und
+# bleiben deshalb unveraendert, auch wenn sich das Label aendert.
 CONSENSUS_PRESET_DEFINITIONS = [
     {
         "id": "fast",
-        "label": "Fast",
+        "label": "Daily",
         "hint": "Quick synthesis for everyday questions",
         "pro_only": False,
     },

@@ -176,12 +176,32 @@
           return Boolean(window.auth?.currentUser?.emailVerified);
         }
 
+        // Angemeldet, aber die E-Mail ist noch nicht bestaetigt. Frueher wurde
+        // dieser Zustand sofort ausgeloggt; jetzt bleibt der Nutzer in der App
+        // und sieht den Bestaetigungs-Streifen (#verifyBanner). Tippen darf er
+        // dabei — nur der Lauf selbst wartet auf die Bestaetigung, damit die
+        // getippte Frage den Klick auf den Verify-Link ueberlebt.
+        function hasUnverifiedSession() {
+          const user = window.auth?.currentUser;
+          return Boolean(user && !user.emailVerified);
+        }
+        window.hasUnverifiedSession = hasUnverifiedSession;
+
         window.userCanAskQuestions = function () {
           return hasVerifiedSession();
         };
 
+        // Wer tippen darf, ist nicht dasselbe wie wer starten darf.
+        window.userCanTypeQuestions = function () {
+          return hasVerifiedSession() || hasUnverifiedSession();
+        };
+
+        const unverifiedQuestionPlaceholder =
+          "Type your question — confirm your e-mail to run it";
+
         window.updateQuestionInputAccess = function () {
           const canAsk = window.userCanAskQuestions();
+          const canType = window.userCanTypeQuestions();
           const selectedModelCount = window.App.getSelectedModelCount?.() || 0;
           const hasMinimumModels = selectedModelCount >= 2;
           const canStartRun = canAsk && hasMinimumModels;
@@ -189,15 +209,21 @@
           const postDemoLoginPrompt = document.getElementById("postDemoLoginPrompt");
 
           if (questionInput) {
-            questionInput.disabled = !canAsk;
-            questionInput.placeholder = canAsk ? defaultQuestionPlaceholder : lockedQuestionPlaceholder;
-            questionInput.setAttribute("aria-disabled", String(!canAsk));
+            questionInput.disabled = !canType;
+            questionInput.placeholder = canAsk
+              ? defaultQuestionPlaceholder
+              : canType
+                ? unverifiedQuestionPlaceholder
+                : lockedQuestionPlaceholder;
+            questionInput.setAttribute("aria-disabled", String(!canType));
           }
 
           if (sendButton && !sendButton.classList.contains("is-cancel-action")) {
             sendButton.disabled = !canStartRun;
             sendButton.title = !canAsk
-              ? "Sign in to ask questions or use your own API keys"
+              ? canType
+                ? "Confirm your e-mail address to start this run"
+                : "Sign in to ask questions or use your own API keys"
               : hasMinimumModels
                 ? "Send question"
                 : "Select at least two models to run consensus";
@@ -220,6 +246,55 @@
         };
 
         window.updateQuestionInputAccess();
+
+        // --- Frage-Entwurf ueber den Bestaetigungs-Umweg retten ------------
+        // Wer auf den Link im Postfach klickt, verlaesst diese Seite. Kaeme er
+        // mit leerem Feld zurueck, waere die Bestaetigung eine Strafe fuer den
+        // Versuch, etwas zu fragen. Gespeichert wird nur, solange der Lauf
+        // nicht starten kann — ein verifizierter Nutzer braucht keinen
+        // Zwischenspeicher, und alte Fragen sollen nicht wieder auftauchen.
+        const QUESTION_DRAFT_KEY = "consensio.questionDraft.v1";
+
+        function storeQuestionDraft(value) {
+          try {
+            if (value) localStorage.setItem(QUESTION_DRAFT_KEY, value);
+            else localStorage.removeItem(QUESTION_DRAFT_KEY);
+          } catch (_) {
+            // Private/gehaertete Browser: dann eben ohne Rettungsnetz.
+          }
+        }
+
+        window.App.clearQuestionDraft = function () {
+          storeQuestionDraft("");
+        };
+
+        // Nur ECHTE Tastenanschlaege sind ein Entwurf. Programmatische
+        // input-Events (clearResponseBoxes beim Auth-Wechsel, Demo-Tippen)
+        // haetten den Entwurf sonst geloescht, bevor er gebraucht wurde.
+        questionInput?.addEventListener("input", event => {
+          if (!event.isTrusted) return;
+          if (window.userCanAskQuestions()) return;
+          storeQuestionDraft(questionInput.value.trim().slice(0, 4000));
+        });
+
+        // Idempotent: fuellt nur ein leeres Feld. Wird beim Start UND nach
+        // jedem Auth-Wechsel aufgerufen (firebase.js), weil der Auth-Callback
+        // den Composer ueber resetLoadedRunAfterLogout() leert — und genau
+        // dieser Callback laeuft, wenn der Nutzer nach der Bestaetigung
+        // zurueckkommt.
+        window.App.restoreQuestionDraft = function () {
+          if (!questionInput || questionInput.value.trim()) return;
+          let draft = "";
+          try {
+            draft = localStorage.getItem(QUESTION_DRAFT_KEY) || "";
+          } catch (_) {}
+          if (!draft) return;
+          questionInput.value = draft;
+          requestAnimationFrame(resizeQuestionInput);
+          window.syncDemoChipState?.();
+        };
+
+        window.App.restoreQuestionDraft();
 
         let mobileInfoPopupTimer = null;
 
@@ -401,7 +476,6 @@
           "Deep Think": "Deep Think puts the reasoning models on your question. One run costs several times a normal one, so it stays off unless I switch it on for an account.",
           "High Quality mode": "High Quality mode uses the expensive model set for all six answers and for the synthesis. It is the priciest run consens.io can do.",
           "Resolve": "A Resolve round sends the disagreeing models back at each other, which is a second full round of calls on top of the run you already made.",
-          "Follow-up questions": "A follow-up carries your previous question and its consensus along as context, so it is a full six-model run again, with a longer prompt.",
           "More frequent Consensus Watch checks": "A Watch re-runs your question on a schedule. More Watches and shorter intervals mean more paid runs every single day.",
           "File uploads": "An attached file is read and sent along to every model, which makes all six calls a lot longer, and longer prompts cost more per run.",
         };

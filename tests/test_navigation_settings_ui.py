@@ -90,7 +90,12 @@ def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract()
     assert "position: static" in demo_rule
     assert 'severity: "minor"' in demo
     assert '[S8].</li>' in demo
-    assert 'class="watch-feature-nudge-close" aria-label="Dismiss new feature tip"></button>' in watch
+    # Das Kreuz ist ein echtes Glyph (wie bei den Modal-Close-Buttons), nicht
+    # mehr aus zwei gedrehten Pseudo-Elementen gebaut.
+    assert (
+        'class="watch-feature-nudge-close" aria-label="Dismiss new feature tip">&#10005;</button>'
+        in watch
+    )
     assert '[/anthropic|claude/i, "/static/icons/chat_icons/claude.png"]' in leaderboard
     assert 'id="modelLeaderboard"' in pulse_page
     assert "not a popularity vote" in pulse_page.lower()

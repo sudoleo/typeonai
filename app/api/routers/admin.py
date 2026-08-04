@@ -672,7 +672,7 @@ def normalize_models_document(data: dict) -> dict:
     for provider in PROVIDER_KEYS:
         allowed_direct_consensus.update(normalized.get(provider) or [])
 
-    # Vollstaendige Model-Sets je Picker-Preset. Fast/Balanced bleiben auch bei
+    # Vollstaendige Model-Sets je Picker-Preset. Daily/Balanced bleiben auch bei
     # Admin-Konfiguration Free-faehig; High Quality (ID: thorough) ist Pro-only.
     incoming_presets = normalized.get("preset_models")
     incoming_presets = incoming_presets if isinstance(incoming_presets, dict) else {}
@@ -1039,7 +1039,7 @@ def update_models(request: Request, data: dict = Body(...)):
         _validate_admin_models_input(data, normalized)
         incoming_presets = data.get("preset_models")
         if not isinstance(incoming_presets, dict):
-            raise HTTPException(status_code=400, detail="preset_models must contain Fast, Balanced and High Quality mappings")
+            raise HTTPException(status_code=400, detail="preset_models must contain Daily, Balanced and High Quality mappings")
         for preset in cfg.CONSENSUS_PRESET_DEFINITIONS:
             preset_id = preset["id"]
             supplied = incoming_presets.get(preset_id)

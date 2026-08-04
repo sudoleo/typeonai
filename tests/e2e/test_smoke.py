@@ -532,14 +532,10 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     assert collapsed_composer is not None
     assert collapsed_composer["height"] <= 64
 
-    # Auch Pro startet im kompakten Choice-State. Erst die bewusste
-    # Follow-up-Wahl öffnet das Feld wieder und hängt den Kontext-Chip an.
-    app_page.evaluate(
-        """() => {
-          window.isUserPro = true;
-          window.App.followup.render();
-        }"""
-    )
+    # Der kompakte Choice-State gilt fuer alle Tiers, und die Follow-up-Wahl
+    # steht auch Free offen (kein Pro-Gate mehr): erst die bewusste Wahl
+    # öffnet das Feld wieder und hängt den Kontext-Chip an.
+    expect(app_page.locator(".composer-gate-followup .pro-badge")).to_have_count(0)
     expect(app_page.locator("#questionInput")).to_be_hidden()
     app_page.locator(".composer-gate-followup").click()
     expect(app_page.locator("#questionInput")).to_be_visible()

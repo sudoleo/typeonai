@@ -1208,6 +1208,156 @@ body:not(.dark-mode) .chat-input-container {
   }
 }
 
+/* ---- E-Mail-Bestaetigung (#verifyBanner) ---------------------------------
+   Der eine Schritt zwischen Registrierung und erstem Lauf. Bewusst ein
+   Streifen und keine Karte im Thread: er gilt fuer die ganze Sitzung, nicht
+   fuer einen Lauf, und steht deshalb ueber allem (order: 0) — ohne den
+   Composer zu sperren, denn tippen darf man schon.
+   -------------------------------------------------------------------------- */
+.verify-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 2px 6px 14px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--partial) 30%, transparent);
+  border-left: 2px solid var(--partial);
+  border-radius: var(--radius-md);
+  background: var(--partial-bg);
+}
+
+.verify-banner[hidden] {
+  display: none;
+}
+
+body:not(.is-hero) #verifyBanner {
+  order: 0;
+}
+
+.verify-banner-icon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 1px;
+  color: var(--partial);
+}
+
+.verify-banner-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.verify-banner-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.verify-banner-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--ink);
+}
+
+.verify-banner-body {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+  color: var(--ink-2);
+}
+
+.verify-banner-email {
+  font-weight: var(--font-weight-semibold);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.verify-banner-hint {
+  margin: 0;
+  font-size: var(--font-size-micro);
+  color: var(--ink-3);
+}
+
+.verify-banner-status {
+  margin: 2px 0 0;
+  font-size: var(--font-size-micro);
+  color: var(--ink-2);
+}
+
+.verify-banner-status[hidden] {
+  display: none;
+}
+
+.verify-banner-status.is-error {
+  color: var(--dispute);
+}
+
+.verify-banner-status.is-success {
+  color: var(--agree);
+}
+
+.verify-banner-actions {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.verify-banner-btn {
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--ground);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.verify-banner-btn:hover:not(:disabled) {
+  background: var(--ink-2);
+}
+
+.verify-banner-btn:disabled {
+  background: var(--raise);
+  border-color: var(--line);
+  color: var(--ink-3);
+  cursor: default;
+}
+
+.verify-banner-link {
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  font-size: var(--font-size-micro);
+  color: var(--ink-3);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.verify-banner-link:hover {
+  color: var(--ink);
+}
+
+@media (max-width: 700px) {
+  .verify-banner {
+    flex-wrap: wrap;
+  }
+
+  .verify-banner-actions {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+}
+
 /* ---- Provenance footer ---------------------------------------------------
    What the run leaves behind, in TWO lines that read top to bottom:
 
@@ -2062,10 +2212,6 @@ body:not(.is-hero) .consensus-section::before {
   background: var(--raise);
   border: 0;
   color: var(--ink);
-}
-
-.run-provenance-actions .followup-offer-btn.is-pro-locked {
-  opacity: 1;
 }
 
 /* The verdict was a filled, bordered banner. It says the same thing as a

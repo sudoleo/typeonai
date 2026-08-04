@@ -810,7 +810,7 @@
             if (option.textContent !== value) option.textContent += ` (${value})`;
             const apiModel = apiModelFor(value);
             if (apiModel) option.textContent += ` → ${apiModel}`;
-            // Fast/Balanced sind Free-faehig und duerfen keine Premium-Modelle
+            // Daily/Balanced sind Free-faehig und duerfen keine Premium-Modelle
             // setzen. Sichtbar lassen statt ausblenden: sonst wirkt die Liste
             // unvollstaendig, ohne dass der Grund erkennbar waere.
             if (locked) {
@@ -2950,7 +2950,7 @@
                 <h3>Preset Model Sets</h3>
                 <p class="section-hint">
                     Each preset selects all six answer models and the final Consensus engine together.
-                    Fast and Balanced accept Free-tier models only; High Quality is always Pro-only.
+                    Daily and Balanced accept Free-tier models only; High Quality is always Pro-only.
                 </p>
                 <div id="presetModelsContainer" class="preset-model-cards">
                     <!-- Populated by JavaScript -->

@@ -432,6 +432,12 @@ function renderDemoModelResponse(model, outputEl) {
 
 async function renderDemoConsensus(mainP, diffP) {
   const runId = demoRunId;
+  // Der gefuehrte Lauf kennt bei einer echten Query drei Schritte: Antworten,
+  // Konsens, Differences. Die Demo hat bisher nur Anfang und Ende gemeldet —
+  // dadurch lief nach 6 s der Notausstieg (settleWithoutConsensus) und der
+  // Lauf stand auf "Done", waehrend der Konsenstext noch geschrieben wurde.
+  // Hier meldet die Demo dieselben Uebergaenge wie ein echter Lauf.
+  window.App?.consensusPipeline?.onConsensusStart?.();
   let consensusMarkdown = DEMO_DATA.consensus;
   if (window.registerResponseSources) {
     consensusMarkdown = window.registerResponseSources(consensusMarkdown, DEMO_DATA.consensusSources);
@@ -446,6 +452,9 @@ async function renderDemoConsensus(mainP, diffP) {
     if (runId !== demoRunId) return;
     if (window.injectMarkdown) window.injectMarkdown(mainP, consensusMarkdown);
   }
+
+  // Konsenstext steht: ab hier prueft die Auswertung auf Widersprueche.
+  window.App?.consensusPipeline?.onDifferencesStart?.();
 
   // Differences exakt wie bei echten Queries: strukturierte Auswertung mit
   // Verdict-Header, Agreement-Badges und Contradiction-Karten. Nur wenn die

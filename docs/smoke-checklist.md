@@ -66,7 +66,7 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 - [ ] Quellen-Chips / Evidence-Links erscheinen und sind klickbar.
 
 ## Consensus (höchstes Risiko)
-- [ ] Presets: Fast/Balanced setzen sichtbar alle sechs Antwortmodelle und die
+- [ ] Presets: Daily/Balanced setzen sichtbar alle sechs Antwortmodelle und die
       konfigurierte Consensus-Engine; eine manuelle Modellwahl wechselt zu Custom.
 - [ ] High Quality zeigt ein Pro-Badge, hat beim Hover/Fokus eine dezente
       Power-Animation, oeffnet fuer Free den Kosten-Erklaerdialog (kein Kauf-,

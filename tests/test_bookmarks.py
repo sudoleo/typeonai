@@ -290,6 +290,30 @@ def test_bookmark_frontend_prepares_share_and_watch_result():
     assert "resolveCurrentShareResultId" in watch
 
 
+def test_bookmark_restore_uses_historical_model_labels_without_mutating_picker_state():
+    root = Path(__file__).resolve().parents[1]
+    firebase = (root / "static" / "firebase.js").read_text(encoding="utf-8")
+    query_send = (root / "static" / "js" / "query-send.js").read_text(encoding="utf-8")
+
+    helper = firebase.split("function applyBookmarkModelPresentation(bookmark) {", 1)[1]
+    helper = helper.split("// Diese Funktion füllt die UI", 1)[0]
+
+    assert "bookmark?.model_labels" in helper
+    assert "labelEl.textContent = visibleLabel" in helper
+    assert "select.value" not in helper
+    assert "localStorage.setItem" not in helper
+    assert "localStorage.removeItem" not in helper
+    assert "bookmarkCitationModels = applyBookmarkModelPresentation(bookmark);" in firebase
+    assert 'consensusModel: bookmark.consensus_model || ""' in firebase
+    assert "window.App.updateDeepThinkText?.();" in query_send
+    assert firebase.index("if (bookmark.mode)") < firebase.index(
+        "bookmarkCitationModels = applyBookmarkModelPresentation(bookmark);"
+    )
+    assert query_send.index("window.App.updateDeepThinkText?.();") < query_send.index(
+        "window.App?.consensusPipeline?.onPrepare?.();"
+    )
+
+
 def test_bookmark_list_is_compact_and_cursor_paginated():
     items = {
         "first_id": {"query": "First", "mode": "Normal", "responses": {"OpenAI": "large", "consensus": "full"}},

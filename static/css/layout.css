@@ -183,8 +183,8 @@ body:has(.sidebar.active) .brand-float {
 }
 
 /* Einheitliches Pro-Badge im App-Gold — die eine Quelle für alle
-   Pro-Kennzeichnungen (Top-Bar #proBadge, .followup-pro-badge,
-   .diff-resolve-pro-chip, .model-picker-pro-badge). Die Kontext-Klassen
+   Pro-Kennzeichnungen (Top-Bar #proBadge, .diff-resolve-pro-chip,
+   .model-picker-pro-badge). Die Kontext-Klassen
    steuern nur noch Layout (flex/margin), nicht mehr die Optik. */
 .pro-badge {
   display: inline-flex;

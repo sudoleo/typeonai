@@ -55,6 +55,33 @@ incorporate the owner's feedback and apply to every future draft.
 - A video should show the actual product flow, use concise captions, and avoid
   synthetic presenter footage.
 
+## Product video
+
+The demo video is generated, not hand-edited. Pipeline and flags:
+`recording/README.md` (local tooling, gitignored). Rules that apply to every
+cut:
+
+- Record the running app, never a rebuild of it. The recorder drives the real
+  interface through the app's own demo scenario (`static/demo.js`); the shell,
+  the run, the consensus, the claim badges and the difference cards are the
+  product's own DOM.
+- Every scene reacts to real DOM state instead of a guessed duration, so a
+  product change shows up in the next render rather than drifting out of sync.
+- Default output: 1080 × 1350 (4:5), ~50–55 s, 30 fps, dark theme. A 1920 × 1080
+  landscape master is available for the site and YouTube.
+- One idea per cut, six captions at most. A caption names what the product is
+  doing in the moment it does it; it never claims something the frame does not
+  show.
+- Framing: the product's reading column sets the zoom, then the camera settles.
+  Never crop words. Move attention with a spotlight (dim everything but one
+  element) and with copy, not with constant zooming.
+- The stage around the product is monochrome and built from the same five
+  surface values as the app. Colour belongs to the agreement signals only.
+- Disclose the setup on the end card (`Demo scenario · real interface`). The
+  interface is real; the model answers in the demo scenario are canned, and
+  that difference is never blurred.
+- Silent by default. Feed video is watched muted; captions carry it.
+
 ## Fact and visual QA
 
 - Verify every number, model assignment, quote, capability, and result against

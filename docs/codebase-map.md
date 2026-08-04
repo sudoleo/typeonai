@@ -59,7 +59,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache), `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
-| `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (Pro, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
+| `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (seit 2026-08-04 ohne Tier-Gate, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP) und übergibt sie als nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). Nach einem tatsächlich neu angelegten E-Mail/Passwort-Konto plant `/register` außerdem einen PII-freien, nicht-blockierenden Telegram-Admin-Alert ein; `/confirm-registration` erkennt damit auch gerade neu angelegte Google-Konten serverseitig. Normale Logins, Reloads und neutrale Antworten für bereits bestehende Adressen bleiben ruhig. |
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
@@ -196,7 +196,7 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Antwortbereich und Input vom zentrierten Leerzustand in den Laufzustand.
 - **`model-picker.js`** — Modellauswahl/Custom-Picker, Default-Modelle, localStorage-
   Persistenz (`restoreModelSelections`). Der Consensus-Picker hat seit 2026-07-18
-  eine Preset-Ebene (Fast/Balanced/High Quality + Custom): Presets kommen aus
+  eine Preset-Ebene (Daily/Balanced/High Quality + Custom): Presets kommen aus
   `window.CONSENSUS_PRESETS` und setzen als zusammenhaengendes Model-Set alle
   sechs Antwortmodelle plus Consensus-Engine. High Quality (interne ID
   `thorough`) ist Pro-only und zeigt
@@ -558,7 +558,14 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   `prefers-reduced-motion`. Nach dem
   ersten erfolgreichen, speicherbaren Consensus zeigt `window.App.watch.*`
   einmalig einen dezenten Hinweis am Watch-Button; Schließen oder Öffnen des
-  Features persistiert die Bestätigung in `localStorage`. Die
+  Features persistiert die Bestätigung in `localStorage`. Seit 2026-08-04
+  enthält dieser Hinweis die **Aktion selbst**: „Watch this question"
+  (`#watchNudgeStart`) legt den Watch mit einem Klick über
+  `nudgeWatchDefaults()` an (wöchentlich, morgiger Wochentag, 09:00 lokal,
+  privat, E-Mail nur bei materieller Änderung) und ersetzt den Hinweis durch
+  eine Bestätigung mit dem ersten Prüftermin. Daneben steht ausdrücklich, wann
+  überhaupt eine Nachricht kommt („no change, no message"); „Pick a different
+  schedule" öffnet weiterhin den vollen Dialog, ein 429 ebenfalls. Die
   Browser-IANA-Zeitzone wird zusammen mit `HH:MM` an das Backend gesendet.
   Weekly-Watches senden zusätzlich den gewählten lokalen Wochentag
   (`run_weekday`) und können ihn im Dashboard nachträglich ändern.
@@ -591,6 +598,10 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   deaktiviert.
 - **`user-tier.js`** — Free/Pro-UI, Premium-Modellstatus (`updateUserTierUI`,
   `updatePremiumModelsState`) und Plan-Label im Sidebar-Account-Footer.
+- **`email-verify.js`** (ES-Modul) — der Streifen `#verifyBanner` für
+  angemeldete, aber unbestätigte Sessions (`showEmailVerificationGate` /
+  `hideEmailVerificationGate`). Kennt Firebase bewusst nicht: `firebase.js`
+  reicht Resend/Recheck/Sign-out als Callbacks herein (siehe §4, Auth).
 - **`consensus-insights.js`** — strukturierte Auswertung: **Inline-Marker im
   Antworttext**, Claim-Badges, Difference-Karten, Credibility-Frame-Farben,
   Jump-to-answer, Resolve-Runde (Button an Widerspruchs-Karten → `POST
@@ -725,7 +736,7 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
 
 ### Anfrage an Modelle (Streaming)
 1. Frontend `sendQuestion` (`query-send.js`) ruft zuerst **`POST /prepare`**:
-   Auth + Follow-up-Gate sowie transaktionale Usage-Reservierung und sofortiger
+   Auth sowie transaktionale Usage-Reservierung und sofortiger
    Verbrauch anhand des vom Client erzeugten, kostenfreien `usage_run_key`; Antwort: finaler
    `system_prompt` + persistenter UTC-Tagesstand.
    Echtzeitdaten holen sich die Modelle selbst über die native Web-Suche in jedem
@@ -771,7 +782,7 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
    Modell ab, markiert die Box als `responseState="error"` +
    `responseSkipped="true"` und zaehlt es einmalig als beantwortet.
 
-### Follow-up-Fragen (Pro)
+### Follow-up-Fragen
 Nach einem erfolgreichen Consensus kann eine Anschlussfrage mit Kontext
 gestellt werden. Kontext ist **genau eine Ebene**: das letzte Frage/Konsens-
 Paar (`{previous_question, previous_consensus}`) — bewusst NICHT die sechs
@@ -779,14 +790,16 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
 - Frontend: `window.App.followup` (in `consensus-run.js`) rendert **zwei Orte
   am Composer, einen Zustand** (seit 2026-07-27, Angebot dorthin verschoben):
   Das **Composer-Gate** `#composerGate` erscheint, sobald eine Frage beantwortet
-  ist, und sagt, wie es weitergeht — „New comparison" (frei) und „Ask a
-  follow-up" (Pro-gebadged, Free-Klick öffnet das Pro-Modal). Für alle Nutzer
+  ist, und sagt, wie es weitergeht — „New comparison" und „Ask a
+  follow-up". **Beide sind seit 2026-08-04 für alle Nutzer offen**: das
+  Pro-Gate (Badge, Teaser-Modal, 403 `pro_required`) ist ersatzlos weg, ein
+  Follow-up zählt als ein normaler Lauf gegen das Tagesbudget. Für alle Nutzer
   **klappt `syncInputLock()` den gesamten Eingabe-Composer für Free UND Pro
   zu** (`body.composer-locked`): Textarea, Anhang, Modellwahl und Senden
   verschwinden; sichtbar bleibt nur die kompakte Entscheidung „New comparison“
   / „Ask a follow-up“. consens.io ist kein Chat, ein Vergleich endet mit seiner
   Antwort. „New comparison“ setzt den normalen leeren Composer zurück;
-  „Ask a follow-up“ öffnet ihn für Pro mit Kontext-Chip (Free: Pro-Modal).
+  „Ask a follow-up“ öffnet ihn mit Kontext-Chip.
   Die Login-Schranke (`updateQuestionInputAccess`) bleibt die stärkere
   Bedingung und ruft `syncInputLock()` am Ende selbst auf, sonst öffnete sie
   das Feld nach jedem Lauf wieder. Aktivieren erzeugt den
@@ -800,8 +813,8 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   keine weitere Affordance an — erst eine frische Frage schaltet sie wieder frei.
 - Backend: `normalize_followup_context` (`chat.py`) validiert und kappt beide
   Texte serverseitig (`followup_max_question_chars` /
-  `followup_max_consensus_chars` in `LIMITS`). `/prepare` gated nur
-  (403 `pro_required` für Nicht-Pro, auch mit eigenen Keys); die **Injektion
+  `followup_max_consensus_chars` in `LIMITS`). `/prepare` verarbeitet den
+  Kontext bewusst gar nicht; die **Injektion
   passiert ausschließlich in `handle_ask`** via `build_followup_system_prompt`
   (`base.py`), damit der Kontextblock nie doppelt im Prompt steht und auch den
   `/prepare`-Fallback-Pfad des Frontends überlebt.
@@ -968,6 +981,22 @@ sichtbaren Auswahlzustand als auch defensiv im tatsächlichen Request-Fan-out au
   E-Mail-verifizierte Nutzer; `allow_unverified=True` nur für Registrierung/Delete).
 - Token-Quelle: `extract_id_token` liest Body `id_token`, sonst `Authorization:
   Bearer`, sonst Cookie `session`.
+- **Unbestätigte Sessions bleiben angemeldet (seit 2026-08-04).** Früher hat
+  `onIdTokenChanged` unbestätigte Nutzer sofort ausgeloggt; wer den Link nicht
+  im selben Moment fand, stand wieder vor der Login-Maske. Jetzt bleibt die
+  Firebase-Session stehen (kein `id_token` in `localStorage`, keine
+  Server-Session, keine authentifizierten Calls — die Schranke bleibt
+  serverseitig `verify_user_token`), und `static/js/email-verify.js` zeigt den
+  Streifen `#verifyBanner`: Resend mit 60-s-Cooldown, „I've confirmed it"
+  (`user.reload()` + erzwungenes Token, ohne Seitenneuladen), Spam-Hinweis und
+  „Use a different address" als einziger verbliebener Sign-out. Ein Wechsel
+  zurück in den Tab prüft stumm nach (`visibilitychange`/`focus`), weil der
+  Link meist in einem anderen Tab geöffnet wird. Der Bestätigungslink trägt
+  `continueUrl = /app?verified=1`. Getippt werden darf dabei schon:
+  `window.userCanTypeQuestions()` (Feld) und `window.userCanAskQuestions()`
+  (Senden) sind zwei getrennte Rechte, und der Entwurf liegt bis zum ersten
+  echten Lauf unter `consensio.questionDraft.v1` — die Frage überlebt den
+  Umweg über das Postfach.
 - Eigene API-Keys sind ein eingeloggtes Feature: `/check_keys`, `/ask_*` mit
   User-Key und `/consensus` mit `useOwnKeys` verlangen ein verifiziertes Token.
 - Pro-Status: `is_user_pro` liest Firestore `users/{uid}.tier ∈ {premium, pro}`.
@@ -991,8 +1020,10 @@ sichtbaren Auswahlzustand als auch defensiv im tatsächlichen Request-Fan-out au
   Fan-out denselben Run gleichzeitig konsumiert. Sind die Retries dennoch
   ausgeschöpft, antwortet `/ask_*` strukturiert mit HTTP 503 statt mit einem
   unlesbaren generischen 500er.
-  Der neue Free-Default ist 3 reguläre Runs pro UTC-Tag
-  (`free_consensus_run_limit`); reguläre und Deep-Think-Run-Limits je Tier sind
+  Der Free-Default ist seit 2026-08-04 **12** reguläre Runs pro UTC-Tag
+  (`free_consensus_run_limit`, vorher 3: drei Runs erlaubten einen Test, keine
+  Gewohnheit — und mit freigeschalteten Follow-ups wäre drei sofort wieder die
+  alte Sackgasse); reguläre und Deep-Think-Run-Limits je Tier sind
   als vier eigene `app_config/models.limits`-Felder konfigurierbar. `/prepare`
   reserviert, der erste serverfinanzierte Provider-Aufruf konsumiert, und
   `/consensus` wiederholt denselben Consume idempotent. `/resolve` erzeugt einen
@@ -1574,9 +1605,9 @@ Providerlisten, Reihenfolge, Free-Defaults und Premium-Zuordnung aus
 `app_config/models` autoritativ. Ebenfalls in `config.py`: die festen
 Produkt-Metadaten `CONSENSUS_PRESET_DEFINITIONS` und Basiswerte ausschließlich
 für ein fehlendes/noch nicht migriertes Dokument.
-Firestore `preset_models` ueberschreibt pro Fast/Balanced/High Quality (ID:
+Firestore `preset_models` ueberschreibt pro Daily/Balanced/High Quality (ID:
 `thorough`) die sechs
-Antwortmodelle plus Consensus-Engine; Fast/Balanced bleiben Free-faehig und
+Antwortmodelle plus Consensus-Engine; Daily/Balanced bleiben Free-faehig und
 High Quality bleibt unabhaengig von der Konfiguration Pro-only. Grok-Alt-Aliasse
 (u. a. 4.1 Fast) werden beim Laden auf explizite interne Grok-4.3-Varianten
 migriert: `grok-4.3-no-reasoning` sendet API-Modell `grok-4.3` mit
@@ -1592,7 +1623,7 @@ migriert: `grok-4.3-no-reasoning` sendet API-Modell `grok-4.3` mit
   `grok-4.3-no-reasoning` mit HTTP 400 „Model not found“. Das Admin-Dashboard
   blendet die Auflösung als `→ <api_model>` hinter dem Optionsnamen ein.
   Die Admin-Dropdowns blenden Premium-Modelle in Free-Kontexten (Free Watch,
-  Fast/Balanced-Preset) nicht mehr aus, sondern zeigen sie deaktiviert mit dem
+  Daily/Balanced-Preset) nicht mehr aus, sondern zeigen sie deaktiviert mit dem
   Zusatz „— Pro only“, damit die Liste vollständig bleibt.
 
 Die frühere Early-/Frontier-Low-Schicht ist vollständig entfernt. Es gibt nur

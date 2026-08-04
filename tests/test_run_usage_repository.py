@@ -30,9 +30,11 @@ LIMITS = UsageLimits(total=3, deep_think=1)
 UTC_NOON = datetime(2026, 7, 18, 12, tzinfo=timezone.utc)
 
 
-def test_new_free_consensus_run_limit_defaults_to_three():
-    assert cfg.DEFAULT_LIMITS["free_consensus_run_limit"] == 3
-    assert cfg.get_consensus_run_limit(False) == 3
+def test_free_consensus_run_limit_allows_a_daily_habit():
+    # Drei Runs waren ein Test, keine Gewohnheit. Der Wert darf steigen, aber
+    # nicht wieder unter das zurueckfallen, was eine Session unbrauchbar macht.
+    assert cfg.DEFAULT_LIMITS["free_consensus_run_limit"] == 12
+    assert cfg.get_consensus_run_limit(False) >= 10
     assert cfg.get_deep_think_run_limit(False) == 0
 
 

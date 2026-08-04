@@ -28,7 +28,8 @@
     // 1. Globalen Status aktualisieren.
     window.isUserPro = isPro;
 
-    // Follow-up-Affordance neu rendern: Pro-Badge/Teaser hängen am Tier.
+    // Follow-up-Affordance neu rendern (tierunabhängig, aber der Composer
+    // wird bei jedem Tier-Wechsel ohnehin neu aufgebaut).
     window.App?.followup?.render?.();
 
     // 2. Elemente referenzieren

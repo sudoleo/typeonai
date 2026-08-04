@@ -231,19 +231,6 @@ def normalize_followup_context(raw):
     }
 
 
-def require_pro_for_followup(followup_context, is_pro: bool):
-    """Follow-up-Fragen sind Pro-only; das Gate gilt auch mit eigenen Keys
-    (wie Deep Think und Resolve)."""
-    if followup_context and not is_pro:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "error": "Follow-up questions are a Pro feature.",
-                "error_code": "pro_required",
-            },
-        )
-
-
 def validate_question_word_limit(question: str, is_pro: bool, deep_search: bool):
     if not isinstance(question, str) or not question.strip():
         raise HTTPException(status_code=400, detail="Question must not be empty.")
@@ -394,12 +381,12 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     attachments = parse_attachments(data, is_pro_user)
     max_tokens = cfg.get_output_token_limit(is_pro_user, deep_search)
 
-    # Follow-up-Kontext (Pro): genau eine vorherige Frage/Konsens-Ebene,
+    # Follow-up-Kontext: genau eine vorherige Frage/Konsens-Ebene,
     # serverseitig gekappt und hier in den System-Prompt injiziert — nicht in
     # /prepare, damit der Kontext auch dann ankommt, wenn das Frontend nach
-    # einem /prepare-Fehler mit dem Basis-Prompt weitermacht.
+    # einem /prepare-Fehler mit dem Basis-Prompt weitermacht. Kein Tier-Gate:
+    # ein Follow-up ist ein normaler Lauf und zaehlt gegen das Tagesbudget.
     followup_context = normalize_followup_context(data.get("context"))
-    require_pro_for_followup(followup_context, is_pro_user)
     if followup_context:
         base_prompt = (
             system_prompt.strip()
@@ -539,10 +526,9 @@ async def prepare(request: Request, data: dict = Body(...)):
         logging.error(f"Auth failed in /prepare: {e}")
         raise HTTPException(status_code=401, detail="Authentication failed.")
 
-    # Follow-up-Kontext frueh gaten: Free-Nutzer bekommen den Pro-Fehler schon
-    # vor dem Fan-out. Injiziert wird der Kontext erst in den /ask_*-Endpoints
-    # (handle_ask), sonst stuende er doppelt im System-Prompt.
-    require_pro_for_followup(normalize_followup_context(data.get("context")), is_pro)
+    # Der Follow-up-Kontext wird hier bewusst NICHT verarbeitet: injiziert wird
+    # er erst in den /ask_*-Endpoints (handle_ask), sonst stuende er doppelt im
+    # System-Prompt. Ein Tier-Gate gibt es nicht mehr.
 
     raw_system_prompt = data.get("system_prompt")
     if not raw_system_prompt or not str(raw_system_prompt).strip():
