@@ -700,10 +700,10 @@
 }
 
 /* The panel column is narrow: the judge footnote wraps under the headline,
-   indented behind the score ring (42px ring + 14px gap), like the app. */
+   indented behind the score gauge (92px column + 14px gap), like the app. */
 .ce-render-panel .verdict-judge {
-  flex-basis: calc(100% - 56px);
-  margin-left: 56px;
+  flex-basis: calc(100% - 106px);
+  margin-left: 106px;
   text-align: left;
 }
 

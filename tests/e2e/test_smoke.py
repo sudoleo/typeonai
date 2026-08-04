@@ -734,6 +734,59 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     assert errors == [], f"Konsolen-Fehler im Consensus-Flow: {errors}"
 
 
+def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_page):
+    """Ein Follow-up darf den fertigen Turn nicht visuell recyceln: die alte
+    Frage/Antwort bleibt stehen, die neue User-Frage beginnt darunter."""
+    app_page.evaluate("() => window.setAgentMode(false, { persist: true })")
+    _send_question(app_page)
+    _wait_for_all_final_answers(app_page)
+    expect(app_page.locator("#composerGate")).to_be_visible(timeout=20000)
+
+    original_answer = app_page.locator("#consensusAnswerBody").text_content().strip()
+    assert original_answer
+    original_agreement = app_page.locator("#consensusVerdict .verdict-score").text_content().strip()
+    assert original_agreement
+
+    app_page.locator(".composer-gate-followup").click()
+    followup_question = "Which consideration should I prioritize first?"
+    app_page.locator("#questionInput").fill(followup_question)
+    app_page.locator("#sendButton").click()
+
+    archived_turn = app_page.locator("#threadHistory .thread-history-turn").last
+    expect(archived_turn).to_be_visible(timeout=15000)
+    expect(archived_turn.locator(".thread-history-question-text")).to_have_text(QUESTION)
+    archived_answer = archived_turn.locator(".thread-history-answer-body")
+    expect(archived_answer).to_be_visible()
+    assert original_answer in archived_answer.text_content()
+    archived_agreement = archived_turn.locator(".thread-history-verdict .verdict-score")
+    expect(archived_agreement).to_have_text(original_agreement)
+    assert "…" not in archived_turn.locator(".thread-history-verdict .verdict-detail").text_content()
+    expect(app_page.locator("#threadAskText")).to_have_text(followup_question)
+
+    layout = app_page.evaluate(
+        """() => {
+          const previous = document.querySelector('.thread-history-answer');
+          const current = document.getElementById('threadAsk');
+          return {
+            previousBottom: previous.getBoundingClientRect().bottom,
+            currentTop: current.getBoundingClientRect().top,
+            verdictRight: document.querySelector('.thread-history-verdict')
+              .getBoundingClientRect().right,
+            verdictMainRight: document.querySelector('.thread-history-verdict .verdict-main')
+              .getBoundingClientRect().right,
+            currentAlign: getComputedStyle(current).textAlign,
+            archivedAlign: getComputedStyle(
+              document.querySelector('.thread-history-question')
+            ).textAlign,
+          };
+        }"""
+    )
+    assert layout["previousBottom"] <= layout["currentTop"]
+    assert abs(layout["verdictRight"] - layout["verdictMainRight"]) <= 2
+    assert layout["currentAlign"] == "right"
+    assert layout["archivedAlign"] == "right"
+
+
 def test_split_claim_underlines_in_the_colour_of_its_badge(app_page):
     """Geteilte Zustimmung ohne Widerspruchs-Karte: Linie und Quote muessen
     dieselbe Bernstein-Note tragen. Vorher lief die Linie hier neutral grau,

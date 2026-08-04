@@ -72,7 +72,7 @@
   }
 
   const followup = {
-    lastExchange: null, // {question, consensus} des letzten Konsens-Laufs
+    lastExchange: null, // {question, consensus, turn} des letzten Konsens-Laufs
     armed: false,
     // True, solange der gerade laufende Query selbst eine Follow-up-Frage ist.
     // Follow-ups duerfen sich nicht verketten (Kostenkontrolle): der Konsens
@@ -82,7 +82,172 @@
     // zurueckzuholen, wenn der Lauf gar nicht stattgefunden hat.
     spentExchange: null,
 
-    offer(question, consensusText) {
+    isArmed() {
+      return !!(this.armed && this.lastExchange);
+    },
+
+    previousQuestionForBookmark() {
+      return String(this.spentExchange?.question || "").trim();
+    },
+
+    previousTurnForBookmark() {
+      const turn = this.spentExchange?.turn;
+      return turn && typeof turn === "object" ? turn : null;
+    },
+
+    staticizeHistoryNode(node) {
+      if (!node) return null;
+      const clone = node.cloneNode(true);
+      clone.removeAttribute("id");
+      clone.hidden = false;
+      clone.querySelectorAll("[id]").forEach(child => child.removeAttribute("id"));
+      clone.querySelectorAll(
+        ".consensus-copy-icon-btn, .copy-btn, .response-code-copy"
+      ).forEach(child => child.remove());
+      clone.querySelectorAll("button").forEach(button => {
+        const replacement = document.createElement("span");
+        replacement.className = button.className;
+        replacement.innerHTML = button.innerHTML;
+        replacement.setAttribute("aria-hidden", "true");
+        button.replaceWith(replacement);
+      });
+      clone.querySelectorAll("[aria-controls]").forEach(child => {
+        child.removeAttribute("aria-controls");
+        child.removeAttribute("aria-expanded");
+      });
+      return clone;
+    },
+
+    buildStoredAgreement(differencesData) {
+      const agreement = differencesData?.agreement;
+      if (!agreement || typeof agreement.score !== "number") return null;
+      const score = Math.max(0, Math.min(100, Math.round(agreement.score)));
+      const verdict = document.createElement("div");
+      verdict.className = "consensus-verdict thread-history-verdict "
+        + (score >= 65 ? "is-calm" : score >= 40 ? "is-warn" : "is-alert");
+
+      const gauge = document.createElement("span");
+      gauge.className = "verdict-gauge";
+      gauge.style.setProperty("--val", String(score));
+      const scoreLine = document.createElement("span");
+      scoreLine.className = "verdict-score";
+      const num = document.createElement("span");
+      num.className = "verdict-score-num";
+      num.textContent = String(score);
+      const unit = document.createElement("span");
+      unit.className = "verdict-score-unit";
+      unit.textContent = "/100";
+      scoreLine.append(num, unit);
+      const meter = document.createElement("span");
+      meter.className = "verdict-meter";
+      const fill = document.createElement("span");
+      fill.className = "verdict-meter-fill";
+      meter.appendChild(fill);
+      gauge.append(scoreLine, meter);
+
+      const main = document.createElement("span");
+      main.className = "verdict-main";
+      const headline = document.createElement("span");
+      headline.className = "verdict-headline";
+      headline.textContent = score >= 85 ? "High agreement"
+        : score >= 65 ? "Strong agreement"
+          : score >= 40 ? "Partial agreement"
+            : score >= 20 ? "Low agreement" : "Very low agreement";
+      const detail = document.createElement("span");
+      detail.className = "verdict-detail";
+      const modelCount = Number(agreement.model_count) || 0;
+      detail.textContent = modelCount
+        ? `${modelCount} model${modelCount === 1 ? "" : "s"} compared`
+        : "Saved agreement score";
+      main.append(headline, detail);
+      verdict.append(gauge, main);
+      return verdict;
+    },
+
+    appendHistoryTurn(turnData, liveBody = null, liveVerdict = null) {
+      const history = document.getElementById("threadHistory");
+      if (!history || !turnData?.question || !turnData?.consensus) return false;
+
+      const turn = document.createElement("article");
+      turn.className = "thread-history-turn";
+
+      const question = document.createElement("div");
+      question.className = "thread-history-question";
+      const questionLabel = document.createElement("div");
+      questionLabel.className = "thread-ask-label";
+      questionLabel.textContent = "Question";
+      const questionText = document.createElement("div");
+      questionText.className = "thread-history-question-text";
+      questionText.textContent = String(turnData.question).replace(/\s+/g, " ").trim();
+      question.append(questionLabel, questionText);
+
+      const answer = document.createElement("div");
+      answer.className = "thread-history-answer";
+      const answerLabel = document.createElement("div");
+      answerLabel.className = "thread-history-answer-label";
+      answerLabel.textContent = "Consensus Answer";
+      let answerBody = this.staticizeHistoryNode(liveBody);
+      if (!answerBody) {
+        answerBody = document.createElement("div");
+        answerBody.className = "consensus-answer-body";
+        const currentSources = window.currentEvidenceSources;
+        window.currentEvidenceSources = Array.isArray(turnData.sources) ? turnData.sources : [];
+        try {
+          if (typeof window.injectMarkdown === "function") {
+            window.injectMarkdown(answerBody, turnData.consensus);
+          } else {
+            answerBody.textContent = turnData.consensus;
+          }
+        } finally {
+          window.currentEvidenceSources = currentSources;
+        }
+      }
+      answerBody.classList.add("thread-history-answer-body");
+      const verdict = this.staticizeHistoryNode(liveVerdict)
+        || this.buildStoredAgreement(turnData.differences_data);
+      if (verdict) verdict.classList.add("thread-history-verdict");
+      answer.append(answerLabel, answerBody);
+      if (verdict) answer.appendChild(verdict);
+      turn.append(question, answer);
+      history.appendChild(turn);
+      history.hidden = false;
+      return true;
+    },
+
+    // Der Live-Consensus wird fuer den naechsten Lauf wiederverwendet. Bevor
+    // das passiert, frieren wir die sichtbare Frage und Antwort als statischen
+    // Turn ein. Interaktive Marker werden dabei zu reinen Anzeigeelementen;
+    // doppelte IDs oder tote Buttons duerfen nicht in den Live-DOM gelangen.
+    archiveCurrentExchange() {
+      const liveBody = window.App.consensusBodyEl?.();
+      const exchange = this.spentExchange || this.lastExchange;
+      if (!liveBody || !exchange?.question || !liveBody.textContent?.trim()) {
+        return false;
+      }
+      const turnData = exchange.turn || {
+        question: exchange.question,
+        consensus: exchange.consensus
+      };
+      return this.appendHistoryTurn(
+        turnData,
+        liveBody,
+        document.getElementById("consensusVerdict")
+      );
+    },
+
+    renderStoredTurn(turnData) {
+      this.clearHistory();
+      return this.appendHistoryTurn(turnData);
+    },
+
+    clearHistory() {
+      const history = document.getElementById("threadHistory");
+      if (!history) return;
+      history.replaceChildren();
+      history.hidden = true;
+    },
+
+    offer(question, consensusText, turn = null) {
       // Der aktuelle Konsens ist selbst die Antwort auf eine Follow-up-Frage:
       // keine weitere Ebene anbieten. Erst eine frische Frage schaltet die
       // Affordance wieder frei.
@@ -94,7 +259,11 @@
         return;
       }
       if (!question || !consensusText) return;
-      this.lastExchange = { question: question, consensus: consensusText };
+      this.lastExchange = {
+        question: question,
+        consensus: consensusText,
+        turn: turn && typeof turn === "object" ? turn : null
+      };
       this.armed = false;
       // Ein Lauf ist durchgelaufen: nichts mehr zurueckzuholen.
       this.spentExchange = null;
@@ -158,7 +327,8 @@
     // Zwei Orte am Composer, ein Zustand:
     //   #composerGate     — der Zustand NACH einer beantworteten Frage: der
     //                       Lauf ist zu Ende, und hier steht, wie es
-    //                       weitergeht (neue Frage frei, Follow-up Pro).
+    //                       weitergeht (frischer Vergleich oder Kontextlauf;
+    //                       beide zaehlen als normaler Lauf).
     //                       Das Angebot sass frueher in der Provenance-Zeile
     //                       an der Antwort; es gehoert aber an das Feld, in
     //                       das die naechste Frage getippt wird.
@@ -751,17 +921,32 @@
           }
         }
 
-        // Follow-up-Affordance im Input-Bereich anbieten (Pro-Feature, Free
-        // sieht den Teaser) — nicht bei Fehlertexten aus dem Consensus-Stream.
+        const bookmarkPreviousQuestion = followup.previousQuestionForBookmark();
+        const bookmarkPreviousTurn = followup.previousTurnForBookmark();
+
+        const completedTurn = {
+          question,
+          consensus: data.consensus_response,
+          differences: data.differences || "",
+          differences_data: data.differences_data || null,
+          sources: Array.isArray(window.currentEvidenceSources)
+            ? window.currentEvidenceSources
+            : []
+        };
+
+        // Follow-up-Affordance im Input-Bereich anbieten — nicht bei
+        // Fehlertexten aus dem Consensus-Stream.
         if (data.consensus_response
             && !/^(Consensus error:|Invalid consensus model selected:)/i.test(data.consensus_response.trim())) {
-          followup.offer(question, data.consensus_response);
+          followup.offer(question, data.consensus_response, completedTurn);
         }
 
         // Payload merken: eine spätere Resolve-Runde hängt ihr Ergebnis an
         // differences_data und speichert das Bookmark damit erneut.
         window.lastConsensusBookmarkPayload = {
           question: question,
+          previousQuestion: bookmarkPreviousQuestion,
+          previousTurn: bookmarkPreviousTurn,
           consensusText: data.consensus_response,
           differencesText: data.differences,
           differencesData: data.differences_data || null
@@ -769,7 +954,9 @@
         if (window.auth?.currentUser) {
           window.saveBookmarkConsensus(
             question, data.consensus_response, data.differences, data.differences_data,
-            data.result_id, consensus_model, shareModelLabels
+            bookmarkPreviousQuestion ? null : data.result_id,
+            consensus_model, shareModelLabels, bookmarkPreviousQuestion,
+            bookmarkPreviousTurn
           );
         }
         trackAppEvent("app_consensus_completed", {

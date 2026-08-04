@@ -189,6 +189,61 @@ def test_consensus_save_returns_complete_merged_bookmark():
     assert bookmark["model_labels"] == {"OpenAI": "GPT-5.4 mini"}
 
 
+def test_followup_bookmark_keeps_complete_previous_turn_for_restore():
+    current = "What should I prioritize first?"
+    previous = "How should I plan the migration?"
+    bookmark_id = "V2hhdCBzaG91bGQgSSBwcmlvcml0aXplIGZpcnN0Pw__"
+    bookmark_ref = FakeBookmarkRef(bookmark_id, {"query": current, "responses": {}})
+    fake_db = FakeFirestore(bookmark_ref)
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(bookmarks_router.router)
+
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", fake_db),
+        patch.object(
+            bookmarks_router.share_snapshots,
+            "pending_result_is_available",
+            return_value=True,
+        ),
+    ):
+        response = TestClient(app).post(
+            "/bookmark/consensus",
+            json={
+                "id_token": "token",
+                "question": current,
+                "previousQuestion": previous,
+                "previousTurn": {
+                    "question": previous,
+                    "consensus": "Original consensus",
+                    "differences": "Original differences",
+                    "differences_data": {
+                        "agreement": {"score": 82, "model_count": 6},
+                        "claims": [],
+                        "differences": [],
+                        "best_model": None,
+                        "models_compared": [],
+                    },
+                },
+                "consensusText": "Follow-up consensus",
+                "differencesText": "No material differences",
+                "resultId": "R" * 16,
+            },
+        )
+
+    assert response.status_code == 200
+    bookmark = response.json()["bookmark"]
+    assert bookmark["query"] == current
+    assert bookmark["previous_question"] == previous
+    assert bookmark["previous_turn"]["question"] == previous
+    assert bookmark["previous_turn"]["consensus"] == "Original consensus"
+    assert bookmark["previous_turn"]["differences_data"]["agreement"]["score"] == 82
+    assert bookmark["share_result_id"] == ""
+    meta = bookmarks_router._bookmark_meta(bookmark_id, bookmark)
+    assert meta["query"] == current
+
+
 def test_legacy_consensus_bookmark_gets_new_share_result():
     bookmark_id = "V2h5Pw__"
     bookmark_ref = FakeBookmarkRef(
@@ -288,6 +343,22 @@ def test_bookmark_frontend_prepares_share_and_watch_result():
     assert "prepareBookmarkShareResult(bookmark);" in firebase
     assert "resolveCurrentShareResultId" in share_dialog
     assert "resolveCurrentShareResultId" in watch
+
+
+def test_bookmark_frontend_restores_followup_as_two_complete_turns():
+    root = Path(__file__).resolve().parents[1]
+    firebase = (root / "static" / "firebase.js").read_text(encoding="utf-8")
+    query_send = (root / "static" / "js" / "query-send.js").read_text(encoding="utf-8")
+    consensus_run = (root / "static" / "js" / "consensus-run.js").read_text(encoding="utf-8")
+
+    assert "function bookmarkDisplayQuestion(bookmark)" in firebase
+    assert "window.App?.setThreadQuestion?.(displayQuestion);" in firebase
+    assert "renderStoredTurn?.(bookmark.previous_turn)" in firebase
+    assert "question: displayQuestion" in firebase
+    assert query_send.count("bookmarkPreviousQuestion)") == 6
+    assert "previousQuestion: bookmarkPreviousQuestion" in consensus_run
+    assert "previousTurn: bookmarkPreviousTurn" in consensus_run
+    assert "buildStoredAgreement(differencesData)" in consensus_run
 
 
 def test_bookmark_restore_uses_historical_model_labels_without_mutating_picker_state():

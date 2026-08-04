@@ -1480,36 +1480,59 @@ img { display: block; max-width: 100%; }
 .consensus-verdict.is-warn { --verdict-ring: var(--partial); }
 .consensus-verdict.is-alert { --verdict-ring: var(--dispute); }
 
-/* Score ring: conic gauge, fill level comes from --val (0–100). */
-.verdict-score {
-  position: relative;
-  width: 42px;
-  height: 42px;
-  flex-shrink: 0;
-}
-
-.verdict-score-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: conic-gradient(
-    var(--verdict-ring, var(--accent)) calc(var(--val, 0) * 1%),
-    color-mix(in srgb, var(--sidebar-border) 55%, transparent) 0
-  );
-  -webkit-mask: radial-gradient(closest-side, transparent 77%, #000 78%);
-  mask: radial-gradient(closest-side, transparent 77%, #000 78%);
-}
-
-.verdict-score-num {
-  position: absolute;
-  inset: 0;
+/* Score: set number over a fine measuring bar, fill level comes from --val
+   (0–100). No ring, no tinted plate — see the .consensus-verdict block in
+   shell.css, this has to be made of the same material as the product. */
+.verdict-gauge {
+  flex: 0 0 auto;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-xs);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  width: 92px;
+}
+
+.verdict-score {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  line-height: var(--line-height-solid);
+}
+
+/* The number carries the traffic light colour, not a plate behind it: the
+   colour sits on the element the reader looks at first. */
+.verdict-score-num {
+  font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-tight);
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
+  color: var(--verdict-ring, var(--text-color));
+}
+
+.verdict-score-unit {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+/* The unfilled stretch carries a hint of the same traffic light colour: at
+   score 0 — where the statement is strongest — a neutral bar would go mute
+   exactly when it matters most. */
+.verdict-meter {
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--verdict-ring, var(--accent)) 22%, transparent);
+  overflow: hidden;
+}
+
+.verdict-meter-fill {
+  display: block;
+  height: 100%;
+  width: calc(var(--val, 0) * 1%);
+  border-radius: inherit;
+  background: var(--verdict-ring, var(--accent));
 }
 
 /* Fallback without a score (also used by /consensus-engine): small status dot. */

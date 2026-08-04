@@ -39,7 +39,7 @@ def test_changed_frontend_scripts_are_cache_busted():
     template = read("templates/index.html")
 
     assert "markdown-stream.js?v=20260802-markdownfallback1" in template
-    assert "firebase.js?v=20260804-verifygate1" in template
+    assert "firebase.js?v=20260804-bookmarkturns1" in template
     assert "demo.js?v=20260803-demorunstages1" in template
     assert "usage-limit.js?v=20260802-storagebusy1" in template
-    assert "query-send.js?v=20260804-verifygate1" in template
+    assert "query-send.js?v=20260804-bookmarkturns1" in template

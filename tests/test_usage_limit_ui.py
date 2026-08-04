@@ -91,8 +91,10 @@ def test_run_is_blocked_before_it_appears_to_start():
     prepare_ui = query.index("consensusPipeline?.onPrepare")
     assert preflight < prepare_ui
 
-    # Die Demo kostet nichts und darf nie am Kontingent haengen.
-    assert "if (!isDemoQuery(question)) {" in query
+    # Die Demo kostet nichts und darf nie am Kontingent haengen. Ein echtes
+    # Follow-up mit dem Text "Demo" bleibt dagegen ein normaler, gezaehlter
+    # Kontextlauf und darf den archivierten Turn nicht umgehen.
+    assert "if (!isDemoQuery(question) || followupRequested) {" in query
 
     # Der Server bleibt die Autoritaet: der /prepare-Zweig zeigt dieselbe
     # Karte, wenn die Vorab-Pruefung nichts wusste (Gast, frischer Tab).
@@ -179,6 +181,6 @@ def test_css_cache_busting_was_bumped():
     style = read("static/style.css")
     template = read("templates/index.html")
 
-    assert "shell.css?v=20260804-verifygate1" in style
+    assert "shell.css?v=20260804-agreementwidth1" in style
     assert "components-input.css?v=20260804-verifygate1" in style
-    assert "style.css?v=20260804-verifygate1" in template
+    assert "style.css?v=20260804-agreementwidth1" in template

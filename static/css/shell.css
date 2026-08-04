@@ -1376,7 +1376,6 @@ body:not(.is-hero) #verifyBanner {
    Nothing is lost when the run collapses — it just stops taking up screen.
    -------------------------------------------------------------------------- */
 .run-provenance {
-  --footer-verdict-ring: var(--ink-3);
   position: relative;
   isolation: isolate;
   display: grid;
@@ -1394,38 +1393,24 @@ body:not(.is-hero) #verifyBanner {
   color: var(--ink-3);
 }
 
-.run-provenance:has(.consensus-verdict.is-calm) {
-  --footer-verdict-ring: var(--agree);
-}
-
-.run-provenance:has(.consensus-verdict.is-warn) {
-  --footer-verdict-ring: var(--partial);
-}
-
-.run-provenance:has(.consensus-verdict.is-alert) {
-  --footer-verdict-ring: #cf5a4a;
-}
-
-.dark-mode .run-provenance:has(.consensus-verdict.is-alert) {
-  --footer-verdict-ring: #e58a79;
-}
-
-/* Verdict und Antwort-Aktionen bilden auf breiten Screens eine gemeinsame
-   Summary-Zeile. Die Flaeche ueber die volle Breite vermeidet den unfertigen
-   Eindruck einer farbigen Karte, die direkt vor den Aktionen abbricht. */
+/* Keine getoente Summary-Flaeche mehr: eine eingefaerbte Platte im sonst
+   rahmenlosen Fuss las sich wie ein Fehlerbanner, nicht wie das Kernergebnis.
+   Was die Platte aber geleistet hat, muss bleiben: sie hat das Auge gruppiert
+   und den Blick gehalten. Das uebernehmen jetzt drei Mittel ohne Kasten —
+   die Ampelfarbe auf der Zahl selbst, mehr Luft um das Urteil, und diese
+   Haarlinie, die den Fuss in zwei Baender teilt (oben das Urteil samt
+   Aktionen, unten die Schubladen). Sie laeuft an beiden Enden aus, dieselbe
+   Sprache wie der Composer-Horizont: Trennung durch eine Linie, die keine
+   Kante ist. */
 .run-provenance::before {
   content: "";
-  z-index: 0;
   grid-column: 1 / -1;
   grid-row: 1;
-  align-self: stretch;
-  border-radius: var(--radius-md);
-  background:
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--footer-verdict-ring) 7%, var(--raise)),
-      color-mix(in srgb, var(--footer-verdict-ring) 3%, var(--raise))
-    );
+  align-self: end;
+  height: 1px;
+  background: var(--line);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
   pointer-events: none;
 }
 
@@ -1793,12 +1778,12 @@ body:not(.is-hero) #verifyBanner {
 
   .run-provenance .consensus-verdict {
     display: grid;
-    /* auto statt fester Breite: die Spalte traegt Ring UND Bildunterschrift. */
+    /* auto statt fester Breite: die Spalte traegt Zahl UND Messbalken. */
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
-    column-gap: 11px;
+    column-gap: 14px;
     row-gap: 2px;
-    padding: 10px 12px;
+    padding: 4px 0 14px;
   }
 
   .run-provenance .verdict-gauge,
@@ -1896,6 +1881,7 @@ body:not(.is-hero) .container {
   padding-bottom: 0;
 }
 
+.thread-history,
 .thread-ask { order: 1; }
 body:not(.is-hero) #consensusRun { order: 2; }
 /* Die Absage steht dort, wo der Lauf gestanden haette: unter der Frage,
@@ -1984,9 +1970,14 @@ body:not(.is-hero) .consensus-section::before {
 /* ---- The question at the head of the thread ------------------------------
    An eyebrow and the question itself in the serif voice — the one element
    that speaks in the user's words, so it gets the largest quiet type on the
-   page. Long questions clamp to three lines; the link below unfolds them. */
+   page. User questions align to the right; long questions clamp to three
+   lines and the link below unfolds them. */
 .thread-ask {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   margin: 10px 6px 18px;
+  text-align: right;
 }
 
 .thread-ask[hidden] {
@@ -2002,10 +1993,11 @@ body:not(.is-hero) .consensus-section::before {
 }
 
 .thread-ask-text {
-  /* The question is a heading, not a paragraph: it stays left-aligned and
-     stops short of the right edge so it reads as a title above the answer
-     rather than as the answer's first line. */
+  /* The question is a heading, not a paragraph: it stays right-aligned and
+     stops short of the left edge so it reads as the user's turn rather than
+     as the answer's first line. */
   max-width: 70%;
+  margin-left: auto;
   font-family: var(--font-sans);
   font-size: var(--font-size-xl);
   line-height: var(--line-height-heading);
@@ -2045,6 +2037,112 @@ body:not(.is-hero) .consensus-section::before {
 .thread-ask-more:hover {
   color: var(--ink);
   text-decoration-color: var(--ink-3);
+}
+
+/* ---- Abgeschlossene Follow-up-Turns --------------------------------------
+   Der aktive Renderbaum bleibt einmalig (seine IDs sind ein JS-Vertrag).
+   Bevor ein Follow-up ihn wiederverwendet, liegt die bisherige Frage/Antwort
+   deshalb als statische, voll lesbare Kopie im Verlauf. Die User-Frage steht
+   wie der aktive Turn rechts, die Consensus-Antwort bleibt im Lesefluss links. */
+.thread-history[hidden] {
+  display: none;
+}
+
+.thread-history-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  margin-bottom: 34px;
+}
+
+.thread-history-question {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin: 10px 6px 0;
+  text-align: right;
+}
+
+.thread-history-question-text {
+  max-width: 70%;
+  margin-left: auto;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-xl);
+  line-height: var(--line-height-heading);
+  letter-spacing: var(--tracking-tight);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.thread-history-answer {
+  margin: 0 6px;
+}
+
+.thread-history-answer-label {
+  margin-bottom: 9px;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.thread-history-answer-body {
+  max-width: none;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-reading);
+  letter-spacing: var(--tracking-tight);
+  color: var(--ink);
+}
+
+.thread-history-answer-body .claim-badge,
+.thread-history-answer-body .cx-marker {
+  pointer-events: none;
+}
+
+.thread-history-verdict {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 26px;
+  padding: 18px 0 0;
+  border-top: 1px solid var(--line-soft);
+  background: transparent;
+}
+
+.thread-history-verdict > .verdict-main {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.thread-history-verdict .verdict-detail {
+  display: block;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Die Archivkopie liegt nicht mehr in .run-provenance. Deshalb dieselbe
+   kompakte Judge-Fussnote hier explizit wiederherstellen, statt sie als
+   rechtsbuendigen eigenen Flex-Block wertvolle Zeilenbreite kosten zu lassen. */
+.thread-history-verdict .verdict-judge {
+  display: inline;
+  flex-basis: auto;
+  margin-left: 0;
+  text-align: left;
+  white-space: normal;
+}
+
+.thread-history-verdict .verdict-judge-sub {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .thread-history-verdict {
+    gap: 14px;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -2252,69 +2350,41 @@ body:not(.is-hero) .consensus-section::before {
   color: var(--ink-3);
 }
 
-/* ---- Das Urteil als ruhige Flaeche ---------------------------------------
+/* ---- Das Urteil als Messwert ---------------------------------------------
    Der Fuss besteht aus lauter gleich leisen Grautoenen; die eine Aussage, die
    der Leser NICHT uebersehen darf — wie einig sich die Modelle sind — sah
-   darin aus wie eine Fussnote unter der Fussnote. Sie bekommt deshalb als
-   einziges Element des Fusses eine eigene Flaeche: kein Rahmen, kein Schatten,
-   kein Glas (die Shell baut Rahmen ueberall ab), sondern ein Grundton, der die
-   Ampelfarbe nur ahnen laesst. Das traegt die Semantik auch dann, wenn der
-   Ring bei Score 0 leer bleibt — genau der Fall, in dem sie am meisten zaehlt.
-
-   Bewusst nur das Urteil, nicht die ganze Zeile: Teilen/Beobachten/Zitieren
-   daneben bleiben auf dem Seitengrund und damit sichtbar zweitrangig.
+   darin lange aus wie eine Fussnote unter der Fussnote. Der Versuch, sie mit
+   einer eingefaerbten Platte herauszuheben, hat das Kernergebnis wie eine
+   Fehlermeldung aussehen lassen: eine rote Box mitten in einer rahmenlosen
+   Seite. Die Loesung ist Typografie statt Flaeche — eine gesetzte Zahl in
+   Ueberschriftsgroesse, darunter ein 3px-Balken in der Ampelfarbe. Das ist
+   das lauteste Element des Fusses, ohne irgendetwas zu umranden, und es traegt
+   die Semantik auch bei Score 0, weil die leere Strecke getoent bleibt.
    -------------------------------------------------------------------------- */
 .run-provenance .consensus-verdict {
-  padding: 11px 15px 11px 12px;
+  align-items: center;
+  gap: 20px;
+  padding: 7px 0 17px;
   border-radius: 0;
   background: transparent;
 }
 
 /* Die Headline ist die Ueberschrift des Ergebnisses, nicht ein weiterer
-   Fussnotentext: eine Stufe groesser und in voller Textfarbe. */
+   Fussnotentext: in voller Textfarbe, mit Luft zur Detailzeile. */
 .run-provenance .verdict-headline {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-base);
   font-weight: var(--font-weight-semibold);
   color: var(--ink);
 }
 
-/* Score-Anzeige: Ring plus Bildunterschrift. Eine nackte "0" im Kreis sagt
-   nicht, wovon sie 0 ist. */
-.run-provenance .verdict-gauge {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
+.run-provenance .verdict-main {
+  gap: 3px;
 }
 
-.run-provenance .verdict-score {
-  width: 46px;
-  height: 46px;
-}
-
-/* Die ungefuellte Strecke des Rings traegt einen Hauch derselben Farbe. Bei
-   Score 0 — dem Fall, in dem die Aussage am staerksten ist — war der Ring
-   sonst ein leerer grauer Kreis und damit ausgerechnet dann stumm. */
-.run-provenance .verdict-score-ring {
-  background: conic-gradient(
-    var(--verdict-ring, var(--accent)) calc(var(--val, 0) * 1%),
-    color-mix(in srgb, var(--verdict-ring, var(--ink-3)) 22%, transparent) 0
-  );
-}
-
-.run-provenance .verdict-score-num {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-bold);
-  color: var(--ink);
-}
-
-.verdict-score-caption {
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  line-height: var(--line-height-solid);
+/* Groesse, Ampelfarbe und Balken der Score-Anzeige stehen in
+   components-consensus-insights.css — hier nur, was der Fuss-Kontext
+   beisteuert: der gedaempfte Nenner auf der Fuss-Tonleiter. */
+.run-provenance .verdict-score-unit {
   color: var(--ink-3);
 }
 
@@ -2813,8 +2883,8 @@ body.is-hero .chat-input-container .consensus-model .select-wrapper .model-picke
 /* ---- Composer gate -------------------------------------------------------
    consens.io is not a chat: a comparison ends with its answer. Rather than
    letting people type into a field that will silently start a second
-   six-model run, the composer says what happens next — a new comparison is
-   free, carrying this context along is Pro. The follow-up offer moved here
+   six-model run, the composer says what happens next: a fresh comparison or
+   a context-carrying follow-up, each counted as a normal run. The offer moved here
    from the provenance line for the same reason: it belongs at the field
    where the next question gets typed. */
 .composer-gate {

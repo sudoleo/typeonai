@@ -290,6 +290,7 @@
       }
 
       const question = document.getElementById("questionInput").value;
+      const followupRequested = window.App.followup?.isArmed?.() === true;
       window.lastQuestion = question;  // Speichern in einer globalen Variable (auch von consensus-run.js gelesen)
 
       if (!question.trim()) {
@@ -310,7 +311,7 @@
       // gleich wieder weg. Der Server bleibt die Autoritaet (siehe den
       // /prepare-Zweig weiter unten); das hier ist nur die Zusage, dass
       // nichts zu laufen scheint, was gar nicht laeuft.
-      if (!isDemoQuery(question)) {
+      if (!isDemoQuery(question) || followupRequested) {
         if (window.App.usageLimit?.blockIfExhausted?.({
           useOwnKeys: document.getElementById("useOwnKeysSwitch")?.checked === true,
           deepThink: document.getElementById("deepSearchToggle")?.checked === true,
@@ -332,7 +333,12 @@
       // Ab dem ersten echten Lauf wird die Seite zum Thread: Frage oben,
       // Composer unten. Der Demo-Pfad nutzt denselben Übergang.
       window.exitHeroMode?.();
-      window.App.setThreadQuestion?.(question);
+      // Bei einem Follow-up bleibt der bisherige Turn waehrend /prepare noch
+      // unangetastet. Erst wenn der Lauf wirklich fortgesetzt wird, archivieren
+      // wir ihn und setzen die neue Frage darunter.
+      if (!followupRequested) {
+        window.App.setThreadQuestion?.(question);
+      }
 
       // Der gefuehrte Lauf beginnt HIER, nicht erst beim Fan-out: zwischen
       // Klick und erster Modellantwort liegen Validierung und /prepare, und
@@ -340,7 +346,7 @@
       window.App?.consensusPipeline?.onPrepare?.();
 
       // === DEMO: Früh raus, wenn "Demo" ===
-      if (isDemoQuery(question)) {
+      if (isDemoQuery(question) && !followupRequested) {
         trackAppEvent("app_demo_started", {
           selected_models: getSelectedModelCount(),
           agent_mode: typeof window.isAgentModeEnabled === "function" && window.isAgentModeEnabled()
@@ -718,12 +724,15 @@
         }
       }
 
-      // Follow-up-Kontext (Pro): genau eine Ebene — vorherige Frage + Konsens-
+      // Follow-up-Kontext: genau eine Ebene — vorherige Frage + Konsens-
       // Text. consume() liefert den Payload nur bei aktiviertem Chip und räumt
-      // den State auf; reset() lässt auch die Affordance verschwinden, weil
-      // dieser Lauf den alten Konsens ersetzt. Erst hier (nach den frühen
+      // den aktiven State auf; die sichtbare alte Antwort wird nach /prepare
+      // in #threadHistory archiviert. Erst hier (nach den frühen
       // Abbruch-Pfaden), damit ein abgebrochener Send den Chip nicht frisst.
       const followupContext = window.App.followup?.consume?.() || null;
+      const bookmarkPreviousQuestion = String(
+        followupContext?.previous_question || ""
+      ).trim();
       if (followupContext) {
         // consume() hat den Lauf schon als Follow-up markiert (kein reset,
         // sonst ginge das In-Flight-Flag verloren).
@@ -731,6 +740,7 @@
       } else {
         // Frische Frage ersetzt den alten Konsens: Affordance/Flag verwerfen.
         window.App.followup?.reset?.();
+        if (followupRequested) window.App.setThreadQuestion?.(question);
       }
 
       // Wir rufen /prepare IMMER auf, damit Wetter-Infos etc. injiziert werden können.
@@ -838,6 +848,18 @@
 
       if (!isActiveQueryRun(queryRunId)) {
         return;
+      }
+
+      if (followupContext) {
+        window.App.followup?.archiveCurrentExchange?.();
+        window.App.setThreadQuestion?.(question);
+        // Der archivierte Turn ist jetzt die sichtbare alte Antwort. Das Live-
+        // Renderziel wird fuer den neuen Consensus frei und darf nicht unter
+        // der neuen Frage noch einmal den alten Text zeigen.
+        window.hideConsensusOutput?.();
+        const liveConsensusBody = window.App.consensusBodyEl?.();
+        if (liveConsensusBody) liveConsensusBody.innerHTML = "";
+        window.resetConsensusInsights?.();
       }
 
       // Die Frage steht jetzt im Thread-Kopf; der Composer wird frei für die
@@ -1116,7 +1138,7 @@
                 ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                 : data.response;
               if (window.auth.currentUser) {
-                window.saveBookmark(question, responseWithSources, "OpenAI", mode);
+                window.saveBookmark(question, responseWithSources, "OpenAI", mode, bookmarkPreviousQuestion);
               }
             } else if (data.error) {
               markModelError(outputEl, data.error, data);
@@ -1195,7 +1217,7 @@
                 : data.response;
 
               if (window.auth.currentUser) {
-                window.saveBookmark(question, responseWithSources, "Mistral", mode);
+                window.saveBookmark(question, responseWithSources, "Mistral", mode, bookmarkPreviousQuestion);
               }
             } else if (data.error) {
               markModelError(outputEl, data.error, data);
@@ -1267,7 +1289,7 @@
                 ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                 : data.response;
               if (window.auth.currentUser) {
-                window.saveBookmark(question, responseWithSources, "Anthropic", mode);
+                window.saveBookmark(question, responseWithSources, "Anthropic", mode, bookmarkPreviousQuestion);
               }
             } else if (data.error) {
               markModelError(outputEl, data.error, data);
@@ -1339,7 +1361,7 @@
                 ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                 : data.response;
               if (window.auth.currentUser) {
-                window.saveBookmark(question, responseWithSources, "Gemini", mode);
+                window.saveBookmark(question, responseWithSources, "Gemini", mode, bookmarkPreviousQuestion);
               }
             } else if (data.error) {
               markModelError(outputEl, data.error, data);
@@ -1411,7 +1433,7 @@
                 ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                 : data.response;
               if (window.auth.currentUser) {
-                window.saveBookmark(question, responseWithSources, "DeepSeek", mode);
+                window.saveBookmark(question, responseWithSources, "DeepSeek", mode, bookmarkPreviousQuestion);
               }
             } else if (data.error) {
               markModelError(outputEl, data.error, data);
@@ -1482,7 +1504,7 @@
                 ? window.renderModelResponseWithSources(outputEl, data.response, data.sources || [])
                 : data.response;
               if (window.auth.currentUser) {
-                window.saveBookmark(question, responseWithSources, "Grok", mode);
+                window.saveBookmark(question, responseWithSources, "Grok", mode, bookmarkPreviousQuestion);
               }
             } else if (data.error) {
               markModelError(outputEl, data.error, data);

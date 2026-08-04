@@ -1731,6 +1731,7 @@
           window.hideConsensusOutput?.();
           // Follow-up-Affordance/Chip gehören zum gelöschten Konsens.
           window.App.followup?.reset?.();
+          window.App.followup?.clearHistory?.();
 
           // Lösche den Inhalt aller Modell-Antwortboxen.
           boxIds.forEach(id => {

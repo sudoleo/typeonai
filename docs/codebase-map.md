@@ -63,7 +63,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP) und übergibt sie als nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). Nach einem tatsächlich neu angelegten E-Mail/Passwort-Konto plant `/register` außerdem einen PII-freien, nicht-blockierenden Telegram-Admin-Alert ein; `/confirm-registration` erkennt damit auch gerade neu angelegte Google-Konten serverseitig. Normale Logins, Reloads und neutrale Antworten für bereits bestehende Adressen bleiben ruhig. |
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
-| `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. |
+| `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Follow-up-Saves akzeptieren optional `previousQuestion` und beim Consensus zusätzlich `previousTurn`; gespeichert werden `previous_question` sowie der sanitierte vorherige Turn mit Frage, Consensus, Differences-/Agreement-Daten und Quellen. Beim Restore bleibt `query` die aktive zweite Frage, während `previous_turn` als vollständiger erster Turn davor erscheint. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (`?version=<run_id>`, rendert Position Map + Agreement-Kurve über `services/history_view.py` — dieselbe Darstellung wie die Watch-Seiten, bewusst nur bis zum gewählten Snapshot), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe`; Admin-CRUD unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
@@ -411,22 +411,43 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   jetzt Nachsatz derselben Meta-Zeile (`.verdict-judge` inline, der Zusatz
   „independent of the consensus engine" liegt im `title`). Die Headline zeigt
   seither **genau ein** Thema (schwerwiegendstes zuerst, `TOPIC_MAX_SHOWN`)
-  und wird per CSS einzeilig gekuerzt — vorher kettete sie zwei abgeschnittene
-  Claim-Fragmente plus „+2 more" zu einem zweizeiligen Satzrest.
-  **Das Urteil ist die einzige Flaeche im Fuss (2026-07-28).** In lauter gleich
-  leisen Grautoenen wurde die eine Aussage, die der Leser nicht uebersehen darf,
-  zur Fussnote unter der Fussnote. Es bekommt deshalb einen Grundton
-  (`color-mix` aus `--verdict-ring` in `--raise`, kein Rahmen/Schatten/Glas),
-  eine groessere Headline in voller Textfarbe, einen 46px-Ring mit
-  Bildunterschrift „agreement" (`.verdict-gauge`, weil eine nackte 0 im Kreis
-  nicht sagt, wovon sie 0 ist) und eine **dritte Ampelstufe** `is-alert`
-  (Agreement unter 40; Widerspruchsschwere steht separat in der Detailzeile).
-  Die ungefuellte Ringstrecke traegt 22 % derselben Farbe — bei Score 0 war der
-  Ring sonst ein leerer grauer Kreis und ausgerechnet im staerksten Fall stumm.
-  Teilen/Beobachten/Zitieren bleiben bewusst OHNE Flaeche auf dem Seitengrund
-  und damit sichtbar zweitrangig. Achtung: die Flaeche muss NACH dem
-  rahmenlosen Reset (`.consensus-verdict.is-warn { background: none }`) in
-  `shell.css` stehen — gleiche Spezifitaet, spaeter gewinnt.
+  statt mehrerer Fragmente plus „+2 more". Seit 2026-08-04 gibt es fuer dieses
+  eine Thema keine feste 7-Wort-Kuerzung mehr: Es nutzt die vorhandene Breite
+  und bricht an der echten Layoutkante um.
+  **Das Urteil ist ein Messwert, keine Flaeche (2026-08-04).** Der Versuch von
+  2026-07-28, die eine Aussage, die der Leser nicht uebersehen darf, mit einer
+  getoenten Platte (`color-mix` aus `--verdict-ring` in `--raise`, als
+  `.run-provenance::before` ueber Urteil UND Aktionen) aus dem Grau des Fusses
+  zu heben, hat das Kernergebnis wie ein Fehlerbanner aussehen lassen: eine
+  eingefaerbte Box mitten in einer bewusst rahmenlosen Seite. Sie ist weg —
+  aber was sie geleistet hat, musste bleiben: **sie hat das Auge gruppiert**
+  („die alte Faerbung hat dem Auge und dem Gehirn geholfen"; ohne Ersatz ging
+  das Urteil im Fuss unter). Drei Mittel ohne Kasten uebernehmen das:
+  (1) die **Ampelfarbe sitzt auf der Zahl selbst** (`--verdict-ring` als
+  `color` von `.verdict-score-num`), also auf dem Element, das der Leser
+  zuerst ansieht; (2) **Groesse und Luft** — `--font-size-2xl`,
+  `padding: 7px 0 17px`, Headline auf `--font-size-base`; (3) eine **an beiden
+  Enden auslaufende Haarlinie** (`.run-provenance::before`, Grid-Row 1,
+  `align-self: end`, mask-image wie der Composer-Horizont), die den Fuss in
+  zwei Baender teilt: oben Urteil + Aktionen, unten die Schubladen.
+  Die Hierarchie traegt also Typografie: `.verdict-gauge` (92px) setzt den
+  Score in `--font-size-2xl` mit tabellarischen Ziffern, daneben ein
+  gedaempftes „/100", darunter ein 4px-Messbalken (`.verdict-meter` /
+  `.verdict-meter-fill`, Breite aus `--val`) in derselben Ampelfarbe. Zahl,
+  Nenner und Balken sind zentral in `components-consensus-insights.css`
+  definiert (NICHT in `shell.css` doppelt), damit /app und Mockups nicht
+  auseinanderlaufen. Der frueher noetige Ring samt Bildunterschrift
+  „agreement" entfaellt: der Nenner steht sichtbar daneben und das Wort
+  „agreement" ohnehin in jeder Headline (High/Strong/Partial/Low/Very low).
+  Die ungefuellte Strecke traegt 22 % derselben Farbe — bei Score 0 waere der
+  Balken sonst ausgerechnet im staerksten Fall stumm. Die **dritte Ampelstufe**
+  `is-alert` (Agreement unter 40; Widerspruchsschwere steht separat in der
+  Detailzeile) bleibt unveraendert. Achtung: die Fuss-Feinheiten muessen NACH
+  dem rahmenlosen Reset (`.consensus-verdict.is-warn { background: none }`) in
+  `shell.css` stehen — gleiche Spezifitaet, spaeter gewinnt. Die Marketing-
+  Mockups (`landing.html`, `consensus-engine.html`,
+  `partials/product_result_mockup.html` + `landing.css`) tragen dieselbe
+  Struktur und muessen mitwandern.
   Die Tabs bleiben rahmenlos (Text, Zahl, Chevron; aktiv per Schriftgewicht,
   Unterstreichung und gedrehtem Chevron) — ein Rechteck um ein Wort ist genau
   der Rahmen, den diese Shell sonst ueberall abbaut. Der Fuss erscheint
@@ -467,12 +488,14 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   fuer `body:not(.is-hero)` per Flex-`order` und macht `.input-section`
   zum letzten Flex-Abschnitt mit eigenem auslaufenden Horizont
   (`.consensus-section::before` ist in diesem Zustand aus). Die Frage steht im
-  Thread-Kopf `#threadAsk` („Question“-Eyebrow + Serif-Text, 3-Zeilen-Clamp mit
+  Thread-Kopf `#threadAsk` („Question“-Eyebrow + rechtsbündiger Text,
+  3-Zeilen-Clamp mit
   „Show full question“): `window.App.setThreadQuestion` (app-core.js), gefuellt
   von `query-send.js` (send), `demo.js` (nach der Tipp-Phase) und
   `firebase.js::loadSingleBookmarkUI`; geleert von „New comparison“ und
-  `clearResponseBoxes`. Der Text ist auf `max-width: 70%` begrenzt: die Frage
-  ist eine Ueberschrift ueber der Antwort, keine erste Zeile davon. Die
+  `clearResponseBoxes`. Der Text ist auf `max-width: 70%` begrenzt und nach
+  rechts gerückt: User-Turn und linksbündige Antwort bleiben sofort
+  unterscheidbar. Die
   **Demo** laesst ihre Frage waehrend des animierten Laufs zusaetzlich im
   Composer stehen (echte Laeufe leeren ihn), damit der selbst getippte Text
   nicht mitten im Ablauf verschwindet. Nach der fertigen Antwort ersetzt bei
@@ -709,7 +732,12 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   gespeicherten `model_labels`; die aktuellen Modell-Selects und `localStorage`
   bleiben unverändert und werden erst für einen neuen Lauf wieder in die UI
   gespiegelt. Alte Bookmarks ohne Provenienz zeigen keinen erfundenen aktuellen
-  Modellnamen. Nach einer E-Mail-Registrierung zeigt
+  Modellnamen. Follow-up-Bookmarks behalten `query` als aktuelle Frage und
+  `previous_question` als Kontext. `previous_turn` bewahrt die vorherige Frage,
+  ihren Consensus, ihr Agreement und ihre Quellen; `renderStoredTurn()` stellt
+  sie beim Öffnen im `#threadHistory` wieder her. Sidebar, Thread-Kopf, Titel
+  und Citation verwenden weiterhin die aktuelle `query`. Nach einer
+  E-Mail-Registrierung zeigt
   das Auth-Modal einen eigenen Verifizierungs-Erfolgszustand statt eines Browser-Alerts.
   Logout löscht zuerst erfolgreich die HttpOnly-Session und wartet danach
   Firebase `signOut()` ab; erst dann wird der ausgeloggte Zustand gezeigt.
@@ -808,6 +836,16 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   bleibt als leerer DOM-Knoten bestehen (`consensus-progress.js` fragt ihn ab).
   `query-send.js` konsumiert den State beim
   Senden und legt `context` in den `/prepare`- und alle `/ask_*`-Payloads.
+  Sobald `/prepare` den Lauf nicht abweist, archiviert
+  `archiveCurrentExchange()` die bisherige Frage und den bereits gerenderten
+  Consensus samt Agreement als statischen Turn in `#threadHistory`; erst danach
+  erscheint die neue Frage darunter im aktiven `#threadAsk`. Der alte Live-Renderbaum wird
+  geleert und für die neue Antwort wiederverwendet, sodass IDs einmalig bleiben
+  und die vorherige Antwort trotzdem sichtbar bleibt. Interaktive Marker der
+  Archivkopie werden zu reinen Anzeigeelementen. Das archivierte Agreement
+  nutzt mit einem wachsenden `.verdict-main` die volle Threadbreite; die
+  Judge-Fußnote bleibt wie im Live-Footer kompakt inline. „New comparison“/
+  `clearResponseBoxes` leert auch den Verlauf.
   **Follow-ups verketten sich nicht** (Kostenkontrolle): `consume()` markiert
   den Lauf via `followupInFlight`, der Konsens einer Follow-up-Frage bietet
   keine weitere Affordance an — erst eine frische Frage schaltet sie wieder frei.
@@ -1137,7 +1175,9 @@ sichtbaren Auswahlzustand als auch defensiv im tatsächlichen Request-Fan-out au
 - `/consensus` legt ein `pending_results`-Dokument an → `result_id`.
 - Die Consensus-API publiziert dagegen direkt aus ihrem 30-Tage-Run-Snapshot;
   `source_api_run_id` bleibt serverintern und wird nie Teil der Public-Payload.
-- Consensus-Bookmarks speichern diese ID mit, solange sie gültig ist. Beim
+- Consensus-Bookmarks speichern diese ID mit, solange sie gültig ist. Bei
+  Follow-ups wird der Live-Verweis bewusst nicht übernommen, weil dessen
+  Pending-Snapshot nur die aktuelle Frage kennt. Beim
   Teilen/Watchen eines älteren, geöffneten Bookmarks erzeugt
   `POST /bookmark/consensus/share-result` aus dem serverseitigen Bookmark
   best-effort einen neuen sanitisierten Pending-Snapshot; Share/Watch warten
@@ -1358,6 +1398,11 @@ Deploy manuell über die Firebase Console):
 **Firestore-Collections** (verifiziert über Code):
 - `users/{uid}` — `tier`, `role`; Subcollections `bookmarks`, `counters` sowie
   die produktive run-basierte Usage:
+  `bookmarks` speichert pro Follow-up optional `previous_question` sowie
+  `previous_turn` (vorherige Frage, Consensus, Differences-/Agreement-Daten und
+  Quellen) getrennt von der aktuellen `query`; normale Saves schreiben
+  Leerwerte und entfernen damit versehentlich stehen gebliebenen Kontext bei
+  derselben Frage.
   - `usage_days/{YYYY-MM-DD}` — UTC-Tagesaggregat mit Schema-Version und den
     Integer-Zählern `total_reserved`, `total_consumed`,
     `deep_think_reserved`, `deep_think_consumed`. Reservierte und verbrauchte
@@ -1887,10 +1932,12 @@ ersten Check statt eines leeren Consensus-Panels.
   `window.isUserPro`, `window.pendingAttachments`, `window.ConsensusMath`,
   `window.App.reportCriticalError`.
 - **`window.App.followup`** (definiert in `consensus-run.js`) ist der
-  Follow-up-Kontext-State (`offer/arm/discard/consume/reset/render`).
-  `query-send.js` (consume beim Senden), `app-init.js` (reset in
+  Follow-up-Kontext- und Verlauf-State (`offer/arm/discard/consume/reset/render`,
+  `isArmed/archiveCurrentExchange/renderStoredTurn/clearHistory`).
+  `query-send.js` (consume + archivieren beim Senden), `app-init.js` (reset in
   `clearResponseBoxes`) und `user-tier.js` (render bei Tier-Wechsel) hängen
-  daran; DOM-Ziele sind `#composerGate` und `#followupChipBar` in `index.html`.
+  daran; DOM-Ziele sind `#composerGate`, `#followupChipBar` und
+  `#threadHistory` in `index.html`.
 - **`window.App.setAppTitle(question?)`** (definiert in `app-core.js`) hält den
   Standard- bzw. fragebezogenen Browser-Tab-Titel bei Query-Send, Bookmark-Open
   und Clear synchron zur aktuellen Ansicht.

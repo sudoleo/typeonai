@@ -1143,6 +1143,10 @@ function truncateText(text, maxWords = 5) {
   return text;
 }
 
+function bookmarkDisplayQuestion(bookmark) {
+  return String(bookmark?.query || "").trim();
+}
+
 function bookmarkMeta(bookmark) {
   const responses = bookmark?.responses && typeof bookmark.responses === "object" ? bookmark.responses : {};
   const modelCount = Object.entries(responses).filter(([key, value]) =>
@@ -1150,7 +1154,7 @@ function bookmarkMeta(bookmark) {
   ).length;
   return {
     id: bookmark?.id || "",
-    query: bookmark?.query || "",
+    query: bookmarkDisplayQuestion(bookmark),
     mode: bookmark?.mode || "",
     timestamp: bookmark?.timestamp || null,
     has_consensus: Boolean(String(responses.consensus || "").trim()),
@@ -1175,7 +1179,7 @@ function upsertBookmarkMeta(bookmark, { prepend = true } = {}) {
   }
 }
 
-async function saveBookmark(question, response, modelName, mode) {
+async function saveBookmark(question, response, modelName, mode, previousQuestion = "") {
   if (!auth.currentUser) return;
   const id_token = await auth.currentUser.getIdToken(false);
   if (!id_token) return;
@@ -1198,6 +1202,7 @@ async function saveBookmark(question, response, modelName, mode) {
         response,
         modelName,
         mode,
+        previousQuestion,
         sources: sources,
         attachments: attachmentsMeta
       })
@@ -1226,7 +1231,8 @@ async function saveBookmark(question, response, modelName, mode) {
 window.saveBookmark = saveBookmark;
 
 async function saveBookmarkConsensus(question, consensusText, differencesText, differencesData,
-                                     resultId, consensusModel, modelLabels) {
+                                     resultId, consensusModel, modelLabels,
+                                     previousQuestion = "", previousTurn = null) {
   if (!auth.currentUser) return;
   const id_token = await auth.currentUser?.getIdToken(/* forceRefresh= */ false);
   if (!id_token) return;
@@ -1249,7 +1255,9 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
          sources: sources,
          resultId: resultId || null,
          consensusModel: consensusModel || "",
-         modelLabels: modelLabels || null
+         modelLabels: modelLabels || null,
+         previousQuestion: previousQuestion || "",
+         previousTurn: previousTurn || null
        })
     });
     const data = await res.json();
@@ -1378,10 +1386,16 @@ function applyBookmarkModelPresentation(bookmark) {
 // Diese Funktion füllt die UI mit den Daten eines Bookmarks
 function loadSingleBookmarkUI(bookmark) {
     let bookmarkCitationModels = [];
+    const displayQuestion = bookmarkDisplayQuestion(bookmark);
     // Ein geladenes Bookmark zeigt sofort Antworten und startet daher nie im
     // zentrierten Leerzustand.
     window.exitHeroMode?.();
-    window.App?.setAppTitle?.(bookmark?.query);
+    window.App?.followup?.reset?.();
+    window.App?.followup?.clearHistory?.();
+    if (bookmark?.previous_turn) {
+        window.App?.followup?.renderStoredTurn?.(bookmark.previous_turn);
+    }
+    window.App?.setAppTitle?.(displayQuestion);
     // Never let Share/Watch target a run that was displayed previously.
     // A consensus bookmark gets a reusable server-side snapshot on Share/Watch.
     prepareBookmarkShareResult(bookmark);
@@ -1471,6 +1485,8 @@ function loadSingleBookmarkUI(bookmark) {
         // geladenen Bookmark heraus ihr Ergebnis in dasselbe Bookmark schreibt.
         window.lastConsensusBookmarkPayload = (consensusText.trim() && bookmark.query) ? {
             question: bookmark.query,
+            previousQuestion: bookmark.previous_question || "",
+            previousTurn: bookmark.previous_turn || null,
             consensusText: consensusText,
             differencesText: bookmark.responses["differences"] || "",
             differencesData: (differencesData && typeof differencesData === "object") ? differencesData : null
@@ -1527,7 +1543,7 @@ function loadSingleBookmarkUI(bookmark) {
         // Die Frage steht im Thread-Kopf über der Antwort; das Eingabefeld
         // unten bleibt frei für die nächste Frage.
         if (bookmark.query) {
-            window.App?.setThreadQuestion?.(bookmark.query);
+            window.App?.setThreadQuestion?.(displayQuestion);
             const questionInput = document.getElementById("questionInput");
             if (questionInput) {
                 questionInput.value = "";
@@ -1535,7 +1551,7 @@ function loadSingleBookmarkUI(bookmark) {
                 window.syncDemoChipState?.();
             }
             // Falls du eine globale Variable für die letzte Frage hast:
-            if (typeof lastQuestion !== 'undefined') lastQuestion = bookmark.query;
+            if (typeof lastQuestion !== 'undefined') lastQuestion = displayQuestion;
         }
 
         // Anhänge des Bookmarks als Vorschau-Chips anzeigen (nur Metadaten,
@@ -1554,7 +1570,7 @@ function loadSingleBookmarkUI(bookmark) {
         }
 
         window.consensusCitationMeta = {
-            question: bookmark.query || "",
+            question: displayQuestion,
             includedModels: includedModels,
             consensusModel: bookmark.consensus_model || "",
             url: window.location.href.split("#")[0],

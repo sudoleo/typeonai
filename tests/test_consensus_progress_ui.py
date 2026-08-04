@@ -122,6 +122,39 @@ def test_followup_offer_sits_with_the_answer_and_the_chip_with_the_input():
     assert "followupChipBar" in run
 
 
+def test_followup_archives_the_previous_turn_before_rendering_the_next_one():
+    template = read("templates/index.html")
+    run = read("static/js/consensus-run.js")
+    query = read("static/js/query-send.js")
+    app_init = read("static/js/app-init.js")
+    css = read("static/css/shell.css")
+
+    # Der statische Verlauf steht im DOM vor dem aktiven Turn. Der Live-
+    # Renderbaum mit seinen einmaligen IDs bleibt dadurch unveraendert.
+    assert template.index('id="threadHistory"') < template.index('id="threadAsk"')
+    assert "archiveCurrentExchange()" in run
+    assert 'clone.removeAttribute("id")' in run
+    assert "renderStoredTurn(turnData)" in run
+    assert "buildStoredAgreement(differencesData)" in run
+    assert "const insightRoot = window.App.consensusBodyEl?.() || document" in read(
+        "static/js/consensus-insights.js"
+    )
+    archive_at = query.index("archiveCurrentExchange?.()")
+    assert archive_at < query.index("setThreadQuestion?.(question)", archive_at)
+    assert "clearHistory?.()" in app_init
+
+    # User-Turns stehen rechts; Consensus-Turns bleiben als Lesetext links.
+    assert "align-items: flex-end" in css
+    assert ".thread-history-question" in css
+    assert ".thread-history-answer-body" in css
+    assert ".thread-history-verdict" in css
+    assert "flex: 1 1 0" in css
+    assert ".thread-history-verdict .verdict-judge" in css
+    insights = read("static/js/consensus-insights.js")
+    assert "TOPIC_MAX_SHOWN = 1" in insights
+    assert "TOPIC_MAX_WORDS" not in insights
+
+
 def test_composer_row_is_reduced_to_attach_run_switch_and_send():
     """Agent Mode, the mode explainer and the clear button left the composer.
     Their functions live in Settings, the (+) menu and 'New comparison'."""

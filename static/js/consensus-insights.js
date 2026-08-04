@@ -702,24 +702,19 @@
           // ob ihn der strittige Punkt betrifft; das Thema schon.
           const TOPIC_PREFIX =
             /^(?:the\s+models?\s+)?(?:dis)?agree(?:ment)?\s+(?:on|about)\s+|^(?:do|does|did|is|are|was|were|should|shall|can|could|will|would|has|have|whether|how|what|which|when|why)\b\s*/i;
-          const TOPIC_MAX_WORDS = 7;
-          // Genau EIN Thema. Zwei aneinandergereihte 7-Wort-Fragmente plus
-          // "+2 more" ergaben eine zweizeilige Headline aus abgeschnittenen
-          // Satzresten - das lauteste Element im Fuss und zugleich das am
-          // schwersten zu lesende. Die vollstaendige Liste steht eine Zeile
-          // tiefer hinter "Review differences".
+          // Genau EIN Thema. Mehrere aneinandergereihte Fragmente plus
+          // "+2 more" waren ueberladen; das eine wichtigste Thema darf die
+          // vorhandene Breite dagegen voll nutzen und natuerlich umbrechen.
+          // Eine feste Wortgrenze schnitt es auch auf breiten Screens mitten
+          // im Satz ab.
           const TOPIC_MAX_SHOWN = 1;
 
           function toTopic(claim) {
             let text = String(claim || "").trim().replace(/[.?!]+$/, "");
             text = text.replace(TOPIC_PREFIX, "").trim();
             if (!text) return "";
-            const words = text.split(/\s+/);
-            // Groß-/Kleinschreibung bleibt unangetastet: ein automatisches
-            // Kleinschreiben würde Eigennamen beschädigen.
-            if (words.length > TOPIC_MAX_WORDS) {
-              return words.slice(0, TOPIC_MAX_WORDS).join(" ") + "…";
-            }
+            // Groß-/Kleinschreibung und der vollstaendige Wortlaut bleiben
+            // unangetastet; CSS uebernimmt den Umbruch an der echten Kante.
             return text;
           }
 
@@ -765,35 +760,42 @@
             verdict.classList.add(cls);
             verdict.innerHTML = "";
 
-            // Score-Ring; alte Bookmarks ohne Score behalten den kleinen Punkt.
+            // Score-Anzeige; alte Bookmarks ohne Score behalten den kleinen Punkt.
+            // Seit 2026-08-04 gesetzte Zahl plus feiner Messbalken statt
+            // Conic-Ring auf getoenter Platte: die Zahl traegt die Aussage,
+            // der Balken macht sie auf einen Blick vergleichbar, und die
+            // Ampelfarbe bleibt die einzige Farbe im Fuss.
             if (hasScore) {
               const gauge = document.createElement("span");
               gauge.className = "verdict-gauge";
-              const ring = document.createElement("span");
-              ring.className = "verdict-score";
-              ring.style.setProperty("--val", String(boundedScore));
-              ring.title = "Agreement score " + agreement.score + "/100 across "
+              gauge.style.setProperty("--val", String(boundedScore));
+              gauge.title = "Agreement score " + agreement.score + "/100 across "
                 + modelCount + " model" + (modelCount === 1 ? "" : "s");
-              const fill = document.createElement("span");
-              fill.className = "verdict-score-ring";
-              fill.setAttribute("aria-hidden", "true");
+              const score = document.createElement("span");
+              score.className = "verdict-score";
               const num = document.createElement("span");
               num.className = "verdict-score-num";
               num.textContent = String(agreement.score);
               // Screenreader (und E2E-Check) lesen den vollen Score.
+              const srUnit = document.createElement("span");
+              srUnit.className = "visually-hidden";
+              srUnit.textContent = "/100 agreement score";
+              num.appendChild(srUnit);
+              // Sichtbarer Nenner: eine nackte 28 sagt nicht, wovon sie 28 ist.
+              // Das Wort "agreement" steht bereits in jeder Headline daneben,
+              // eine zusaetzliche Bildunterschrift waere die dritte Wiederholung.
               const unit = document.createElement("span");
-              unit.className = "visually-hidden";
-              unit.textContent = "/100 agreement score";
-              num.appendChild(unit);
-              ring.append(fill, num);
-              // Eine nackte Zahl im Kreis sagt nicht, WOVON sie 0 oder 64 ist.
-              // Die Bildunterschrift kostet eine Zeile Kleinschrift und macht
-              // aus der Zahl eine Aussage.
-              const caption = document.createElement("span");
-              caption.className = "verdict-score-caption";
-              caption.setAttribute("aria-hidden", "true");
-              caption.textContent = "agreement";
-              gauge.append(ring, caption);
+              unit.className = "verdict-score-unit";
+              unit.setAttribute("aria-hidden", "true");
+              unit.textContent = "/100";
+              score.append(num, unit);
+              const meter = document.createElement("span");
+              meter.className = "verdict-meter";
+              meter.setAttribute("aria-hidden", "true");
+              const fill = document.createElement("span");
+              fill.className = "verdict-meter-fill";
+              meter.appendChild(fill);
+              gauge.append(score, meter);
               verdict.appendChild(gauge);
             } else {
               const icon = document.createElement("span");
@@ -1592,7 +1594,12 @@
               payload.question,
               payload.consensusText,
               payload.differencesText,
-              payload.differencesData
+              payload.differencesData,
+              null,
+              "",
+              null,
+              payload.previousQuestion || "",
+              payload.previousTurn || null
             );
           }
 
@@ -1964,11 +1971,15 @@
             }
             const legend = $("consensusMarkerLegend");
             if (legend) legend.hidden = true;
-            document.querySelectorAll(".claim-badge, .cx-marker").forEach(function (el) { el.remove(); });
+            // Nur der aktive Consensus wird fuer den naechsten Lauf
+            // zurueckgesetzt. Statische Follow-up-Turns in #threadHistory
+            // behalten ihre sichtbaren Marker und Unterstreichungen.
+            const insightRoot = window.App.consensusBodyEl?.() || document;
+            insightRoot.querySelectorAll(".claim-badge, .cx-marker").forEach(function (el) { el.remove(); });
             // Inline-Markierungen auflösen: Span entfernen, Text an Ort und
             // Stelle lassen. normalize() führt die Textknoten wieder zusammen,
             // damit eine erneute Ankersuche nicht an Fragmenten scheitert.
-            document.querySelectorAll(".cx-claim").forEach(function (span) {
+            insightRoot.querySelectorAll(".cx-claim").forEach(function (span) {
               const parent = span.parentNode;
               if (!parent) return;
               while (span.firstChild) parent.insertBefore(span.firstChild, span);

@@ -5,6 +5,7 @@ import logging
 from firebase_admin import firestore
 from fastapi import APIRouter, Request, Body, HTTPException, Query
 
+from app.core import config as cfg
 from app.core.rate_limit import limiter
 from app.core.security import verify_user_token, extract_id_token, db_firestore
 from app.services.llm.attachments import ALLOWED_ATTACHMENT_MIMES, MAX_ATTACHMENTS
@@ -15,6 +16,33 @@ router = APIRouter()
 BOOKMARK_PAGE_SIZE = 35
 BOOKMARK_PAGE_SIZE_MAX = 50
 BOOKMARK_ID_RE = re.compile(r"[A-Za-z0-9_]{1,100}")
+
+
+def _clean_previous_question(value):
+    return str(value or "").strip()[:cfg.get_followup_question_char_limit()]
+
+
+def _bookmark_display_question(data):
+    return str(data.get("query") or "").strip()
+
+
+def _sanitize_previous_turn(raw):
+    if not isinstance(raw, dict):
+        return None
+    question = _clean_previous_question(raw.get("question"))
+    consensus = str(raw.get("consensus") or "").strip()[:cfg.get_followup_consensus_char_limit()]
+    if not question or not consensus:
+        return None
+    turn = {
+        "question": question,
+        "consensus": consensus,
+        "differences": str(raw.get("differences") or "").strip()[:50_000],
+        "sources": share_snapshots.sanitize_sources(raw.get("sources")),
+    }
+    differences_data = share_snapshots.sanitize_differences_data(raw.get("differences_data"))
+    if differences_data is not None:
+        turn["differences_data"] = differences_data
+    return turn
 
 
 def _bookmark_uid(request: Request):
@@ -32,7 +60,7 @@ def _bookmark_meta(bookmark_id, data):
     responses = data.get("responses") if isinstance(data.get("responses"), dict) else {}
     return {
         "id": str(bookmark_id),
-        "query": str(data.get("query") or ""),
+        "query": _bookmark_display_question(data),
         "mode": str(data.get("mode") or ""),
         "timestamp": data.get("timestamp"),
         "has_consensus": bool(str(responses.get("consensus") or "").strip()),
@@ -157,6 +185,7 @@ async def save_bookmark(request: Request, data: dict = Body(...)):
     mode         = data.get("mode")
     sources      = data.get("sources") # <--- NEU: Quellen auslesen
     attachments  = sanitize_attachment_meta(data.get("attachments"))
+    previous_question = _clean_previous_question(data.get("previousQuestion"))
 
     if not (id_token and question and response_text and modelName):
         raise HTTPException(status_code=400, detail="Missing required fields.")
@@ -172,10 +201,15 @@ async def save_bookmark(request: Request, data: dict = Body(...)):
     
     dataToMerge = {
         "query": question,
+        "previous_question": previous_question,
         "timestamp": firestore.SERVER_TIMESTAMP,
         "mode": mode,
         "responses": { modelName: response_text }
     }
+    if not previous_question:
+        # A regular run reusing the same document id must not inherit a stale
+        # archived turn from an older follow-up bookmark.
+        dataToMerge["previous_turn"] = {}
 
     # <--- NEU: Quellen hinzufügen, falls vorhanden
     if sources is not None:
@@ -224,6 +258,8 @@ async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
     result_id = str(data.get("resultId") or "").strip()
     consensus_model = str(data.get("consensusModel") or "").strip()[:80]
     model_labels = data.get("modelLabels")
+    previous_question = _clean_previous_question(data.get("previousQuestion"))
+    previous_turn = _sanitize_previous_turn(data.get("previousTurn"))
 
     if not id_token or not question or consensusText is None or differencesText is None:
         raise HTTPException(status_code=400, detail="Missing required fields.")
@@ -238,11 +274,17 @@ async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
     doc_id = re.sub(r'[^a-zA-Z0-9]', '_', doc_id)[:50]
 
     dataToMerge = {
+        "query": question,
+        "previous_question": previous_question,
         "responses": {
             "consensus": consensusText,
             "differences": differencesText
         }
     }
+    if previous_turn is not None:
+        dataToMerge["previous_turn"] = previous_turn
+    else:
+        dataToMerge["previous_turn"] = {}
 
     # Strukturierte Differences whitelisten/kappen (gleiche Validierung wie beim
     # Share-Snapshot) und mitspeichern, damit das Bookmark Verdict, Karten und
@@ -254,7 +296,12 @@ async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
     if sources is not None:
         dataToMerge["sources"] = sources
 
-    if result_id and share_snapshots.pending_result_is_available(
+    if previous_question:
+        # Das Live-Pending-Result des Follow-ups kennt nur die aktuelle Frage.
+        # Ein Bookmark-Share muss spaeter serverseitig neu aufgebaut werden und
+        # darf keinen alten Result-Verweis wiederverwenden.
+        dataToMerge["share_result_id"] = ""
+    elif result_id and share_snapshots.pending_result_is_available(
         uid, result_id, db=db_firestore
     ):
         dataToMerge["share_result_id"] = result_id
@@ -311,7 +358,7 @@ async def prepare_bookmark_share_result(request: Request, data: dict = Body(...)
     responses = bookmark.get("responses")
     responses = responses if isinstance(responses, dict) else {}
     consensus_text = str(responses.get("consensus") or "").strip()
-    question = str(bookmark.get("query") or "").strip()
+    question = _bookmark_display_question(bookmark)
     if not question or not consensus_text:
         raise HTTPException(status_code=400, detail="This bookmark has no consensus result.")
 
