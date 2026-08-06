@@ -290,6 +290,16 @@ _BASE_PRO_JUDGE_BY_PROVIDER = {
 }
 PRO_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_PRO_JUDGE_BY_PROVIDER)
 
+# Modell, das die Chat-Memory laengerer Unterhaltungen fortschreibt
+# (app/services/chat_context.py). Die FAMILIE bleibt die der Consensus-Engine
+# des Turns — bei Eigenschluesseln liegt nur fuer diesen Provider ein Key vor —,
+# das Modell INNERHALB der Familie ist vom Admin ueber Firestore (Feld
+# "chat_memory_models") umstellbar. Basis sind bewusst die guenstigen
+# Standardmodelle: die Aufgabe ist strukturierte Extraktion nach JSON-Schema,
+# kein Denken. Wie die Judge-Dicts in-place mutiert.
+_BASE_CHAT_MEMORY_MODEL_BY_PROVIDER = dict(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
+CHAT_MEMORY_MODEL_BY_PROVIDER = dict(_BASE_CHAT_MEMORY_MODEL_BY_PROVIDER)
+
 # Familien-Prioritaet der Judge-Wahl: primaerer und Fallback-Judge nehmen die
 # erste Familie mit verfuegbarem Key, die nicht die der Consensus-Engine ist.
 # Gemini/OpenAI remain the preferred independent judges. Mistral is a working
@@ -854,6 +864,39 @@ def get_pro_judge_models() -> dict:
     return dict(PRO_JUDGE_MODEL_BY_PROVIDER)
 
 
+def apply_chat_memory_models(overrides: dict | None) -> None:
+    """Setzt das Chat-Memory-Modell je Provider. Ungueltige/fehlende Werte
+    fallen je Provider auf die Basis zurueck. Mutiert das dict in-place."""
+    data = overrides if isinstance(overrides, dict) else {}
+    for provider, base in _BASE_CHAT_MEMORY_MODEL_BY_PROVIDER.items():
+        chosen = str(data.get(provider) or "").strip()
+        if not (chosen and is_valid_judge_model(provider, chosen)):
+            allowed = _provider_allowed_sets().get(provider, set())
+            chosen = next(
+                (
+                    candidate for candidate in (
+                        FREE_DEFAULT_MODEL_BY_PROVIDER.get(provider),
+                        base,
+                        *get_ordered_models(provider),
+                    )
+                    if candidate in allowed
+                ),
+                "",
+            )
+        CHAT_MEMORY_MODEL_BY_PROVIDER[provider] = chosen
+
+
+def get_chat_memory_models() -> dict:
+    return dict(CHAT_MEMORY_MODEL_BY_PROVIDER)
+
+
+def get_chat_memory_model(provider: str) -> str:
+    """Modell, mit dem die Chat-Memory dieser Provider-Familie fortgeschrieben
+    wird. Leer heisst: keine gueltige Wahl — der Aufrufer bleibt dann bei der
+    Consensus-Engine des Turns."""
+    return str(CHAT_MEMORY_MODEL_BY_PROVIDER.get(str(provider or "").strip().lower()) or "")
+
+
 def apply_judge_families(overrides: dict | None) -> None:
     """Setzt das Mapping Engine-Familie -> bevorzugte Judge-Familie. Gueltig
     sind nur bekannte Provider, die sich von der Engine-Familie unterscheiden
@@ -1166,6 +1209,7 @@ def load_models_from_db():
             apply_judge_models(data.get("judge_models"))
             apply_pro_judge_models(data.get("judge_models_pro"))
             apply_judge_families(data.get("judge_families"))
+            apply_chat_memory_models(data.get("chat_memory_models"))
 
             if "consensus" in data:
                 ALLOWED_CONSENSUS_MODELS.clear()
@@ -1214,6 +1258,7 @@ def load_models_from_db():
                 "judge_models": get_judge_models(),
                 "judge_models_pro": get_pro_judge_models(),
                 "judge_families": get_judge_families(),
+                "chat_memory_models": get_chat_memory_models(),
                 "watch_models": {
                     tier: dict(models) for tier, models in WATCH_MODELS_BY_TIER.items()
                 },

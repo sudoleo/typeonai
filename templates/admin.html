@@ -326,7 +326,8 @@
             gap: 12px;
             padding: 5px 0;
         }
-        .judge-row.judge-head {
+        .judge-row.judge-head,
+        .judge-fam-row.judge-head {
             font-size: var(--font-size-xs);
             font-weight: var(--font-weight-bold);
             color: var(--sidebar-text-muted);
@@ -1278,6 +1279,14 @@
             return result;
         }
 
+        function currentChatMemoryModels() {
+            const result = {};
+            document.querySelectorAll('[data-chatmemory-provider]').forEach(select => {
+                if (select.value) result[select.dataset.chatmemoryProvider] = select.value;
+            });
+            return result;
+        }
+
         function currentJudgeFamilies() {
             const result = {};
             document.querySelectorAll('[data-judgefam-engine]').forEach(select => {
@@ -1344,6 +1353,42 @@
             });
 
             renderJudgeFamilies();
+            renderChatMemorySelects();
+        }
+
+        // Chat-Memory je Provider-Familie. Die Familie selbst waehlt der Nutzer
+        // mit der Consensus-Engine — hier steht nur, welches Modell dieser
+        // Familie die Memory laengerer Chats fortschreibt.
+        function renderChatMemorySelects() {
+            const container = document.getElementById('chatMemoryModelsContainer');
+            if (!container) return;
+            const chosenNow = currentChatMemoryModels();
+            container.innerHTML = '';
+            const defaults = meta().chat_memory_defaults || {};
+            const saved = globalModelsData.chat_memory_models || {};
+
+            const head = document.createElement('div');
+            head.className = 'judge-fam-row judge-head';
+            ['Family', 'Chat memory model'].forEach(text => {
+                const cell = document.createElement('span');
+                cell.textContent = text;
+                head.appendChild(cell);
+            });
+            container.appendChild(head);
+
+            providers.forEach(p => {
+                const row = document.createElement('div');
+                row.className = 'judge-fam-row';
+
+                const label = document.createElement('label');
+                label.textContent = p;
+
+                const chosen = chosenNow[p] || saved[p] || defaults[p] || '';
+                row.appendChild(label);
+                row.appendChild(buildJudgeModelSelect(
+                    p, chosen, defaults[p], 'chatmemoryProvider', `Chat memory model for ${p}`));
+                container.appendChild(row);
+            });
         }
 
         function renderJudgeFamilies() {
@@ -1471,6 +1516,7 @@
                 judge_models: currentJudgeModels(),
                 judge_models_pro: currentProJudgeModels(),
                 judge_families: currentJudgeFamilies(),
+                chat_memory_models: currentChatMemoryModels(),
                 watch_models: { free: {}, pro: {} },
                 defaults: {},
                 limits: {}
@@ -2988,6 +3034,22 @@
                     back to Auto if its key is unavailable.
                 </p>
                 <div id="judgeFamiliesContainer">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+
+            <div class="admin-section">
+                <h3>Chat Memory</h3>
+                <p class="section-hint">
+                    Model that compresses older turns of a conversation into the structured memory a
+                    follow-up is answered with. It runs once per turn from the <strong>third</strong> turn
+                    on — a JSON extraction job, not a reasoning one, so a cheap model is usually the right
+                    pick. The <strong>family</strong> always follows the turn's Consensus engine, because
+                    with own API keys only that provider's key is available; you choose the model inside
+                    each family. If the call fails, the server falls back to a deterministic summary
+                    without an LLM.
+                </p>
+                <div id="chatMemoryModelsContainer">
                     <!-- Populated by JavaScript -->
                 </div>
             </div>

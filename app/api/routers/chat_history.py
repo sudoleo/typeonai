@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, StrictBool, field_validator
 
+from app.core import config as cfg
 from app.core.rate_limit import limiter
 from app.core.security import db_firestore, extract_id_token, verify_user_token
 from app.services.chat_store import (
@@ -198,7 +199,13 @@ def _memory_credentials(
             return None, "memory_credentials_missing", provider, engine_model
     elif not api_keys.get(provider):
         return None, "memory_credentials_missing", provider, engine_model
-    return ChatMemoryCompressor(engine_model, api_keys), "", provider, engine_model
+
+    # Die Familie bleibt die der Consensus-Engine — nur fuer sie liegt bei
+    # Eigenschluesseln ein Key vor. Welches Modell dieser Familie die Memory
+    # fortschreibt, entscheidet der Admin (Firestore "chat_memory_models");
+    # ohne gueltige Wahl bleibt es bei der Engine des Turns.
+    memory_model = cfg.get_chat_memory_model(config.provider) or engine_model
+    return ChatMemoryCompressor(memory_model, api_keys), "", provider, memory_model
 
 
 def _raise_store_error(exc: Exception, *, operation: str, uid: str) -> None:

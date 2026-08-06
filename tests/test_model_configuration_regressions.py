@@ -245,6 +245,67 @@ class ExistingModelFlowTests(unittest.TestCase):
         finally:
             cfg.apply_judge_families(snapshot)
 
+    def test_apply_chat_memory_models_keeps_a_valid_model_per_family(self):
+        """Das Chat-Memory-Modell ist je Familie konfigurierbar; ungueltige
+        Werte duerfen nie durchschlagen, sonst haette ein Tippfehler im Admin
+        den Kontext laengerer Chats auf den deterministischen Fallback
+        heruntergezogen."""
+        from app.api.routers.admin import normalize_models_document
+
+        snapshot = cfg.get_chat_memory_models()
+        try:
+            cfg.apply_chat_memory_models({"grok": cfg.GROK_NO_REASONING_MODEL})
+            self.assertEqual(
+                cfg.get_chat_memory_model("grok"), cfg.GROK_NO_REASONING_MODEL
+            )
+            # Provider ohne Eintrag behalten ihre Basis.
+            self.assertEqual(
+                cfg.get_chat_memory_model("openai"),
+                cfg.CHAT_MEMORY_MODEL_BY_PROVIDER["openai"],
+            )
+            # Unbekanntes Modell / unbekannter Provider -> gueltiger Fallback.
+            cfg.apply_chat_memory_models({"grok": "grok-does-not-exist"})
+            self.assertIn(
+                cfg.get_chat_memory_model("grok"), cfg.ALLOWED_GROK_MODELS
+            )
+            self.assertEqual(cfg.get_chat_memory_model("nope"), "")
+
+            # Der Admin-Save normalisiert dasselbe Feld wie die Judges: eine
+            # gueltige Wahl bleibt, eine ungueltige faellt in die Providerliste.
+            base = {
+                "openai": [cfg.DEFAULT_OPENAI_MODEL],
+                "mistral": [cfg.DEFAULT_MISTRAL_MODEL],
+                "anthropic": [cfg.DEFAULT_ANTHROPIC_MODEL],
+                "gemini": [cfg.DEFAULT_GEMINI_MODEL],
+                "deepseek": [cfg.DEFAULT_DEEPSEEK_MODEL],
+                "grok": [cfg.DEFAULT_GROK_MODEL],
+                "premium": [],
+                "consensus": ["Gemini"],
+            }
+            normalized = normalize_models_document({
+                **base,
+                "chat_memory_models": {"openai": "gpt-does-not-exist"},
+            })
+            self.assertEqual(
+                normalized["chat_memory_models"]["openai"], cfg.DEFAULT_OPENAI_MODEL
+            )
+            normalized = normalize_models_document({
+                **base,
+                "chat_memory_models": {"grok": cfg.DEFAULT_GROK_MODEL},
+            })
+            self.assertEqual(
+                normalized["chat_memory_models"]["grok"], cfg.DEFAULT_GROK_MODEL
+            )
+        finally:
+            cfg.apply_chat_memory_models(snapshot)
+
+    def test_admin_template_exposes_the_chat_memory_selection(self):
+        template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
+        self.assertIn("chatMemoryModelsContainer", template)
+        self.assertIn("chat_memory_models: currentChatMemoryModels()", template)
+        self.assertIn("data-chatmemory-provider", template)
+        self.assertIn("renderChatMemorySelects();", template)
+
     def test_judge_engines_resolve_virtual_ids_to_their_api_model(self):
         """Judge-IDs sind interne IDs; der Request muss das API-Modell tragen.
 

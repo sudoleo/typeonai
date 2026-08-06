@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.api.routers import chat as chat_router
 from app.api.routers import chat_history as chat_history_router
+from app.core import config as cfg
 from app.services.chat_context import (
     ChatContextBuildInProgress,
     ChatContextConflict,
@@ -550,8 +551,73 @@ def test_own_key_memory_credentials_never_resolve_developer_keys(monkeypatch):
 
     assert reason == ""
     assert provider == "OpenAI"
-    assert model == "OpenAI"
+    # Die Familie folgt der Consensus-Engine (nur fuer sie liegt ein
+    # Eigenschluessel vor); das Modell kommt aus der Admin-Konfiguration.
+    assert model == cfg.get_chat_memory_model("openai")
+    assert compressor.engine_model == model
     assert compressor.api_keys == {"OpenAI": "user-secret"}
+
+
+def test_admin_chat_memory_model_replaces_the_turn_engine_within_its_family(monkeypatch):
+    """Der Admin waehlt das Memory-Modell, der Nutzer die Familie."""
+    monkeypatch.setattr(
+        chat_history_router,
+        "resolve_consensus_engine_model",
+        lambda _model: SimpleNamespace(provider="anthropic"),
+    )
+    monkeypatch.setattr(
+        cfg,
+        "CHAT_MEMORY_MODEL_BY_PROVIDER",
+        {**cfg.CHAT_MEMORY_MODEL_BY_PROVIDER, "anthropic": "claude-haiku-4-5-20251001"},
+    )
+    payload = chat_history_router.ContextBuildRequest(
+        useOwnKeys=True,
+        memory_api_key="user-secret",
+    )
+
+    compressor, reason, provider, model = chat_history_router._memory_credentials(
+        UID,
+        {"consensus_model": "Anthropic-Pro"},
+        payload,
+        chat_id=CHAT_ID,
+        turn_id=TURN_3,
+    )
+
+    assert reason == ""
+    assert provider == "Anthropic"
+    assert model == "claude-haiku-4-5-20251001"
+    assert compressor.engine_model == "claude-haiku-4-5-20251001"
+    # Der Eigenschluessel bleibt der der gewaehlten Familie.
+    assert compressor.api_keys == {"Anthropic": "user-secret"}
+
+
+def test_without_a_configured_chat_memory_model_the_turn_engine_stays(monkeypatch):
+    monkeypatch.setattr(
+        chat_history_router,
+        "resolve_consensus_engine_model",
+        lambda _model: SimpleNamespace(provider="grok"),
+    )
+    monkeypatch.setattr(
+        cfg,
+        "CHAT_MEMORY_MODEL_BY_PROVIDER",
+        {**cfg.CHAT_MEMORY_MODEL_BY_PROVIDER, "grok": ""},
+    )
+    payload = chat_history_router.ContextBuildRequest(
+        useOwnKeys=True,
+        memory_api_key="user-secret",
+    )
+
+    _compressor, reason, provider, model = chat_history_router._memory_credentials(
+        UID,
+        {"consensus_model": "Grok-Pro"},
+        payload,
+        chat_id=CHAT_ID,
+        turn_id=TURN_3,
+    )
+
+    assert reason == ""
+    assert provider == "Grok"
+    assert model == "Grok-Pro"
 
 
 def test_developer_memory_credentials_only_read_consumed_usage(monkeypatch):

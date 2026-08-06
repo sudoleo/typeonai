@@ -778,18 +778,19 @@ def normalize_models_document(data: dict) -> dict:
     # Differences-Judges je Provider: Firestore speichert immer eine vollstaendige
     # gueltige Zuordnung. Fallbacks stammen aus derselben Providerliste statt
     # unsichtbar ein hardcodiertes Modell wieder einzuschleusen.
-    for field in ("judge_models", "judge_models_pro"):
+    # "chat_memory_models" laeuft bewusst durch dieselbe Normalisierung: es ist
+    # dieselbe Form (ein gueltiges Modell je Provider-Familie).
+    for field, base_map in (
+        ("judge_models", cfg._BASE_DIFFERENCES_JUDGE_BY_PROVIDER),
+        ("judge_models_pro", cfg._BASE_PRO_JUDGE_BY_PROVIDER),
+        ("chat_memory_models", cfg._BASE_CHAT_MEMORY_MODEL_BY_PROVIDER),
+    ):
         incoming_judges = normalized.get(field) or {}
         clean_judges = {}
         for provider in PROVIDER_KEYS:
             chosen = cfg.canonical_model_id(incoming_judges.get(provider), provider)
             allowed = list(normalized.get(provider) or [])
             if not (chosen and chosen in allowed):
-                base_map = (
-                    cfg._BASE_PRO_JUDGE_BY_PROVIDER
-                    if field == "judge_models_pro"
-                    else cfg._BASE_DIFFERENCES_JUDGE_BY_PROVIDER
-                )
                 candidates = (
                     base_map.get(provider),
                     clean_defaults.get(provider),
@@ -854,6 +855,7 @@ def _model_dependencies(data: dict) -> dict:
     for field, label in (
         ("judge_models", "Standard judge"),
         ("judge_models_pro", "Pro judge"),
+        ("chat_memory_models", "Chat memory"),
     ):
         for provider, model in (data.get(field) or {}).items():
             add(provider, model, label)
@@ -898,6 +900,7 @@ def _admin_meta(data: dict) -> dict:
         "deep_think_fallback": cfg._BASE_DEEP_THINK_CONSENSUS_MODEL,
         "judge_defaults": dict(cfg._BASE_DIFFERENCES_JUDGE_BY_PROVIDER),
         "judge_pro_defaults": dict(cfg._BASE_PRO_JUDGE_BY_PROVIDER),
+        "chat_memory_defaults": dict(cfg._BASE_CHAT_MEMORY_MODEL_BY_PROVIDER),
         "judge_priority": list(cfg.JUDGE_FAMILY_PRIORITY),
         "preset_definitions": list(cfg.CONSENSUS_PRESET_DEFINITIONS),
     }
@@ -968,6 +971,7 @@ def _validate_admin_models_input(data: dict, normalized: dict) -> None:
     for field, label in (
         ("judge_models", "Standard judge"),
         ("judge_models_pro", "Pro judge"),
+        ("chat_memory_models", "Chat memory model"),
     ):
         incoming = data.get(field)
         if not isinstance(incoming, dict):
@@ -1017,6 +1021,7 @@ def get_models(request: Request):
                 "judge_models": cfg.get_judge_models(),
                 "judge_models_pro": cfg.get_pro_judge_models(),
                 "judge_families": cfg.get_judge_families(),
+                "chat_memory_models": cfg.get_chat_memory_models(),
                 "limits": get_limits_config()
             }
         data["meta"] = _admin_meta(data)
@@ -1094,6 +1099,7 @@ def update_models(request: Request, data: dict = Body(...)):
             "judge_models": normalized["judge_models"],
             "judge_models_pro": normalized["judge_models_pro"],
             "judge_families": normalized["judge_families"],
+            "chat_memory_models": normalized["chat_memory_models"],
             "limits": get_limits_config()
         })
 
