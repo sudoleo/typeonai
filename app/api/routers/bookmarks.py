@@ -282,9 +282,34 @@ def load_bookmark_conversation(
                 "has_more": False,
             }
 
-        page = _chat_store().list_turn_details(
-            uid, chat_id, cursor=cursor, limit=limit, status="completed"
-        )
+        store = _chat_store()
+        try:
+            page = store.list_turn_details(
+                uid, chat_id, cursor=cursor, limit=limit, status="completed"
+            )
+        except (ChatNotFound, InvalidChatCursor, ChatCursorUnavailable):
+            raise
+        except Exception:
+            # The compact path is an optimisation, not a correctness gate. If
+            # a Firestore/runtime incompatibility breaks the collection reads,
+            # fall back to the older owner-bound detail path so the browser
+            # never silently collapses a full chat to two bookmark snapshots.
+            logging.warning(
+                "Optimized bookmark transcript read failed; using detail fallback",
+                exc_info=True,
+            )
+            metadata_page = store.list_turns(
+                uid, chat_id, cursor=cursor, limit=limit
+            )
+            page = {
+                "turns": [
+                    store.get_turn(uid, chat_id, turn["id"])
+                    for turn in metadata_page["turns"]
+                    if turn.get("status") == "completed"
+                ],
+                "next_cursor": metadata_page.get("next_cursor"),
+                "has_more": metadata_page.get("has_more") is True,
+            }
         return {
             "status": "success",
             "chat_id": chat_id,

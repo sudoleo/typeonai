@@ -109,7 +109,10 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 - [ ] Ein altes Bookmark ohne `chat_id` bleibt im Legacy-One-Hop-Pfad. Ein
       Chat-Bookmark lädt dagegen alle completed Turns paginiert und stellt
       ausschließlich seine letzte completed Chat-/Turn-Basis für ein weiteres
-      Follow-up wieder her. Clear und Logout leeren aktive, pending, Context-
+      Follow-up wieder her. Bei einem absichtlichen Transcript-Fehler bleibt
+      die gespeicherte Chat-Bindung fortsetzbar und die reduzierte Anzeige wird
+      erklärt; ohne nutzbaren Frage-/Consensus-Kontext nennt das Input-Feld den
+      nächsten Lauf ausdrücklich einen neuen Vergleich. Clear und Logout leeren aktive, pending, Context-
       und Bookmark-Zuordnung vollständig.
 - [ ] Eine Premium-Consensus-Engine bleibt für ein Free-Konto gesperrt, auch
       mit aktivem Own-Key-Schalter: 403, kein Engine-Call, kein Turn-Write.
@@ -174,7 +177,8 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 - [ ] Mobile Composer: Plus, Modell-Picker und Send-Pfeil liegen auf derselben
       horizontalen Achse; der Composer bleibt am unteren Viewport-Rand fixiert.
       Das Fragefeld wächst beim Tippen bis 180 px, scrollt danach intern und
-      schrumpft beim Löschen wieder auf seine Ausgangshöhe.
+      schrumpft beim Löschen wieder auf seine Ausgangshöhe. Enter auf der
+      Handy-Tastatur fügt einen Absatz ein und sendet nicht.
       Am vollständigen Scrollende liegen die geschlossenen Detail-Tabs direkt
       darüber, ohne Leerraum oder verdeckten Inhalt.
 - [ ] Quellen-Fussnoten im Consensus stehen hinter Punkt, Frage- oder
@@ -347,6 +351,8 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 ## Bookmarks / Sidebar
 - [ ] Models und Bookmarks beginnen auf derselben Icon-/Textachse und verwenden
       dieselbe Titelgröße/-stärke; im Gastzustand bleibt Bookmarks deaktiviert.
+- [ ] Nach einer fertigen Antwort öffnet „Models“ den unsichtbaren Picker nicht:
+      ein Hinweis verlangt zuerst „Ask a follow-up“ oder „New comparison“.
 - [ ] Bookmarks laden/aufklappen, Chat-Suche filtert.
 - [ ] Turn 1, Turn 2, Turn 3 und weitere Follow-ups aktualisieren genau ein
       Sidebar-Bookmark. Nach Reload öffnet dieses eine Bookmark den vollständigen

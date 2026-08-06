@@ -1446,12 +1446,55 @@ function normalizeConversationTurn(turn) {
   return { ...turn, turn_id: turn.id || turn.turn_id || "" };
 }
 
+function bookmarkFallbackTurn(bookmark) {
+  const question = bookmarkDisplayQuestion(bookmark);
+  const responses = bookmark?.responses && typeof bookmark.responses === "object"
+    ? bookmark.responses
+    : {};
+  const consensus = String(responses.consensus || "").trim();
+  if (!question || !consensus) return null;
+
+  const storedLabels = bookmark?.model_labels && typeof bookmark.model_labels === "object"
+    ? bookmark.model_labels
+    : {};
+  const sources = Array.isArray(bookmark?.sources) ? bookmark.sources : [];
+  const modelAnswers = {};
+  BOOKMARK_MODEL_PRESENTATION.forEach(({ provider }) => {
+    const answer = String(responses[provider] || "").trim();
+    if (!answer) return;
+    modelAnswers[provider] = {
+      provider,
+      model_label: String(storedLabels[provider] || provider),
+      answer,
+      sources
+    };
+  });
+  return {
+    turn_id: String(bookmark?.turn_id || ""),
+    status: "completed",
+    question,
+    mode: String(bookmark?.mode || ""),
+    consensus_model: String(bookmark?.consensus_model || ""),
+    consensus,
+    differences: String(responses.differences || ""),
+    differences_data: responses.differences_data || null,
+    sources,
+    model_answers: modelAnswers
+  };
+}
+
 function materializeConversationBookmark(bookmark, conversationTurns) {
   const turns = (Array.isArray(conversationTurns) ? conversationTurns : [])
     .map(normalizeConversationTurn)
     .filter(Boolean)
     .sort((left, right) => Number(left.position || 0) - Number(right.position || 0));
-  if (!turns.length) return { bookmark, historyTurns: [], currentTurn: null };
+  if (!turns.length) {
+    return {
+      bookmark,
+      historyTurns: [],
+      currentTurn: bookmarkFallbackTurn(bookmark)
+    };
+  }
 
   const currentTurn = turns[turns.length - 1];
   const responses = {
@@ -1485,13 +1528,15 @@ function materializeConversationBookmark(bookmark, conversationTurns) {
   };
 }
 
-async function loadBookmarkConversation(bookmark) {
+async function loadBookmarkConversationOnce(bookmark) {
   if (!bookmark?.chat_id || !auth.currentUser) return [];
   const requestUser = auth.currentUser;
   const requestUid = requestUser.uid;
   const requestGeneration = authGeneration;
   const idToken = await requestUser.getIdToken(false);
   const turns = [];
+  const seenTurnIds = new Set();
+  const seenCursors = new Set();
   let cursor = "";
   do {
     const path = "/bookmarks/" + encodeURIComponent(bookmark.id)
@@ -1504,14 +1549,43 @@ async function loadBookmarkConversation(bookmark) {
     if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
       throw new Error("Authentication changed while loading bookmark");
     }
-    if (!response.ok) throw new Error(data.detail || "Could not load bookmark conversation");
-    turns.push(...(Array.isArray(data.turns) ? data.turns : []));
-    cursor = data.has_more ? String(data.next_cursor || "") : "";
+    if (!response.ok) {
+      const error = new Error(data.detail || "Could not load bookmark conversation");
+      error.retryable = response.status === 429 || response.status >= 500;
+      throw error;
+    }
+    if (String(data.chat_id || "") !== String(bookmark.chat_id || "")) {
+      throw new Error("Bookmark conversation did not match the saved chat");
+    }
+    (Array.isArray(data.turns) ? data.turns : []).forEach(turn => {
+      const turnId = String(turn?.id || turn?.turn_id || "");
+      if (turnId && seenTurnIds.has(turnId)) return;
+      if (turnId) seenTurnIds.add(turnId);
+      turns.push(turn);
+    });
+    const nextCursor = data.has_more ? String(data.next_cursor || "") : "";
+    if (data.has_more && !nextCursor) {
+      throw new Error("Bookmark conversation was incomplete");
+    }
+    if (nextCursor && seenCursors.has(nextCursor)) {
+      throw new Error("Bookmark conversation pagination repeated a page");
+    }
+    if (nextCursor) seenCursors.add(nextCursor);
+    cursor = nextCursor;
   } while (cursor);
   return turns;
 }
 
-function loadSingleBookmarkUI(sourceBookmark, conversationTurns = []) {
+async function loadBookmarkConversation(bookmark) {
+  try {
+    return await loadBookmarkConversationOnce(bookmark);
+  } catch (error) {
+    if (!error?.retryable) throw error;
+    return await loadBookmarkConversationOnce(bookmark);
+  }
+}
+
+function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = {}) {
     const materialized = materializeConversationBookmark(sourceBookmark, conversationTurns);
     const bookmark = materialized.bookmark;
     let bookmarkCitationModels = [];
@@ -1528,12 +1602,13 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = []) {
     } else if (bookmark?.previous_turn) {
         window.App?.followup?.renderStoredTurn?.(bookmark.previous_turn);
     }
-    if (materialized.currentTurn && bookmark.chat_id) {
-        window.App?.chatSession?.restoreCompletedChat?.(
+    const continuationTurn = materialized.currentTurn;
+    const authoritativeChatRestored = continuationTurn && bookmark.chat_id
+      ? window.App?.chatSession?.restoreCompletedChat?.(
           bookmark.chat_id,
-          materialized.currentTurn.turn_id
-        );
-    }
+          continuationTurn.turn_id
+        ) === true
+      : false;
     window.App?.setAppTitle?.(displayQuestion);
     // Never let Share/Watch target a run that was displayed previously.
     // A consensus bookmark gets a reusable server-side snapshot on Share/Watch.
@@ -1668,12 +1743,14 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = []) {
             // unter der wiederhergestellten Antwort stehen.
             window.updateAgentModeUI?.();
             window.App?.consensusPipeline?.renderProvenance?.();
-            if (materialized.currentTurn) {
+            if (continuationTurn) {
                 window.App?.followup?.offer?.(
                   displayQuestion,
                   consensusText,
-                  materialized.currentTurn
+                  continuationTurn
                 );
+            } else {
+                window.App?.followup?.markContinuationUnavailable?.();
             }
         } else {
             window.hideConsensusOutput?.();
@@ -1717,6 +1794,9 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = []) {
             window.showBookmarkAttachments(bookmark.attachments || []);
         }
     }
+    if (!continuationTurn) {
+        window.App?.followup?.markContinuationUnavailable?.();
+    }
     // === NEU: Citation-Meta immer nach dem Rendern setzen ===
     try {
         let includedModels = bookmarkCitationModels;
@@ -1740,6 +1820,12 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = []) {
     } catch (err) {
         console.warn("Could not rebuild consensusCitationMeta from bookmark:", err);
         window.consensusCitationMeta = null;
+    }
+    if (options.conversationLoadFailed) {
+        const message = authoritativeChatRestored
+          ? "Some earlier messages could not be displayed. Follow-ups still use the saved chat context."
+          : "The full saved conversation could not be loaded. Only the visible answer is available as follow-up context.";
+        window.App?.showPopup?.(message);
     }
 }
 
@@ -1822,13 +1908,15 @@ window.openBookmark = async function (bookmarkId) {
   try {
     const bookmark = await loadBookmarkDetail(bookmarkId);
     let conversationTurns = [];
+    let conversationLoadFailed = false;
     try {
       conversationTurns = await loadBookmarkConversation(bookmark);
     } catch (conversationError) {
-      console.warn("Could not load full bookmark conversation; using latest saved turn.", conversationError);
+      conversationLoadFailed = Boolean(bookmark?.chat_id);
+      console.warn("Could not load full bookmark conversation; using saved continuation data.", conversationError);
     }
     openedBookmarkId = bookmarkId;
-    loadSingleBookmarkUI(bookmark, conversationTurns);
+    loadSingleBookmarkUI(bookmark, conversationTurns, { conversationLoadFailed });
     trackAppEvent("app_bookmark_opened");
   } catch (error) {
     console.error("Error opening bookmark:", error);

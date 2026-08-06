@@ -65,6 +65,7 @@
 
   const DEFAULT_INPUT_PLACEHOLDER = "Enter your question";
   const FOLLOWUP_INPUT_PLACEHOLDER = "Ask a follow-up question";
+  const UNAVAILABLE_INPUT_PLACEHOLDER = "Start a new comparison — saved context unavailable";
 
   // Jede archivierte Schublade braucht eine eigene ID fuer aria-controls.
   // Der Verlauf lebt im selben Dokument wie der Live-Renderbaum, dessen IDs
@@ -82,12 +83,17 @@
     // True while the current query continues the preceding exchange. The flag
     // is reset by offer(); completed turns may continue indefinitely.
     followupInFlight: false,
+    continuationUnavailable: false,
     // Was consume() zuletzt ausgegeben hat. Nur dafuer da, den Kontext
     // zurueckzuholen, wenn der Lauf gar nicht stattgefunden hat.
     spentExchange: null,
 
     isArmed() {
       return !!(this.armed && this.lastExchange);
+    },
+
+    isAwaitingChoice() {
+      return !!(this.lastExchange && !this.armed);
     },
 
     previousQuestionForBookmark() {
@@ -401,6 +407,7 @@
 
     offer(question, consensusText, turn = null) {
       if (!question || !consensusText) return;
+      this.continuationUnavailable = false;
       this.followupInFlight = false;
       this.lastExchange = {
         question: question,
@@ -447,6 +454,16 @@
       this.armed = false;
       this.followupInFlight = false;
       this.spentExchange = null;
+      this.continuationUnavailable = false;
+      this.render();
+    },
+
+    markContinuationUnavailable() {
+      this.lastExchange = null;
+      this.armed = false;
+      this.followupInFlight = false;
+      this.spentExchange = null;
+      this.continuationUnavailable = true;
       this.render();
     },
 
@@ -498,7 +515,11 @@
       const armed = !!(this.armed && this.lastExchange);
       const input = document.getElementById("questionInput");
       if (input) {
-        input.placeholder = armed ? FOLLOWUP_INPUT_PLACEHOLDER : DEFAULT_INPUT_PLACEHOLDER;
+        input.placeholder = armed
+          ? FOLLOWUP_INPUT_PLACEHOLDER
+          : (this.continuationUnavailable
+              ? UNAVAILABLE_INPUT_PLACEHOLDER
+              : DEFAULT_INPUT_PLACEHOLDER);
       }
 
       if (armed && chipBar) {

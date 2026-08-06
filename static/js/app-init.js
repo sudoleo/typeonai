@@ -837,9 +837,13 @@
         });
 
         // Event-Listener für Eingabefelder und Buttons
-        // Frage per Enter (ohne Zeilenumbruch) absenden
+        // Desktop: Enter sendet, Shift+Enter macht einen Absatz. Auf kleinen
+        // Handy-Layouts bleibt Enter immer die normale Absatz-Taste.
         document.getElementById("questionInput").addEventListener("keydown", function (event) {
           if (event.key === "Enter" && !event.shiftKey) {
+            if (window.matchMedia("(max-width: 768px)").matches || event.isComposing) {
+              return;
+            }
             if (window.isRunActive && window.isRunActive()) {
               event.preventDefault();
               return;
@@ -1184,6 +1188,13 @@
         document.getElementById("sidebarModelPicker")?.addEventListener("click", function (event) {
           event.preventDefault();
           event.stopPropagation();
+          if (window.App.followup?.isAwaitingChoice?.() === true) {
+            window.App?.showPopup?.(
+              "Choose “Ask a follow-up” or “New comparison” before changing models."
+            );
+            trackAppEvent("app_model_picker_blocked", { reason: "followup_choice" });
+            return;
+          }
           const consensusSelect = document.getElementById("consensusModelDropdown");
           if (!consensusSelect) return;
 

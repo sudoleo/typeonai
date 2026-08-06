@@ -64,7 +64,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP) und übergibt sie als nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). Nach einem tatsächlich neu angelegten E-Mail/Passwort-Konto plant `/register` außerdem einen PII-freien, nicht-blockierenden Telegram-Admin-Alert ein; `/confirm-registration` erkennt damit auch gerade neu angelegte Google-Konten serverseitig. Normale Logins, Reloads und neutrale Antworten für bereits bestehende Adressen bleiben ruhig. |
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/delete_account` räumt die Nutzer-Subcollections einzeln ab, weil Firestore nicht kaskadiert; Chats brauchen dafür eine eigene dreistufige Kaskade über `ChatStore.delete_all_chats` (`chats` → `turns` → `model_answers`, plus `context_versions`), sonst überlebten Fragen und vollständige Modellantworten die Kontolöschung als unerreichbare Waisen (DSGVO Art. 17). `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
-| `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; das läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und kostet damit `2 + N` statt `2 + 8N` Firestore-Reads. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. `DELETE /bookmark` liest die Chat-Bindung **vor** dem Löschen und räumt den gebundenen Chat per `ChatStore.delete_chat` mit ab — best effort, damit eine fehlgeschlagene Kaskade eine bereits erfolgte Löschung nicht in einen Retry verwandelt. Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. |
+| `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und kostet damit `2 + N` statt `2 + 8N` Firestore-Reads. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. `DELETE /bookmark` liest die Chat-Bindung **vor** dem Löschen und räumt den gebundenen Chat per `ChatStore.delete_chat` mit ab — best effort, damit eine fehlgeschlagene Kaskade eine bereits erfolgte Löschung nicht in einen Retry verwandelt. Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (`?version=<run_id>`, rendert Position Map + Agreement-Kurve über `services/history_view.py` — dieselbe Darstellung wie die Watch-Seiten, bewusst nur bis zum gewählten Snapshot), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe`; Admin-CRUD unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
@@ -725,7 +725,10 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   (ein Klick bricht dann via `cancelCurrentConsensus` ab).
 - **`app-init.js`** — das gesamte `initApp()`: Theme, Usage/Limits + User-Status,
   Response-Box-Toggles, Sidebar/Layout, Modals, Tooltips, Evidence-Rendering,
-  API-Key-Test. `clearResponseBoxes({silent?})` entfernt außerdem den kompletten
+  API-Key-Test. Bis 768 px erzeugt Enter im Composer immer einen Absatz; nur
+  Desktop-Enter sendet. Der Sidebar-Eintrag „Models“ erklärt bei geschlossenem
+  Composer-Gate zuerst die notwendige Follow-up-/Neuvergleich-Wahl, statt einen
+  unsichtbaren Picker zu öffnen. `clearResponseBoxes({silent?})` entfernt außerdem den kompletten
   fragebezogenen Share-/Citation-/Evidence-State. Läuft als letztes Script,
   ruft `initApp()` direkt auf.
 
@@ -749,8 +752,14 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Consensus-Dual-Writes dasselbe Sidebar-Element. Chat-gebundene Bookmarks laden
   beim Öffnen alle completed Transcript-Seiten, rendern alle Vorgänger per
   `renderStoredTurns()` und stellen die letzte completed Chat-/Turn-Basis wieder
-  her. Legacy-Bookmarks ohne `chat_id` verwenden weiter `previous_turn` als
-  Ein-Turn-Fallback. Sidebar, Thread-Kopf, Titel und Citation verwenden die
+  her. Transiente 429/5xx werden einmal wiederholt; fehlende oder zyklische
+  Cursor gelten nicht als vollständiger Verlauf. Scheitert nur die Anzeige des
+  Transcripts, bleibt die gespeicherte Chat-/Turn-Bindung autoritative
+  Fortsetzungsbasis und ein Popup erklärt die reduzierte Anzeige.
+  Legacy-Bookmarks ohne `chat_id` verwenden weiter `previous_turn` für die
+  Anzeige und ihre letzte Frage/Consensus-Antwort als Ein-Turn-Kontext. Fehlt
+  selbst dieser Kontext, nennt der Input den nächsten Lauf ausdrücklich einen
+  neuen Vergleich. Sidebar, Thread-Kopf, Titel und Citation verwenden die
   jeweils letzte completed Frage. Nach einer
   E-Mail-Registrierung zeigt
   das Auth-Modal einen eigenen Verifizierungs-Erfolgszustand statt eines Browser-Alerts.
@@ -841,6 +850,10 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   verschwinden; sichtbar bleibt nur die kompakte Entscheidung „New comparison“
   / „Ask a follow-up“. „New comparison“ setzt den normalen leeren Composer zurück;
   „Ask a follow-up“ öffnet ihn mit Kontext-Chip.
+  Ein Klick auf „Models“ in diesem Choice-State zeigt den Grund der Sperre; die
+  Modellwahl öffnet erst nach einer der beiden Entscheidungen. Ein restauriertes
+  Bookmark bietet denselben Choice-State an, sobald Frage und Consensus als
+  Kontext vorhanden sind.
   Die Login-Schranke (`updateQuestionInputAccess`) bleibt die stärkere
   Bedingung und ruft `syncInputLock()` am Ende selbst auf, sonst öffnete sie
   das Feld nach jedem Lauf wieder. Aktivieren erzeugt den
@@ -2170,7 +2183,8 @@ ersten Check statt eines leeren Consensus-Panels.
   `window.App.reportCriticalError`.
 - **`window.App.followup`** (definiert in `consensus-run.js`) ist der
   Follow-up-Kontext- und Verlauf-State (`offer/arm/discard/consume/reset/render`,
-  `isArmed/archiveCurrentExchange/renderStoredTurn/renderStoredTurns/clearHistory`).
+  `isArmed/isAwaitingChoice/markContinuationUnavailable/archiveCurrentExchange/
+  renderStoredTurn/renderStoredTurns/clearHistory`).
   `query-send.js` (consume + archivieren beim Senden), `app-init.js` (reset in
   `clearResponseBoxes`) und `user-tier.js` (render bei Tier-Wechsel) hängen
   daran; DOM-Ziele sind `#composerGate`, `#followupChipBar` und

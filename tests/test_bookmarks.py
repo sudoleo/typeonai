@@ -453,6 +453,62 @@ def test_chat_bookmark_conversation_returns_complete_owner_bound_turns():
     assert [turn["question"] for turn in response.json()["turns"]] == ["First", "Third"]
 
 
+def test_chat_bookmark_conversation_falls_back_without_losing_middle_turns():
+    bookmark_id = "stable_chat_bookmark"
+    chat_id = "c" * 32
+    fake_db = FakeBookmarkDatabase({
+        "uid-1": {bookmark_id: {"query": "Fourth", "chat_id": chat_id}},
+    })
+    turn_ids = [str(index) * 32 for index in range(1, 5)]
+
+    class FallbackChatStore:
+        def list_turn_details(self, *_args, **_kwargs):
+            raise RuntimeError("optimized collection read unavailable")
+
+        def list_turns(self, uid, requested_chat_id, *, cursor, limit):
+            assert (uid, requested_chat_id, cursor, limit) == (
+                "uid-1", chat_id, "", 50,
+            )
+            return {
+                "turns": [
+                    {"id": turn_id, "status": "completed"}
+                    for turn_id in turn_ids
+                ],
+                "next_cursor": None,
+                "has_more": False,
+            }
+
+        def get_turn(self, uid, requested_chat_id, turn_id):
+            index = turn_ids.index(turn_id) + 1
+            return {
+                "id": turn_id,
+                "status": "completed",
+                "position": index,
+                "question": f"Question {index}",
+                "consensus": f"Answer {index}",
+                "model_answers": {},
+            }
+
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(bookmarks_router.router)
+    app.add_middleware(CustomSecurityMiddleware)
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", fake_db),
+        patch.object(bookmarks_router, "_chat_store", return_value=FallbackChatStore()),
+    ):
+        response = TestClient(app).get(
+            f"/bookmarks/{bookmark_id}/conversation?limit=50",
+            headers={"Authorization": "Bearer token"},
+        )
+
+    assert response.status_code == 200
+    assert [turn["question"] for turn in response.json()["turns"]] == [
+        "Question 1", "Question 2", "Question 3", "Question 4",
+    ]
+
+
 def test_legacy_consensus_bookmark_gets_new_share_result():
     bookmark_id = "V2h5Pw__"
     bookmark_ref = FakeBookmarkRef(
@@ -554,7 +610,7 @@ def test_bookmark_frontend_prepares_share_and_watch_result():
     assert "resolveCurrentShareResultId" in watch
 
 
-def test_bookmark_frontend_restores_followup_as_two_complete_turns():
+def test_bookmark_frontend_restores_every_turn_and_keeps_a_context_fallback():
     root = Path(__file__).resolve().parents[1]
     firebase = (root / "static" / "firebase.js").read_text(encoding="utf-8")
     query_send = (root / "static" / "js" / "query-send.js").read_text(encoding="utf-8")
@@ -564,13 +620,22 @@ def test_bookmark_frontend_restores_followup_as_two_complete_turns():
     assert "window.App?.setThreadQuestion?.(displayQuestion);" in firebase
     assert "renderStoredTurns?.(materialized.historyTurns)" in firebase
     assert '"/conversation?limit=50"' in firebase
+    assert "function loadBookmarkConversationOnce(bookmark)" in firebase
+    assert "Bookmark conversation was incomplete" in firebase
+    assert "Bookmark conversation pagination repeated a page" in firebase
+    assert "function bookmarkFallbackTurn(bookmark)" in firebase
     assert "restoreCompletedChat?.(" in firebase
+    assert "continuationTurn.turn_id" in firebase
+    assert "followup?.offer?.(" in firebase
+    assert "markContinuationUnavailable?.()" in firebase
+    assert "Follow-ups still use the saved chat context" in firebase
     assert "window.App.bookmarkSession" in firebase
     assert "question: displayQuestion" in firebase
     assert query_send.count("bookmarkPreviousQuestion)") == 6
     assert "previousQuestion: bookmarkPreviousQuestion" in consensus_run
     assert "previousTurn: bookmarkPreviousTurn" in consensus_run
     assert "buildStoredAgreement(differencesData)" in consensus_run
+    assert "Start a new comparison — saved context unavailable" in consensus_run
 
 
 def test_bookmark_restore_uses_historical_model_labels_without_mutating_picker_state():

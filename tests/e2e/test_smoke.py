@@ -194,6 +194,34 @@ def test_question_input_grows_and_caps_on_desktop_and_mobile(app_page):
     assert reset["height"] == base_height
     assert reset["overflowY"] == "hidden"
 
+    input_box.fill("First line")
+    input_box.press("Enter")
+    expect(input_box).to_have_value("First line\n")
+
+
+def test_locked_composer_explains_models_and_unavailable_saved_context(app_page):
+    app_page.evaluate(
+        """() => window.App.followup.offer(
+          "Saved question",
+          "Saved consensus",
+          { question: "Saved question", consensus: "Saved consensus" }
+        )"""
+    )
+    expect(app_page.locator("#composerGate")).to_be_visible()
+    app_page.locator("#sidebarModelPicker").click()
+    expect(app_page.locator(".explanation-popup")).to_contain_text(
+        "before changing models"
+    )
+    expect(
+        app_page.locator("#consensusModelDropdown").locator("xpath=..").locator(".model-picker-menu")
+    ).not_to_have_class(re.compile(r"\bis-open\b"))
+
+    app_page.evaluate("() => window.App.followup.markContinuationUnavailable()")
+    expect(app_page.locator("#questionInput")).to_be_visible()
+    expect(app_page.locator("#questionInput")).to_have_attribute(
+        "placeholder", "Start a new comparison — saved context unavailable"
+    )
+
 
 def test_latex_is_typeset_after_markdown_rendering(app_page):
     result = app_page.evaluate(
