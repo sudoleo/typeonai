@@ -15,6 +15,10 @@ data/benchmark/runs/
 !data/benchmark/mmlu_pro_disagreement_v1.json
 !data/benchmark/mmlu_pro_random_*.json
 
+# Testfixtures gehoeren ins Repo – ohne sie ist der Test in jedem frischen
+# Clone rot, ebenfalls trotz der globalen *json-Regel oben.
+!tests/fixtures/*.json
+
 # Recording assets and local video generation tooling
 recordings/
 recording/

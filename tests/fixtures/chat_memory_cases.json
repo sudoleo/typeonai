@@ -1,0 +1,47 @@
+[
+  {
+    "name": "pronoun_reference",
+    "category": "decisions",
+    "memory_text": "The user chose the second option: deploy the solar array on the warehouse roof.",
+    "recent_question": "Which solar deployment should we use?",
+    "recent_consensus": "Option two is the warehouse-roof array.",
+    "current_question": "Does it still work in winter?",
+    "expected_signals": ["second option", "warehouse roof", "winter"]
+  },
+  {
+    "name": "numbers_and_units",
+    "category": "constraints",
+    "memory_text": "The approved budget is EUR 12,500 and the deadline is 2026-11-30.",
+    "recent_question": "Confirm the delivery constraints.",
+    "recent_consensus": "Do not exceed EUR 12,500; deliver by 2026-11-30.",
+    "current_question": "Can the scope fit?",
+    "expected_signals": ["12,500", "2026-11-30", "Do not exceed"]
+  },
+  {
+    "name": "negation_and_preference",
+    "category": "user_preferences",
+    "memory_text": "The user does not want email notifications and prefers Telegram only.",
+    "recent_question": "How should alerts be delivered?",
+    "recent_consensus": "Use Telegram only; do not send email.",
+    "current_question": "Set that up.",
+    "expected_signals": ["does not want email", "Telegram only", "do not send email"]
+  },
+  {
+    "name": "open_question",
+    "category": "open_questions",
+    "memory_text": "Open question: whether legal review is required before launch.",
+    "recent_question": "What remains unresolved?",
+    "recent_consensus": "The legal-review requirement is still unresolved.",
+    "current_question": "What should we investigate next?",
+    "expected_signals": ["Open question", "legal review", "still unresolved"]
+  },
+  {
+    "name": "later_correction",
+    "category": "corrections",
+    "memory_text": "Correction: the event city is Hamburg; the earlier Berlin value is superseded.",
+    "recent_question": "Where will the event happen?",
+    "recent_consensus": "The corrected location is Hamburg, not Berlin.",
+    "current_question": "Book a venue there.",
+    "expected_signals": ["Hamburg", "superseded", "not Berlin"]
+  }
+]
