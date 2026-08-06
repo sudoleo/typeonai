@@ -296,6 +296,107 @@ def test_followup_consensus_updates_one_stable_chat_bookmark():
     assert bookmark["responses"]["consensus"] == "Second consensus"
 
 
+def test_bookmark_name_stays_the_first_question_of_the_conversation():
+    """Der Sidebar-Name gehoert der ERSTEN Frage; `query` wandert weiter."""
+    bookmark_id = "stable_chat_bookmark"
+    chat_id = "c" * 32
+    turn_id = "2" * 32
+    bookmark_ref = FakeBookmarkRef(bookmark_id, {"responses": {}})
+    fake_db = FakeFirestore(bookmark_ref)
+    app = FastAPI()
+    app.state.limiter = limiter
+    limiter.reset()
+    app.include_router(bookmarks_router.router)
+
+    class FakeChatStore:
+        def get_chat(self, uid, requested_chat_id):
+            assert (uid, requested_chat_id) == ("uid-1", chat_id)
+            return {"id": chat_id, "title": "First question"}
+
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", fake_db),
+        patch.object(bookmarks_router, "_chat_store", return_value=FakeChatStore()),
+    ):
+        client = TestClient(app)
+        opening = client.post(
+            "/bookmark/consensus",
+            json={
+                "id_token": "token",
+                "bookmarkId": bookmark_id,
+                "chatId": chat_id,
+                "turnId": turn_id,
+                "question": "First question",
+                "consensusText": "First consensus",
+                "differencesText": "First differences",
+            },
+        )
+        followup = client.post(
+            "/bookmark/consensus",
+            json={
+                "id_token": "token",
+                "bookmarkId": bookmark_id,
+                "chatId": chat_id,
+                "turnId": turn_id,
+                "question": "Second question",
+                "previousQuestion": "First question",
+                "consensusText": "Second consensus",
+                "differencesText": "Second differences",
+            },
+        )
+
+    assert opening.json()["bookmark"]["title"] == "First question"
+    assert followup.status_code == 200
+    bookmark = followup.json()["bookmark"]
+    assert bookmark["title"] == "First question"
+    assert bookmark["query"] == "Second question"
+    assert bookmarks_router._bookmark_meta(bookmark_id, bookmark)["title"] == (
+        "First question"
+    )
+
+
+def test_a_legacy_bookmark_without_a_title_falls_back_to_its_question():
+    meta = bookmarks_router._bookmark_meta("legacy_id", {"query": "Only question"})
+    assert meta["title"] == "Only question"
+
+
+def test_a_followup_without_a_chat_never_renames_its_bookmark():
+    bookmark_id = "legacy_followup"
+    bookmark_ref = FakeBookmarkRef(
+        bookmark_id, {"query": "First", "title": "First", "responses": {}}
+    )
+    fake_db = FakeFirestore(bookmark_ref)
+    app = FastAPI()
+    app.state.limiter = limiter
+    limiter.reset()
+    app.include_router(bookmarks_router.router)
+
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", fake_db),
+        patch.object(
+            bookmarks_router.share_snapshots,
+            "pending_result_is_available",
+            return_value=True,
+        ),
+    ):
+        response = TestClient(app).post(
+            "/bookmark/consensus",
+            json={
+                "id_token": "token",
+                "bookmarkId": bookmark_id,
+                "question": "Second",
+                "previousQuestion": "First",
+                "consensusText": "Second consensus",
+                "differencesText": "Second differences",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["bookmark"]["title"] == "First"
+    assert response.json()["bookmark"]["query"] == "Second"
+
+
 def test_chat_bookmark_conversation_returns_complete_owner_bound_turns():
     bookmark_id = "stable_chat_bookmark"
     chat_id = "c" * 32
@@ -520,9 +621,9 @@ def test_bookmark_list_is_compact_and_cursor_paginated():
     assert "responses" not in first.json()["bookmarks"][0]
     assert first.json()["bookmarks"][0]["has_consensus"] is True
     assert second.json()["bookmarks"] == [{
-        "id": "third_id", "query": "Third", "mode": "", "timestamp": None,
-        "has_consensus": False, "model_count": 1, "source_count": 0,
-        "attachment_count": 0,
+        "id": "third_id", "query": "Third", "title": "Third", "mode": "",
+        "timestamp": None, "has_consensus": False, "model_count": 1,
+        "source_count": 0, "attachment_count": 0,
     }]
     assert second.json()["has_more"] is False
 

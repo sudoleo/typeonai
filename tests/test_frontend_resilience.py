@@ -39,11 +39,11 @@ def test_changed_frontend_scripts_are_cache_busted():
     template = read("templates/index.html")
 
     assert "markdown-stream.js?v=20260805-chatmulti1" in template
-    assert "firebase.js?v=20260806-chatbookmark1" in template
+    assert "firebase.js?v=20260806-historytabs1" in template
     assert "demo.js?v=20260803-demorunstages1" in template
     assert "usage-limit.js?v=20260802-storagebusy1" in template
     assert "consensus-insights.js?v=20260806-chatbookmark1" in template
     assert "chat-session.js?v=20260806-chatcleanup1" in template
-    assert "consensus-run.js?v=20260806-chatcleanup1" in template
+    assert "consensus-run.js?v=20260806-historytabs1" in template
     assert "query-send.js?v=20260806-chatbookmark1" in template
     assert "app-init.js?v=20260806-chatbookmark1" in template

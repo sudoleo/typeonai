@@ -1149,6 +1149,14 @@ function bookmarkDisplayQuestion(bookmark) {
   return String(bookmark?.query || "").trim();
 }
 
+// Der Sidebar-Name ist die ERSTE Frage der Unterhaltung und bleibt danach
+// stehen; `query` ist die zuletzt gestellte Frage und wandert mit jedem
+// Follow-up weiter. Aeltere Bookmarks ohne gespeicherten Titel fallen auf
+// die Frage zurueck.
+function bookmarkDisplayTitle(bookmark) {
+  return String(bookmark?.title || "").trim() || bookmarkDisplayQuestion(bookmark);
+}
+
 function bookmarkIdForQuestion(question) {
   const bytes = new TextEncoder().encode(String(question || ""));
   let binary = "";
@@ -1190,6 +1198,7 @@ function bookmarkMeta(bookmark) {
   return {
     id: bookmark?.id || "",
     query: bookmarkDisplayQuestion(bookmark),
+    title: bookmarkDisplayTitle(bookmark),
     mode: bookmark?.mode || "",
     timestamp: bookmark?.timestamp || null,
     has_consensus: Boolean(String(responses.consensus || "").trim()),
@@ -1912,7 +1921,7 @@ window.sendFeedback = sendFeedback;
 function updateBookmarkDOM(bookmark) {
   const row = document.querySelector(`.bookmark[data-id="${bookmark.id}"]`);
   const label = row?.querySelector("p");
-  if (label) label.textContent = truncateText(bookmark.query || "");
+  if (label) label.textContent = truncateText(bookmarkDisplayTitle(bookmark));
 }
 
 function addBookmarkToDOM(bookmark, { prepend = true } = {}) {
@@ -1932,7 +1941,7 @@ function addBookmarkToDOM(bookmark, { prepend = true } = {}) {
   // Die Frage kommt als freier Nutzertext und darf nie als HTML interpretiert
   // werden - deshalb textContent statt Template-Interpolation in innerHTML.
   const label = document.createElement("p");
-  label.textContent = truncateText(bookmark.query);
+  label.textContent = truncateText(bookmarkDisplayTitle(bookmark));
   const deleteSpan = document.createElement("span");
   deleteSpan.className = "delete-bookmark";
   deleteSpan.setAttribute("role", "button");

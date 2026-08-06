@@ -19,4 +19,4 @@
 @import url('./css/components-watch.css?v=20260802-readingchrome1');
 /* Shell layer — loaded LAST so the frameless redesign wins on equal
    specificity. Elevation, sidebar, topbar, composer and thread material. */
-@import url('./css/shell.css?v=20260805-chatmulti1');
+@import url('./css/shell.css?v=20260806-historytabs1');

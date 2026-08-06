@@ -66,6 +66,11 @@
   const DEFAULT_INPUT_PLACEHOLDER = "Enter your question";
   const FOLLOWUP_INPUT_PLACEHOLDER = "Ask a follow-up question";
 
+  // Jede archivierte Schublade braucht eine eigene ID fuer aria-controls.
+  // Der Verlauf lebt im selben Dokument wie der Live-Renderbaum, dessen IDs
+  // ein JS-Vertrag sind — hier darf nie eine davon ein zweites Mal auftauchen.
+  let panelSequence = 0;
+
   function truncateLabel(text, max) {
     const t = (text || "").trim().replace(/\s+/g, " ");
     return t.length > max ? t.slice(0, max - 1).trimEnd() + "…" : t;
@@ -210,32 +215,90 @@
         || this.buildStoredAgreement(turnData.differences_data);
       if (verdict) verdict.classList.add("thread-history-verdict");
       answer.append(answerLabel, answerBody);
-      if (verdict) answer.appendChild(verdict);
 
-      function appendMarkdownDetails(label, markdown, sources) {
-        if (!String(markdown || "").trim()) return;
-        const details = document.createElement("details");
-        details.className = "thread-history-details";
-        const summary = document.createElement("summary");
-        summary.textContent = label;
-        const body = document.createElement("div");
-        body.className = "thread-history-detail-body";
-        if (typeof window.injectMarkdown === "function") {
-          window.injectMarkdown(body, markdown, sources);
-        } else {
-          body.textContent = markdown;
-        }
-        details.append(summary, body);
-        answer.appendChild(details);
+      // Der Fuss eines archivierten Turns spricht dieselbe Sprache wie der
+      // Fuss der aktiven Antwort: EINE Zeile leiser Schubladen nebeneinander
+      // (#runProvenance / .consensus-footer-tabs), nicht drei untereinander
+      // gestapelte <details>. Gestapelt hat jeder alte Turn den Thread um
+      // drei weitere Zeilen verlaengert, obwohl alles zugeklappt war.
+      const footer = document.createElement("div");
+      footer.className = "thread-history-footer";
+      if (verdict) footer.appendChild(verdict);
+      const tabs = document.createElement("div");
+      tabs.className = "consensus-footer-tabs thread-history-tabs";
+      const panels = document.createElement("div");
+      panels.className = "thread-history-panels";
+      footer.append(tabs, panels);
+      answer.appendChild(footer);
+
+      // Chip + Schublade als Paar: gleiche Klassen wie im Live-Fuss, damit
+      // shell.css beide gleich behandelt. Die IDs sind je Turn eindeutig —
+      // der Verlauf teilt sich den DOM mit dem Live-Renderbaum.
+      function addDrawer(label, shortLabel, count, fill) {
+        const panelId = `threadHistoryPanel-${++panelSequence}`;
+        const tab = document.createElement("button");
+        tab.type = "button";
+        tab.className = "consensus-tab";
+        tab.setAttribute("aria-expanded", "false");
+        tab.setAttribute("aria-controls", panelId);
+        const chevron = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        chevron.setAttribute("class", "consensus-tab-chevron");
+        chevron.setAttribute("viewBox", "0 0 12 12");
+        chevron.setAttribute("aria-hidden", "true");
+        chevron.setAttribute("fill", "none");
+        chevron.setAttribute("stroke", "currentColor");
+        chevron.setAttribute("stroke-width", "1.6");
+        chevron.setAttribute("stroke-linecap", "round");
+        chevron.setAttribute("stroke-linejoin", "round");
+        const chevronPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        chevronPath.setAttribute("d", "M2.5 4.5 6 8l3.5-3.5");
+        chevron.appendChild(chevronPath);
+        const tabLabel = document.createElement("span");
+        tabLabel.className = "consensus-tab-label";
+        tabLabel.dataset.short = shortLabel;
+        tabLabel.textContent = label;
+        const tabCount = document.createElement("span");
+        tabCount.className = "consensus-tab-count";
+        tabCount.textContent = count > 0 ? String(count) : "";
+        tab.append(chevron, tabLabel, tabCount);
+
+        const panel = document.createElement("div");
+        panel.className = "thread-history-panel";
+        panel.id = panelId;
+        panel.hidden = true;
+        fill(panel);
+
+        tab.addEventListener("click", () => {
+          const open = tab.getAttribute("aria-expanded") === "true";
+          tab.setAttribute("aria-expanded", String(!open));
+          panel.hidden = open;
+        });
+
+        tabs.appendChild(tab);
+        panels.appendChild(panel);
       }
 
-      appendMarkdownDetails("Differences", turnData.differences, turnSources);
+      const differencesText = String(turnData.differences || "").trim();
+      if (differencesText) {
+        const storedDifferences = turnData.differences_data?.differences;
+        addDrawer(
+          "Review differences",
+          "Differences",
+          Array.isArray(storedDifferences) ? storedDifferences.length : 0,
+          panel => {
+            const body = document.createElement("div");
+            body.className = "thread-history-detail-body";
+            if (typeof window.injectMarkdown === "function") {
+              window.injectMarkdown(body, differencesText, turnSources);
+            } else {
+              body.textContent = differencesText;
+            }
+            panel.appendChild(body);
+          }
+        );
+      }
 
       if (turnSources.length) {
-        const details = document.createElement("details");
-        details.className = "thread-history-details";
-        const summary = document.createElement("summary");
-        summary.textContent = `Sources (${turnSources.length})`;
         const list = document.createElement("ol");
         list.className = "thread-history-sources";
         turnSources.forEach((source, index) => {
@@ -257,8 +320,9 @@
           item.appendChild(label);
           list.appendChild(item);
         });
-        details.append(summary, list);
-        answer.appendChild(details);
+        addDrawer("Verify sources", "Sources", turnSources.length, panel => {
+          panel.appendChild(list);
+        });
       }
 
       const storedAnswers = turnData.model_answers && typeof turnData.model_answers === "object"
@@ -266,29 +330,26 @@
         : [];
       const usableAnswers = storedAnswers.filter(item => String(item?.answer || "").trim());
       if (usableAnswers.length) {
-        const details = document.createElement("details");
-        details.className = "thread-history-details";
-        const summary = document.createElement("summary");
-        summary.textContent = `Model answers (${usableAnswers.length})`;
-        const models = document.createElement("div");
-        models.className = "thread-history-models";
-        usableAnswers.forEach(item => {
-          const section = document.createElement("section");
-          const heading = document.createElement("h4");
-          heading.textContent = String(item.model_label || item.provider || "Model");
-          const body = document.createElement("div");
-          body.className = "thread-history-detail-body";
-          const sources = Array.isArray(item.sources) ? item.sources : turnSources;
-          if (typeof window.injectMarkdown === "function") {
-            window.injectMarkdown(body, item.answer, sources);
-          } else {
-            body.textContent = item.answer;
-          }
-          section.append(heading, body);
-          models.appendChild(section);
+        addDrawer("Compare answers", "Answers", usableAnswers.length, panel => {
+          const models = document.createElement("div");
+          models.className = "thread-history-models";
+          usableAnswers.forEach(item => {
+            const section = document.createElement("section");
+            const heading = document.createElement("h4");
+            heading.textContent = String(item.model_label || item.provider || "Model");
+            const body = document.createElement("div");
+            body.className = "thread-history-detail-body";
+            const sources = Array.isArray(item.sources) ? item.sources : turnSources;
+            if (typeof window.injectMarkdown === "function") {
+              window.injectMarkdown(body, item.answer, sources);
+            } else {
+              body.textContent = item.answer;
+            }
+            section.append(heading, body);
+            models.appendChild(section);
+          });
+          panel.appendChild(models);
         });
-        details.append(summary, models);
-        answer.appendChild(details);
       }
       turn.append(question, answer);
       history.appendChild(turn);

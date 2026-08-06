@@ -2139,25 +2139,51 @@ body:not(.is-hero) .consensus-section::before {
   display: none;
 }
 
-.thread-history-details {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line-soft);
-  color: var(--ink-2);
+/* ---- Der Fuss eines archivierten Turns ------------------------------------
+   Dieselbe Zeile leiser Schubladen wie unter der aktiven Antwort
+   (.consensus-footer-tabs), nur ohne Lauf-Fakten und Aktionen. Vorher lagen
+   Differences, Sources und Model answers als drei gestapelte <details>
+   untereinander — jeder alte Turn hat den Thread damit um drei Zeilen
+   verlaengert, obwohl alles zugeklappt war. */
+.thread-history-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: var(--font-size-xs);
+  color: var(--ink-3);
 }
 
-.thread-history-details > summary {
-  cursor: pointer;
-  font-family: var(--font-sans);
+/* Ohne Urteil fehlt die Haarlinie, die den Fuss sonst vom Text abtrennt. */
+.thread-history-footer:not(:has(.thread-history-verdict)) {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.thread-history-footer:not(:has(.consensus-tab)):not(:has(.thread-history-verdict)) {
+  display: none;
+}
+
+.thread-history-panels:empty {
+  display: none;
+}
+
+.thread-history-panel[hidden] {
+  display: none;
+}
+
+/* Der Fuss spricht in Chip-Groesse; was in der Schublade steht, ist wieder
+   Lesetext und darf die Zeilenhoehe des Fusses nicht erben. */
+.thread-history-panel {
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-reading);
   color: var(--ink-2);
 }
 
 .thread-history-detail-body,
 .thread-history-sources,
 .thread-history-models {
-  margin-top: 13px;
+  margin-top: 0;
   color: var(--ink);
 }
 

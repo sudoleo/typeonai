@@ -157,6 +157,32 @@ def test_followup_archives_the_previous_turn_before_rendering_the_next_one():
     assert "TOPIC_MAX_WORDS" not in insights
 
 
+def test_archived_turns_use_the_same_drawer_row_as_the_live_answer():
+    """Differences, Sources und Model answers liegen im Verlauf NEBEN-, nicht
+    untereinander: dieselben .consensus-tab-Chips wie im Fuss der aktiven
+    Antwort. Drei gestapelte <details> haben jeden alten Turn im Thread um
+    drei Zeilen verlaengert, obwohl alles zugeklappt war."""
+    run = read("static/js/consensus-run.js")
+    css = read("static/css/shell.css")
+
+    history_block = run.split("appendHistoryTurn(", 1)[1].split(
+        "archiveCurrentExchange()", 1
+    )[0]
+    assert "thread-history-details" not in history_block
+    assert '"consensus-footer-tabs thread-history-tabs"' in history_block
+    assert 'tab.className = "consensus-tab"' in history_block
+    assert '"Review differences",\n          "Differences",' in history_block
+    assert 'addDrawer("Verify sources", "Sources", turnSources.length' in history_block
+    assert 'addDrawer("Compare answers", "Answers", usableAnswers.length' in history_block
+    # Der Verlauf teilt sich den DOM mit dem Live-Renderbaum: keine ID darf
+    # dort ein zweites Mal auftauchen.
+    assert "`threadHistoryPanel-${++panelSequence}`" in history_block
+    assert 'tab.setAttribute("aria-controls", panelId)' in history_block
+
+    assert ".thread-history-footer" in css
+    assert ".thread-history-panel[hidden]" in css
+
+
 def test_composer_row_is_reduced_to_attach_run_switch_and_send():
     """Agent Mode, the mode explainer and the clear button left the composer.
     Their functions live in Settings, the (+) menu and 'New comparison'."""

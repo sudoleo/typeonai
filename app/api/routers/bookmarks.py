@@ -17,6 +17,7 @@ from app.services.chat_store import (
     ChatNotFound,
     ChatStore,
     InvalidChatCursor,
+    derive_title,
 )
 from app.services.share_snapshots import sanitize_differences_data
 
@@ -33,6 +34,35 @@ def _clean_previous_question(value):
 
 def _bookmark_display_question(data):
     return str(data.get("query") or "").strip()
+
+
+def _bookmark_title(data):
+    """The name shown in the sidebar: the conversation's opening question.
+
+    `query` is the LATEST question of the bookmark and has to stay that way —
+    share, restore and follow-up context all read it. Older bookmarks have no
+    stored title yet, so the latest question remains the fallback name.
+    """
+    return str(data.get("title") or "").strip() or _bookmark_display_question(data)
+
+
+def _stable_bookmark_title(uid, question, previous_question, chat_binding):
+    """Return the title to merge, or "" when the existing one must survive.
+
+    A follow-up must never rename its bookmark, so only the opening turn
+    writes the title. A chat-bound follow-up is the one exception: the chat
+    document already keeps the first question, which repairs bookmarks that
+    were written before titles existed.
+    """
+    if not previous_question:
+        return derive_title(question)
+    if not chat_binding:
+        return ""
+    try:
+        chat = _chat_store().get_chat(uid, chat_binding["chat_id"])
+    except Exception:
+        return ""
+    return str(chat.get("title") or "").strip()
 
 
 def _bookmark_document_id(question, requested_id=""):
@@ -104,6 +134,7 @@ def _bookmark_meta(bookmark_id, data):
     return {
         "id": str(bookmark_id),
         "query": _bookmark_display_question(data),
+        "title": _bookmark_title(data),
         "mode": str(data.get("mode") or ""),
         "timestamp": data.get("timestamp"),
         "has_consensus": bool(str(responses.get("consensus") or "").strip()),
@@ -309,6 +340,9 @@ async def save_bookmark(request: Request, data: dict = Body(...)):
         "mode": mode,
         "responses": { modelName: response_text }
     }
+    title = _stable_bookmark_title(uid, question, previous_question, chat_binding)
+    if title:
+        dataToMerge["title"] = title
     if not previous_question:
         # A regular run reusing the same document id must not inherit a stale
         # archived turn from an older follow-up bookmark.
@@ -386,6 +420,9 @@ async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
             "differences": differencesText
         }
     }
+    title = _stable_bookmark_title(uid, question, previous_question, chat_binding)
+    if title:
+        dataToMerge["title"] = title
     if model_responses is not None:
         # Every provider key is present, including empty strings. That clears
         # stale answers when a later turn in the same chat used fewer models.
