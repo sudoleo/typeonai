@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.api.routers import bookmarks as bookmarks_router
 from app.core.rate_limit import limiter
+from app.core.security import CustomSecurityMiddleware
 
 
 class FakeSnapshot:
@@ -244,6 +245,107 @@ def test_followup_bookmark_keeps_complete_previous_turn_for_restore():
     assert meta["query"] == current
 
 
+def test_followup_consensus_updates_one_stable_chat_bookmark():
+    bookmark_id = "stable_chat_bookmark"
+    chat_id = "c" * 32
+    turn_id = "2" * 32
+    bookmark_ref = FakeBookmarkRef(
+        bookmark_id,
+        {
+            "query": "First question",
+            "responses": {"DeepSeek": "stale answer", "consensus": "First consensus"},
+        },
+    )
+    fake_db = FakeFirestore(bookmark_ref)
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(bookmarks_router.router)
+
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", fake_db),
+    ):
+        response = TestClient(app).post(
+            "/bookmark/consensus",
+            json={
+                "id_token": "token",
+                "bookmarkId": bookmark_id,
+                "chatId": chat_id,
+                "turnId": turn_id,
+                "question": "Second question",
+                "previousQuestion": "First question",
+                "consensusText": "Second consensus",
+                "differencesText": "Second differences",
+                "modelResponses": {
+                    "OpenAI": "new answer",
+                    "Gemini": "other answer",
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    bookmark = response.json()["bookmark"]
+    assert bookmark["id"] == bookmark_id
+    assert bookmark["query"] == "Second question"
+    assert bookmark["chat_id"] == chat_id
+    assert bookmark["turn_id"] == turn_id
+    assert bookmark["responses"]["OpenAI"] == "new answer"
+    assert bookmark["responses"]["Gemini"] == "other answer"
+    assert bookmark["responses"]["DeepSeek"] == ""
+    assert bookmark["responses"]["consensus"] == "Second consensus"
+
+
+def test_chat_bookmark_conversation_returns_complete_owner_bound_turns():
+    bookmark_id = "stable_chat_bookmark"
+    chat_id = "c" * 32
+    fake_db = FakeBookmarkDatabase({
+        "uid-1": {bookmark_id: {"query": "Latest", "chat_id": chat_id}},
+    })
+
+    class FakeChatStore:
+        def list_turns(self, uid, requested_chat_id, *, cursor, limit):
+            assert (uid, requested_chat_id, cursor, limit) == (
+                "uid-1", chat_id, "", 50,
+            )
+            return {
+                "turns": [
+                    {"id": "1" * 32, "status": "completed"},
+                    {"id": "2" * 32, "status": "failed"},
+                    {"id": "3" * 32, "status": "completed"},
+                ],
+                "next_cursor": None,
+                "has_more": False,
+            }
+
+        def get_turn(self, uid, requested_chat_id, requested_turn_id):
+            assert uid == "uid-1" and requested_chat_id == chat_id
+            return {
+                "id": requested_turn_id,
+                "status": "completed",
+                "question": "First" if requested_turn_id.startswith("1") else "Third",
+                "consensus": "Answer",
+                "model_answers": {},
+            }
+
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(bookmarks_router.router)
+    app.add_middleware(CustomSecurityMiddleware)
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", fake_db),
+        patch.object(bookmarks_router, "_chat_store", return_value=FakeChatStore()),
+    ):
+        response = TestClient(app).get(
+            f"/bookmarks/{bookmark_id}/conversation?limit=50",
+            headers={"Authorization": "Bearer token"},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "private, no-store"
+    assert [turn["question"] for turn in response.json()["turns"]] == ["First", "Third"]
+
+
 def test_legacy_consensus_bookmark_gets_new_share_result():
     bookmark_id = "V2h5Pw__"
     bookmark_ref = FakeBookmarkRef(
@@ -353,7 +455,10 @@ def test_bookmark_frontend_restores_followup_as_two_complete_turns():
 
     assert "function bookmarkDisplayQuestion(bookmark)" in firebase
     assert "window.App?.setThreadQuestion?.(displayQuestion);" in firebase
-    assert "renderStoredTurn?.(bookmark.previous_turn)" in firebase
+    assert "renderStoredTurns?.(materialized.historyTurns)" in firebase
+    assert '"/conversation?limit=50"' in firebase
+    assert "restoreCompletedChat?.(" in firebase
+    assert "window.App.bookmarkSession" in firebase
     assert "question: displayQuestion" in firebase
     assert query_send.count("bookmarkPreviousQuestion)") == 6
     assert "previousQuestion: bookmarkPreviousQuestion" in consensus_run

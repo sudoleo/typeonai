@@ -1599,7 +1599,8 @@
               "",
               null,
               payload.previousQuestion || "",
-              payload.previousTurn || null
+              payload.previousTurn || null,
+              payload.conversation || null
             );
           }
 

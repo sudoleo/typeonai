@@ -135,6 +135,8 @@ def test_followup_archives_the_previous_turn_before_rendering_the_next_one():
     assert "archiveCurrentExchange()" in run
     assert 'clone.removeAttribute("id")' in run
     assert "renderStoredTurn(turnData)" in run
+    assert "renderStoredTurns(turns)" in run
+    assert 'node.querySelector?.(".thread-history-question-text")' in run
     assert "buildStoredAgreement(differencesData)" in run
     assert "const insightRoot = window.App.consensusBodyEl?.() || document" in read(
         "static/js/consensus-insights.js"

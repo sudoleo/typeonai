@@ -103,9 +103,14 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 - [ ] Frühere Turns bleiben vollständig sichtbar. Consensus, Agreement,
       Differences, Sources und Modellantworten gehören jeweils zum richtigen
       Turn; `[S…]`-Links eines alten Turns öffnen nicht die Quellen des neuen.
-- [ ] Ein altes Bookmark bzw. Reload ohne aktive Chat-Zuordnung bleibt im
-      Legacy-One-Hop-Pfad. Clear, Logout und Bookmark-Restore leeren aktive,
-      pending und Context-Zuordnung vollständig.
+- [ ] Turn 3 und weitere Turns hängen jeweils unterhalb des vollständigen
+      bisherigen Verlaufs an; kein neuer Turn ersetzt Turn 2 oder einen anderen
+      bereits gerenderten Vorgänger.
+- [ ] Ein altes Bookmark ohne `chat_id` bleibt im Legacy-One-Hop-Pfad. Ein
+      Chat-Bookmark lädt dagegen alle completed Turns paginiert und stellt
+      ausschließlich seine letzte completed Chat-/Turn-Basis für ein weiteres
+      Follow-up wieder her. Clear und Logout leeren aktive, pending, Context-
+      und Bookmark-Zuordnung vollständig.
 
 ## Consensus (höchstes Risiko)
 - [ ] Presets: Daily/Balanced setzen sichtbar alle sechs Antwortmodelle und die
@@ -324,6 +329,10 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 - [ ] Models und Bookmarks beginnen auf derselben Icon-/Textachse und verwenden
       dieselbe Titelgröße/-stärke; im Gastzustand bleibt Bookmarks deaktiviert.
 - [ ] Bookmarks laden/aufklappen, Chat-Suche filtert.
+- [ ] Turn 1, Turn 2, Turn 3 und weitere Follow-ups aktualisieren genau ein
+      Sidebar-Bookmark. Nach Reload öffnet dieses eine Bookmark den vollständigen
+      Verlauf in richtiger Reihenfolge und ein weiteres Follow-up bleibt im
+      selben Chat sowie im selben Bookmark.
 - [ ] Bookmark aus dem frischen Leerzustand öffnen: Input dockt ohne Hero-Sprung
       oben an und die gespeicherten Antworten sind direkt sichtbar.
 - [ ] Einen gespeicherten Consensus nach Reload öffnen: Share-Link und Watch

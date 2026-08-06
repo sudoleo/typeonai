@@ -454,6 +454,14 @@
       this.markPendingUncertain();
     },
 
+    restoreCompletedChat(chatId, turnId) {
+      this.reset();
+      if (!ID_RE.test(chatId || "") || !ID_RE.test(turnId || "")) return false;
+      this.activeChatId = chatId;
+      this.activeTurnId = turnId;
+      return true;
+    },
+
     _clearPending() {
       this.pendingChatId = null;
       this.pendingTurnId = null;

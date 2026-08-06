@@ -167,7 +167,14 @@
       const history = document.getElementById("threadHistory");
       if (!history || !turnData?.question || !turnData?.consensus) return false;
       const turnId = String(turnData.turn_id || "").trim();
-      if (turnId && Array.from(history.children).some(node => node.dataset?.turnId === turnId)) {
+      const normalizedQuestion = String(turnData.question).replace(/\s+/g, " ").trim();
+      // A replay of the same completed turn is idempotent. A colliding ID with
+      // different content must never make the visible exchange disappear:
+      // append it and let the owner-bound transcript remain the authority.
+      if (turnId && Array.from(history.children).some(node => (
+        node.dataset?.turnId === turnId
+        && node.querySelector?.(".thread-history-question-text")?.textContent === normalizedQuestion
+      ))) {
         return false;
       }
 
@@ -182,7 +189,7 @@
       questionLabel.textContent = "Question";
       const questionText = document.createElement("div");
       questionText.className = "thread-history-question-text";
-      questionText.textContent = String(turnData.question).replace(/\s+/g, " ").trim();
+      questionText.textContent = normalizedQuestion;
       question.append(questionLabel, questionText);
 
       const answer = document.createElement("div");
@@ -313,6 +320,15 @@
     renderStoredTurn(turnData) {
       this.clearHistory();
       return this.appendHistoryTurn(turnData);
+    },
+
+    renderStoredTurns(turns) {
+      this.clearHistory();
+      let rendered = 0;
+      (Array.isArray(turns) ? turns : []).forEach(turn => {
+        if (this.appendHistoryTurn(turn)) rendered += 1;
+      });
+      return rendered;
     },
 
     clearHistory() {
@@ -1068,6 +1084,29 @@
             }
           ]))
         };
+        const bookmarkConversation = data.chat_persisted === true
+          && data.chat_turn_state === "completed"
+          && data.chat_id && data.turn_id
+          ? {
+              bookmarkId: window.App.bookmarkSession?.currentId?.() || "",
+              chatId: data.chat_id,
+              turnId: data.turn_id,
+              modelResponses: Object.fromEntries(
+                Object.entries(completedTurn.model_answers || {}).map(([provider, item]) => [
+                  provider,
+                  typeof item === "string" ? item : String(item?.answer || "")
+                ])
+              )
+            }
+          : {
+              bookmarkId: window.App.bookmarkSession?.currentId?.() || "",
+              modelResponses: Object.fromEntries(
+                Object.entries(completedTurn.model_answers || {}).map(([provider, item]) => [
+                  provider,
+                  typeof item === "string" ? item : String(item?.answer || "")
+                ])
+              )
+            };
 
         // Follow-up-Affordance im Input-Bereich anbieten — nicht bei
         // Fehlertexten aus dem Consensus-Stream.
@@ -1084,14 +1123,15 @@
           previousTurn: bookmarkPreviousTurn,
           consensusText: data.consensus_response,
           differencesText: data.differences,
-          differencesData: data.differences_data || null
+          differencesData: data.differences_data || null,
+          conversation: bookmarkConversation
         };
         if (!completedReplay && window.auth?.currentUser) {
           window.saveBookmarkConsensus(
             question, data.consensus_response, data.differences, data.differences_data,
             bookmarkPreviousQuestion ? null : data.result_id,
             consensus_model, shareModelLabels, bookmarkPreviousQuestion,
-            bookmarkPreviousTurn
+            bookmarkPreviousTurn, bookmarkConversation
           );
         }
         if (!completedReplay) {

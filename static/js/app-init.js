@@ -1733,6 +1733,7 @@
           window.App.followup?.reset?.();
           window.App.followup?.clearHistory?.();
           window.App.chatSession?.reset?.();
+          window.App.bookmarkSession?.reset?.();
 
           // Lösche den Inhalt aller Modell-Antwortboxen.
           boxIds.forEach(id => {

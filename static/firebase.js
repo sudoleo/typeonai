@@ -128,6 +128,7 @@ function resetLoadedRunAfterLogout() {
   window.currentEvidenceSources = [];
   window.consensusCitationMeta = null;
   window.App?.chatSession?.reset?.();
+  window.App?.bookmarkSession?.reset?.();
   window.App?.sharedModal?.close?.();
   window.App?.watch?.resetAfterLogout?.();
   document.body.classList.add("is-hero");
@@ -1148,6 +1149,39 @@ function bookmarkDisplayQuestion(bookmark) {
   return String(bookmark?.query || "").trim();
 }
 
+function bookmarkIdForQuestion(question) {
+  const bytes = new TextEncoder().encode(String(question || ""));
+  let binary = "";
+  bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/[^a-zA-Z0-9]/g, "_").slice(0, 50);
+}
+
+window.App = window.App || {};
+window.App.bookmarkSession = {
+  activeId: null,
+
+  begin(question, { followup = false } = {}) {
+    if (!followup || !this.activeId) {
+      this.activeId = bookmarkIdForQuestion(question) || null;
+    }
+    return this.activeId;
+  },
+
+  restore(bookmarkId) {
+    const value = String(bookmarkId || "").trim();
+    this.activeId = /^[A-Za-z0-9_]{1,100}$/.test(value) ? value : null;
+    return this.activeId;
+  },
+
+  currentId() {
+    return this.activeId;
+  },
+
+  reset() {
+    this.activeId = null;
+  }
+};
+
 function bookmarkMeta(bookmark) {
   const responses = bookmark?.responses && typeof bookmark.responses === "object" ? bookmark.responses : {};
   const modelCount = Object.entries(responses).filter(([key, value]) =>
@@ -1182,6 +1216,8 @@ function upsertBookmarkMeta(bookmark, { prepend = true } = {}) {
 
 async function saveBookmark(question, response, modelName, mode, previousQuestion = "") {
   if (!auth.currentUser) return;
+  const bookmarkId = window.App.bookmarkSession?.currentId?.()
+    || bookmarkIdForQuestion(question);
   const id_token = await auth.currentUser.getIdToken(false);
   if (!id_token) return;
 
@@ -1203,6 +1239,7 @@ async function saveBookmark(question, response, modelName, mode, previousQuestio
         response,
         modelName,
         mode,
+        bookmarkId: bookmarkId || null,
         previousQuestion,
         sources: sources,
         attachments: attachmentsMeta
@@ -1216,6 +1253,7 @@ async function saveBookmark(question, response, modelName, mode, previousQuestio
     }
 
     if (data.bookmark) {
+        window.App.bookmarkSession?.restore?.(data.bookmark.id);
         upsertBookmarkMeta(data.bookmark);
         if (openedBookmarkId === data.bookmark.id) {
           bookmarkDetailCache.clear();
@@ -1233,8 +1271,12 @@ window.saveBookmark = saveBookmark;
 
 async function saveBookmarkConsensus(question, consensusText, differencesText, differencesData,
                                      resultId, consensusModel, modelLabels,
-                                     previousQuestion = "", previousTurn = null) {
+                                     previousQuestion = "", previousTurn = null,
+                                     conversation = null) {
   if (!auth.currentUser) return;
+  const bookmarkId = conversation?.bookmarkId
+    || window.App.bookmarkSession?.currentId?.()
+    || bookmarkIdForQuestion(question);
   const id_token = await auth.currentUser?.getIdToken(/* forceRefresh= */ false);
   if (!id_token) return;
 
@@ -1257,6 +1299,10 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
          resultId: resultId || null,
          consensusModel: consensusModel || "",
          modelLabels: modelLabels || null,
+         modelResponses: conversation?.modelResponses || null,
+         bookmarkId: bookmarkId || null,
+         chatId: conversation?.chatId || null,
+         turnId: conversation?.turnId || null,
          previousQuestion: previousQuestion || "",
          previousTurn: previousTurn || null
        })
@@ -1267,6 +1313,7 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
       return;
     }
     if (data.bookmark) {
+      window.App.bookmarkSession?.restore?.(data.bookmark.id);
       upsertBookmarkMeta(data.bookmark);
       if (openedBookmarkId === data.bookmark.id) {
         bookmarkDetailCache.clear();
@@ -1385,7 +1432,79 @@ function applyBookmarkModelPresentation(bookmark) {
 }
 
 // Diese Funktion füllt die UI mit den Daten eines Bookmarks
-function loadSingleBookmarkUI(bookmark) {
+function normalizeConversationTurn(turn) {
+  if (!turn || turn.status !== "completed" || !turn.question || !turn.consensus) return null;
+  return { ...turn, turn_id: turn.id || turn.turn_id || "" };
+}
+
+function materializeConversationBookmark(bookmark, conversationTurns) {
+  const turns = (Array.isArray(conversationTurns) ? conversationTurns : [])
+    .map(normalizeConversationTurn)
+    .filter(Boolean)
+    .sort((left, right) => Number(left.position || 0) - Number(right.position || 0));
+  if (!turns.length) return { bookmark, historyTurns: [], currentTurn: null };
+
+  const currentTurn = turns[turns.length - 1];
+  const responses = {
+    OpenAI: "", Mistral: "", Anthropic: "", Gemini: "", DeepSeek: "", Grok: "",
+    consensus: currentTurn.consensus || "",
+    differences: currentTurn.differences || "",
+    differences_data: currentTurn.differences_data || null
+  };
+  const modelLabels = {};
+  Object.entries(currentTurn.model_answers || {}).forEach(([provider, item]) => {
+    responses[provider] = typeof item === "string" ? item : String(item?.answer || "");
+    const label = typeof item === "object" ? String(item?.model_label || "").trim() : "";
+    if (label) modelLabels[provider] = label;
+  });
+  return {
+    bookmark: {
+      ...bookmark,
+      query: currentTurn.question,
+      mode: currentTurn.mode || bookmark.mode || "",
+      responses,
+      sources: Array.isArray(currentTurn.sources) ? currentTurn.sources : [],
+      consensus_model: currentTurn.consensus_model || bookmark.consensus_model || "",
+      model_labels: modelLabels,
+      chat_id: bookmark.chat_id,
+      turn_id: currentTurn.turn_id,
+      previous_question: turns.length > 1 ? turns[turns.length - 2].question : "",
+      previous_turn: turns.length > 1 ? turns[turns.length - 2] : null
+    },
+    historyTurns: turns.slice(0, -1),
+    currentTurn
+  };
+}
+
+async function loadBookmarkConversation(bookmark) {
+  if (!bookmark?.chat_id || !auth.currentUser) return [];
+  const requestUser = auth.currentUser;
+  const requestUid = requestUser.uid;
+  const requestGeneration = authGeneration;
+  const idToken = await requestUser.getIdToken(false);
+  const turns = [];
+  let cursor = "";
+  do {
+    const path = "/bookmarks/" + encodeURIComponent(bookmark.id)
+      + "/conversation?limit=50"
+      + (cursor ? "&cursor=" + encodeURIComponent(cursor) : "");
+    const response = await fetch(path, {
+      headers: { "Authorization": "Bearer " + idToken }
+    });
+    const data = await response.json();
+    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
+      throw new Error("Authentication changed while loading bookmark");
+    }
+    if (!response.ok) throw new Error(data.detail || "Could not load bookmark conversation");
+    turns.push(...(Array.isArray(data.turns) ? data.turns : []));
+    cursor = data.has_more ? String(data.next_cursor || "") : "";
+  } while (cursor);
+  return turns;
+}
+
+function loadSingleBookmarkUI(sourceBookmark, conversationTurns = []) {
+    const materialized = materializeConversationBookmark(sourceBookmark, conversationTurns);
+    const bookmark = materialized.bookmark;
     let bookmarkCitationModels = [];
     const displayQuestion = bookmarkDisplayQuestion(bookmark);
     // Ein geladenes Bookmark zeigt sofort Antworten und startet daher nie im
@@ -1394,8 +1513,17 @@ function loadSingleBookmarkUI(bookmark) {
     window.App?.followup?.reset?.();
     window.App?.chatSession?.reset?.();
     window.App?.followup?.clearHistory?.();
-    if (bookmark?.previous_turn) {
+    window.App?.bookmarkSession?.restore?.(sourceBookmark?.id);
+    if (materialized.historyTurns.length) {
+        window.App?.followup?.renderStoredTurns?.(materialized.historyTurns);
+    } else if (bookmark?.previous_turn) {
         window.App?.followup?.renderStoredTurn?.(bookmark.previous_turn);
+    }
+    if (materialized.currentTurn && bookmark.chat_id) {
+        window.App?.chatSession?.restoreCompletedChat?.(
+          bookmark.chat_id,
+          materialized.currentTurn.turn_id
+        );
     }
     window.App?.setAppTitle?.(displayQuestion);
     // Never let Share/Watch target a run that was displayed previously.
@@ -1491,7 +1619,18 @@ function loadSingleBookmarkUI(bookmark) {
             previousTurn: bookmark.previous_turn || null,
             consensusText: consensusText,
             differencesText: bookmark.responses["differences"] || "",
-            differencesData: (differencesData && typeof differencesData === "object") ? differencesData : null
+            differencesData: (differencesData && typeof differencesData === "object") ? differencesData : null,
+            conversation: materialized.currentTurn ? {
+              bookmarkId: sourceBookmark.id,
+              chatId: bookmark.chat_id,
+              turnId: materialized.currentTurn.turn_id,
+              modelResponses: Object.fromEntries(
+                Object.entries(materialized.currentTurn.model_answers || {}).map(([provider, item]) => [
+                  provider,
+                  typeof item === "string" ? item : String(item?.answer || "")
+                ])
+              )
+            } : { bookmarkId: sourceBookmark.id }
         } : null;
 
         if (!structuredRendered) {
@@ -1520,6 +1659,13 @@ function loadSingleBookmarkUI(bookmark) {
             // unter der wiederhergestellten Antwort stehen.
             window.updateAgentModeUI?.();
             window.App?.consensusPipeline?.renderProvenance?.();
+            if (materialized.currentTurn) {
+                window.App?.followup?.offer?.(
+                  displayQuestion,
+                  consensusText,
+                  materialized.currentTurn
+                );
+            }
         } else {
             window.hideConsensusOutput?.();
         }
@@ -1666,8 +1812,14 @@ window.openBookmark = async function (bookmarkId) {
   row?.classList.add("is-loading");
   try {
     const bookmark = await loadBookmarkDetail(bookmarkId);
+    let conversationTurns = [];
+    try {
+      conversationTurns = await loadBookmarkConversation(bookmark);
+    } catch (conversationError) {
+      console.warn("Could not load full bookmark conversation; using latest saved turn.", conversationError);
+    }
     openedBookmarkId = bookmarkId;
-    loadSingleBookmarkUI(bookmark);
+    loadSingleBookmarkUI(bookmark, conversationTurns);
     trackAppEvent("app_bookmark_opened");
   } catch (error) {
     console.error("Error opening bookmark:", error);

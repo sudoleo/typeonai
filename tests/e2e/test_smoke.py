@@ -786,6 +786,20 @@ def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_pag
     assert layout["currentAlign"] == "right"
     assert layout["archivedAlign"] == "right"
 
+    # Turn 3 is the regression boundary: the second exchange used to vanish
+    # when the live render tree was recycled for the next answer.
+    expect(app_page.locator("#composerGate")).to_be_visible(timeout=20000)
+    app_page.locator(".composer-gate-followup").click()
+    third_question = "What should I do immediately after that?"
+    app_page.locator("#questionInput").fill(third_question)
+    app_page.locator("#sendButton").click()
+
+    archived_turns = app_page.locator("#threadHistory .thread-history-turn")
+    expect(archived_turns).to_have_count(2, timeout=15000)
+    expect(archived_turns.nth(0).locator(".thread-history-question-text")).to_have_text(QUESTION)
+    expect(archived_turns.nth(1).locator(".thread-history-question-text")).to_have_text(followup_question)
+    expect(app_page.locator("#threadAskText")).to_have_text(third_question)
+
 
 def test_split_claim_underlines_in_the_colour_of_its_badge(app_page):
     """Geteilte Zustimmung ohne Widerspruchs-Karte: Linie und Quote muessen

@@ -341,6 +341,7 @@
       // that historical run. A fresh run must display the current picker/Deep
       // Think labels again without the bookmark ever mutating those controls.
       window.App.updateDeepThinkText?.();
+      window.App.bookmarkSession?.begin?.(question, { followup: followupRequested });
 
       // Ab dem ersten echten Lauf wird die Seite zum Thread: Frage oben,
       // Composer unten. Der Demo-Pfad nutzt denselben Übergang.

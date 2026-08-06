@@ -63,6 +63,10 @@ class CustomSecurityMiddleware:
         sensitive_api_response = (
             path == "/chats"
             or path.startswith("/chats/")
+            or path == "/bookmarks"
+            or path.startswith("/bookmarks/")
+            or path == "/bookmark"
+            or path.startswith("/bookmark/")
             or path.startswith("/api/v1/")
             or path.startswith("/api/admin/")
         )

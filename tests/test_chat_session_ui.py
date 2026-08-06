@@ -232,7 +232,7 @@ def test_chat_session_script_order_consensus_payload_and_legacy_bookmarks_remain
     assert template.index("/static/js/query-send.js") < template.index(
         "/static/js/app-init.js"
     )
-    assert "chat-session.js?v=20260805-chatmulti1" in template
+    assert "chat-session.js?v=20260806-chatbookmark1" in template
     assert 'data-engine-provider="{{ model.provider }}"' in template
     assert "consensusPayload.chat_id = chatTurnIds.chatId" in consensus
     assert "consensusPayload.turn_id = chatTurnIds.turnId" in consensus

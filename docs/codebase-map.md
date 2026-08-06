@@ -64,7 +64,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP) und übergibt sie als nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). Nach einem tatsächlich neu angelegten E-Mail/Passwort-Konto plant `/register` außerdem einen PII-freien, nicht-blockierenden Telegram-Admin-Alert ein; `/confirm-registration` erkennt damit auch gerade neu angelegte Google-Konten serverseitig. Normale Logins, Reloads und neutrale Antworten für bereits bestehende Adressen bleiben ruhig. |
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
-| `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Follow-up-Saves akzeptieren optional `previousQuestion` und beim Consensus zusätzlich `previousTurn`; gespeichert werden `previous_question` sowie der sanitierte vorherige Turn mit Frage, Consensus, Differences-/Agreement-Daten und Quellen. Beim Restore bleibt `query` die aktive zweite Frage, während `previous_turn` als vollständiger erster Turn davor erscheint. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. |
+| `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (`?version=<run_id>`, rendert Position Map + Agreement-Kurve über `services/history_view.py` — dieselbe Darstellung wie die Watch-Seiten, bewusst nur bis zum gewählten Snapshot), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe`; Admin-CRUD unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
@@ -744,11 +744,14 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   gespeicherten `model_labels`; die aktuellen Modell-Selects und `localStorage`
   bleiben unverändert und werden erst für einen neuen Lauf wieder in die UI
   gespiegelt. Alte Bookmarks ohne Provenienz zeigen keinen erfundenen aktuellen
-  Modellnamen. Follow-up-Bookmarks behalten `query` als aktuelle Frage und
-  `previous_question` als Kontext. `previous_turn` bewahrt die vorherige Frage,
-  ihren Consensus, ihr Agreement und ihre Quellen; `renderStoredTurn()` stellt
-  sie beim Öffnen im `#threadHistory` wieder her. Sidebar, Thread-Kopf, Titel
-  und Citation verwenden weiterhin die aktuelle `query`. Nach einer
+  Modellnamen. `window.App.bookmarkSession` hält eine stabile Bookmark-ID vom
+  ersten Turn bis zu „New comparison“/Logout; dadurch aktualisieren Modell- und
+  Consensus-Dual-Writes dasselbe Sidebar-Element. Chat-gebundene Bookmarks laden
+  beim Öffnen alle completed Transcript-Seiten, rendern alle Vorgänger per
+  `renderStoredTurns()` und stellen die letzte completed Chat-/Turn-Basis wieder
+  her. Legacy-Bookmarks ohne `chat_id` verwenden weiter `previous_turn` als
+  Ein-Turn-Fallback. Sidebar, Thread-Kopf, Titel und Citation verwenden die
+  jeweils letzte completed Frage. Nach einer
   E-Mail-Registrierung zeigt
   das Auth-Modal einen eigenen Verifizierungs-Erfolgszustand statt eines Browser-Alerts.
   Logout löscht zuerst erfolgreich die HttpOnly-Session und wartet danach
@@ -978,12 +981,13 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   Ein nicht completed Chat wird nie als persistierte Grundlage
   eines folgenden Follow-ups verwendet.
 - Die bisherigen `saveBookmark(...)`-/`saveBookmarkConsensus(...)`-Aufrufe
-  bleiben als bewusstes temporäres Dual-Write für Sidebar, Restore, Share und
-  Watch aktiv. Ein Follow-up aus einem alten Bookmark oder nach Reload hat keine
-  `activeChatId`: es läuft normal weiter, wird aber diagnostisch ohne Chat-IDs
-  gesendet, damit kein irreführender Chat nur mit der zweiten Frage entsteht.
-  Bookmark-Migration und historische Chat-Anzeige/Sidebar sind ausdrücklich
-  noch nicht implementiert.
+  bleiben als Dual-Write für Sidebar, Restore, Share und Watch aktiv. Innerhalb
+  eines Browser-Chats verwenden alle Turns dieselbe stabile Bookmark-ID; nach
+  erfolgreicher Chat-Completion speichert das Bookmark nur `chat_id`/letzte
+  `turn_id`, und der Restore liest den vollständigen kanonischen Transcript
+  paginiert aus `ChatStore`. Ein altes Bookmark ohne Chat-Bindung bleibt im
+  Legacy-Ein-Turn-Kontextpfad und erzeugt keinen irreführenden Chat, dessen
+  Historie mit Turn 2 beginnt.
 - **Multi-Turn-Context (Session 4 Backend, seit Session 5 im Browser aktiv):**
   `POST /chats/{chat_id}/turns/{turn_id}/context` liest ausschließlich frühere
   owner-gebundene completed Turns. Bei Zielposition 2 bleibt der jüngste
@@ -1524,11 +1528,12 @@ Deploy manuell über die Firebase Console):
 **Firestore-Collections** (verifiziert über Code):
 - `users/{uid}` — `tier`, `role`; Subcollections `bookmarks`, `counters`, `chats` sowie
   die produktive run-basierte Usage:
-  `bookmarks` speichert pro Follow-up optional `previous_question` sowie
-  `previous_turn` (vorherige Frage, Consensus, Differences-/Agreement-Daten und
-  Quellen) getrennt von der aktuellen `query`; normale Saves schreiben
-  Leerwerte und entfernen damit versehentlich stehen gebliebenen Kontext bei
-  derselben Frage.
+  `bookmarks` speichert pro laufender Unterhaltung genau ein Dokument unter der
+  stabilen ID des ersten Turns. `query`/`responses` bilden den letzten Stand;
+  nach erfolgreicher Persistenz referenzieren `chat_id` und `turn_id` den
+  kanonischen owner-gebundenen Transcript. Vollständige ältere Turns werden
+  nicht im Bookmark dupliziert. `previous_question`/`previous_turn` bleiben nur
+  als Legacy-Fallback für Bookmarks ohne Chat-Bindung.
   - `chats/{chat_id}` — serverseitig zufällig erzeugte, nicht aus Titel oder
     Frage abgeleitete 32-Hex-ID; Felder `schema_version`, `title`,
     `status=active`, `created_at`, `updated_at`, `turn_count` und
@@ -2150,7 +2155,7 @@ ersten Check statt eines leeren Consensus-Panels.
   `window.App.reportCriticalError`.
 - **`window.App.followup`** (definiert in `consensus-run.js`) ist der
   Follow-up-Kontext- und Verlauf-State (`offer/arm/discard/consume/reset/render`,
-  `isArmed/archiveCurrentExchange/renderStoredTurn/clearHistory`).
+  `isArmed/archiveCurrentExchange/renderStoredTurn/renderStoredTurns/clearHistory`).
   `query-send.js` (consume + archivieren beim Senden), `app-init.js` (reset in
   `clearResponseBoxes`) und `user-tier.js` (render bei Tier-Wechsel) hängen
   daran; DOM-Ziele sind `#composerGate`, `#followupChipBar` und
@@ -2165,8 +2170,14 @@ ersten Check statt eines leeren Consensus-Panels.
   Abbrüche; `consensus-run.js` verändert ihn nur anhand der autoritativen
   `chat_turn_state`-Disposition. `app-init.js`
   und `firebase.js` resetten aktiven wie pending State bei Clear/Logout;
-  ein Bookmark-Restore resetet ihn ebenfalls, damit sein Follow-up keinen alten
-  Chat fortsetzt.
+  ein Legacy-Bookmark-Restore resetet ihn ebenfalls. Ein owner-gebundenes
+  Chat-Bookmark darf nach vollständigem Transcript-Load dagegen über
+  `restoreCompletedChat(chatId, turnId)` genau seine letzte completed Basis
+  wiederherstellen.
+- **`window.App.bookmarkSession`** (definiert in `firebase.js`) hält nur die
+  stabile Bookmark-Dokument-ID der sichtbaren Unterhaltung. `query-send.js`
+  beginnt sie beim ersten Turn, alle Bookmark-Saves verwenden sie, ein
+  Bookmark-Restore übernimmt dessen ID; Clear/New comparison/Logout resetten sie.
 - **`window.App.setAppTitle(question?)`** (definiert in `app-core.js`) hält den
   Standard- bzw. fragebezogenen Browser-Tab-Titel bei Query-Send, Bookmark-Open
   und Clear synchron zur aktuellen Ansicht.
