@@ -48,14 +48,14 @@ function renderMarkdownHtml(md) {
 }
 
 // Utils: Markdown → HTML (sanitised) + deine Addons
-function injectMarkdown(el, md) {
+function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources) {
   el.innerHTML = renderMarkdownHtml(md);
 
   if (window.addCopyButtons) window.addCopyButtons(el);
   if (window.addNewTabToLinks) window.addNewTabToLinks(el);
 
-  if (window.currentEvidenceSources && window.currentEvidenceSources.length && window.linkifySourceTags) {
-    window.linkifySourceTags(el, window.currentEvidenceSources);
+  if (Array.isArray(evidenceSources) && evidenceSources.length && window.linkifySourceTags) {
+    window.linkifySourceTags(el, evidenceSources);
   }
 
   if (window.ConsensusMath) window.ConsensusMath.render(el);

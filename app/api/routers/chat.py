@@ -1,6 +1,7 @@
 ﻿import os
 import time
 import logging
+import re
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -56,7 +57,26 @@ from app.services.llm.resolve_engine import (
     normalize_resolve_positions,
     run_resolve_round,
 )
-from app.services.share_snapshots import persist_pending_result
+from app.services.share_snapshots import (
+    persist_pending_result,
+    sanitize_model_labels,
+    sanitize_sources,
+)
+from app.services.chat_store import (
+    ChatNotFound,
+    ChatStore,
+    ChatStoreError,
+    TurnQuestionConflict,
+    TurnStatusConflict,
+)
+from app.services.chat_context import (
+    ChatContextConflict,
+    ChatContextError,
+    ChatContextNotFound,
+    ChatContextService,
+    FirestoreChatContextRepository,
+    build_chat_context_system_prompt,
+)
 from app.services.differences_stats import record_differences_stats
 from app.services.usage_repository import (
     FirestoreUsageRepository,
@@ -72,6 +92,9 @@ router = APIRouter()
 
 OWN_KEYS_LOGIN_REQUIRED = "Please log in to use your own API keys."
 run_usage_repository = FirestoreUsageRepository(db_firestore)
+chat_store = ChatStore(db_firestore)
+chat_context_service = ChatContextService(FirestoreChatContextRepository(db_firestore))
+_CHAT_DOCUMENT_ID_RE = re.compile(r"[0-9a-f]{32}")
 
 
 def get_run_usage_limits(is_pro: bool) -> UsageLimits:
@@ -206,6 +229,238 @@ def cap_engine_text(value, limit: int):
     return value[:limit].rstrip()
 
 
+def _chat_turn_ids(data: dict) -> Optional[tuple[str, str]]:
+    chat_id = data.get("chat_id")
+    turn_id = data.get("turn_id")
+    if (chat_id is None) != (turn_id is None):
+        raise HTTPException(
+            status_code=400,
+            detail="chat_id and turn_id must be provided together.",
+        )
+    if chat_id is None:
+        return None
+    if (
+        not isinstance(chat_id, str)
+        or not isinstance(turn_id, str)
+        or not _CHAT_DOCUMENT_ID_RE.fullmatch(chat_id)
+        or not _CHAT_DOCUMENT_ID_RE.fullmatch(turn_id)
+    ):
+        raise HTTPException(status_code=400, detail="Invalid chat or turn identifier.")
+    return chat_id, turn_id
+
+
+def _context_version_id(
+    data: dict, chat_turn_ids: Optional[tuple[str, str]]
+) -> Optional[str]:
+    version_id = data.get("context_version_id")
+    if version_id is None:
+        return None
+    if chat_turn_ids is None:
+        raise HTTPException(
+            status_code=400,
+            detail="context_version_id requires chat_id and turn_id.",
+        )
+    if not isinstance(version_id, str) or not _CHAT_DOCUMENT_ID_RE.fullmatch(version_id):
+        raise HTTPException(status_code=400, detail="Invalid context version identifier.")
+    return version_id
+
+
+def _chat_turn_disposition(
+    ids: tuple[str, str],
+    state: str,
+    *,
+    persisted: Optional[bool] = None,
+) -> dict:
+    chat_id, turn_id = ids
+    result = {
+        "chat_id": chat_id,
+        "turn_id": turn_id,
+        "chat_turn_state": state,
+    }
+    if persisted is not None:
+        result["chat_persisted"] = persisted
+    return result
+
+
+def _chat_turn_error_detail(
+    message: str,
+    ids: tuple[str, str],
+    state: str,
+    *,
+    persisted: Optional[bool] = None,
+) -> dict:
+    return {
+        "error": message,
+        **_chat_turn_disposition(ids, state, persisted=persisted),
+    }
+
+
+def _validate_chat_turn(uid: str, ids: tuple[str, str], question: str) -> dict:
+    chat_id, turn_id = ids
+    try:
+        return chat_store.validate_turn_for_completion(
+            uid,
+            chat_id,
+            turn_id,
+            question=question,
+        )
+    except ChatNotFound as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=_chat_turn_error_detail(
+                "Chat turn not found.", ids, "failed", persisted=False
+            ),
+        ) from exc
+    except TurnQuestionConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=_chat_turn_error_detail(
+                "Consensus question does not match the pending turn.",
+                ids,
+                "failed",
+                persisted=False,
+            ),
+        ) from exc
+    except TurnStatusConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=_chat_turn_error_detail(
+                "Chat turn is not completable.", ids, "failed", persisted=False
+            ),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=_chat_turn_error_detail(
+                "Invalid chat turn payload.", ids, "pending", persisted=False
+            ),
+        ) from exc
+    except ChatStoreError as exc:
+        logging.error(
+            "chat turn preflight failed uid=%s chat_id=%s turn_id=%s",
+            uid,
+            chat_id,
+            turn_id,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=_chat_turn_error_detail(
+                "Chat persistence unavailable.", ids, "pending", persisted=False
+            ),
+        ) from exc
+    except Exception as exc:
+        logging.exception(
+            "chat turn preflight failed uid=%s chat_id=%s turn_id=%s",
+            uid,
+            chat_id,
+            turn_id,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=_chat_turn_error_detail(
+                "Chat persistence unavailable.", ids, "pending", persisted=False
+            ),
+        ) from exc
+
+
+def _fail_chat_turn_best_effort(
+    uid: str,
+    ids: Optional[tuple[str, str]],
+    *,
+    error_code: str,
+) -> bool:
+    if ids is None:
+        return False
+    chat_id, turn_id = ids
+    try:
+        failed_turn = chat_store.fail_turn(uid, chat_id, turn_id, error_code=error_code)
+        return isinstance(failed_turn, dict) and failed_turn.get("status") == "failed"
+    except Exception:
+        logging.warning(
+            "chat turn failure marker failed uid=%s chat_id=%s turn_id=%s code=%s",
+            uid,
+            chat_id,
+            turn_id,
+            error_code,
+        )
+        return False
+
+
+def _replay_completed_chat_turn(
+    uid: str,
+    ids: tuple[str, str],
+    *,
+    stream_requested: bool,
+):
+    chat_id, turn_id = ids
+    try:
+        turn = chat_store.get_turn(uid, chat_id, turn_id)
+    except ChatNotFound as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=_chat_turn_error_detail(
+                "Chat turn not found.", ids, "failed", persisted=False
+            ),
+        ) from exc
+    except Exception as exc:
+        logging.exception(
+            "completed chat turn replay read failed uid=%s chat_id=%s turn_id=%s",
+            uid,
+            chat_id,
+            turn_id,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=_chat_turn_error_detail(
+                "Chat persistence unavailable.", ids, "pending", persisted=False
+            ),
+        ) from exc
+
+    consensus_text = turn.get("consensus")
+    if not isinstance(consensus_text, str) or not consensus_text.strip():
+        raise HTTPException(
+            status_code=409,
+            detail=_chat_turn_error_detail(
+                "Completed chat turn has no replayable consensus.",
+                ids,
+                "failed",
+                persisted=False,
+            ),
+        )
+
+    payload = {
+        "consensus_response": consensus_text,
+        "differences": turn.get("differences")
+        if isinstance(turn.get("differences"), str)
+        else "",
+        "differences_data": turn.get("differences_data"),
+        "sources": turn.get("sources") if isinstance(turn.get("sources"), list) else [],
+        "model_answers": (
+            turn.get("model_answers")
+            if isinstance(turn.get("model_answers"), dict)
+            else {}
+        ),
+        **_chat_turn_disposition(ids, "completed", persisted=True),
+        "chat_replayed": True,
+    }
+    result_id = turn.get("result_id")
+    if isinstance(result_id, str) and result_id:
+        payload["result_id"] = result_id
+
+    if not stream_requested:
+        return payload
+
+    def replay_event_source():
+        yield sse_pack("consensus.final", {"text": consensus_text})
+        yield sse_pack("final", payload)
+
+    return StreamingResponse(
+        replay_event_source(),
+        media_type="text/event-stream",
+        headers=dict(SSE_HEADERS),
+    )
+
+
 def normalize_followup_context(raw):
     """Validiert das optionale context-Feld einer Follow-up-Frage
     ({previous_question, previous_consensus}) und kappt beide Texte
@@ -229,6 +484,51 @@ def normalize_followup_context(raw):
             previous_consensus.strip(), cfg.get_followup_consensus_char_limit()
         ),
     }
+
+
+def _resolve_authoritative_chat_context(
+    uid: Optional[str],
+    data: dict,
+    question: str,
+) -> Optional[str]:
+    fields = (
+        data.get("chat_id"),
+        data.get("turn_id"),
+        data.get("context_version_id"),
+    )
+    if not any(value is not None for value in fields):
+        return None
+    if uid is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if data.get("context") is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Legacy context and context_version_id cannot be combined.",
+        )
+    if not all(
+        isinstance(value, str) and _CHAT_DOCUMENT_ID_RE.fullmatch(value)
+        for value in fields
+    ):
+        raise HTTPException(status_code=400, detail="Invalid chat context identifier.")
+    chat_id, turn_id, version_id = fields
+    try:
+        return chat_context_service.resolve_for_ask(
+            uid,
+            chat_id,
+            turn_id,
+            version_id,
+            question=question,
+        )
+    except ChatContextNotFound as exc:
+        raise HTTPException(status_code=404, detail="Chat context not found") from exc
+    except ChatContextConflict as exc:
+        raise HTTPException(status_code=409, detail="Chat context conflict") from exc
+    except ChatContextError as exc:
+        logging.error("chat context resolution failed uid=%s: %s", uid, exc)
+        raise HTTPException(status_code=503, detail="Chat context unavailable") from exc
+    except Exception as exc:
+        logging.exception("chat context resolution failed uid=%s", uid)
+        raise HTTPException(status_code=503, detail="Chat context unavailable") from exc
 
 
 def validate_question_word_limit(question: str, is_pro: bool, deep_search: bool):
@@ -381,7 +681,19 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     attachments = parse_attachments(data, is_pro_user)
     max_tokens = cfg.get_output_token_limit(is_pro_user, deep_search)
 
-    # Follow-up-Kontext: genau eine vorherige Frage/Konsens-Ebene,
+    authoritative_context = _resolve_authoritative_chat_context(uid, data, question)
+    if authoritative_context:
+        base_prompt = (
+            system_prompt.strip()
+            if isinstance(system_prompt, str) and system_prompt.strip()
+            else get_system_prompt()
+        )
+        system_prompt = build_chat_context_system_prompt(
+            base_prompt,
+            authoritative_context,
+        )
+
+    # Legacy-Follow-up-Kontext: genau eine vorherige Frage/Konsens-Ebene,
     # serverseitig gekappt und hier in den System-Prompt injiziert — nicht in
     # /prepare, damit der Kontext auch dann ankommt, wenn das Frontend nach
     # einem /prepare-Fehler mit dem Basis-Prompt weitermacht. Kein Tier-Gate:
@@ -568,6 +880,8 @@ async def prepare(request: Request, data: dict = Body(...)):
 @limiter.limit("5/minute")
 def consensus(request: Request, data: dict = Body(...)):
     id_token = extract_id_token(request, data)
+    chat_turn_ids = _chat_turn_ids(data)
+    context_version_id = _context_version_id(data, chat_turn_ids)
     use_own_keys = str(data.get("useOwnKeys", "false")).lower() == "true"
     deep_think = parse_boolean_flag(data.get("deep_search", False))
     consensus_model = data.get("consensus_model")
@@ -588,21 +902,38 @@ def consensus(request: Request, data: dict = Body(...)):
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    if consensus_model not in cfg.ALLOWED_CONSENSUS_MODELS:
-        raise HTTPException(status_code=400, detail="Invalid consensus model selected.")
-
-    if deep_think and not is_pro:
-        raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
-
-    if not use_own_keys:
-        if cfg.is_premium_consensus_model(consensus_model) and not is_pro:
-            raise HTTPException(status_code=403, detail="Premium consensus engines are reserved for Pro users.")
+    # A completed turn is owner-bound stored history, not a new engine run.
+    # Resolve it before current model/tier/credential checks so a later plan or
+    # allowlist change cannot make an already completed answer unreadable.
+    question = cap_engine_text(
+        data.get("question"), cfg.get_consensus_question_char_limit()
+    )
+    validated_chat_turn_ids = None
+    if question and chat_turn_ids is not None:
+        validated_turn = _validate_chat_turn(uid, chat_turn_ids, question)
+        validated_chat_turn_ids = chat_turn_ids
+        linked_context_version_id = validated_turn.get("context_version_id")
+        if linked_context_version_id != context_version_id:
+            raise HTTPException(
+                status_code=409,
+                detail=_chat_turn_error_detail(
+                    "Consensus context version does not match the pending turn.",
+                    chat_turn_ids,
+                    "pending",
+                    persisted=False,
+                ),
+            )
+        if validated_turn.get("status") == "completed":
+            return _replay_completed_chat_turn(
+                uid,
+                validated_chat_turn_ids,
+                stream_requested=stream_requested,
+            )
 
     # Parameter extrahieren. Frage und Antworten kommen als freier Text vom
     # Client und werden serverseitig gekappt: der Consensus-Prompt enthaelt
     # sonst unbegrenzte Eingaben gegen den Developer-Key (Kostenleck).
     answer_char_limit = cfg.get_consensus_answer_char_limit()
-    question        = cap_engine_text(data.get("question"), cfg.get_consensus_question_char_limit())
     answer_openai   = cap_engine_text(data.get("answer_openai"), answer_char_limit)
     answer_mistral  = cap_engine_text(data.get("answer_mistral"), answer_char_limit)
     answer_claude   = cap_engine_text(data.get("answer_claude"), answer_char_limit)
@@ -630,23 +961,6 @@ def consensus(request: Request, data: dict = Body(...)):
     if "Grok" in excluded_models:
         answer_grok = None
 
-    # API Keys setzen: Own-Key-Modus nutzt ausschliesslich Nutzer-Keys,
-    # andernfalls kommt das vollstaendige Developer-Key-Set aus der gemeinsamen
-    # Credential-Quelle.
-    if cfg.is_premium_consensus_model(consensus_model):
-        if not id_token:
-            raise HTTPException(status_code=403, detail="Premium consensus engines require a Pro account.")
-        if uid is None:
-            try:
-                uid = verify_user_token(id_token)
-                is_pro = is_user_pro(uid)
-            except Exception:
-                raise HTTPException(status_code=401, detail="Invalid token")
-        if not is_pro:
-            raise HTTPException(status_code=403, detail="Premium consensus engines are reserved for Pro users.")
-
-    api_keys = build_engine_api_keys(data, use_own_keys)
-
     # Validierung der erforderlichen Parameter (nur für Modelle, die nicht ausgeschlossen wurden)
     missing = []
     if not question:
@@ -664,7 +978,11 @@ def consensus(request: Request, data: dict = Body(...)):
             "DeepSeek": answer_deepseek,
             "Grok": answer_grok,
         }.items()
-        if model not in excluded_models and answer
+        if (
+            model not in excluded_models
+            and isinstance(answer, str)
+            and answer.strip()
+        )
     }
 
     # Ein einzelner ausgefallener Provider (Timeout, 503, leere Reasoning-
@@ -678,7 +996,42 @@ def consensus(request: Request, data: dict = Body(...)):
         missing.append("at least two selected model answers")
 
     if missing:
-        raise HTTPException(status_code=400, detail="Missing parameters: " + ", ".join(missing))
+        failed = _fail_chat_turn_best_effort(
+            uid,
+            validated_chat_turn_ids,
+            error_code=(
+                "insufficient_answers"
+                if len(included_answers) < 2
+                else "consensus_failed"
+            ),
+        )
+        message = "Missing parameters: " + ", ".join(missing)
+        if validated_chat_turn_ids is not None:
+            raise HTTPException(
+                status_code=400,
+                detail=_chat_turn_error_detail(
+                    message,
+                    validated_chat_turn_ids,
+                    "failed" if failed else "pending",
+                    persisted=False,
+                ),
+            )
+        raise HTTPException(status_code=400, detail=message)
+
+    if consensus_model not in cfg.ALLOWED_CONSENSUS_MODELS:
+        raise HTTPException(status_code=400, detail="Invalid consensus model selected.")
+
+    if deep_think and not is_pro:
+        raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
+
+    if not use_own_keys and cfg.is_premium_consensus_model(consensus_model) and not is_pro:
+        raise HTTPException(status_code=403, detail="Premium consensus engines are reserved for Pro users.")
+
+    # API Keys setzen: Own-Key-Modus nutzt ausschliesslich Nutzer-Keys,
+    # andernfalls kommt das vollstaendige Developer-Key-Set aus der gemeinsamen
+    # Credential-Quelle. Bei unvollstaendigen Antworten ist der Turn bereits
+    # autoritativ disponiert, bevor diese aktuelle Konfiguration relevant wird.
+    api_keys = build_engine_api_keys(data, use_own_keys)
     
     # Engine-Key-Check (wichtig, um 401 der Engine zu vermeiden)
     engine = consensus_model
@@ -736,6 +1089,33 @@ def consensus(request: Request, data: dict = Body(...)):
     share_uid = uid
     model_labels = data.get("model_labels")
 
+    allowed_model_labels = sanitize_model_labels(
+        model_labels,
+        list(included_answers.keys()),
+    )
+    chat_model_answers = {
+        provider: {
+            "provider": provider,
+            "answer": answer,
+            "model_label": allowed_model_labels.get(provider, provider),
+            "sources": model_sources.get(provider, []),
+        }
+        for provider, answer in included_answers.items()
+    }
+    if "turn_sources" in data:
+        raw_turn_sources = data.get("turn_sources")
+    else:
+        raw_turn_sources = [
+            source
+            for provider in included_answers
+            for source in (
+                model_sources.get(provider, [])
+                if isinstance(model_sources.get(provider, []), list)
+                else []
+            )
+        ]
+    sanitized_turn_sources = sanitize_sources(raw_turn_sources)
+
     def record_run_stats(differences_data):
         # Anonyme Differences-Telemetrie (keine Texte, keine UID — siehe
         # app/services/differences_stats.py). Mock-Läufe (E2E) schreiben nicht.
@@ -766,6 +1146,56 @@ def consensus(request: Request, data: dict = Body(...)):
             included_providers=list(included_answers.keys()),
             model_labels=model_labels,
             consensus_model=consensus_model,
+        )
+
+    def persist_chat_completion(
+        consensus_text,
+        differences_text,
+        differences_data,
+        result_id,
+    ) -> bool:
+        if validated_chat_turn_ids is None:
+            return False
+        chat_id, turn_id = validated_chat_turn_ids
+        try:
+            chat_store.complete_turn(
+                uid,
+                chat_id,
+                turn_id,
+                question=question,
+                model_answers=chat_model_answers,
+                consensus=consensus_text,
+                differences=differences_text,
+                differences_data=differences_data,
+                sources=sanitized_turn_sources,
+                result_id=result_id,
+            )
+            return True
+        except Exception:
+            # The LLM result is authoritative for the UI. Keep the pending turn
+            # retryable and report only identifiers/state, never content/keys.
+            logging.exception(
+                "chat turn completion failed uid=%s chat_id=%s turn_id=%s",
+                uid,
+                chat_id,
+                turn_id,
+            )
+            return False
+
+    def add_chat_result_fields(
+        payload: dict,
+        *,
+        persisted: bool,
+        state: str,
+    ) -> None:
+        if validated_chat_turn_ids is None:
+            return
+        payload.update(
+            _chat_turn_disposition(
+                validated_chat_turn_ids,
+                state,
+                persisted=persisted,
+            )
         )
 
     if stream_requested:
@@ -863,6 +1293,13 @@ def consensus(request: Request, data: dict = Body(...)):
                         else:
                             differences_text = coerce_text(item.get("text"))
                             differences_data = item.get("data")
+            except GeneratorExit:
+                _fail_chat_turn_best_effort(
+                    uid,
+                    validated_chat_turn_ids,
+                    error_code="cancelled",
+                )
+                raise
             except Exception as exc:
                 logging.exception("Consensus streaming failed")
                 stream_failed = True
@@ -876,11 +1313,35 @@ def consensus(request: Request, data: dict = Body(...)):
                 "differences": differences_text,
                 "differences_data": differences_data,
             }
+            result_id = None
+            chat_persisted = False
+            chat_turn_state = "pending"
             if not stream_failed and not consensus_failed:
                 record_run_stats(differences_data)
                 result_id = persist_share_result(consensus_text, differences_data, differences_text)
                 if result_id:
                     payload["result_id"] = result_id
+                chat_persisted = persist_chat_completion(
+                    consensus_text,
+                    differences_text,
+                    differences_data,
+                    result_id,
+                )
+                if chat_persisted:
+                    chat_turn_state = "completed"
+            else:
+                failed = _fail_chat_turn_best_effort(
+                    uid,
+                    validated_chat_turn_ids,
+                    error_code="consensus_failed",
+                )
+                if failed:
+                    chat_turn_state = "failed"
+            add_chat_result_fields(
+                payload,
+                persisted=chat_persisted,
+                state=chat_turn_state,
+            )
             payload.update(extra_fields)
             yield sse_pack("final", payload)
 
@@ -894,48 +1355,90 @@ def consensus(request: Request, data: dict = Body(...)):
             headers=dict(SSE_HEADERS),
         )
 
-    consensus_answer = query_consensus(
-        question,
-        answer_openai,
-        answer_mistral,
-        answer_claude,
-        answer_gemini,
-        answer_deepseek,
-        answer_grok,
-        excluded_models,
-        consensus_model,
-        api_keys,
-        model_sources=model_sources,
-    )
-
-    consensus_failed = is_consensus_error_text(consensus_answer)
-    if consensus_failed:
-        # Kein Vergleich gegen einen Fehlertext (siehe Streaming-Pfad).
-        differences, differences_data = DIFFERENCES_SKIPPED_TEXT, None
-    else:
-        differences, differences_data = query_differences(
+    try:
+        consensus_answer = query_consensus(
+            question,
             answer_openai,
             answer_mistral,
             answer_claude,
             answer_gemini,
             answer_deepseek,
             answer_grok,
-            consensus_answer,
+            excluded_models,
+            consensus_model,
             api_keys,
-            differences_model=consensus_model,
-            excluded_models=excluded_models,
+            model_sources=model_sources,
         )
+
+        consensus_failed = is_consensus_error_text(consensus_answer)
+        if consensus_failed:
+            # Kein Vergleich gegen einen Fehlertext (siehe Streaming-Pfad).
+            differences, differences_data = DIFFERENCES_SKIPPED_TEXT, None
+        else:
+            differences, differences_data = query_differences(
+                answer_openai,
+                answer_mistral,
+                answer_claude,
+                answer_gemini,
+                answer_deepseek,
+                answer_grok,
+                consensus_answer,
+                api_keys,
+                differences_model=consensus_model,
+                excluded_models=excluded_models,
+            )
+    except Exception as exc:
+        failed = _fail_chat_turn_best_effort(
+            uid,
+            validated_chat_turn_ids,
+            error_code="consensus_failed",
+        )
+        if validated_chat_turn_ids is not None:
+            raise HTTPException(
+                status_code=500,
+                detail=_chat_turn_error_detail(
+                    "Consensus generation failed.",
+                    validated_chat_turn_ids,
+                    "failed" if failed else "pending",
+                    persisted=False,
+                ),
+            ) from exc
+        raise
 
     response = {
         "consensus_response": consensus_answer,
         "differences": differences,
         "differences_data": differences_data,
     }
+    chat_persisted = False
+    chat_turn_state = "pending"
+    result_id = None
     if not consensus_failed:
         record_run_stats(differences_data)
         result_id = persist_share_result(consensus_answer, differences_data, differences)
         if result_id:
             response["result_id"] = result_id
+        chat_persisted = persist_chat_completion(
+            consensus_answer,
+            differences,
+            differences_data,
+            result_id,
+        )
+        if chat_persisted:
+            chat_turn_state = "completed"
+    else:
+        failed = _fail_chat_turn_best_effort(
+            uid,
+            validated_chat_turn_ids,
+            error_code="consensus_failed",
+        )
+        if failed:
+            chat_turn_state = "failed"
+    add_chat_result_fields(
+        response,
+        persisted=chat_persisted,
+        state=chat_turn_state,
+    )
     if usage_result is not None:
         response.update(usage_response_fields(usage_result.snapshot, is_pro))
         response["usage_run_status"] = usage_result.status.value

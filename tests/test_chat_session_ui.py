@@ -1,0 +1,473 @@
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_chat_session_state_fresh_followup_retry_and_reset_contract():
+    script_path = ROOT / "static" / "js" / "chat-session.js"
+    node_script = f"""
+const assert = require("assert");
+const fs = require("fs");
+const vm = require("vm");
+const {{ webcrypto }} = require("crypto");
+global.window = global;
+global.crypto = webcrypto;
+global.App = {{}};
+const calls = [];
+let chatIds = ["c".repeat(32), "d".repeat(32), "e".repeat(32)];
+let turnIds = ["1".repeat(32), "2".repeat(32), "3".repeat(32), "4".repeat(32)];
+let failNextTurn = false;
+let failNextChat = false;
+global.fetch = async (url, options) => {{
+  calls.push({{ url, options }});
+  if (url === "/chats") {{
+    if (failNextChat) {{
+      failNextChat = false;
+      return {{ ok: false, status: 503, json: async () => ({{}}) }};
+    }}
+    return {{ ok: true, status: 201, json: async () => ({{ chat: {{ id: chatIds.shift() }} }}) }};
+  }}
+  if (failNextTurn) {{
+    failNextTurn = false;
+    return {{ ok: false, status: 503, json: async () => ({{}}) }};
+  }}
+  return {{ ok: true, status: 201, json: async () => ({{ turn: {{ id: turnIds.shift() }} }}) }};
+}};
+vm.runInThisContext(fs.readFileSync({str(script_path)!r}, "utf8"), {{ filename: "chat-session.js" }});
+const session = App.chatSession;
+const run = (overrides = {{}}) => session.beginRun({{
+  question: "Question one",
+  mode: "Standard",
+  deepSearch: false,
+  selectedModels: ["model-a", "model-b"],
+  consensusModel: "Gemini",
+  isFollowup: false,
+  prepareSucceeded: true,
+  api_key: "must-not-survive",
+  ...overrides
+}});
+
+(async () => {{
+  run();
+  const stableId = session.pendingClientRequestId;
+  const first = await session.ensurePendingTurn({{ idToken: "token", question: "Question one", consensusModel: "Gemini" }});
+  assert.deepStrictEqual(first, {{ chatId: "c".repeat(32), turnId: "1".repeat(32) }});
+  assert.strictEqual(session.activeChatId, null);
+  assert.strictEqual(session.pendingChatId, first.chatId);
+  assert.strictEqual(calls.length, 2);
+  const firstTurnPayload = JSON.parse(calls[1].options.body);
+  assert.deepStrictEqual(Object.keys(firstTurnPayload).sort(), [
+    "client_request_id", "consensus_model", "deep_search", "mode", "question", "selected_models"
+  ].sort());
+  assert.strictEqual(firstTurnPayload.client_request_id, stableId);
+  assert.ok(!JSON.stringify(firstTurnPayload).includes("must-not-survive"));
+  assert.ok(!JSON.stringify(firstTurnPayload).includes("token"));
+
+  const retryWithoutNetwork = await session.ensurePendingTurn({{ idToken: "token", question: "Question one", consensusModel: "Gemini" }});
+  assert.deepStrictEqual(retryWithoutNetwork, first);
+  assert.strictEqual(calls.length, 2);
+  session.handleConsensusResult({{
+    chatId: first.chatId,
+    turnId: first.turnId,
+    chatPersisted: true,
+    chatTurnState: "completed"
+  }});
+  assert.strictEqual(session.activeChatId, first.chatId);
+  assert.strictEqual(session.pendingChatId, null);
+  assert.strictEqual(session.pendingTurnId, null);
+
+  run({{ question: "Follow-up", isFollowup: true }});
+  const beforeFollowup = calls.length;
+  const followup = await session.ensurePendingTurn({{ idToken: "token", question: "Follow-up", consensusModel: "Gemini" }});
+  assert.strictEqual(followup.chatId, first.chatId);
+  assert.strictEqual(calls.length, beforeFollowup + 1);
+  assert.strictEqual(calls.at(-1).url, `/chats/${{first.chatId}}/turns`);
+  session.handleConsensusResult({{
+    chatId: followup.chatId,
+    turnId: followup.turnId,
+    chatPersisted: false,
+    chatTurnState: "pending"
+  }});
+  assert.strictEqual(session.activeChatId, first.chatId);
+  assert.strictEqual(session.pendingChatId, first.chatId);
+
+  run({{ question: "Follow-up behind pending", isFollowup: true }});
+  const beforeUnsafeFollowup = calls.length;
+  assert.strictEqual(await session.ensurePendingTurn({{
+    idToken: "token",
+    question: "Follow-up behind pending",
+    consensusModel: "Gemini"
+  }}), null);
+  assert.strictEqual(calls.length, beforeUnsafeFollowup);
+  assert.strictEqual(session.activeChatId, null);
+
+  run({{ question: "Fresh again" }});
+  assert.strictEqual(session.activeChatId, null);
+  const freshAgain = await session.ensurePendingTurn({{ idToken: "token", question: "Fresh again", consensusModel: "Gemini" }});
+  assert.strictEqual(freshAgain.chatId, "d".repeat(32));
+  assert.strictEqual(session.activeChatId, null);
+  session.handleConsensusResult({{
+    chatId: freshAgain.chatId,
+    turnId: freshAgain.turnId,
+    chatPersisted: false,
+    chatTurnState: "pending"
+  }});
+  assert.strictEqual(session.activeChatId, null);
+  assert.strictEqual(session.pendingChatId, freshAgain.chatId);
+
+  run({{ question: "Must not follow pending", isFollowup: true }});
+  const beforePendingFollowup = calls.length;
+  assert.strictEqual(await session.ensurePendingTurn({{
+    idToken: "token",
+    question: "Must not follow pending",
+    consensusModel: "Gemini"
+  }}), null);
+  assert.strictEqual(calls.length, beforePendingFollowup);
+  assert.strictEqual(session.activeChatId, null);
+
+  session.reset();
+  run({{ question: "Legacy follow-up", isFollowup: true }});
+  const beforeLegacy = calls.length;
+  const legacy = await session.ensurePendingTurn({{ idToken: "token", question: "Legacy follow-up", consensusModel: "Gemini" }});
+  assert.strictEqual(legacy, null);
+  assert.strictEqual(calls.length, beforeLegacy);
+
+  session.reset();
+  run({{ question: "Retry turn" }});
+  failNextTurn = true;
+  const requestId = session.pendingClientRequestId;
+  const firstAttempt = await session.ensurePendingTurn({{ idToken: "token", question: "Retry turn", consensusModel: "Gemini" }});
+  assert.strictEqual(firstAttempt, null);
+  assert.strictEqual(session.activeChatId, null);
+  const retryAttempt = await session.ensurePendingTurn({{ idToken: "token", question: "Retry turn", consensusModel: "Gemini" }});
+  assert.strictEqual(retryAttempt.chatId, "e".repeat(32));
+  const retryBodies = calls.filter(call => call.url === `/chats/${{"e".repeat(32)}}/turns`)
+    .map(call => JSON.parse(call.options.body));
+  assert.strictEqual(retryBodies.length, 2);
+  assert.ok(retryBodies.every(body => body.client_request_id === requestId));
+
+  const beforeLogicalRetry = calls.length;
+  run({{ question: "Retry turn" }});
+  assert.strictEqual(session.pendingClientRequestId, requestId);
+  assert.deepStrictEqual(await session.ensurePendingTurn({{
+    idToken: "token",
+    question: "Retry turn",
+    consensusModel: "Gemini"
+  }}), retryAttempt);
+  assert.strictEqual(calls.length, beforeLogicalRetry);
+
+  session.handleConsensusResult({{}});
+  assert.strictEqual(session.pendingChatId, retryAttempt.chatId);
+  assert.strictEqual(session.pendingTurnId, retryAttempt.turnId);
+  session.handleConsensusResult({{
+    chatId: retryAttempt.chatId,
+    turnId: retryAttempt.turnId,
+    chatPersisted: false,
+    chatTurnState: "pending"
+  }});
+  assert.strictEqual(session.pendingChatId, retryAttempt.chatId);
+  assert.strictEqual(session.pendingTurnId, retryAttempt.turnId);
+  session.handleConsensusResult({{
+    chatId: retryAttempt.chatId,
+    turnId: retryAttempt.turnId,
+    chatPersisted: false,
+    chatTurnState: "failed"
+  }});
+  assert.strictEqual(session.activeChatId, null);
+  assert.strictEqual(session.pendingChatId, null);
+  assert.strictEqual(session.pendingTurnId, null);
+
+  session.reset();
+  run({{ question: "Chat unavailable" }});
+  failNextChat = true;
+  const beforeFailure = calls.length;
+  assert.strictEqual(await session.ensurePendingTurn({{ idToken: "token", question: "Chat unavailable", consensusModel: "Gemini" }}), null);
+  assert.strictEqual(session.activeChatId, null);
+  assert.strictEqual(await session.ensurePendingTurn({{ idToken: "token", question: "Chat unavailable", consensusModel: "Gemini" }}), null);
+  assert.strictEqual(calls.length, beforeFailure + 1);
+
+  session.reset();
+  assert.strictEqual(session.activeChatId, null);
+  assert.strictEqual(session.activeTurnId, null);
+  assert.strictEqual(session.pendingChatId, null);
+  assert.strictEqual(session.pendingTurnId, null);
+  assert.strictEqual(session.pendingContextVersionId, null);
+  assert.strictEqual(session.pendingUsageRunKey, null);
+  assert.strictEqual(session.pendingClientRequestId, null);
+  assert.strictEqual(session.logicalRun, null);
+}})().catch(error => {{ console.error(error); process.exit(1); }});
+"""
+    result = subprocess.run(
+        ["node", "-e", node_script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_chat_session_script_order_consensus_payload_and_legacy_bookmarks_remain():
+    template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
+    consensus = (ROOT / "static" / "js" / "consensus-run.js").read_text(
+        encoding="utf-8"
+    )
+    query = (ROOT / "static" / "js" / "query-send.js").read_text(encoding="utf-8")
+    firebase = (ROOT / "static" / "firebase.js").read_text(encoding="utf-8")
+    app_init = (ROOT / "static" / "js" / "app-init.js").read_text(encoding="utf-8")
+
+    assert template.index("/static/js/app-core.js") < template.index(
+        "/static/js/chat-session.js"
+    )
+    assert template.index("/static/js/chat-session.js") < template.index(
+        "/static/js/consensus-run.js"
+    )
+    assert template.index("/static/js/consensus-run.js") < template.index(
+        "/static/js/query-send.js"
+    )
+    assert template.index("/static/js/query-send.js") < template.index(
+        "/static/js/app-init.js"
+    )
+    assert "chat-session.js?v=20260805-chatmulti1" in template
+    assert 'data-engine-provider="{{ model.provider }}"' in template
+    assert "consensusPayload.chat_id = chatTurnIds.chatId" in consensus
+    assert "consensusPayload.turn_id = chatTurnIds.turnId" in consensus
+    assert "consensusPayload.context_version_id = chatTurnIds.contextVersionId" in consensus
+    assert "streamSSERequest(\"/consensus\", consensusPayload" in consensus
+    assert consensus.index("ensurePendingTurn") < consensus.index(
+        'streamSSERequest("/consensus", consensusPayload'
+    )
+    assert "window.saveBookmarkConsensus(" in consensus
+    assert query.count("window.saveBookmark(") == 6
+    assert "window.App?.chatSession?.reset?.();" in firebase
+    assert "window.App.chatSession?.reset?.();" in app_init
+    assert "chatSession?.beginRun?.({" in query
+    assert query.count("attachConversationContext(payload);") == 6
+    assert "followupContext && !authoritativeContinuation" in query
+    assert "Object.assign(payload, authoritativeContextBinding)" in query
+    assert "memory_api_key" not in query
+    offer_block = consensus.split("offer(question, consensusText", 1)[1].split(
+        "arm()", 1
+    )[0]
+    assert "if (this.followupInFlight)" not in offer_block
+    history_block = consensus.split("appendHistoryTurn(", 1)[1].split(
+        "archiveCurrentExchange()", 1
+    )[0]
+    assert "injectMarkdown(answerBody, turnData.consensus, turnSources)" in history_block
+    assert "window.currentEvidenceSources =" not in history_block
+    assert "turnData.model_answers" in history_block
+    assert "thread-history-sources" in history_block
+    assert "terminalError" not in consensus
+    assert "chatTurnState: chatDisposition.chat_turn_state" in consensus
+
+
+def test_chat_turn_payload_contains_no_key_or_answer_fields():
+    session_script = (ROOT / "static" / "js" / "chat-session.js").read_text(
+        encoding="utf-8"
+    )
+    payload_block = session_script.split("const turnPayload = {", 1)[1].split("};", 1)[0]
+    assert "question:" in payload_block
+    assert "selected_models:" in payload_block
+    assert "client_request_id:" in payload_block
+    assert "api_key" not in payload_block
+    assert "id_token" not in payload_block
+    assert "answer" not in payload_block
+
+
+def test_session6_frontend_replay_disposition_and_ui_ordering_contracts():
+    consensus = (ROOT / "static" / "js" / "consensus-run.js").read_text(
+        encoding="utf-8"
+    )
+    query = (ROOT / "static" / "js" / "query-send.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'const completedReplay = data.chat_replayed === true;' in consensus
+    assert "if (!completedReplay && window.auth?.currentUser)" in consensus
+    assert "if (!completedReplay && bestModelFromConsensus)" in consensus
+    assert 'const dispositionOnly = trigger === "disposition";' in consensus
+    assert "replayPendingTurn || dispositionOnly" in consensus
+    assert 'window.getConsensus("disposition")' in query
+
+    # Own-key completeness is checked before /prepare, follow-up consumption,
+    # pending-turn creation, and all provider calls.
+    own_key_check = query.index("const requiredOwnKeyProviders")
+    assert own_key_check < query.index("window.App.followup?.consume?.()")
+    assert own_key_check < query.index("chatSession?.beginRun?.({")
+    assert own_key_check < query.index('prepareWithUsageRetry(')
+
+    # A context failure must leave the live completed predecessor untouched.
+    context_build = query.index("await chatSession.ensureContext({")
+    archive = query.index("window.App.followup?.archiveCurrentExchange?.()")
+    destructive_reset = query.index("delete box.dataset.consensusAnswer")
+    evidence_reset = query.index("window.currentEvidenceSources = []")
+    assert context_build < archive < destructive_reset
+    assert context_build < evidence_reset
+
+    # Fresh Turn 1 remains lazy; query-send creates an early turn only inside
+    # the authoritative-continuation branch. consensus-run retains late create.
+    lifecycle = query.split("let authoritativeContextBinding = null;", 1)[1].split(
+        "function attachConversationContext", 1
+    )[0]
+    assert lifecycle.count("ensurePendingTurn") == 1
+    assert lifecycle.index("if (authoritativeContinuation)") < lifecycle.index(
+        "ensurePendingTurn"
+    )
+    assert "ensurePendingTurn" in consensus
+
+
+def test_chat_context_version_retry_degraded_and_own_key_contract():
+    script_path = ROOT / "static" / "js" / "chat-session.js"
+    node_script = f"""
+const assert = require("assert");
+const fs = require("fs");
+const vm = require("vm");
+const {{ webcrypto }} = require("crypto");
+global.window = global;
+global.crypto = webcrypto;
+global.App = {{}};
+const calls = [];
+const turnIds = ["1".repeat(32), "2".repeat(32), "3".repeat(32), "4".repeat(32)];
+let contextResponses = [];
+let inspectedState = "pending";
+global.fetch = async (url, options = {{}}) => {{
+  calls.push({{ url, options }});
+  if (url.endsWith("/context")) return contextResponses.shift();
+  if (options.method === "POST" && url.endsWith("/turns")) {{
+    return {{ ok: true, status: 201, json: async () => ({{ turn: {{ id: turnIds.shift() }} }}) }};
+  }}
+  if (!options.method && url.includes("/turns/")) {{
+    return {{ ok: true, status: 200, json: async () => ({{ turn: {{ status: inspectedState }} }}) }};
+  }}
+  throw new Error("unexpected fetch " + url);
+}};
+vm.runInThisContext(fs.readFileSync({str(script_path)!r}, "utf8"), {{ filename: "chat-session.js" }});
+const session = App.chatSession;
+const activeChat = "c".repeat(32);
+session.activeChatId = activeChat;
+session.activeTurnId = "a".repeat(32);
+session.beginRun({{
+  question: "Second", mode: "Standard", deepSearch: false,
+  selectedModels: ["m1", "m2"], consensusModel: "Gemini",
+  isFollowup: true, prepareSucceeded: true, useOwnKeys: false,
+  usageRunKey: "usage-stable"
+}});
+
+(async () => {{
+  const pending = await session.ensurePendingTurn({{
+    idToken: "token", question: "Second", consensusModel: "Gemini"
+  }});
+  assert.strictEqual(pending.chatId, activeChat);
+  const version = "b".repeat(32);
+  contextResponses = [
+    {{ ok: false, status: 202, headers: {{ get: () => "0" }}, json: async () => ({{ status: "building" }}) }},
+    {{ ok: true, status: 200, headers: {{ get: () => null }}, json: async () => ({{
+      context: {{ id: version, state: "ready", target_turn_id: pending.turnId }}
+    }}) }}
+  ];
+  const ready = await session.ensureContext({{
+    idToken: "token", useOwnKeys: false, usageRunKey: "usage-stable"
+  }});
+  assert.strictEqual(ready.contextVersionId, version);
+  assert.deepStrictEqual(session.contextBinding(), {{
+    chat_id: activeChat, turn_id: pending.turnId, context_version_id: version
+  }});
+  const contextCalls = calls.filter(call => call.url.endsWith("/context"));
+  assert.strictEqual(contextCalls.length, 2);
+  contextCalls.forEach(call => assert.deepStrictEqual(JSON.parse(call.options.body), {{
+    useOwnKeys: false, usage_run_key: "usage-stable"
+  }}));
+  assert.strictEqual(session.canReuseUsageRun({{
+    question: "Second", mode: "Standard", deepSearch: false,
+    selectedModels: ["m1", "m2"], consensusModel: "Gemini",
+    isFollowup: true, useOwnKeys: false
+  }}), true);
+
+  session.markPendingUncertain();
+  inspectedState = "completed";
+  const inspected = await session.inspectPendingTurn({{ idToken: "token" }});
+  assert.strictEqual(inspected.status, "completed");
+  assert.strictEqual(session.pendingTurnId, pending.turnId);
+  session.handleConsensusResult({{
+    chatId: activeChat, turnId: pending.turnId,
+    chatPersisted: true, chatTurnState: "completed"
+  }});
+  assert.strictEqual(session.activeTurnId, pending.turnId);
+
+  session.beginRun({{
+    question: "Third", mode: "Standard", deepSearch: false,
+    selectedModels: ["m1", "m2"], consensusModel: "Gemini",
+    isFollowup: true, prepareSucceeded: true, useOwnKeys: true
+  }});
+  const third = await session.ensurePendingTurn({{
+    idToken: "token", question: "Third", consensusModel: "Gemini"
+  }});
+  const degradedVersion = "d".repeat(32);
+  contextResponses = [{{
+    ok: true, status: 200, headers: {{ get: () => null }}, json: async () => ({{
+      context: {{ id: degradedVersion, state: "degraded", target_turn_id: third.turnId }}
+    }})
+  }}];
+  const degraded = await session.ensureContext({{
+    idToken: "token", useOwnKeys: true, memoryApiKey: "only-memory-key"
+  }});
+  assert.strictEqual(degraded.contextState, "degraded");
+  const ownBody = JSON.parse(calls.filter(call => call.url.endsWith("/context")).at(-1).options.body);
+  assert.deepStrictEqual(ownBody, {{ useOwnKeys: true, memory_api_key: "only-memory-key" }});
+  assert.ok(!JSON.stringify(ownBody).includes("usage-stable"));
+
+  session.handleConsensusResult({{
+    chatId: activeChat, turnId: third.turnId,
+    chatPersisted: true, chatTurnState: "completed"
+  }});
+  session.beginRun({{
+    question: "Fourth", mode: "Standard", deepSearch: false,
+    selectedModels: ["m1", "m2"], consensusModel: "Gemini",
+    isFollowup: true, prepareSucceeded: true, useOwnKeys: false,
+    usageRunKey: "usage-fourth"
+  }});
+  const fourth = await session.ensurePendingTurn({{
+    idToken: "token", question: "Fourth", consensusModel: "Gemini"
+  }});
+  const completedPredecessor = session.activeTurnId;
+  contextResponses = [{{
+    ok: false, status: 409, headers: {{ get: () => null }},
+    json: async () => ({{ detail: "Chat context conflict" }})
+  }}];
+  await assert.rejects(session.ensureContext({{
+    idToken: "token", useOwnKeys: false, usageRunKey: "usage-fourth"
+  }}), /conflict/i);
+  assert.strictEqual(session.activeTurnId, completedPredecessor);
+  assert.strictEqual(session.pendingTurnId, fourth.turnId);
+
+  const controller = new AbortController();
+  contextResponses = [{{
+    ok: false, status: 202, headers: {{ get: () => "1" }},
+    json: async () => ({{ status: "building" }})
+  }}];
+  controller.abort();
+  await assert.rejects(session.ensureContext({{
+    idToken: "token", useOwnKeys: false, usageRunKey: "usage-fourth",
+    signal: controller.signal
+  }}), error => error.name === "AbortError");
+  assert.strictEqual(session.pendingTurnId, fourth.turnId);
+  session.handleConsensusResult({{
+    chatId: activeChat, turnId: fourth.turnId,
+    chatPersisted: false, chatTurnState: "failed"
+  }});
+  assert.strictEqual(session.activeTurnId, completedPredecessor);
+  assert.strictEqual(session.pendingTurnId, null);
+}})().catch(error => {{ console.error(error); process.exit(1); }});
+"""
+    result = subprocess.run(
+        ["node", "-e", node_script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

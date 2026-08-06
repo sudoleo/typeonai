@@ -182,6 +182,49 @@ def test_ask_with_context_works_for_free_users():
     assert "What is quantum entanglement?" in captured["system_prompt"]
 
 
+def test_ask_with_context_version_loads_authoritative_context_without_compressing():
+    client = make_client()
+    captured = {}
+    ids = {
+        "chat_id": "a" * 32,
+        "turn_id": "b" * 32,
+        "context_version_id": "c" * 32,
+    }
+
+    def fake_run_ask(provider, **kwargs):
+        captured.update(kwargs)
+        return {"ok": True}
+
+    def resolve(uid, chat_id, turn_id, version_id, *, question):
+        assert uid == "uid-followup-tests"
+        assert (chat_id, turn_id, version_id) == (
+            ids["chat_id"], ids["turn_id"], ids["context_version_id"]
+        )
+        assert question == "Does that decision still hold?"
+        return "AUTHORITATIVE CHAT CONTEXT: decision=PostgreSQL"
+
+    p1, p2 = auth_patches(is_pro=False)
+    with p1, p2:
+        with patch.object(
+            chat_router.chat_context_service, "resolve_for_ask", side_effect=resolve
+        ), patch.object(chat_router, "_run_ask", side_effect=fake_run_ask):
+            response = client.post(
+                "/ask_gemini",
+                headers=AUTH_HEADER,
+                json={
+                    "question": "Does that decision still hold?",
+                    "model": free_model("gemini"),
+                    "system_prompt": "BASE PROMPT",
+                    **ids,
+                },
+            )
+
+    assert response.status_code == 200
+    assert "decision=PostgreSQL" in captured["system_prompt"]
+    assert captured["system_prompt"].endswith("BASE PROMPT")
+    assert FOLLOWUP_CONTEXT_HEADER not in captured["system_prompt"]
+
+
 def test_prepare_with_context_works_for_free_users():
     client = make_client()
     p1, p2 = auth_patches(is_pro=False)

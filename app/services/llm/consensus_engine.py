@@ -374,6 +374,41 @@ def _call_engine_text(
     raise _InvalidEngineError(f"Unsupported engine provider: {provider}")
 
 
+def query_engine_json(
+    engine_model: str,
+    api_keys: dict,
+    *,
+    system: str,
+    prompt: str,
+    max_tokens: int,
+    json_schema: dict | None = None,
+) -> str:
+    """Run one non-streaming structured task through a configured judge engine.
+
+    This deliberately shares the exact credential and model-resolution path
+    used by Consensus/Differences. Callers remain responsible for parsing and
+    validating the returned JSON; providers other than Gemini currently receive
+    JSON mode without a provider-native schema.
+    """
+    resolved = _resolve_engine(engine_model)
+    if resolved is None:
+        raise _InvalidEngineError(f"Unsupported engine model: {engine_model}")
+    provider, api_model, model_ref = resolved
+    return _call_engine_text(
+        provider,
+        api_model,
+        model_ref,
+        api_keys,
+        system=system,
+        prompt=prompt,
+        max_tokens=max_tokens,
+        temperature=0,
+        json_mode=True,
+        effort="low",
+        json_schema=json_schema,
+    )
+
+
 def _stream_engine_text(
     provider: str,
     api_model: str,

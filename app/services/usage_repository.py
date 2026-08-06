@@ -27,6 +27,7 @@ Transaktion.
 from __future__ import annotations
 
 import hashlib
+import hmac
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -141,6 +142,12 @@ class UsageRepository(Protocol):
     def consume(self, uid: str, idempotency_key: str) -> UsageRunResult: ...
 
     def release(self, uid: str, idempotency_key: str) -> UsageRunResult: ...
+
+    def get_run(self, uid: str, idempotency_key: str) -> UsageRunResult: ...
+
+    def bind_context_target(
+        self, uid: str, idempotency_key: str, target_scope: str
+    ) -> None: ...
 
     def snapshot(
         self,
@@ -266,6 +273,78 @@ class FirestoreUsageRepository:
 
     def release(self, uid: str, idempotency_key: str) -> UsageRunResult:
         return self._finish(uid, idempotency_key, RunStatus.RELEASED)
+
+    def get_run(self, uid: str, idempotency_key: str) -> UsageRunResult:
+        """Read a logical run without changing its lifecycle or counters."""
+        uid = _validate_uid(uid)
+        key_hash = _idempotency_hash(idempotency_key)
+        snap = self._run_ref(uid, key_hash).get()
+        if not snap.exists:
+            raise UsageRunNotFound("Usage reservation does not exist")
+        run_data = snap.to_dict() or {}
+        kind = _stored_kind(run_data)
+        status = _stored_status(run_data)
+        utc_date = _stored_utc_date(run_data)
+        limits = _stored_limits(run_data)
+        day_snap = self._day_ref(uid, utc_date).get()
+        day_data = _parse_day_data(day_snap.to_dict() if day_snap.exists else {})
+        return _result(
+            uid,
+            key_hash,
+            kind,
+            status,
+            utc_date,
+            day_data,
+            limits,
+            idempotent=True,
+        )
+
+    def bind_context_target(
+        self, uid: str, idempotency_key: str, target_scope: str
+    ) -> None:
+        """Bind one consumed logical run to one chat-context target.
+
+        Only a hash of the target scope is stored. This does not reserve or
+        consume another slot; it prevents one historical consumed key from
+        financing context builds for multiple turns.
+        """
+        uid = _validate_uid(uid)
+        key_hash = _idempotency_hash(idempotency_key)
+        if not isinstance(target_scope, str) or not target_scope.strip():
+            raise ValueError("target_scope must not be empty")
+        encoded_scope = target_scope.encode("utf-8")
+        if len(encoded_scope) > 512:
+            raise ValueError("target_scope is too long")
+        target_hash = hashlib.sha256(encoded_scope).hexdigest()
+        run_ref = self._run_ref(uid, key_hash)
+
+        def operation(tx):
+            run_snap = run_ref.get(transaction=tx)
+            if not run_snap.exists:
+                raise UsageRunNotFound("Usage reservation does not exist")
+            run_data = run_snap.to_dict() or {}
+            status = _stored_status(run_data)
+            if status is not RunStatus.CONSUMED:
+                raise UsageTransitionError(
+                    "Only a consumed usage run can fund chat context"
+                )
+            existing = run_data.get("context_target_hash")
+            if isinstance(existing, str) and existing:
+                if not hmac.compare_digest(existing, target_hash):
+                    raise UsageRunConflict(
+                        "Usage run is already bound to a different context target"
+                    )
+                return
+            tx.update(
+                run_ref,
+                {
+                    "context_target_hash": target_hash,
+                    "context_bound_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc),
+                },
+            )
+
+        self._transaction(operation)
 
     def snapshot(
         self,

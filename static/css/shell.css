@@ -2139,6 +2139,49 @@ body:not(.is-hero) .consensus-section::before {
   display: none;
 }
 
+.thread-history-details {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--ink-2);
+}
+
+.thread-history-details > summary {
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--ink-2);
+}
+
+.thread-history-detail-body,
+.thread-history-sources,
+.thread-history-models {
+  margin-top: 13px;
+  color: var(--ink);
+}
+
+.thread-history-sources {
+  padding-left: 24px;
+}
+
+.thread-history-sources li + li {
+  margin-top: 8px;
+}
+
+.thread-history-models section + section {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.thread-history-models h4 {
+  margin: 0 0 9px;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  color: var(--ink-2);
+}
+
 @media (max-width: 640px) {
   .thread-history-verdict {
     gap: 14px;

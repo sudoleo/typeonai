@@ -74,9 +74,8 @@
   const followup = {
     lastExchange: null, // {question, consensus, turn} des letzten Konsens-Laufs
     armed: false,
-    // True, solange der gerade laufende Query selbst eine Follow-up-Frage ist.
-    // Follow-ups duerfen sich nicht verketten (Kostenkontrolle): der Konsens
-    // einer Follow-up-Frage bietet keine weitere Follow-up-Affordance an.
+    // True while the current query continues the preceding exchange. The flag
+    // is reset by offer(); completed turns may continue indefinitely.
     followupInFlight: false,
     // Was consume() zuletzt ausgegeben hat. Nur dafuer da, den Kontext
     // zurueckzuholen, wenn der Lauf gar nicht stattgefunden hat.
@@ -167,9 +166,14 @@
     appendHistoryTurn(turnData, liveBody = null, liveVerdict = null) {
       const history = document.getElementById("threadHistory");
       if (!history || !turnData?.question || !turnData?.consensus) return false;
+      const turnId = String(turnData.turn_id || "").trim();
+      if (turnId && Array.from(history.children).some(node => node.dataset?.turnId === turnId)) {
+        return false;
+      }
 
       const turn = document.createElement("article");
       turn.className = "thread-history-turn";
+      if (turnId) turn.dataset.turnId = turnId;
 
       const question = document.createElement("div");
       question.className = "thread-history-question";
@@ -186,21 +190,13 @@
       const answerLabel = document.createElement("div");
       answerLabel.className = "thread-history-answer-label";
       answerLabel.textContent = "Consensus Answer";
-      let answerBody = this.staticizeHistoryNode(liveBody);
-      if (!answerBody) {
-        answerBody = document.createElement("div");
-        answerBody.className = "consensus-answer-body";
-        const currentSources = window.currentEvidenceSources;
-        window.currentEvidenceSources = Array.isArray(turnData.sources) ? turnData.sources : [];
-        try {
-          if (typeof window.injectMarkdown === "function") {
-            window.injectMarkdown(answerBody, turnData.consensus);
-          } else {
-            answerBody.textContent = turnData.consensus;
-          }
-        } finally {
-          window.currentEvidenceSources = currentSources;
-        }
+      const turnSources = Array.isArray(turnData.sources) ? turnData.sources : [];
+      const answerBody = document.createElement("div");
+      answerBody.className = "consensus-answer-body";
+      if (typeof window.injectMarkdown === "function") {
+        window.injectMarkdown(answerBody, turnData.consensus, turnSources);
+      } else {
+        answerBody.textContent = turnData.consensus;
       }
       answerBody.classList.add("thread-history-answer-body");
       const verdict = this.staticizeHistoryNode(liveVerdict)
@@ -208,6 +204,85 @@
       if (verdict) verdict.classList.add("thread-history-verdict");
       answer.append(answerLabel, answerBody);
       if (verdict) answer.appendChild(verdict);
+
+      function appendMarkdownDetails(label, markdown, sources) {
+        if (!String(markdown || "").trim()) return;
+        const details = document.createElement("details");
+        details.className = "thread-history-details";
+        const summary = document.createElement("summary");
+        summary.textContent = label;
+        const body = document.createElement("div");
+        body.className = "thread-history-detail-body";
+        if (typeof window.injectMarkdown === "function") {
+          window.injectMarkdown(body, markdown, sources);
+        } else {
+          body.textContent = markdown;
+        }
+        details.append(summary, body);
+        answer.appendChild(details);
+      }
+
+      appendMarkdownDetails("Differences", turnData.differences, turnSources);
+
+      if (turnSources.length) {
+        const details = document.createElement("details");
+        details.className = "thread-history-details";
+        const summary = document.createElement("summary");
+        summary.textContent = `Sources (${turnSources.length})`;
+        const list = document.createElement("ol");
+        list.className = "thread-history-sources";
+        turnSources.forEach((source, index) => {
+          const item = document.createElement("li");
+          const rawUrl = String(source?.url || "");
+          let safeUrl = "";
+          try {
+            const parsed = new URL(rawUrl);
+            if (["http:", "https:"].includes(parsed.protocol)) safeUrl = parsed.href;
+          } catch (_) {}
+          const title = String(source?.title || rawUrl || `Source ${index + 1}`);
+          const label = safeUrl ? document.createElement("a") : document.createElement("span");
+          label.textContent = title;
+          if (safeUrl) {
+            label.href = safeUrl;
+            label.target = "_blank";
+            label.rel = "noopener noreferrer";
+          }
+          item.appendChild(label);
+          list.appendChild(item);
+        });
+        details.append(summary, list);
+        answer.appendChild(details);
+      }
+
+      const storedAnswers = turnData.model_answers && typeof turnData.model_answers === "object"
+        ? Object.values(turnData.model_answers)
+        : [];
+      const usableAnswers = storedAnswers.filter(item => String(item?.answer || "").trim());
+      if (usableAnswers.length) {
+        const details = document.createElement("details");
+        details.className = "thread-history-details";
+        const summary = document.createElement("summary");
+        summary.textContent = `Model answers (${usableAnswers.length})`;
+        const models = document.createElement("div");
+        models.className = "thread-history-models";
+        usableAnswers.forEach(item => {
+          const section = document.createElement("section");
+          const heading = document.createElement("h4");
+          heading.textContent = String(item.model_label || item.provider || "Model");
+          const body = document.createElement("div");
+          body.className = "thread-history-detail-body";
+          const sources = Array.isArray(item.sources) ? item.sources : turnSources;
+          if (typeof window.injectMarkdown === "function") {
+            window.injectMarkdown(body, item.answer, sources);
+          } else {
+            body.textContent = item.answer;
+          }
+          section.append(heading, body);
+          models.appendChild(section);
+        });
+        details.append(summary, models);
+        answer.appendChild(details);
+      }
       turn.append(question, answer);
       history.appendChild(turn);
       history.hidden = false;
@@ -248,17 +323,8 @@
     },
 
     offer(question, consensusText, turn = null) {
-      // Der aktuelle Konsens ist selbst die Antwort auf eine Follow-up-Frage:
-      // keine weitere Ebene anbieten. Erst eine frische Frage schaltet die
-      // Affordance wieder frei.
-      if (this.followupInFlight) {
-        this.followupInFlight = false;
-        this.lastExchange = null;
-        this.armed = false;
-        this.render();
-        return;
-      }
       if (!question || !consensusText) return;
+      this.followupInFlight = false;
       this.lastExchange = {
         question: question,
         consensus: consensusText,
@@ -307,9 +373,8 @@
       this.render();
     },
 
-    // context-Payload für /prepare + /ask_*; danach ist der Chip weg und der
-    // laufende Query als Follow-up markiert, damit sein Konsens keine weitere
-    // Follow-up-Ebene anbietet (nur einmalig, Kostenkontrolle).
+    // The returned one-hop payload remains for legacy bookmark restores. An
+    // owned active chat uses only its server-issued context-version binding.
     consume() {
       if (!this.armed || !this.lastExchange) return null;
       const ctx = {
@@ -467,6 +532,8 @@
   window.App.followup = followup;
 
   window.getConsensus = async function (trigger = "manual") {
+    const replayPendingTurn = trigger === "replay";
+    const dispositionOnly = trigger === "disposition";
     if (consensusLifecycle.isRunning()) {
       window.cancelCurrentConsensus();
       return;
@@ -492,10 +559,16 @@
     // hoechstens schon die NAECHSTE, noch nicht gesendete Frage.
     const question = (window.lastQuestion ?? "").trim()
       || (document.getElementById("questionInput")?.value ?? "").trim();
-    // Status, ob eigene API Keys genutzt werden sollen
-    const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
-    const deepThink = window.App.usageRun?.current?.deepThink
-      ?? (document.getElementById("deepSearchToggle")?.checked === true);
+    const replayRun = replayPendingTurn ? window.App.chatSession?.logicalRun : null;
+    // A completed reconciliation replays the original logical run even when
+    // the user changed controls while the transport disposition was unknown.
+    const useOwnKeys = replayRun
+      ? replayRun.useOwnKeys === true
+      : document.getElementById("useOwnKeysSwitch").checked;
+    const deepThink = replayRun
+      ? replayRun.deepSearch === true
+      : (window.App.usageRun?.current?.deepThink
+        ?? (document.getElementById("deepSearchToggle")?.checked === true));
     const usageRun = window.App.usageRun?.ensure?.(deepThink, useOwnKeys);
 
     let id_token = null;
@@ -531,7 +604,8 @@
     // Setze den Konsens-Bereich (Spinner etc.) und rufe anschließend deinen Konsens-Endpunkt auf.
     const consensusDiv = document.getElementById("consensusResponse");
 
-    const consensus_model = document.getElementById("consensusModelDropdown").value;
+    const consensus_model = replayRun?.consensusModel
+      || document.getElementById("consensusModelDropdown").value;
 
     // Hole die Antwort-Boxen
     const openaiBox = document.getElementById("openaiResponse");
@@ -599,13 +673,15 @@
     if (
       !question ||
       !consensus_model ||
-      includedAnswerCount < 2 ||
-      (needOpenAI && !answer_openai) ||
-      (needGemini && !answer_gemini) ||
-      (needMistral && !answer_mistral) ||
-      (needClaude && !answer_claude) ||
-      (needDeepseek && !answer_deepseek) ||
-      (needGrok && !answer_grok)
+      (!(replayPendingTurn || dispositionOnly) && (
+        includedAnswerCount < 2 ||
+        (needOpenAI && !answer_openai) ||
+        (needGemini && !answer_gemini) ||
+        (needMistral && !answer_mistral) ||
+        (needClaude && !answer_claude) ||
+        (needDeepseek && !answer_deepseek) ||
+        (needGrok && !answer_grok)
+      ))
     ) {
       alert("Please provide at least two completed model answers before generating a consensus.");
       if (window.resetCredibilityFrame) {
@@ -749,6 +825,12 @@
     });
 
     try {
+      const chatTurnIds = await window.App.chatSession?.ensurePendingTurn?.({
+        idToken: id_token,
+        question,
+        consensusModel: consensus_model,
+        signal: consensusSignal
+      }) || null;
       // Reasoning-Marker ({reasoning:true} auf consensus.delta/differences.delta)
       // flippen das Spinner-Label, solange noch kein Text streamt: sichtbar
       // machen, dass die Engine bzw. der Differences-Judge gerade denkt.
@@ -807,7 +889,7 @@
         markReasoning() {},
         stop() {}
       };
-      const consensusRequestResult = await streamSSERequest("/consensus", {
+      const consensusPayload = {
           id_token: id_token,
           useOwnKeys: useOwnKeys,
           usage_run_key: usageRun?.key || null,
@@ -830,14 +912,30 @@
           deepseek_key: deepseekKey,
           grok_key: grokKey,
           keepalive: true
-        }, consensusSignal, {
+        };
+      if (chatTurnIds) {
+        consensusPayload.chat_id = chatTurnIds.chatId;
+        consensusPayload.turn_id = chatTurnIds.turnId;
+        if (chatTurnIds.contextVersionId) {
+          consensusPayload.context_version_id = chatTurnIds.contextVersionId;
+        }
+        consensusPayload.turn_sources = Array.isArray(window.currentEvidenceSources)
+          ? window.currentEvidenceSources
+          : [];
+      }
+      const consensusRequestResult = await streamSSERequest("/consensus", consensusPayload, consensusSignal, {
           "consensus.delta": consensusMainRenderer,
           "consensus.final": consensusFinalPhaseRenderer,
           "differences.delta": differencesPhaseRenderer
         });
       const data = consensusRequestResult.data || {};
+      const completedReplay = data.chat_replayed === true;
       if (!data.consensus_response && completedConsensusText) {
         data.consensus_response = completedConsensusText;
+      }
+      if (Array.isArray(data.sources)) {
+        window.currentEvidenceSources = data.sources;
+        window.renderEvidenceSources?.(data.sources);
       }
       if (data?.usage_run_status) {
         window.App.usageRun?.mark?.(data.usage_run_status);
@@ -873,6 +971,23 @@
         totalLimit: data?.limit ?? consensusErrorDetail?.limit ?? window.currentMaxLimit,
         deepLimit: data?.deep_limit ?? consensusErrorDetail?.deep_limit ?? window.currentDeepLimit
       });
+
+      const chatDisposition = data?.chat_turn_state
+        ? data
+        : (consensusErrorDetail?.chat_turn_state ? consensusErrorDetail : null);
+      if (chatDisposition) {
+        window.App.chatSession?.handleConsensusResult?.({
+          chatId: chatDisposition.chat_id,
+          turnId: chatDisposition.turn_id,
+          chatPersisted: chatDisposition.chat_persisted === true,
+          chatTurnState: chatDisposition.chat_turn_state
+        });
+        if (chatDisposition.chat_turn_state === "failed") {
+          followup.restoreAfterBlockedRun();
+        }
+      } else if (chatTurnIds) {
+        window.App.chatSession?.markPendingUncertain?.();
+      }
 
       if (consensusRequestResult.ok && data.consensus_response) {
         // Share-Feature: nur mit result_id aus dem Final-Event ist
@@ -925,13 +1040,33 @@
         const bookmarkPreviousTurn = followup.previousTurnForBookmark();
 
         const completedTurn = {
+          turn_id: data.turn_id || chatTurnIds?.turnId || "",
           question,
           consensus: data.consensus_response,
           differences: data.differences || "",
           differences_data: data.differences_data || null,
           sources: Array.isArray(window.currentEvidenceSources)
             ? window.currentEvidenceSources
-            : []
+            : [],
+          model_answers: data.model_answers && typeof data.model_answers === "object"
+            && Object.keys(data.model_answers).length
+            ? data.model_answers
+            : Object.fromEntries([
+            ["OpenAI", answer_openai],
+            ["Mistral", answer_mistral],
+            ["Anthropic", answer_claude],
+            ["Gemini", answer_gemini],
+            ["DeepSeek", answer_deepseek],
+            ["Grok", answer_grok]
+          ].filter(([, answer]) => String(answer || "").trim()).map(([provider, answer]) => [
+            provider,
+            {
+              provider,
+              model_label: shareModelLabels[provider] || provider,
+              answer,
+              sources: Array.isArray(model_sources[provider]) ? model_sources[provider] : []
+            }
+          ]))
         };
 
         // Follow-up-Affordance im Input-Bereich anbieten — nicht bei
@@ -951,7 +1086,7 @@
           differencesText: data.differences,
           differencesData: data.differences_data || null
         };
-        if (window.auth?.currentUser) {
+        if (!completedReplay && window.auth?.currentUser) {
           window.saveBookmarkConsensus(
             question, data.consensus_response, data.differences, data.differences_data,
             bookmarkPreviousQuestion ? null : data.result_id,
@@ -959,17 +1094,19 @@
             bookmarkPreviousTurn
           );
         }
-        trackAppEvent("app_consensus_completed", {
-          status: data.error ? "partial" : "success",
-          trigger,
-          included_models: includedAnswerCount
-        });
-        window.App.watch?.showFeatureNudge?.();
+        if (!completedReplay) {
+          trackAppEvent("app_consensus_completed", {
+            status: data.error ? "partial" : "success",
+            trigger,
+            included_models: includedAnswerCount
+          });
+          window.App.watch?.showFeatureNudge?.();
+        }
 
         const bestModelFromConsensus =
           (data.differences_data && data.differences_data.best_model) ||
           parseBestModel(data.differences);
-        if (bestModelFromConsensus) {
+        if (!completedReplay && bestModelFromConsensus) {
           window.recordModelVote(bestModelFromConsensus, "BestModel");
         }
       } else {
@@ -1016,8 +1153,12 @@
 
     } catch (error) {
       if (isAbortError(error) || !isActiveConsensusRun(consensusRunId)) {
+        if (isAbortError(error)) {
+          window.App.chatSession?.handleConsensusCancelled?.();
+        }
         return;
       }
+      window.App.chatSession?.markPendingUncertain?.();
       console.error("Error fetching consensus:", error);
       const failBodyEl = window.App.consensusBodyEl(consensusDiv);
       const preservedConsensus = completedConsensusText || streamedConsensusText;

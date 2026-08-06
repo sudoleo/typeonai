@@ -65,6 +65,48 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       Entfernen aller Anhänge wird die vorherige DeepSeek-Auswahl wiederhergestellt.
 - [ ] Quellen-Chips / Evidence-Links erscheinen und sind klickbar.
 
+## Multi-Turn Chat
+- [ ] Frische Frage sendet nach `/prepare` zunächst ohne Chat-Bindung an
+      `/ask_*`; Chat und pending Turn 1 entstehen genau einmal erst bei der
+      automatischen oder manuellen Consensus-Anforderung. Ohne Consensus-
+      Anforderung entsteht kein Turn-1-Orphan. Turn 1 sendet kein Legacy-
+      `context` und keine `context_version_id` an `/ask_*`.
+- [ ] Nach einem completed Turn lässt „Ask a follow-up“ Turn 2, Turn 3 und
+      weitere Fragen im selben Chat zu; die aktive Chat-Zuordnung bleibt nach
+      jedem completed Turn erhalten.
+- [ ] Eine aktive Fortsetzung baut vor dem Provider-Fan-out genau einmal
+      `/chats/{chat}/turns/{turn}/context`; alle `/ask_*` und `/consensus`
+      erhalten exakt dieselben `chat_id`, `turn_id`, `context_version_id` und
+      niemals parallel den Legacy-`context`.
+- [ ] Developer-Modus verwendet beim Context-Build denselben von `/prepare`
+      konsumierten `usage_run_key`. Own-Key sendet ausschließlich den Key des
+      Providers der gewählten Consensus-Engine als `memory_api_key`; im
+      Netzwerk-Payload stehen keine weiteren Nutzer-Keys und kein Developer-
+      Fallback.
+- [ ] Fehlt im Own-Key-Modus ein Key eines ausgewählten Antwort-Providers oder
+      des Memory-Providers, stoppt der Lauf vor Usage, `/prepare`, Turn-Anlage
+      und Fan-out; Frage, Follow-up-Chip und completed Vorgänger bleiben stehen.
+- [ ] Ein kurzzeitiges `202 building` wird begrenzt wiederholt; eine
+      `degraded`-Version startet den normalen Fan-out. Context-Fehler oder Stop
+      lassen den completed Vorgänger sichtbar und beschädigen ihn nicht.
+- [ ] Nach einem mehrdeutigen Abbruch bleiben pending Turn-ID und
+      `client_request_id` beim Retry stabil. Ein serverseitig bereits
+      completed Turn wird ohne neue Provider-/Consensus-/Differences-Aufrufe
+      sowie ohne Bookmark-, Vote-, Completion-Analytics- oder Watch-Nudge-
+      Schreibvorgang wiedergegeben — auch wenn Modell, Tarif oder Keybestand
+      inzwischen geändert wurden. `failed` startet keine Fortsetzung hinter
+      diesem Turn.
+- [ ] Liefert eine aktive Fortsetzung weniger als zwei Modellantworten, sendet
+      der Browser genau eine Dispositionsanfrage: der pending Turn wird ohne
+      aktuelle Modell-/Tierprüfung, Engine-/Credential-Aufruf und ohne neue Usage-Einheit als
+      `insufficient_answers` failed markiert.
+- [ ] Frühere Turns bleiben vollständig sichtbar. Consensus, Agreement,
+      Differences, Sources und Modellantworten gehören jeweils zum richtigen
+      Turn; `[S…]`-Links eines alten Turns öffnen nicht die Quellen des neuen.
+- [ ] Ein altes Bookmark bzw. Reload ohne aktive Chat-Zuordnung bleibt im
+      Legacy-One-Hop-Pfad. Clear, Logout und Bookmark-Restore leeren aktive,
+      pending und Context-Zuordnung vollständig.
+
 ## Consensus (höchstes Risiko)
 - [ ] Presets: Daily/Balanced setzen sichtbar alle sechs Antwortmodelle und die
       konfigurierte Consensus-Engine; eine manuelle Modellwahl wechselt zu Custom.

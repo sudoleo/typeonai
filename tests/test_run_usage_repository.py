@@ -179,6 +179,38 @@ def test_consume_moves_one_slot_and_is_idempotent(usage_repo):
         repo.release("consumer", "consume-me")
 
 
+def test_get_run_is_read_only_and_reports_consumed_status(usage_repo):
+    repo, db = usage_repo
+    repo.reserve("reader", "read-me", RunKind.REGULAR, LIMITS, now=UTC_NOON)
+    repo.consume("reader", "read-me")
+    before = {path: dict(data) for path, data in db.documents.items()}
+
+    result = repo.get_run("reader", "read-me")
+
+    assert result.status is RunStatus.CONSUMED
+    assert result.idempotent is True
+    assert db.documents == before
+
+
+def test_consumed_run_context_binding_is_idempotent_and_target_specific(usage_repo):
+    repo, db = usage_repo
+    repo.reserve("binder", "bind-me", RunKind.REGULAR, LIMITS, now=UTC_NOON)
+    repo.consume("binder", "bind-me")
+    before_snapshot = repo.snapshot("binder", LIMITS, now=UTC_NOON)
+
+    repo.bind_context_target("binder", "bind-me", "chat-context\0chat-a\0turn-a")
+    first_documents = {path: dict(data) for path, data in db.documents.items()}
+    repo.bind_context_target("binder", "bind-me", "chat-context\0chat-a\0turn-a")
+
+    assert db.documents == first_documents
+    after_snapshot = repo.snapshot("binder", LIMITS, now=UTC_NOON)
+    assert after_snapshot == before_snapshot
+    with pytest.raises(UsageRunConflict):
+        repo.bind_context_target(
+            "binder", "bind-me", "chat-context\0chat-b\0turn-b"
+        )
+
+
 def test_release_frees_slot_and_is_idempotent(usage_repo):
     repo, _ = usage_repo
     repo.reserve("releaser", "release-me", RunKind.REGULAR, LIMITS, now=UTC_NOON)

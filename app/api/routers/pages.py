@@ -208,6 +208,7 @@ async def read_root(request: Request):
             "label": cfg.get_consensus_model_label(model),
             "badge": cfg.get_consensus_model_badge(model),
             "is_premium": cfg.is_premium_consensus_model(model),
+            "provider": (cfg.get_consensus_model_config(model).provider or ""),
         }
         for model in cfg.ALLOWED_CONSENSUS_MODELS
     ]

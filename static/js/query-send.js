@@ -251,7 +251,19 @@
       finishQueryRun(runId);
       setConsensusGate(true);
       window.hideConsensusOutput?.();
-      releaseReservedUsageRun();
+      const chatSession = window.App.chatSession;
+      if (chatSession?.pendingClientRequestId) {
+        chatSession.markPendingUncertain?.();
+        const input = document.getElementById("questionInput");
+        const pendingQuestion = String(chatSession.logicalRun?.question || "");
+        if (input && pendingQuestion) {
+          input.value = pendingQuestion;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      } else {
+        releaseReservedUsageRun();
+      }
+      window.App.followup?.restoreAfterBlockedRun?.();
       trackAppEvent("app_query_canceled");
     };
 
@@ -419,6 +431,27 @@
         return;
       }
 
+      try {
+        const reconciledTurn = await window.App.chatSession?.inspectPendingTurn?.({
+          idToken: validIdToken,
+          signal: querySignal
+        });
+        if (reconciledTurn?.status === "completed") {
+          finishQueryRun(queryRunId);
+          await window.getConsensus?.("replay");
+          return;
+        }
+      } catch (error) {
+        if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
+        finishQueryRun(queryRunId);
+        setConsensusGate(true);
+        window.App.followup?.restoreAfterBlockedRun?.();
+        window.App?.showPopup?.(
+          error?.message || "The pending conversation turn could not be checked. Please retry."
+        );
+        return;
+      }
+
       // 0. Zuerst den gespeicherten Prompt aus dem Speicher holen
       const savedPrompt = localStorage.getItem("systemPrompt");
 
@@ -442,10 +475,6 @@
       effectiveSystemPrompt = storedSystemPrompt;
 
       const deepSearchFlag = document.getElementById("deepSearchToggle").checked;
-
-      await releaseReservedUsageRun();
-      const usageRun = window.App.usageRun.start(deepSearchFlag, useOwnKeys);
-
       const attachmentsPayload = (typeof window.getAttachmentsPayload === "function")
         ? window.getAttachmentsPayload()
         : [];
@@ -467,6 +496,66 @@
       // checkbox or another renderer must never put DeepSeek back into the
       // request fan-out while files are attached.
       const deepSeekBlockedByAttachments = attachmentsPayload.length > 0;
+      const consensusModelForRun = document.getElementById("consensusModelDropdown")?.value || "";
+      const selectedProviderConfigsForRun = [
+        ["OpenAI", "selectOpenAI", "openaiModelSelect"],
+        ["Mistral", "selectMistral", "mistralModelSelect"],
+        ["Anthropic", "selectClaude", "claudeModelSelect"],
+        ["Gemini", "selectGemini", "geminiModelSelect"],
+        ["DeepSeek", "selectDeepSeek", "deepseekModelSelect"],
+        ["Grok", "selectGrok", "grokModelSelect"]
+      ].filter(([provider, checkboxId]) => (
+        document.getElementById(checkboxId)?.checked
+        && !(provider === "DeepSeek" && deepSeekBlockedByAttachments)
+      ));
+      const selectedModelConfigsForRun = selectedProviderConfigsForRun
+        .map(([, , selectId]) => document.getElementById(selectId)?.value)
+        .filter(Boolean);
+      const selectedConsensusOptionForRun = document.getElementById("consensusModelDropdown")
+        ?.selectedOptions?.[0];
+      const memoryProviderForRun = String(
+        selectedConsensusOptionForRun?.dataset?.engineProvider || ""
+      ).trim().toLowerCase();
+      const ownKeyStorageByProvider = {
+        openai: "openaiKey",
+        mistral: "mistralKey",
+        anthropic: "anthropicKey",
+        gemini: "geminiKey",
+        deepseek: "deepseekKey",
+        grok: "grokKey"
+      };
+      if (useOwnKeys) {
+        const requiredOwnKeyProviders = new Set(
+          selectedProviderConfigsForRun.map(([provider]) => provider.toLowerCase())
+        );
+        if (memoryProviderForRun) requiredOwnKeyProviders.add(memoryProviderForRun);
+        const missingOwnKeyProviders = Array.from(requiredOwnKeyProviders).filter(provider => {
+          const storageKey = ownKeyStorageByProvider[provider];
+          return !storageKey || !String(localStorage.getItem(storageKey) || "").trim();
+        });
+        if (missingOwnKeyProviders.length) {
+          finishQueryRun(queryRunId);
+          setConsensusGate(true);
+          window.App?.showPopup?.(
+            `Add API keys for the selected providers before sending: ${missingOwnKeyProviders.join(", ")}.`
+          );
+          return;
+        }
+      }
+      const reuseUsageRun = window.App.chatSession?.canReuseUsageRun?.({
+        question,
+        mode,
+        deepSearch: deepSearchFlag,
+        selectedModels: selectedModelConfigsForRun,
+        consensusModel: consensusModelForRun,
+        isFollowup: followupRequested,
+        useOwnKeys
+      }) === true;
+      if (!reuseUsageRun) await releaseReservedUsageRun();
+      const usageRun = reuseUsageRun
+        ? window.App.usageRun.ensure(deepSearchFlag, useOwnKeys)
+        : window.App.usageRun.start(deepSearchFlag, useOwnKeys);
+
       function enforceDeepSeekAttachmentBlock() {
         if (!deepSeekBlockedByAttachments) return;
         window.App.setModelSelectionState?.("deepseekResponse", false, {
@@ -512,23 +601,6 @@
         setConsensusGate(true);
         return;
       }
-
-      // 🔸 PHASE 1: UI Feedback setzen
-      // Erst die Boxen auf "pending" zuruecksetzen, dann den Status melden:
-      // setAgentModeStatus baut die Chips neu und startet den Fortschritts-
-      // Ticker, der sonst noch das "complete" des vorherigen Laufs liest.
-      window.spinnerHTML = baseSpinnerHTML;
-      modelBoxes.forEach(box => {
-        delete box.dataset.consensusAnswer;
-        delete box.dataset.consensusSources;
-        delete box.dataset.responseError;
-        delete box.dataset.responseSkipped;
-        box.dataset.responseState = "pending";
-        window.setSpinnerEl(box);
-      });
-      setAgentModeStatus(modelBoxes.length > 0 ? "running" : "idle");
-      window.currentEvidenceSources = [];
-      if (window.renderEvidenceSources) window.renderEvidenceSources([]);
 
       let queryHadBlockingError = false;
       let queryBlockingErrorMessage = "";
@@ -724,11 +796,12 @@
         }
       }
 
-      // Follow-up-Kontext: genau eine Ebene — vorherige Frage + Konsens-
-      // Text. consume() liefert den Payload nur bei aktiviertem Chip und räumt
-      // den aktiven State auf; die sichtbare alte Antwort wird nach /prepare
-      // in #threadHistory archiviert. Erst hier (nach den frühen
-      // Abbruch-Pfaden), damit ein abgebrochener Send den Chip nicht frisst.
+      // consume() advances the visible thread. Owned active chats replace its
+      // legacy one-hop payload with an authoritative context version below;
+      // bookmark restores without an active chat keep the compatibility path.
+      const authoritativeContinuation = Boolean(
+        followupRequested && window.App.chatSession?.hasActiveChat?.()
+      );
       const followupContext = window.App.followup?.consume?.() || null;
       const bookmarkPreviousQuestion = String(
         followupContext?.previous_question || ""
@@ -744,6 +817,7 @@
       }
 
       // Wir rufen /prepare IMMER auf, damit Wetter-Infos etc. injiziert werden können.
+      let prepareSucceeded = false;
       try {
         // 🔹 Firebase-ID-Token holen (falls eingeloggt)
         let idToken = null;
@@ -770,13 +844,14 @@
         if (idToken) {
           preparePayload.id_token = idToken;
         }
-        if (followupContext) {
+        if (followupContext && !authoritativeContinuation) {
           preparePayload.context = followupContext;
         }
 
         const { response: prepareResp, data: prepareData } = await prepareWithUsageRetry(
           preparePayload, querySignal
         );
+        prepareSucceeded = prepareResp.ok;
 
         if (prepareResp.ok && prepareData.system_prompt) {
           updateUsageDisplayFromData(prepareData);
@@ -791,10 +866,12 @@
               prepareData,
               "The usage service is busy right now. Please try again in a moment."
             );
-            modelBoxes.forEach(box => {
-              const outputEl = box.querySelector(".collapsible-content");
-              if (outputEl) markModelError(outputEl, message, prepareData);
-            });
+            if (!followupContext) {
+              modelBoxes.forEach(box => {
+                const outputEl = box.querySelector(".collapsible-content");
+                if (outputEl) markModelError(outputEl, message, prepareData);
+              });
+            }
             finishQueryRun(queryRunId);
             setAgentModeStatus("error", message);
             setConsensusGate(true);
@@ -808,10 +885,12 @@
             // erst den Ring korrigieren, dann die Karte bauen, die daraus
             // liest.
             updateUsageDisplayFromData(prepareData);
-            modelBoxes.forEach(box => {
-              const outputEl = box.querySelector(".collapsible-content");
-              if (outputEl) markModelError(outputEl, message, prepareData);
-            });
+            if (!followupContext) {
+              modelBoxes.forEach(box => {
+                const outputEl = box.querySelector(".collapsible-content");
+                if (outputEl) markModelError(outputEl, message, prepareData);
+              });
+            }
             finishQueryRun(queryRunId);
             // Raeumt den gefuehrten Lauf ab (dismiss); die bleibende Meldung
             // steht danach in #runBlocked — sonst faellt die Seite in genau
@@ -850,6 +929,77 @@
         return;
       }
 
+      const chatSession = window.App.chatSession;
+      chatSession?.beginRun?.({
+        question,
+        mode,
+        deepSearch: deepSearchFlag,
+        selectedModels: selectedModelConfigsForRun,
+        consensusModel: consensusModelForRun,
+        isFollowup: !!followupContext,
+        prepareSucceeded,
+        useOwnKeys,
+        usageRunKey: usageRun.key
+      });
+      let authoritativeContextBinding = null;
+      try {
+        if (authoritativeContinuation) {
+          const pendingTurn = await chatSession?.ensurePendingTurn?.({
+            idToken: validIdToken,
+            question,
+            consensusModel: consensusModelForRun,
+            signal: querySignal
+          });
+          if (!pendingTurn) {
+            throw new Error("The conversation turn could not be prepared. Please retry.");
+          }
+          const memoryApiKey = useOwnKeys && ownKeyStorageByProvider[memoryProviderForRun]
+            ? (localStorage.getItem(ownKeyStorageByProvider[memoryProviderForRun]) || "")
+            : "";
+          if (useOwnKeys && !memoryApiKey) {
+            throw new Error(`Missing API key for the conversation memory provider: ${memoryProviderForRun || "selected consensus engine"}.`);
+          }
+          await chatSession.ensureContext({
+            idToken: validIdToken,
+            useOwnKeys,
+            usageRunKey: usageRun.key,
+            memoryApiKey,
+            signal: querySignal
+          });
+          authoritativeContextBinding = chatSession.contextBinding();
+          if (!authoritativeContextBinding) {
+            throw new Error("The conversation context could not be bound. Please retry.");
+          }
+        }
+      } catch (error) {
+        if (isAbortError(error) || !isActiveQueryRun(queryRunId)) {
+          chatSession?.markPendingUncertain?.();
+          return;
+        }
+        const message = error?.message || "The conversation context could not be prepared.";
+        if (!followupContext) {
+          modelBoxes.forEach(box => {
+            const outputEl = box.querySelector(".collapsible-content");
+            if (outputEl) markModelError(outputEl, message);
+          });
+        }
+        finishQueryRun(queryRunId);
+        setAgentModeStatus("error", message);
+        setConsensusGate(true);
+        window.App.followup?.restoreAfterBlockedRun?.();
+        window.App?.showPopup?.(message);
+        return;
+      }
+
+      function attachConversationContext(payload) {
+        if (authoritativeContextBinding) {
+          Object.assign(payload, authoritativeContextBinding);
+        } else if (followupContext && !authoritativeContinuation) {
+          payload.context = followupContext;
+        }
+        return payload;
+      }
+
       if (followupContext) {
         window.App.followup?.archiveCurrentExchange?.();
         window.App.setThreadQuestion?.(question);
@@ -877,8 +1027,20 @@
       // before answer counting and request fan-out.
       enforceDeepSeekAttachmentBlock();
 
+      // Only now may the live response tree be reused. Until /prepare and the
+      // optional context binding have succeeded, it remains the readable
+      // completed predecessor and must survive credential/202/network errors.
       window.spinnerHTML = baseSpinnerHTML;
-      modelBoxes.forEach(box => window.setSpinnerEl(box));
+      modelBoxes.forEach(box => {
+        delete box.dataset.consensusAnswer;
+        delete box.dataset.consensusSources;
+        delete box.dataset.responseError;
+        delete box.dataset.responseSkipped;
+        box.dataset.responseState = "pending";
+        window.setSpinnerEl(box);
+      });
+      window.currentEvidenceSources = [];
+      window.renderEvidenceSources?.([]);
 
 
       const deepSearchActive = document.getElementById("deepSearchToggle").checked;
@@ -995,6 +1157,16 @@
             ? window.canGenerateConsensus()
             : true;
 
+          if (!canGenerate && window.App.chatSession?.pendingTurnId) {
+            // The early turn exists only for an authoritative continuation.
+            // Let /consensus record insufficient_answers before any engine or
+            // credential work, instead of leaving a permanent pending orphan.
+            window.getConsensus("disposition").catch((error) => {
+              console.error("Could not finalize the incomplete chat turn:", error);
+            });
+            return;
+          }
+
           if (autoConsensusOn && canGenerate) {
             window.getConsensus("auto").catch((error) => {
               console.error("Fehler bei der Konsensgenerierung:", error);
@@ -1089,7 +1261,7 @@
           usage_run_key: usageRun.key
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
-        if (followupContext) payload.context = followupContext;
+        attachConversationContext(payload);
 
 
         if (!useOwnKeys) {
@@ -1178,7 +1350,7 @@
           usage_run_key: usageRun.key
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
-        if (followupContext) payload.context = followupContext;
+        attachConversationContext(payload);
 
         if (!useOwnKeys) {
           if (validIdToken) {
@@ -1251,7 +1423,7 @@
           usage_run_key: usageRun.key
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
-        if (followupContext) payload.context = followupContext;
+        attachConversationContext(payload);
 
         if (!useOwnKeys) {
           if (validIdToken) {
@@ -1323,7 +1495,7 @@
           usage_run_key: usageRun.key
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
-        if (followupContext) payload.context = followupContext;
+        attachConversationContext(payload);
 
         if (!useOwnKeys) {
           if (validIdToken) {
@@ -1395,7 +1567,7 @@
           usage_run_key: usageRun.key
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
-        if (followupContext) payload.context = followupContext;
+        attachConversationContext(payload);
 
         if (!useOwnKeys) {
           if (validIdToken) {
@@ -1467,7 +1639,7 @@
           usage_run_key: usageRun.key
         };
         if (attachmentsPayload.length) payload.attachments = attachmentsPayload;
-        if (followupContext) payload.context = followupContext;
+        attachConversationContext(payload);
 
         if (!useOwnKeys) {
           if (validIdToken) {

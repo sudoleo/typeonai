@@ -127,6 +127,7 @@ function resetLoadedRunAfterLogout() {
   window.clearPreparedBookmarkShareResult?.();
   window.currentEvidenceSources = [];
   window.consensusCitationMeta = null;
+  window.App?.chatSession?.reset?.();
   window.App?.sharedModal?.close?.();
   window.App?.watch?.resetAfterLogout?.();
   document.body.classList.add("is-hero");
@@ -1391,6 +1392,7 @@ function loadSingleBookmarkUI(bookmark) {
     // zentrierten Leerzustand.
     window.exitHeroMode?.();
     window.App?.followup?.reset?.();
+    window.App?.chatSession?.reset?.();
     window.App?.followup?.clearHistory?.();
     if (bookmark?.previous_turn) {
         window.App?.followup?.renderStoredTurn?.(bookmark.previous_turn);

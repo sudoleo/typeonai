@@ -59,7 +59,8 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache), `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
-| `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren ein optionales `context`-Feld für Follow-up-Fragen (seit 2026-08-04 ohne Tier-Gate, siehe §4). Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). |
+| `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
+| `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn` finalisiert pending Turns samt höchstens sechs separaten Modellantworten atomar und per Payload-Fingerprint idempotent; `fail_turn` setzt nur einen allowgelisteten Fehlercode. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Finalisiert wird weiterhin ausschließlich serverseitig über `/consensus`. |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP) und übergibt sie als nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). Nach einem tatsächlich neu angelegten E-Mail/Passwort-Konto plant `/register` außerdem einen PII-freien, nicht-blockierenden Telegram-Admin-Alert ein; `/confirm-registration` erkennt damit auch gerade neu angelegte Google-Konten serverseitig. Normale Logins, Reloads und neutrale Antworten für bereits bestehende Adressen bleiben ruhig. |
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
@@ -312,6 +313,8 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   gedrosselten Streaming-Render über `window.ConsensusMath`. Fehlt `marked`
   oder `DOMPurify` nach einem Asset-Ladefehler, rendert es sicher als Plaintext
   und meldet den degradierten Zustand, statt eine Promise-Rejection auszulösen.
+  `injectMarkdown(el, md, evidenceSources?)` akzeptiert optional turnbezogene
+  Quellen; ohne dritten Parameter gilt weiter `window.currentEvidenceSources`.
 - **`sources.js`** — Quellen/Evidence-Mapping; nutzt DOM-Datasets
   `dataset.consensusAnswer` / `dataset.consensusSources`; `window.currentEvidenceSources`.
   Seit 2026-07-27 zwei Darstellungen: **im Konsenstext** (Container ist bzw.
@@ -693,9 +696,18 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   las sich über die volle Listenbreite wie ein grauer Rahmen um den ganzen
   Differences-Bereich.
 - **`consensus-run.js`** — `window.getConsensus`: baut `/consensus`-Payload, fährt
-  den SSE-Stream, rendert Ergebnis + Citation/Share-Meta. `parseBestModel`.
+  den SSE-Stream, rendert Ergebnis + Citation/Share-Meta und archiviert jeden
+  abgeschlossenen Turn inklusive turnbezogener Quellen, Differences und
+  Modellantworten. `parseBestModel`.
+- **`chat-session.js`** — session-lokaler `window.App.chatSession`-State für
+  completed aktive Basis, pending Turn/Context, stabile `client_request_id`,
+  zugehörigen Usage-Key und whitelisted Run-Metadaten. Das Modul hält keine
+  Provider-Keys oder Antworten, kapselt Chat-/Turn-Anlage, Context-Build samt
+  begrenztem 202-Retry und owner-gebundene Turn-Reconciliation und muss in
+  `index.html` nach `app-core.js`, aber vor `consensus-run.js` geladen werden.
 - **`query-send.js`** — `window.sendQuestion`: `/prepare` + `/ask_*`-Fan-out,
-  Streaming-Rendering, Usage/Tier-UI, Auto-Consensus-Trigger, Query-Run-State
+  vorgelagerte Turn-/Context-Bindung, Streaming-Rendering, Usage/Tier-UI,
+  Auto-Consensus-Trigger, Query-Run-State
   (`isQueryRequestRunning`, `cancelCurrentQuery`). Ein valider erster Lauf
   beendet über `window.exitHeroMode()` den zentrierten Input-Leerzustand. Vor
   `/prepare` gilt eine harte Mindestzahl von zwei ausgewählten Modellen;
@@ -811,10 +823,9 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
    `responseSkipped="true"` und zaehlt es einmalig als beantwortet.
 
 ### Follow-up-Fragen
-Nach einem erfolgreichen Consensus kann eine Anschlussfrage mit Kontext
-gestellt werden. Kontext ist **genau eine Ebene**: das letzte Frage/Konsens-
-Paar (`{previous_question, previous_consensus}`) — bewusst NICHT die sechs
-Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
+Nach jedem erfolgreichen Consensus kann derselbe owner-gebundene Chat um eine
+weitere Frage ergänzt werden. Es gibt keine harte Turn-2-Sperre mehr: Turn 2,
+Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Version.
 - Frontend: `window.App.followup` (in `consensus-run.js`) rendert **zwei Orte
   am Composer, einen Zustand** (seit 2026-07-27, Angebot dorthin verschoben):
   Das **Composer-Gate** `#composerGate` erscheint, sobald eine Frage beantwortet
@@ -825,8 +836,7 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   **klappt `syncInputLock()` den gesamten Eingabe-Composer für Free UND Pro
   zu** (`body.composer-locked`): Textarea, Anhang, Modellwahl und Senden
   verschwinden; sichtbar bleibt nur die kompakte Entscheidung „New comparison“
-  / „Ask a follow-up“. consens.io ist kein Chat, ein Vergleich endet mit seiner
-  Antwort. „New comparison“ setzt den normalen leeren Composer zurück;
+  / „Ask a follow-up“. „New comparison“ setzt den normalen leeren Composer zurück;
   „Ask a follow-up“ öffnet ihn mit Kontext-Chip.
   Die Login-Schranke (`updateQuestionInputAccess`) bleibt die stärkere
   Bedingung und ruft `syncInputLock()` am Ende selbst auf, sonst öffnete sie
@@ -834,9 +844,15 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   **Kontext-Chip** in `#followupChipBar` **am Eingabefeld**, weil er
   beschreibt, was gleich rausgeht. `#followupBar` in der Provenance-Zeile
   bleibt als leerer DOM-Knoten bestehen (`consensus-progress.js` fragt ihn ab).
-  `query-send.js` konsumiert den State beim
-  Senden und legt `context` in den `/prepare`- und alle `/ask_*`-Payloads.
-  Sobald `/prepare` den Lauf nicht abweist, archiviert
+  `query-send.js` konsumiert den UI-State beim Senden. Hat
+  `chat-session.js` eine bestätigte `activeChatId` plus `activeTurnId`, wird
+  **kein** Legacy-`context` gesendet. Stattdessen entsteht nach erfolgreichem
+  `/prepare` der pending Follow-up-Turn; der Browser baut vor dem Provider-Fan-out genau
+  einmal `/context` und hängt dasselbe
+  `{chat_id, turn_id, context_version_id}` an alle sechs `/ask_*` sowie später
+  an `/consensus`. `ready` und `degraded` sind gleichermaßen verwendbare,
+  autoritative Versionen; `202 building` wird begrenzt wiederholt.
+  Erst nachdem `/prepare` und der optionale Context-Build erfolgreich waren, archiviert
   `archiveCurrentExchange()` die bisherige Frage und den bereits gerenderten
   Consensus samt Agreement als statischen Turn in `#threadHistory`; erst danach
   erscheint die neue Frage darunter im aktiven `#threadAsk`. Der alte Live-Renderbaum wird
@@ -844,12 +860,16 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   und die vorherige Antwort trotzdem sichtbar bleibt. Interaktive Marker der
   Archivkopie werden zu reinen Anzeigeelementen. Das archivierte Agreement
   nutzt mit einem wachsenden `.verdict-main` die volle Threadbreite; die
-  Judge-Fußnote bleibt wie im Live-Footer kompakt inline. „New comparison“/
+  Judge-Fußnote bleibt wie im Live-Footer kompakt inline. Differences, Quellen
+  und Modellantworten werden mit dem Turn gespeichert und in der Archivkopie
+  turnbezogen gerendert; Citation-Auflösung verwendet nicht den globalen
+  `window.currentEvidenceSources`-Stand eines späteren Turns. „New comparison“/
   `clearResponseBoxes` leert auch den Verlauf.
-  **Follow-ups verketten sich nicht** (Kostenkontrolle): `consume()` markiert
-  den Lauf via `followupInFlight`, der Konsens einer Follow-up-Frage bietet
-  keine weitere Affordance an — erst eine frische Frage schaltet sie wieder frei.
-- Backend: `normalize_followup_context` (`chat.py`) validiert und kappt beide
+- Alte Bookmark-Restores bzw. Reloads ohne aktive Chat-Zuordnung bleiben bis
+  zur späteren History-Migration bewusst im Legacy-Pfad: `context` enthält
+  genau das letzte `{previous_question, previous_consensus}`-Paar. Dieser Pfad
+  erzeugt keinen irreführenden Chat, dessen Historie mit Turn 2 beginnt.
+- Backend-Legacy: `normalize_followup_context` (`chat.py`) validiert und kappt beide
   Texte serverseitig (`followup_max_question_chars` /
   `followup_max_consensus_chars` in `LIMITS`). `/prepare` verarbeitet den
   Kontext bewusst gar nicht; die **Injektion
@@ -881,6 +901,109 @@ Modellantworten (Kostenkontrolle, der Kontext geht in alle `/ask_*`-Prompts).
   `excluded_models` + `consensus_model` und ruft **`POST /consensus`**
   (`stream:true`) mit demselben `usage_run_key`. Der Endpoint validiert/
   konsumiert den Run idempotent und erzeugt keine zweite Usage-Einheit.
+- **Chat-Turn-Persistenz und Context-Verdrahtung (Sessions 5–6):** Nach
+  erfolgreichem `/prepare` legt `query-send.js` den logischen Run fest. Nur bei
+  einer aktiven Fortsetzung erzeugt `chat-session.js` den pending Turn bereits
+  **vor** Context-Build und Provider-Fan-out, weil der autoritative Context an
+  diesen Ziel-Turn gebunden wird. Bei einer frischen Frage entstehen Chat und
+  Turn erst, wenn `getConsensus` tatsächlich aufgerufen wird; ein Lauf ohne
+  Consensus hinterlässt dadurch keinen Turn-1-Orphan. Bei einer Fortsetzung
+  wird ausschließlich die durch den letzten completed Turn bestätigte
+  `activeChatId` verwendet. `activeChatId` + `activeTurnId` bezeichnen immer
+  eine completed Basis; der neue Lauf liegt bis zur autoritativen Completion
+  separat in `pendingChatId`/`pendingTurnId`. Der Turn-Request enthält nur
+  `question`, `mode`, `deep_search`, `selected_models`, `consensus_model` und die
+  pro logischem Run stabile `client_request_id`.
+- Im Own-Key-Modus validiert `query-send.js` vor Usage-Reservierung, `/prepare`
+  und Turn-Anlage vollständig die lokalen Keys aller ausgewählten Antwort-
+  Provider sowie des Memory-Providers. Fehlt einer, bleibt der completed
+  Vorgänger samt Follow-up-Chip unverändert und es entsteht kein pending Turn.
+  Bei aktiven Fortsetzungen ruft `query-send.js` danach genau einmal den
+  Context-Endpoint. Developer-Läufe senden denselben bereits durch `/prepare`
+  konsumierten `usage_run_key`; Own-Key-Läufe senden ausschließlich den zum
+  Provider des gewählten Consensus-Modells gehörenden `memory_api_key` aus dem
+  lokalen Keybestand. Keys gehen nie an `/prepare`. Erst nach einer fertigen
+  `ready|degraded`-Version beginnt der Fan-out; alle `/ask_*` laden dieselbe
+  Version und komprimieren nicht selbst.
+- Mit Chat-IDs sendet `getConsensus` zusätzlich globale `turn_sources` sowie
+  bei fortgesetzten Turns dieselbe `context_version_id`.
+  `/consensus` akzeptiert IDs nur paarweise im 32-Hex-Format, prüft UID,
+  Chat/Turn, Status, normalisierte Frage und die exakte Context-Verknüpfung
+  read-only **vor** dem teuren Engine-
+  Call und baut nach dem Ergebnis aus den bereits gekappten `included_answers`,
+  serverseitig erlaubten Labels und providerbezogenen Quellen das vollständige
+  `ChatStore.complete_turn`-Payload. Completion erfolgt genau einmal im
+  jeweiligen erfolgreichen Streaming-/JSON-Pfad, erst nach finalem Consensus,
+  finalen Differences und dem optionalen `result_id`. Responses mit IDs tragen
+  zusätzlich die autoritative Disposition `chat_turn_state=completed|failed|pending`:
+  Nur `completed` zusammen mit `chat_persisted=true` promotet `pendingChatId` zu
+  `activeChatId`; `failed` verwirft den lokalen pending State, `pending` erhält
+  IDs und stabile `client_request_id` für einen Retry. Allgemeine UI-
+  Fehlerklassifikation ist keine Persistenzwahrheit.
+- Ein completed Preflight liest das vollständige owner-gebundene Turn-Detail
+  und gibt gespeicherten Consensus, Differences, `differences_data`, Quellen,
+  Modellantworten und `result_id` direkt wieder (`chat_replayed=true`): JSON normal, bei Streaming
+  als kurzer kompatibler `consensus.final`-/`final`-SSE-Ablauf. Dabei laufen
+  weder LLMs noch `complete_turn`, Share-Snapshot, Differences-Statistik oder
+  `/consensus`-Usage-Consume. Er läuft vor der aktuellen Modell-Allowlist sowie
+  Tier- und Credential-Prüfung, damit ein gespeichertes Ergebnis auch nach
+  Modell-, Tarif- oder Key-Änderungen lesbar bleibt. Der Browser rendert und
+  promotet den Replay, unterdrückt dabei aber Bookmark-Dual-Write, Best-Model-
+  Vote, Completion-Analytics und Watch-Nudge. Nach einem mehrdeutigen lokalen Transportabbruch
+  liest der Browser zuerst den owner-gebundenen Turn: `completed` wird über
+  diesen Replay-Pfad dargestellt, `failed` autoritativ verworfen und `pending`
+  mit denselben IDs sowie demselben Usage-/Request-Key wiederholt.
+  Ein completed Alt-Turn ohne Consensus wird sicher abgewiesen und niemals
+  still neu berechnet.
+- Terminale Consensus-Fehler markieren den validierten pending Turn best effort
+  mit einem allowgelisteten Code; zu wenige serverseitige Antworten verwenden
+  `insufficient_answers`, ein zuverlässig erkannter Stream-Abbruch `cancelled`.
+  Hat eine aktive Fortsetzung nach dem Fan-out weniger als zwei Antworten,
+  sendet der Browser eine dispositionsbezogene `/consensus`-Anforderung. Der
+  Server prüft und markiert den Turn noch vor aktueller Modell-/Tierprüfung,
+  Engine-/Credential-Auflösung und ohne weitere Usage-Einheit als failed; es
+  bleibt kein solcher pending Orphan.
+  Nur nach erfolgreichem `fail_turn` lautet die Disposition `failed`; korrigierbare
+  frühe Fehler und ein gescheitertes `fail_turn` lassen sie retrybar. Scheitert
+  nur `complete_turn`, bleibt der Turn pending/retrybar und der fertige Consensus
+  wird mit `chat_persisted=false`, `chat_turn_state=pending` ausgeliefert. Fehler von
+  `POST /chats` oder `POST /turns` blockieren einen aktiven Follow-up vor dem
+  Fan-out; eine frische erste Frage darf bei ausgefallener optionaler Persistenz
+  weiterhin ohne Chat-Bindung laufen. Ein lokaler Abort behauptet keine
+  serverseitige Terminalität und erhält bekannte pending IDs. Ein Abbruch oder
+  Verlassen der Seite nach der frühen Follow-up-Turn-Anlage, aber vor einer
+  autoritativen `/consensus`-Disposition kann daher weiterhin einen pending
+  Turn hinterlassen; ein Retry im laufenden Browser ist durch die stabile
+  `client_request_id` abgesichert. Dafür gibt es bewusst noch keinen Cleanup-Job.
+  Ein nicht completed Chat wird nie als persistierte Grundlage
+  eines folgenden Follow-ups verwendet.
+- Die bisherigen `saveBookmark(...)`-/`saveBookmarkConsensus(...)`-Aufrufe
+  bleiben als bewusstes temporäres Dual-Write für Sidebar, Restore, Share und
+  Watch aktiv. Ein Follow-up aus einem alten Bookmark oder nach Reload hat keine
+  `activeChatId`: es läuft normal weiter, wird aber diagnostisch ohne Chat-IDs
+  gesendet, damit kein irreführender Chat nur mit der zweiten Frage entsteht.
+  Bookmark-Migration und historische Chat-Anzeige/Sidebar sind ausdrücklich
+  noch nicht implementiert.
+- **Multi-Turn-Context (Session 4 Backend, seit Session 5 im Browser aktiv):**
+  `POST /chats/{chat_id}/turns/{turn_id}/context` liest ausschließlich frühere
+  owner-gebundene completed Turns. Bei Zielposition 2 bleibt der jüngste
+  completed Turn als begrenzter Wortlaut-Kontext erhalten; ab Zielposition 3
+  wird genau einmal pro Context-Version die ältere Historie in strukturierte
+  Memory (`decisions`, `constraints`, `entities_facts`, `open_questions`,
+  `user_preferences`, `uncertainties`, `corrections`) überführt, während der
+  jüngste completed Turn separat bleibt. Deterministische Version-ID,
+  Build-Lease und Ziel-Turn-Verknüpfung machen Retries idempotent; `/ask_*`
+  laden die fertige Version nur noch und führen keine Komprimierung aus.
+  Ein completed Ziel-Turn kann nur seine bereits verknüpfte fertige Version
+  wiedergeben und erhält nie nachträglich einen neuen Context-Build.
+  Harte Budgets sind 24.000 Context-Zeichen, 8.000 Memory-Zeichen, 14.000 für
+  den jüngsten Turn und 2.500 Output-Tokens. Komprimierungs-/Credentialfehler
+  erzeugen eine gekennzeichnete deterministische Fallback-Version und ändern
+  keine Roh-Turns. Der Developer-Modus akzeptiert nur einen bereits durch
+  `/prepare` konsumierten `usage_run_key`, bindet dessen Usage-Dokument per
+  SHA-256-Zielhash idempotent an genau diesen Chat/Turn und erzeugt keinen zweiten Slot;
+  Own-Key nutzt ausschließlich `memory_api_key`, speichert/loggt ihn nicht und
+  fällt bei Fehlen niemals auf Developer-Keys oder Gemini-ADC zurück.
 - Deep Think bleibt ein separater Pro-Laufmodus neben High Quality: Das Preset
   waehlt Premium-Modelle, Deep Think ergaenzt Prompt, Provider-Reasoning,
   hoeheres Tokenbudget und eigenes Kontingent. Deep Think wählt im Frontend
@@ -1063,8 +1186,8 @@ sichtbaren Auswahlzustand als auch defensiv im tatsächlichen Request-Fan-out au
   Gewohnheit — und mit freigeschalteten Follow-ups wäre drei sofort wieder die
   alte Sackgasse); reguläre und Deep-Think-Run-Limits je Tier sind
   als vier eigene `app_config/models.limits`-Felder konfigurierbar. `/prepare`
-  reserviert, der erste serverfinanzierte Provider-Aufruf konsumiert, und
-  `/consensus` wiederholt denselben Consume idempotent. `/resolve` erzeugt einen
+  reserviert und konsumiert den Slot sofort; Provider-Fan-out und `/consensus`
+  bestätigen denselben Consume danach nur noch idempotent. `/resolve` erzeugt einen
   eigenen Run. `/usage` und `/user_status` lesen die Firestore-Tagesbasis;
   `/usage/run/release` gibt nur noch nicht konsumierte Reservierungen frei.
   `app/core/state.py` enthält nur noch den kurzlebigen Feedback-Cooldown; die
@@ -1337,16 +1460,19 @@ app/core/
   state.py                   Kurzlebiger In-Memory-Feedback-Cooldown
 app/api/routers/             siehe §2
   api_v1.py                  Gescopte Run-, Publish-, Share-Lifecycle- und Indexing-API + OpenAPI-Modelle
+  chat_history.py            Owner-gebundene Chat-/Turn-API inkl. vollständigem Turn-Detail
 app/services/llm/
   base.py                    System-Prompt, Wortzählung, validate_model
   engines.py                 Provider-Requests (build_provider_payload, query_*)
   streaming.py               SSE-Helfer, stream_*_query, streaming_model_response
-  consensus_engine.py        query/stream_consensus + query/stream_differences, normalize_model_name
+  consensus_engine.py        query/stream_consensus + query/stream_differences, gemeinsamer strukturierter Engine-Dispatch, normalize_model_name
   resolve_engine.py          Resolve-Runde (run_resolve_round, normalize_resolve_positions)
   citations.py               Antwort-Parsing + Quellen (source_response, make_llm_result)
   attachments.py             Attachment-Validierung/Aufbereitung
 app/services/
-  usage_repository.py        Firestore-Usage fuer logische Runs (reserve/consume/release/snapshot)
+  chat_store.py              Firestore-Pfade, Turn-Lifecycle/Antwortdokumente, atomare Finalisierung, Idempotenz, Cursor + Allowlists
+  chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Budgets, Lease/Idempotenz und Fallback-Rendering
+  usage_repository.py        Firestore-Usage fuer logische Runs (reserve/consume/release/get_run/context-target-binding/snapshot)
   api_account_cleanup.py     Fail-closed Account-Blocks + retrybare API-Datenlöschung
   api_key_repository.py      SHA-256-gehashte, UID-gebundene API-Schluessel
   api_run_repository.py      Idempotenz + persistente API-Run-State-Machine
@@ -1396,13 +1522,92 @@ Deploy manuell über die Firebase Console):
   sie vorher aus `users/{uid}` herauslösen (z. B. Firebase Custom Claims).
 
 **Firestore-Collections** (verifiziert über Code):
-- `users/{uid}` — `tier`, `role`; Subcollections `bookmarks`, `counters` sowie
+- `users/{uid}` — `tier`, `role`; Subcollections `bookmarks`, `counters`, `chats` sowie
   die produktive run-basierte Usage:
   `bookmarks` speichert pro Follow-up optional `previous_question` sowie
   `previous_turn` (vorherige Frage, Consensus, Differences-/Agreement-Daten und
   Quellen) getrennt von der aktuellen `query`; normale Saves schreiben
   Leerwerte und entfernen damit versehentlich stehen gebliebenen Kontext bei
   derselben Frage.
+  - `chats/{chat_id}` — serverseitig zufällig erzeugte, nicht aus Titel oder
+    Frage abgeleitete 32-Hex-ID; Felder `schema_version`, `title`,
+    `status=active`, `created_at`, `updated_at`, `turn_count` und
+    `latest_question`. Letzteres ist nur eine NFKC-normalisierte, whitespace-
+    zusammengefasste Vorschau von höchstens 300 Zeichen; die vollständige Frage
+    bleibt ausschließlich im Turn. Ein leer erstellter Chat erhält mit dem ersten Turn einen
+    normalisierten, serverseitig auf 120 Zeichen gekappten Titel aus der Frage.
+    Alle Zugriffe beginnen beim verifizierten Pfad `users/{uid}`; unbekannte und
+    fremde IDs liefern gleichförmig 404. `GET /chats` liefert nur kompakte
+    Metadaten, absteigend nach `updated_at`, höchstens 50 Dokumente pro Seite.
+  - `chats/{chat_id}/turns/{turn_id}` — `schema_version`, monoton aus dem
+    Chat-Zähler vergebene `position`, `status=pending|completed|failed`, begrenzte `question` und
+    `mode`, boolesches `deep_search`, begrenzte/normalisierte
+    `selected_models`, `consensus_model`, `created_at`, `updated_at` und optional
+    `client_request_id`/`context_version_id`. Turn-Anlage und Chat-Update (`turn_count`,
+    `updated_at`, `latest_question`) laufen in einer Firestore-Transaktion. Bei
+    `client_request_id` wird die Turn-ID aus einem serverseitigen SHA-256-Digest
+    abgeleitet; derselbe Key im selben Chat erzeugt deshalb keinen zweiten Turn.
+    Stimmt der normalisierte Payload (`question`, `mode`, `deep_search`,
+    `selected_models`, `consensus_model`) mit dem vorhandenen Turn überein, wird
+    dieser zurückgegeben; andernfalls endet der Retry ohne Änderung mit 409.
+    `GET .../turns` sortiert nach `position` und liest höchstens 100 Dokumente
+    pro Seite; es bleibt kompakt und enthält keine Ergebnis-Texte oder Quellen.
+    `GET .../turns/{turn_id}` liefert owner-gebunden die whitelisted Vollansicht;
+    unbekannte/fremde Chat-Turn-Kombinationen sind gleichförmig 404.
+  - Bei erfolgreicher Finalisierung ergänzt das Turn-Dokument `consensus`,
+    `differences`, sanitierte `differences_data` und `sources`, ausschließlich
+    kanonische `included_models`, serverseitig berechnete `answer_count` und
+    (nur falls vorhanden) den aus den sanitisierten Differences abgeleiteten
+    `agreement_score`; optional kommt eine validierte `result_id` hinzu.
+    `completion_fingerprint`, `completed_at` und `updated_at` sind intern;
+    der Fingerprint wird nie von der API ausgegeben. Der SHA-256-Fingerprint
+    umfasst die normalisierte Turn-Identität, Antworten samt Modell-Labels und
+    Quellen, Consensus, Differences, Differences-JSON, Turn-Quellen und
+    `result_id` in kanonischer JSON-Serialisierung. Ein identischer Completion-
+    Retry schreibt nichts, ein abweichender endet als Conflict.
+  - `pending → completed` und `pending → failed` sind die einzigen Übergänge.
+    Ein identischer Fail-Retry ist schreibfrei idempotent; abweichende Fail-
+    Retries, `failed → completed` und `completed → failed` sind Conflicts.
+    Failed Turns ergänzen ausschließlich `status=failed`, einen der Codes
+    `consensus_failed|cancelled|insufficient_answers|persistence_interrupted`,
+    `failed_at` und `updated_at`; Providerfehler oder freie Clienttexte werden
+    nicht persistiert.
+  - `chats/{chat_id}/turns/{turn_id}/model_answers/{provider}` speichert pro
+    erfolgreicher Antwort genau ein Dokument. Die einzige Pfad-Allowlist ist
+    `openai|mistral|anthropic|gemini|deepseek|grok`; Dokumentfelder sind
+    `schema_version`, kanonischer `provider`, begrenztes `model_label` und
+    `answer`, über den Share-Sanitizer normalisierte `sources`, `created_at` und
+    `updated_at`. Leere/fehlgeschlagene Antworten erzeugen kein Dokument. Turn,
+    höchstens sechs Antwort-Dokumente und `chat.updated_at` werden in einer
+    Firestore-Transaktion nach allen Reads geschrieben; `turn_count` und
+    `latest_question` bleiben dabei unverändert. Consensus (100.000 Zeichen),
+    Differences (50.000), Modellantworten (dynamisches Consensus-Answer-Limit),
+    Modell-Labels (80), Result-ID (16) und Quellen (50; URL 2.000, Titel 300,
+    Provider 40) sind serverseitig begrenzt. Responses und Persistenz verwenden
+    Feld-Allowlists; API-Keys, Tokens, Credentials, Roh-Attachments und
+    unbekannte Felder werden verworfen.
+  - `chats/{chat_id}/context_versions/{version_id}` ist eine ausschließlich
+    abgeleitete, owner-gebundene Context-Version. Sie referenziert Ziel-Turn,
+    jüngsten wörtlichen completed Turn und die bis zu einer Position
+    zusammengefassten älteren completed Turns, enthält die validierte
+    strukturierte Memory, eine auf tatsächlich referenzierte Turns begrenzte
+    Provenienzkarte (`turn_id → source_count`), den Vorgänger-Versionslink,
+    Quell-Fingerprint, Builder-/Schema-Version,
+    Engine-Metadaten, feste Budgetwerte und `ready|building`-Lifecyclefelder.
+    Eine deterministische ID plus zeitlich begrenzte Build-Lease verhindert
+    parallele Komprimierungen; erst die fertige Version wird atomar am Ziel-Turn
+    als `context_version_id` verknüpft. Keys, Providerfehlertexte und Roh-Prompts
+    werden nie gespeichert. Vollständige Turns werden weder ersetzt noch
+    verändert; bei Fehlern entsteht eine explizit `degraded` markierte,
+    deterministische Fallback-Memory. Die Provenienzkarte hält validierte
+    Turn-/Quellenreferenzen inkrementeller Memory auch dann stabil, wenn der
+    betreffende Roh-Turn außerhalb des begrenzten 200-Turn-Lesefensters liegt.
+  - Erfolgreiche normale Browser-Runs schreiben den ersten completed Turn;
+    Turn 2 und alle späteren Fortsetzungen schreiben nur bei einer als completed
+    bestätigten `activeChatId` in denselben Chat. Pending Chat-/Turn-/Context-IDs
+    bleiben bis zur autoritativen Disposition separat; `/ask_*` schreiben nicht
+    direkt. Legacy-Follow-ups ohne aktive Chat-Zuordnung bleiben ausschließlich
+    im Bookmark-Flow. Bookmarks werden vorübergehend parallel weitergeschrieben.
   - `usage_days/{YYYY-MM-DD}` — UTC-Tagesaggregat mit Schema-Version und den
     Integer-Zählern `total_reserved`, `total_consumed`,
     `deep_think_reserved`, `deep_think_consumed`. Reservierte und verbrauchte
@@ -1413,9 +1618,12 @@ Deploy manuell über die Firebase Console):
     Klartext-Key wird nicht gespeichert. Enthält `kind=regular|deep_think`, den
     UTC-Tag der Reservierung, beide serverseitigen Limits zum
     Reservierungszeitpunkt und
-    `status=reserved|consumed|released`. Erlaubte Übergänge:
-    `reserved → consumed` (der erste begonnene Provider-Aufruf kostet genau
-    eine Run-Einheit) oder
+    `status=reserved|consumed|released`. Ein für Chat-Memory verwendeter Run
+    erhält zusätzlich ausschließlich `context_target_hash` und
+    `context_bound_at`; derselbe konsumierte Key kann damit nur einen
+    Chat-/Turn-Context finanzieren, ohne einen weiteren Zähler zu verändern.
+    Erlaubte Übergänge: `reserved → consumed` (`/prepare` kostet genau eine
+    Run-Einheit) oder
     `reserved → released` (fehlgeschlagener/abgebrochener Run gibt den Slot
     frei); beide Zielzustände sind terminal, Wiederholungen idempotent. Der Key
     kann nicht für einen anderen Run-Typ wiederverwendet werden. Provider-/LLM-
@@ -1604,6 +1812,14 @@ Deploy manuell über die Firebase Console):
   `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`, `WATCH_UNSUBSCRIBE_SECRET`.
   Topic-Tokens tragen einen eigenen Typ und abonnieren ausschließlich
   `topic_followers`, verwenden aber bewusst denselben serverseitigen HMAC-Key.
+- Chat-Pagination: `CHAT_CURSOR_SECRET` signiert die opaken, an UID und
+  Ressourcentyp gebundenen, selbstenthaltenden Cursor. Chat-Cursor enthalten
+  Version, Typ, kanonisches/lossloses RFC3339-`updated_at` und Dokument-ID;
+  Turn-Cursor enthalten Version, Typ, `position` und Dokument-ID. `start_after`
+  verwendet diese signierten Originalwerte direkt und liest das Cursor-Dokument
+  nicht erneut. Für bestehende Deployments dient
+  `WATCH_UNSUBSCRIBE_SECRET` als Fallback; mindestens einer der beiden Werte muss
+  gesetzt sein, sobald eine Chat- oder Turn-Liste eine Folgeseite ausgibt.
 - Search Console (nur serverseitig): `GSC_SITE_URL` (URL-Prefix- oder
   `sc-domain:`-Property) und `GSC_SERVICE_ACCOUNT_JSON` (**ausschließlich ein
   Dateipfad**, trotz Variablennamen). Relative Pfade werden gegen den Repository-
@@ -1912,6 +2128,7 @@ ersten Check statt eines leeren Consensus-Panels.
   wie „already registered" wäre eine Konto-Enumeration.
 - **Script-Ladereihenfolge in `templates/index.html` ist ein Vertrag.**
   `app-core.js` definiert `window.App` und muss vor allen Feature-Modulen laufen;
+  `chat-session.js` muss vor `consensus-run.js` und `query-send.js` laufen;
   KaTeX + Auto-Render müssen vor `math-render.js`, dieses wiederum vor
   `markdown-stream.js` geladen werden;
   `app-init.js` läuft als letztes (deferred am `</body>`) und verdrahtet das DOM.
@@ -1938,6 +2155,18 @@ ersten Check statt eines leeren Consensus-Panels.
   `clearResponseBoxes`) und `user-tier.js` (render bei Tier-Wechsel) hängen
   daran; DOM-Ziele sind `#composerGate`, `#followupChipBar` und
   `#threadHistory` in `index.html`.
+- **`window.App.chatSession`** (definiert in `chat-session.js`) hält nur die
+  laufzeitlokale Chat-Zuordnung (`activeChatId` + `activeTurnId` ausschließlich
+  als completed Basis, `pendingChatId`/`pendingTurnId`/
+  `pendingContextVersionId`, stabile pending Request-/Usage-ID und whitelisted
+  logische Run-Metadaten). `query-send.js` startet den State nach `/prepare`,
+  erzeugt bei aktiven Fortsetzungen Turn und Context vor dem Provider-Fan-out
+  und reconciliert mehrdeutige
+  Abbrüche; `consensus-run.js` verändert ihn nur anhand der autoritativen
+  `chat_turn_state`-Disposition. `app-init.js`
+  und `firebase.js` resetten aktiven wie pending State bei Clear/Logout;
+  ein Bookmark-Restore resetet ihn ebenfalls, damit sein Follow-up keinen alten
+  Chat fortsetzt.
 - **`window.App.setAppTitle(question?)`** (definiert in `app-core.js`) hält den
   Standard- bzw. fragebezogenen Browser-Tab-Titel bei Query-Send, Bookmark-Open
   und Clear synchron zur aktuellen Ansicht.
@@ -1975,7 +2204,10 @@ ersten Check statt eines leeren Consensus-Panels.
   `CONSENSUS_PRESETS` inklusive Antwort-/Consensus-Model-Sets,
   `DEFAULT_CONSENSUS_PRESET`, `FREE_LIMIT`) oder
   serverseitig gerenderte Template-Optionen wie
-  `consensus_models` für den Consensus-Picker. `app-init.js` kann kein Jinja
+  `consensus_models` für den Consensus-Picker. Dessen
+  `data-engine-provider` bestimmt im Own-Key-Modus ausschließlich, welcher
+  einzelne lokale API-Key als `memory_api_key` an `/context` geht.
+  `app-init.js` kann kein Jinja
   rendern — neue Server-Werte müssen hier gebridged werden.
 - **CSP** (`CustomSecurityMiddleware` in `security.py`): neue externe Hosts (Skripte,
   `connect-src`-Ziele, Frames) müssen explizit in die Policy. Sonst blockt der
@@ -1991,7 +2223,10 @@ ersten Check statt eines leeren Consensus-Panels.
   `/consensus`; Resolve nutzt einen eigenen Key. Run-Typ (`regular` oder
   `deep_think`) und Limits werden ausschließlich serverseitig bestimmt. Niemals
   clientseitige Kosten, Modellanzahl oder Float-Inkremente übernehmen; niemals
-  Provider-Aufrufe in die Firestore-Transaktionsfunktion verschieben.
+  Provider-Aufrufe in die Firestore-Transaktionsfunktion verschieben. Der
+  Chat-Context-Endpoint darf im Developer-Modus nur einen bereits konsumierten
+  Run verwenden und bindet dessen Hash-Metadaten vor dem LLM-Call einmalig an
+  genau einen Chat/Turn; diese Bindung verändert keine Usage-Zähler.
 - **Datenminimierung ist Designentscheidung**: keine IP-/User-Agent-Speicherung,
   keine Datei-Bytes in Firestore. Nicht „aus Versehen" mitloggen.
 
