@@ -2361,26 +2361,6 @@ body:not(.is-hero) .consensus-section::before {
   transform: translateY(1px) rotate(225deg);
 }
 
-/* ---- Follow-up offer: a quiet action, not a call-out ---------------------
-   The offer sits in the provenance line under the answer. It used to be a
-   dashed accent chip — louder than everything around it. It reads as one of
-   the line's quiet actions now; the small Pro badge still marks the gate. */
-.run-provenance-actions .followup-offer-btn {
-  border: 0;
-  background: transparent;
-  border-radius: var(--radius-xs);
-  padding: 4px 9px;
-  color: var(--ink-3);
-  font-size: var(--font-size-xs);
-  gap: 6px;
-}
-
-.run-provenance-actions .followup-offer-btn:hover {
-  background: var(--raise);
-  border: 0;
-  color: var(--ink);
-}
-
 /* The verdict was a filled, bordered banner. It says the same thing as a
    line: score ring, headline, judge footnote — so it becomes a line. The
    traffic light stays, because that is the one piece of colour that carries
@@ -2949,23 +2929,6 @@ body.is-hero .chat-input-container .consensus-model .select-wrapper .model-picke
   bottom: auto;
 }
 
-/* ---- Composer gate -------------------------------------------------------
-   consens.io is not a chat: a comparison ends with its answer. Rather than
-   letting people type into a field that will silently start a second
-   six-model run, the composer says what happens next: a fresh comparison or
-   a context-carrying follow-up, each counted as a normal run. The offer moved here
-   from the provenance line for the same reason: it belongs at the field
-   where the next question gets typed. */
-.composer-gate {
-  flex: 1 1 100%;
-  min-width: 0;
-  margin-top: 2px;
-}
-
-.composer-gate[hidden] {
-  display: none;
-}
-
 /* "Run again" fuellt die Frage nur vor. Was das Absenden kostet, steht bis
    dahin hier — an dem Feld, das gleich abgeschickt wird. */
 .composer-run-notice {
@@ -2980,72 +2943,6 @@ body.is-hero .chat-input-container .consensus-model .select-wrapper .model-picke
 
 .composer-run-notice[hidden] {
   display: none;
-}
-
-.composer-gate-inner {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 12px;
-}
-
-.composer-gate-copy {
-  flex: 1 1 260px;
-  min-width: 0;
-  font-size: var(--font-size-xs);
-  line-height: var(--line-height-ui);
-  text-align: left;
-  color: var(--ink-3);
-}
-
-.composer-gate-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-}
-
-.composer-gate .followup-offer-btn {
-  border: 0;
-  border-radius: var(--radius-pill);
-  padding: 5px 10px;
-  background: transparent;
-  color: var(--ink-3);
-  font-size: var(--font-size-xs);
-  gap: 6px;
-}
-
-.composer-gate .followup-offer-btn:hover {
-  background: var(--ground);
-  border: 0;
-  color: var(--ink);
-}
-
-.composer-gate-new {
-  border: 0;
-  border-radius: var(--radius-pill);
-  padding: 5px 12px;
-  background: var(--accent);
-  color: var(--ground);
-  font: inherit;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.composer-gate-new:hover {
-  opacity: 0.88;
-}
-
-/* Nach der Antwort ist dies kein deaktiviertes Eingabefeld mehr, sondern eine
-   kompakte Entscheidung. Erst eine der beiden Aktionen öffnet den normalen
-   Composer wieder — leer oder mit Follow-up-Kontext. */
-body.composer-locked .chat-input-container {
-  gap: 0;
-  padding: 10px 12px;
-  min-height: 0;
-  border-radius: var(--radius-lg);
 }
 
 @media (max-width: 640px) {
@@ -3090,49 +2987,6 @@ body.composer-locked .chat-input-container {
    den gesamten (ohnehin deaktivierten) Composer. */
 body:has(#postDemoLoginPrompt:not([hidden])) .chat-input-container {
   display: none;
-}
-
-body.composer-locked .chat-input-container .input-field,
-body.composer-locked .chat-input-container .consensus-switch-container,
-body.composer-locked .chat-input-container .input-actions-container,
-body.composer-locked .chat-input-container #attachmentBar,
-body.composer-locked .chat-input-container #followupChipBar,
-body.composer-locked .chat-input-container #attachMenu {
-  display: none;
-}
-
-body.composer-locked .composer-gate {
-  margin: 0;
-}
-
-body.composer-locked .composer-gate-inner {
-  min-height: 34px;
-  animation: composerGateIn 0.18s ease-out both;
-}
-
-@keyframes composerGateIn {
-  from {
-    opacity: 0;
-    transform: translateY(2px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (max-width: 640px) {
-  /* Auf schmalen Screens sagen die zwei Buttons bereits alles. Die
-     Zwischenfrage wuerde nur eine dritte Zeile im Sticky-Fuss erzeugen. */
-  body.composer-locked .composer-gate-copy {
-    display: none;
-  }
-
-  body.composer-locked .composer-gate-actions {
-    width: 100%;
-    margin-left: 0;
-    justify-content: center;
-  }
 }
 
 /* ---- Hover preview on a marked passage -----------------------------------

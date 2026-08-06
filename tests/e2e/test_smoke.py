@@ -199,7 +199,11 @@ def test_question_input_grows_and_caps_on_desktop_and_mobile(app_page):
     expect(input_box).to_have_value("First line\n")
 
 
-def test_locked_composer_explains_models_and_unavailable_saved_context(app_page):
+def test_restored_context_arms_the_composer_and_stays_switchable(app_page):
+    """Ein wiederhergestellter Turn stellt keine Zwischenfrage: das Feld bleibt
+    offen und die naechste Frage ist per Default eine Folgefrage. Der Chip
+    laesst sich abschalten und wieder anschalten, und die Modellwahl bleibt
+    dabei durchgehend bedienbar."""
     app_page.evaluate(
         """() => window.App.followup.offer(
           "Saved question",
@@ -207,20 +211,81 @@ def test_locked_composer_explains_models_and_unavailable_saved_context(app_page)
           { question: "Saved question", consensus: "Saved consensus" }
         )"""
     )
-    expect(app_page.locator("#composerGate")).to_be_visible()
-    app_page.locator("#sidebarModelPicker").click()
-    expect(app_page.locator(".explanation-popup")).to_contain_text(
-        "before changing models"
+    expect(app_page.locator("#followupChipBar .followup-chip")).to_contain_text(
+        "Follow-up to: “Saved question”"
     )
+    expect(app_page.locator("#questionInput")).to_be_enabled()
+    expect(app_page.locator("#questionInput")).to_have_attribute(
+        "placeholder", "Ask a follow-up question"
+    )
+    expect(app_page.locator("#followupChipBar .followup-newrun")).to_be_visible()
+
+    # Die Modellwahl ist nicht mehr gesperrt: es gibt keine Entscheidung, die
+    # sie stoeren koennte.
+    app_page.locator("#sidebarModelPicker").click()
     expect(
         app_page.locator("#consensusModelDropdown").locator("xpath=..").locator(".model-picker-menu")
-    ).not_to_have_class(re.compile(r"\bis-open\b"))
+    ).to_have_class(re.compile(r"\bis-open\b"))
+    app_page.keyboard.press("Escape")
+
+    # Kontext abschalten und wieder anschalten - beides ohne das Feld zu sperren.
+    app_page.locator(".followup-chip-remove").click()
+    expect(app_page.locator(".followup-chip.is-off")).to_be_visible()
+    expect(app_page.locator("#questionInput")).to_be_enabled()
+    expect(app_page.locator("#questionInput")).to_have_attribute(
+        "placeholder", "Enter your question"
+    )
+    app_page.locator(".followup-chip.is-off").click()
+    expect(app_page.locator("#followupChipBar .followup-chip-remove")).to_be_visible()
 
     app_page.evaluate("() => window.App.followup.markContinuationUnavailable()")
+    expect(app_page.locator("#followupChipBar")).to_be_hidden()
     expect(app_page.locator("#questionInput")).to_be_visible()
     expect(app_page.locator("#questionInput")).to_have_attribute(
         "placeholder", "Start a new comparison — saved context unavailable"
     )
+
+
+def test_followup_context_chip_stays_inside_the_mobile_composer(app_page):
+    """Der Chip-Text ist nowrap. Ohne min-width:0 auf Bar und Chip bleibt die
+    automatische Flex-Mindestgroesse die volle Textbreite und der Chip ragt auf
+    dem Handy aus dem Bildrand."""
+    app_page.set_viewport_size({"width": 390, "height": 844})
+    long_question = (
+        "gib mal bitte aus welchen kontext du in dieser unterhaltung schon "
+        "kennst und was nicht"
+    )
+    app_page.evaluate(
+        """question => {
+          window.App.followup.offer(question, "Saved consensus", {
+            question: question, consensus: "Saved consensus",
+          });
+          window.App.followup.arm();
+        }""",
+        long_question,
+    )
+    expect(app_page.locator("#followupChipBar .followup-chip")).to_be_visible()
+
+    layout = app_page.evaluate(
+        """() => {
+          const composer = document.querySelector(".chat-input-container");
+          const chip = document.querySelector("#followupChipBar .followup-chip");
+          const text = chip.querySelector(".followup-chip-text");
+          return {
+            chipRight: chip.getBoundingClientRect().right,
+            composerRight: composer.getBoundingClientRect().right,
+            composerScrollWidth: composer.scrollWidth,
+            composerClientWidth: composer.clientWidth,
+            documentScrollWidth: document.documentElement.scrollWidth,
+            viewportWidth: window.innerWidth,
+            isEllipsised: text.scrollWidth > text.clientWidth,
+          };
+        }"""
+    )
+    assert layout["chipRight"] <= layout["composerRight"]
+    assert layout["composerScrollWidth"] == layout["composerClientWidth"]
+    assert layout["documentScrollWidth"] <= layout["viewportWidth"]
+    assert layout["isEllipsised"] is True
 
 
 def test_latex_is_typeset_after_markdown_rendering(app_page):
@@ -549,29 +614,18 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     if result_gap["scrollable"]:
         assert abs(result_gap["gap"]) <= 2
 
-    # Nach der fertigen Antwort schrumpft der Composer zur Entscheidung:
-    # kein leeres/deaktiviertes Fragefeld, nur die zwei ehrlichen Wege weiter.
-    expect(app_page.locator("#composerGate")).to_be_visible(timeout=15000)
-    expect(app_page.locator("#questionInput")).to_be_hidden()
-    expect(app_page.locator(".chat-input-container .consensus-switch-container")).to_be_hidden()
-    expect(app_page.locator(".composer-gate-new")).to_be_visible()
-    expect(app_page.locator(".composer-gate-followup")).to_be_visible()
-    collapsed_composer = app_page.locator(".chat-input-container").bounding_box()
-    assert collapsed_composer is not None
-    assert collapsed_composer["height"] <= 64
-
-    # Der kompakte Choice-State gilt fuer alle Tiers, und die Follow-up-Wahl
-    # steht auch Free offen (kein Pro-Gate mehr): erst die bewusste Wahl
-    # öffnet das Feld wieder und hängt den Kontext-Chip an.
-    expect(app_page.locator(".composer-gate-followup .pro-badge")).to_have_count(0)
-    expect(app_page.locator("#questionInput")).to_be_hidden()
-    app_page.locator(".composer-gate-followup").click()
+    # Nach der fertigen Antwort bleibt der Composer offen: die naechste Frage
+    # ist per Default eine Folgefrage, ohne Zwischenentscheidung und ohne
+    # Pro-Gate. Der Ausstieg steht als stiller Button daneben.
+    expect(app_page.locator("#followupChipBar .followup-chip")).to_be_visible(timeout=15000)
     expect(app_page.locator("#questionInput")).to_be_visible()
     expect(app_page.locator("#questionInput")).to_be_enabled()
+    expect(app_page.locator(".chat-input-container .consensus-switch-container")).to_be_visible()
+    expect(app_page.locator("#followupChipBar .followup-newrun")).to_be_visible()
+    expect(app_page.locator("#followupChipBar .pro-badge")).to_have_count(0)
     expect(app_page.locator("#questionInput")).to_have_attribute(
         "placeholder", "Ask a follow-up question"
     )
-    expect(app_page.locator("#followupChipBar")).to_be_visible()
 
     # Inline-Confidence: der Widerspruch wird im Antworttext selbst markiert
     # (Linie + Quote), nicht nur in einer Karte daneben.
@@ -768,14 +822,26 @@ def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_pag
     app_page.evaluate("() => window.setAgentMode(false, { persist: true })")
     _send_question(app_page)
     _wait_for_all_final_answers(app_page)
-    expect(app_page.locator("#composerGate")).to_be_visible(timeout=20000)
+    expect(app_page.locator("#followupChipBar .followup-chip")).to_be_visible(timeout=20000)
 
-    original_answer = app_page.locator("#consensusAnswerBody").text_content().strip()
+    # Erst die Inline-Confidence abwarten, dann vergleichen: die Quote-Badges
+    # gehoeren zum Live-Baum, der Verlauf rendert den reinen Consensus-Text.
+    # Ohne dieses Warten haengt der Vergleich davon ab, ob die Badges vor oder
+    # nach dem Auslesen eingehaengt wurden.
+    expect(app_page.locator("#consensusAnswerBody .claim-badge").first).to_be_attached(
+        timeout=20000
+    )
+    original_answer = app_page.evaluate(
+        """() => {
+          const clone = document.getElementById("consensusAnswerBody").cloneNode(true);
+          clone.querySelectorAll(".claim-badge, .cx-marker").forEach(el => el.remove());
+          return clone.textContent.trim();
+        }"""
+    )
     assert original_answer
     original_agreement = app_page.locator("#consensusVerdict .verdict-score").text_content().strip()
     assert original_agreement
 
-    app_page.locator(".composer-gate-followup").click()
     followup_question = "Which consideration should I prioritize first?"
     app_page.locator("#questionInput").fill(followup_question)
     app_page.locator("#sendButton").click()
@@ -816,8 +882,7 @@ def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_pag
 
     # Turn 3 is the regression boundary: the second exchange used to vanish
     # when the live render tree was recycled for the next answer.
-    expect(app_page.locator("#composerGate")).to_be_visible(timeout=20000)
-    app_page.locator(".composer-gate-followup").click()
+    expect(app_page.locator("#followupChipBar .followup-chip")).to_be_visible(timeout=20000)
     third_question = "What should I do immediately after that?"
     app_page.locator("#questionInput").fill(third_question)
     app_page.locator("#sendButton").click()

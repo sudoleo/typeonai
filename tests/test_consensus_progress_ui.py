@@ -219,13 +219,28 @@ def test_sidebar_header_groups_brand_and_toggle_before_new_comparison():
 
 
 def test_consensus_loader_matches_the_run_visual_language():
+    """Die synthetisierende Box bleibt still, der Loader sind die Punkte.
+
+    Frueher lief hier eine wandernde Linie (.is-synthesizing::after mit
+    @keyframes consensusLoadingLine) und davor ein Sweep-Verlauf. Beides wurde
+    bewusst entfernt: der gefuehrte Lauf (#consensusRun) ist die EINZIGE
+    Fortschrittsanzeige, die Antwortflaeche selbst zappelt nicht mehr. Der Test
+    haelt genau diese Entscheidung fest, statt die geloeschte Animation zu
+    fordern.
+    """
     consensus_css = read("static/css/components-consensus.css")
     feedback_css = read("static/css/components-feedback.css")
 
-    assert ".consensus-box.is-synthesizing::after" in consensus_css
-    assert "height: 2px" in consensus_css
-    assert "animation: consensusLoadingLine" in consensus_css
+    # Die Box waehrend der Synthese: rahmenlos und ohne eigene Bewegung.
+    assert ".consensus-box.is-synthesizing" in consensus_css
     assert "background: transparent" in consensus_css
+    # Keine wandernde Linie und kein Sweep mehr - weder als Regel noch als
+    # Keyframe, sonst kaeme die alte Unruhe durch die Hintertuer zurueck.
+    assert ".consensus-box.is-synthesizing::after" not in consensus_css
+    assert "consensusLoadingLine" not in consensus_css
+    assert "consensusLoadingLine" not in feedback_css
+    assert "consensusSynthesisSweep" not in feedback_css
+    # Der verbleibende Loader ist die ruhige Punktreihe (4px, kein Schatten).
+    assert "animation: consensusLoaderDots" in feedback_css
     assert "width: 4px" in feedback_css
     assert "box-shadow: none" in feedback_css
-    assert "consensusSynthesisSweep" not in feedback_css

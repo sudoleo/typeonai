@@ -71,9 +71,12 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       automatischen oder manuellen Consensus-Anforderung. Ohne Consensus-
       Anforderung entsteht kein Turn-1-Orphan. Turn 1 sendet kein Legacy-
       `context` und keine `context_version_id` an `/ask_*`.
-- [ ] Nach einem completed Turn lässt „Ask a follow-up“ Turn 2, Turn 3 und
-      weitere Fragen im selben Chat zu; die aktive Chat-Zuordnung bleibt nach
-      jedem completed Turn erhalten.
+- [ ] Nach einem completed Turn bleibt das Eingabefeld offen und der
+      Kontext-Chip ist gesetzt: die nächste Frage geht ohne Zwischenschritt als
+      Turn 2, Turn 3 und weiter im selben Chat raus; die aktive Chat-Zuordnung
+      bleibt nach jedem completed Turn erhalten. Das ✕ am Chip schaltet den
+      Kontext für die nächste Frage ab (und der graue Chip wieder an);
+      „New comparison“ daneben schneidet den Thread ab.
 - [ ] Eine aktive Fortsetzung baut vor dem Provider-Fan-out genau einmal
       `/chats/{chat}/turns/{turn}/context`; alle `/ask_*` und `/consensus`
       erhalten exakt dieselben `chat_id`, `turn_id`, `context_version_id` und
@@ -133,6 +136,17 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 - [ ] Ein pending Turn, dessen Browser-Bindung durch Reload verloren ging, wird
       beim nächsten Turn im selben Chat als `abandoned` retired — completed und
       failed Turns bleiben unangetastet.
+- [ ] Eine Frage mit geschütztem Leerzeichen (aus Word/PDF/Webseite kopiert)
+      als **Follow-up** stellen: der Lauf geht durch. Vor dem NFKC-Fix liefen
+      alle sechs `/ask_*` in 409 und der Lauf brach ohne Antwort ab.
+- [ ] `CHAT_CURSOR_SECRET` ist in Render gesetzt (nicht nur der Fallback
+      `WATCH_UNSUBSCRIBE_SECRET`): ein Chat mit mehr als 50 Turns lässt sich aus
+      dem Bookmark vollständig nachladen, statt mit 503 abzubrechen.
+- [ ] Free-Konto kann keinen Turn mit einer Premium-Engine anlegen (403
+      `pro_required`) — dieselbe Grenze wie in `/consensus`.
+- [ ] Limits greifen mit ehrlicher Meldung statt „Please retry": bei erreichtem
+      Chat-Limit „…Delete one to start another.", bei erreichter Chat-Länge
+      „…Start a new comparison to continue."
 
 ## Consensus (höchstes Risiko)
 - [ ] Presets: Daily/Balanced setzen sichtbar alle sechs Antwortmodelle und die
@@ -178,7 +192,9 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       horizontalen Achse; der Composer bleibt am unteren Viewport-Rand fixiert.
       Das Fragefeld wächst beim Tippen bis 180 px, scrollt danach intern und
       schrumpft beim Löschen wieder auf seine Ausgangshöhe. Enter auf der
-      Handy-Tastatur fügt einen Absatz ein und sendet nicht.
+      Handy-Tastatur fügt einen Absatz ein und sendet nicht. Der Follow-up-
+      Kontext-Chip einer langen Frage bleibt vollständig im Composer und
+      endet mit Ellipse, statt aus dem Bildrand zu ragen.
       Am vollständigen Scrollende liegen die geschlossenen Detail-Tabs direkt
       darüber, ohne Leerraum oder verdeckten Inhalt.
 - [ ] Quellen-Fussnoten im Consensus stehen hinter Punkt, Frage- oder
@@ -351,8 +367,8 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
 ## Bookmarks / Sidebar
 - [ ] Models und Bookmarks beginnen auf derselben Icon-/Textachse und verwenden
       dieselbe Titelgröße/-stärke; im Gastzustand bleibt Bookmarks deaktiviert.
-- [ ] Nach einer fertigen Antwort öffnet „Models“ den unsichtbaren Picker nicht:
-      ein Hinweis verlangt zuerst „Ask a follow-up“ oder „New comparison“.
+- [ ] Nach einer fertigen Antwort öffnet „Models“ den Picker normal — es gibt
+      keine Entscheidung mehr, die ihn sperren könnte.
 - [ ] Bookmarks laden/aufklappen, Chat-Suche filtert.
 - [ ] Turn 1, Turn 2, Turn 3 und weitere Follow-ups aktualisieren genau ein
       Sidebar-Bookmark. Nach Reload öffnet dieses eine Bookmark den vollständigen

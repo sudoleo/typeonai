@@ -196,9 +196,27 @@ async def handle_http_exception(request, exc: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def handle_validation_exception(request, exc: RequestValidationError):
+    """422 mit einer garantiert serialisierbaren Fehlerliste.
+
+    exc.errors() enthaelt bei Pydantic v2 zwei Felder, die hier nicht
+    hingehoeren: "ctx" traegt das ROHE Exception-Objekt (jeder Validator, der
+    wie ueberall in diesem Projekt ValueError wirft, liess json.dumps damit
+    platzen -- die Antwort war dann ein 500er statt eines 422ers), und "input"
+    spiegelt den eingesendeten Wert zurueck, also potentiell einen Key oder ein
+    Token aus einem abgelehnten Feld. Deshalb werden nur Ort, Typ und Meldung
+    uebernommen, jeweils als reiner String.
+    """
+    details = []
+    for error in exc.errors():
+        location = error.get("loc") or ()
+        details.append({
+            "loc": [str(part) for part in location],
+            "type": str(error.get("type") or ""),
+            "msg": str(error.get("msg") or ""),
+        })
     return JSONResponse(
         status_code=HTTP_422_UNPROCESSABLE_CONTENT,
-        content={"error": "Validation failed", "details": exc.errors()},
+        content={"error": "Validation failed", "details": details},
     )
 
 @app.exception_handler(Exception)

@@ -54,6 +54,13 @@ class ApiUidRateLimiter:
         self._events = defaultdict(deque)
         self._lock = threading.Lock()
 
+    def reset(self):
+        """Alle Zaehler verwerfen. Fuer Tests: der Limiter ist ein
+        Prozess-Singleton, sonst schleppt jeder Testfall die Requests des
+        vorherigen mit und die Suite wird reihenfolgeabhaengig."""
+        with self._lock:
+            self._events.clear()
+
     def check(self, uid: str, operation: str, limit: int, *, window_seconds: int = 60):
         if not self._enabled:
             return

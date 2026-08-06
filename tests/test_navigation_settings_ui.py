@@ -60,8 +60,10 @@ def test_sidebar_navigation_is_self_contained_and_guest_login_is_top_only():
     assert 'class="model-selection-check"' not in template
     assert 'id="modelSelectionArea" hidden' in template
     assert "window.App.openModelPicker(consensusSelect)" in app_init
-    assert "window.App.followup?.isAwaitingChoice?.() === true" in app_init
-    assert "before changing models" in app_init
+    # Die Modellwahl kennt keinen Follow-up-Choice-State mehr, der sie sperren
+    # koennte: eine Folgefrage ist der Default, kein Zwischenschritt.
+    assert "isAwaitingChoice" not in app_init
+    assert "before changing models" not in app_init
     assert "function syncSidebarModelCount()" in model_picker
     assert ":not(.sidebar-model-entry)" in input_css
     assert ":not(.sidebar-search-trigger)" in input_css

@@ -96,6 +96,16 @@ CHAT_PAGE_SIZE_MAX = 50
 TURN_PAGE_SIZE = 50
 TURN_PAGE_SIZE_MAX = 100
 
+# Harte Obergrenzen pro Eigentuemer. Chats und Turns kosten KEINEN Usage-Slot:
+# beide Endpoints schreiben nach Firestore, ohne dass je ein Modell laeuft. Ohne
+# Deckel kann ein eingeloggtes Konto beliebig viele Dokumente anlegen -- reines
+# Speicherwachstum auf Kosten des Betreibers, und der Abandoned-Sweep raeumt
+# nichts weg (er setzt haengende Turns nur auf "failed"). Beide Werte liegen weit
+# ueber jeder echten Nutzung: 200 gespeicherte Unterhaltungen und 500 Fragen in
+# EINER Unterhaltung erreicht niemand versehentlich.
+MAX_CHATS_PER_OWNER = 200
+MAX_TURNS_PER_CHAT = 500
+
 _ID_RE = re.compile(r"[0-9a-f]{32}")
 _CLIENT_REQUEST_ID_RE = re.compile(
     rf"[A-Za-z0-9][A-Za-z0-9._:-]{{0,{CLIENT_REQUEST_ID_MAX_LENGTH - 1}}}"
@@ -142,6 +152,14 @@ class ChatIdempotencyConflict(ChatStoreError):
 
 class TurnStatusConflict(ChatStoreError):
     pass
+
+
+class ChatQuotaExceeded(ChatStoreError):
+    """Ein Eigentuemer-Limit (Chats pro Konto, Turns pro Chat) ist erreicht."""
+
+    def __init__(self, message: str, *, error_code: str):
+        super().__init__(message)
+        self.error_code = error_code
 
 
 class TurnCompletionConflict(TurnStatusConflict):
@@ -534,6 +552,11 @@ class ChatStore:
 
     def create_chat(self, uid: str, *, title: str = "") -> dict:
         title = normalize_title(title)
+        if self._chat_count(uid) >= MAX_CHATS_PER_OWNER:
+            raise ChatQuotaExceeded(
+                f"At most {MAX_CHATS_PER_OWNER} chats per account",
+                error_code="chat_limit_reached",
+            )
         chat_id = secrets.token_hex(16)
         ref = self._chats_ref(uid).document(chat_id)
         document = {
@@ -712,6 +735,14 @@ class ChatStore:
 
             chat_data = chat_snapshot.to_dict() or {}
             position = _safe_non_negative_int(chat_data.get("turn_count")) + 1
+            # In der Transaktion, damit parallele Anlagen das Limit nicht
+            # gemeinsam ueberschiessen koennen. turn_count liegt hier ohnehin
+            # vor - die Pruefung kostet keinen zusaetzlichen Read.
+            if position > MAX_TURNS_PER_CHAT:
+                raise ChatQuotaExceeded(
+                    f"At most {MAX_TURNS_PER_CHAT} turns per chat",
+                    error_code="turn_limit_reached",
+                )
             turn_document = {
                 "schema_version": TURN_SCHEMA_VERSION,
                 "position": position,
@@ -990,6 +1021,41 @@ class ChatStore:
             return operation(tx)
 
         return run(transaction)
+
+    def _chat_count(self, uid: str) -> int:
+        """Anzahl der Chats eines Eigentuemers, so billig wie moeglich.
+
+        Bevorzugt die Firestore-Aggregation (count()): sie kostet unabhaengig
+        von der Menge nur einen Bruchteil eines Reads. Faellt sie aus (aeltere
+        SDKs, Fakes in Tests, Emulator), wird bis MAX_CHATS_PER_OWNER + 1
+        gezaehlt und dort abgebrochen -- teurer, aber nach oben begrenzt und
+        fuer die Entscheidung "Limit erreicht?" ausreichend.
+        """
+        chats_ref = self._chats_ref(uid)
+        aggregation = getattr(chats_ref, "count", None)
+        if callable(aggregation):
+            try:
+                result = aggregation().get()
+                # Das SDK liefert [[AggregationResult]]; die Form variiert je
+                # nach Version, deshalb defensiv auspacken.
+                while isinstance(result, (list, tuple)):
+                    if not result:
+                        raise ValueError("empty aggregation result")
+                    result = result[0]
+                value = getattr(result, "value", result)
+                count = int(value)
+                if count >= 0:
+                    return count
+            except Exception:
+                logging.warning(
+                    "chat count aggregation unavailable; falling back to a bounded scan",
+                    exc_info=True,
+                )
+
+        counted = 0
+        for _ in chats_ref.limit(MAX_CHATS_PER_OWNER + 1).stream():
+            counted += 1
+        return counted
 
     def _chats_ref(self, uid: str):
         return self.db.collection("users").document(uid).collection("chats")

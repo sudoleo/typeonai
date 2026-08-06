@@ -103,10 +103,10 @@ def test_followups_are_no_longer_pro_gated():
     consensus_run = read("static/js/consensus-run.js")
     chat_router = read("app/api/routers/chat.py")
 
-    gate = consensus_run[consensus_run.index("buildGate() {"):]
-    gate = gate[:gate.index("syncInputLock()")]
-    assert "pro-badge" not in gate
-    assert "is-pro-locked" not in gate
+    chip = consensus_run[consensus_run.index("buildContextChip() {"):]
+    chip = chip[:chip.index("buildNewRunButton() {")]
+    assert "pro-badge" not in chip
+    assert "is-pro-locked" not in chip
 
     arm = consensus_run[consensus_run.index("arm() {"):]
     arm = arm[:arm.index("discard()")]

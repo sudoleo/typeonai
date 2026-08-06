@@ -232,7 +232,7 @@ def test_chat_session_script_order_consensus_payload_and_legacy_bookmarks_remain
     assert template.index("/static/js/query-send.js") < template.index(
         "/static/js/app-init.js"
     )
-    assert "chat-session.js?v=20260806-chatcleanup1" in template
+    assert "chat-session.js?v=20260806-chatlimits1" in template
     assert 'data-engine-provider="{{ model.provider }}"' in template
     assert "consensusPayload.chat_id = chatTurnIds.chatId" in consensus
     assert "consensusPayload.turn_id = chatTurnIds.turnId" in consensus
@@ -511,3 +511,116 @@ def test_pending_turn_creation_does_not_rewrite_the_logical_run():
     # run started; an unconditional overwrite would hide a changed picker.
     assert "run.consensusModel = cleanString(consensusModel) || run.consensusModel" not in lifecycle
     assert "if (!run.consensusModel) {" in lifecycle
+
+
+def test_permanent_persistence_failures_are_reported_as_such():
+    """Ein erreichtes Limit ist kein "Please retry".
+
+    Chat- und Turn-Anlage koennen jetzt mit 403 (Limit, Tier-Gate) oder 429
+    (UID-Rate-Limit) enden. Diese Ursachen behebt kein Wiederholen - die
+    Session merkt sich den Grund, damit query-send.js ihn statt des
+    generischen Retry-Hinweises zeigt.
+    """
+    script_path = ROOT / "static" / "js" / "chat-session.js"
+    node_script = f"""
+const assert = require("assert");
+const fs = require("fs");
+const vm = require("vm");
+const {{ webcrypto }} = require("crypto");
+global.window = global;
+global.crypto = webcrypto;
+global.App = {{}};
+let nextResponse = null;
+global.fetch = async (url) => {{
+  if (nextResponse) {{
+    const response = nextResponse;
+    nextResponse = null;
+    return response;
+  }}
+  if (url === "/chats") {{
+    return {{ ok: true, status: 201, json: async () => ({{ chat: {{ id: "c".repeat(32) }} }}) }};
+  }}
+  return {{ ok: true, status: 201, json: async () => ({{ turn: {{ id: "1".repeat(32) }} }}) }};
+}};
+vm.runInThisContext(fs.readFileSync({str(script_path)!r}, "utf8"), {{ filename: "chat-session.js" }});
+const session = App.chatSession;
+const run = (overrides = {{}}) => session.beginRun({{
+  question: "Question one",
+  mode: "Standard",
+  deepSearch: false,
+  selectedModels: ["model-a"],
+  consensusModel: "Gemini",
+  isFollowup: false,
+  prepareSucceeded: true,
+  ...overrides
+}});
+
+(async () => {{
+  // Chat-Limit: dauerhafter Grund, wortwoertlich weitergereicht.
+  run();
+  nextResponse = {{
+    ok: false,
+    status: 403,
+    json: async () => ({{ detail: {{ error_code: "chat_limit_reached", error: "..." }} }})
+  }};
+  assert.strictEqual(await session.ensurePendingTurn({{
+    idToken: "token", question: "Question one", consensusModel: "Gemini"
+  }}), null);
+  assert.ok(/maximum number of saved conversations/.test(session.lastPersistenceError));
+
+  // Ein neuer Lauf startet ohne den alten Grund.
+  run({{ question: "Question two" }});
+  assert.strictEqual(session.lastPersistenceError, "");
+
+  // Turn-Limit im bestehenden Chat.
+  const ok = await session.ensurePendingTurn({{
+    idToken: "token", question: "Question two", consensusModel: "Gemini"
+  }});
+  assert.ok(ok);
+  session.handleConsensusResult({{
+    chatId: ok.chatId, turnId: ok.turnId, chatPersisted: true, chatTurnState: "completed"
+  }});
+  run({{ question: "Follow-up", isFollowup: true }});
+  nextResponse = {{
+    ok: false,
+    status: 403,
+    json: async () => ({{ detail: {{ error_code: "turn_limit_reached", error: "..." }} }})
+  }};
+  assert.strictEqual(await session.ensurePendingTurn({{
+    idToken: "token", question: "Follow-up", consensusModel: "Gemini"
+  }}), null);
+  assert.ok(/maximum length/.test(session.lastPersistenceError));
+
+  // Ein unbekannter/voruebergehender Fehler bleibt ohne eigenen Text, damit
+  // der Aufrufer auf den generischen Retry-Hinweis zurueckfaellt.
+  run({{ question: "Question three" }});
+  nextResponse = {{ ok: false, status: 503, json: async () => ({{}}) }};
+  await session.ensurePendingTurn({{
+    idToken: "token", question: "Question three", consensusModel: "Gemini"
+  }});
+  assert.strictEqual(session.lastPersistenceError, "");
+
+  // reset() raeumt den Grund ebenfalls ab.
+  session.lastPersistenceError = "stale";
+  session.reset();
+  assert.strictEqual(session.lastPersistenceError, "");
+
+  console.log("OK");
+}})().catch(error => {{
+  console.error(error);
+  process.exit(1);
+}});
+"""
+    result = subprocess.run(
+        ["node", "-e", node_script], capture_output=True, text=True, cwd=ROOT
+    )
+    assert result.returncode == 0, result.stderr
+    assert "OK" in result.stdout
+
+
+def test_query_send_shows_the_real_reason_instead_of_a_dead_end_retry():
+    send = (ROOT / "static" / "js" / "query-send.js").read_text(encoding="utf-8")
+
+    assert "chatSession?.lastPersistenceError" in send
+    # Der generische Hinweis bleibt der Fallback, nicht die einzige Antwort.
+    assert '|| "The conversation turn could not be prepared. Please retry."' in send

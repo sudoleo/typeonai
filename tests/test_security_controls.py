@@ -51,3 +51,41 @@ def test_user_api_key_requests_require_login():
 
     assert response.status_code == 401
     assert response.json()["detail"] == chat_router.OWN_KEYS_LOGIN_REQUIRED
+
+
+def test_validation_errors_stay_422_and_never_echo_the_submitted_value():
+    """Der globale Handler in main.py muss ValueError-Validatoren ueberleben.
+
+    Fast jeder Validator in diesem Projekt meldet ungueltige Eingaben als
+    ValueError. Pydantic v2 haengt dieses ROHE Exception-Objekt in errors()
+    unter "ctx" -- der Handler serialisierte das direkt und lief in einen
+    TypeError, sodass die Antwort ein 500er statt eines 422ers wurde. Die
+    Unit-Tests der einzelnen Router sehen das nicht: sie bauen eigene
+    FastAPI-Apps ohne diesen Handler.
+    """
+    import main
+
+    client = TestClient(main.app)
+    response = client.post(
+        "/chats/" + "a" * 32 + "/turns",
+        json={
+            "question": "Test",
+            "mode": "x" * 41,  # ValueError aus normalize_mode
+            "deep_search": False,
+            "selected_models": ["OpenAI"],
+            "consensus_model": "OpenAI",
+        },
+        headers={"Authorization": "Bearer not-a-real-token"},
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["error"] == "Validation failed"
+    assert payload["details"], "der Grund der Ablehnung muss erkennbar bleiben"
+    for entry in payload["details"]:
+        assert set(entry) == {"loc", "type", "msg"}
+        assert all(isinstance(part, str) for part in entry["loc"])
+    # Weder das rohe Exception-Objekt noch der eingesendete Wert gehen zurueck.
+    body = response.text
+    assert "ctx" not in body
+    assert "x" * 41 not in body

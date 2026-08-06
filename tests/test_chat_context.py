@@ -29,7 +29,7 @@ from app.services.chat_context import (
     sanitize_memory,
 )
 from app.services.usage_repository import RunStatus
-from app.services.chat_store import ChatStore
+from app.services.chat_store import ChatStore, normalize_question
 from app.core.rate_limit import limiter
 from test_chat_history import FakeChatDatabase
 
@@ -413,6 +413,48 @@ def test_context_is_owner_scoped_and_question_bound():
         service.resolve_for_ask(
             UID, CHAT_ID, TURN_2, context["id"], question="Different"
         )
+
+
+def test_question_binding_normalizes_like_create_turn():
+    """Eine kopierte Frage darf den Follow-up nicht stillschweigend killen.
+
+    create_turn speichert NFKC-normalisiert; resolve_for_ask verglich frueher
+    nur mit strip(). NFKC bildet U+00A0 (geschuetztes Leerzeichen, steckt in
+    fast jeder aus Word/PDF/Web kopierten Frage) auf ein normales Leerzeichen
+    ab - die gespeicherte und die im /ask_* mitgeschickte Frage waren damit
+    verschieden, alle sechs Calls liefen in 409 und der Lauf brach ab.
+    """
+    #   bewusst als Escape: ein literales NBSP im Quelltext waere
+    # unsichtbar und der erste Editor/Formatter macht ein Leerzeichen daraus.
+    raw_question = "Was kostet das?"
+    stored_question = normalize_question(raw_question)
+    assert stored_question != raw_question  # sonst prueft der Test nichts
+
+    db = FakeChatDatabase()
+    seed_chat(db, [
+        completed(TURN_1, 1, "One", "First"),
+        pending(TURN_2, 2, stored_question),
+    ])
+    service = ChatContextService(FirestoreChatContextRepository(db))
+    context = service.build_for_turn(UID, CHAT_ID, TURN_2, compressor=None, now=NOW)
+
+    # Der Client schickt die Rohfrage - genau so, wie sie im Eingabefeld stand.
+    rendered = service.resolve_for_ask(
+        UID, CHAT_ID, TURN_2, context["id"], question=raw_question
+    )
+    assert "First" in rendered
+
+    # Eine wirklich andere Frage bleibt ein Konflikt.
+    with pytest.raises(ChatContextConflict):
+        service.resolve_for_ask(
+            UID, CHAT_ID, TURN_2, context["id"], question="Etwas anderes"
+        )
+    # Leere/kaputte Eingaben bleiben ein Konflikt statt eines 500ers.
+    for broken in ("", "   ", None, 42):
+        with pytest.raises(ChatContextConflict):
+            service.resolve_for_ask(
+                UID, CHAT_ID, TURN_2, context["id"], question=broken
+            )
 
 
 def test_completed_turn_cannot_receive_new_context_but_linked_retry_is_read_only():

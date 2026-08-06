@@ -116,10 +116,10 @@ def test_chip_progress_bars_restart_from_zero_on_a_second_run(app_page):
         }"""
     )
 
-    # Nach einer beantworteten Frage sperrt das Composer-Gate das Eingabefeld
-    # (Free: eine Frage je Vergleich). Der zweite Lauf beginnt deshalb wie in
-    # der App mit "New comparison".
-    app_page.locator(".composer-gate-new").click()
+    # Nach einer beantworteten Frage steht der Follow-up-Kontext am Composer.
+    # Dieser Test misst einen frischen Lauf, deshalb hier bewusst der Ausstieg
+    # ueber "New comparison" — genau wie in der App.
+    app_page.locator("#followupChipBar .followup-newrun").click()
     expect(app_page.locator("#questionInput")).to_be_visible()
     expect(app_page.locator("#questionInput")).to_be_enabled()
 

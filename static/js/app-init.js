@@ -236,10 +236,9 @@
             postDemoLoginPrompt.classList.remove("is-visible");
           }
 
-          // Ein beantworteter Lauf klappt den Composer fuer alle Nutzer zur
-          // naechsten Entscheidung zu (consens.io ist kein Chat). Diese
-          // Funktion laeuft nach jedem Auth-Update und wuerde das Feld sonst
-          // wieder aufmachen.
+          // Nach einer Antwort traegt das Feld den Follow-up-Platzhalter.
+          // Diese Funktion laeuft nach jedem Auth-Update und wuerde ihn sonst
+          // wieder mit dem Standardtext ueberschreiben.
           window.App?.followup?.syncInputLock?.();
 
           return canStartRun;
@@ -1188,13 +1187,9 @@
         document.getElementById("sidebarModelPicker")?.addEventListener("click", function (event) {
           event.preventDefault();
           event.stopPropagation();
-          if (window.App.followup?.isAwaitingChoice?.() === true) {
-            window.App?.showPopup?.(
-              "Choose “Ask a follow-up” or “New comparison” before changing models."
-            );
-            trackAppEvent("app_model_picker_blocked", { reason: "followup_choice" });
-            return;
-          }
+          // Kein Choice-State mehr, den die Modellwahl stoeren koennte: eine
+          // Folgefrage ist der Default, und die Modelle duerfen dabei jederzeit
+          // gewechselt werden (der naechste Lauf nutzt die neue Auswahl).
           const consensusSelect = document.getElementById("consensusModelDropdown");
           if (!consensusSelect) return;
 

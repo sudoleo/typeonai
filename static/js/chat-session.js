@@ -50,6 +50,34 @@
     console.warn("[chat-session] persistence unavailable", { stage, status });
   }
 
+  // Fehlerursachen, die ein Wiederholen NICHT behebt: der Nutzer muss etwas
+  // aendern (aufraeumen, neu anfangen, warten). Der Server liefert dafuer
+  // error_code + Text; alles andere bleibt beim generischen Retry-Hinweis.
+  const PERSISTENCE_ERROR_MESSAGES = {
+    chat_limit_reached:
+      "You have reached the maximum number of saved conversations. Delete one to start another.",
+    turn_limit_reached:
+      "This conversation has reached its maximum length. Start a new comparison to continue.",
+    chat_rate_limited:
+      "Too many new conversations in a short time. Please wait a moment.",
+    pro_required: "This consensus engine is reserved for Pro users."
+  };
+
+  // Der globale HTTPException-Handler in main.py packt das FastAPI-"detail"
+  // in "error" um ({"error": {...}}), waehrend FastAPI selbst {"detail": {...}}
+  // liefert. Beide Formen muessen hier ankommen duerfen - sonst greift die
+  // Zuordnung genau in Produktion nicht, wo der Handler aktiv ist.
+  function persistenceErrorMessage(data) {
+    for (const candidate of [data?.detail, data?.error, data]) {
+      if (!candidate || typeof candidate !== "object") continue;
+      const code = cleanString(candidate.error_code);
+      if (code && PERSISTENCE_ERROR_MESSAGES[code]) {
+        return PERSISTENCE_ERROR_MESSAGES[code];
+      }
+    }
+    return "";
+  }
+
   function abortError() {
     const error = new Error("Request aborted");
     error.name = "AbortError";
@@ -99,6 +127,10 @@
     _chatCreationAttempted: false,
     _persistenceDisabled: false,
     _needsReconcile: false,
+    // Grund der letzten fehlgeschlagenen Chat-/Turn-Anlage, sofern der Server
+    // einen genannt hat. Ein erreichtes Limit ist dauerhaft - "Please retry"
+    // waere dort eine Sackgasse mit falscher Auskunft.
+    lastPersistenceError: "",
 
     hasActiveChat() {
       return ID_RE.test(this.activeChatId || "") && ID_RE.test(this.activeTurnId || "");
@@ -189,6 +221,7 @@
       this._chatCreationAttempted = followup;
       this._persistenceDisabled = prepareSucceeded !== true || !this.pendingClientRequestId;
       this._needsReconcile = false;
+      this.lastPersistenceError = "";
       this.logicalRun = nextRun;
     },
 
@@ -262,6 +295,7 @@
           chatId = data?.chat?.id;
           if (!response.ok || !ID_RE.test(chatId || "")) {
             diagnostic("create_chat", response.status);
+            this.lastPersistenceError = persistenceErrorMessage(data);
             this._persistenceDisabled = true;
             return null;
           }
@@ -292,6 +326,7 @@
         const turnId = data?.turn?.id;
         if (!response.ok || !ID_RE.test(turnId || "")) {
           diagnostic("create_turn", response.status);
+          this.lastPersistenceError = persistenceErrorMessage(data);
           return null;
         }
         this.pendingChatId = chatId;
@@ -492,6 +527,7 @@
       this._chatCreationAttempted = false;
       this._persistenceDisabled = false;
       this._needsReconcile = false;
+      this.lastPersistenceError = "";
     }
   };
 

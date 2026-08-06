@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 import app.core.config as cfg
 from app.api.routers import chat_history as chat_history_router
-from app.core.rate_limit import limiter
+from app.core.rate_limit import api_uid_limiter, limiter
 from app.core.security import CustomSecurityMiddleware
 from app.services import chat_store
 from google.api_core.datetime_helpers import DatetimeWithNanoseconds
@@ -19,12 +19,16 @@ from google.api_core.datetime_helpers import DatetimeWithNanoseconds
 
 AUTH_OWNER = {"Authorization": "Bearer owner-token"}
 AUTH_OTHER = {"Authorization": "Bearer other-token"}
+# Eine echte Engine aus ALLOWED_CONSENSUS_MODELS. Frueher stand hier der
+# Fantasiestring "GPT Consensus" - der Endpoint nahm ihn an, weil er nur die
+# Laenge prueft. Seit die Turn-Anlage dieselbe Allowlist wie /consensus
+# durchsetzt, muss die Fixture ein Modell verwenden, das es wirklich gibt.
 TURN_PAYLOAD = {
     "question": "What changed?",
     "mode": "regular",
     "deep_search": False,
     "selected_models": ["OpenAI", "Gemini"],
-    "consensus_model": "GPT Consensus",
+    "consensus_model": "OpenAI",
 }
 PROVIDERS = ("OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok")
 
@@ -69,6 +73,19 @@ class FakeDocumentRef:
         self.database.write_log.append(("delete", self.path))
 
 
+class FakeAggregationResult:
+    def __init__(self, value):
+        self.value = value
+
+
+class FakeAggregation:
+    def __init__(self, value):
+        self._value = value
+
+    def get(self):
+        return [[FakeAggregationResult(self._value)]]
+
+
 class FakeCollectionRef:
     def __init__(self, database, path):
         self.database = database
@@ -82,6 +99,15 @@ class FakeCollectionRef:
 
     def where(self, filter=None):
         return FakeQuery(self, [], filters=[filter])
+
+    def limit(self, value):
+        # Echte CollectionReference kann das auch ohne vorheriges order_by.
+        return FakeQuery(self, []).limit(value)
+
+    def count(self):
+        # Bildet die Firestore-Aggregation nach, inklusive der verschachtelten
+        # Ergebnisform [[AggregationResult]], die der Store auspacken muss.
+        return FakeAggregation(len(self._child_paths()))
 
     def _child_paths(self):
         depth = len(self.path) + 1
@@ -305,6 +331,7 @@ class FakeChatDatabase:
 def chat_api(monkeypatch):
     database = FakeChatDatabase()
     limiter._storage.reset()
+    api_uid_limiter.reset()
     monkeypatch.setenv("CHAT_CURSOR_SECRET", "test-chat-cursor-secret-32-bytes")
     monkeypatch.setattr(chat_history_router, "db_firestore", database)
 
@@ -316,6 +343,11 @@ def chat_api(monkeypatch):
         raise RuntimeError("invalid token")
 
     monkeypatch.setattr(chat_history_router, "verify_user_token", verify)
+    # Ohne diesen Stub liefe das Tier-Gate der Turn-Anlage gegen das ECHTE
+    # Firestore (is_user_pro haengt am Client aus app.core.security, nicht am
+    # gepatchten db_firestore dieses Moduls). Default ist Free; ein Test, der
+    # Pro braucht, patcht die Funktion selbst.
+    monkeypatch.setattr(chat_history_router, "is_user_pro", lambda uid: False)
     app = FastAPI()
     app.state.limiter = limiter
     app.include_router(chat_history_router.router)
@@ -680,6 +712,10 @@ def test_turn_list_is_sorted_bounded_and_cursor_paginated(chat_api):
         {**TURN_PAYLOAD, "selected_models": []},
         {**TURN_PAYLOAD, "selected_models": [f"model-{index}" for index in range(9)]},
         {**TURN_PAYLOAD, "consensus_model": ""},
+        # Kein Modell ausserhalb der Allowlist: der Turn haelt die Engine fest,
+        # mit der spaeter der Memory-Call laeuft.
+        {**TURN_PAYLOAD, "consensus_model": "GPT Consensus"},
+        {**TURN_PAYLOAD, "consensus_model": "gpt-5-turbo-unlimited"},
         {**TURN_PAYLOAD, "client_request_id": "contains spaces"},
         {**TURN_PAYLOAD, "api_key": "sk-do-not-store"},
         {**TURN_PAYLOAD, "id_token": "firebase-token-do-not-store"},
@@ -694,6 +730,42 @@ def test_invalid_or_secret_bearing_turn_payloads_are_not_stored(chat_api, payloa
     assert response.status_code == 422
     assert database.turns("owner-uid", chat["id"]) == {}
     assert database.chats("owner-uid")[chat["id"]]["turn_count"] == 0
+
+
+def test_premium_engine_needs_pro_at_turn_creation_like_at_consensus(
+    chat_api, monkeypatch
+):
+    """Das Tier-Gate von /consensus gilt schon beim Anlegen des Turns.
+
+    Der Turn ist die Quelle, aus der _memory_credentials spaeter die Engine
+    liest. Ohne dieses Gate koennte ein Free-Konto eine Premium-Engine im
+    Dokument hinterlegen, die dann - sobald die Admin-Zuordnung
+    chat_memory_models fuer diese Familie leer ist - den Kompressions-Call auf
+    dem Developer-Key faehrt.
+    """
+    client, database = chat_api
+    chat = create_chat(client)
+    premium = {**TURN_PAYLOAD, "consensus_model": "Anthropic-Pro"}
+
+    blocked = client.post(
+        f"/chats/{chat['id']}/turns", json=premium, headers=AUTH_OWNER
+    )
+    assert blocked.status_code == 403
+    assert blocked.json()["detail"]["error_code"] == "pro_required"
+    # Kein halb angelegter Turn und kein hochgezaehlter Chat.
+    assert database.turns("owner-uid", chat["id"]) == {}
+    assert database.chats("owner-uid")[chat["id"]]["turn_count"] == 0
+
+    # Free-Engines bleiben fuer dasselbe Konto offen.
+    create_turn(client, chat["id"])
+
+    # Mit Pro geht die Premium-Engine durch.
+    monkeypatch.setattr(chat_history_router, "is_user_pro", lambda uid: True)
+    allowed = client.post(
+        f"/chats/{chat['id']}/turns", json=premium, headers=AUTH_OWNER
+    )
+    assert allowed.status_code == 201
+    assert allowed.json()["turn"]["consensus_model"] == "Anthropic-Pro"
 
 
 def test_unknown_and_foreign_chat_are_indistinguishable_for_turn_creation(chat_api):
@@ -1418,6 +1490,92 @@ def test_sweep_never_touches_completed_or_failed_turns(chat_api):
     stored = database.turns("owner-uid", chat["id"])
     assert stored[done["id"]]["status"] == "completed"
     assert stored[broken["id"]]["error_code"] == "cancelled"
+
+
+def test_chat_count_is_capped_per_owner_and_scoped_to_that_owner(chat_api, monkeypatch):
+    """Chats kosten keinen Usage-Slot - ohne Deckel waechst Firestore beliebig."""
+    monkeypatch.setattr(chat_store, "MAX_CHATS_PER_OWNER", 3)
+    client, database = chat_api
+
+    for _ in range(3):
+        create_chat(client)
+    blocked = client.post("/chats", json={}, headers=AUTH_OWNER)
+    assert blocked.status_code == 403
+    assert blocked.json()["detail"]["error_code"] == "chat_limit_reached"
+    assert len(database.chats("owner-uid")) == 3
+
+    # Das Limit ist pro Konto, nicht global.
+    other = client.post("/chats", json={}, headers=AUTH_OTHER)
+    assert other.status_code == 201
+
+    # Platz schaffen macht wieder Platz.
+    victim = next(iter(database.chats("owner-uid")))
+    assert client.delete(f"/chats/{victim}", headers=AUTH_OWNER).status_code == 200
+    assert client.post("/chats", json={}, headers=AUTH_OWNER).status_code == 201
+
+
+def test_chat_count_falls_back_to_a_bounded_scan_without_aggregation(
+    chat_api, monkeypatch
+):
+    """Ohne count()-Aggregation greift der begrenzte Scan - und zaehlt gleich."""
+    monkeypatch.setattr(chat_store, "MAX_CHATS_PER_OWNER", 2)
+    monkeypatch.delattr(FakeCollectionRef, "count")
+    client, database = chat_api
+
+    create_chat(client)
+    create_chat(client)
+    blocked = client.post("/chats", json={}, headers=AUTH_OWNER)
+
+    assert blocked.status_code == 403
+    assert blocked.json()["detail"]["error_code"] == "chat_limit_reached"
+    assert len(database.chats("owner-uid")) == 2
+
+
+def test_turns_per_chat_are_capped_without_corrupting_the_counter(
+    chat_api, monkeypatch
+):
+    monkeypatch.setattr(chat_store, "MAX_TURNS_PER_CHAT", 2)
+    client, database = chat_api
+    chat = create_chat(client)
+
+    create_turn(client, chat["id"], {**TURN_PAYLOAD, "question": "One"})
+    create_turn(client, chat["id"], {**TURN_PAYLOAD, "question": "Two"})
+    blocked = client.post(
+        f"/chats/{chat['id']}/turns",
+        json={**TURN_PAYLOAD, "question": "Three"},
+        headers=AUTH_OWNER,
+    )
+
+    assert blocked.status_code == 403
+    assert blocked.json()["detail"]["error_code"] == "turn_limit_reached"
+    # Die abgelehnte Anlage darf weder einen Turn noch einen Zaehlerstand
+    # hinterlassen - sonst waere der Chat danach dauerhaft inkonsistent.
+    assert len(database.turns("owner-uid", chat["id"])) == 2
+    assert database.chats("owner-uid")[chat["id"]]["turn_count"] == 2
+
+
+def test_write_endpoints_are_rate_limited_per_account_not_only_per_ip(
+    chat_api, monkeypatch
+):
+    """Das IP-Limit ist hier die falsche Achse (IPv6 umgeht es, NAT teilt es).
+
+    Der UID-Limiter sitzt hinter der Token-Pruefung, also trifft er genau das
+    Konto, das die Schreibzugriffe ausloest - und nur dieses.
+    """
+    monkeypatch.setitem(chat_history_router.CHAT_UID_RATE_LIMITS, "create_chat", 3)
+    client, _database = chat_api
+
+    for _ in range(3):
+        assert client.post("/chats", json={}, headers=AUTH_OWNER).status_code == 201
+    throttled = client.post("/chats", json={}, headers=AUTH_OWNER)
+    assert throttled.status_code == 429
+    assert throttled.json()["detail"]["error_code"] == "chat_rate_limited"
+
+    # Ein anderes Konto von derselben IP bleibt unberuehrt.
+    assert client.post("/chats", json={}, headers=AUTH_OTHER).status_code == 201
+
+    # Lesende Endpoints haengen nicht am Schreib-Budget.
+    assert client.get("/chats", headers=AUTH_OWNER).status_code == 200
 
 
 def test_creating_a_turn_retires_an_abandoned_predecessor(chat_api):

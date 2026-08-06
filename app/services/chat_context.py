@@ -19,6 +19,7 @@ from typing import Callable
 from firebase_admin import firestore
 
 from app.services.chat_store import (
+    normalize_question,
     normalize_turn_differences_data,
     normalize_turn_sources,
 )
@@ -760,7 +761,20 @@ class ChatContextService:
             raise ChatContextConflict("Context version is not ready")
         if version.get("target_turn_id") != turn_id or target.get("context_version_id") != version_id:
             raise ChatContextConflict("Context version does not belong to this turn")
-        if str(target.get("question") or "") != str(question or "").strip():
+        # Genau dieselbe Normalisierung wie beim Speichern (create_turn) und
+        # wie in validate_turn_for_completion. Ein blosses strip() reichte
+        # nicht: NFKC bildet u. a. U+00A0 auf ein normales Leerzeichen ab, und
+        # ein geschuetztes Leerzeichen steckt in fast jeder aus Word, PDF oder
+        # einer Webseite kopierten Frage. Die gespeicherte Frage war dann
+        # normalisiert, die im /ask_* mitgeschickte nicht - alle sechs Calls
+        # liefen in 409, der Follow-up brach komplett ab.
+        try:
+            supplied_question = normalize_question(question)
+        except (TypeError, ValueError) as exc:
+            raise ChatContextConflict(
+                "Context question does not match the target turn"
+            ) from exc
+        if str(target.get("question") or "") != supplied_question:
             raise ChatContextConflict("Context question does not match the target turn")
         recent = None
         recent_turn_id = version.get("recent_turn_id")

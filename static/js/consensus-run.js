@@ -52,9 +52,10 @@
 
   // --------- Follow-up-Fragen: Kontext-State + Input-Affordance ---------
   // Genau eine Kontext-Ebene: das Frage/Konsens-Paar des letzten erfolgreichen
-  // Laufs. offer() merkt sich das Paar und zeigt den "Ask a follow-up"-Button
-  // im Input-Bereich, arm() aktiviert den Kontext-Chip, consume() liefert den
-  // context-Payload für query-send.js und räumt auf.
+  // Laufs. offer() merkt sich das Paar und ARMIERT es sofort — eine Folgefrage
+  // ist der Normalfall, keine Entscheidung. Der Kontext-Chip am Eingabefeld
+  // sagt, was mitgeht; discard() schaltet ihn ab, arm() wieder an, consume()
+  // liefert den context-Payload für query-send.js und räumt auf.
   // Kein Tier-Gate: ein Follow-up ist ein vollwertiger Lauf und zaehlt wie
   // jede andere Frage gegen das Tagesbudget — mehr kostet es niemanden.
   const FOLLOWUP_ICON =
@@ -92,8 +93,10 @@
       return !!(this.armed && this.lastExchange);
     },
 
-    isAwaitingChoice() {
-      return !!(this.lastExchange && !this.armed);
+    // Ein fortsetzbarer Turn liegt vor — unabhaengig davon, ob der Nutzer den
+    // Kontext gerade abgeschaltet hat.
+    hasContinuableExchange() {
+      return !!this.lastExchange;
     },
 
     previousQuestionForBookmark() {
@@ -414,7 +417,10 @@
         consensus: consensusText,
         turn: turn && typeof turn === "object" ? turn : null
       };
-      this.armed = false;
+      // Der Normalfall nach einer Antwort ist die naechste Frage zum selben
+      // Thema. Sie darf keine Zwischenentscheidung kosten: das Feld bleibt
+      // offen und der Kontext ist schon angehaengt.
+      this.armed = true;
       // Ein Lauf ist durchgelaufen: nichts mehr zurueckzuholen.
       this.spentExchange = null;
       this.render();
@@ -422,15 +428,21 @@
 
     arm() {
       if (!this.lastExchange) return;
+      if (!this.armed) trackAppEvent("app_followup_armed");
       this.armed = true;
-      trackAppEvent("app_followup_armed");
       this.render();
       document.getElementById("questionInput")?.focus();
     },
 
+    // Der Nutzer will die naechste Frage OHNE den vorherigen Turn stellen,
+    // aber die Antwort weiter sehen. Der Kontext bleibt abrufbar (der Chip
+    // schaltet ihn wieder ein), gesendet wird er nicht.
     discard() {
+      if (!this.armed) return;
       this.armed = false;
+      trackAppEvent("app_followup_discarded");
       this.render();
+      document.getElementById("questionInput")?.focus();
     },
 
     // Ein Lauf, der gar nicht stattgefunden hat (Kontingent leer), darf den
@@ -483,18 +495,12 @@
       return ctx;
     },
 
-    // Zwei Orte am Composer, ein Zustand:
-    //   #composerGate     — der Zustand NACH einer beantworteten Frage: der
-    //                       Lauf ist zu Ende, und hier steht, wie es
-    //                       weitergeht (frischer Vergleich oder Kontextlauf;
-    //                       beide zaehlen als normaler Lauf).
-    //                       Das Angebot sass frueher in der Provenance-Zeile
-    //                       an der Antwort; es gehoert aber an das Feld, in
-    //                       das die naechste Frage getippt wird.
-    //   #followupChipBar  — der aktivierte KONTEXT-CHIP, am Eingabefeld,
-    //                       weil er beschreibt, was gleich rausgeht
+    // Ein Ort am Composer, ein Zustand: #followupChipBar direkt ueber dem
+    // Eingabefeld. Der Chip beschreibt, was mit der naechsten Frage rausgeht,
+    // und laesst sich abschalten; daneben steht der Ausstieg ("New
+    // comparison"). Das Feld bleibt dabei durchgehend benutzbar — die frueher
+    // erzwungene Zwischenentscheidung (#composerGate) ist ersatzlos weg.
     render() {
-      const gate = document.getElementById("composerGate");
       const chipBar = document.getElementById("followupChipBar");
       // Die alte Angebots-Leiste in der Provenance-Zeile bleibt im DOM (andere
       // Module fragen sie ab), traegt aber nichts mehr.
@@ -503,105 +509,88 @@
         offerBar.innerHTML = "";
         offerBar.hidden = true;
       }
-      if (chipBar) {
-        chipBar.innerHTML = "";
-        chipBar.hidden = true;
+      if (!chipBar) {
+        this.syncInputLock();
+        return;
       }
-      if (gate) {
-        gate.innerHTML = "";
-        gate.hidden = true;
-      }
+      chipBar.innerHTML = "";
+      chipBar.hidden = true;
 
-      const armed = !!(this.armed && this.lastExchange);
-      const input = document.getElementById("questionInput");
-      if (input) {
-        input.placeholder = armed
-          ? FOLLOWUP_INPUT_PLACEHOLDER
-          : (this.continuationUnavailable
-              ? UNAVAILABLE_INPUT_PLACEHOLDER
-              : DEFAULT_INPUT_PLACEHOLDER);
-      }
-
-      if (armed && chipBar) {
-        const chip = document.createElement("div");
-        chip.className = "followup-chip";
-        chip.title = "Your next question is sent with the previous question and its consensus answer as context.";
-
-        const icon = document.createElement("span");
-        icon.className = "followup-chip-icon";
-        icon.innerHTML = FOLLOWUP_ICON;
-
-        const text = document.createElement("span");
-        text.className = "followup-chip-text";
-        text.textContent = "Follow-up to: “" + truncateLabel(this.lastExchange.question, 90) + "”";
-
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = "followup-chip-remove";
-        remove.title = "Discard follow-up context";
-        remove.setAttribute("aria-label", "Discard follow-up context");
-        remove.textContent = "✕";
-        remove.addEventListener("click", () => this.discard());
-
-        chip.append(icon, text, remove);
-        chipBar.appendChild(chip);
+      if (this.lastExchange) {
+        chipBar.append(this.buildContextChip(), this.buildNewRunButton());
         chipBar.hidden = false;
-      } else if (this.lastExchange && gate) {
-        gate.appendChild(this.buildGate());
-        gate.hidden = false;
       }
 
       this.syncInputLock();
     },
 
-    // Der Lauf ist beantwortet — und damit zu Ende. Das Eingabefeld klappt
-    // jetzt komplett zu; diese kompakte Zeile bietet nur die beiden ehrlichen
-    // Wege weiter an: frischer Vergleich oder Follow-up mit Kontext.
-    buildGate() {
-      const wrap = document.createElement("div");
-      wrap.className = "composer-gate-inner";
+    // Angeschaltet: der Chip nennt die Frage, an die angeknuepft wird, und
+    // das ✕ schaltet den Kontext fuer die naechste Frage ab. Abgeschaltet
+    // bleibt derselbe Chip als Weg zurueck stehen — sonst waere der Kontext
+    // eines sichtbaren Threads unerreichbar verloren.
+    buildContextChip() {
+      const icon = document.createElement("span");
+      icon.className = "followup-chip-icon";
+      icon.innerHTML = FOLLOWUP_ICON;
 
-      const copy = document.createElement("span");
-      copy.className = "composer-gate-copy";
-      copy.textContent = "What would you like to do next?";
-      wrap.appendChild(copy);
+      const text = document.createElement("span");
+      text.className = "followup-chip-text";
 
-      const actions = document.createElement("span");
-      actions.className = "composer-gate-actions";
+      if (!this.armed) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "followup-chip is-off";
+        chip.title = "Send your next question with the previous question and its "
+          + "consensus answer as context.";
+        text.textContent = "Follow-up context off";
+        chip.append(icon, text);
+        chip.addEventListener("click", () => this.arm());
+        return chip;
+      }
 
+      const chip = document.createElement("div");
+      chip.className = "followup-chip";
+      chip.title = "Your next question is sent with the previous question and its "
+        + "consensus answer as context. It counts as one normal run.";
+      text.textContent = "Follow-up to: “" + truncateLabel(this.lastExchange.question, 90) + "”";
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "followup-chip-remove";
+      remove.title = "Ask the next question without this context";
+      remove.setAttribute("aria-label", "Ask the next question without this context");
+      remove.textContent = "✕";
+      remove.addEventListener("click", () => this.discard());
+
+      chip.append(icon, text, remove);
+      return chip;
+    },
+
+    // "New comparison" bleibt der bewusste Schnitt: Thread leeren, frisch
+    // anfangen. Es steht neben dem Chip, weil genau dort entschieden wird,
+    // woran die naechste Frage haengt.
+    buildNewRunButton() {
       const newBtn = document.createElement("button");
       newBtn.type = "button";
-      newBtn.className = "composer-gate-new";
+      newBtn.className = "followup-newrun";
       newBtn.textContent = "New comparison";
-      newBtn.title = "Clear this run and ask a fresh question";
+      newBtn.title = "Clear this conversation and start a fresh comparison";
       newBtn.addEventListener("click", () => {
         const trigger = document.getElementById("newRunButton");
         if (trigger) trigger.click();
         else window.clearResponseBoxes?.();
         document.getElementById("questionInput")?.focus();
       });
-      actions.appendChild(newBtn);
-
-      const followupBtn = document.createElement("button");
-      followupBtn.type = "button";
-      followupBtn.className = "followup-offer-btn composer-gate-followup";
-      followupBtn.innerHTML = FOLLOWUP_ICON + '<span class="followup-offer-label">Ask a follow-up</span>';
-      followupBtn.title = "Ask a follow-up question. The previous question and its consensus answer go along as context. Counts as one run.";
-      followupBtn.addEventListener("click", () => this.arm());
-      actions.appendChild(followupBtn);
-
-      wrap.appendChild(actions);
-      return wrap;
+      return newBtn;
     },
 
-    // Nach einer fertigen Antwort ist der Composer kompakt: der naechste
-    // Schritt wird bewusst gewaehlt ("Follow-up" nimmt den Kontext mit,
-    // "New comparison" setzt das Feld leer zurueck).
+    // Der Composer bleibt nach einer Antwort offen; hier wird nur noch die
+    // Login-Schranke (updateQuestionInputAccess) nachgezogen und das
+    // Platzhalter-Wording an den Kontext-Zustand angepasst — updateQuestion-
+    // InputAccess laeuft nach jedem Auth-Update und wuerde den Follow-up-
+    // Platzhalter sonst wieder ueberschreiben.
     syncInputLock() {
-      const locked = !!this.lastExchange && !this.armed;
-      // Die Login-Schranke (updateQuestionInputAccess) bleibt die staerkere
-      // Bedingung: dieses Gate darf ein gesperrtes Feld nie oeffnen. Tippen
-      // und Absenden sind dabei zwei Rechte: wer auf die E-Mail-Bestaetigung
+      // Tippen und Absenden sind zwei Rechte: wer auf die E-Mail-Bestaetigung
       // wartet, darf seine Frage schon schreiben.
       const canAsk = typeof window.userCanAskQuestions === "function"
         ? window.userCanAskQuestions()
@@ -609,22 +598,16 @@
       const canType = typeof window.userCanTypeQuestions === "function"
         ? window.userCanTypeQuestions()
         : canAsk;
-      const disabled = locked || !canAsk;
-      const inputDisabled = locked || !canType;
       const input = document.getElementById("questionInput");
-      const send = document.getElementById("sendButton");
-      document.body.classList.toggle("composer-locked", locked);
-      if (input) {
-        input.disabled = inputDisabled;
-        input.setAttribute("aria-disabled", inputDisabled ? "true" : "false");
-        if (locked) input.placeholder = "Ask a follow-up — or start a new comparison";
-      }
-      // Waehrend eines Laufs ist derselbe Knopf der Abbrechen-Knopf; der darf
-      // nicht gesperrt werden, sonst haengt der Nutzer im Lauf fest.
-      if (send && !send.classList.contains("is-cancel-action")) {
-        send.disabled = disabled;
-        send.setAttribute("aria-disabled", disabled ? "true" : "false");
-      }
+      if (!input) return;
+      input.disabled = !canType;
+      input.setAttribute("aria-disabled", !canType ? "true" : "false");
+      if (!canAsk) return;
+      input.placeholder = this.isArmed()
+        ? FOLLOWUP_INPUT_PLACEHOLDER
+        : (this.continuationUnavailable
+            ? UNAVAILABLE_INPUT_PLACEHOLDER
+            : DEFAULT_INPUT_PLACEHOLDER);
     }
   };
   window.App.followup = followup;

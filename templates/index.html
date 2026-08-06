@@ -57,7 +57,7 @@
     };
   </script>
   <!-- Google Fonts -->
-  <link rel="stylesheet" href="/static/style.css?v=20260806-historytabs1">
+  <link rel="stylesheet" href="/static/style.css?v=20260806-followupdefault1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
@@ -107,9 +107,9 @@
   <script src="/static/js/usage-limit.js?v=20260802-storagebusy1" defer></script>
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-insights.js?v=20260806-chatbookmark1" defer></script>
-  <script src="/static/js/chat-session.js?v=20260806-chatcleanup1" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260806-bookmarkcontinue1" defer></script>
-  <script src="/static/js/query-send.js?v=20260806-chatbookmark1" defer></script>
+  <script src="/static/js/chat-session.js?v=20260806-chatlimits1" defer></script>
+  <script src="/static/js/consensus-run.js?v=20260806-followupdefault1" defer></script>
+  <script src="/static/js/query-send.js?v=20260806-followupdefault1" defer></script>
   {% include "partials/analytics.html" %}
 </head>
 
@@ -486,24 +486,17 @@
       <p class="hero-greeting">What should the models cross-check?</p>
       <div class="chat-input-container" style="position: relative;">
         <div id="attachmentBar" class="attachment-bar" hidden></div>
-        <!-- Follow-up: das ANGEBOT steht an der Antwort (#followupBar in der
-             Provenance-Zeile), weil es deren Kontext mitnimmt. Ist es aktiviert,
-             erscheint der Kontext-Chip hier — er gehoert zu dem, was gleich
-             abgeschickt wird. Beides rendert window.App.followup. -->
+        <!-- Follow-up: nach einer beantworteten Frage ist die naechste Frage
+             per Default eine Folgefrage. Der Kontext-Chip steht hier, weil er
+             beschreibt, was gleich abgeschickt wird; das ✕ schaltet den
+             Kontext ab, "New comparison" daneben schneidet den Thread ab.
+             Gerendert von window.App.followup (consensus-run.js). -->
         <div id="followupChipBar" class="followup-bar" hidden></div>
         <!-- "Run again" fuellt nur vor, abgeschickt wird bewusst. Genau
              dazwischen steht hier, was das Abschicken kostet. Gesetzt und
              wieder geleert von consensus-progress.js. -->
         <p id="composerRunNotice" class="composer-run-notice" role="status" hidden></p>
         <textarea class="input-field" id="questionInput" rows="1" placeholder="Enter your question"></textarea>
-        <!-- Composer-Gate: die Stelle, an der die App sagt, dass sie kein Chat
-             ist. Nach einer beantworteten Frage ist der Lauf zu Ende — hier
-             steht, wie es weitergeht: eine neue Frage oder ein Follow-up, das
-             den Kontext mitnimmt (beides frei, beides ein Lauf). Das Angebot
-             ist deshalb aus der Provenance-Zeile hierher gewandert: es gehoert
-             an das Feld, in das die naechste Frage getippt wird.
-             Gefuellt von window.App.followup.render() (consensus-run.js). -->
-        <div id="composerGate" class="composer-gate" hidden></div>
         <!-- Attachment-Menü (öffnet über dem Plus-Button) -->
         <div id="attachMenu" class="attach-menu" hidden>
           <button type="button" id="attachUploadOption" class="attach-menu-item">
@@ -893,7 +886,7 @@
       </div>
     </div>
 
-  <script src="/static/js/app-init.js?v=20260806-bookmarkcontinue1" defer></script>
+  <script src="/static/js/app-init.js?v=20260806-followupdefault1" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing

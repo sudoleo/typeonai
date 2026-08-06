@@ -7,8 +7,13 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, StrictBool, field_validator
 
 from app.core import config as cfg
-from app.core.rate_limit import limiter
-from app.core.security import db_firestore, extract_id_token, verify_user_token
+from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
+from app.core.security import (
+    db_firestore,
+    extract_id_token,
+    is_user_pro,
+    verify_user_token,
+)
 from app.services.chat_store import (
     CHAT_PAGE_SIZE,
     CHAT_PAGE_SIZE_MAX,
@@ -17,6 +22,7 @@ from app.services.chat_store import (
     ChatCursorUnavailable,
     ChatIdempotencyConflict,
     ChatNotFound,
+    ChatQuotaExceeded,
     ChatStore,
     ChatStoreError,
     InvalidChatCursor,
@@ -98,7 +104,15 @@ class TurnCreateRequest(BaseModel):
     @field_validator("consensus_model")
     @classmethod
     def validate_consensus_model(cls, value):
-        return normalize_model_name(value, field_name="consensus_model")
+        # Dieselbe Allowlist, die /consensus spaeter prueft. Ohne sie landete
+        # ein beliebiger Modell-String im Turn-Dokument -- und der Memory-Build
+        # liest die Engine genau von dort (_memory_credentials), nicht aus dem
+        # Request. Die Familie dieser Engine bestimmt, welcher Key den
+        # Kompressions-Call bezahlt.
+        model = normalize_model_name(value, field_name="consensus_model")
+        if model not in cfg.ALLOWED_CONSENSUS_MODELS:
+            raise ValueError("consensus_model is not an allowed consensus engine")
+        return model
 
     @field_validator("client_request_id")
     @classmethod
@@ -128,15 +142,43 @@ class ContextBuildRequest(BaseModel):
         return value
 
 
-def _chat_uid(request: Request) -> str:
+# Schreibende Chat-Operationen zusaetzlich pro KONTO begrenzen. Der
+# slowapi-Limiter am Endpoint zaehlt pro IP; das ist hier die falsche Achse:
+# ueber IPv6 (ein /64 liefert praktisch beliebig viele Adressen) laesst sich ein
+# IP-Limit umgehen, waehrend sich hinter einem Firmen-NAT fremde Nutzer
+# gegenseitig aussperren. Chat- und Turn-Anlage kosten keinen Usage-Slot, also
+# ist das Konto die einzige Achse, die den Missbrauch wirklich deckelt.
+CHAT_UID_RATE_LIMITS = {
+    "create_chat": 20,
+    "create_turn": 40,
+    "build_context": 30,
+    "delete_chat": 30,
+}
+
+
+def _chat_uid(request: Request, operation: str = "") -> str:
     token = extract_id_token(request, {})
     if not token:
         raise HTTPException(status_code=401, detail="Authentication failed")
     try:
-        return verify_user_token(token)
+        uid = verify_user_token(token)
     except Exception as exc:
         logging.warning("chat history authentication failed")
         raise HTTPException(status_code=401, detail="Authentication failed") from exc
+
+    limit = CHAT_UID_RATE_LIMITS.get(operation)
+    if limit is not None:
+        try:
+            api_uid_limiter.check(uid, f"chat:{operation}", limit)
+        except ApiUidRateLimitExceeded as exc:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "Too many chat requests. Please slow down.",
+                    "error_code": "chat_rate_limited",
+                },
+            ) from exc
+    return uid
 
 
 def _store() -> ChatStore:
@@ -211,6 +253,14 @@ def _memory_credentials(
 def _raise_store_error(exc: Exception, *, operation: str, uid: str) -> None:
     if isinstance(exc, ChatNotFound):
         raise HTTPException(status_code=404, detail="Chat not found") from exc
+    if isinstance(exc, ChatQuotaExceeded):
+        # Kein 500: das Limit ist erreicht, nicht kaputt. Der error_code sagt
+        # dem Frontend, ob eine alte Unterhaltung geloescht oder eine neue
+        # begonnen werden muss.
+        raise HTTPException(
+            status_code=403,
+            detail={"error": str(exc), "error_code": exc.error_code},
+        ) from exc
     if isinstance(exc, InvalidChatCursor):
         raise HTTPException(status_code=400, detail="Invalid or expired chat cursor") from exc
     if isinstance(exc, ChatCursorUnavailable):
@@ -233,7 +283,7 @@ def create_chat(
     request: Request,
     payload: ChatCreateRequest | None = Body(default=None),
 ):
-    uid = _chat_uid(request)
+    uid = _chat_uid(request, "create_chat")
     try:
         chat = _store().create_chat(uid, title=(payload.title if payload else "") or "")
         return {"status": "success", "chat": chat}
@@ -276,7 +326,7 @@ def delete_chat(request: Request, chat_id: str):
     it. Repeating the call on an already deleted chat returns 404, matching
     every other unknown or foreign chat id.
     """
-    uid = _chat_uid(request)
+    uid = _chat_uid(request, "delete_chat")
     try:
         _store().delete_chat(uid, chat_id)
         return {"status": "success"}
@@ -287,7 +337,20 @@ def delete_chat(request: Request, chat_id: str):
 @router.post("/chats/{chat_id}/turns", status_code=201)
 @limiter.limit("30/minute")
 def create_turn(request: Request, chat_id: str, payload: TurnCreateRequest):
-    uid = _chat_uid(request)
+    uid = _chat_uid(request, "create_turn")
+    # Dasselbe Tier-Gate wie in /consensus, hier gespiegelt. Der Turn haelt die
+    # Engine fest, mit der spaeter der Memory-Call laeuft; ohne diese Pruefung
+    # koennte ein Free-Konto eine Premium-Engine im Dokument hinterlegen und
+    # sie auf dem Developer-Key kompressieren lassen, sobald die
+    # Admin-Zuordnung fuer diese Familie einmal leer ist.
+    if cfg.is_premium_consensus_model(payload.consensus_model) and not is_user_pro(uid):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "Premium consensus engines are reserved for Pro users.",
+                "error_code": "pro_required",
+            },
+        )
     try:
         turn = _store().create_turn(uid, chat_id, **payload.model_dump())
         return {"status": "success", "turn": turn}
@@ -298,7 +361,7 @@ def create_turn(request: Request, chat_id: str, payload: TurnCreateRequest):
 @router.get("/chats/{chat_id}/turns/{turn_id}")
 @limiter.limit("60/minute")
 def get_turn(request: Request, chat_id: str, turn_id: str):
-    uid = _chat_uid(request)
+    uid = _chat_uid(request, "build_context")
     try:
         return {
             "status": "success",

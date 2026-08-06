@@ -838,27 +838,31 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
 Nach jedem erfolgreichen Consensus kann derselbe owner-gebundene Chat um eine
 weitere Frage ergänzt werden. Es gibt keine harte Turn-2-Sperre mehr: Turn 2,
 Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Version.
-- Frontend: `window.App.followup` (in `consensus-run.js`) rendert **zwei Orte
-  am Composer, einen Zustand** (seit 2026-07-27, Angebot dorthin verschoben):
-  Das **Composer-Gate** `#composerGate` erscheint, sobald eine Frage beantwortet
-  ist, und sagt, wie es weitergeht — „New comparison" und „Ask a
-  follow-up". **Beide sind seit 2026-08-04 für alle Nutzer offen**: das
-  Pro-Gate (Badge, Teaser-Modal, 403 `pro_required`) ist ersatzlos weg, ein
-  Follow-up zählt als ein normaler Lauf gegen das Tagesbudget. Für alle Nutzer
-  **klappt `syncInputLock()` den gesamten Eingabe-Composer für Free UND Pro
-  zu** (`body.composer-locked`): Textarea, Anhang, Modellwahl und Senden
-  verschwinden; sichtbar bleibt nur die kompakte Entscheidung „New comparison“
-  / „Ask a follow-up“. „New comparison“ setzt den normalen leeren Composer zurück;
-  „Ask a follow-up“ öffnet ihn mit Kontext-Chip.
-  Ein Klick auf „Models“ in diesem Choice-State zeigt den Grund der Sperre; die
-  Modellwahl öffnet erst nach einer der beiden Entscheidungen. Ein restauriertes
-  Bookmark bietet denselben Choice-State an, sobald Frage und Consensus als
-  Kontext vorhanden sind.
-  Die Login-Schranke (`updateQuestionInputAccess`) bleibt die stärkere
-  Bedingung und ruft `syncInputLock()` am Ende selbst auf, sonst öffnete sie
-  das Feld nach jedem Lauf wieder. Aktivieren erzeugt den
-  **Kontext-Chip** in `#followupChipBar` **am Eingabefeld**, weil er
-  beschreibt, was gleich rausgeht. `#followupBar` in der Provenance-Zeile
+- Frontend: `window.App.followup` (in `consensus-run.js`) rendert **einen Ort
+  am Composer, einen Zustand**: den **Kontext-Chip** in `#followupChipBar`
+  direkt über dem Eingabefeld, weil er beschreibt, was gleich rausgeht.
+  **Seit 2026-08-06 ist die Folgefrage der Default** (User-Vorgabe: die
+  erzwungene Zwischenentscheidung war schlechte UX): `offer()` armiert den
+  Kontext sofort, das Feld bleibt offen und trägt den Platzhalter „Ask a
+  follow-up question". Das frühere **Composer-Gate** (`#composerGate`,
+  `body.composer-locked`, „Ask a follow-up“ / „New comparison“ als Zwangswahl)
+  ist ersatzlos entfallen — samt der Sperre, die es über die Modellwahl legte.
+  Zwei Ausstiege stehen in derselben Zeile: das **✕ am Chip** (`discard()`)
+  schaltet den Kontext für die nächste Frage ab und lässt einen grauen
+  `.followup-chip.is-off`-Chip stehen, der ihn per Klick (`arm()`) wieder
+  anschaltet; **`.followup-newrun` („New comparison")** löst am rechten Rand
+  denselben `#newRunButton` aus wie die Sidebar. Eine Frage ohne Kontext räumt
+  in `query-send.js` auch `#threadHistory` (`clearHistory()`) — die Modelle
+  sehen die archivierten Turns nicht, also darf der Thread sie nicht
+  behaupten. **Für alle Nutzer offen** (seit 2026-08-04): kein Pro-Gate
+  (Badge, Teaser-Modal, 403 `pro_required`), ein Follow-up zählt als ein
+  normaler Lauf gegen das Tagesbudget.
+  Ein restauriertes Bookmark landet über denselben `offer()`-Pfad direkt im
+  armierten Zustand.
+  `syncInputLock()` zieht nur noch die Login-Schranke nach und setzt den
+  Platzhalter passend zum Kontext-Zustand; `updateQuestionInputAccess` ruft es
+  am Ende selbst auf, sonst überschriebe es den Follow-up-Platzhalter nach
+  jedem Auth-Update. `#followupBar` in der Provenance-Zeile
   bleibt als leerer DOM-Knoten bestehen (`consensus-progress.js` fragt ihn ab).
   `query-send.js` konsumiert den UI-State beim Senden. Hat
   `chat-session.js` eine bestätigte `activeChatId` plus `activeTurnId`, wird
@@ -2183,11 +2187,11 @@ ersten Check statt eines leeren Consensus-Panels.
   `window.App.reportCriticalError`.
 - **`window.App.followup`** (definiert in `consensus-run.js`) ist der
   Follow-up-Kontext- und Verlauf-State (`offer/arm/discard/consume/reset/render`,
-  `isArmed/isAwaitingChoice/markContinuationUnavailable/archiveCurrentExchange/
-  renderStoredTurn/renderStoredTurns/clearHistory`).
+  `isArmed/hasContinuableExchange/markContinuationUnavailable/
+  archiveCurrentExchange/renderStoredTurn/renderStoredTurns/clearHistory`).
   `query-send.js` (consume + archivieren beim Senden), `app-init.js` (reset in
   `clearResponseBoxes`) und `user-tier.js` (render bei Tier-Wechsel) hängen
-  daran; DOM-Ziele sind `#composerGate`, `#followupChipBar` und
+  daran; DOM-Ziele sind `#followupChipBar` und
   `#threadHistory` in `index.html`.
 - **`window.App.chatSession`** (definiert in `chat-session.js`) hält nur die
   laufzeitlokale Chat-Zuordnung (`activeChatId` + `activeTurnId` ausschließlich

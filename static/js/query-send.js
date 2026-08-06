@@ -813,6 +813,9 @@
         trackAppEvent("app_followup_sent");
       } else {
         // Frische Frage ersetzt den alten Konsens: Affordance/Flag verwerfen.
+        // Ohne Kontext gehoeren auch die archivierten Turns nicht mehr darueber:
+        // die Modelle sehen sie nicht, also darf der Thread sie nicht behaupten.
+        window.App.followup?.clearHistory?.();
         window.App.followup?.reset?.();
         if (followupRequested) window.App.setThreadQuestion?.(question);
       }
@@ -904,12 +907,11 @@
               source: "prepare",
               phase: "prepare"
             });
-            // Der Composer bleibt bedienbar: die Frage steht noch im Feld
-            // (geleert wird erst nach diesem Zweig), und der Nutzer soll sie
-            // nach dem Reset unveraendert abschicken koennen. Bei einem
-            // Follow-up hat consume() den Chip aber schon verbraucht — ohne
-            // diese Ruecknahme sperrt syncInputLock das Feld zu, in dem die
-            // Frage laut Karte noch stehen soll.
+            // Die Frage steht noch im Feld (geleert wird erst nach diesem
+            // Zweig) und soll unveraendert abschickbar bleiben. Bei einem
+            // Follow-up hat consume() den Kontext aber schon verbraucht — ohne
+            // diese Ruecknahme ginge die Wiederholung stillschweigend ohne den
+            // Kontext raus, den die Absage-Karte als ungesendet ausweist.
             window.App.followup?.restoreAfterBlockedRun?.();
             return;
           }
@@ -952,7 +954,13 @@
             signal: querySignal
           });
           if (!pendingTurn) {
-            throw new Error("The conversation turn could not be prepared. Please retry.");
+            // Ein erreichtes Limit oder ein Tier-Gate ist dauerhaft - dann darf
+            // hier nicht "Please retry" stehen. chatSession haelt den Grund
+            // fest, sofern der Server einen genannt hat.
+            throw new Error(
+              chatSession?.lastPersistenceError
+              || "The conversation turn could not be prepared. Please retry."
+            );
           }
           const memoryApiKey = useOwnKeys && ownKeyStorageByProvider[memoryProviderForRun]
             ? (localStorage.getItem(ownKeyStorageByProvider[memoryProviderForRun]) || "")
