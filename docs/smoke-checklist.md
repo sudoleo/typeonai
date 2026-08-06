@@ -111,6 +111,25 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       ausschließlich seine letzte completed Chat-/Turn-Basis für ein weiteres
       Follow-up wieder her. Clear und Logout leeren aktive, pending, Context-
       und Bookmark-Zuordnung vollständig.
+- [ ] Eine Premium-Consensus-Engine bleibt für ein Free-Konto gesperrt, auch
+      mit aktivem Own-Key-Schalter: 403, kein Engine-Call, kein Turn-Write.
+- [ ] Kontolöschung entfernt neben Bookmarks/Usage auch alle Chats inklusive
+      Turns, Modellantworten und Context-Versionen — in der Firestore-Konsole
+      darf unter `users/{uid}/chats` nichts zurückbleiben.
+- [ ] Ein Chat-Bookmark mit vielen Turns öffnet sich zügig: pro Seite genau ein
+      Chat-Read und eine Query je Turn statt sechs Einzel-Gets pro Turn.
+- [ ] Ein Follow-up-Lauf löst den Kontext genau einmal auf, nicht sechsmal:
+      im Server-Log steht pro Turn ein Context-Resolve, nicht einer je `/ask_*`.
+- [ ] Ein Chat-Bookmark löschen entfernt auch den Chat: unter
+      `users/{uid}/chats/{chat}` bleibt nichts zurück. Ein Legacy-Bookmark ohne
+      `chat_id` löscht weiterhin nur sich selbst.
+- [ ] Nach einem mehrdeutigen Abbruch zeigt der Replay eines bereits completed
+      Turns die **gespeicherten** Modellantworten in den Antwortboxen; Provider
+      ohne gespeicherte Antwort sind leer und nicht mit der vorherigen Antwort
+      gefüllt. Die Agreement-Zahl zählt die gespeicherten Modelle.
+- [ ] Ein pending Turn, dessen Browser-Bindung durch Reload verloren ging, wird
+      beim nächsten Turn im selben Chat als `abandoned` retired — completed und
+      failed Turns bleiben unangetastet.
 
 ## Consensus (höchstes Risiko)
 - [ ] Presets: Daily/Balanced setzen sichtbar alle sechs Antwortmodelle und die

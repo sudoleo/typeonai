@@ -11,15 +11,17 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import secrets
 import unicodedata
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, TypeVar
 
 from firebase_admin import firestore
 from google.api_core.datetime_helpers import DatetimeWithNanoseconds
+from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1.field_path import FieldPath
 
 import app.core.config as cfg
@@ -58,10 +60,23 @@ FAILED_TURN_ERROR_CODES = frozenset({
     "cancelled",
     "insufficient_answers",
     "persistence_interrupted",
+    # A pending turn whose browser binding is gone (reload, closed tab). No run
+    # can ever finish it, so it is retired instead of pending forever.
+    "abandoned",
 })
 
+# Far beyond any legitimate run, including deep search plus judge retries, so a
+# slow-but-live turn is never retired out from under its own consensus call.
+ABANDONED_TURN_MAX_AGE_SECONDS = 30 * 60
+ABANDONED_TURN_SWEEP_LIMIT = 10
+
 CHAT_TITLE_MAX_LENGTH = 120
-QUESTION_MAX_LENGTH = 20_000
+# Fallback only. The effective limit is the SAME one /consensus caps the
+# question with (see _question_max_length): a turn whose stored question is
+# longer than that cap could never be completed, because the capped question
+# would no longer match and validate_turn_for_completion would reject every
+# retry with a permanent 409.
+QUESTION_MAX_LENGTH_FALLBACK = 8_000
 MODE_MAX_LENGTH = 40
 MODEL_NAME_MAX_LENGTH = 120
 SELECTED_MODELS_MAX_ITEMS = 8
@@ -148,14 +163,23 @@ def derive_title(question: object) -> str:
     return _collapse_whitespace(question)[:CHAT_TITLE_MAX_LENGTH]
 
 
+def _question_max_length() -> int:
+    try:
+        value = int(cfg.get_consensus_question_char_limit())
+    except (TypeError, ValueError):
+        value = QUESTION_MAX_LENGTH_FALLBACK
+    return max(1, value)
+
+
 def normalize_question(value: object) -> str:
     if not isinstance(value, str):
         raise ValueError("question must be a string")
     text = unicodedata.normalize("NFKC", value).strip()
     if not text:
         raise ValueError("question must not be empty")
-    if len(text) > QUESTION_MAX_LENGTH:
-        raise ValueError(f"question must be at most {QUESTION_MAX_LENGTH} characters")
+    limit = _question_max_length()
+    if len(text) > limit:
+        raise ValueError(f"question must be at most {limit} characters")
     return text
 
 
@@ -541,17 +565,28 @@ class ChatStore:
         if not turn_snapshot.exists:
             raise ChatNotFound("Chat not found")
 
+        return turn_detail(
+            turn_snapshot.id,
+            turn_snapshot.to_dict() or {},
+            self._model_answers(turn_ref),
+        )
+
+    def _model_answers(self, turn_ref) -> dict[str, dict]:
+        """Read a turn's model answers with ONE query instead of six gets.
+
+        The document ID still has to match the stored provider: that keeps the
+        original per-provider path check, so a document written under the wrong
+        ID can never impersonate another provider's answer.
+        """
         answers: dict[str, dict] = {}
-        answers_ref = turn_ref.collection("model_answers")
-        for provider in PROVIDER_ORDER:
-            document_id = PROVIDER_DOCUMENT_IDS[provider]
-            snapshot = answers_ref.document(document_id).get()
-            if not snapshot.exists:
-                continue
+        for snapshot in turn_ref.collection("model_answers").stream():
             answer = model_answer_metadata(snapshot.to_dict() or {})
-            if answer is not None and answer["provider"] == provider:
-                answers[provider] = answer
-        return turn_detail(turn_snapshot.id, turn_snapshot.to_dict() or {}, answers)
+            if answer is None:
+                continue
+            if PROVIDER_DOCUMENT_IDS.get(answer["provider"]) != snapshot.id:
+                continue
+            answers[answer["provider"]] = answer
+        return answers
 
     def validate_turn_for_completion(
         self,
@@ -641,6 +676,13 @@ class ChatStore:
         )
         client_request_id = normalize_client_request_id(client_request_id)
         chat_ref = self._chat_ref(uid, chat_id)
+        # Opportunistic, best effort: a new turn is the natural moment to
+        # notice that an earlier one was abandoned. This must never block the
+        # run, so every failure here is swallowed after logging.
+        try:
+            self.purge_abandoned_turns(uid, chat_id)
+        except Exception:
+            logging.warning("abandoned-turn sweep failed for chat %s", chat_id)
         if client_request_id:
             turn_id = _idempotent_turn_id(chat_id, client_request_id)
         else:
@@ -847,6 +889,60 @@ class ChatStore:
         limit: int = TURN_PAGE_SIZE,
         cursor: str = "",
     ) -> dict:
+        page = self._list_turn_snapshots(uid, chat_id, limit=limit, cursor=cursor)
+        return {
+            "turns": [
+                turn_metadata(snapshot.id, snapshot.to_dict() or {})
+                for snapshot in page["snapshots"]
+            ],
+            "next_cursor": page["next_cursor"],
+            "has_more": page["has_more"],
+        }
+
+    def list_turn_details(
+        self,
+        uid: str,
+        chat_id: str,
+        *,
+        limit: int = TURN_PAGE_SIZE,
+        cursor: str = "",
+        status: str | None = None,
+    ) -> dict:
+        """One page of turns including consensus, sources and model answers.
+
+        The chat is verified once for the whole page instead of once per turn,
+        so a page costs 2 + N reads rather than 2 + 8N. Pass ``status`` to keep
+        only turns in that lifecycle state; pagination still reflects the full
+        page so the cursor stays stable.
+        """
+        page = self._list_turn_snapshots(uid, chat_id, limit=limit, cursor=cursor)
+        turns_ref = self._chat_ref(uid, chat_id).collection("turns")
+        turns = []
+        for snapshot in page["snapshots"]:
+            data = snapshot.to_dict() or {}
+            if status is not None and data.get("status") != status:
+                continue
+            turns.append(
+                turn_detail(
+                    snapshot.id,
+                    data,
+                    self._model_answers(turns_ref.document(snapshot.id)),
+                )
+            )
+        return {
+            "turns": turns,
+            "next_cursor": page["next_cursor"],
+            "has_more": page["has_more"],
+        }
+
+    def _list_turn_snapshots(
+        self,
+        uid: str,
+        chat_id: str,
+        *,
+        limit: int,
+        cursor: str,
+    ) -> dict:
         chat_ref = self._chat_ref(uid, chat_id)
         if not chat_ref.get().exists:
             raise ChatNotFound("Chat not found")
@@ -876,10 +972,7 @@ class ChatStore:
                 owner_scope=f"{uid}:{chat_id}",
             )
         return {
-            "turns": [
-                turn_metadata(snapshot.id, snapshot.to_dict() or {})
-                for snapshot in page
-            ],
+            "snapshots": page,
             "next_cursor": next_cursor,
             "has_more": has_more,
         }
@@ -910,6 +1003,81 @@ class ChatStore:
         if not _ID_RE.fullmatch(str(turn_id or "")):
             raise ChatNotFound("Chat not found")
         return self._chat_ref(uid, chat_id).collection("turns").document(turn_id)
+
+    def delete_all_chats(self, uid: str) -> None:
+        """Remove every chat of one owner, including nested subcollections.
+
+        Firestore does NOT cascade: deleting a chat document would leave its
+        turns, their model answers and the derived context versions behind as
+        unreachable orphans that still contain the user's questions and the
+        model answers. Account deletion (GDPR Art. 17) therefore walks all
+        three levels explicitly, deepest first, so an interrupted run can be
+        repeated without ever stranding a level.
+        """
+        for chat_ref in _child_documents(self._chats_ref(uid)):
+            self._delete_chat_tree(chat_ref)
+
+    def delete_chat(self, uid: str, chat_id: str) -> None:
+        """Delete one owner-bound chat with the same three-level cascade."""
+        chat_ref = self._chat_ref(uid, chat_id)
+        if not chat_ref.get().exists:
+            raise ChatNotFound("Chat not found")
+        self._delete_chat_tree(chat_ref)
+
+    def _delete_chat_tree(self, chat_ref) -> None:
+        # Deepest level first: an interrupted run can simply be repeated and
+        # never leaves a level that is no longer reachable from its parent.
+        for turn_ref in _child_documents(chat_ref.collection("turns")):
+            for answer_ref in _child_documents(turn_ref.collection("model_answers")):
+                answer_ref.delete()
+            turn_ref.delete()
+        for version_ref in _child_documents(chat_ref.collection("context_versions")):
+            version_ref.delete()
+        chat_ref.delete()
+
+    def purge_abandoned_turns(self, uid: str, chat_id: str, *, now=None) -> list[str]:
+        """Retire pending turns that no run can ever finish.
+
+        A reload or a closed tab drops the browser's turn binding, leaving a
+        turn pending forever: invisible in the transcript, unfinishable, and
+        skipped by every context build. Retiring them keeps the lifecycle
+        honest. Completed and failed turns are never touched, and the sweep is
+        bounded so it can sit on the turn-creation path.
+        """
+        now = now or datetime.now(timezone.utc)
+        cutoff = now - timedelta(seconds=ABANDONED_TURN_MAX_AGE_SECONDS)
+        turns_ref = self._chat_ref(uid, chat_id).collection("turns")
+        query = turns_ref.where(
+            filter=FieldFilter("status", "==", TURN_STATUS_PENDING)
+        ).limit(ABANDONED_TURN_SWEEP_LIMIT)
+        retired: list[str] = []
+        for snapshot in query.stream():
+            created_at = (snapshot.to_dict() or {}).get("created_at")
+            if not isinstance(created_at, datetime) or created_at.tzinfo is None:
+                continue
+            if created_at > cutoff:
+                continue
+            try:
+                self.fail_turn(uid, chat_id, snapshot.id, error_code="abandoned")
+                retired.append(snapshot.id)
+            except ChatStoreError:
+                # Raced with a real completion or another sweep. The turn is no
+                # longer pending, which is exactly the desired end state.
+                continue
+        return retired
+
+
+def _child_documents(collection_ref) -> list:
+    """List a collection's document references, newest SDKs and fakes alike.
+
+    ``list_documents`` also returns "missing" parent documents that exist only
+    because a subcollection hangs beneath them, which ``stream`` skips. That
+    matters for deletion, so it is preferred where available.
+    """
+    lister = getattr(collection_ref, "list_documents", None)
+    if callable(lister):
+        return list(lister())
+    return [snapshot.reference for snapshot in collection_ref.stream()]
 
 
 def _collapse_whitespace(value: object) -> str:

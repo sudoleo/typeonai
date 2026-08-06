@@ -652,6 +652,54 @@
       }
     }
 
+    const providerBoxes = {
+      OpenAI: openaiBox,
+      Mistral: mistralBox,
+      Anthropic: claudeBox,
+      Gemini: geminiBox,
+      DeepSeek: deepseekBox,
+      Grok: grokBox
+    };
+
+    // Replay of a stored turn: the providers were never called, so every box
+    // still shows the previous run. Repaint the ones the stored turn actually
+    // used and blank the rest, so no box can attribute an old answer to this
+    // question. Returns how many answers were restored.
+    function restoreStoredModelAnswers(storedAnswers) {
+      const answers = storedAnswers && typeof storedAnswers === "object"
+        ? storedAnswers
+        : {};
+      let restored = 0;
+      Object.entries(providerBoxes).forEach(([provider, box]) => {
+        if (!box) return;
+        const outputEl = box.querySelector(".collapsible-content");
+        if (!outputEl) return;
+        const stored = answers[provider];
+        const answer = typeof stored === "string"
+          ? stored
+          : String(stored?.answer || "");
+        delete box.dataset.consensusAnswer;
+        delete box.dataset.consensusSources;
+        delete box.dataset.responseError;
+        delete box.dataset.responseSkipped;
+        if (!answer.trim()) {
+          box.dataset.responseState = "idle";
+          outputEl.innerHTML = "";
+          return;
+        }
+        box.dataset.responseState = "complete";
+        const sources = Array.isArray(stored?.sources) ? stored.sources : [];
+        if (typeof window.renderModelResponseWithSources === "function") {
+          window.renderModelResponseWithSources(outputEl, answer, sources);
+        } else {
+          window.injectMarkdown?.(outputEl, answer, sources);
+        }
+        restored += 1;
+      });
+      window.updateAgentModeUI?.();
+      return restored;
+    }
+
     // Abgewählte Modelle werden bewusst als leer gesendet.
     const answer_openai = getIncludedAnswer(openaiBox);
     const answer_mistral = getIncludedAnswer(mistralBox);
@@ -953,6 +1001,12 @@
         window.currentEvidenceSources = data.sources;
         window.renderEvidenceSources?.(data.sources);
       }
+      // A replay never ran the providers, so the boxes still hold whatever the
+      // PREVIOUS run left there. Restore them from the stored turn instead —
+      // otherwise the visible model answers belong to a different question.
+      const replayedAnswerCount = completedReplay
+        ? restoreStoredModelAnswers(data.model_answers)
+        : 0;
       if (data?.usage_run_status) {
         window.App.usageRun?.mark?.(data.usage_run_status);
       }
@@ -1023,8 +1077,13 @@
           // fällt bei fehlenden/ungültigen Daten auf den Freitext zurück.
           let structuredRendered = false;
           try {
+            // On a replay the DOM count describes the previous run; the stored
+            // turn is the authority for how many models this answer rests on.
             structuredRendered = window.renderConsensusInsights
-              ? window.renderConsensusInsights(data.differences_data, includedAnswerCount)
+              ? window.renderConsensusInsights(
+                  data.differences_data,
+                  completedReplay ? replayedAnswerCount : includedAnswerCount
+                )
               : false;
           } catch (renderError) {
             // A malformed/legacy Judge payload may degrade the comparison UI,

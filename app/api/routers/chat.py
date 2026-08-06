@@ -75,7 +75,9 @@ from app.services.chat_context import (
     ChatContextNotFound,
     ChatContextService,
     FirestoreChatContextRepository,
+    ResolvedContextCache,
     build_chat_context_system_prompt,
+    resolved_context_cache_key,
 )
 from app.services.differences_stats import record_differences_stats
 from app.services.usage_repository import (
@@ -94,6 +96,7 @@ OWN_KEYS_LOGIN_REQUIRED = "Please log in to use your own API keys."
 run_usage_repository = FirestoreUsageRepository(db_firestore)
 chat_store = ChatStore(db_firestore)
 chat_context_service = ChatContextService(FirestoreChatContextRepository(db_firestore))
+resolved_context_cache = ResolvedContextCache()
 _CHAT_DOCUMENT_ID_RE = re.compile(r"[0-9a-f]{32}")
 
 
@@ -512,12 +515,19 @@ def _resolve_authoritative_chat_context(
         raise HTTPException(status_code=400, detail="Invalid chat context identifier.")
     chat_id, turn_id, version_id = fields
     try:
-        return chat_context_service.resolve_for_ask(
-            uid,
-            chat_id,
-            turn_id,
-            version_id,
-            question=question,
+        # All six /ask_* calls of one run resolve the identical owner-bound
+        # tuple. Resolving stays server-side (the context must never travel
+        # through the client), but the cache pays the ~18 reads and six
+        # renders exactly once per turn instead of once per provider.
+        return resolved_context_cache.get_or_resolve(
+            resolved_context_cache_key(uid, chat_id, turn_id, version_id, question),
+            lambda: chat_context_service.resolve_for_ask(
+                uid,
+                chat_id,
+                turn_id,
+                version_id,
+                question=question,
+            ),
         )
     except ChatContextNotFound as exc:
         raise HTTPException(status_code=404, detail="Chat context not found") from exc
@@ -996,9 +1006,14 @@ def consensus(request: Request, data: dict = Body(...)):
         missing.append("at least two selected model answers")
 
     if missing:
+        # An empty question skips the preflight above, so validated_chat_turn_ids
+        # stays None — but the pending turn still exists and would otherwise stay
+        # pending forever. fail_turn is owner-scoped and only moves pending ->
+        # failed, so disposing an unvalidated turn is safe and never leaks state.
+        disposable_ids = validated_chat_turn_ids or chat_turn_ids
         failed = _fail_chat_turn_best_effort(
             uid,
-            validated_chat_turn_ids,
+            disposable_ids,
             error_code=(
                 "insufficient_answers"
                 if len(included_answers) < 2
@@ -1006,12 +1021,12 @@ def consensus(request: Request, data: dict = Body(...)):
             ),
         )
         message = "Missing parameters: " + ", ".join(missing)
-        if validated_chat_turn_ids is not None:
+        if disposable_ids is not None:
             raise HTTPException(
                 status_code=400,
                 detail=_chat_turn_error_detail(
                     message,
-                    validated_chat_turn_ids,
+                    disposable_ids,
                     "failed" if failed else "pending",
                     persisted=False,
                 ),
@@ -1024,7 +1039,11 @@ def consensus(request: Request, data: dict = Body(...)):
     if deep_think and not is_pro:
         raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
 
-    if not use_own_keys and cfg.is_premium_consensus_model(consensus_model) and not is_pro:
+    # Premium-Engines bleiben Pro-exklusiv, AUCH im Own-Key-Modus: eigene Keys
+    # bezahlen zwar den Call, heben aber das Tier-Gate nicht auf. Bewusst
+    # unbedingt (nicht nur unter `not use_own_keys`) — genau diese zweite,
+    # unbedingte Pruefung stand vor der Chat-Umsortierung weiter unten.
+    if cfg.is_premium_consensus_model(consensus_model) and not is_pro:
         raise HTTPException(status_code=403, detail="Premium consensus engines are reserved for Pro users.")
 
     # API Keys setzen: Own-Key-Modus nutzt ausschliesslich Nutzer-Keys,

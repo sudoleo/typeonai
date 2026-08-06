@@ -220,7 +220,10 @@ async def load_bookmark_detail(request: Request, bookmark_id: str):
 
 @router.get("/bookmarks/{bookmark_id}/conversation")
 @limiter.limit("30/minute")
-async def load_bookmark_conversation(
+# Deliberately sync so FastAPI runs it in the threadpool: one page walks the
+# chat plus every turn's model answers with blocking Firestore calls, which as
+# `async def` would sit ON the event loop and stall every other request.
+def load_bookmark_conversation(
     request: Request,
     bookmark_id: str,
     cursor: str = Query(default="", max_length=512),
@@ -248,17 +251,13 @@ async def load_bookmark_conversation(
                 "has_more": False,
             }
 
-        store = _chat_store()
-        page = store.list_turns(uid, chat_id, cursor=cursor, limit=limit)
-        turns = [
-            store.get_turn(uid, chat_id, turn["id"])
-            for turn in page["turns"]
-            if turn.get("status") == "completed"
-        ]
+        page = _chat_store().list_turn_details(
+            uid, chat_id, cursor=cursor, limit=limit, status="completed"
+        )
         return {
             "status": "success",
             "chat_id": chat_id,
-            "turns": turns,
+            "turns": page["turns"],
             "next_cursor": page.get("next_cursor"),
             "has_more": page.get("has_more") is True,
         }
@@ -266,8 +265,15 @@ async def load_bookmark_conversation(
         raise
     except ChatNotFound:
         raise HTTPException(status_code=404, detail="Chat not found")
-    except (InvalidChatCursor, ChatCursorUnavailable) as exc:
+    except InvalidChatCursor as exc:
         raise HTTPException(status_code=400, detail="Invalid chat cursor") from exc
+    except ChatCursorUnavailable as exc:
+        # Missing cursor-signing configuration is a server problem. Reporting it
+        # as 400 made a deployment error look like a bad client request.
+        logging.error("bookmark conversation failed: chat cursor signing is not configured")
+        raise HTTPException(
+            status_code=503, detail="Conversation pagination unavailable"
+        ) from exc
     except Exception as exc:
         logging.exception("Error loading bookmark conversation for uid=%s", uid)
         raise HTTPException(status_code=500, detail="Error loading bookmark conversation") from exc
@@ -514,7 +520,30 @@ async def delete_bookmark(data: dict):
         raise HTTPException(status_code=401, detail="Authentication failed")
     
     try:
-        db_firestore.collection("users").document(uid).collection("bookmarks").document(bookmark_id).delete()
-        return {"status": "success", "message": "Bookmark deleted."}
-    except Exception as e:
+        ref = (
+            db_firestore.collection("users").document(uid)
+            .collection("bookmarks").document(bookmark_id)
+        )
+        # Read the chat binding BEFORE the delete: afterwards the bookmark is
+        # the only handle on that chat, and the transcript would be stranded
+        # with no way to reach or remove it.
+        snap = ref.get()
+        chat_id = str((snap.to_dict() or {}).get("chat_id") or "") if snap.exists else ""
+        ref.delete()
+    except Exception:
         raise HTTPException(status_code=500, detail="Error deleting bookmark")
+
+    if CHAT_ID_RE.fullmatch(chat_id):
+        # Best effort: the bookmark is already gone, so a failing cascade must
+        # not turn a successful deletion into an error the user has to retry.
+        # A leftover chat stays reachable for the account-level cascade.
+        try:
+            _chat_store().delete_chat(uid, chat_id)
+        except ChatNotFound:
+            pass
+        except Exception:
+            logging.exception(
+                "Bookmark deleted but chat cascade failed for uid=%s", uid
+            )
+
+    return {"status": "success", "message": "Bookmark deleted."}

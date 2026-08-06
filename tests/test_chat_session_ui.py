@@ -232,7 +232,7 @@ def test_chat_session_script_order_consensus_payload_and_legacy_bookmarks_remain
     assert template.index("/static/js/query-send.js") < template.index(
         "/static/js/app-init.js"
     )
-    assert "chat-session.js?v=20260806-chatbookmark1" in template
+    assert "chat-session.js?v=20260806-chatcleanup1" in template
     assert 'data-engine-provider="{{ model.provider }}"' in template
     assert "consensusPayload.chat_id = chatTurnIds.chatId" in consensus
     assert "consensusPayload.turn_id = chatTurnIds.turnId" in consensus
@@ -471,3 +471,43 @@ session.beginRun({{
         timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_replay_repaints_model_boxes_from_the_stored_turn():
+    consensus = (ROOT / "static" / "js" / "consensus-run.js").read_text(
+        encoding="utf-8"
+    )
+
+    # A replay never calls the providers, so the boxes must come from the
+    # stored turn rather than from whatever the previous run left behind.
+    assert "function restoreStoredModelAnswers(storedAnswers)" in consensus
+    assert "restoreStoredModelAnswers(data.model_answers)" in consensus
+    restore_call = consensus.index("restoreStoredModelAnswers(data.model_answers)")
+    guard = consensus.index("const replayedAnswerCount = completedReplay")
+    assert guard < restore_call
+
+    body = consensus.split("function restoreStoredModelAnswers", 1)[1].split(
+        "\n    }", 1
+    )[0]
+    # Providers without a stored answer are blanked, never left stale.
+    assert 'box.dataset.responseState = "idle"' in body
+    assert 'outputEl.innerHTML = ""' in body
+    assert "delete box.dataset.responseError" in body
+    assert 'box.dataset.responseState = "complete"' in body
+    # Sources travel per stored answer so old [S…] links cannot leak across turns.
+    assert "Array.isArray(stored?.sources)" in body
+
+    # The agreement widget must count the stored models, not the stale DOM.
+    assert "completedReplay ? replayedAnswerCount : includedAnswerCount" in consensus
+
+
+def test_pending_turn_creation_does_not_rewrite_the_logical_run():
+    session = (ROOT / "static" / "js" / "chat-session.js").read_text(encoding="utf-8")
+
+    lifecycle = session.split("async ensurePendingTurn(", 1)[1].split(
+        "async _createPendingTurn", 1
+    )[0]
+    # sameLogicalRun() compares a retry against what the user chose when the
+    # run started; an unconditional overwrite would hide a changed picker.
+    assert "run.consensusModel = cleanString(consensusModel) || run.consensusModel" not in lifecycle
+    assert "if (!run.consensusModel) {" in lifecycle

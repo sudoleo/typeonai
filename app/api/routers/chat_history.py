@@ -50,6 +50,11 @@ from app.services.usage_repository import (
 
 router = APIRouter()
 
+# Every endpoint below is deliberately a sync `def`, so FastAPI runs it in the
+# threadpool. The Firestore client is blocking; declaring these `async def`
+# would execute those blocking reads and transactions directly ON the event
+# loop and stall every concurrent request for their whole duration.
+
 
 class ChatCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -217,7 +222,7 @@ def _raise_store_error(exc: Exception, *, operation: str, uid: str) -> None:
 
 @router.post("/chats", status_code=201)
 @limiter.limit("20/minute")
-async def create_chat(
+def create_chat(
     request: Request,
     payload: ChatCreateRequest | None = Body(default=None),
 ):
@@ -231,7 +236,7 @@ async def create_chat(
 
 @router.get("/chats")
 @limiter.limit("30/minute")
-async def list_chats(
+def list_chats(
     request: Request,
     cursor: str = Query(default="", max_length=512),
     limit: int = Query(default=CHAT_PAGE_SIZE, ge=1, le=CHAT_PAGE_SIZE_MAX),
@@ -246,7 +251,7 @@ async def list_chats(
 
 @router.get("/chats/{chat_id}")
 @limiter.limit("60/minute")
-async def get_chat(request: Request, chat_id: str):
+def get_chat(request: Request, chat_id: str):
     uid = _chat_uid(request)
     try:
         return {"status": "success", "chat": _store().get_chat(uid, chat_id)}
@@ -254,9 +259,27 @@ async def get_chat(request: Request, chat_id: str):
         _raise_store_error(exc, operation="get chat", uid=uid)
 
 
+@router.delete("/chats/{chat_id}")
+@limiter.limit("20/minute")
+def delete_chat(request: Request, chat_id: str):
+    """Delete one owner-bound chat and everything nested beneath it.
+
+    Without this the only handle on a chat is its bookmark, so deleting the
+    bookmark stranded the whole transcript with no way to ever reach or remove
+    it. Repeating the call on an already deleted chat returns 404, matching
+    every other unknown or foreign chat id.
+    """
+    uid = _chat_uid(request)
+    try:
+        _store().delete_chat(uid, chat_id)
+        return {"status": "success"}
+    except Exception as exc:
+        _raise_store_error(exc, operation="delete chat", uid=uid)
+
+
 @router.post("/chats/{chat_id}/turns", status_code=201)
 @limiter.limit("30/minute")
-async def create_turn(request: Request, chat_id: str, payload: TurnCreateRequest):
+def create_turn(request: Request, chat_id: str, payload: TurnCreateRequest):
     uid = _chat_uid(request)
     try:
         turn = _store().create_turn(uid, chat_id, **payload.model_dump())
@@ -267,7 +290,7 @@ async def create_turn(request: Request, chat_id: str, payload: TurnCreateRequest
 
 @router.get("/chats/{chat_id}/turns/{turn_id}")
 @limiter.limit("60/minute")
-async def get_turn(request: Request, chat_id: str, turn_id: str):
+def get_turn(request: Request, chat_id: str, turn_id: str):
     uid = _chat_uid(request)
     try:
         return {
@@ -338,7 +361,7 @@ def build_turn_context(
 
 @router.get("/chats/{chat_id}/turns")
 @limiter.limit("60/minute")
-async def list_turns(
+def list_turns(
     request: Request,
     chat_id: str,
     cursor: str = Query(default="", max_length=512),

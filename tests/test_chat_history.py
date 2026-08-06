@@ -9,6 +9,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import app.core.config as cfg
 from app.api.routers import chat_history as chat_history_router
 from app.core.rate_limit import limiter
 from app.core.security import CustomSecurityMiddleware
@@ -63,6 +64,10 @@ class FakeDocumentRef:
     def update(self, data):
         self.database.apply_update(self, data)
 
+    def delete(self):
+        self.database.documents.pop(self.path, None)
+        self.database.write_log.append(("delete", self.path))
+
 
 class FakeCollectionRef:
     def __init__(self, database, path):
@@ -75,11 +80,34 @@ class FakeCollectionRef:
     def order_by(self, field, direction=None):
         return FakeQuery(self, [(field, direction)])
 
+    def where(self, filter=None):
+        return FakeQuery(self, [], filters=[filter])
+
+    def _child_paths(self):
+        depth = len(self.path) + 1
+        return sorted(
+            path
+            for path in self.database.documents
+            if len(path) == depth and path[:-1] == self.path
+        )
+
+    def stream(self):
+        for path in self._child_paths():
+            ref = FakeDocumentRef(self.database, path)
+            self.database.read_log.append(path)
+            yield FakeSnapshot(ref, self.database.documents.get(path))
+
+    def list_documents(self):
+        for path in self._child_paths():
+            self.database.read_log.append(path)
+            yield FakeDocumentRef(self.database, path)
+
 
 class FakeQuery:
-    def __init__(self, collection, orders):
+    def __init__(self, collection, orders, filters=None):
         self.collection = collection
         self.orders = list(orders)
+        self.filters = [f for f in (filters or []) if f is not None]
         self.after_id = None
         self.after_values = None
         self.page_limit = None
@@ -87,6 +115,23 @@ class FakeQuery:
     def order_by(self, field, direction=None):
         self.orders.append((field, direction))
         return self
+
+    def where(self, filter=None):
+        if filter is not None:
+            self.filters.append(filter)
+        return self
+
+    def _matches_filters(self, snapshot):
+        data = snapshot.to_dict() or {}
+        for condition in self.filters:
+            field = getattr(condition, "field_path", None)
+            op = getattr(condition, "op_string", None)
+            value = getattr(condition, "value", None)
+            if op != "==":
+                raise AssertionError(f"unsupported fake filter operator: {op}")
+            if data.get(field) != value:
+                return False
+        return True
 
     def start_after(self, boundary):
         if isinstance(boundary, dict):
@@ -105,6 +150,9 @@ class FakeQuery:
         for path, data in self.collection.database.documents.items():
             if len(path) == depth and path[:-1] == self.collection.path:
                 items.append(FakeSnapshot(FakeDocumentRef(self.collection.database, path), data))
+
+        if self.filters:
+            items = [item for item in items if self._matches_filters(item)]
 
         for field, direction in reversed(self.orders):
             reverse = str(direction).upper().endswith("DESCENDING")
@@ -186,7 +234,10 @@ class FakeTransaction:
 class FakeChatDatabase:
     def __init__(self):
         self.documents = {}
-        self.clock = datetime(2026, 8, 5, tzinfo=timezone.utc)
+        # Emulates SERVER_TIMESTAMP, which is always ~now. A fixed date in the
+        # past would make freshly written documents look stale to any age-based
+        # logic (e.g. the abandoned-turn sweep).
+        self.clock = datetime.now(timezone.utc).replace(microsecond=0)
         self.read_log = []
         self.write_log = []
         self.transaction_commits = []
@@ -1032,3 +1083,369 @@ def test_turn_list_stays_compact_after_completion_and_failure(chat_api):
         "model_answers", "completion_fingerprint",
     }
     assert all(forbidden.isdisjoint(item) for item in listed)
+
+
+# ---------------------------------------------------------------------------
+# Question-Limit: /consensus kappt die Frage auf
+# cfg.get_consensus_question_char_limit(). Wird ein Turn mit einer laengeren
+# Frage angelegt, kann er NIE abgeschlossen werden — die gekappte Frage passt
+# dann nicht mehr, und jeder Retry scheitert dauerhaft an 409.
+# ---------------------------------------------------------------------------
+
+
+def test_turn_question_limit_matches_the_consensus_cap():
+    assert chat_store._question_max_length() == cfg.get_consensus_question_char_limit()
+
+
+def test_turn_rejects_a_question_the_consensus_cap_would_truncate(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    limit = cfg.get_consensus_question_char_limit()
+    payload = {**TURN_PAYLOAD, "question": "q" * (limit + 1)}
+
+    response = client.post(f"/chats/{chat['id']}/turns", json=payload, headers=AUTH_OWNER)
+
+    assert response.status_code == 422
+    assert database.turns("owner-uid", chat["id"]) == {}
+
+
+def test_longest_accepted_question_still_validates_after_the_consensus_cap(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    limit = cfg.get_consensus_question_char_limit()
+    question = "q" * limit
+    turn = create_turn(client, chat["id"], {**TURN_PAYLOAD, "question": question})
+
+    # Exactly what /consensus does to the question before it validates the turn.
+    capped = question[:limit].rstrip()
+    validated = chat_store.ChatStore(database).validate_turn_for_completion(
+        "owner-uid", chat["id"], turn["id"], question=capped
+    )
+
+    assert validated["id"] == turn["id"]
+    assert validated["status"] == "pending"
+
+
+# ---------------------------------------------------------------------------
+# Read-Amplification: ein Turn-Detail darf nicht sechs Einzel-Gets auf
+# model_answers kosten, und eine Detail-Seite darf den Chat nicht pro Turn neu
+# pruefen.
+# ---------------------------------------------------------------------------
+
+
+def test_get_turn_reads_model_answers_with_one_query(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    turn = create_turn(client, chat["id"])
+    store = chat_store.ChatStore(database)
+    store.complete_turn(
+        "owner-uid", chat["id"], turn["id"], **completion_payload(providers=("OpenAI",))
+    )
+    database.read_log.clear()
+
+    detail = store.get_turn("owner-uid", chat["id"], turn["id"])
+
+    assert set(detail["model_answers"]) == {"OpenAI"}
+    answer_reads = [
+        path for path in database.read_log if "model_answers" in path
+    ]
+    # One collection read for the single stored answer — not one get per
+    # provider in PROVIDER_ORDER.
+    assert len(answer_reads) == 1
+
+
+def test_model_answer_under_a_foreign_document_id_is_ignored(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    turn = create_turn(client, chat["id"])
+    store = chat_store.ChatStore(database)
+    store.complete_turn(
+        "owner-uid", chat["id"], turn["id"], **completion_payload(providers=("OpenAI",))
+    )
+    # Same payload, wrong document id: the provider must not be trusted over
+    # the path it was stored under.
+    smuggled = ("users", "owner-uid", "chats", chat["id"], "turns", turn["id"],
+                "model_answers", "gemini")
+    database.documents[smuggled] = {
+        **database.model_answers("owner-uid", chat["id"], turn["id"])["openai"],
+    }
+
+    detail = store.get_turn("owner-uid", chat["id"], turn["id"])
+
+    assert set(detail["model_answers"]) == {"OpenAI"}
+
+
+def test_list_turn_details_checks_the_chat_once_for_the_whole_page(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    store = chat_store.ChatStore(database)
+    for index in range(3):
+        turn = create_turn(
+            client, chat["id"], {**TURN_PAYLOAD, "question": f"Question {index}"}
+        )
+        if index != 1:
+            store.complete_turn(
+                "owner-uid",
+                chat["id"],
+                turn["id"],
+                **completion_payload(
+                    question=f"Question {index}", providers=("OpenAI", "Gemini")
+                ),
+            )
+    database.read_log.clear()
+
+    page = store.list_turn_details("owner-uid", chat["id"], status="completed")
+
+    assert [turn["question"] for turn in page["turns"]] == ["Question 0", "Question 2"]
+    assert page["has_more"] is False
+    assert all(turn["model_answers"] for turn in page["turns"])
+    chat_reads = [path for path in database.read_log if len(path) == 4]
+    assert len(chat_reads) == 1
+
+
+def test_list_turn_details_keeps_pagination_identical_to_list_turns(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    store = chat_store.ChatStore(database)
+    for index in range(3):
+        create_turn(client, chat["id"], {**TURN_PAYLOAD, "question": f"Question {index}"})
+
+    metadata_page = store.list_turns("owner-uid", chat["id"], limit=2)
+    detail_page = store.list_turn_details("owner-uid", chat["id"], limit=2)
+
+    assert detail_page["has_more"] == metadata_page["has_more"] is True
+    assert detail_page["next_cursor"] == metadata_page["next_cursor"]
+    assert [turn["id"] for turn in detail_page["turns"]] == [
+        turn["id"] for turn in metadata_page["turns"]
+    ]
+
+
+def test_list_turn_details_rejects_a_foreign_owner(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    create_turn(client, chat["id"])
+
+    with pytest.raises(chat_store.ChatNotFound):
+        chat_store.ChatStore(database).list_turn_details("other-uid", chat["id"])
+
+
+# ---------------------------------------------------------------------------
+# DSGVO Art. 17: Firestore kaskadiert nicht. Chats, Turns, Modellantworten und
+# Context-Versionen muessen bei der Kontoloeschung alle verschwinden.
+# ---------------------------------------------------------------------------
+
+
+def test_delete_all_chats_removes_every_nested_level(chat_api):
+    client, database = chat_api
+    store = chat_store.ChatStore(database)
+    chat = create_chat(client)
+    turn = create_turn(client, chat["id"])
+    store.complete_turn(
+        "owner-uid", chat["id"], turn["id"], **completion_payload()
+    )
+    version_path = (
+        "users", "owner-uid", "chats", chat["id"], "context_versions", "d" * 32,
+    )
+    database.documents[version_path] = {"status": "ready", "memory": {}}
+    assert database.model_answers("owner-uid", chat["id"], turn["id"])
+
+    store.delete_all_chats("owner-uid")
+
+    survivors = [
+        path for path in database.documents
+        if len(path) > 2 and path[:2] == ("users", "owner-uid") and "chats" in path
+    ]
+    assert survivors == []
+
+
+def test_delete_all_chats_leaves_other_owners_untouched(chat_api):
+    client, database = chat_api
+    store = chat_store.ChatStore(database)
+    owner_chat = create_chat(client)
+    create_turn(client, owner_chat["id"])
+    other_chat = create_chat(client, headers=AUTH_OTHER)
+    create_turn(client, other_chat["id"], headers=AUTH_OTHER)
+
+    store.delete_all_chats("owner-uid")
+
+    assert database.chats("owner-uid") == {}
+    assert set(database.chats("other-uid")) == {other_chat["id"]}
+    assert database.turns("other-uid", other_chat["id"])
+
+
+def test_delete_all_chats_is_idempotent(chat_api):
+    client, database = chat_api
+    store = chat_store.ChatStore(database)
+    chat = create_chat(client)
+    turn = create_turn(client, chat["id"])
+    store.complete_turn("owner-uid", chat["id"], turn["id"], **completion_payload())
+
+    store.delete_all_chats("owner-uid")
+    store.delete_all_chats("owner-uid")
+
+    assert database.chats("owner-uid") == {}
+
+
+# ---------------------------------------------------------------------------
+# Loeschpfad: ohne DELETE war ein Bookmark der einzige Griff an einem Chat —
+# war es weg, blieb das Transcript unerreichbar liegen.
+# ---------------------------------------------------------------------------
+
+
+def test_delete_chat_removes_the_whole_tree(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    turn = create_turn(client, chat["id"])
+    chat_store.ChatStore(database).complete_turn(
+        "owner-uid", chat["id"], turn["id"], **completion_payload()
+    )
+    version_path = (
+        "users", "owner-uid", "chats", chat["id"], "context_versions", "d" * 32,
+    )
+    database.documents[version_path] = {"status": "ready"}
+
+    response = client.delete(f"/chats/{chat['id']}", headers=AUTH_OWNER)
+
+    assert response.status_code == 200
+    assert database.chats("owner-uid") == {}
+    assert database.turns("owner-uid", chat["id"]) == {}
+    assert database.model_answers("owner-uid", chat["id"], turn["id"]) == {}
+    assert version_path not in database.documents
+
+
+def test_delete_chat_is_owner_scoped_and_uniformly_404(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+
+    foreign = client.delete(f"/chats/{chat['id']}", headers=AUTH_OTHER)
+    unknown = client.delete(f"/chats/{'f' * 32}", headers=AUTH_OWNER)
+    malformed = client.delete("/chats/not-a-chat-id", headers=AUTH_OWNER)
+
+    assert foreign.status_code == unknown.status_code == malformed.status_code == 404
+    # The foreign attempt must not have touched the owner's chat.
+    assert set(database.chats("owner-uid")) == {chat["id"]}
+
+
+def test_delete_chat_requires_authentication(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+
+    response = client.delete(f"/chats/{chat['id']}")
+
+    assert response.status_code == 401
+    assert set(database.chats("owner-uid")) == {chat["id"]}
+
+
+def test_deleting_a_chat_twice_reports_404_and_changes_nothing(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    create_turn(client, chat["id"])
+
+    assert client.delete(f"/chats/{chat['id']}", headers=AUTH_OWNER).status_code == 200
+    writes = len(database.write_log)
+    assert client.delete(f"/chats/{chat['id']}", headers=AUTH_OWNER).status_code == 404
+    assert len(database.write_log) == writes
+
+
+# ---------------------------------------------------------------------------
+# Verwaiste pending Turns: ein Reload verliert die Browser-Bindung, danach kann
+# kein Lauf den Turn je abschliessen.
+# ---------------------------------------------------------------------------
+
+
+def _age_turn(database, chat_id, turn_id, *, seconds):
+    path = ("users", "owner-uid", "chats", chat_id, "turns", turn_id)
+    database.documents[path]["created_at"] = (
+        datetime.now(timezone.utc) - timedelta(seconds=seconds)
+    )
+
+
+def test_stale_pending_turn_is_retired_as_abandoned(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    stale = create_turn(client, chat["id"])
+    _age_turn(
+        database,
+        chat["id"],
+        stale["id"],
+        seconds=chat_store.ABANDONED_TURN_MAX_AGE_SECONDS + 60,
+    )
+
+    retired = chat_store.ChatStore(database).purge_abandoned_turns("owner-uid", chat["id"])
+
+    assert retired == [stale["id"]]
+    stored = database.turns("owner-uid", chat["id"])[stale["id"]]
+    assert stored["status"] == "failed"
+    assert stored["error_code"] == "abandoned"
+
+
+def test_a_recent_pending_turn_is_never_retired(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    fresh = create_turn(client, chat["id"])
+    _age_turn(
+        database,
+        chat["id"],
+        fresh["id"],
+        seconds=chat_store.ABANDONED_TURN_MAX_AGE_SECONDS - 60,
+    )
+
+    retired = chat_store.ChatStore(database).purge_abandoned_turns("owner-uid", chat["id"])
+
+    assert retired == []
+    assert database.turns("owner-uid", chat["id"])[fresh["id"]]["status"] == "pending"
+
+
+def test_sweep_never_touches_completed_or_failed_turns(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    store = chat_store.ChatStore(database)
+    done = create_turn(client, chat["id"], {**TURN_PAYLOAD, "question": "Done"})
+    store.complete_turn(
+        "owner-uid", chat["id"], done["id"], **completion_payload(question="Done")
+    )
+    broken = create_turn(client, chat["id"], {**TURN_PAYLOAD, "question": "Broken"})
+    store.fail_turn("owner-uid", chat["id"], broken["id"], error_code="cancelled")
+    for turn_id in (done["id"], broken["id"]):
+        _age_turn(
+            database,
+            chat["id"],
+            turn_id,
+            seconds=chat_store.ABANDONED_TURN_MAX_AGE_SECONDS + 600,
+        )
+
+    assert store.purge_abandoned_turns("owner-uid", chat["id"]) == []
+    stored = database.turns("owner-uid", chat["id"])
+    assert stored[done["id"]]["status"] == "completed"
+    assert stored[broken["id"]]["error_code"] == "cancelled"
+
+
+def test_creating_a_turn_retires_an_abandoned_predecessor(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    abandoned = create_turn(client, chat["id"], {**TURN_PAYLOAD, "question": "Lost"})
+    _age_turn(
+        database,
+        chat["id"],
+        abandoned["id"],
+        seconds=chat_store.ABANDONED_TURN_MAX_AGE_SECONDS + 60,
+    )
+
+    fresh = create_turn(client, chat["id"], {**TURN_PAYLOAD, "question": "Next"})
+
+    stored = database.turns("owner-uid", chat["id"])
+    assert stored[abandoned["id"]]["error_code"] == "abandoned"
+    assert stored[fresh["id"]]["status"] == "pending"
+
+
+def test_a_failing_sweep_never_blocks_turn_creation(chat_api, monkeypatch):
+    client, database = chat_api
+    chat = create_chat(client)
+
+    def explode(self, uid, chat_id, *, now=None):
+        raise RuntimeError("firestore unavailable")
+
+    monkeypatch.setattr(chat_store.ChatStore, "purge_abandoned_turns", explode)
+    turn = create_turn(client, chat["id"])
+
+    assert database.turns("owner-uid", chat["id"])[turn["id"]]["status"] == "pending"

@@ -11,6 +11,8 @@ import hashlib
 import json
 import re
 import secrets
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
@@ -767,6 +769,84 @@ class ChatContextService:
             if recent.get("status") != "completed":
                 raise ChatContextConflict("Recent context turn is not completed")
         return render_context(version.get("memory"), recent)
+
+
+RESOLVED_CONTEXT_CACHE_TTL_SECONDS = 120.0
+RESOLVED_CONTEXT_CACHE_MAX_ENTRIES = 128
+
+
+def resolved_context_cache_key(
+    uid: str, chat_id: str, turn_id: str, version_id: str, question: str
+) -> tuple:
+    """Owner-scoped cache key. The UID comes first so no entry can ever be
+    reached by another owner, and the question is hashed to bound key size."""
+    return (
+        str(uid),
+        str(chat_id),
+        str(turn_id),
+        str(version_id),
+        hashlib.sha256(str(question or "").strip().encode("utf-8")).hexdigest(),
+    )
+
+
+class ResolvedContextCache:
+    """Collapse one fan-out's six identical context resolutions into one read.
+
+    All six ``/ask_*`` calls of a single run resolve the exact same owner-bound
+    (chat, turn, context version, question) tuple. Resolving server-side per
+    call is what keeps the context tamper-proof — it never travels through the
+    client — but re-reading and re-rendering it six times costs ~18 Firestore
+    reads and six full renders per turn. This short-lived, bounded, in-process
+    cache keeps the server as the authority while paying that cost once.
+
+    A context version is immutable once ready, so a cached hit can never serve
+    a superseded context. Only successful resolutions are stored: every error
+    propagates, so a conflict is never frozen for the length of the TTL.
+    """
+
+    def __init__(
+        self,
+        *,
+        ttl_seconds: float = RESOLVED_CONTEXT_CACHE_TTL_SECONDS,
+        max_entries: int = RESOLVED_CONTEXT_CACHE_MAX_ENTRIES,
+    ):
+        self._ttl = float(ttl_seconds)
+        self._max_entries = max(1, int(max_entries))
+        self._entries: dict[tuple, tuple[float, str]] = {}
+        self._lock = threading.Lock()
+
+    def get_or_resolve(
+        self, key: tuple, resolver: Callable[[], str], *, now: float | None = None
+    ) -> str:
+        now = time.monotonic() if now is None else float(now)
+        with self._lock:
+            self._drop_expired(now)
+            hit = self._entries.get(key)
+            if hit is not None:
+                return hit[1]
+
+        # Resolved OUTSIDE the lock: this does Firestore I/O and must not
+        # serialize unrelated chats behind one slow read. Two threads racing
+        # the same key simply both resolve once; the result is identical.
+        value = resolver()
+
+        with self._lock:
+            self._drop_expired(now)
+            while len(self._entries) >= self._max_entries:
+                self._entries.pop(next(iter(self._entries)), None)
+            self._entries[key] = (now + self._ttl, value)
+        return value
+
+    def _drop_expired(self, now: float) -> None:
+        expired = [
+            key for key, (expires_at, _) in self._entries.items() if expires_at <= now
+        ]
+        for key in expired:
+            self._entries.pop(key, None)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._entries.clear()
 
 
 def render_context(memory: object, recent_turn: dict | None) -> str:

@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.api.routers import bookmarks as bookmarks_router
 from app.core.rate_limit import limiter
 from app.core.security import CustomSecurityMiddleware
+from app.services.chat_store import ChatCursorUnavailable, InvalidChatCursor
 
 
 class FakeSnapshot:
@@ -303,28 +304,33 @@ def test_chat_bookmark_conversation_returns_complete_owner_bound_turns():
     })
 
     class FakeChatStore:
-        def list_turns(self, uid, requested_chat_id, *, cursor, limit):
-            assert (uid, requested_chat_id, cursor, limit) == (
-                "uid-1", chat_id, "", 50,
+        def list_turn_details(
+            self, uid, requested_chat_id, *, cursor, limit, status=None
+        ):
+            # One owner-bound page call, filtered in the store: the failed turn
+            # is never fetched in full, and the chat is verified only once.
+            assert (uid, requested_chat_id, cursor, limit, status) == (
+                "uid-1", chat_id, "", 50, "completed",
             )
             return {
                 "turns": [
-                    {"id": "1" * 32, "status": "completed"},
-                    {"id": "2" * 32, "status": "failed"},
-                    {"id": "3" * 32, "status": "completed"},
+                    {
+                        "id": "1" * 32,
+                        "status": "completed",
+                        "question": "First",
+                        "consensus": "Answer",
+                        "model_answers": {},
+                    },
+                    {
+                        "id": "3" * 32,
+                        "status": "completed",
+                        "question": "Third",
+                        "consensus": "Answer",
+                        "model_answers": {},
+                    },
                 ],
                 "next_cursor": None,
                 "has_more": False,
-            }
-
-        def get_turn(self, uid, requested_chat_id, requested_turn_id):
-            assert uid == "uid-1" and requested_chat_id == chat_id
-            return {
-                "id": requested_turn_id,
-                "status": "completed",
-                "question": "First" if requested_turn_id.startswith("1") else "Third",
-                "consensus": "Answer",
-                "model_answers": {},
             }
 
     app = FastAPI()
@@ -547,3 +553,139 @@ def test_bookmark_detail_is_owner_scoped_and_frontend_loads_on_open():
     assert 'const path = "/bookmarks?limit=35"' in firebase
     assert "bookmarkDetailCache.clear()" in firebase
     assert "window.openBookmark(bookmark.id)" in firebase
+
+
+# ---------------------------------------------------------------------------
+# Ein Bookmark ist der einzige Griff an seinem Chat. Wird es geloescht, muss
+# der Chat mitgehen — sonst bleibt das Transcript unerreichbar liegen.
+# ---------------------------------------------------------------------------
+
+
+class DeletableBookmarkRef(FakeBookmarkRef):
+    def __init__(self, bookmark_id, data):
+        super().__init__(bookmark_id, data)
+        self.deleted = False
+
+    def delete(self):
+        self.deleted = True
+
+
+class RecordingChatStore:
+    def __init__(self, error=None):
+        self.deleted = []
+        self.error = error
+
+    def delete_chat(self, uid, chat_id):
+        self.deleted.append((uid, chat_id))
+        if self.error:
+            raise self.error
+
+
+def _delete_bookmark(bookmark_ref, chat_store):
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(bookmarks_router.router)
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", FakeFirestore(bookmark_ref)),
+        patch.object(bookmarks_router, "_chat_store", return_value=chat_store),
+    ):
+        return TestClient(app).request(
+            "DELETE",
+            "/bookmark",
+            json={"id_token": "token", "bookmarkId": bookmark_ref.id},
+        )
+
+
+def test_deleting_a_chat_bookmark_also_deletes_its_chat():
+    chat_id = "c" * 32
+    bookmark_ref = DeletableBookmarkRef("chat_bookmark", {"query": "Q", "chat_id": chat_id})
+    chat_store = RecordingChatStore()
+
+    response = _delete_bookmark(bookmark_ref, chat_store)
+
+    assert response.status_code == 200
+    assert bookmark_ref.deleted is True
+    assert chat_store.deleted == [("uid-1", chat_id)]
+
+
+def test_deleting_a_legacy_bookmark_touches_no_chat():
+    bookmark_ref = DeletableBookmarkRef("legacy_bookmark", {"query": "Q"})
+    chat_store = RecordingChatStore()
+
+    response = _delete_bookmark(bookmark_ref, chat_store)
+
+    assert response.status_code == 200
+    assert bookmark_ref.deleted is True
+    assert chat_store.deleted == []
+
+
+def test_a_failing_chat_cascade_does_not_fail_the_bookmark_deletion():
+    chat_id = "c" * 32
+    bookmark_ref = DeletableBookmarkRef("chat_bookmark", {"query": "Q", "chat_id": chat_id})
+    chat_store = RecordingChatStore(error=RuntimeError("firestore unavailable"))
+
+    response = _delete_bookmark(bookmark_ref, chat_store)
+
+    # The bookmark is already gone; reporting a 500 would only make the user
+    # retry a deletion that already happened. The chat stays reachable for the
+    # account-level cascade.
+    assert response.status_code == 200
+    assert bookmark_ref.deleted is True
+
+
+def test_unavailable_cursor_signing_is_reported_as_a_server_error():
+    bookmark_id = "stable_chat_bookmark"
+    chat_id = "c" * 32
+    fake_db = FakeBookmarkDatabase({
+        "uid-1": {bookmark_id: {"query": "Latest", "chat_id": chat_id}},
+    })
+
+    class UnavailableChatStore:
+        def list_turn_details(self, *_args, **_kwargs):
+            raise ChatCursorUnavailable("Chat cursor signing is not configured")
+
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(bookmarks_router.router)
+    app.add_middleware(CustomSecurityMiddleware)
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", fake_db),
+        patch.object(bookmarks_router, "_chat_store", return_value=UnavailableChatStore()),
+    ):
+        response = TestClient(app).get(
+            f"/bookmarks/{bookmark_id}/conversation",
+            headers={"Authorization": "Bearer token"},
+        )
+
+    # A missing signing secret is a deployment problem, not a bad request.
+    assert response.status_code == 503
+
+
+def test_a_malformed_cursor_is_still_a_client_error():
+    bookmark_id = "stable_chat_bookmark"
+    chat_id = "c" * 32
+    fake_db = FakeBookmarkDatabase({
+        "uid-1": {bookmark_id: {"query": "Latest", "chat_id": chat_id}},
+    })
+
+    class InvalidCursorChatStore:
+        def list_turn_details(self, *_args, **_kwargs):
+            raise InvalidChatCursor("Invalid chat cursor")
+
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(bookmarks_router.router)
+    app.add_middleware(CustomSecurityMiddleware)
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", fake_db),
+        patch.object(bookmarks_router, "_chat_store", return_value=InvalidCursorChatStore()),
+    ):
+        response = TestClient(app).get(
+            f"/bookmarks/{bookmark_id}/conversation?cursor=garbage",
+            headers={"Authorization": "Bearer token"},
+        )
+
+    assert response.status_code == 400

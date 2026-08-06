@@ -225,7 +225,12 @@
       }
       if (this._turnPromise) return await this._turnPromise;
 
-      run.consensusModel = cleanString(consensusModel) || run.consensusModel;
+      // Never mutate logicalRun here: sameLogicalRun() compares a retry
+      // against what the user actually chose when the run started, and
+      // overwriting it would make a changed picker look like the same run.
+      if (!run.consensusModel) {
+        run.consensusModel = cleanString(consensusModel);
+      }
       if (!run.consensusModel) return null;
       this._turnPromise = this._createPendingTurn(cleanString(idToken), signal);
       try {

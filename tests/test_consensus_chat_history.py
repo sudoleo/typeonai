@@ -670,3 +670,110 @@ def test_correctable_missing_own_key_keeps_turn_retryable(chat_consensus_api):
     assert "chat_turn_state" not in response.json()
     assert store.failures == []
     assert store.completions == []
+
+
+# ---------------------------------------------------------------------------
+# Tier-Gate: Premium-Engines bleiben Pro-exklusiv, auch mit eigenen Keys.
+# Die Chat-Umsortierung hatte die zweite, unbedingte Pruefung entfernt, sodass
+# `useOwnKeys=true` das Gate vollstaendig umging.
+# ---------------------------------------------------------------------------
+
+
+def test_premium_engine_stays_pro_only_even_with_own_keys(chat_consensus_api):
+    client, store, monkeypatch = chat_consensus_api
+    engine_calls = []
+    monkeypatch.setattr(
+        chat_router,
+        "query_consensus",
+        lambda *args, **kwargs: engine_calls.append(args) or "Consensus",
+    )
+
+    response = client.post(
+        "/consensus",
+        headers=AUTH,
+        json=_base_payload(consensus_model="Gemini-Pro", useOwnKeys=True),
+    )
+
+    assert response.status_code == 403
+    assert "Pro" in response.json()["detail"]
+    assert engine_calls == []
+    assert store.completions == []
+
+
+def test_premium_engine_stays_pro_only_with_developer_keys(chat_consensus_api):
+    client, _store, _ = chat_consensus_api
+
+    response = client.post(
+        "/consensus",
+        headers=AUTH,
+        json=_base_payload(consensus_model="Gemini-Pro", useOwnKeys=False),
+    )
+
+    assert response.status_code == 403
+
+
+def test_pro_user_may_use_a_premium_engine_with_own_keys(chat_consensus_api):
+    client, store, monkeypatch = chat_consensus_api
+    monkeypatch.setattr(chat_router, "is_user_pro", lambda uid: True)
+
+    response = client.post(
+        "/consensus",
+        headers=AUTH,
+        json=_base_payload(consensus_model="Gemini-Pro", useOwnKeys=True),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["consensus_response"] == "Consensus"
+    assert len(store.completions) == 1
+
+
+def test_non_premium_engine_remains_available_to_free_users(chat_consensus_api):
+    client, _store, _ = chat_consensus_api
+
+    response = client.post("/consensus", headers=AUTH, json=_base_payload())
+
+    assert response.status_code == 200
+
+
+def test_empty_question_still_disposes_the_pending_turn(chat_consensus_api):
+    client, store, _ = chat_consensus_api
+    payload = _base_payload(question="")
+
+    response = client.post("/consensus", headers=AUTH, json=payload)
+
+    assert response.status_code == 400
+    # The preflight cannot run without a question, but the turn must not be
+    # left pending forever just because the request was malformed. Both model
+    # answers are present, so this is a consensus failure rather than an
+    # insufficient-answers one.
+    assert store.failures == [(UID, CHAT_ID, TURN_ID, "consensus_failed")]
+    assert response.json()["detail"]["chat_turn_state"] == "failed"
+    assert store.completions == []
+
+
+def test_empty_question_with_too_few_answers_reports_insufficient_answers(
+    chat_consensus_api,
+):
+    client, store, _ = chat_consensus_api
+
+    response = client.post(
+        "/consensus",
+        headers=AUTH,
+        json=_base_payload(question="", answer_mistral=""),
+    )
+
+    assert response.status_code == 400
+    assert store.failures == [(UID, CHAT_ID, TURN_ID, "insufficient_answers")]
+
+
+def test_empty_question_without_chat_ids_keeps_the_legacy_error(chat_consensus_api):
+    client, store, _ = chat_consensus_api
+    payload = _base_payload(question="")
+    payload.pop("chat_id")
+    payload.pop("turn_id")
+
+    response = client.post("/consensus", headers=AUTH, json=payload)
+
+    assert response.status_code == 400
+    assert isinstance(response.json()["detail"], str)
+    assert store.failures == []

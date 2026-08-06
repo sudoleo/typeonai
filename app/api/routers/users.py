@@ -14,6 +14,7 @@ from app.services.usage_repository import (
     UsageTransitionError,
 )
 from app.services.api_account_cleanup import FirestoreApiAccountCleanup
+from app.services.chat_store import ChatStore
 
 router = APIRouter()
 run_usage_repository = FirestoreUsageRepository(db_firestore)
@@ -178,6 +179,16 @@ async def delete_account(request: Request, data: dict = Body(default={})):
                 f"delete_account: {subcollection} cleanup failed for {uid}: {e}"
             )
             errors.append(subcollection)
+
+    # 1b. Chats brauchen eine eigene Kaskade: unter chats/{id} haengen turns,
+    #     darunter model_answers und daneben context_versions. Ein einfaches
+    #     stream()+delete() wie oben wuerde die Fragen und die vollstaendigen
+    #     Modellantworten als unerreichbare Waisen zuruecklassen.
+    try:
+        ChatStore(db_firestore).delete_all_chats(uid)
+    except Exception as e:
+        logging.error(f"delete_account: chats cleanup failed for {uid}: {e}")
+        errors.append("chats")
 
     # 2. users-Dokument löschen
     try:

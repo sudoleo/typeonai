@@ -20,9 +20,11 @@ from app.services.chat_context import (
     FirestoreChatContextRepository,
     MEMORY_CATEGORIES,
     MAX_CONTEXT_CHARS,
+    ResolvedContextCache,
     empty_memory,
     deterministic_memory_fallback,
     render_context,
+    resolved_context_cache_key,
     sanitize_memory,
 )
 from app.services.usage_repository import RunStatus
@@ -705,3 +707,126 @@ def test_offline_memory_evaluation_preserves_reference_numbers_negations_and_cor
             assert signal.casefold() in context.casefold(), (case["name"], signal)
         assert len(context) <= MAX_CONTEXT_CHARS + len(case["current_question"]) + 10
         assert set(memory) == {"schema_version", *MEMORY_CATEGORIES}
+
+
+# ---------------------------------------------------------------------------
+# Fan-out-Cache: alle sechs /ask_*-Calls eines Laufs loesen dasselbe
+# owner-gebundene Tripel auf. Die Aufloesung bleibt serverseitig (der Kontext
+# darf nie ueber den Client laufen), kostet aber nur noch einen Read statt sechs.
+# ---------------------------------------------------------------------------
+
+
+def _ask_data(uid_scope=CHAT_ID, turn_id=TURN_2, version_id=TURN_3):
+    return {
+        "chat_id": uid_scope,
+        "turn_id": turn_id,
+        "context_version_id": version_id,
+    }
+
+
+def test_fan_out_resolves_the_same_context_once(monkeypatch):
+    chat_router.resolved_context_cache.clear()
+    calls = []
+    monkeypatch.setattr(
+        chat_router.chat_context_service,
+        "resolve_for_ask",
+        lambda uid, chat_id, turn_id, version_id, question: (
+            calls.append((uid, chat_id, turn_id, version_id, question))
+            or "resolved context"
+        ),
+    )
+
+    resolved = [
+        chat_router._resolve_authoritative_chat_context(UID, _ask_data(), "Question")
+        for _ in range(6)
+    ]
+
+    assert resolved == ["resolved context"] * 6
+    assert len(calls) == 1
+
+
+def test_cached_context_never_crosses_owners_turns_or_questions(monkeypatch):
+    chat_router.resolved_context_cache.clear()
+    monkeypatch.setattr(
+        chat_router.chat_context_service,
+        "resolve_for_ask",
+        lambda uid, chat_id, turn_id, version_id, question: (
+            f"{uid}|{chat_id}|{turn_id}|{version_id}|{question}"
+        ),
+    )
+
+    owner = chat_router._resolve_authoritative_chat_context(UID, _ask_data(), "Question")
+    other = chat_router._resolve_authoritative_chat_context(
+        OTHER_UID, _ask_data(), "Question"
+    )
+    other_turn = chat_router._resolve_authoritative_chat_context(
+        UID, _ask_data(turn_id=TURN_4), "Question"
+    )
+    other_version = chat_router._resolve_authoritative_chat_context(
+        UID, _ask_data(version_id=TURN_1), "Question"
+    )
+    other_question = chat_router._resolve_authoritative_chat_context(
+        UID, _ask_data(), "A different question"
+    )
+
+    assert len({owner, other, other_turn, other_version, other_question}) == 5
+    assert owner.startswith(f"{UID}|")
+    assert other.startswith(f"{OTHER_UID}|")
+
+
+def test_context_errors_are_never_cached(monkeypatch):
+    chat_router.resolved_context_cache.clear()
+    attempts = []
+
+    def failing(uid, chat_id, turn_id, version_id, question):
+        attempts.append(question)
+        raise ChatContextConflict("Context version is not ready")
+
+    monkeypatch.setattr(
+        chat_router.chat_context_service, "resolve_for_ask", failing
+    )
+
+    for _ in range(3):
+        with pytest.raises(Exception) as conflict:
+            chat_router._resolve_authoritative_chat_context(
+                UID, _ask_data(), "Question"
+            )
+        assert conflict.value.status_code == 409
+
+    # A conflict must stay observable instead of being frozen for the TTL.
+    assert len(attempts) == 3
+
+
+def test_resolved_context_cache_expires_and_stays_bounded():
+    cache = ResolvedContextCache(ttl_seconds=10.0, max_entries=2)
+    key = resolved_context_cache_key(UID, CHAT_ID, TURN_2, TURN_3, "Question")
+    calls = []
+
+    def resolver():
+        calls.append(1)
+        return f"value-{len(calls)}"
+
+    assert cache.get_or_resolve(key, resolver, now=0.0) == "value-1"
+    assert cache.get_or_resolve(key, resolver, now=9.0) == "value-1"
+    # Expired: resolved again rather than served stale.
+    assert cache.get_or_resolve(key, resolver, now=11.0) == "value-2"
+    assert len(calls) == 2
+
+    for index in range(5):
+        other = resolved_context_cache_key(
+            UID, CHAT_ID, TURN_2, TURN_3, f"Question {index}"
+        )
+        cache.get_or_resolve(other, lambda: "x", now=11.0)
+    assert len(cache._entries) <= 2
+
+
+def test_resolved_context_cache_key_is_owner_first_and_bounded():
+    long_question = "q" * 50_000
+    key = resolved_context_cache_key(UID, CHAT_ID, TURN_2, TURN_3, long_question)
+
+    assert key[0] == UID
+    # The question is hashed, so a huge question cannot inflate the key.
+    assert len(key[-1]) == 64
+    assert key == resolved_context_cache_key(
+        UID, CHAT_ID, TURN_2, TURN_3, f"  {long_question}  "
+    )
