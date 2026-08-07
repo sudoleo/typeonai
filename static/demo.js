@@ -588,7 +588,14 @@ function createStartDemoChip() {
   btn.className = "demo-chip";
   btn.type = "button";
   btn.setAttribute("aria-label", "Start interactive demo");
-  btn.textContent = "Watch demo";
+  // Zwei Beschriftungen, immer genau eine sichtbar. Auf einem 375er Schirm
+  // teilen sich (+), Lauf-Schalter, dieser Knopf und Senden 315 px — mit
+  // "Watch demo" passte das nicht mehr in eine Zeile und der Senden-Knopf
+  // rutschte allein in eine zweite. Welche Beschriftung gilt, entscheidet
+  // components-misc.css; der aria-Name bleibt in beiden Faellen derselbe.
+  btn.innerHTML =
+    '<span class="demo-chip-label demo-chip-label-full">Watch demo</span>' +
+    '<span class="demo-chip-label demo-chip-label-short">Demo</span>';
 
   const inputActions = container.querySelector(".input-actions-container");
   if (inputActions) {

@@ -408,3 +408,27 @@ header .sidebar-toggle.collapse-btn {
   opacity: 0;
   pointer-events: none;
 }
+
+/* Der Knopf steht in derselben Zeile wie (+), Lauf-Schalter und Senden. Auf
+   breiten Schirmen ist dort Platz fuer den ganzen Satz; auf dem Handy nicht —
+   dort bleibt "Demo" neben dem Play-Dreieck, sonst faellt der Senden-Knopf in
+   eine zweite Zeile. Der aria-Name ("Start interactive demo") ist am Knopf
+   gesetzt und von beiden Beschriftungen unabhaengig. */
+.demo-chip-label-short {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .demo-chip-label-full {
+    display: none;
+  }
+
+  .demo-chip-label-short {
+    display: inline;
+  }
+
+  .demo-chip {
+    padding: 0 10px;
+    gap: 6px;
+  }
+}

@@ -235,28 +235,44 @@ def test_restored_context_keeps_the_composer_open_and_continuable(app_page):
     )
 
 
-def test_mobile_composer_collapses_while_reading_and_opens_on_tap(app_page):
-    """Auf dem Handy hat der fixierte Composer mit Lauf-Schalter und Fuss ein
-    Drittel des Bildschirms belegt. Beim Lesen bleibt nur die Eingabezeile."""
-    app_page.set_viewport_size({"width": 390, "height": 844})
-    app_page.evaluate("() => window.exitHeroMode()")
-
-    before = app_page.evaluate(
-        """() => document.querySelector(".input-section").getBoundingClientRect().height"""
-    )
-    app_page.evaluate("() => window.App.composer.collapse()")
-    collapsed = app_page.evaluate(
+def _composer_state(page):
+    return page.evaluate(
         """() => ({
           height: document.querySelector(".input-section").getBoundingClientRect().height,
+          collapsed: document.body.classList.contains("composer-collapsed"),
           switchVisible: !!document.querySelector(
             ".chat-input-container .consensus-switch-container"
           ).offsetParent,
           footerVisible: !!document.querySelector(".app-footer").offsetParent,
           inputVisible: !!document.getElementById("questionInput").offsetParent,
           sendVisible: !!document.getElementById("sendButton").offsetParent,
+          focused: document.activeElement === document.getElementById("questionInput"),
         })"""
     )
-    assert collapsed["height"] < before
+
+
+def _settle_composer(page):
+    """Auf- und Zuklappen ist eine Transition; erst danach steht die Hoehe."""
+    page.wait_for_function(
+        "() => !document.body.classList.contains('composer-animating')"
+    )
+
+
+def test_mobile_composer_collapses_after_a_question_and_opens_on_tap(app_page):
+    """Auf dem Handy hat der fixierte Composer mit Lauf-Schalter und Fuss ein
+    Drittel des Bildschirms belegt. Sobald der Thread steht, bleibt nur die
+    Eingabezeile — angetippt kommt der Rest zurueck, und zwar mit dem Cursor
+    IM Feld: aufgeklappt liegt an der Stelle des Taps die Knopfzeile."""
+    app_page.set_viewport_size({"width": 390, "height": 844})
+    app_page.evaluate("() => window.exitHeroMode()")
+
+    # Kein Scrollen noetig: der Thread beginnt eingeklappt.
+    expect(app_page.locator("body")).to_have_class(
+        re.compile(r"\bcomposer-collapsed\b")
+    )
+    _settle_composer(app_page)
+    collapsed = _composer_state(app_page)
+
     assert collapsed["switchVisible"] is False
     assert collapsed["footerVisible"] is False
     # Fragen bleibt jederzeit moeglich - nur leiser.
@@ -264,16 +280,47 @@ def test_mobile_composer_collapses_while_reading_and_opens_on_tap(app_page):
     assert collapsed["sendVisible"] is True
 
     app_page.locator("#questionInput").click()
-    expanded = app_page.evaluate(
-        """() => ({
-          height: document.querySelector(".input-section").getBoundingClientRect().height,
-          switchVisible: !!document.querySelector(
-            ".chat-input-container .consensus-switch-container"
-          ).offsetParent,
-        })"""
-    )
+    _settle_composer(app_page)
+    expanded = _composer_state(app_page)
+
+    assert expanded["collapsed"] is False
     assert expanded["switchVisible"] is True
-    assert abs(expanded["height"] - before) <= 1
+    assert expanded["footerVisible"] is True
+    assert expanded["focused"] is True
+    assert expanded["height"] > collapsed["height"]
+
+
+def test_mobile_composer_stays_small_when_scrolling_back_up(app_page):
+    """User-Befund 2026-08-07: das Aufklappen beim Hochscrollen hat den
+    Composer beim Zurueckblaettern wieder vor die Antwort geschoben. Nach
+    unten zuklappen bleibt, nach oben passiert nichts."""
+    app_page.set_viewport_size({"width": 390, "height": 844})
+    app_page.evaluate("() => window.exitHeroMode()")
+    _settle_composer(app_page)
+
+    # Genug Seite zum Scrollen, dann runter und wieder hoch.
+    app_page.evaluate(
+        """() => {
+          const filler = document.createElement("div");
+          filler.id = "scrollFiller";
+          filler.style.height = "2400px";
+          document.querySelector(".container").prepend(filler);
+          window.scrollTo(0, 1200);
+        }"""
+    )
+    app_page.wait_for_timeout(120)
+    app_page.evaluate("() => window.scrollTo(0, 0)")
+    app_page.wait_for_timeout(200)
+    _settle_composer(app_page)
+
+    assert _composer_state(app_page)["collapsed"] is True
+
+    # Und was ihn wirklich oeffnet, oeffnet ihn auch: das Tippen.
+    app_page.locator("#questionInput").click()
+    _settle_composer(app_page)
+    assert _composer_state(app_page)["collapsed"] is False
+
+    app_page.evaluate("() => document.getElementById('scrollFiller').remove()")
 
 
 def test_typing_into_the_collapsed_composer_keeps_the_cursor_in_the_field(app_page):
@@ -283,7 +330,10 @@ def test_typing_into_the_collapsed_composer_keeps_the_cursor_in_the_field(app_pa
     eine 0 als falsy verwirft. Beide Zustaende muessen zur Feldhoehe passen."""
     app_page.set_viewport_size({"width": 390, "height": 844})
     app_page.evaluate("() => window.exitHeroMode()")
-    app_page.evaluate("() => window.App.composer.collapse()")
+    expect(app_page.locator("body")).to_have_class(
+        re.compile(r"\bcomposer-collapsed\b")
+    )
+    _settle_composer(app_page)
 
     collapsed = app_page.evaluate(
         """() => {

@@ -40,7 +40,6 @@ def test_changed_frontend_scripts_are_cache_busted():
 
     assert "markdown-stream.js?v=20260805-chatmulti1" in template
     assert "firebase.js?v=20260806-bookmarkcontinue1" in template
-    assert "demo.js?v=20260803-demorunstages1" in template
     assert "usage-limit.js?v=20260802-storagebusy1" in template
     assert "consensus-insights.js?v=20260806-chatbookmark1" in template
     assert "chat-session.js?v=20260806-chatlimits1" in template
@@ -50,12 +49,17 @@ def test_changed_frontend_scripts_are_cache_busted():
         "attachments.js",
         "consensus-progress.js",
         "consensus-run.js",
-        "query-send.js",
     ):
         assert f"{changed}?v=20260807-threadmessages1" in template
-    # Nachtrag: eingeklappter Composer + Cursor-Fix.
-    for changed in ("style.css", "composer-collapse.js"):
-        assert f"{changed}?v=20260807-threadmessages2" in template
+    # Nachtrag: Composer waechst beim Antippen statt beim Scrollen, Cursor
+    # bleibt im Feld, und der Demo-Knopf passt wieder in die Knopfzeile.
+    for changed in (
+        "style.css",
+        "composer-collapse.js",
+        "query-send.js",
+        "demo.js",
+    ):
+        assert f"{changed}?v=20260807-composergrow1" in template
 
 
 def test_mobile_enter_keeps_the_textarea_newline_behavior():

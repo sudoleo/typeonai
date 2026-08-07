@@ -1943,15 +1943,21 @@ body:not(.is-hero) .input-section {
 
 /* ---- Der eingeklappte Composer -------------------------------------------
    Auf dem Handy stand der fixierte Composer mit Anhangleiste, Lauf-Schalter
-   und Disclaimer-Fuss vor einem Drittel der Antwort. Beim Lesen (Scrollen
-   nach unten) und direkt nach dem Absenden bleibt deshalb nur EINE Zeile
-   uebrig: das Feld und der Senden-Knopf. Alles andere kommt zurueck, sobald
-   man den Composer anfasst — gesteuert von composer-collapse.js, dessen
-   COLLAPSE_QUERY zu dieser Breakpoint-Grenze passen muss. */
+   und Disclaimer-Fuss vor einem Drittel der Antwort. Nach dem Absenden bleibt
+   deshalb nur EINE Zeile uebrig: das Feld und der Senden-Knopf. Alles andere
+   kommt zurueck, sobald man den Composer anfasst oder darin tippt — und
+   verschwindet wieder, sobald der Fokus ein leeres Feld verlaesst. Gesteuert
+   von composer-collapse.js, dessen COLLAPSE_QUERY zu dieser Breakpoint-Grenze
+   passen muss. */
 @media (max-width: 1099px) {
+  /* Eingeklappt bleiben genau zwei Dinge: das Feld und der Senden-Knopf. Der
+     Demo-Knopf gehoert ausdruecklich dazu — er sitzt zwar in derselben
+     Aktionsgruppe wie Senden, ist aber ein Onboarding-Anstupser und hat dem
+     Feld in der einen Zeile 75 px weggenommen. */
   body.composer-collapsed:not(.is-hero) .chat-input-container .attachment-bar,
   body.composer-collapsed:not(.is-hero) .composer-run-notice,
   body.composer-collapsed:not(.is-hero) .consensus-switch-container,
+  body.composer-collapsed:not(.is-hero) .demo-chip,
   body.composer-collapsed:not(.is-hero) .app-footer {
     display: none;
   }
@@ -1981,6 +1987,49 @@ body:not(.is-hero) .input-section {
   body.composer-collapsed:not(.is-hero) .input-section {
     padding-top: 8px;
     padding-bottom: 8px;
+  }
+
+  /* Auf- und Zuklappen ist eine Bewegung, kein Sprung. Zwischen den beiden
+     Zustaenden liegen ein display:none, ein Zeilenumbruch und zwei Paddings —
+     nichts davon animiert fuer sich. Animierbar ist die HOEHE des Blocks:
+     composer-collapse.js misst Start und Ziel und schreibt sie als Inline-
+     Hoehe, diese Regel gibt der Strecke ihre Kurve. Weil der Block dabei
+     clippt, faltet sich auf, was dazukommt, statt aufzupoppen — auch der
+     Disclaimer-Fuss, der auf einem schmalen Schirm hoeher ist als das Feld.
+
+     Nur waehrend der Bewegung aktiv: dauerhaft wuerde overflow:hidden die
+     Menues ueber dem Composer abschneiden, und jede Zeile, die das Feld beim
+     Tippen waechst, wuerde hinterherfedern. */
+  body.composer-animating:not(.is-hero) .input-section {
+    transition:
+      height 240ms cubic-bezier(0.22, 0.9, 0.28, 1),
+      padding-top 240ms cubic-bezier(0.22, 0.9, 0.28, 1),
+      padding-bottom 240ms cubic-bezier(0.22, 0.9, 0.28, 1),
+      transform 0.5s cubic-bezier(0.22, 0.9, 0.28, 1);
+    overflow: hidden;
+  }
+
+  /* Der innere Rahmen der Box gehoert zur selben Bewegung; sonst rueckt der
+     Text im Feld sprunghaft, waehrend der Block noch gleitet. Die Hoehe der
+     Box wird NICHT animiert — sie steht sofort auf ihrem Zielwert und wird
+     vom Block darueber freigegeben. */
+  body.composer-animating:not(.is-hero) .chat-input-container {
+    transition:
+      margin 240ms cubic-bezier(0.22, 0.9, 0.28, 1),
+      padding 240ms cubic-bezier(0.22, 0.9, 0.28, 1),
+      box-shadow 0.3s,
+      background-color 0.3s;
+  }
+
+  /* Beim Zuklappen steht die verbleibende eine Zeile schon an ihrem Platz —
+     sie darf nicht erst von oben nachrutschen. Also fuer die Dauer der
+     Bewegung am unteren Rand verankern: der Ueberschuss faltet sich nach
+     oben weg, das Feld bleibt liegen. (Beim Aufklappen ist es genau
+     umgekehrt richtig, dort bleibt die normale Blockrichtung.) */
+  body.composer-animating.composer-collapsing:not(.is-hero) .input-section {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
   }
 }
 

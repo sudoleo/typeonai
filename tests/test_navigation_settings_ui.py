@@ -88,10 +88,18 @@ def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract()
     leaderboard = read("static/js/model-pulse.js")
     pulse_page = read("templates/model-pulse.html")
     assert "score: 83" in demo
-    assert 'btn.textContent = "Watch demo"' in demo
+    # Zwei Beschriftungen, eine sichtbar: in der Knopfzeile des Composers ist
+    # auf dem Handy kein Platz fuer den ganzen Satz, sonst faellt der
+    # Senden-Knopf in eine zweite Zeile.
+    assert '<span class="demo-chip-label demo-chip-label-full">Watch demo</span>' in demo
+    assert '<span class="demo-chip-label demo-chip-label-short">Demo</span>' in demo
+    assert 'btn.setAttribute("aria-label", "Start interactive demo")' in demo
     assert "inputActions.prepend(btn)" in demo
     demo_rule = misc_css.split(".demo-chip {", 1)[1].split("}", 1)[0]
     assert "position: static" in demo_rule
+    narrow_rule = misc_css.split("@media (max-width: 640px) {", 1)[1]
+    assert ".demo-chip-label-full" in narrow_rule
+    assert ".demo-chip-label-short" in narrow_rule
     assert 'severity: "minor"' in demo
     assert '[S8].</li>' in demo
     # Das Kreuz ist ein echtes Glyph (wie bei den Modal-Close-Buttons), nicht

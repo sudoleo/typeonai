@@ -1038,7 +1038,10 @@
       // ausgeschlossen.
       const sentAttachments = window.App.attachments?.detachForMessage?.() || [];
       window.App.setThreadQuestionAttachments?.(sentAttachments);
-      window.App.composer?.collapse?.();
+      // force: die Frage ist raus, also faellt der Composer auf eine Zeile
+      // zusammen — auch dann, wenn der Fokus (und damit die Tastatur) noch im
+      // gerade geleerten Feld steht. Tippt man dort weiter, geht er wieder auf.
+      window.App.composer?.collapse?.({ force: true });
 
       // /prepare refreshes the authoritative user tier. That refresh restores
       // persisted model selections, so reassert the attachment invariant
