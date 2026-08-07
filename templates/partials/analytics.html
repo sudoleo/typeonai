@@ -1,10 +1,16 @@
 {# Umami Cloud Tracking. Einzige Stelle im Repo mit der Website-ID.
 
-   Davor der Selbst-Ausschluss: Umami prueft vor jedem Send
-   localStorage['umami.disabled'] — ist der Schluessel gesetzt, gehen weder
-   Pageviews noch umami.track()-Events raus. Ueber ?notrack=1 laesst sich das
-   auch auf Geraeten setzen, die keine Konsole haben (Handy/Tablet);
-   ?notrack=0 nimmt den Ausschluss wieder zurueck. #}
+   data-domains haelt lokale Entwicklung aus den Zahlen: Umami vergleicht
+   location.hostname mit der Liste und sendet auf localhost/127.0.0.1 gar
+   nichts — ohne Zustand, der pro Port und Browser-Profil gesetzt werden
+   muesste. Neue Domains (Staging, Preview-Deploys) muessen hier rein,
+   sonst tracken sie nicht.
+
+   Der Selbst-Ausschluss davor gilt der echten Domain: Umami prueft vor
+   jedem Send localStorage['umami.disabled'] — ist der Schluessel gesetzt,
+   gehen weder Pageviews noch umami.track()-Events raus. Ueber ?notrack=1
+   laesst sich das auch auf Geraeten setzen, die keine Konsole haben
+   (Handy/Tablet); ?notrack=0 nimmt den Ausschluss wieder zurueck. #}
 <script>
   (function () {
     try {
@@ -16,4 +22,4 @@
     }
   })();
 </script>
-<script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
+<script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-domains="consens.io,www.consens.io" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>

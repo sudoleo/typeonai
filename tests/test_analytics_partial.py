@@ -45,6 +45,17 @@ def test_admin_pages_are_not_tracked():
         assert PARTIAL not in template, name
 
 
+def test_partial_restricts_tracking_to_the_live_domain():
+    # Ohne data-domains zaehlt jeder lokale Klick (uvicorn auf localhost,
+    # Preview-Ports, Playwright ohne Route-Block) in die echten Zahlen.
+    partial = (TEMPLATES / PARTIAL).read_text(encoding="utf-8")
+    script_tag = next(
+        line for line in partial.splitlines() if "cloud.umami.is/script.js" in line
+    )
+
+    assert 'data-domains="consens.io,www.consens.io"' in script_tag
+
+
 def test_partial_ships_the_self_exclusion_switch():
     partial = (TEMPLATES / PARTIAL).read_text(encoding="utf-8")
 
