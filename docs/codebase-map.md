@@ -339,7 +339,18 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   zusätzlich nach dem Tier-Refresh von `/prepare` und direkt beim
   Request-Fan-out. Der Auswahl-Restore darf den dabei deaktivierten Provider
   nicht reaktivieren. Nach Entfernen wird die vorherige Auswahl
-  wiederhergestellt. `window.pendingAttachments`, `getAttachmentsPayload`.
+  wiederhergestellt. **Seit 2026-08-07 gibt der Composer seine Anhänge beim
+  Senden ab** (User-Vorgabe: „Anhänge sollten nicht nach dem Senden im
+  Chatfenster hängen, sondern an der Nachricht"): `detachForMessage()` leert
+  `window.pendingAttachments` und liefert die Metadaten, die
+  `window.App.setThreadQuestionAttachments` als statische Chips unter die
+  gesendete Frage (`#threadAskAttachments`) hängt; beim Archivieren wandern sie
+  mit dem Turn in `#threadHistory`. Eine Folgefrage schickt die Datei damit
+  NICHT erneut mit — wer sie wieder braucht, hängt sie wieder an. Bookmark-
+  Anhänge (`showBookmarkAttachments`) landen aus demselben Grund an der
+  wiederhergestellten Frage statt im Eingabefeld.
+  `window.pendingAttachments`, `getAttachmentsPayload`,
+  `window.App.attachments.{detachForMessage,renderMessageAttachments}`.
 - **`agent-mode.js`** — Agent-Mode-**Zustand**, Status-Hub und Timer; einzige
   Stelle, die den Auto-Consensus-Toggle erzwingt/sperrt, und `setAgentModeStatus`
   bleibt der zentrale Lifecycle-Kanal JEDES Laufs (auch ohne Agent Mode).
@@ -404,8 +415,7 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   .runs()` — derselben Quelle wie der Kontingent-Ring, damit hier nie ein
   zweiter, falscher Preis entsteht; ein MutationObserver auf `#usageDisplay`
   zieht das Label nach, wenn das Kontingent spaeter eintrifft.
-  `#followupBar` spannt darunter
-  ueber beide Spalten. Der Verdict stand vorher UEBER der Antwort und
+  Der Verdict stand vorher UEBER der Antwort und
   bewertete sie, bevor sie gelesen war.
   **Was dabei entfallen ist, ist Doppelung, keine Information:** die
   Modellzahl stand in Fakten UND Verdict-Detail, „N contested passages" sagte
@@ -723,6 +733,12 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   `consensus-lifecycle.js` bei Start/Ende der Consensus-Phase gerufen, damit
   der Cancel-Button bis zum fertigen Consensus/Differences stehen bleibt
   (ein Klick bricht dann via `cancelCurrentConsensus` ab).
+- **`composer-collapse.js`** — der Composer klappt auf dem Handy (bis 1099 px,
+  `COLLAPSE_QUERY` muss zur Grenze in `shell.css` passen) auf EINE Zeile ein:
+  beim Absenden (`window.App.composer.collapse()` aus `query-send.js`) und beim
+  Scrollen nach unten. Antippen, Fokus oder Hochscrollen holt (+), Lauf-Schalter
+  und Fuß zurück; getippter Text wird nie unter den Fingern weggeräumt. Zustand
+  ist allein `body.composer-collapsed`; Desktop ist bewusst ausgenommen.
 - **`app-init.js`** — das gesamte `initApp()`: Theme, Usage/Limits + User-Status,
   Response-Box-Toggles, Sidebar/Layout, Modals, Tooltips, Evidence-Rendering,
   API-Key-Test. Bis 768 px erzeugt Enter im Composer immer einen Absatz; nur
@@ -838,32 +854,29 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
 Nach jedem erfolgreichen Consensus kann derselbe owner-gebundene Chat um eine
 weitere Frage ergänzt werden. Es gibt keine harte Turn-2-Sperre mehr: Turn 2,
 Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Version.
-- Frontend: `window.App.followup` (in `consensus-run.js`) rendert **einen Ort
-  am Composer, einen Zustand**: den **Kontext-Chip** in `#followupChipBar`
-  direkt über dem Eingabefeld, weil er beschreibt, was gleich rausgeht.
-  **Seit 2026-08-06 ist die Folgefrage der Default** (User-Vorgabe: die
-  erzwungene Zwischenentscheidung war schlechte UX): `offer()` armiert den
-  Kontext sofort, das Feld bleibt offen und trägt den Platzhalter „Ask a
-  follow-up question". Das frühere **Composer-Gate** (`#composerGate`,
-  `body.composer-locked`, „Ask a follow-up“ / „New comparison“ als Zwangswahl)
-  ist ersatzlos entfallen — samt der Sperre, die es über die Modellwahl legte.
-  Zwei Ausstiege stehen in derselben Zeile: das **✕ am Chip** (`discard()`)
-  schaltet den Kontext für die nächste Frage ab und lässt einen grauen
-  `.followup-chip.is-off`-Chip stehen, der ihn per Klick (`arm()`) wieder
-  anschaltet; **`.followup-newrun` („New comparison")** löst am rechten Rand
-  denselben `#newRunButton` aus wie die Sidebar. Eine Frage ohne Kontext räumt
-  in `query-send.js` auch `#threadHistory` (`clearHistory()`) — die Modelle
-  sehen die archivierten Turns nicht, also darf der Thread sie nicht
-  behaupten. **Für alle Nutzer offen** (seit 2026-08-04): kein Pro-Gate
-  (Badge, Teaser-Modal, 403 `pro_required`), ein Follow-up zählt als ein
-  normaler Lauf gegen das Tagesbudget.
+- Frontend: `window.App.followup` (in `consensus-run.js`) hält **nur noch
+  State, keine Fläche**. **Seit 2026-08-07 hat der Composer überhaupt keine
+  Follow-up-Affordance mehr** (User-Vorgabe: „Das Follow-up-Feature ist
+  überflüssig, Chats sollten standardmäßig fortführbar sein"): der frühere
+  Kontext-Chip (`#followupChipBar`, `.followup-chip`, `discard()`/`arm()`) und
+  das zweite „New comparison" (`.followup-newrun`) am Feld sind ersatzlos
+  entfallen, ebenso der leere `#followupBar` in der Provenance-Zeile. Davor war
+  bereits (2026-08-06) das **Composer-Gate** (`#composerGate`,
+  `body.composer-locked`, Zwangswahl) gefallen. `isArmed()` ist jetzt schlicht
+  „es gibt einen fortsetzbaren Turn": `offer()` merkt sich das Paar, die
+  nächste Frage geht mit seinem Kontext raus, der Platzhalter wird zu „Ask a
+  follow-up question". Der **einzige Ausstieg ist `#newRunButton`** in der
+  Sidebar. Er räumt über `clearResponseBoxes` auch `#threadHistory`
+  (`clearHistory()`) — die Modelle sehen die archivierten Turns nicht, also
+  darf der Thread sie nicht behaupten. **Für alle Nutzer offen** (seit
+  2026-08-04): kein Pro-Gate (Badge, Teaser-Modal, 403 `pro_required`), ein
+  Follow-up zählt als ein normaler Lauf gegen das Tagesbudget.
   Ein restauriertes Bookmark landet über denselben `offer()`-Pfad direkt im
-  armierten Zustand.
+  fortsetzbaren Zustand.
   `syncInputLock()` zieht nur noch die Login-Schranke nach und setzt den
   Platzhalter passend zum Kontext-Zustand; `updateQuestionInputAccess` ruft es
   am Ende selbst auf, sonst überschriebe es den Follow-up-Platzhalter nach
-  jedem Auth-Update. `#followupBar` in der Provenance-Zeile
-  bleibt als leerer DOM-Knoten bestehen (`consensus-progress.js` fragt ihn ab).
+  jedem Auth-Update.
   `query-send.js` konsumiert den UI-State beim Senden. Hat
   `chat-session.js` eine bestätigte `activeChatId` plus `activeTurnId`, wird
   **kein** Legacy-`context` gesendet. Stattdessen entsteht nach erfolgreichem
@@ -2186,13 +2199,13 @@ ersten Check statt eines leeren Consensus-Panels.
   `window.isUserPro`, `window.pendingAttachments`, `window.ConsensusMath`,
   `window.App.reportCriticalError`.
 - **`window.App.followup`** (definiert in `consensus-run.js`) ist der
-  Follow-up-Kontext- und Verlauf-State (`offer/arm/discard/consume/reset/render`,
+  Follow-up-Kontext- und Verlauf-State (`offer/consume/reset/render`,
   `isArmed/hasContinuableExchange/markContinuationUnavailable/
   archiveCurrentExchange/renderStoredTurn/renderStoredTurns/clearHistory`).
   `query-send.js` (consume + archivieren beim Senden), `app-init.js` (reset in
   `clearResponseBoxes`) und `user-tier.js` (render bei Tier-Wechsel) hängen
-  daran; DOM-Ziele sind `#followupChipBar` und
-  `#threadHistory` in `index.html`.
+  daran; einziges DOM-Ziel ist `#threadHistory` in `index.html` — `render()`
+  zieht nur noch Login-Schranke und Platzhalter nach.
 - **`window.App.chatSession`** (definiert in `chat-session.js`) hält nur die
   laufzeitlokale Chat-Zuordnung (`activeChatId` + `activeTurnId` ausschließlich
   als completed Basis, `pendingChatId`/`pendingTurnId`/

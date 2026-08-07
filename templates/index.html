@@ -57,7 +57,7 @@
     };
   </script>
   <!-- Google Fonts -->
-  <link rel="stylesheet" href="/static/style.css?v=20260806-followupdefault1">
+  <link rel="stylesheet" href="/static/style.css?v=20260807-threadmessages2">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
@@ -75,7 +75,7 @@
   <script type="module" src="/static/demo.js?v=20260803-demorunstages1"></script>
   <script src="/static/app-ui.js?v=20260727-thread12" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
-  <script src="/static/js/app-core.js?v=20260727-thread12" defer></script>
+  <script src="/static/js/app-core.js?v=20260807-threadmessages1" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
   <script src="/static/js/model-picker.js?v=20260731-pickercompact1" defer></script>
   <!-- Gemeinsame LaTeX-Aufbereitung; muss vor markdown-stream.js laden. -->
@@ -85,11 +85,11 @@
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
   <script src="/static/js/sources.js?v=20260727-composerfix1" defer></script>
   <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
-  <script src="/static/js/attachments.js?v=20260729-attachmentfanout1" defer></script>
+  <script src="/static/js/attachments.js?v=20260807-threadmessages1" defer></script>
   <!-- Agent Mode (aus index.html ausgelagert) -->
   <script src="/static/js/agent-mode.js?v=20260729-disclosurescroll1" defer></script>
   <!-- Kompakte Zwei-Phasen-Anzeige fuer regulaere Laeufe (ohne Agent Mode). -->
-  <script src="/static/js/consensus-progress.js?v=20260729-disclosurescroll1" defer></script>
+  <script src="/static/js/consensus-progress.js?v=20260807-threadmessages1" defer></script>
   <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
   <script src="/static/js/consensus-lifecycle.js?v=20260727-resultactions1" defer></script>
   <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
@@ -108,8 +108,10 @@
   <!-- Consensus-Insights, Credibility-Frames, Spalten-Balancer (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-insights.js?v=20260806-chatbookmark1" defer></script>
   <script src="/static/js/chat-session.js?v=20260806-chatlimits1" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260806-followupdefault1" defer></script>
-  <script src="/static/js/query-send.js?v=20260806-followupdefault1" defer></script>
+  <script src="/static/js/consensus-run.js?v=20260807-threadmessages1" defer></script>
+  <script src="/static/js/query-send.js?v=20260807-threadmessages1" defer></script>
+  <!-- Composer einklappen (Handy): eine Zeile beim Lesen, voll beim Anfassen -->
+  <script src="/static/js/composer-collapse.js?v=20260807-threadmessages2" defer></script>
   {% include "partials/analytics.html" %}
 </head>
 
@@ -432,6 +434,10 @@
     <div id="threadAsk" class="thread-ask" hidden>
       <div class="thread-ask-label">Question</div>
       <div class="thread-ask-text" id="threadAskText"></div>
+      <!-- Die Anhaenge dieser Frage. Gefuellt von
+           window.App.setThreadQuestionAttachments (app-core.js), sobald die
+           Frage samt Dateien rausgegangen ist. -->
+      <div class="attachment-bar message-attachments" id="threadAskAttachments" hidden></div>
       <button type="button" id="threadAskMore" class="thread-ask-more">Show full question</button>
     </div>
     <!-- Gefuehrter Lauf. Sichtbar ist immer nur EIN aktiver Schritt: eine
@@ -485,13 +491,10 @@
       <!-- Nur im Agent-Mode-Hero und nur bei ausreichender Viewport-Fläche sichtbar. -->
       <p class="hero-greeting">What should the models cross-check?</p>
       <div class="chat-input-container" style="position: relative;">
+        <!-- Noch nicht gesendete Anhaenge. Beim Senden wandern sie an die
+             Nachricht (#threadAskAttachments) — ein Anhang gehoert zu der
+             Frage, mit der er rausgegangen ist, nicht ans leere Feld. -->
         <div id="attachmentBar" class="attachment-bar" hidden></div>
-        <!-- Follow-up: nach einer beantworteten Frage ist die naechste Frage
-             per Default eine Folgefrage. Der Kontext-Chip steht hier, weil er
-             beschreibt, was gleich abgeschickt wird; das ✕ schaltet den
-             Kontext ab, "New comparison" daneben schneidet den Thread ab.
-             Gerendert von window.App.followup (consensus-run.js). -->
-        <div id="followupChipBar" class="followup-bar" hidden></div>
         <!-- "Run again" fuellt nur vor, abgeschickt wird bewusst. Genau
              dazwischen steht hier, was das Abschicken kostet. Gesetzt und
              wieder geleert von consensus-progress.js. -->
@@ -687,7 +690,6 @@
                   <button type="button" id="runReplayButton" class="run-replay-btn"
                     title="Start a new comparison with the same question"><span class="run-replay-label">Run again</span><span class="run-replay-cost" id="runReplayCost"></span></button>
                 </div>
-                <span class="run-provenance-actions" id="followupBar"></span>
               </div>
               <!-- Quellenverzeichnis: die hochgestellten Zahlen im Antworttext
                    zeigen hierher. Standardmaessig zu, geoeffnet ueber den

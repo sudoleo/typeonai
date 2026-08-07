@@ -48,6 +48,33 @@
     document.title = `${shortened} | consens.io`;
   }
 
+  // Anhaenge der sichtbaren Frage. Sie gehoeren zu der Nachricht, mit der sie
+  // rausgegangen sind — eine neue Frage erbt sie nicht. Gerendert werden sie
+  // von attachments.js, das die Chip-Optik besitzt.
+  let threadAttachments = [];
+
+  function getThreadAttachments() {
+    return threadAttachments.slice();
+  }
+
+  function setThreadQuestionAttachments(attachmentsMeta) {
+    threadAttachments = (Array.isArray(attachmentsMeta) ? attachmentsMeta : [])
+      .filter(item => item && item.name)
+      .map(item => ({
+        name: String(item.name),
+        mime: String(item.mime || ""),
+        size: Number(item.size) || 0
+      }));
+    const row = document.getElementById("threadAskAttachments");
+    if (!row) return;
+    if (typeof window.App.attachments?.renderMessageAttachments === "function") {
+      window.App.attachments.renderMessageAttachments(row, threadAttachments);
+      return;
+    }
+    row.innerHTML = "";
+    row.hidden = true;
+  }
+
   // Kopf des Threads (#threadAsk): zeigt die gestellte Frage über dem Lauf.
   // Leerer Text versteckt den Block wieder (New comparison, Clear). Lange
   // Fragen clampen per CSS auf drei Zeilen; is-long schaltet den Aufklapp-
@@ -63,6 +90,9 @@
     wrap.classList.remove("is-open", "is-long");
     const more = document.getElementById("threadAskMore");
     if (more) more.textContent = "Show full question";
+    // Eine neue Frage beginnt ohne Anhaenge; wer welche mitschickt, meldet sie
+    // direkt nach dem Senden ueber setThreadQuestionAttachments an.
+    setThreadQuestionAttachments([]);
     if (!normalized) return;
 
     requestAnimationFrame(() => {
@@ -244,6 +274,8 @@
     getSelectedModelCount,
     setAppTitle,
     setThreadQuestion,
+    setThreadQuestionAttachments,
+    getThreadAttachments,
     consensusBodyEl,
     trackAppEvent,
     showPopup,

@@ -105,21 +105,21 @@ def test_result_footer_has_one_boundary_before_the_composer():
     assert "body:not(.is-hero) .input-section::before" in css
 
 
-def test_followup_offer_sits_with_the_answer_and_the_chip_with_the_input():
-    """The offer belongs to the answer it would send as context; the armed
-    context chip belongs to the field it will be sent from."""
+def test_the_composer_carries_no_followup_affordance_at_all():
+    """Ein Gespraech laeuft ueber das Eingabefeld weiter — ohne Kontext-Chip,
+    ohne Angebots-Leiste und ohne ein zweites "New comparison" am Composer.
+    Der Ausstieg steht in der Sidebar."""
     template = read("templates/index.html")
     run = read("static/js/consensus-run.js")
 
-    # Offer slot inside the provenance line, chip slot inside the composer.
-    provenance_at = template.index('id="runProvenance"')
-    offer_at = template.index('id="followupBar"')
-    chip_at = template.index('id="followupChipBar"')
-    input_at = template.index('id="questionInput"')
+    assert 'id="followupChipBar"' not in template
+    assert 'id="followupBar"' not in template
+    assert "followupChipBar" not in run
+    assert "followup-newrun" not in run
+    assert 'id="newRunButton"' in template
 
-    assert provenance_at < offer_at
-    assert chip_at < input_at
-    assert "followupChipBar" in run
+    # Der Kontext geht trotzdem immer mit: ein fortsetzbarer Turn ist armed.
+    assert "isArmed() {\n      return !!this.lastExchange;\n    }" in run
 
 
 def test_followup_archives_the_previous_turn_before_rendering_the_next_one():

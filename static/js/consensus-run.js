@@ -50,20 +50,17 @@
     return match ? match[1].trim() : null;
   }
 
-  // --------- Follow-up-Fragen: Kontext-State + Input-Affordance ---------
+  // --------- Follow-up-Fragen: Kontext-State ---------
   // Genau eine Kontext-Ebene: das Frage/Konsens-Paar des letzten erfolgreichen
-  // Laufs. offer() merkt sich das Paar und ARMIERT es sofort — eine Folgefrage
-  // ist der Normalfall, keine Entscheidung. Der Kontext-Chip am Eingabefeld
-  // sagt, was mitgeht; discard() schaltet ihn ab, arm() wieder an, consume()
-  // liefert den context-Payload für query-send.js und räumt auf.
+  // Laufs. offer() merkt sich das Paar, consume() liefert den context-Payload
+  // für query-send.js und räumt auf.
+  //
+  // Es gibt KEINE Follow-up-Entscheidung mehr: ein sichtbares Gespraech laeuft
+  // ueber das Eingabefeld einfach weiter (wie in jedem Chat). Der frueher hier
+  // gerenderte Kontext-Chip samt "New comparison" ist ersatzlos entfallen —
+  // der Ausstieg steht in der Sidebar, wo ein neues Gespraech beginnt.
   // Kein Tier-Gate: ein Follow-up ist ein vollwertiger Lauf und zaehlt wie
   // jede andere Frage gegen das Tagesbudget — mehr kostet es niemanden.
-  const FOLLOWUP_ICON =
-    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" ' +
-    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-    '<polyline points="9 14 4 9 9 4"></polyline>' +
-    '<path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>';
-
   const DEFAULT_INPUT_PLACEHOLDER = "Enter your question";
   const FOLLOWUP_INPUT_PLACEHOLDER = "Ask a follow-up question";
   const UNAVAILABLE_INPUT_PLACEHOLDER = "Start a new comparison — saved context unavailable";
@@ -73,14 +70,8 @@
   // ein JS-Vertrag sind — hier darf nie eine davon ein zweites Mal auftauchen.
   let panelSequence = 0;
 
-  function truncateLabel(text, max) {
-    const t = (text || "").trim().replace(/\s+/g, " ");
-    return t.length > max ? t.slice(0, max - 1).trimEnd() + "…" : t;
-  }
-
   const followup = {
     lastExchange: null, // {question, consensus, turn} des letzten Konsens-Laufs
-    armed: false,
     // True while the current query continues the preceding exchange. The flag
     // is reset by offer(); completed turns may continue indefinitely.
     followupInFlight: false,
@@ -89,12 +80,12 @@
     // zurueckzuholen, wenn der Lauf gar nicht stattgefunden hat.
     spentExchange: null,
 
+    // Ein sichtbares Gespraech laeuft immer weiter: sobald ein fortsetzbarer
+    // Turn da ist, geht die naechste Frage mit seinem Kontext raus.
     isArmed() {
-      return !!(this.armed && this.lastExchange);
+      return !!this.lastExchange;
     },
 
-    // Ein fortsetzbarer Turn liegt vor — unabhaengig davon, ob der Nutzer den
-    // Kontext gerade abgeschaltet hat.
     hasContinuableExchange() {
       return !!this.lastExchange;
     },
@@ -205,6 +196,19 @@
       questionText.className = "thread-history-question-text";
       questionText.textContent = normalizedQuestion;
       question.append(questionLabel, questionText);
+
+      // Anhaenge bleiben an ihrer Nachricht, auch wenn der Turn in den
+      // Verlauf rutscht.
+      const attachmentsMeta = Array.isArray(turnData.attachments) ? turnData.attachments : [];
+      if (attachmentsMeta.length) {
+        const attachmentRow = document.createElement("div");
+        attachmentRow.className = "attachment-bar message-attachments";
+        const rendered = window.App.attachments?.renderMessageAttachments?.(
+          attachmentRow,
+          attachmentsMeta
+        );
+        if (rendered) question.appendChild(attachmentRow);
+      }
 
       const answer = document.createElement("div");
       answer.className = "thread-history-answer";
@@ -376,10 +380,15 @@
       if (!liveBody || !exchange?.question || !liveBody.textContent?.trim()) {
         return false;
       }
-      const turnData = exchange.turn || {
-        question: exchange.question,
-        consensus: exchange.consensus
-      };
+      const turnData = Object.assign(
+        {},
+        exchange.turn || { question: exchange.question, consensus: exchange.consensus }
+      );
+      // Die sichtbaren Anhaenge gehoeren zu genau diesem Turn und wandern mit
+      // ihm in den Verlauf; der Server-Turn kennt sie nicht.
+      if (!Array.isArray(turnData.attachments) || !turnData.attachments.length) {
+        turnData.attachments = window.App.getThreadAttachments?.() || [];
+      }
       return this.appendHistoryTurn(
         turnData,
         liveBody,
@@ -417,36 +426,13 @@
         consensus: consensusText,
         turn: turn && typeof turn === "object" ? turn : null
       };
-      // Der Normalfall nach einer Antwort ist die naechste Frage zum selben
-      // Thema. Sie darf keine Zwischenentscheidung kosten: das Feld bleibt
-      // offen und der Kontext ist schon angehaengt.
-      this.armed = true;
       // Ein Lauf ist durchgelaufen: nichts mehr zurueckzuholen.
       this.spentExchange = null;
       this.render();
     },
 
-    arm() {
-      if (!this.lastExchange) return;
-      if (!this.armed) trackAppEvent("app_followup_armed");
-      this.armed = true;
-      this.render();
-      document.getElementById("questionInput")?.focus();
-    },
-
-    // Der Nutzer will die naechste Frage OHNE den vorherigen Turn stellen,
-    // aber die Antwort weiter sehen. Der Kontext bleibt abrufbar (der Chip
-    // schaltet ihn wieder ein), gesendet wird er nicht.
-    discard() {
-      if (!this.armed) return;
-      this.armed = false;
-      trackAppEvent("app_followup_discarded");
-      this.render();
-      document.getElementById("questionInput")?.focus();
-    },
-
     // Ein Lauf, der gar nicht stattgefunden hat (Kontingent leer), darf den
-    // Follow-up-Chip nicht gefressen haben: consume() ist beim Absenden
+    // Gespraechsfaden nicht gefressen haben: consume() ist beim Absenden
     // passiert, gesendet wurde aber nichts. Sonst waere der Kontext weg,
     // waehrend die Absage-Karte sagt "nichts wurde gesendet" — und die
     // naechste Frage ginge stillschweigend ohne Kontext raus.
@@ -455,15 +441,13 @@
       this.lastExchange = this.spentExchange;
       this.spentExchange = null;
       this.followupInFlight = false;
-      this.armed = true;
       this.render();
     },
 
-    // Neuer Lauf ohne Kontext bzw. Clear: Affordance und Chip verschwinden.
+    // Neuer Lauf ohne Kontext bzw. Clear: der Faden ist abgeschnitten.
     // Loescht auch das In-Flight-Flag (frische Frage darf wieder anbieten).
     reset() {
       this.lastExchange = null;
-      this.armed = false;
       this.followupInFlight = false;
       this.spentExchange = null;
       this.continuationUnavailable = false;
@@ -472,7 +456,6 @@
 
     markContinuationUnavailable() {
       this.lastExchange = null;
-      this.armed = false;
       this.followupInFlight = false;
       this.spentExchange = null;
       this.continuationUnavailable = true;
@@ -482,7 +465,7 @@
     // The returned one-hop payload remains for legacy bookmark restores. An
     // owned active chat uses only its server-issued context-version binding.
     consume() {
-      if (!this.armed || !this.lastExchange) return null;
+      if (!this.lastExchange) return null;
       const ctx = {
         previous_question: this.lastExchange.question,
         previous_consensus: this.lastExchange.consensus
@@ -495,93 +478,12 @@
       return ctx;
     },
 
-    // Ein Ort am Composer, ein Zustand: #followupChipBar direkt ueber dem
-    // Eingabefeld. Der Chip beschreibt, was mit der naechsten Frage rausgeht,
-    // und laesst sich abschalten; daneben steht der Ausstieg ("New
-    // comparison"). Das Feld bleibt dabei durchgehend benutzbar — die frueher
-    // erzwungene Zwischenentscheidung (#composerGate) ist ersatzlos weg.
+    // Der Kontext-Zustand hat KEINE eigene Flaeche mehr am Composer. Sichtbar
+    // ist er dort, wo er hingehoert: im Thread, der ueber dem Eingabefeld
+    // steht. Uebrig bleibt das Nachziehen der Login-Schranke und des
+    // Platzhalters.
     render() {
-      const chipBar = document.getElementById("followupChipBar");
-      // Die alte Angebots-Leiste in der Provenance-Zeile bleibt im DOM (andere
-      // Module fragen sie ab), traegt aber nichts mehr.
-      const offerBar = document.getElementById("followupBar");
-      if (offerBar) {
-        offerBar.innerHTML = "";
-        offerBar.hidden = true;
-      }
-      if (!chipBar) {
-        this.syncInputLock();
-        return;
-      }
-      chipBar.innerHTML = "";
-      chipBar.hidden = true;
-
-      if (this.lastExchange) {
-        chipBar.append(this.buildContextChip(), this.buildNewRunButton());
-        chipBar.hidden = false;
-      }
-
       this.syncInputLock();
-    },
-
-    // Angeschaltet: der Chip nennt die Frage, an die angeknuepft wird, und
-    // das ✕ schaltet den Kontext fuer die naechste Frage ab. Abgeschaltet
-    // bleibt derselbe Chip als Weg zurueck stehen — sonst waere der Kontext
-    // eines sichtbaren Threads unerreichbar verloren.
-    buildContextChip() {
-      const icon = document.createElement("span");
-      icon.className = "followup-chip-icon";
-      icon.innerHTML = FOLLOWUP_ICON;
-
-      const text = document.createElement("span");
-      text.className = "followup-chip-text";
-
-      if (!this.armed) {
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = "followup-chip is-off";
-        chip.title = "Send your next question with the previous question and its "
-          + "consensus answer as context.";
-        text.textContent = "Follow-up context off";
-        chip.append(icon, text);
-        chip.addEventListener("click", () => this.arm());
-        return chip;
-      }
-
-      const chip = document.createElement("div");
-      chip.className = "followup-chip";
-      chip.title = "Your next question is sent with the previous question and its "
-        + "consensus answer as context. It counts as one normal run.";
-      text.textContent = "Follow-up to: “" + truncateLabel(this.lastExchange.question, 90) + "”";
-
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "followup-chip-remove";
-      remove.title = "Ask the next question without this context";
-      remove.setAttribute("aria-label", "Ask the next question without this context");
-      remove.textContent = "✕";
-      remove.addEventListener("click", () => this.discard());
-
-      chip.append(icon, text, remove);
-      return chip;
-    },
-
-    // "New comparison" bleibt der bewusste Schnitt: Thread leeren, frisch
-    // anfangen. Es steht neben dem Chip, weil genau dort entschieden wird,
-    // woran die naechste Frage haengt.
-    buildNewRunButton() {
-      const newBtn = document.createElement("button");
-      newBtn.type = "button";
-      newBtn.className = "followup-newrun";
-      newBtn.textContent = "New comparison";
-      newBtn.title = "Clear this conversation and start a fresh comparison";
-      newBtn.addEventListener("click", () => {
-        const trigger = document.getElementById("newRunButton");
-        if (trigger) trigger.click();
-        else window.clearResponseBoxes?.();
-        document.getElementById("questionInput")?.focus();
-      });
-      return newBtn;
     },
 
     // Der Composer bleibt nach einer Antwort offen; hier wird nur noch die

@@ -1030,6 +1030,15 @@
         questionInputEl.dispatchEvent(new Event("input", { bubbles: true }));
         window.syncDemoChipState?.();
       }
+      // Die Anhaenge sind mit DIESER Frage rausgegangen: der Composer gibt sie
+      // ab, die Chips stehen ab jetzt an der Nachricht im Thread. Vorher hingen
+      // sie ueber dem leeren Feld und sahen aus wie ein Anhang der naechsten
+      // Frage. Muss vor enforceDeepSeekAttachmentBlock() passieren: das
+      // Abgeben gibt DeepSeek wieder frei, und fuer DIESEN Lauf bleibt es
+      // ausgeschlossen.
+      const sentAttachments = window.App.attachments?.detachForMessage?.() || [];
+      window.App.setThreadQuestionAttachments?.(sentAttachments);
+      window.App.composer?.collapse?.();
 
       // /prepare refreshes the authoritative user tier. That refresh restores
       // persisted model selections, so reassert the attachment invariant
@@ -1705,16 +1714,6 @@
           });
       }
 
-      // Echte Anhänge bleiben nach dem Senden sichtbar (z. B. für Folgefragen zum
-      // selben Dokument). Nur Vorschau-Chips aus früher geladenen Bookmarks
-      // gehören nicht zur neuen Frage und werden entfernt.
-      const hadPreviewChips = (window.pendingAttachments || []).some(att => att.previewOnly);
-      if (hadPreviewChips) {
-        window.pendingAttachments = (window.pendingAttachments || []).filter(att => !att.previewOnly);
-        if (typeof window.renderAttachmentChips === "function") {
-          window.renderAttachmentChips();
-        }
-      }
     };
 
   window.isQueryRequestRunning = function () {

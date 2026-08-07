@@ -199,11 +199,10 @@ def test_question_input_grows_and_caps_on_desktop_and_mobile(app_page):
     expect(input_box).to_have_value("First line\n")
 
 
-def test_restored_context_arms_the_composer_and_stays_switchable(app_page):
-    """Ein wiederhergestellter Turn stellt keine Zwischenfrage: das Feld bleibt
-    offen und die naechste Frage ist per Default eine Folgefrage. Der Chip
-    laesst sich abschalten und wieder anschalten, und die Modellwahl bleibt
-    dabei durchgehend bedienbar."""
+def test_restored_context_keeps_the_composer_open_and_continuable(app_page):
+    """Ein wiederhergestellter Turn stellt keine Zwischenfrage und traegt keine
+    eigene Flaeche am Composer: das Feld laeuft einfach weiter, die naechste
+    Frage ist eine Folgefrage. Die Modellwahl bleibt dabei bedienbar."""
     app_page.evaluate(
         """() => window.App.followup.offer(
           "Saved question",
@@ -211,14 +210,15 @@ def test_restored_context_arms_the_composer_and_stays_switchable(app_page):
           { question: "Saved question", consensus: "Saved consensus" }
         )"""
     )
-    expect(app_page.locator("#followupChipBar .followup-chip")).to_contain_text(
-        "Follow-up to: “Saved question”"
-    )
     expect(app_page.locator("#questionInput")).to_be_enabled()
     expect(app_page.locator("#questionInput")).to_have_attribute(
         "placeholder", "Ask a follow-up question"
     )
-    expect(app_page.locator("#followupChipBar .followup-newrun")).to_be_visible()
+    assert app_page.evaluate("() => window.App.followup.isArmed()") is True
+    # Der frueher hier stehende Kontext-Chip samt "New comparison" ist weg:
+    # der Ausstieg lebt in der Sidebar.
+    expect(app_page.locator("#followupChipBar")).to_have_count(0)
+    expect(app_page.locator(".chat-input-container .followup-newrun")).to_have_count(0)
 
     # Die Modellwahl ist nicht mehr gesperrt: es gibt keine Entscheidung, die
     # sie stoeren koennte.
@@ -228,64 +228,106 @@ def test_restored_context_arms_the_composer_and_stays_switchable(app_page):
     ).to_have_class(re.compile(r"\bis-open\b"))
     app_page.keyboard.press("Escape")
 
-    # Kontext abschalten und wieder anschalten - beides ohne das Feld zu sperren.
-    app_page.locator(".followup-chip-remove").click()
-    expect(app_page.locator(".followup-chip.is-off")).to_be_visible()
-    expect(app_page.locator("#questionInput")).to_be_enabled()
-    expect(app_page.locator("#questionInput")).to_have_attribute(
-        "placeholder", "Enter your question"
-    )
-    app_page.locator(".followup-chip.is-off").click()
-    expect(app_page.locator("#followupChipBar .followup-chip-remove")).to_be_visible()
-
     app_page.evaluate("() => window.App.followup.markContinuationUnavailable()")
-    expect(app_page.locator("#followupChipBar")).to_be_hidden()
     expect(app_page.locator("#questionInput")).to_be_visible()
     expect(app_page.locator("#questionInput")).to_have_attribute(
         "placeholder", "Start a new comparison — saved context unavailable"
     )
 
 
-def test_followup_context_chip_stays_inside_the_mobile_composer(app_page):
-    """Der Chip-Text ist nowrap. Ohne min-width:0 auf Bar und Chip bleibt die
-    automatische Flex-Mindestgroesse die volle Textbreite und der Chip ragt auf
-    dem Handy aus dem Bildrand."""
+def test_mobile_composer_collapses_while_reading_and_opens_on_tap(app_page):
+    """Auf dem Handy hat der fixierte Composer mit Lauf-Schalter und Fuss ein
+    Drittel des Bildschirms belegt. Beim Lesen bleibt nur die Eingabezeile."""
     app_page.set_viewport_size({"width": 390, "height": 844})
-    long_question = (
-        "gib mal bitte aus welchen kontext du in dieser unterhaltung schon "
-        "kennst und was nicht"
-    )
-    app_page.evaluate(
-        """question => {
-          window.App.followup.offer(question, "Saved consensus", {
-            question: question, consensus: "Saved consensus",
-          });
-          window.App.followup.arm();
-        }""",
-        long_question,
-    )
-    expect(app_page.locator("#followupChipBar .followup-chip")).to_be_visible()
+    app_page.evaluate("() => window.exitHeroMode()")
 
-    layout = app_page.evaluate(
+    before = app_page.evaluate(
+        """() => document.querySelector(".input-section").getBoundingClientRect().height"""
+    )
+    app_page.evaluate("() => window.App.composer.collapse()")
+    collapsed = app_page.evaluate(
+        """() => ({
+          height: document.querySelector(".input-section").getBoundingClientRect().height,
+          switchVisible: !!document.querySelector(
+            ".chat-input-container .consensus-switch-container"
+          ).offsetParent,
+          footerVisible: !!document.querySelector(".app-footer").offsetParent,
+          inputVisible: !!document.getElementById("questionInput").offsetParent,
+          sendVisible: !!document.getElementById("sendButton").offsetParent,
+        })"""
+    )
+    assert collapsed["height"] < before
+    assert collapsed["switchVisible"] is False
+    assert collapsed["footerVisible"] is False
+    # Fragen bleibt jederzeit moeglich - nur leiser.
+    assert collapsed["inputVisible"] is True
+    assert collapsed["sendVisible"] is True
+
+    app_page.locator("#questionInput").click()
+    expanded = app_page.evaluate(
+        """() => ({
+          height: document.querySelector(".input-section").getBoundingClientRect().height,
+          switchVisible: !!document.querySelector(
+            ".chat-input-container .consensus-switch-container"
+          ).offsetParent,
+        })"""
+    )
+    assert expanded["switchVisible"] is True
+    assert abs(expanded["height"] - before) <= 1
+
+
+def test_typing_into_the_collapsed_composer_keeps_the_cursor_in_the_field(app_page):
+    """User-Befund 2026-08-07: das Feld wuchs beim Antippen, der Cursor sprang
+    aber sichtbar heraus. Ursache war die INLINE-Hoehe des Autosizers, die
+    nach dem Umschalten stehenblieb — plus `parseFloat(minHeight) || 52`, das
+    eine 0 als falsy verwirft. Beide Zustaende muessen zur Feldhoehe passen."""
+    app_page.set_viewport_size({"width": 390, "height": 844})
+    app_page.evaluate("() => window.exitHeroMode()")
+    app_page.evaluate("() => window.App.composer.collapse()")
+
+    collapsed = app_page.evaluate(
         """() => {
-          const composer = document.querySelector(".chat-input-container");
-          const chip = document.querySelector("#followupChipBar .followup-chip");
-          const text = chip.querySelector(".followup-chip-text");
+          const input = document.getElementById("questionInput");
           return {
-            chipRight: chip.getBoundingClientRect().right,
-            composerRight: composer.getBoundingClientRect().right,
-            composerScrollWidth: composer.scrollWidth,
-            composerClientWidth: composer.clientWidth,
-            documentScrollWidth: document.documentElement.scrollWidth,
-            viewportWidth: window.innerWidth,
-            isEllipsised: text.scrollWidth > text.clientWidth,
+            inline: input.style.height,
+            box: Math.round(input.getBoundingClientRect().height),
           };
         }"""
     )
-    assert layout["chipRight"] <= layout["composerRight"]
-    assert layout["composerScrollWidth"] == layout["composerClientWidth"]
-    assert layout["documentScrollWidth"] <= layout["viewportWidth"]
-    assert layout["isEllipsised"] is True
+    # Eingeklappt gilt die eine Zeile - nicht die stehengebliebene Vollhoehe.
+    assert collapsed["inline"] == "34px"
+    assert collapsed["box"] == 34
+
+    field = app_page.locator("#questionInput")
+    field.click()
+    field.type(
+        "Und was bedeutet das fuer die zweite Jahreshaelfte, wenn die Modelle "
+        "sich schon beim Jahr uneinig sind?"
+    )
+
+    typed = app_page.evaluate(
+        """() => {
+          const input = document.getElementById("questionInput");
+          return {
+            focused: document.activeElement === input,
+            collapsed: document.body.classList.contains("composer-collapsed"),
+            inline: input.style.height,
+            box: Math.round(input.getBoundingClientRect().height),
+            scrollTop: input.scrollTop,
+            hiddenText: input.scrollHeight - input.clientHeight,
+            caretAtEnd: input.selectionStart === input.value.length,
+          };
+        }"""
+    )
+    assert typed["focused"] is True
+    assert typed["collapsed"] is False
+    assert typed["caretAtEnd"] is True
+    # Der getippte Text steht vollstaendig im sichtbaren Feld: nichts ist nach
+    # oben weggescrollt, und die Inline-Hoehe entspricht der echten Box.
+    assert typed["scrollTop"] == 0
+    assert typed["hiddenText"] <= 1
+    assert typed["box"] > 34
+    assert typed["inline"] == f"{typed['box']}px"
 
 
 def test_latex_is_typeset_after_markdown_rendering(app_page):
@@ -615,17 +657,14 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
         assert abs(result_gap["gap"]) <= 2
 
     # Nach der fertigen Antwort bleibt der Composer offen: die naechste Frage
-    # ist per Default eine Folgefrage, ohne Zwischenentscheidung und ohne
-    # Pro-Gate. Der Ausstieg steht als stiller Button daneben.
-    expect(app_page.locator("#followupChipBar .followup-chip")).to_be_visible(timeout=15000)
+    # ist per Default eine Folgefrage, ohne Zwischenentscheidung, ohne Pro-Gate
+    # und ohne eine eigene Kontext-Flaeche am Feld.
+    expect(app_page.locator("#questionInput")).to_have_attribute(
+        "placeholder", "Ask a follow-up question", timeout=15000
+    )
     expect(app_page.locator("#questionInput")).to_be_visible()
     expect(app_page.locator("#questionInput")).to_be_enabled()
     expect(app_page.locator(".chat-input-container .consensus-switch-container")).to_be_visible()
-    expect(app_page.locator("#followupChipBar .followup-newrun")).to_be_visible()
-    expect(app_page.locator("#followupChipBar .pro-badge")).to_have_count(0)
-    expect(app_page.locator("#questionInput")).to_have_attribute(
-        "placeholder", "Ask a follow-up question"
-    )
 
     # Inline-Confidence: der Widerspruch wird im Antworttext selbst markiert
     # (Linie + Quote), nicht nur in einer Karte daneben.
@@ -822,7 +861,9 @@ def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_pag
     app_page.evaluate("() => window.setAgentMode(false, { persist: true })")
     _send_question(app_page)
     _wait_for_all_final_answers(app_page)
-    expect(app_page.locator("#followupChipBar .followup-chip")).to_be_visible(timeout=20000)
+    expect(app_page.locator("#questionInput")).to_have_attribute(
+        "placeholder", "Ask a follow-up question", timeout=20000
+    )
 
     # Erst die Inline-Confidence abwarten, dann vergleichen: die Quote-Badges
     # gehoeren zum Live-Baum, der Verlauf rendert den reinen Consensus-Text.
@@ -882,7 +923,9 @@ def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_pag
 
     # Turn 3 is the regression boundary: the second exchange used to vanish
     # when the live render tree was recycled for the next answer.
-    expect(app_page.locator("#followupChipBar .followup-chip")).to_be_visible(timeout=20000)
+    expect(app_page.locator("#questionInput")).to_have_attribute(
+        "placeholder", "Ask a follow-up question", timeout=20000
+    )
     third_question = "What should I do immediately after that?"
     app_page.locator("#questionInput").fill(third_question)
     app_page.locator("#sendButton").click()

@@ -181,6 +181,6 @@ def test_css_cache_busting_was_bumped():
     style = read("static/style.css")
     template = read("templates/index.html")
 
-    assert "shell.css?v=20260806-followupdefault1" in style
-    assert "components-input.css?v=20260806-followupdefault1" in style
-    assert "style.css?v=20260806-followupdefault1" in template
+    assert "shell.css?v=20260807-threadmessages2" in style
+    assert "components-input.css?v=20260807-threadmessages1" in style
+    assert "style.css?v=20260807-threadmessages2" in template

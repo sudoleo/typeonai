@@ -44,9 +44,18 @@ def test_changed_frontend_scripts_are_cache_busted():
     assert "usage-limit.js?v=20260802-storagebusy1" in template
     assert "consensus-insights.js?v=20260806-chatbookmark1" in template
     assert "chat-session.js?v=20260806-chatlimits1" in template
-    assert "consensus-run.js?v=20260806-followupdefault1" in template
-    assert "query-send.js?v=20260806-followupdefault1" in template
     assert "app-init.js?v=20260806-followupdefault1" in template
+    for changed in (
+        "app-core.js",
+        "attachments.js",
+        "consensus-progress.js",
+        "consensus-run.js",
+        "query-send.js",
+    ):
+        assert f"{changed}?v=20260807-threadmessages1" in template
+    # Nachtrag: eingeklappter Composer + Cursor-Fix.
+    for changed in ("style.css", "composer-collapse.js"):
+        assert f"{changed}?v=20260807-threadmessages2" in template
 
 
 def test_mobile_enter_keeps_the_textarea_newline_behavior():

@@ -540,15 +540,13 @@
       answersCount.textContent = boxes > 0 ? String(boxes) : "";
     }
 
-    // The footer also hosts the follow-up offer and the drawers, so it stays
-    // open when it has no facts of its own but does carry an action.
-    const actions = $("followupBar");
-    const hasActions = Boolean(actions && !actions.hidden && actions.childElementCount);
+    // The footer also hosts the drawers, so it stays open when it has no
+    // facts of its own but does carry one.
     const hasTabs = Boolean(
       document.querySelector("#consensusFooterTabs .consensus-tab:not([hidden])")
       || !$("agentModeAnswersRow")?.hidden
     );
-    wrap.hidden = parts.length === 0 && !hasActions && !hasTabs;
+    wrap.hidden = parts.length === 0 && !hasTabs;
   }
 
   function clearProvenance() {

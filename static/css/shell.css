@@ -1941,6 +1941,49 @@ body:not(.is-hero) .input-section {
   }
 }
 
+/* ---- Der eingeklappte Composer -------------------------------------------
+   Auf dem Handy stand der fixierte Composer mit Anhangleiste, Lauf-Schalter
+   und Disclaimer-Fuss vor einem Drittel der Antwort. Beim Lesen (Scrollen
+   nach unten) und direkt nach dem Absenden bleibt deshalb nur EINE Zeile
+   uebrig: das Feld und der Senden-Knopf. Alles andere kommt zurueck, sobald
+   man den Composer anfasst — gesteuert von composer-collapse.js, dessen
+   COLLAPSE_QUERY zu dieser Breakpoint-Grenze passen muss. */
+@media (max-width: 1099px) {
+  body.composer-collapsed:not(.is-hero) .chat-input-container .attachment-bar,
+  body.composer-collapsed:not(.is-hero) .composer-run-notice,
+  body.composer-collapsed:not(.is-hero) .consensus-switch-container,
+  body.composer-collapsed:not(.is-hero) .app-footer {
+    display: none;
+  }
+
+  body.composer-collapsed:not(.is-hero) .chat-input-container {
+    flex-wrap: nowrap;
+    align-items: center;
+    padding: 6px 8px 6px 14px;
+    margin: 0;
+  }
+
+  /* min-/max-height statt height: der Autosizer in app-init.js liest genau
+     diese beiden Werte und schreibt daraus die INLINE-Hoehe des Feldes. Eine
+     feste height hier waere von dieser Inline-Hoehe ueberschrieben — das Feld
+     haette den Zustand des Composers nicht mitbekommen.
+     BEIDE Werte muessen gesetzt sein, und min-height darf nicht 0 sein:
+     `parseFloat(minHeight) || 52` im Autosizer verwirft eine 0 als falsy und
+     faellt auf die volle Hoehe zurueck. */
+  body.composer-collapsed:not(.is-hero) .chat-input-container .input-field {
+    flex: 1 1 auto;
+    min-height: 34px;
+    max-height: 34px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  body.composer-collapsed:not(.is-hero) .input-section {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+}
+
 /* Die sechs Antwortboxen liegen standardmaessig hinter "Compare answers".
    Ist der Drawer zu, verschwindet auch ihr leerer Flex-Wrapper samt
    margin-bottom; sonst bleiben zwischen Footer und Composer weitere 20px. */
@@ -2013,6 +2056,33 @@ body:not(.is-hero) .consensus-section::before {
 .thread-ask.is-open .thread-ask-text {
   -webkit-line-clamp: unset;
   overflow: visible;
+}
+
+/* ---- Anhaenge an der Nachricht -------------------------------------------
+   Ein Anhang gehoert zu der Frage, mit der er rausgegangen ist. Er steht
+   deshalb unter ihr — rechtsbuendig wie die Frage selbst — und nicht mehr
+   ueber dem leeren Eingabefeld, wo er die naechste Frage zu meinen schien.
+   Die Datei selbst wird nicht aufbewahrt: die Chips sind Metadaten und
+   deshalb bewusst ohne Vorschau und ohne Entfernen-Knopf. */
+.message-attachments {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  max-width: 100%;
+  margin: 9px 0 0;
+  padding: 0;
+}
+
+.message-attachments[hidden] {
+  display: none;
+}
+
+.message-attachments .attachment-chip {
+  cursor: default;
+  background: var(--raise);
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .thread-ask-more {

@@ -116,10 +116,12 @@ def test_chip_progress_bars_restart_from_zero_on_a_second_run(app_page):
         }"""
     )
 
-    # Nach einer beantworteten Frage steht der Follow-up-Kontext am Composer.
-    # Dieser Test misst einen frischen Lauf, deshalb hier bewusst der Ausstieg
-    # ueber "New comparison" — genau wie in der App.
-    app_page.locator("#followupChipBar .followup-newrun").click()
+    # Nach einer beantworteten Frage laeuft das Gespraech weiter. Dieser Test
+    # misst einen frischen Lauf, deshalb hier bewusst der Ausstieg ueber
+    # "New comparison" in der Sidebar — genau wie in der App. Die Sidebar ist
+    # auf dieser Breite eingeklappt, deshalb erst aufklappen.
+    app_page.locator(".sidebar-toggle:visible").first.click()
+    app_page.locator("#newRunButton").click()
     expect(app_page.locator("#questionInput")).to_be_visible()
     expect(app_page.locator("#questionInput")).to_be_enabled()
 

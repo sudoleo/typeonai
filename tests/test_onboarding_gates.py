@@ -103,14 +103,13 @@ def test_followups_are_no_longer_pro_gated():
     consensus_run = read("static/js/consensus-run.js")
     chat_router = read("app/api/routers/chat.py")
 
-    chip = consensus_run[consensus_run.index("buildContextChip() {"):]
-    chip = chip[:chip.index("buildNewRunButton() {")]
-    assert "pro-badge" not in chip
-    assert "is-pro-locked" not in chip
-
-    arm = consensus_run[consensus_run.index("arm() {"):]
-    arm = arm[:arm.index("discard()")]
-    assert "isUserPro" not in arm
+    # Ein fortsetzbarer Turn IST der Follow-up-Zustand: kein Tier, kein Badge,
+    # keine Zwischenentscheidung.
+    armed = consensus_run[consensus_run.index("isArmed() {"):]
+    armed = armed[:armed.index("consume() {")]
+    assert "isUserPro" not in armed
+    assert "pro-badge" not in armed
+    assert "is-pro-locked" not in armed
 
     # Serverseitig gibt es kein Follow-up-Gate mehr - der Kontext kostet ueber
     # das normale Tagesbudget, nicht ueber ein Tier.

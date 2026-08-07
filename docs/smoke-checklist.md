@@ -71,12 +71,11 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       automatischen oder manuellen Consensus-Anforderung. Ohne Consensus-
       Anforderung entsteht kein Turn-1-Orphan. Turn 1 sendet kein Legacy-
       `context` und keine `context_version_id` an `/ask_*`.
-- [ ] Nach einem completed Turn bleibt das Eingabefeld offen und der
-      Kontext-Chip ist gesetzt: die nächste Frage geht ohne Zwischenschritt als
+- [ ] Nach einem completed Turn bleibt das Eingabefeld offen und trägt keine
+      Follow-up-Meldung: die nächste Frage geht ohne Zwischenschritt als
       Turn 2, Turn 3 und weiter im selben Chat raus; die aktive Chat-Zuordnung
-      bleibt nach jedem completed Turn erhalten. Das ✕ am Chip schaltet den
-      Kontext für die nächste Frage ab (und der graue Chip wieder an);
-      „New comparison“ daneben schneidet den Thread ab.
+      bleibt nach jedem completed Turn erhalten. Der einzige Ausstieg ist
+      „New comparison“ in der Sidebar.
 - [ ] Eine aktive Fortsetzung baut vor dem Provider-Fan-out genau einmal
       `/chats/{chat}/turns/{turn}/context`; alle `/ask_*` und `/consensus`
       erhalten exakt dieselben `chat_id`, `turn_id`, `context_version_id` und
@@ -206,6 +205,14 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       steht über dem Eingabefeld, dass Senden einen vollständigen neuen Lauf
       startet — der Hinweis verschwindet mit dem Absenden oder mit
       „New comparison“.
+
+- [ ] Anhänge hängen an der Nachricht, nicht am Feld: nach dem Senden ist die
+      Anhangleiste des Composers leer und die Chips stehen unter der gesendeten
+      Frage (auch nach dem Archivieren im Verlauf und beim Bookmark-Restore).
+      Eine Folgefrage schickt die Datei nicht erneut mit.
+- [ ] Handy: nach dem Absenden und beim Scrollen nach unten schrumpft der
+      Composer auf eine Zeile (Feld + Senden); (+), Lauf-Schalter und Fuß
+      kommen beim Antippen oder Hochscrollen zurück. Desktop bleibt unverändert.
 
 ## Consensus Watch
 - [ ] Nach erfolgreichem Consensus erscheint „Watch“ neben Share; Aktivierung

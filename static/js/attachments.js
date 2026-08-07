@@ -234,47 +234,110 @@
       return Math.max(1, Math.round(bytes / 1024)) + " KB";
     }
 
+    // Baut den Chip einer Datei. `readonly` macht ihn zum reinen
+    // Anzeigeelement: kein Viewer, kein Entfernen — so haengt er an einer
+    // bereits gesendeten Nachricht, deren Datei es nicht mehr gibt.
+    function buildAttachmentChip(att, options) {
+      const readonly = Boolean(options && options.readonly);
+      const chip = document.createElement("div");
+      chip.className = "attachment-chip";
+      if (att.previewOnly) chip.classList.add("is-preview-only");
+
+      if (!att.previewOnly && att.mime.indexOf("image/") === 0 && att.data) {
+        const img = document.createElement("img");
+        img.className = "attachment-chip-thumb";
+        img.alt = "";
+        img.src = "data:" + att.mime + ";base64," + att.data;
+        chip.appendChild(img);
+      } else {
+        const icon = document.createElement("span");
+        icon.className = "attachment-chip-icon";
+        if (att.mime.indexOf("image/") === 0) icon.classList.add("is-image");
+        icon.textContent = chipIconLabel(att.mime);
+        chip.appendChild(icon);
+      }
+
+      const meta = document.createElement("span");
+      meta.className = "attachment-chip-meta";
+      const nameEl = document.createElement("span");
+      nameEl.className = "attachment-chip-name";
+      nameEl.textContent = att.name;
+      nameEl.title = att.name;
+      const sizeEl = document.createElement("span");
+      sizeEl.className = "attachment-chip-size";
+      if (readonly) {
+        sizeEl.textContent = att.size ? formatFileSize(att.size) : "";
+      } else {
+        sizeEl.textContent = att.previewOnly
+          ? (att.size ? formatFileSize(att.size) + " · saved chat" : "saved chat")
+          : formatFileSize(att.size);
+      }
+      meta.appendChild(nameEl);
+      meta.appendChild(sizeEl);
+      chip.appendChild(meta);
+
+      if (readonly) return chip;
+
+      chip.setAttribute("role", "button");
+      chip.tabIndex = 0;
+      chip.title = "Click to preview " + att.name;
+      chip.addEventListener("click", function () {
+        openAttachmentViewer(att);
+      });
+      chip.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openAttachmentViewer(att);
+        }
+      });
+      return chip;
+    }
+
+    // Anhaenge einer bereits gesendeten Frage. Sie stehen im Thread an ihrer
+    // Nachricht und sind reine Metadaten — die Dateien selbst sind mit dem
+    // Lauf rausgegangen und werden nicht aufbewahrt.
+    function renderMessageAttachments(container, attachmentsMeta) {
+      if (!container) return 0;
+      container.innerHTML = "";
+      const items = (Array.isArray(attachmentsMeta) ? attachmentsMeta : [])
+        .filter(function (item) { return item && item.name; });
+      items.forEach(function (item) {
+        container.appendChild(buildAttachmentChip({
+          name: String(item.name),
+          mime: String(item.mime || ""),
+          size: Number(item.size) || 0,
+          data: null
+        }, { readonly: true }));
+      });
+      container.hidden = items.length === 0;
+      return items.length;
+    }
+
+    // Beim Senden gibt der Composer seine Anhaenge ab: die Chips wandern an
+    // die Nachricht, das Feld startet leer in die naechste Frage. Ein Anhang,
+    // der nach dem Senden ueber dem leeren Feld haengen bleibt, behauptet
+    // sonst, er gehoere zur naechsten Frage — mitgeschickt wurde er aber mit
+    // der letzten.
+    function detachForMessage() {
+      const meta = (window.pendingAttachments || [])
+        .filter(function (att) { return !att.previewOnly && att.data; })
+        .map(function (att) {
+          return { name: att.name, mime: att.mime, size: att.size || 0 };
+        });
+      if (window.pendingAttachments.length) {
+        window.pendingAttachments = [];
+        renderAttachmentChips();
+      }
+      return meta;
+    }
+
     function renderAttachmentChips() {
       bar.innerHTML = "";
       const items = window.pendingAttachments;
       bar.hidden = items.length === 0;
 
       items.forEach(function (att, index) {
-        const chip = document.createElement("div");
-        chip.className = "attachment-chip";
-        if (att.previewOnly) chip.classList.add("is-preview-only");
-        chip.setAttribute("role", "button");
-        chip.tabIndex = 0;
-        chip.title = "Click to preview " + att.name;
-
-        if (!att.previewOnly && att.mime.indexOf("image/") === 0) {
-          const img = document.createElement("img");
-          img.className = "attachment-chip-thumb";
-          img.alt = "";
-          img.src = "data:" + att.mime + ";base64," + att.data;
-          chip.appendChild(img);
-        } else {
-          const icon = document.createElement("span");
-          icon.className = "attachment-chip-icon";
-          if (att.mime.indexOf("image/") === 0) icon.classList.add("is-image");
-          icon.textContent = chipIconLabel(att.mime);
-          chip.appendChild(icon);
-        }
-
-        const meta = document.createElement("span");
-        meta.className = "attachment-chip-meta";
-        const nameEl = document.createElement("span");
-        nameEl.className = "attachment-chip-name";
-        nameEl.textContent = att.name;
-        nameEl.title = att.name;
-        const sizeEl = document.createElement("span");
-        sizeEl.className = "attachment-chip-size";
-        sizeEl.textContent = att.previewOnly
-          ? (att.size ? formatFileSize(att.size) + " · saved chat" : "saved chat")
-          : formatFileSize(att.size);
-        meta.appendChild(nameEl);
-        meta.appendChild(sizeEl);
-        chip.appendChild(meta);
+        const chip = buildAttachmentChip(att);
 
         const removeBtn = document.createElement("button");
         removeBtn.type = "button";
@@ -288,16 +351,6 @@
           renderAttachmentChips();
         });
         chip.appendChild(removeBtn);
-
-        chip.addEventListener("click", function () {
-          openAttachmentViewer(att);
-        });
-        chip.addEventListener("keydown", function (event) {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            openAttachmentViewer(att);
-          }
-        });
 
         bar.appendChild(chip);
       });
@@ -316,6 +369,11 @@
     }
 
     window.renderAttachmentChips = renderAttachmentChips;
+    window.App = window.App || {};
+    window.App.attachments = {
+      detachForMessage: detachForMessage,
+      renderMessageAttachments: renderMessageAttachments
+    };
 
     window.clearPendingAttachments = function () {
       if (!window.pendingAttachments.length) return;
@@ -507,21 +565,12 @@
       });
   };
 
-  // Zeigt Anhänge aus einem gespeicherten Bookmark als reine Vorschau-Chips
-  // (nur Metadaten, ohne Dateidaten – wird beim nächsten Senden nicht mitgeschickt).
+  // Anhänge eines gespeicherten Bookmarks. Sie gehören zu der Frage, mit der
+  // sie damals rausgegangen sind, und stehen deshalb an ihr im Thread — nicht
+  // im Eingabefeld, das der naechsten Frage gehoert. Reine Metadaten: die
+  // Dateien selbst sind nicht gespeichert.
   window.showBookmarkAttachments = function (attachmentsMeta) {
-    window.pendingAttachments = (Array.isArray(attachmentsMeta) ? attachmentsMeta : [])
-      .map(function (meta) {
-        return {
-          name: String(meta.name || "attachment"),
-          mime: String(meta.mime || ""),
-          size: Number(meta.size) || 0,
-          data: null,
-          previewOnly: true
-        };
-      });
-    if (typeof window.renderAttachmentChips === "function") {
-      window.renderAttachmentChips();
-    }
+    window.clearPendingAttachments?.();
+    window.App?.setThreadQuestionAttachments?.(attachmentsMeta);
   };
 })();
