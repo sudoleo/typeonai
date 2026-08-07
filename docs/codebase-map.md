@@ -660,7 +660,13 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   `findAnchorTarget` löst den verifizierten Anker auf, `sentenceBounds`
   dehnt ihn auf den umgebenden Satz aus, `wrapFlatRange` wrappt die
   betroffenen Textknoten in `<span class="cx-claim is-unanimous|is-minor|
-  is-split|is-major">`. Gewrappt wird pro Textknoten (nicht per
+  is-split|is-major">`. Seit dem Satz-Index (2026-08-07) ist der Anker in der
+  Regel bereits ein GANZER Satz; `endsAtSentenceBoundary` verhindert deshalb,
+  dass `sentenceBounds` noch weiter dehnt — sonst verschluckt der erste Satz
+  den zweiten und beide Claims landen auf derselben Markierung.
+  `searchVariants` probiert zusätzlich eine von `[S1]`-Quellentags befreite
+  Fassung: im DOM ist der Tag ein übersprungener `.src-ref`-Chip, ein Anker mit
+  Tag fand seine Stelle sonst nie. Gewrappt wird pro Textknoten (nicht per
   `Range.extractContents`), damit `<strong>`, `[S1]`-Links und KaTeX exakt an
   ihrem Platz bleiben; `code`/`pre`/`.katex`/Badges werden übersprungen.
   `is-unanimous` ist bewusst dekorationslos (nur die Marke), `is-minor` eine
@@ -678,10 +684,16 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Flaeche und feiner Kontur. Sie ist damit klar von hochgestellten
   Quellenzahlen unterschieden; Neutral = Einigkeit, Bernstein
   (`has-dissent`) = Abweichung. Wenn Claim und Difference denselben Satz
-  belegen, bleibt nur die Quote sichtbar; der zusaetzliche `.cx-marker` bleibt
-  verborgen im DOM. Der Passage-Klick folgt in diesem Fall bewusst dem
-  **sichtbaren** Claim-Badge und öffnet dessen Agreement-Details; Preview und
-  Zaehlung kennen die Difference weiterhin. Treffen mehrere Claims denselben Satz, bleibt
+  belegen, bleibt genau EIN Steuerelement sichtbar — welches, entscheidet seit
+  2026-08-07 die Schwere: bei **Widerspruch** gewinnt der `.cx-marker` und das
+  Claim-Badge entfaellt, bei **Emphasis** bleibt es wie bisher beim Badge.
+  Grund: seit die Claims über den Satz-Index jeden prüfbaren Satz abdecken,
+  trägt ein strittiger Satz fast immer AUCH ein Claim-Badge — mit der alten
+  Regel (Badge gewinnt immer) verschwand damit praktisch jeder
+  Widerspruchs-Marker aus dem Text, und der Klick auf den strittigen Satz
+  öffnete „4 of 6 models agree" statt der Widerspruchs-Karte (User-Befund
+  2026-08-07). Der unterlegene Marker bleibt verborgen im DOM, Preview und
+  Zaehlung kennen ihn weiterhin. Treffen mehrere Claims denselben Satz, bleibt
   ebenfalls nur eine Marke sichtbar: die konservative Satzquote des am
   wenigsten gestuetzten Claims. Die Kopien in
   `landing.css` **und die Mockup-Markups** (`landing.html`,
@@ -1080,12 +1092,28 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   zusätzlich Kommentar-Keepalives, wenn eine Engine länger keine Bytes liefert.
   `differences_data` ist
   strukturiertes JSON (Verdict, Karten, `best_model`, `models_compared`).
-  Jeder Eintrag in `differences[]` trägt zusätzlich **`consensus_anchor`**: ein
-  wörtlicher Auszug aus der KONSENSANTWORT (nicht aus einer Modellantwort),
-  serverseitig wie `claims[].anchor` verifiziert und bei Nichtauffindbarkeit
-  **geleert** — das Frontend markiert damit den Satz inline. `positions[].quote`
-  bleibt unverändert ein Zitat aus der jeweiligen Modellantwort. Alte
-  Bookmarks/Snapshots ohne das Feld degradieren auf „nur Karte".
+  Jeder Eintrag in `differences[]` trägt zusätzlich **`consensus_anchor`**: die
+  Stelle in der KONSENSANTWORT (nicht in einer Modellantwort), an der der
+  Widerspruch hängt; das Frontend markiert damit den Satz inline.
+  `positions[].quote` bleibt unverändert ein Zitat aus der jeweiligen
+  Modellantwort. Alte Bookmarks/Snapshots ohne das Feld degradieren auf „nur
+  Karte".
+  **Satz-Index (seit 2026-08-07):** Der Judge schreibt Anker nicht mehr ab.
+  `_enumerate_consensus_sentences` nummeriert die prüfbaren Sätze der
+  Konsensantwort (Überschriften, Tabellen, Code bleiben außen vor, Listenzähler
+  und `[S1]`-Tags gehören nicht zum Satz) und stellt jedem ein `[n] ` voran;
+  der Judge liefert nur noch `claims[].s` bzw. `differences[].s` (`0` = der
+  Konsens sagt dazu nichts), der Server setzt daraus den exakten Originalsatz
+  in `anchor`/`consensus_anchor` ein. Der Anker ist damit per Konstruktion
+  auffindbar und kostet ~2 statt ~60 Output-Tokens — erst das finanziert
+  `MAX_DIFF_CLAIMS = 20` (vorher 8) und die Prompt-Regel „jeder prüfbare Satz"
+  statt „die 3–6 zentralen". Die wörtliche Abschrift bleibt als Lesepfad für
+  ältere Payloads erhalten. Ein Claim braucht **mindestens zwei** beteiligte
+  Modelle (`MIN_CLAIM_SUPPORT`): „1/1 — all models agree" liest sich wie eine
+  Bestätigung, ist aber nur eine Stimme, und verzerrte zusätzlich den
+  Agreement-Score. Zwei Claims auf demselben Satz werden serverseitig auf den
+  am wenigsten gestützten zusammengezogen (dieselbe Regel, die das Frontend
+  für die sichtbare Quote anwendet).
 - Kritische Fehleralarmierung: Schlagen alle ausgewählten Modellrequests fehl,
   meldet `query-send.js` genau einen zusammengefassten `run_failed`-Alert. Ein
   Consensus-Abbruch wird nur gemeldet, wenn kein verwertbarer Consensus-Text

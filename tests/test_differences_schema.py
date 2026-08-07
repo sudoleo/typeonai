@@ -6,6 +6,7 @@ import app.core.config as cfg
 from app.services.llm.consensus_engine import (
     _build_differences_prompt,
     _differences_attempts,
+    _enumerate_consensus_sentences,
     _gemini_engine_payload,
     _legacy_differences_text,
     _judge_effort,
@@ -154,6 +155,32 @@ class JsonRepairAndShapeTests(unittest.TestCase):
         data, legacy = parse_differences_payload('{"claims": [{"anchor": "x", "agree": [', ANON_MAP)
         self.assertIsNone(data)
         self.assertEqual(legacy, "")
+
+    def test_truncation_before_any_difference_is_not_reported_as_agreement(self):
+        """Eine am Token-Limit abgeschnittene Ausgabe hat den Rest VERLOREN.
+        Ein dabei leeres "differences" als "keine Widersprueche" zu rendern
+        (und die Score-Strafpunkte wegfallen zu lassen) waere eine erfundene
+        Entwarnung - Retry/Fallback-Judge sind die richtige Antwort."""
+        raw = json.dumps(valid_payload())
+        truncated = raw[: raw.index('"differences"') + len('"differences": [')]
+        data, legacy = parse_differences_payload(truncated, ANON_MAP)
+        self.assertIsNone(data)
+        self.assertEqual(legacy, "")
+
+    def test_truncation_after_a_difference_keeps_what_was_written(self):
+        """Steht mindestens ein Widerspruch vollstaendig da, bleibt er gueltig -
+        nur der abgeschnittene Rest faellt weg."""
+        payload = valid_payload()
+        payload["differences"].append({
+            "claim": "Second disputed point.",
+            "type": "contradiction",
+            "positions": [{"stance": "x", "models": ["Model A"], "quote": "q"}],
+        })
+        raw = json.dumps(payload)
+        truncated = raw[: raw.index("Second disputed point") + 5]
+        data, _ = parse_differences_payload(truncated, ANON_MAP)
+        self.assertIsNotNone(data)
+        self.assertEqual(len(data["differences"]), 1)
 
     def test_json_garbage_never_leaks_raw_text(self):
         data, legacy = parse_differences_payload("```json\n{\"claims\": bro", ANON_MAP)
@@ -587,11 +614,11 @@ class DifferencesPromptTests(unittest.TestCase):
     def test_prompt_requests_json_and_anonymizes(self):
         built = _build_differences_prompt(
             "answer one", "answer two", None, None, None, None,
-            consensus_answer="the consensus",
+            consensus_answer="This is the consensus answer.",
             excluded_models=[],
         )
         self.assertIsNotNone(built)
-        prompt, anon_map, answers_by_model = built
+        prompt, anon_map, answers_by_model, sentences = built
         self.assertIn("JSON", prompt)
         self.assertIn('"claims"', prompt)
         self.assertIn('"differences"', prompt)
@@ -605,6 +632,241 @@ class DifferencesPromptTests(unittest.TestCase):
             answers_by_model,
             {"OpenAI": "answer one", "Mistral": "answer two"},
         )
+        # Die Konsensantwort steht nummeriert im Prompt; der Judge referenziert
+        # Saetze ueber "s" statt sie abzuschreiben.
+        self.assertIn("[1] This is the consensus answer.", prompt)
+        self.assertEqual(sentences, ["This is the consensus answer."])
+        self.assertIn('"s"', prompt)
+
+    def test_differences_are_requested_before_claims(self):
+        """Reisst das Token-Budget, faellt die redundantere Claim-Liste weg -
+        nicht die Widersprueche. Das gilt fuer die Reihenfolge im Prompt UND
+        im Structured-Output-Schema (Gemini generiert in Schema-Reihenfolge)."""
+        built = _build_differences_prompt(
+            "answer one", "answer two", None, None, None, None,
+            consensus_answer="This is the consensus answer.",
+            excluded_models=[],
+        )
+        prompt = built[0]
+        self.assertLess(prompt.index('"differences"'), prompt.index('"claims"'))
+
+        schema_keys = list(DIFFERENCES_JSON_SCHEMA["properties"])
+        self.assertLess(schema_keys.index("differences"), schema_keys.index("claims"))
+        self.assertEqual(
+            DIFFERENCES_JSON_SCHEMA["required"],
+            ["differences", "claims", "best_model"],
+        )
+
+    def test_long_consensus_is_numbered_sentence_by_sentence(self):
+        consensus = (
+            "# Overview\n\n"
+            "The tower is 330 metres tall. It was finished in 1889, i.e. for the fair.\n\n"
+            "- Tickets cost about 30 euros for adults.\n"
+            "- Short.\n"
+        )
+        built = _build_differences_prompt(
+            "answer one", None, None, None, None, None,
+            consensus_answer=consensus,
+            excluded_models=[],
+        )
+        prompt, _anon_map, _answers, sentences = built
+
+        self.assertEqual(sentences, [
+            "The tower is 330 metres tall.",
+            "It was finished in 1889, i.e. for the fair.",
+            "Tickets cost about 30 euros for adults.",
+        ])
+        # Ueberschrift bleibt unnummeriert, der Listenzaehler steht vor der Marke
+        self.assertIn("# Overview", prompt)
+        self.assertNotIn("[1] # Overview", prompt)
+        self.assertIn("[1] The tower", prompt)
+        self.assertIn("[2] It was finished", prompt)
+        self.assertIn("- [3] Tickets cost", prompt)
+        # Jeder Satz ist ein exakter Ausschnitt der Konsensantwort
+        for sentence in sentences:
+            self.assertIn(sentence, consensus)
+
+
+class ConsensusSentenceSplitTests(unittest.TestCase):
+    """Jeder nummerierte Satz muss ein EXAKTER Ausschnitt der Konsensantwort
+    sein - nur dann findet ihn das Frontend im gerenderten Text wieder."""
+
+    def sentences(self, text):
+        numbered, sentences = _enumerate_consensus_sentences(text)
+        for sentence in sentences:
+            self.assertIn(sentence, text, "Anker muss ein Substring des Konsens sein")
+        return numbered, sentences
+
+    def test_plain_sentences_are_split(self):
+        _numbered, sentences = self.sentences(
+            "The tower is 330 metres tall. It was finished in 1889."
+        )
+        self.assertEqual(sentences, [
+            "The tower is 330 metres tall.",
+            "It was finished in 1889.",
+        ])
+
+    def test_year_at_the_end_is_a_sentence_end(self):
+        """Der haeufigste Faktensatz ueberhaupt endet auf eine Zahl - er darf
+        nicht mit dem Folgesatz verschmelzen."""
+        _numbered, sentences = self.sentences(
+            "Es wurde 1889 fertiggestellt. Der Bau dauerte gut zwei Jahre."
+        )
+        self.assertEqual(len(sentences), 2)
+
+    def test_source_tag_neither_blocks_the_split_nor_enters_the_anchor(self):
+        numbered, sentences = self.sentences(
+            "Der Turm ist 330 m hoch.[S1] Er wurde 1889 fertiggestellt."
+        )
+        self.assertEqual(sentences[0], "Der Turm ist 330 m hoch.")
+        self.assertEqual(sentences[1], "Er wurde 1889 fertiggestellt.")
+        self.assertIn("[1] Der Turm", numbered)
+        self.assertIn("[2] Er wurde", numbered)
+
+    def test_abbreviations_and_initials_do_not_split(self):
+        _numbered, sentences = self.sentences(
+            "Laut J. R. R. Tolkien ist das anders und u.a. deshalb umstritten."
+        )
+        self.assertEqual(len(sentences), 1)
+
+    def test_headings_tables_and_code_are_not_numbered(self):
+        text = (
+            "# Titel\n\n"
+            "Der erste pruefbare Satz steht hier.\n\n"
+            "| a | b |\n|---|---|\n\n"
+            "```python\nx = 1. Foo bar baz\n```\n"
+        )
+        numbered, sentences = self.sentences(text)
+        self.assertEqual(sentences, ["Der erste pruefbare Satz steht hier."])
+        self.assertIn("# Titel", numbered)
+        self.assertNotIn("[1] # Titel", numbered)
+        self.assertNotIn("[2]", numbered)
+
+    def test_list_counter_stays_out_of_the_anchor(self):
+        _numbered, sentences = self.sentences(
+            "1. **Weltklasse:** ca. 1.300 Watt Dauerleistung.\n"
+            "2. Ein Hobbyfahrer schafft dagegen rund 200 Watt.\n"
+        )
+        self.assertEqual(sentences, [
+            "**Weltklasse:** ca. 1.300 Watt Dauerleistung.",
+            "Ein Hobbyfahrer schafft dagegen rund 200 Watt.",
+        ])
+
+    def test_sentence_count_is_capped(self):
+        text = " ".join(f"Dies ist der Satz Nummer {i} im Text." for i in range(200))
+        _numbered, sentences = self.sentences(text)
+        self.assertEqual(len(sentences), 80)
+
+    def test_empty_answer_yields_no_sentences(self):
+        numbered, sentences = _enumerate_consensus_sentences("")
+        self.assertEqual(sentences, [])
+        self.assertEqual(numbered, "")
+
+
+class SentenceAnchorTests(unittest.TestCase):
+    """Der Anker kommt aus der Satznummer statt aus einer Abschrift - damit
+    ist er per Konstruktion im Konsenstext auffindbar."""
+
+    CONSENSUS = (
+        "The capital of France is Paris. "
+        "It was founded in the third century BC."
+    )
+
+    def numbered_payload(self):
+        payload = valid_payload()
+        payload["claims"][0] = {
+            "s": 1,
+            "agree": ["Model A", "Model B"],
+            "dissent": [{"model": "Model C", "quote": "the capital is Lyon"}],
+        }
+        payload["claims"][1] = {"s": 2, "agree": ["Model A", "Model B"], "dissent": []}
+        payload["differences"][0]["s"] = 1
+        return payload
+
+    def test_sentence_numbers_resolve_to_the_exact_sentence(self):
+        data, _ = parse_differences_payload(
+            json.dumps(self.numbered_payload()), ANON_MAP,
+            consensus_answer=self.CONSENSUS, model_answers={},
+        )
+        self.assertEqual(data["claims"][0]["anchor"], "The capital of France is Paris.")
+        self.assertEqual(
+            data["claims"][1]["anchor"], "It was founded in the third century BC.")
+        self.assertEqual(
+            data["differences"][0]["consensus_anchor"], "The capital of France is Paris.")
+
+    def test_unknown_sentence_number_is_ignored(self):
+        payload = self.numbered_payload()
+        payload["claims"][0]["s"] = 99
+        payload["differences"][0]["s"] = 99
+        data, _ = parse_differences_payload(
+            json.dumps(payload), ANON_MAP,
+            consensus_answer=self.CONSENSUS, model_answers={},
+        )
+        # Ohne gueltige Nummer und ohne Abschrift bleibt kein Anker uebrig -
+        # der Claim faellt damit ganz weg, statt einen falschen Satz zu
+        # markieren. Die Widerspruchs-Karte bleibt, nur ohne Inline-Marke.
+        self.assertEqual(len(data["claims"]), 1)
+        self.assertEqual(
+            data["claims"][0]["anchor"], "It was founded in the third century BC.")
+        self.assertEqual(data["differences"][0]["consensus_anchor"], "")
+
+    def test_zero_means_the_consensus_does_not_state_it(self):
+        payload = self.numbered_payload()
+        payload["differences"][0]["s"] = 0
+        data, _ = parse_differences_payload(
+            json.dumps(payload), ANON_MAP,
+            consensus_answer=self.CONSENSUS, model_answers={},
+        )
+        self.assertEqual(data["differences"][0]["consensus_anchor"], "")
+
+    def test_verbatim_anchor_still_works_for_older_payloads(self):
+        """Alte Bookmarks und ein Judge, der doch abschreibt, bleiben gueltig."""
+        data, _ = parse_differences_payload(
+            json.dumps(valid_payload()), ANON_MAP,
+            consensus_answer=self.CONSENSUS, model_answers={},
+        )
+        self.assertEqual(data["claims"][0]["anchor"], "The capital of France is Paris")
+
+    def test_duplicate_sentence_keeps_the_more_conservative_claim(self):
+        payload = self.numbered_payload()
+        payload["claims"][1] = {"s": 1, "agree": ["Model A"], "dissent": []}
+        payload["claims"].append(
+            {"s": 1, "agree": ["Model A"], "dissent": [{"model": "Model C", "quote": "no"}]}
+        )
+        data, _ = parse_differences_payload(
+            json.dumps(payload), ANON_MAP,
+            consensus_answer=self.CONSENSUS, model_answers={},
+        )
+        # Ein Satz, ein Claim - und zwar der am wenigsten gestuetzte (1/2)
+        self.assertEqual(len(data["claims"]), 1)
+        self.assertEqual(data["claims"][0]["agree"], ["OpenAI"])
+        self.assertEqual([d["model"] for d in data["claims"][0]["dissent"]], ["Grok"])
+
+
+class ClaimSupportThresholdTests(unittest.TestCase):
+    """Eine einzelne Stimme belegt nichts: "1/1 - all models agree" liest sich
+    wie eine Bestaetigung, ist aber nur ein Modell."""
+
+    def test_single_voice_claim_is_dropped(self):
+        payload = valid_payload()
+        payload["claims"][1]["agree"] = ["Model A"]
+        payload["claims"][1]["dissent"] = []
+        data, _ = parse_differences_payload(json.dumps(payload), ANON_MAP)
+        self.assertEqual(len(data["claims"]), 1)
+        self.assertEqual(data["claims"][0]["agree"], ["OpenAI", "Gemini"])
+
+    def test_two_voices_are_kept(self):
+        payload = valid_payload()
+        payload["claims"][1]["agree"] = ["Model A", "Model B"]
+        data, _ = parse_differences_payload(json.dumps(payload), ANON_MAP)
+        self.assertEqual(len(data["claims"]), 2)
+
+    def test_single_dissent_alone_is_dropped(self):
+        payload = valid_payload()
+        payload["claims"][1]["agree"] = []
+        payload["claims"][1]["dissent"] = [{"model": "Model C", "quote": "nope"}]
+        data, _ = parse_differences_payload(json.dumps(payload), ANON_MAP)
+        self.assertEqual(len(data["claims"]), 1)
 
 
 if __name__ == "__main__":

@@ -596,12 +596,16 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     expect(verdict).to_be_visible(timeout=15000)
     expect(verdict).to_contain_text("/100")
 
+    # Zwei gepruefte Saetze (der Judge markiert seit dem Satz-Index jeden
+    # pruefbaren Satz, nicht nur die "zentralen"), aber nur EIN Claim-Badge:
+    # auf dem strittigen Satz behaelt der Widerspruch das Wort.
     claim_badges = app_page.locator("#consensusAnswerBody .claim-badge")
     expect(claim_badges).to_have_count(1)
     expect(claim_badges.first).to_be_visible(timeout=15000)
     expect(claim_badges.first).to_have_text(
         re.compile(r"^\d+/\d+$")
     )
+    expect(app_page.locator("#consensusAnswerBody .cx-claim")).to_have_count(2)
 
     # Der fertige Footer zeigt die Einzelantworten-Disclosure auch ohne
     # Agent Mode. Sie ist ein fester Teil jeder Consensus-Antwort.
@@ -720,15 +724,25 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     # (Linie + Quote), nicht nur in einer Karte daneben.
     marked = app_page.locator("#consensusAnswerBody .cx-claim.is-major").first
     expect(marked).to_be_visible(timeout=15000)
-    # Claim und Difference treffen im Fixture denselben Satz. Dort bleibt nur
-    # die aussagekraeftigere Quote sichtbar; der doppelte Punkt ist weg.
+    # Claim und Difference treffen im Fixture denselben Satz. Dort steht genau
+    # EIN Steuerelement — und zwar der Widerspruchs-Marker, nicht das
+    # Claim-Badge: eine Zustimmungsquote wuerde den Streit verharmlosen.
     overlap_marker = app_page.locator("#consensusAnswerBody .cx-marker").first
-    expect(overlap_marker).to_be_hidden()
+    expect(overlap_marker).to_be_visible()
     assert (
         overlap_marker.get_attribute("aria-label")
     ), "Marker braucht ein sprechendes aria-label"
+    assert app_page.evaluate(
+        """() => {
+          const marker = document.querySelector("#consensusAnswerBody .cx-marker");
+          const span = marker.previousElementSibling;
+          return span && span.classList.contains("cx-claim")
+            && span.classList.contains("is-major")
+            && !document.querySelector("#consensusAnswerBody .claim-badge.has-dissent");
+        }"""
+    ), "Strittiger Satz: rote Linie + Widerspruchs-Marker, kein Dissens-Badge daneben"
 
-    # Linie und Quote sagen dasselbe: wo das Badge gelb ist (Dissens), darf die
+    # Linie und Quote sagen dasselbe: wo ein Badge gelb ist (Dissens), darf die
     # Unterlinie nicht neutral grau bleiben.
     assert app_page.evaluate(
         """() => Array.from(
@@ -1089,6 +1103,154 @@ def test_claim_anchor_with_markdown_syntax_marks_the_rendered_sentence(app_page)
     assert fallback.get_attribute("hidden") is None
     expect(fallback.locator("strong")).to_have_text("Unmatched claim:")
     assert "*" not in fallback.inner_text()
+
+
+def test_two_claims_in_one_paragraph_mark_their_own_sentence(app_page):
+    """Der Anker ist seit dem Satz-Index ein GANZER Satz. sentenceBounds dehnte
+    ihn trotzdem bis zum naechsten Satzende weiter - der erste Satz verschluckte
+    damit den zweiten, beide Claims landeten auf derselben Markierung und im
+    Absatz blieb nur ein Badge stehen."""
+    app_page.evaluate(
+        """() => {
+          document.getElementById("consensusAnswerBody").innerHTML =
+            "<p>The tower is 330 metres tall. It was finished in 1889.</p>";
+          window.renderConsensusInsights({
+            claims: [
+              {anchor: "The tower is 330 metres tall.",
+               agree: [{model: "openai"}, {model: "gemini"}], dissent: []},
+              {anchor: "It was finished in 1889.",
+               agree: [{model: "openai"}],
+               dissent: [{model: "grok", quote: "finished in 1887"}]}
+            ],
+            differences: [],
+            models_compared: ["openai", "gemini", "grok"]
+          }, 3);
+        }"""
+    )
+    marked = app_page.locator("#consensusAnswerBody .cx-claim")
+    expect(marked).to_have_count(2)
+    assert marked.nth(0).inner_text() == "The tower is 330 metres tall."
+    assert marked.nth(1).inner_text() == "It was finished in 1889."
+    expect(app_page.locator("#consensusAnswerBody .claim-badge")).to_have_count(2)
+    expect(app_page.locator("#consensusClaimsFallback")).to_be_hidden()
+
+
+def test_contradiction_keeps_the_visible_control_on_a_shared_sentence(app_page):
+    """Seit die Claims jeden pruefbaren Satz abdecken, traegt ein strittiger
+    Satz fast immer AUCH ein Claim-Badge. Solange dort das Badge gewann,
+    verschwand praktisch jeder Widerspruchs-Marker aus dem Text: der strittige
+    Satz sah aus wie jeder andere und der Klick darauf oeffnete "4 of 6 models
+    agree" statt der Widerspruchs-Karte (User-Befund 2026-08-07)."""
+    app_page.evaluate(
+        """() => {
+          document.getElementById("consensusAnswerBody").innerHTML =
+            "<p>Der Break-even liegt bei 50.000 km. Der Strommix ist entscheidend.</p>";
+          window.renderConsensusInsights({
+            claims: [
+              {anchor: "Der Break-even liegt bei 50.000 km.",
+               agree: [{model:"openai"},{model:"gemini"},{model:"mistral"},{model:"claude"}],
+               dissent: [{model:"grok", quote:"eher 80.000 km"},{model:"deepseek", quote:"eher 90.000"}]},
+              {anchor: "Der Strommix ist entscheidend.",
+               agree: [{model:"openai"},{model:"gemini"},{model:"grok"}], dissent: []}
+            ],
+            differences: [
+              {claim: "Break-even-Kilometer", consensus_anchor: "Der Break-even liegt bei 50.000 km.",
+               type: "contradiction", severity: "major",
+               positions: [
+                 {stance:"50.000 km", models:["openai"], quote:"rund 50.000"},
+                 {stance:"80.000 km", models:["grok"], quote:"eher 80.000 km"}
+               ]}
+            ],
+            models_compared: ["openai","gemini","mistral","claude","grok","deepseek"]
+          }, 6);
+        }"""
+    )
+    # Das isolierte Renderer-Fixture haelt den aeusseren Ergebniscontainer
+    # hidden — gemessen wird deshalb der DOM-Zustand, den der Code selbst
+    # setzt, nicht die CSS-Sichtbarkeit.
+    state = app_page.evaluate(
+        """() => {
+          const body = document.getElementById("consensusAnswerBody");
+          const marker = body.querySelector(".cx-marker.is-major");
+          return {
+            markerSuppressed: !marker || marker.hidden
+              || marker.getAttribute("aria-hidden") === "true",
+            badges: Array.from(body.querySelectorAll(".claim-badge"))
+              .map(b => b.textContent)
+          };
+        }"""
+    )
+    # Auf dem strittigen Satz bleibt der Widerspruchs-Marker stehen ...
+    assert state["markerSuppressed"] is False, "Widerspruch darf nicht zurueckgedraengt werden"
+    # ... und das Claim-Badge tritt dort zurueck. Der unstrittige Satz behaelt
+    # seins, es bleibt also bei genau EINEM Steuerelement pro Satz.
+    assert state["badges"] == ["3/3"], state["badges"]
+
+    # Und der Klick auf den strittigen Satz fuehrt zur Widerspruchs-Karte,
+    # nicht in ein Zustimmungs-Popover.
+    app_page.evaluate(
+        """() => document.querySelectorAll("#consensusAnswerBody .cx-claim")[0].click()"""
+    )
+    expect(app_page.locator(".diff-card.is-focused")).to_have_count(1)
+    expect(app_page.locator("#claimPopover")).to_be_hidden()
+
+
+def test_emphasis_marker_still_yields_to_the_claim_badge(app_page):
+    """Nur Widersprueche gewinnen. Eine blosse Gewichtungs-Differenz ist die
+    schwaechere Aussage als die Stuetzungsquote und tritt weiter zurueck."""
+    app_page.evaluate(
+        """() => {
+          document.getElementById("consensusAnswerBody").innerHTML =
+            "<p>Der Strommix ist entscheidend.</p>";
+          window.renderConsensusInsights({
+            claims: [{anchor: "Der Strommix ist entscheidend.",
+                      agree: [{model:"openai"},{model:"gemini"}],
+                      dissent: [{model:"grok", quote:"nachrangig"}]}],
+            differences: [
+              {claim: "Gewichtung des Strommix", consensus_anchor: "Der Strommix ist entscheidend.",
+               type: "emphasis",
+               positions: [{stance:"zentral", models:["openai"], quote:"zentral"},
+                           {stance:"nachrangig", models:["grok"], quote:"nachrangig"}]}
+            ],
+            models_compared: ["openai","gemini","grok"]
+          }, 3);
+        }"""
+    )
+    suppressed = app_page.evaluate(
+        """() => {
+          const marker = document.querySelector("#consensusAnswerBody .cx-marker");
+          return !!marker && (marker.hidden || marker.getAttribute("aria-hidden") === "true");
+        }"""
+    )
+    expect(app_page.locator("#consensusAnswerBody .claim-badge")).to_have_count(1)
+    assert suppressed is True, "Emphasis-Marker tritt weiterhin hinter das Badge zurueck"
+
+
+def test_claim_anchor_with_source_tag_still_marks_its_sentence(app_page):
+    """Im Konsens-Markdown steht "...330 metres tall.[S1]", im DOM ist daraus
+    ein uebersprungener .src-ref-Chip geworden. Ein Anker mit Tag fand seine
+    Stelle deshalb nie - und das traf ausgerechnet die zentralen Faktensaetze,
+    an die der Consensus-Prompt die Tags haengt."""
+    app_page.evaluate(
+        """() => {
+          document.getElementById("consensusAnswerBody").innerHTML =
+            "<p>The tower is 330 metres tall.<a class=\\"src-ref\\" href=\\"#\\">1</a>"
+            + " It was finished in 1889.</p>";
+          window.renderConsensusInsights({
+            claims: [{
+              anchor: "The tower is 330 metres tall.[S1]",
+              agree: [{model: "openai"}, {model: "gemini"}],
+              dissent: []
+            }],
+            differences: [],
+            models_compared: ["openai", "gemini"]
+          }, 2);
+        }"""
+    )
+    marked = app_page.locator("#consensusAnswerBody .cx-claim")
+    expect(marked).to_have_count(1)
+    assert marked.first.inner_text() == "The tower is 330 metres tall."
+    expect(app_page.locator("#consensusClaimsFallback")).to_be_hidden()
 
 
 def test_agent_mode_can_reveal_hidden_model_answers_on_mobile(app_page):

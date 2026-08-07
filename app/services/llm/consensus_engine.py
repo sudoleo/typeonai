@@ -742,6 +742,187 @@ def query_consensus(
 MAX_DIFF_ANSWER_CHARS = 6000
 
 
+# ---------------------------------------------------------------------------
+# Satz-Index der Konsensantwort
+#
+# Der Judge musste den Anker frueher woertlich abschreiben ("verbatim excerpt
+# of 5-12 words"). Jede Abschrift ist eine Fehlerquelle: paraphrasiert, mit
+# Markdown-Resten oder Listenzaehler versehen - und ein Anker, der sich im
+# Konsenstext nicht wiederfindet, verliert seine Inline-Markierung und landet
+# bestenfalls in der Fallback-Liste. Stattdessen sieht der Judge die Antwort
+# mit nummerierten Saetzen und nennt nur noch die Nummer; der Server setzt
+# daraus den exakten Originalsatz ein. Der Anker ist damit per Konstruktion
+# auffindbar und kostet statt ~60 nur noch ~2 Output-Tokens - erst das macht
+# die deutlich hoehere Claim-Abdeckung bezahlbar.
+# ---------------------------------------------------------------------------
+
+MAX_CONSENSUS_SENTENCES = 80
+# Kuerzere Fragmente sind Abkuerzungsreste ("Kosten: ca.") oder Stummel
+# ("Kurz."), keine pruefbare Aussage - sie gehoeren an den Satz daneben.
+# Bewusst nach Woertern statt nach Zeichen: "Es wurde 1889 fertiggestellt." ist
+# ein vollstaendiger Faktensatz und mit 29 Zeichen trotzdem kurz.
+MIN_SENTENCE_WORDS = 3
+
+# Zeilenpraefix, das zur Markdown-Struktur gehoert und nicht zum Satz:
+# Einrueckung, Blockquote-Pfeile, Aufzaehlungs- und Nummerierungszeichen.
+# Spiegelt inlineMarkdownSource() in consensus-insights.js - was dort vom
+# Anker abgeschnitten wird, darf hier gar nicht erst hineingeraten.
+_LINE_PREFIX_RE = re.compile(r"^[ \t]*(?:>[ \t]*)*(?:[-*+][ \t]+|\d+[.)][ \t]+)?")
+# Quellentags stehen zwischen Satzzeichen und Leerzeichen ("…330 m.[S1] Der
+# naechste…") und wuerden die Trennung sonst verhindern - ausgerechnet an den
+# zentralen Faktensaetzen, an die der Consensus-Prompt sie haengt. Sie liegen
+# bewusst AUSSERHALB von "close" und damit ausserhalb des Ankers: markiert wird
+# der Satz, nicht die Fussnote.
+_SENTENCE_SPLIT_RE = re.compile(
+    r"(?<=[.!?…])(?P<close>[\"'”’»)\]]*)(?:\[S?\d+(?:\s*,\s*S?\d+)*\])*[ \t]+"
+)
+_THEMATIC_BREAK_RE = re.compile(r"^[-*_\s]{3,}$")
+
+# Abkuerzungen, deren Punkt kein Satzende ist (Gegenstueck zu ABBREVIATIONS in
+# consensus-insights.js).
+_SENTENCE_ABBREVIATIONS = {
+    "z.b", "u.a", "d.h", "u.u", "i.d.r", "ggf", "bzw", "ca", "etc", "usw",
+    "vgl", "evtl", "inkl", "exkl", "nr", "abb", "tab", "bspw", "dr", "prof",
+    "mr", "mrs", "ms", "st", "vs", "approx", "e.g", "i.e", "cf", "fig",
+    "no", "inc", "ltd", "co", "al", "jr", "sr", "ph.d",
+}
+
+_SENTENCE_TAIL_TOKEN_RE = re.compile(r"[^\s]+$")
+
+
+def _continues_after_dot(fragment: str) -> bool:
+    """True, wenn der Punkt am Ende des Fragments kein Satzende ist -
+    Abkuerzung ("ca.") oder Initial ("J. R. R.").
+
+    Eine Zahl davor zaehlt bewusst NICHT: "…wurde 1889 fertiggestellt." ist ein
+    voellig normales Satzende. Der Fall, den man dabei im Kopf hat - der
+    Aufzaehlungszaehler "1." - kommt hier gar nicht an, den schneidet bereits
+    _LINE_PREFIX_RE ab."""
+    text = fragment.rstrip()
+    if not text.endswith("."):
+        return False
+    match = _SENTENCE_TAIL_TOKEN_RE.search(text[:-1])
+    if not match:
+        return False
+    token = match.group(0).lower().strip("(\"'“„«")
+    if not token:
+        return False
+    if len(token) == 1 and token.isalpha():
+        return True
+    return token.strip(".") in _SENTENCE_ABBREVIATIONS
+
+
+def _sentence_spans(text: str) -> list:
+    """Satzgrenzen innerhalb EINER Markdown-Zeile als (start, end)-Offsets."""
+    raw = []
+    start = 0
+    for match in _SENTENCE_SPLIT_RE.finditer(text):
+        # Ein Kleinbuchstabe dahinter spricht gegen einen Satzanfang
+        # (dieselbe Regel wie isSentenceEnd() im Frontend).
+        following = text[match.end():match.end() + 1]
+        if following and following.islower():
+            continue
+        raw.append((start, match.end("close")))
+        start = match.end()
+    if start < len(text):
+        raw.append((start, len(text)))
+
+    spans = []
+    for span in raw:
+        if spans:
+            previous = text[spans[-1][0]:spans[-1][1]]
+            fragment = text[span[0]:span[1]].strip()
+            # Abkuerzungspunkt oder Stummel: gehoert zum Satz davor.
+            if _continues_after_dot(previous) or len(fragment.split()) < MIN_SENTENCE_WORDS:
+                spans[-1] = (spans[-1][0], span[1])
+                continue
+        spans.append(span)
+    return spans
+
+
+def _enumerate_consensus_sentences(consensus_answer: str):
+    """Nummeriert die Saetze der Konsensantwort.
+
+    Gibt (annotierter Text, Saetze) zurueck. Der annotierte Text ist die
+    unveraenderte Antwort mit einem "[n] " vor jedem nummerierten Satz - der
+    Judge sieht also weiterhin Ueberschriften, Tabellen und Code im Kontext,
+    kann sich aber nur auf pruefbare Fliesstext-Saetze beziehen.
+    sentences[n-1] ist der exakte Originalausschnitt fuer den Anker."""
+    text = str(consensus_answer or "")
+    sentences = []
+    marks = []
+    in_fence = False
+    pos = 0
+
+    for line in text.split("\n"):
+        line_start = pos
+        pos += len(line) + 1
+        stripped = line.strip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            in_fence = not in_fence
+            continue
+        # Ueberschriften und Tabellenzeilen tragen keine pruefbare Aussage,
+        # Code darf nicht angefasst werden, und eine Tabellenzeile waere im
+        # gerenderten DOM ohnehin kein zusammenhaengender Textknoten.
+        if in_fence or not stripped or stripped.startswith(("#", "|")):
+            continue
+        if _THEMATIC_BREAK_RE.match(stripped):
+            continue
+
+        prefix = _LINE_PREFIX_RE.match(line)
+        content_start = prefix.end() if prefix else 0
+        content = line[content_start:]
+        for start, end in _sentence_spans(content):
+            if len(sentences) >= MAX_CONSENSUS_SENTENCES:
+                break
+            fragment = content[start:end].strip()
+            if len(fragment.split()) < MIN_SENTENCE_WORDS:
+                continue
+            absolute = line_start + content_start + start
+            # Fuehrende Leerzeichen aus dem Anker halten, ohne den Offset der
+            # Marke zu verschieben: markiert wird der Satzanfang.
+            sentences.append(text[absolute:line_start + content_start + end].strip())
+            marks.append((absolute, len(sentences)))
+        if len(sentences) >= MAX_CONSENSUS_SENTENCES:
+            break
+
+    if not marks:
+        return text, []
+
+    parts = []
+    cursor = 0
+    for offset, number in marks:
+        parts.append(text[cursor:offset])
+        parts.append(f"[{number}] ")
+        cursor = offset
+    parts.append(text[cursor:])
+    return "".join(parts), sentences
+
+
+def _sentence_number(value):
+    """Satznummer aus der Judge-Ausgabe (Zahl, Float oder Ziffernstring)."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else None
+    text = str(value or "").strip()
+    return int(text) if text.isdigit() else None
+
+
+def _sentence_anchor(value, sentences: list) -> str:
+    """Anker aus einer Satznummer. "" wenn keine gueltige Nummer vorliegt."""
+    number = _sentence_number(value)
+    if number is None:
+        return ""
+    if 1 <= number <= len(sentences):
+        return _clip(sentences[number - 1], MAX_DIFF_TEXT_CHARS)
+    if number != 0:
+        logging.info(f"Differences engine used an unknown sentence number: {number!r}")
+    return ""
+
+
 def _build_differences_prompt(
     answer_openai: str,
     answer_mistral: str,
@@ -752,10 +933,11 @@ def _build_differences_prompt(
     consensus_answer: str,
     excluded_models: list = None,
 ):
-    """Baut den Differences-Prompt. Gibt (prompt, anon_map, answers_by_model)
-    zurück oder None, wenn keine Modellantworten vorliegen. answers_by_model
-    enthält die (gekappten) Antworttexte je echtem Modellnamen für die
-    serverseitige Zitat-Verifikation."""
+    """Baut den Differences-Prompt. Gibt (prompt, anon_map, answers_by_model,
+    sentences) zurück oder None, wenn keine Modellantworten vorliegen.
+    answers_by_model enthält die (gekappten) Antworttexte je echtem Modellnamen
+    für die serverseitige Zitat-Verifikation, sentences die nummerierten Sätze
+    der Konsensantwort für die Auflösung der Claim-Anker."""
 
     excluded = normalize_excluded_models(excluded_models or [])
 
@@ -798,22 +980,24 @@ def _build_differences_prompt(
     else:
         allowed_list = labels[0]
 
+    numbered_answer, sentences = _enumerate_consensus_sentences(consensus_answer)
+
     differences_prompt = (
         "You compare several anonymized model responses against a consensus answer.\n"
+        "Every sentence of the consensus answer that can carry a checkable statement is prefixed "
+        "with its number in square brackets, for example \"[7] \". You refer to those sentences by "
+        "number only — never copy their wording.\n"
         "Respond with ONLY one JSON object. No prose before or after it, no markdown fences.\n\n"
         "JSON schema:\n"
         "{\n"
-        '  "claims": [\n'
-        "    {\n"
-        '      "anchor": "verbatim excerpt of 5-12 consecutive words copied exactly from the consensus answer",\n'
-        '      "agree": ["Model A"],\n'
-        '      "dissent": [{"model": "Model B", "quote": "verbatim short quote from that model\'s response"}]\n'
-        "    }\n"
-        "  ],\n"
+        # "differences" steht BEWUSST vor "claims": wird die Ausgabe am
+        # Token-Limit abgeschnitten, verliert man dann die redundantere
+        # Haelfte. Die Widersprueche sind der Kern der Analyse und muessen
+        # zuerst dastehen - auch in der Reihenfolge, in der das Modell schreibt.
         '  "differences": [\n'
         "    {\n"
         '      "claim": "the disputed point in one short sentence",\n'
-        '      "consensus_anchor": "verbatim excerpt of 5-12 consecutive words copied exactly from the consensus answer, at the place where this disputed point is stated (empty string if the consensus answer does not state it)",\n'
+        '      "s": 7,\n'
         '      "type": "contradiction",\n'
         '      "severity": "major",\n'
         '      "positions": [\n'
@@ -822,47 +1006,82 @@ def _build_differences_prompt(
         '      "verify": "one short sentence saying what exactly the user should double-check"\n'
         "    }\n"
         "  ],\n"
+        '  "claims": [\n'
+        "    {\n"
+        '      "s": 7,\n'
+        '      "agree": ["Model A"],\n'
+        '      "dissent": [{"model": "Model B", "quote": "verbatim short quote from that model\'s response"}]\n'
+        "    }\n"
+        "  ],\n"
         '  "best_model": "Model A"\n'
         "}\n\n"
         "Rules:\n"
-        "- \"claims\": the 3-6 most central claims of the consensus answer. For each, list under \"agree\" every model "
-        "whose response supports it and under \"dissent\" every model whose response contradicts or clearly deviates "
-        "from it, with a short verbatim quote. A model that does not address a claim appears in neither list.\n"
-        "- \"differences\": substantive disagreements between the model responses. Use an empty list if there are none. "
+        "- \"s\": the bracketed number in front of a sentence of the consensus answer. Use only numbers that "
+        "actually appear there; never invent one.\n"
+        "- \"differences\": substantive disagreements between the model responses. Fill this list FIRST, before "
+        "the claims. Use an empty list if there are none. "
         "\"type\" is \"contradiction\" when facts or conclusions are incompatible, and \"emphasis\" when models merely "
         "set different focus, omit something, or weight things differently. Be conservative: only incompatible "
         "statements count as a contradiction. \"verify\" is optional.\n"
         "- \"severity\" (only for type \"contradiction\"): \"major\" when the disagreement changes the overall "
         "conclusion, recommendation, or a central fact of the answer; \"minor\" when it concerns a side detail "
         "that leaves the conclusion intact. Omit it for \"emphasis\" differences.\n"
-        "- \"consensus_anchor\": the passage in the CONSENSUS ANSWER that the disagreement is about, so the reader can "
-        "see it marked in place. Copy it verbatim from the consensus answer, never from a model response. Use an "
-        "empty string if the consensus answer does not state the disputed point at all.\n"
-        "- Quotes and anchors must be copied verbatim from the given texts. You may shorten them at the start or end, "
+        "- \"s\" inside a difference: the number of the consensus sentence that states the disputed point, so the "
+        "reader can see it marked in place. Use 0 if the consensus answer does not state it at all.\n"
+        f"- \"claims\": AFTER the differences, go through the numbered sentences in order and cover EVERY sentence "
+        f"that states something checkable — a fact, a number, a causal statement, a recommendation, a conclusion, "
+        f"or a limitation. Skip a sentence only when it merely introduces, transitions, summarizes the answer "
+        f"itself, or defines a term without asserting anything. Do not restrict yourself to the most important "
+        f"ones; at most {MAX_DIFF_CLAIMS} entries, one per sentence. For each, list under \"agree\" every model "
+        "whose response supports the statement and under \"dissent\" every model whose response contradicts or "
+        "clearly deviates from it, with a short verbatim quote. A model that does not address the sentence appears "
+        "in neither list. Leave the sentence out entirely when fewer than two models address it — a single voice "
+        "is not evidence. Claims never replace a difference: a sentence you listed as disputed above still gets "
+        "its claim entry here.\n"
+        "- Quotes must be copied verbatim from the model responses. You may shorten them at the start or end, "
         "but never paraphrase. Keep each quote under 200 characters.\n"
         f"- Use only these model labels: {allowed_list}. Never invent other labels.\n"
         "- Ignore citation markers, source labels, URLs, and source-list noise unless they reveal a real factual "
         "disagreement.\n"
         "- Write \"claim\", \"stance\", and \"verify\" in the same language as the model responses.\n"
         "- \"best_model\": the model whose answer is closest to the consensus answer.\n\n"
-        "Consensus answer:\n" + consensus_answer + "\n\n"
+        "Consensus answer (sentences numbered):\n" + numbered_answer + "\n\n"
         "Model responses:\n" + responses_text + "\n"
     )
 
-    return differences_prompt, anon_map, answers_by_model
+    return differences_prompt, anon_map, answers_by_model, sentences
 
 
-MAX_DIFF_CLAIMS = 8
+# Seit dem Satz-Index kostet ein Claim nur noch eine Zahl statt einer
+# Zitat-Abschrift. Der Judge darf deshalb jeden pruefbaren Satz melden statt
+# nur die "3-6 zentralen" - erst dadurch wird ein UNmarkierter Satz zur
+# Aussage ("das stuetzt kein Einzelmodell") statt zu blossem Rauschen.
+MAX_DIFF_CLAIMS = 20
+# Eine einzelne Stimme belegt nichts: "1/1 - all models agree" liest sich wie
+# eine Bestaetigung, ist aber nur ein Modell. Solche Claims werden weder
+# markiert noch in den Agreement-Score eingerechnet.
+MIN_CLAIM_SUPPORT = 2
 MAX_DIFF_ENTRIES = 6
 MAX_DIFF_POSITIONS = 4
 MAX_DIFF_QUOTE_CHARS = 300
 MAX_DIFF_TEXT_CHARS = 280
 
 
-def _extract_json_object(raw: str):
+def _extract_json_object(raw: str, *, with_repair_flag: bool = False):
+    """Parst das JSON-Objekt aus einer (auch verunreinigten) Modellausgabe.
+
+    Mit `with_repair_flag=True` kommt `(objekt, wurde_repariert)` zurueck. Der
+    Aufrufer braucht das, weil eine reparierte Ausgabe abgeschnitten war und
+    damit alles nach dem Schnitt VERLOREN hat - eine dabei leer gebliebene
+    Liste ist fehlende Information, kein Befund."""
+    result = _extract_json_object_inner(raw)
+    return result if with_repair_flag else result[0]
+
+
+def _extract_json_object_inner(raw: str):
     text = str(raw or "").strip()
     if not text:
-        return None
+        return None, False
 
     candidates = []
     fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
@@ -879,15 +1098,15 @@ def _extract_json_object(raw: str):
         except ValueError:
             continue
         if isinstance(parsed, dict):
-            return parsed
+            return parsed, False
 
     # Abgeschnittene Ausgaben (max_tokens mitten im JSON) reparieren: offene
     # Strings/Arrays/Objekte schließen, halbe Werte am Ende verwerfen.
     if start != -1:
         repaired = _repair_truncated_json(text[start:])
         if repaired is not None:
-            return repaired
-    return None
+            return repaired, True
+    return None, False
 
 
 def _close_open_json(text: str):
@@ -961,12 +1180,20 @@ def _real_model_names(labels, anon_map: dict) -> list:
     return names
 
 
-def _normalize_claims(raw_claims, anon_map: dict) -> list:
+def _normalize_claims(raw_claims, anon_map: dict, sentences: list = None) -> list:
+    sentences = sentences or []
     claims = []
+    # Zwei Claims koennen auf denselben Satz zeigen. Sichtbar ist im Frontend
+    # ohnehin nur die konservativere Quote - hier gilt dieselbe Regel, damit
+    # der Agreement-Score einen Satz nicht doppelt zaehlt.
+    by_anchor = {}
     for entry in raw_claims if isinstance(raw_claims, list) else []:
         if not isinstance(entry, dict):
             continue
-        anchor = _clip(entry.get("anchor"), MAX_DIFF_TEXT_CHARS)
+        # Bevorzugt der nummerierte Satz (per Konstruktion auffindbar); die
+        # woertliche Abschrift bleibt als Pfad fuer aeltere Judge-Ausgaben.
+        anchor = _sentence_anchor(entry.get("s"), sentences) \
+            or _clip(entry.get("anchor"), MAX_DIFF_TEXT_CHARS)
         if not anchor:
             continue
 
@@ -986,16 +1213,28 @@ def _normalize_claims(raw_claims, anon_map: dict) -> list:
         # Doppelnennungen auflösen: Abweichler verdrängen die Zustimmung.
         dissent_models = {item["model"] for item in dissent}
         agree = [name for name in agree if name not in dissent_models]
-        if not agree and not dissent:
+        total = len(agree) + len(dissent)
+        if total < MIN_CLAIM_SUPPORT:
             continue
 
-        claims.append({"anchor": anchor, "agree": agree, "dissent": dissent})
+        claim = {"anchor": anchor, "agree": agree, "dissent": dissent}
+        position = by_anchor.get(anchor)
+        if position is not None:
+            existing = claims[position]
+            existing_total = len(existing["agree"]) + len(existing["dissent"])
+            if len(agree) / total < len(existing["agree"]) / existing_total:
+                claims[position] = claim
+            continue
+
+        by_anchor[anchor] = len(claims)
+        claims.append(claim)
         if len(claims) >= MAX_DIFF_CLAIMS:
             break
     return claims
 
 
-def _normalize_differences(raw_differences, anon_map: dict) -> list:
+def _normalize_differences(raw_differences, anon_map: dict, sentences: list = None) -> list:
+    sentences = sentences or []
     differences = []
     for entry in raw_differences if isinstance(raw_differences, list) else []:
         if not isinstance(entry, dict):
@@ -1035,12 +1274,15 @@ def _normalize_differences(raw_differences, anon_map: dict) -> list:
 
         differences.append({
             "claim": claim,
-            # Stelle im Konsenstext, an der der Widerspruch haengt. Wird - wie
+            # Stelle im Konsenstext, an der der Widerspruch haengt: aus der
+            # Satznummer aufgeloest (0 = der Konsens sagt dazu nichts), sonst
+            # aus der woertlichen Abschrift aelterer Judge-Ausgaben. Wird - wie
             # claims[].anchor - serverseitig gegen die Konsensantwort verifiziert
             # und geleert, wenn sie dort nicht auffindbar ist. Das Frontend
             # markiert damit den Satz inline; ohne Anker bleibt der Widerspruch
             # ausschliesslich in der Karte.
-            "consensus_anchor": _clip(entry.get("consensus_anchor"), MAX_DIFF_TEXT_CHARS),
+            "consensus_anchor": _sentence_anchor(entry.get("s"), sentences)
+            or _clip(entry.get("consensus_anchor"), MAX_DIFF_TEXT_CHARS),
             "type": diff_type,
             "severity": severity,
             "positions": positions,
@@ -1282,7 +1524,13 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
                 position["quote"] = ""
 
 
-def parse_differences_payload(raw: str, anon_map: dict, consensus_answer: str = None, model_answers: dict = None):
+def parse_differences_payload(
+    raw: str,
+    anon_map: dict,
+    consensus_answer: str = None,
+    model_answers: dict = None,
+    sentences: list = None,
+):
     """Parst die JSON-Ausgabe des Differences-Calls und übersetzt die
     anonymisierten Labels zurück. Gibt (data | None, legacy_text) zurück.
 
@@ -1290,8 +1538,13 @@ def parse_differences_payload(raw: str, anon_map: dict, consensus_answer: str = 
     ist legacy_text leer (kein Roh-JSON an den Nutzer), sonst der Rohtext mit
     rückübersetzter BestModel-Zeile (Alt-Verhalten für Prosa-Ausgaben).
     Mit consensus_answer/model_answers werden Anchors und Quotes serverseitig
-    verifiziert."""
-    parsed = _extract_json_object(raw)
+    verifiziert. `sentences` sind die nummerierten Sätze aus dem Prompt-Bau, in
+    die die Satznummern der Claims auflösen; ohne sie werden sie aus der
+    Konsensantwort neu abgeleitet (identische, rein deterministische Zerlegung).
+    """
+    if sentences is None and consensus_answer:
+        sentences = _enumerate_consensus_sentences(consensus_answer)[1]
+    parsed, was_repaired = _extract_json_object(raw, with_repair_flag=True)
     if parsed is None or not (
         isinstance(parsed.get("claims"), list) and isinstance(parsed.get("differences"), list)
     ):
@@ -1303,14 +1556,26 @@ def parse_differences_payload(raw: str, anon_map: dict, consensus_answer: str = 
             return None, ""
         return None, _translate_best_model(text, anon_map)
 
+    # Reparierte Ausgabe = am Token-Limit abgeschnitten. Steht "differences"
+    # dann leer da, ist das kein Befund, sondern der abgeschnittene Rest: das
+    # Frontend wuerde daraus ein beruhigendes "no contradictions found" machen
+    # und der Agreement-Score fiele die Strafpunkte weg. Lieber als unparsbar
+    # behandeln, damit Retry und Fallback-Judge greifen.
+    if was_repaired and not parsed.get("differences"):
+        logging.warning(
+            "Differences output was truncated before any difference was written; "
+            "treating it as unparsable instead of reporting 'no contradictions'."
+        )
+        return None, ""
+
     best_label = str(parsed.get("best_model") or "").strip()
     best_model = anon_map.get(best_label, "")
     if best_label and not best_model:
         logging.warning(f"Differences engine hallucinated best_model label: {best_label!r}")
 
     data = {
-        "claims": _normalize_claims(parsed.get("claims"), anon_map),
-        "differences": _normalize_differences(parsed.get("differences"), anon_map),
+        "claims": _normalize_claims(parsed.get("claims"), anon_map, sentences),
+        "differences": _normalize_differences(parsed.get("differences"), anon_map, sentences),
         "best_model": best_model,
         "models_compared": sorted(anon_map.values()),
     }
@@ -1373,38 +1638,25 @@ DIFFERENCES_RETRY_SUFFIX = (
 # aber nicht die fuer den Parser erforderlichen Felder. Das REST-Feld
 # responseJsonSchema ist fuer generateContent/streamGenerateContent vorgesehen
 # und haelt auch gestreamte Antworten am gleichen Vertrag.
+#
+# Feldreihenfolge ist Absicht: "differences" steht vor "claims", weil Gemini
+# Structured Output in Schema-Reihenfolge generiert (und die uebrigen Provider
+# der Reihenfolge im Prompt folgen). Reisst das Token-Budget, faellt damit die
+# redundantere Claim-Liste weg statt der Widersprueche. propertyOrdering
+# zusaetzlich zu setzen ist nicht noetig, solange beide Reihenfolgen gleich
+# sind - wer eine aendert, muss die andere mitziehen.
 DIFFERENCES_JSON_SCHEMA = {
     "type": "object",
     "properties": {
-        "claims": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "anchor": {"type": "string"},
-                    "agree": {"type": "array", "items": {"type": "string"}},
-                    "dissent": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "model": {"type": "string"},
-                                "quote": {"type": "string"},
-                            },
-                            "required": ["model", "quote"],
-                        },
-                    },
-                },
-                "required": ["anchor", "agree", "dissent"],
-            },
-        },
         "differences": {
             "type": "array",
             "items": {
                 "type": "object",
                 "properties": {
                     "claim": {"type": "string"},
-                    "consensus_anchor": {"type": "string"},
+                    # Nummer des Konsens-Satzes, an dem der Widerspruch haengt;
+                    # 0, wenn die Konsensantwort den Punkt nicht nennt.
+                    "s": {"type": "integer"},
                     "type": {"type": "string", "enum": ["contradiction", "emphasis"]},
                     "severity": {"type": "string", "enum": ["major", "minor"]},
                     "positions": {
@@ -1421,12 +1673,36 @@ DIFFERENCES_JSON_SCHEMA = {
                     },
                     "verify": {"type": "string"},
                 },
-                "required": ["claim", "consensus_anchor", "type", "positions"],
+                "required": ["claim", "s", "type", "positions"],
+            },
+        },
+        "claims": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    # Nummer des Konsens-Satzes, auf den sich der Claim bezieht
+                    # (siehe _enumerate_consensus_sentences).
+                    "s": {"type": "integer"},
+                    "agree": {"type": "array", "items": {"type": "string"}},
+                    "dissent": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "model": {"type": "string"},
+                                "quote": {"type": "string"},
+                            },
+                            "required": ["model", "quote"],
+                        },
+                    },
+                },
+                "required": ["s", "agree", "dissent"],
             },
         },
         "best_model": {"type": "string"},
     },
-    "required": ["claims", "differences", "best_model"],
+    "required": ["differences", "claims", "best_model"],
 }
 
 _NON_RETRYABLE_PROVIDER_STATUS_RE = re.compile(
@@ -1643,7 +1919,7 @@ def query_differences(
     if built is None:
         return "Error in comparison: no model responses available.", None
 
-    differences_prompt, anon_map, answers_by_model = built
+    differences_prompt, anon_map, answers_by_model, sentences = built
 
     attempts = _differences_attempts(differences_model, api_keys)
     if attempts is None:
@@ -1690,6 +1966,7 @@ def query_differences(
             raw, anon_map,
             consensus_answer=consensus_answer,
             model_answers=answers_by_model,
+            sentences=sentences,
         )
         if data is not None:
             data["judges"] = {"differences": _judge_metadata(
@@ -1894,7 +2171,7 @@ def stream_differences(
         yield {"type": "final", "text": "Error in comparison: no model responses available.", "data": None}
         return
 
-    differences_prompt, anon_map, answers_by_model = built
+    differences_prompt, anon_map, answers_by_model, sentences = built
 
     attempts = _differences_attempts(differences_model, api_keys)
     if attempts is None:
@@ -1955,6 +2232,7 @@ def stream_differences(
             raw, anon_map,
             consensus_answer=consensus_answer,
             model_answers=answers_by_model,
+            sentences=sentences,
         )
         if data is not None:
             data["judges"] = {"differences": _judge_metadata(

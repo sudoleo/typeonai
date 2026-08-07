@@ -216,6 +216,28 @@
             return findRangeInText(node.nodeValue || "", normNeedle);
           }
 
+          // Quellentags im Ankertext. Im Konsens-MARKDOWN steht "…330 m.[S1]",
+          // im gerenderten DOM ist daraus ein .src-ref-Chip mit dem Text "1"
+          // geworden — und der wird beim Markieren uebersprungen. Ein Anker mit
+          // Tag fand deshalb nie seine Stelle, obwohl der Consensus-Prompt die
+          // Tags ausgerechnet an die ZENTRALEN Faktenaussagen haengt. Eine
+          // zusaetzliche tagfreie Variante deckt genau diese Faelle ab.
+          // Dieselbe Tag-Form, die linkifySourceTags erkennt ([S1], [1], [S1, S2]).
+          const SOURCE_TAG_RE = /\[S?\d+(?:\s*,\s*S?\d+)*\]/gi;
+
+          function withoutSourceTags(value) {
+            const text = String(value || "");
+            if (!SOURCE_TAG_RE.test(text)) {
+              SOURCE_TAG_RE.lastIndex = 0;
+              return "";
+            }
+            SOURCE_TAG_RE.lastIndex = 0;
+            // Bei alten Bookmarks ("Aussage [S1].") zieht der Renderer das
+            // Satzzeichen VOR den Chip. Der Leerraum, der dabei verschwindet,
+            // faellt hier ebenfalls weg, sonst passt der Anker erneut nicht.
+            return text.replace(SOURCE_TAG_RE, " ").replace(/\s+([.,;:!?])/g, "$1");
+          }
+
           // Erst die vollen Varianten (ohne und mit Auszeichnung), dann die
           // gekuerzten. Eine auf acht Woerter gestutzte Variante darf nie vor
           // einem vollstaendigen Treffer gewinnen.
@@ -223,7 +245,16 @@
             const full = [];
             const short = [];
             const seen = new Set();
-            [stripMarkdown(text), text].forEach(function (candidate) {
+            const stripped = stripMarkdown(text);
+            // Die tagfreien Varianten stehen bewusst HINTER den originalen:
+            // ein exakter Treffer darf nie gegen eine bereinigte Fassung
+            // verlieren.
+            const candidates = [stripped, text];
+            [stripped, text].forEach(function (candidate) {
+              const cleaned = withoutSourceTags(candidate);
+              if (cleaned) candidates.push(cleaned);
+            });
+            candidates.forEach(function (candidate) {
               const norm = normalizeForSearch(candidate)
                 .replace(/^(\.{3}|…)\s*/, "").replace(/\s*(\.{3}|…)$/, "");
               if (!norm || seen.has(norm)) return;
@@ -320,6 +351,17 @@
             return !/[a-zäöüß]/.test(text[k]);
           }
 
+          // Endet [.., end) bereits auf einem Satzende? Seit der Anker die
+          // Satznummer aufloest (statt eines 5-12-Wort-Ausschnitts) ist das der
+          // Normalfall — und dann darf nicht weitergedehnt werden, sonst
+          // verschluckt der erste Satz den zweiten und beide Claims landen auf
+          // derselben Markierung.
+          function endsAtSentenceBoundary(text, end) {
+            let i = end - 1;
+            while (i >= 0 && /["'”’»)\]]/.test(text[i])) i--;
+            return i >= 0 && /[.!?…]/.test(text[i]) && isSentenceEnd(text, i);
+          }
+
           // Dehnt [start,end) auf die umgebenden Satzgrenzen aus.
           function sentenceBounds(text, start, end) {
             let s = start;
@@ -332,7 +374,7 @@
             while (s < end && /\s/.test(text[s])) s++;
 
             let e = end;
-            while (e < text.length) {
+            while (!endsAtSentenceBoundary(text, e) && e < text.length) {
               const ch = text[e];
               if (ch === "\n") break;
               if (/[.!?]/.test(ch) && isSentenceEnd(text, e)) {
@@ -1312,21 +1354,45 @@
               return markSentence(body, anchor, severityClass, marksFor(probe.block));
             }
 
-            // Wenn Claim und Difference denselben Satz meinen, soll dort nur
-            // EIN sichtbares Signal stehen: die aussagekraeftigere Quote
-            // (z. B. 4/6). Der Difference-Marker bleibt unsichtbar im DOM,
-            // damit Hover-Vorschau und Provenance-Zaehlung die Difference
-            // weiterhin kennen. Der Passage-Klick folgt dem sichtbaren Badge.
+            // Wenn Claim und Difference denselben Satz meinen, steht dort nur
+            // EIN sichtbares Signal — welches, entscheidet die Schwere:
+            //
+            // - WIDERSPRUCH: der Marker gewinnt, das Claim-Badge entfaellt.
+            //   Seit die Claims jeden pruefbaren Satz abdecken (Satz-Index,
+            //   2026-08-07), traegt ein strittiger Satz fast IMMER auch ein
+            //   Claim-Badge. Mit der alten Regel (Badge gewinnt) verschwand
+            //   damit praktisch jeder Widerspruchs-Marker aus dem Text: der
+            //   strittige Satz sah aus wie jeder andere, und der Klick darauf
+            //   oeffnete "4 of 6 models agree" statt der Widerspruchs-Karte.
+            //   Genau das ist der Kern des Produkts — es darf nicht als
+            //   Zustimmungsquote getarnt werden.
+            // - EMPHASIS: das Badge gewinnt wie bisher; eine andere Gewichtung
+            //   ist die schwaechere Aussage als die Stuetzungsquote.
+            //
+            // Der unterlegene Marker bleibt unsichtbar im DOM, damit
+            // Hover-Vorschau und Provenance-Zaehlung ihn weiterhin kennen.
             const differenceControls = [];
+
+            // Trefferquote der Ankersuche: nur so laesst sich belegen, ob eine
+            // Aenderung an Ankern oder Suche die Abdeckung wirklich hebt -
+            // statt sie zu schaetzen. Fliesst in app_consensus_insights_rendered.
+            let diffAnchorMisses = 0;
 
             // 1. Widersprüche zuerst: sie tragen die stärkere Markierung.
             differences.forEach(function (diff, index) {
               if (!diff.consensus_anchor) return;
               const isMajor = diff.type === "contradiction" && diff.severity === "major";
               const result = mark(diff.consensus_anchor, isMajor ? "is-major" : "is-minor");
-              if (!result) return;
+              if (!result) {
+                diffAnchorMisses += 1;
+                return;
+              }
               const marker = makeDiffMarker(diff, index);
-              differenceControls.push({ spans: result.spans, marker: marker });
+              differenceControls.push({
+                spans: result.spans,
+                marker: marker,
+                isContradiction: diff.type === "contradiction"
+              });
               attachControl(result, marker, function () {
                 focusDifferenceCard(index);
               }, function () { return buildDiffPreview(diff); });
@@ -1344,6 +1410,15 @@
                 unanchored.push(claim);
                 return;
               }
+              const overlappingDifference = differenceControls.find(function (entry) {
+                return entry.spans === result.spans;
+              });
+              // Auf einem strittigen Satz behaelt der Widerspruch das Wort.
+              // Der Satz ist bereits markiert (markSentence hat die staerkere
+              // is-major/is-minor-Linie gesetzt), er bekommt hier nur kein
+              // zweites, schwaecher klingendes Steuerelement daneben.
+              if (overlappingDifference && overlappingDifference.isContradiction) return;
+
               const badge = makeBadge(claim);
               const total = claim.agree.length + claim.dissent.length;
               const support = total ? claim.agree.length / total : 1;
@@ -1374,9 +1449,7 @@
                   support: support
                 });
               }
-              const overlappingDifference = differenceControls.find(function (entry) {
-                return entry.spans === result.spans;
-              });
+              // Nur noch Emphasis-Marker treten hinter das Badge zurueck.
               if (overlappingDifference) {
                 overlappingDifference.marker.hidden = true;
                 overlappingDifference.marker.setAttribute("aria-hidden", "true");
@@ -1416,6 +1489,12 @@
             // diesen Markern. Sie wird beim Laufende zuerst ohne sie gerendert
             // (die Marker entstehen erst hier) und holt die Zahl jetzt nach.
             window.App?.consensusPipeline?.renderProvenance?.();
+
+            return {
+              claims_anchored: claims.length - unanchored.length,
+              claims_unanchored: unanchored.length,
+              diffs_unanchored: diffAnchorMisses
+            };
           }
 
           // --- Resolve-Runde ---------------------------------------------------
@@ -2009,9 +2088,15 @@
             renderVerdictHeader(differences, modelCount, agreement, judge);
             // Karten zuerst: die Inline-Marker verlinken per Index auf sie.
             renderDifferenceCards(differences, modelCount);
-            renderInlineMarkers(claims, differences);
+            const marks = renderInlineMarkers(claims, differences) || {};
             window.trackUmamiEvent?.("app_consensus_insights_rendered", {
               claims: claims.length,
+              // Wie viele Claims wirklich IM Text markiert wurden statt nur in
+              // der Fallback-Liste zu landen: die eine Zahl, an der sich eine
+              // Aenderung an Ankern oder Ankersuche messen laesst.
+              claims_anchored: marks.claims_anchored ?? null,
+              claims_unanchored: marks.claims_unanchored ?? null,
+              diffs_unanchored: marks.diffs_unanchored ?? null,
               differences: differences.length,
               contradictions: differences.filter(d => d.type === "contradiction").length,
               major_contradictions: differences.filter(d => d.type === "contradiction" && d.severity === "major").length,

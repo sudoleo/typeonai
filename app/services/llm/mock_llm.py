@@ -11,8 +11,11 @@ Fixture-Vertrag (wichtig fuer die Zitat-Verifikation in consensus_engine):
   zeilenweise als "- Model X: ...", mehrzeilige Antworten wuerden das
   Label-Parsing des Mocks brechen).
 - Alle Antworten ausser Grok enthalten SHARED_FACT woertlich; Grok enthaelt
-  DISSENT_FACT. Anchors/Quotes im Mock-Differences-JSON sind Substrings
-  dieser Saetze, sonst leert _verify_differences_data sie.
+  DISSENT_FACT. Quotes im Mock-Differences-JSON sind Substrings dieser Saetze,
+  sonst leert _verify_differences_data sie.
+- Claims/Differences zeigen ueber die Satznummer ("s") in die Konsensantwort,
+  nicht ueber eine Abschrift. Die Nummern liest der Mock aus dem nummerierten
+  Konsenstext im Prompt (_mock_sentence_number).
 """
 
 import json
@@ -75,6 +78,23 @@ def mock_ask_result(provider_label: str, question: str):
     return {"text": text, "sources": []}
 
 
+def _mock_sentence_number(prompt: str, needle: str, default: int) -> int:
+    """Nummer des Konsens-Satzes, der `needle` enthaelt.
+
+    Der Judge referenziert Saetze inzwischen ueber ihre Nummer statt ueber eine
+    Abschrift (siehe _enumerate_consensus_sentences). Der Mock liest die
+    Nummern aus dem echten Prompt aus, damit die Fixture nicht an einer
+    hartkodierten Zaehlung haengt, sobald sich MOCK_CONSENSUS_TEXT aendert.
+    """
+    _, _, numbered = prompt.partition("Consensus answer (sentences numbered):")
+    # Bis zur naechsten Marke, nicht bis zum Zeilenende: mehrere Saetze koennen
+    # in derselben Zeile stehen.
+    for number, text in re.findall(r"\[(\d+)\]\s*([^\[\n]*)", numbered):
+        if needle in text:
+            return int(number)
+    return default
+
+
 def _build_mock_differences_json(prompt: str) -> str:
     """Baut das Judge-JSON aus dem echten Differences-Prompt.
 
@@ -87,19 +107,22 @@ def _build_mock_differences_json(prompt: str) -> str:
     dissent_label = next((label for label, text in labeled if "1887" in text), None)
     agree = [label for label in labels if label != dissent_label]
 
+    disputed_sentence = _mock_sentence_number(prompt, "1889", 1)
+    unanimous_sentence = _mock_sentence_number(prompt, "330 metres", 2)
+
     claims = [
         {
-            "anchor": "The Eiffel Tower is located in Paris",
-            "agree": agree or labels,
-            "dissent": [],
-        },
-        {
-            "anchor": "was completed in 1889",
+            "s": disputed_sentence,
             "agree": agree or labels,
             "dissent": (
                 [{"model": dissent_label, "quote": "was completed in 1887"}]
                 if dissent_label else []
             ),
+        },
+        {
+            "s": unanimous_sentence,
+            "agree": agree or labels,
+            "dissent": [],
         },
     ]
 
@@ -107,9 +130,9 @@ def _build_mock_differences_json(prompt: str) -> str:
     if dissent_label and agree:
         differences.append({
             "claim": "Completion year of the Eiffel Tower",
-            # Muss - wie die Claim-Anchors - ein Substring von
-            # MOCK_CONSENSUS_TEXT sein, sonst leert _verify_differences_data ihn.
-            "consensus_anchor": "was completed in 1889",
+            # Zeigt bewusst auf denselben Satz wie der dissentierende Claim:
+            # dort darf nur EIN sichtbares Signal stehen (Badge statt Marker).
+            "s": disputed_sentence,
             "type": "contradiction",
             "severity": "major",
             "positions": [

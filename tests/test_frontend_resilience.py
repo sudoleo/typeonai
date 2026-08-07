@@ -41,7 +41,8 @@ def test_changed_frontend_scripts_are_cache_busted():
     assert "markdown-stream.js?v=20260805-chatmulti1" in template
     assert "firebase.js?v=20260806-bookmarkcontinue1" in template
     assert "usage-limit.js?v=20260802-storagebusy1" in template
-    assert "consensus-insights.js?v=20260806-chatbookmark1" in template
+    # Claim-Abdeckung: Satz-Index-Anker plus tagfreie Ankersuche
+    assert "consensus-insights.js?v=20260807-claimcoverage1" in template
     assert "chat-session.js?v=20260806-chatlimits1" in template
     assert "app-init.js?v=20260806-followupdefault1" in template
     for changed in (
