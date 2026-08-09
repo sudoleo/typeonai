@@ -94,7 +94,13 @@ class RequestBodyLimitMiddleware:
                     "body": bytes(buffered),
                     "more_body": False,
                 }
-            return {"type": "http.disconnect"}
+            # After replaying the buffered body, keep forwarding the real
+            # connection state. StreamingResponse listens for an actual
+            # http.disconnect while it produces the response; synthesizing one
+            # here cancels every non-instant SSE stream before its first chunk.
+            if disconnected:
+                return {"type": "http.disconnect"}
+            return await receive()
 
         if disconnected and not buffered:
             async def disconnected_receive():

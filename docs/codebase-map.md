@@ -1276,6 +1276,9 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
 - **Unvertrauenswürdige Request-Größen sind vor teurer Arbeit begrenzt:** Das
   ASGI-Bodylimit verwirft sowohl zu großes `Content-Length` als auch erst beim
   chunked Lesen anwachsende Bodies mit 413, bevor FastAPI JSON/Form parst.
+  Nach dem einmaligen Body-Replay reicht die Middleware echte nachfolgende
+  ASGI-Receive-Events weiter; insbesondere wird kein künstliches
+  `http.disconnect` erzeugt, das laufende SSE-Antworten abbrechen würde.
   Chat-Frage und System-Prompt besitzen getrennte Zeichen- und UTF-8-Bytecaps;
   Legacy-Follow-up-Kontext wird bei Überschreitung abgewiesen statt still
   gekappt. Dadurch fallen auch extrem lange Ein-Wort-Strings vor Providerarbeit.

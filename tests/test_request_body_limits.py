@@ -2,6 +2,8 @@
 
 import asyncio
 
+from starlette.responses import StreamingResponse
+
 from app.core.request_limits import RequestBodyLimitMiddleware
 
 
@@ -67,4 +69,72 @@ def test_exact_limit_body_is_replayed_once_to_the_application():
     assert sent[0]["status"] == 204
     assert received == [
         {"type": "http.request", "body": b"12345678", "more_body": False}
+    ]
+
+
+def test_replayed_body_does_not_synthesize_disconnect_for_delayed_stream():
+    sent = []
+    request_messages = [
+        {"type": "http.request", "body": b"{}", "more_body": False}
+    ]
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/ask_openai",
+        "raw_path": b"/ask_openai",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [(b"content-length", b"2")],
+        "client": ("127.0.0.1", 12345),
+        "server": ("testserver", 80),
+    }
+
+    async def run_streaming_scenario():
+        connection_closed = asyncio.Event()
+
+        async def receive():
+            if request_messages:
+                return request_messages.pop(0)
+            await connection_closed.wait()
+            return {"type": "http.disconnect"}
+
+        async def send(message):
+            sent.append(message)
+
+        async def inner(inner_scope, inner_receive, inner_send):
+            assert await inner_receive() == {
+                "type": "http.request",
+                "body": b"{}",
+                "more_body": False,
+            }
+
+            async def delayed_sse():
+                await asyncio.sleep(0.01)
+                yield b'event: final\ndata: {"response":"ok"}\n\n'
+
+            response = StreamingResponse(
+                delayed_sse(), media_type="text/event-stream"
+            )
+            await response(inner_scope, inner_receive, inner_send)
+
+        await RequestBodyLimitMiddleware(inner, max_body_bytes=8)(
+            scope, receive, send
+        )
+
+    asyncio.run(run_streaming_scenario())
+
+    body_messages = [
+        message for message in sent if message["type"] == "http.response.body"
+    ]
+    assert body_messages == [
+        {
+            "type": "http.response.body",
+            "body": b'event: final\ndata: {"response":"ok"}\n\n',
+            "more_body": True,
+        },
+        {"type": "http.response.body", "body": b"", "more_body": False},
     ]
