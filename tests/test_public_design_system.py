@@ -112,7 +112,7 @@ def test_product_result_mockup_is_reused_and_public_copy_has_no_em_dash():
 def test_share_page_loads_the_common_math_renderer():
     template = read("templates/share.html")
     assert "katex@0.17.0/dist/katex.min.js" in template
-    assert "/static/js/math-render.js?v=20260720-math1" in template
+    assert re.search(r"/static/js/math-render\.js\?v=[\w.-]+", template)
     assert '<main class="page-shell" data-math-render>' in template
 
 

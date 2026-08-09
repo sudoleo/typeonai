@@ -15,10 +15,12 @@ from starlette.status import HTTP_422_UNPROCESSABLE_CONTENT
 
 # Init Environment
 load_dotenv()
-os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", "gen-lang-client-0234219247-53b2b1c0e355.json")
+if os.environ.get("E2E_TEST_MODE") != "1":
+    os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", "gen-lang-client-0234219247-53b2b1c0e355.json")
 logging.basicConfig(level=logging.INFO)
 
 from app.core.security import CustomSecurityMiddleware, db_firestore
+from app.core.e2e_profile import e2e_test_mode_enabled
 from app.core.rate_limit import limiter
 
 # Import routers
@@ -101,6 +103,14 @@ def _scheduler_task(loop_factory, name: str):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if e2e_test_mode_enabled():
+        # Request-level persistence still runs against the isolated emulator,
+        # but no cleanup, recovery, backfill, webhook or scheduler writer is
+        # meaningful (or allowed) in the browser-test process.
+        logging.info("E2E profile active: all lifespan maintenance is disabled")
+        yield
+        return
+
     # Fail-closed Account-Tombstones bleiben bestehen; nur ihre idempotente
     # Datenbereinigung wird nach transienten Firestore-Fehlern wiederholt.
     api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)

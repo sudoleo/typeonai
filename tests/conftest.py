@@ -7,6 +7,9 @@ import pytest
 # ("python -m pytest tests") nicht mit einsammeln. Lauf nur mit RUN_E2E=1
 # (siehe tests/e2e/README.md).
 if os.environ.get("RUN_E2E") != "1":
+    # The regular suite uses in-memory repository fakes and must be collectable
+    # on a clean CI checkout without the gitignored production credential.
+    os.environ.setdefault("UNIT_TEST_MODE", "1")
     collect_ignore = ["e2e"]
 
 

@@ -16,7 +16,7 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 **Differences**-Analyse. Optional: Agent Mode (Auto-Consensus), Datei-Anhänge
 (Pro), öffentliche Share-Seiten.
 
-- **Backend**: Python, FastAPI (`fastapi==0.115.8`), via `uvicorn` ausgeliefert.
+- **Backend**: Python, FastAPI (`fastapi==0.128.8`), via `uvicorn` ausgeliefert.
   SSE-Streaming über `StreamingResponse`. Rate-Limiting via `slowapi`.
 - **LLM-Provider**: OpenAI, Mistral, Anthropic, Gemini, DeepSeek, Grok — über die
   jeweiligen SDKs bzw. REST. Provider-Label-Konvention: Claude = `Anthropic`.
@@ -35,7 +35,8 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 
 ## 2. Einstiegspunkte / Routing / Templates
 
-**`main.py`** ist der App-Entry: lädt `.env`, setzt `GOOGLE_APPLICATION_CREDENTIALS`,
+**`main.py`** ist der App-Entry: lädt `.env`, setzt außerhalb des E2E-Profils
+`GOOGLE_APPLICATION_CREDENTIALS`,
 fügt `CustomSecurityMiddleware` (CSP etc.) + slowapi-Limiter hinzu, mountet
 `/static`, registriert globale Exception-Handler und inkludiert alle Router.
 Im `lifespan`-Startup: `load_models_from_db()` + Share-Cleanups (siehe §7),
@@ -53,6 +54,12 @@ vollständiger Telegram-Konfiguration den User-Bot-Webhook.
 Cancellable asyncio-Tasks übernehmen danach
 den 60-Sekunden-API-Maintenance-, 5-Minuten-Account-Cleanup- und
 30-Minuten-Consensus-Watch-Tick.
+Im expliziten Browser-Testprofil `E2E_TEST_MODE=1` überspringt der Lifespan
+dagegen alle Startup-, Cleanup-, Recovery-, Backfill-, Webhook- und Scheduler-
+Writer. `app/core/e2e_profile.py` erlaubt Firebase vor der Initialisierung nur
+mit der festen Demo-Projekt-ID `demo-consensio-e2e` und einem lokalen
+`FIRESTORE_EMULATOR_HOST`; Request-Persistenz läuft dann ausschließlich gegen
+den Emulator. Produktive Credentials sind kein E2E-Fallback.
 
 Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 
@@ -71,14 +78,10 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` ohne DeepSeek und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil und DeepSeek-Ausschluss. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 
 Der Scheduled Publisher läuft per GitHub Actions montags, mittwochs und freitags.
-Seine angehängten `Search-opportunity requirements` priorisieren neben frischen
-AI-Produkt-/News-Signalen besonders erklärungsbedürftige AI-Memes sowie zynische
-oder ironische X-Narrative: Breakout ungefähr innerhalb der letzten zwölf Stunden,
-sichtbar weiter beschleunigte Verbreitung und eine noch laufende virale Welle.
-Originalposts dienen als Primärbeleg für Ursprung/Momentum; externe Quellen
-verifizieren Behauptung und Kontext. Die identische Regel steht wegen der
-Standalone-Ausführung bewusst in `scripts/publish_consensus.py` und als sichtbarer
-Produktfakt in `app/services/publisher_config.py`.
+Seine identisch in `scripts/publish_consensus.py` und
+`app/services/publisher_config.py` gehaltenen `Search-opportunity requirements`
+wählen dauerhaft nachgefragte, strittige Fragen und schließen News-Zyklen,
+Memes, Leaks und virale Posts ausdrücklich aus.
 | `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (Diagnose-Liste; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo`, sanitisierten Live-Check `POST /api/admin/seo/check`, manueller Search-Console-Lauf `POST /api/admin/seo/collect` sowie speicherbare read-only Judgements per `POST /api/admin/seo/pages/{page_id}/recommendation` und optional `.../content-judge`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 Weekly-SEO-Admin-Erweiterung: `GET /api/admin/seo/review`, `PUT
@@ -168,8 +171,10 @@ definiert die verbindlichen Größen-, Gewichts-, Zeilenhöhen- und Laufweiten-T
 und lässt Formularelemente die Produktschrift erben. Google-Fonts-Links und deren
 CSP-Freigaben existieren nicht mehr; Monospace bleibt ausschließlich für Code und
 technische Identifikatoren, KaTeX behält seine eigene Mathematikschrift.
-**`index.html` enthält kein App-JS inline mehr**
-— nur den Jinja-Config-Block im `<head>` und die Modul-`<script>`-Tags.
+`index.html` lädt die App-Module als externe Skripte, enthält aber neben dem
+Jinja-Config-Block vier kleine Inline-Skripte für frühen Agent-Mode-, Auth- und
+Skeleton-State. CSP- oder Script-Refactorings müssen diese Bootstrap-Blöcke
+mitberücksichtigen.
 
 ---
 
@@ -976,7 +981,7 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
 - Im Own-Key-Modus validiert `query-send.js` vor Usage-Reservierung, `/prepare`
   und Turn-Anlage vollständig die lokalen Keys aller ausgewählten Antwort-
   Provider sowie des Memory-Providers. Fehlt einer, bleibt der completed
-  Vorgänger samt Follow-up-Chip unverändert und es entsteht kein pending Turn.
+  Vorgänger unverändert und es entsteht kein pending Turn.
   Bei aktiven Fortsetzungen ruft `query-send.js` danach genau einmal den
   Context-Endpoint. Developer-Läufe senden denselben bereits durch `/prepare`
   konsumierten `usage_run_key`; Own-Key-Läufe senden ausschließlich den zum
@@ -1460,10 +1465,9 @@ sichtbaren Auswahlzustand als auch defensiv im tatsächlichen Request-Fan-out au
   konfiguriertem SMTP deduplizierte Multipart-Updates; Stable-Runs nicht.
   Bestätigungs-/Abmelde-Tokens verwenden den vorhandenen HMAC-Unterbau und
   `WATCH_UNSUBSCRIBE_SECRET`, tragen aber einen eigenen Topic-Token-Typ.
-- `/admin/topics` ist ein eigenständiger Firebase/Admin-geschützter Editor für
-  Metadaten, Status, Regeln, Evidence, SEO und manuelles Publizieren. Wie alle
-  `/api/admin/*`-Antworten wird seine API durch die Security-Middleware als
-  `private, no-store` ausgeliefert.
+- Der Topic-Editor liegt als Tab unter `/admin#topics`; `/admin/topics` ist nur
+  ein 308-Kompatibilitätsredirect dorthin. Seine `/api/admin/*`-Antworten werden
+  durch die Security-Middleware als `private, no-store` ausgeliefert.
 
 ### SEO-Leistungsdaten und Recommendation Judge (Search Console, v2)
 - Der manuelle admin-only Lauf `POST /api/admin/seo/collect` übernimmt exakt die
@@ -1896,6 +1900,14 @@ Deploy manuell über die Firebase Console):
 - Firebase Web-Config: `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`,
   `FIREBASE_PROJECT_ID`, `FIREBASE_STORAGE_BUCKET`, `FIREBASE_MESSAGING_SENDER_ID`,
   `FIREBASE_APP_ID` (ans Frontend durchgereicht via `/app`-Template).
+- Ausschließlich für Tests: `UNIT_TEST_MODE=1` initialisiert Firebase Admin im
+  regulären pytest-Lauf ohne Service-Account gegen das nicht produktive
+  `demo-consensio-unit` und einen geschlossenen Loopback-Port; ein ungemockter
+  Zugriff kann daher keinen externen Dienst erreichen. `E2E_TEST_MODE=1`
+  verlangt zusätzlich
+  `FIRESTORE_EMULATOR_HOST` sowie die in `app/core/e2e_profile.py` fest
+  allowgelisteten Demo-Projekt-ID. Das Profil ist in Produktion verboten und
+  in der normalen `.env` deaktiviert.
 - Developer-LLM-Keys (Fallback wenn Nutzer keine eigenen Keys hat):
   `DEVELOPER_OPENAI_API_KEY`, `DEVELOPER_MISTRAL_API_KEY`,
   `DEVELOPER_ANTHROPIC_API_KEY`, `DEVELOPER_GEMINI_API_KEY`,
@@ -2017,51 +2029,53 @@ mit Link, Lauf-/Indexstatus und sofortiger Admin-Löschaktion. Der separate
 SMTP-Konfigurationsstatus und admin-only Aktionen für eine echte Testmail sowie den sofortigen Start einer aktiven Watch;
 der eigentliche Lauf bleibt im normalen Lease-/Budget-/Scheduler-Pfad. E2E-Zugriff auf
 Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
-Der eigenständige Topics-Editor unter `/admin/topics` ist aus der Admin-Topbar
-verlinkt und lädt/speichert ausschließlich die Topics-API; Pause/Archive und
-Snapshot-Publishing berühren die bestehenden Shared-Pages-/Watch-Tabs nicht.
+Der Topics-Tab unter `/admin#topics` lädt/speichert ausschließlich die Topics-
+API; Pause/Archive und Snapshot-Publishing berühren die bestehenden Shared-
+Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
 
 ---
 
 ## 7. Tests, Smoke-Checks & lokale Befehle
 
-- **Backend-Tests** (`tests/`, pytest): `test_attachments`, `test_streaming`,
-  `test_share_feature`, `test_differences_schema`, `test_model_configuration`,
-  `test_rate_limit`, `test_seo_basics`, `test_seo_data`. Lauf:
+- **Reguläre Tests** (`tests/`, pytest; Browser-Suite standardmäßig
+  ausgeschlossen). Abhängigkeiten kommen aus `requirements-test.txt`, Lauf:
   ```powershell
-  .\venv\Scripts\python.exe -m pytest tests
+  .\venv\Scripts\python.exe -m pytest tests -q
   ```
-  Letzte bekannte Baseline: **772 passed** (2026-07-31; inklusive der neuen
-  Differences-`consensus_anchor`-Tests sowie der bisherigen
-  Search-Console-/SEO-Dossier-, Query-, Recommendation-, LLM-Schema-,
-  Weekly-Portfolio-Review-, Action-, Publisher-Lineage-/Watch-Capacity-,
-  Idempotenz- und Admin-Schutztests sowie
-  run-basierter Usage-, Consensus-API-Publishing-/Scope-/Vertrags-, der
-  selbst gehosteten Inter-Typografie-Verträge sowie
-  Scheduled-Publisher-, Query-first-Watch-, versionierten Watch-/Drift- sowie
-  kuratierten Topic-/Snapshot-/Follower-/SSR-Tests).
-- **Playwright-Smoke-Suite** (`tests/e2e/`, npm-frei via Python-Playwright):
+  Reine String-/Quelltextverträge sind mit `source_contract` gekennzeichnet und
+  laufen weiterhin mit; sie gelten ausdrücklich nicht als Verhaltensabdeckung.
+  Verifizierte Baseline am 2026-08-09: **1003 passed, 43 warnings**.
+- **Playwright-Smoke-Suite** (`tests/e2e/`, Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, kompakte Antwort→Consensus-
   Pipeline inkl. Mobile-Clipping/Ergebnis-Reihenfolge,
   Consensus→Differences+Score inkl. Inline-Marker (`.cx-claim.is-major`,
   `.cx-marker` mit aria-label), zugeklapptem `#consensusDifferencesPanel` und
   markerfreiem Copy-Text, Watch-Dialog mit Pflicht-Sichtbarkeit/Condition-
-  Feld, Exclude, Theme, Picker-Persistenz). Startet einen eigenen uvicorn auf Port
-  8031 mit `MOCK_LLM=1` (deterministische Fixtures in
+  Feld, Exclude, Theme, Picker-Persistenz). Startet einen eigenen uvicorn auf
+  Port 8031 mit `E2E_TEST_MODE=1`, `MOCK_LLM=1` (deterministische Fixtures in
   `app/services/llm/mock_llm.py`, Seams: `_run_ask`,
   `_call_engine_text`/`_stream_engine_text`),
   `MOCK_AUTH=1` (Sentinel-Token statt Firebase, Browser-Stub ersetzt
   `firebase.js` per Playwright-Route), lokale Dummy-Eigenkeys (kein Einfluss
   des live geladenen Free-Limits; `MOCK_LLM` verhindert echte Calls) und
-  `DISABLE_RATE_LIMIT=1`. Lauf:
+  `DISABLE_RATE_LIMIT=1`. Firestore ist technisch auf den lokalen Emulator und
+  `demo-consensio-e2e` begrenzt; der E2E-Lifespan startet keine produktionsnahen
+  Jobs. Lauf mit bereits gestartetem Emulator:
   ```powershell
-  $env:RUN_E2E = "1"; .\venv\Scripts\python.exe -m pytest tests\e2e -v
+  $env:RUN_E2E = "1"
+  $env:FIRESTORE_EMULATOR_HOST = "127.0.0.1:8085"
+  .\venv\Scripts\python.exe -m pytest tests\e2e -v
   ```
   Ohne `RUN_E2E=1` wird `tests/e2e` nicht eingesammelt (Baseline bleibt).
-  Nur lokal (braucht Service-Account-JSON + Netz für CDN); Details/Setup in
-  `tests/e2e/README.md`.
-- **Frontend darüber hinaus ohne automatisierte Tests.** Nach JS-Änderungen
+  Ein Service-Account ist weder nötig noch zulässig; Java/Firebase CLI starten
+  den Emulator, Netzzugang lädt CDN-Assets. Verifizierte Baseline am
+  2026-08-09: **39 passed, 1 warning**. Details in `tests/e2e/README.md`.
+- **CI**: `.github/workflows/tests.yml` führt bei PR, Push auf `main` und
+  manuell zuerst Unit/Integration und danach E2E im Emulator aus. Beide Jobs
+  blockieren bei Fehlern und laden JUnit-XML als Artefakt hoch. Gepinnte
+  Abhängigkeiten, Ausschlüsse und Befehle stehen in `docs/testing.md`.
+- **Frontend darüber hinaus manuell.** Nach JS-Änderungen
   an nicht abgedeckten Flows (Resolve, Share, Attachments, Follow-up,
   Bookmarks, Agent Mode, Demo, Mobile) die manuelle
   **`docs/smoke-checklist.md`** durchgehen.
@@ -2213,10 +2227,11 @@ ersten Check statt eines leeren Consensus-Panels.
   und Admin-Oberfläche nicht als fertige Landkarte veröffentlicht wird. Ein neuer
   interner Router muss in diese Schleife — sonst taucht er öffentlich auf.
 - **Test-Flags sind in Produktion ein harter Startfehler.** `MOCK_AUTH`,
-  `MOCK_ADMIN`, `MOCK_LLM` und `DISABLE_RATE_LIMIT` schalten Auth, Admin-Checks
-  bzw. Rate-Limits ab. `app/core/security.py` verweigert den Start, wenn eines
+  `MOCK_ADMIN`, `MOCK_LLM`, `DISABLE_RATE_LIMIT`, `UNIT_TEST_MODE` und
+  `E2E_TEST_MODE` aktivieren Mock-Kontrollen beziehungsweise credentialfreie
+  Test-Initialisierung. `app/core/security.py` verweigert den Start, wenn eines
   davon zusammen mit `RENDER_SERVICE_NAME` oder `ENVIRONMENT=production` gesetzt
-  ist. Lokal und in der E2E-Suite ändert sich nichts.
+  ist. Außerhalb expliziter pytest-/E2E-Läufe ändert sich lokal nichts.
 - **`/register` darf nie verraten, ob eine E-Mail existiert.** Beide Fälle geben
   `{"status": "check_inbox"}` zurück; nur der echte Neuzugang bekommt zusätzlich
   ein `customToken`. `static/firebase.js` zeigt in beiden Fällen denselben
@@ -2315,9 +2330,13 @@ ersten Check statt eines leeren Consensus-Panels.
 - **CSP** (`CustomSecurityMiddleware` in `security.py`): neue externe Hosts (Skripte,
   `connect-src`-Ziele, Frames) müssen explizit in die Policy. Sonst blockt der
   Browser still.
-- **Static-Caching / `?v=`**: Nach CSS/JS-Änderungen den `?v=`-Query-String in
-  `index.html` (und für CSS in `style.css`/`index.html`) bumpen — sonst wird Stale
-  ausgeliefert. (Siehe Memory „CSS cache-busting".)
+- **Static-Caching / `?v=`**: Nach CSS/JS-Änderungen den
+  `?v=YYYYMMDD-kurzlabel`-Query-String in allen aktiven Referenzen bumpen — für
+  App-CSS sowohl in `style.css` als auch den Templates. Der
+  `source_contract`-Test inventarisiert sämtliche lokalen JS-/CSS-Referenzen in
+  Templates und CSS-Imports, verlangt pro Asset einen einheitlichen Key und
+  weist Keys ab, deren Datum vor dem letzten Git-Commit beziehungsweise einer
+  aktuellen Arbeitsbaumänderung liegt.
 - **Provider-Label-Konvention**: Frontend nutzt teils `Claude`, Backend kanonisch
   `Anthropic`. Beim Verdrahten neuer Modelle Mapping in `app-core.js::modelPrefs`
   und Backend-`normalize_model_name` synchron halten.

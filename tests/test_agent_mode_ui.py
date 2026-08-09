@@ -1,7 +1,10 @@
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
+pytestmark = pytest.mark.source_contract
 
 
 def test_answer_disclosure_contract_is_mode_independent():

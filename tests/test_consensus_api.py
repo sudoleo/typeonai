@@ -864,6 +864,14 @@ def test_admin_api_configures_weekly_watch_with_free_provider_tier(monkeypatch):
     monkeypatch.setattr(api_v1, "is_user_admin", lambda uid: True)
     monkeypatch.setattr(api_v1, "is_user_pro", lambda uid: True)
     monkeypatch.setattr(api_v1.publisher_config, "get_config", lambda: dict(config))
+    monkeypatch.setattr(
+        api_v1.watch_service,
+        "publisher_watch_counts",
+        lambda: {"active": 0, "paused": 0},
+    )
+    monkeypatch.setattr(
+        api_v1.watch_service, "find_watch_for_share", lambda share_id: None
+    )
     monkeypatch.setattr(api_v1.watch_service, "create_watch", create_watch)
     client = TestClient(main.app)
     headers = {"X-API-Key": "cns_publisher"}

@@ -6,6 +6,13 @@ from cachetools import TTLCache
 from fastapi import Request
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
+from google.auth.credentials import AnonymousCredentials
+
+from app.core.e2e_profile import (
+    assert_safe_e2e_environment,
+    e2e_test_mode_enabled,
+    firebase_project_id,
+)
 
 # --- E2E-Test-Hook (MOCK_AUTH=1) ------------------------------------------
 # Die Playwright-Suite laeuft ohne echten Firebase-Login: verify_user_token
@@ -19,7 +26,14 @@ E2E_MOCK_UID = "e2e-mock-user"
 # Produktion setzen" ist keine Kontrolle - ein einziges versehentlich in Render
 # gesetztes MOCK_AUTH=1 wuerde jedem Besucher Admin-Zugriff geben. Deshalb
 # verweigert der Prozess in Produktion den Start, statt unsicher weiterzulaufen.
-_UNSAFE_TEST_FLAGS = ("MOCK_AUTH", "MOCK_ADMIN", "MOCK_LLM", "DISABLE_RATE_LIMIT")
+_UNSAFE_TEST_FLAGS = (
+    "MOCK_AUTH",
+    "MOCK_ADMIN",
+    "MOCK_LLM",
+    "DISABLE_RATE_LIMIT",
+    "E2E_TEST_MODE",
+    "UNIT_TEST_MODE",
+)
 
 
 def _is_production() -> bool:
@@ -41,6 +55,7 @@ def _assert_no_unsafe_test_flags_in_production() -> None:
 
 
 _assert_no_unsafe_test_flags_in_production()
+assert_safe_e2e_environment()
 
 
 def _mock_auth_enabled() -> bool:
@@ -121,10 +136,35 @@ class CustomSecurityMiddleware:
         await self.app(scope, receive, send_wrapper)
 
 
-cred = credentials.Certificate("consensai-firebase-adminsdk-fbsvc-9064a77134.json")
 # Prevent initializing app multiple times if reloaded
+class _AnonymousTestCredential(credentials.Base):
+    """Credential accepted by firebase-admin without any live ADC lookup."""
+
+    def get_credential(self):
+        return AnonymousCredentials()
+
+
 if not firebase_admin._apps:
-    firebase_admin.initialize_app(cred)
+    if e2e_test_mode_enabled():
+        # Admin SDKs bypass Firestore rules, so the local emulator endpoint and
+        # the demo-only project ID are both validated above before this point.
+        firebase_admin.initialize_app(
+            _AnonymousTestCredential(),
+            options={"projectId": firebase_project_id()},
+        )
+    elif os.environ.get("UNIT_TEST_MODE") == "1":
+        # Unit tests patch repositories with in-memory fakes. Initializing the
+        # SDK with an unresolvable demo project and a closed loopback endpoint
+        # keeps collection/import reproducible without credentials and makes an
+        # accidentally unmocked read fail locally instead of reaching Google.
+        os.environ.setdefault("FIRESTORE_EMULATOR_HOST", "127.0.0.1:1")
+        firebase_admin.initialize_app(
+            _AnonymousTestCredential(),
+            options={"projectId": "demo-consensio-unit"},
+        )
+    else:
+        cred = credentials.Certificate("consensai-firebase-adminsdk-fbsvc-9064a77134.json")
+        firebase_admin.initialize_app(cred)
 
 db_firestore = firestore.client()
 

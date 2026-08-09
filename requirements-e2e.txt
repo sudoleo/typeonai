@@ -1,0 +1,5 @@
+-r requirements-test.txt
+
+# Python 3.9 needs the pinned binary wheel; keep it reproducible on every CI OS.
+greenlet==3.1.1
+playwright==1.60.0

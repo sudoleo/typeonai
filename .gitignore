@@ -4,6 +4,7 @@ venv/
 __pycache__/
 *.log
 *json
+!firebase.json
 consensai-firebase-adminsdk-fbsvc-9064a77134.json
 
 # Benchmark: Run-Outputs bleiben lokal, die eingefrorenen Sample-Manifeste

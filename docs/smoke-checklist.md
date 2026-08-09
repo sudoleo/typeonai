@@ -6,7 +6,8 @@ Modell-Ausschluss, Theme-Toggle und Picker-Persistenz ab (Lauf: siehe
 `tests/e2e/README.md`). Die übrigen Punkte weiterhin manuell durchgehen
 (oder zumindest die vom Cluster betroffenen), bevor committet wird. Backend
 bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
-(Baseline: 718 passed, Stand 2026-07-24).
+(Baseline 2026-08-09: regulär 1003 passed; Emulator-E2E 39 passed. Sichere
+Befehle: `docs/testing.md`).
 
 ## Browser-Konsole
 - [ ] Beim Laden **keine** JS-Fehler in der Konsole (besonders: keine
@@ -87,7 +88,7 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       Fallback.
 - [ ] Fehlt im Own-Key-Modus ein Key eines ausgewählten Antwort-Providers oder
       des Memory-Providers, stoppt der Lauf vor Usage, `/prepare`, Turn-Anlage
-      und Fan-out; Frage, Follow-up-Chip und completed Vorgänger bleiben stehen.
+      und Fan-out; Frage und completed Vorgänger bleiben stehen.
 - [ ] Ein kurzzeitiges `202 building` wird begrenzt wiederholt; eine
       `degraded`-Version startet den normalen Fan-out. Context-Fehler oder Stop
       lassen den completed Vorgänger sichtbar und beschädigen ihn nicht.
@@ -174,7 +175,6 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       (nur Contradictions mit ≥2 beteiligten Modellen), Klick zeigt Outcome-Badge
       + Modell-Zeilen, Usage-Counter aktualisiert sich, Fehlerfall reaktiviert
       den Button.
-- [ ] Spalten-Balancer: Differences-Spalte passt Breite an.
 - [ ] Share-Dialog: Link erstellen, Liste anzeigen, Link kopieren.
 
 ## Agent Mode
@@ -191,9 +191,7 @@ bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
       horizontalen Achse; der Composer bleibt am unteren Viewport-Rand fixiert.
       Das Fragefeld wächst beim Tippen bis 180 px, scrollt danach intern und
       schrumpft beim Löschen wieder auf seine Ausgangshöhe. Enter auf der
-      Handy-Tastatur fügt einen Absatz ein und sendet nicht. Der Follow-up-
-      Kontext-Chip einer langen Frage bleibt vollständig im Composer und
-      endet mit Ellipse, statt aus dem Bildrand zu ragen.
+      Handy-Tastatur fügt einen Absatz ein und sendet nicht.
       Am vollständigen Scrollende liegen die geschlossenen Detail-Tabs direkt
       darüber, ohne Leerraum oder verdeckten Inhalt.
 - [ ] Quellen-Fussnoten im Consensus stehen hinter Punkt, Frage- oder

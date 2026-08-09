@@ -1,70 +1,93 @@
-# Playwright-Smoke-Suite (tests/e2e/)
+# Playwright-Smoke-Suite (`tests/e2e/`)
 
-Automatisiert die risikoreichsten Punkte aus `docs/smoke-checklist.md` gegen
-einen lokalen Server mit gemockten LLM-Calls und gemocktem Firebase-Login.
-Npm-frei: Playwright läuft über das Python-Package im venv.
+Die Suite automatisiert die risikoreichsten Punkte aus
+`docs/smoke-checklist.md` gegen einen lokalen Server. LLM-Aufrufe und Login
+sind gemockt; sämtliche serverseitigen Datenzugriffe gehen ausschließlich an
+den lokalen Firestore-Emulator mit der fest allowgelisteten Demo-Projekt-ID
+`demo-consensio-e2e`.
 
 ## Einmaliges Setup
 
+Voraussetzungen sind Python, Node.js und Java 21. Danach:
+
 ```powershell
-# greenlet zuerst pinnen: neuere Versionen liefern kein Wheel mehr fuer das
-# Python 3.9 im venv und wuerden einen MSVC-Build verlangen.
-venv\Scripts\python.exe -m pip install "greenlet==3.1.1" --only-binary=:all:
-venv\Scripts\python.exe -m pip install playwright
-venv\Scripts\python.exe -m playwright install chromium   # lädt ~130 MB Browser
+venv\Scripts\python.exe -m pip install -r requirements-e2e.txt
+venv\Scripts\python.exe -m playwright install chromium
+npm install --global firebase-tools@13.35.1
 ```
 
-## Lauf
+## Sicherer lokaler Lauf
+
+Terminal 1 startet nur den Emulator. Es ist absichtlich kein Firebase-
+Standardprojekt in `.firebaserc` hinterlegt:
+
+```powershell
+firebase emulators:start --only firestore --project demo-consensio-e2e
+```
+
+Terminal 2 startet die Browser-Suite:
 
 ```powershell
 $env:RUN_E2E = "1"
+$env:FIRESTORE_EMULATOR_HOST = "127.0.0.1:8085"
 venv\Scripts\python.exe -m pytest tests\e2e -v
+Remove-Item Env:RUN_E2E
+Remove-Item Env:FIRESTORE_EMULATOR_HOST
+```
+
+Alternativ kapselt `emulators:exec` Start und Stopp in einem Befehl:
+
+```powershell
+$env:RUN_E2E = "1"
+firebase emulators:exec --only firestore --project demo-consensio-e2e `
+  "venv\Scripts\python.exe -m pytest tests\e2e -v"
 Remove-Item Env:RUN_E2E
 ```
 
-Ohne `RUN_E2E=1` wird `tests/e2e/` von pytest ignoriert — die schnelle
-Backend-Baseline (`python -m pytest tests`) bleibt unverändert.
+Ohne `RUN_E2E=1` wird `tests/e2e/` von der regulären Suite ignoriert. Ohne
+erreichbaren Emulator bricht die E2E-Suite ab. Es gibt keinen Fallback auf ein
+Service-Account-JSON oder ein entferntes Firebase-Projekt.
 
-## Wie es funktioniert
+## Erzwungene Isolation
 
-- `conftest.py` startet einen **eigenen uvicorn-Prozess auf Port 8031**
-  (Override: `E2E_PORT`) — bewusst nicht 8021, damit die Tests nie mit einem
-  parallel laufenden echten Dev-Server reden.
-- Der Testserver läuft mit:
-  - `MOCK_LLM=1` — alle Provider-/Engine-Calls liefern deterministische
-    Fixtures (`app/services/llm/mock_llm.py`). Gemockt wird am untersten
-    Seam (`_run_ask`, `_call_engine_text`/`_stream_engine_text`),
-    d. h. SSE-Protokoll, Differences-Parsing,
-    Anchor-/Quote-Verifikation und Agreement-Score laufen **echt**.
-    Zusätzlich wird die `pending_results`-Share-Persistenz übersprungen
-    (kein Firestore-Schreiben aus Tests).
-- `MOCK_AUTH=1` — `verify_user_token` akzeptiert das Sentinel-Token
-  `e2e-mock-token` (uid `e2e-mock-user`, Free-Tier, kein Firestore-Read).
-- Die Send-Hilfe aktiviert lokale Dummy-Eigenkeys. Damit bleibt die Suite vom
-  aktuell aus Firestore geladenen Free-Limit unabhängig; `MOCK_LLM=1`
-  verhindert weiterhin jeden echten Provider-Aufruf.
-- `DISABLE_RATE_LIMIT=1` — slowapi aus, sonst laufen die Tests in die
-    3-5/minute-Limits der Endpoints.
-  - `MOCK_LLM_DELAY_MS=40` — Deltas gedrosselt, damit die Tests den
-    Streaming-Zwischenzustand beobachten können.
-- Im Browser ersetzt eine Playwright-Route `static/firebase.js` durch
-  `firebase_stub.js` (eingeloggter Free-User, No-op-Bookmarks/-Voting).
+`tests/e2e/conftest.py` setzt vor dem uvicorn-Start:
 
-## Voraussetzungen / Grenzen
+- `E2E_TEST_MODE=1`,
+- `FIRESTORE_EMULATOR_HOST=127.0.0.1:8085`,
+- alle relevanten Projektvariablen auf `demo-consensio-e2e`,
+- `MOCK_LLM=1`, `MOCK_AUTH=1` und `DISABLE_RATE_LIMIT=1`.
 
-- **Nur lokal lauffähig**: Der Server braucht das gitignorte
-  Firebase-Service-Account-JSON im Repo-Root (Firestore-Startup:
-  `load_models_from_db`). Firestore wird gelesen, aber nicht beschrieben.
-- **Netzzugang nötig**: CDN-Skripte (marked, DOMPurify) werden echt geladen.
-- **Fixtures**: Eiffelturm-Szenario in `app/services/llm/mock_llm.py` —
-  fünf Modelle sagen 1889, Grok sagt 1887 → ergibt deterministisch Claims,
-  eine Major-Contradiction-Karte und einen Agreement-Score. Zitate/Anchors
-  müssen wörtlich in den Fixture-Texten vorkommen, sonst leert die
-  serverseitige Verifikation sie (Tests schlagen dann fehl).
+`app/core/e2e_profile.py` validiert Projekt und Loopback-Host vor der Firebase-
+Initialisierung. Unbekannte, entfernte oder produktionsnahe Ziele stoppen den
+Prozess. Das E2E-Lifespan-Profil in `main.py` deaktiviert außerdem sämtliche
+Startup-/Maintenance-Writer: Modellkonfigurations-Backfill, Pending-/Share-
+Cleanup, Account-Cleanup-Retry, Run-Recovery, Publisher-Lineage-Backfill,
+Telegram-Startup-Maintenance sowie Watch-, Topic-, SEO-, API-Run- und Account-
+Cleanup-Loops.
 
-## Bewusst (noch) nicht abgedeckt
+Request-Writer bleiben absichtlich aktiv, damit echte Datenflüsse geprüft
+werden, landen aber nur im kurzlebigen Emulator. Inventar:
 
-Resolve-Runde, Share-Dialog, echte Datei-Picker-/Paste-/Drop-Uploads (Pro),
-Follow-up (Pro), Bookmarks, Agent-Mode-Timer, Demo-Flow, Mobile-Layout,
-Login-Flow selbst. Mit dem
-vorhandenen Auth-Mock sind Resolve/Share später günstig nachrüstbar.
+- aktuell ausgeführt: Usage-Reservierungen/Run-Metadaten aus `/prepare` sowie
+  Chats, Turns, Context-Versionen, Modell-Completions und Turn-Abschluss,
+- im Mock-Profil ausdrücklich unterdrückt: `pending_results`, Differences-
+  Telemetrie sowie die durch `firebase_stub.js` ersetzten Bookmark-/Vote-Writes,
+- für neue Tests erreichbar, aber weiterhin emulatorgebunden: Completions,
+  Shares, Votes, Bookmarks, Watches und sonstige App-Endpunkt-Writer.
+
+## Testprofil
+
+- `MOCK_LLM=1` liefert deterministische Fixtures am untersten Provider-Seam;
+  SSE, Differences-Parsing, Anchor-/Quote-Verifikation und Agreement-Score
+  laufen echt. `MOCK_LLM_DELAY_MS=40` hält Streaming-Zwischenzustände sichtbar.
+- `MOCK_AUTH=1` akzeptiert nur `e2e-mock-token` als Free-User
+  `e2e-mock-user`. Im Browser ersetzt eine Playwright-Route `firebase.js` durch
+  `firebase_stub.js`.
+- Dummy-Eigenkeys passieren lokale Key-Prüfungen, lösen mit `MOCK_LLM=1` aber
+  keine Provideraufrufe aus.
+- CDN-Skripte wie marked und DOMPurify werden echt geladen; der Lauf braucht
+  daher Netzzugang.
+
+Noch nicht automatisiert sind unter anderem echte Firebase-Auth-Flows,
+Provideraufrufe, Mail-/Telegram-Zustellung und Admin-Produktionsabläufe. Diese
+gehören ausdrücklich nicht in das E2E-Emulatorprofil.

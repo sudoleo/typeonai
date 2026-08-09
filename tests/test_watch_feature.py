@@ -1992,7 +1992,8 @@ class BriefRouteTests(unittest.TestCase):
         brief = {"enabled": False, "send_time": "07:00", "timezone": "", "mode": "always",
                  "next_send_at": "", "last_sent_at": ""}
         with token_patch, verify_patch, \
-                patch.object(watch_router.watch_brief, "get_brief", return_value=brief):
+                patch.object(watch_router.watch_brief, "get_brief", return_value=brief), \
+                patch.object(watch_router.watch_brief, "has_watches", return_value=False):
             response = self.client.get("/api/my/watch-brief")
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["brief"]["enabled"])

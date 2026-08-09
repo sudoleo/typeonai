@@ -1,18 +1,19 @@
 """Fixtures der Playwright-Smoke-Suite.
 
 Startet einen eigenen uvicorn-Prozess mit MOCK_LLM/MOCK_AUTH auf einem
-dedizierten Testport (Default 8031, NICHT 8021): laeuft parallel ein
-normaler Dev-Server, duerfen die Tests nie versehentlich mit echten
-LLM-Keys reden.
+dedizierten Testport (Default 8031, NICHT 8021). Firestore muss als lokaler
+Emulator auf Port 8085 laufen; Projekt-ID und Emulatorziel werden vor dem
+Serverstart fail-closed validiert.
 
 Voraussetzungen: siehe tests/e2e/README.md (Playwright + Chromium,
-Service-Account-JSON im Root, Netz fuer CDN-Skripte).
+lokaler Firestore-Emulator, Netz fuer CDN-Skripte).
 """
 
 import os
 import subprocess
 import sys
 import time
+import socket
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -20,9 +21,14 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import sync_playwright
 
+from app.core.e2e_profile import E2E_PROJECT_ID, assert_safe_e2e_environment
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 E2E_PORT = int(os.environ.get("E2E_PORT", "8031"))
 BASE_URL = f"http://127.0.0.1:{E2E_PORT}"
+FIRESTORE_EMULATOR_HOST = os.environ.get(
+    "FIRESTORE_EMULATOR_HOST", "127.0.0.1:8085"
+)
 
 FIREBASE_STUB = (Path(__file__).parent / "firebase_stub.js").read_text(encoding="utf-8")
 
@@ -44,6 +50,14 @@ def filter_console_errors(errors):
 @pytest.fixture(scope="session")
 def app_server():
     env = os.environ.copy()
+    env["E2E_TEST_MODE"] = "1"
+    env["FIRESTORE_EMULATOR_HOST"] = FIRESTORE_EMULATOR_HOST
+    env["GOOGLE_CLOUD_PROJECT"] = E2E_PROJECT_ID
+    env["GCLOUD_PROJECT"] = E2E_PROJECT_ID
+    env["FIREBASE_PROJECT_ID"] = E2E_PROJECT_ID
+    env.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
+    assert_safe_e2e_environment(env)
+    _assert_emulator_is_reachable(FIRESTORE_EMULATOR_HOST)
     env["MOCK_LLM"] = "1"
     env["MOCK_AUTH"] = "1"
     env["DISABLE_RATE_LIMIT"] = "1"
@@ -88,7 +102,7 @@ def _wait_until_ready(proc, timeout_seconds=90):
         if proc.poll() is not None:
             raise RuntimeError(
                 f"uvicorn hat sich beim Start beendet (Exit-Code {proc.returncode}). "
-                "Liegt das Firebase-Service-Account-JSON im Repo-Root?"
+                "Pruefe den E2E-Startfehler oberhalb dieser Meldung."
             )
         try:
             with urllib.request.urlopen(f"{BASE_URL}/app", timeout=5) as response:
@@ -98,6 +112,20 @@ def _wait_until_ready(proc, timeout_seconds=90):
             last_error = exc
         time.sleep(0.5)
     raise RuntimeError(f"Testserver auf Port {E2E_PORT} wurde nicht rechtzeitig bereit: {last_error}")
+
+
+def _assert_emulator_is_reachable(emulator_host: str) -> None:
+    host, port_text = emulator_host.rsplit(":", 1)
+    host = host.strip("[]")
+    try:
+        with socket.create_connection((host, int(port_text)), timeout=2):
+            return
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(
+            "Der Firestore-Emulator ist nicht erreichbar. Starte ihn wie in "
+            "tests/e2e/README.md beschrieben; echte Firebase-Credentials sind "
+            "kein erlaubter Fallback."
+        ) from exc
 
 
 @pytest.fixture(scope="session")
