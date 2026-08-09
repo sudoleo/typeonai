@@ -2,10 +2,18 @@ import logging
 from firebase_admin import auth, firestore
 from fastapi import APIRouter, Request, Body, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.rate_limit import limiter
 import app.core.config as cfg
-from app.core.security import verify_user_token, extract_id_token, is_user_pro, invalidate_tier_cache, db_firestore
+from app.core.security import (
+    TierStatusUnavailable,
+    verify_user_token,
+    extract_id_token,
+    is_user_pro,
+    invalidate_tier_cache,
+    db_firestore,
+)
 from app.core.state import last_feedback_time
 from app.services.usage_repository import (
     FirestoreUsageRepository,
@@ -13,12 +21,17 @@ from app.services.usage_repository import (
     UsageRunNotFound,
     UsageTransitionError,
 )
-from app.services.api_account_cleanup import FirestoreApiAccountCleanup
-from app.services.chat_store import ChatStore
+from app.services.account_deletion import FirestoreAccountDeletion
 
 router = APIRouter()
 run_usage_repository = FirestoreUsageRepository(db_firestore)
-api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
+account_deletion = FirestoreAccountDeletion(db_firestore)
+
+
+class UsageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id_token: str = Field(min_length=1, max_length=8192)
 
 
 def _run_limits(is_pro: bool) -> UsageLimits:
@@ -45,7 +58,13 @@ async def get_user_status(request: Request):
         uid = verify_user_token(token)
         
         # 2. Status aus Firestore holen
-        pro_status = is_user_pro(uid)
+        try:
+            pro_status = is_user_pro(uid)
+        except TierStatusUnavailable:
+            raise HTTPException(
+                status_code=503,
+                detail="Account tier is temporarily unavailable. Please retry.",
+            ) from None
 
         # 3. Limits basierend auf Status setzen
         limit_regular = cfg.get_consensus_run_limit(pro_status)
@@ -58,18 +77,19 @@ async def get_user_status(request: Request):
             "deep_limit": limit_deep
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"User status check failed: {e}")
         raise HTTPException(status_code=401, detail="Authentication failed")
 
 @router.post("/usage")
 @limiter.limit("20/minute")
-async def get_usage_post(request: Request):
+async def get_usage_post(request: Request, data: UsageRequest):
     """
     Liefert den persistenten Run-Stand des aktuellen UTC-Tags zurück.
     """
-    data = await request.json()
-    token = data.get("id_token")
+    token = data.id_token
     
     try:
         uid = verify_user_token(token)
@@ -77,7 +97,13 @@ async def get_usage_post(request: Request):
         raise HTTPException(status_code=401, detail="Authentication failed")
     
     # 1. Status prüfen
-    pro_status = is_user_pro(uid)
+    try:
+        pro_status = is_user_pro(uid)
+    except TierStatusUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="Account tier is temporarily unavailable. Please retry.",
+        ) from None
 
     # 2. Limits festlegen
     limits = _run_limits(pro_status)
@@ -141,132 +167,48 @@ async def delete_account(request: Request, data: dict = Body(default={})):
         raise HTTPException(status_code=401, detail="Authentication required")
 
     try:
-        uid = verify_user_token(id_token, allow_unverified=True)
+        # Account deletion is a deliberately rare sensitive action. Pay the
+        # live Firebase revocation/disabled-user lookup here instead of on every
+        # ordinary app read.
+        uid = verify_user_token(
+            id_token,
+            allow_unverified=True,
+            check_revoked=True,
+        )
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed")
-
-    # Persist a fail-closed tombstone before deleting any credential or user
-    # data. Even partial cleanup or a delayed Firebase deletion can therefore
-    # never leave API access active.
     try:
-        api_account_cleanup.block(uid)
+        user = auth.get_user(uid)
+        account_deletion.start(uid, email=str(user.email or ""))
     except Exception:
-        logging.exception("delete_account: API access block failed for %s", uid)
+        logging.exception("delete_account: durable deletion job could not start for %s", uid)
         raise HTTPException(
             status_code=503,
             detail="Account deletion could not be started safely. Please try again.",
         ) from None
 
-    errors = []
-    api_cleanup_errors = api_account_cleanup.cleanup_uid(uid)
-    errors.extend(api_cleanup_errors)
-
-    # 1. Nutzer-Subcollections loeschen (Subcollections werden nicht automatisch
-    #    mit dem Eltern-Dokument entfernt). usage_* ist die persistente Grundlage
-    #    fuer den kuenftigen run-basierten Consensus-Endpoint.
-    user_ref = db_firestore.collection("users").document(uid)
-    for subcollection in (
-        "bookmarks",
-        "counters",
-        "usage_days",
-        "usage_runs",
-    ):
-        try:
-            for doc in user_ref.collection(subcollection).stream():
-                doc.reference.delete()
-        except Exception as e:
-            logging.error(
-                f"delete_account: {subcollection} cleanup failed for {uid}: {e}"
-            )
-            errors.append(subcollection)
-
-    # 1b. Chats brauchen eine eigene Kaskade: unter chats/{id} haengen turns,
-    #     darunter model_answers und daneben context_versions. Ein einfaches
-    #     stream()+delete() wie oben wuerde die Fragen und die vollstaendigen
-    #     Modellantworten als unerreichbare Waisen zuruecklassen.
     try:
-        ChatStore(db_firestore).delete_all_chats(uid)
-    except Exception as e:
-        logging.error(f"delete_account: chats cleanup failed for {uid}: {e}")
-        errors.append("chats")
-
-    # 2. users-Dokument löschen
-    try:
-        user_ref.delete()
-    except Exception as e:
-        logging.error(f"delete_account: user doc cleanup failed for {uid}: {e}")
-        errors.append("profile")
-
-    # 3. Waitlist- und Feedback-Einträge des Nutzers löschen
-    for collection_name in ("pro_waitlist", "feedback"):
-        try:
-            docs = db_firestore.collection(collection_name).where("uid", "==", uid).stream()
-            for doc in docs:
-                doc.reference.delete()
-        except Exception as e:
-            logging.error(f"delete_account: {collection_name} cleanup failed for {uid}: {e}")
-            errors.append(collection_name)
-
-    # 3b. Öffentliche Share-Links und zwischengespeicherte Konsens-Ergebnisse
-    #     löschen (DSGVO-Kaskade, Art. 17) – hart, nicht nur revoked
-    for collection_name in ("shares", "pending_results"):
-        try:
-            docs = db_firestore.collection(collection_name).where("owner_uid", "==", uid).stream()
-            for doc in docs:
-                if collection_name == "shares":
-                    for history_doc in doc.reference.collection("watch_history").stream():
-                        history_doc.reference.delete()
-                doc.reference.delete()
-        except Exception as e:
-            logging.error(f"delete_account: {collection_name} cleanup failed for {uid}: {e}")
-            errors.append(collection_name)
-
-    try:
-        docs = db_firestore.collection("watches").where("owner_uid", "==", uid).stream()
-        for doc in docs:
-            doc.reference.delete()
-    except Exception as e:
-        logging.error(f"delete_account: watches cleanup failed for {uid}: {e}")
-        errors.append("watches")
-
-    # 4. Feedback-Cooldown bereinigen (inkl. Tier-Flag-Cache, sonst wuerde ein
-    #    geloeschter Pro-Account bis zu 60s weiter als Pro gecacht)
+        errors = account_deletion.cleanup_uid(uid)
+    except Exception:
+        # start() has already persisted the fail-closed job. A transient read
+        # or cleanup coordinator outage must therefore remain an honest 202;
+        # the maintenance loop will retry the same idempotent job.
+        logging.exception("delete_account: cleanup attempt failed for %s", uid)
+        errors = ["cleanup_coordinator"]
     last_feedback_time.pop(uid, None)
     invalidate_tier_cache(uid)
-
-    # 5. Auth-Account zuletzt löschen, damit der Nutzer bei Teilfehlern
-    #    erneut authentifiziert löschen kann
-    try:
-        auth.delete_user(uid)
-    except Exception as e:
-        logging.error(f"delete_account: auth deletion failed for {uid}: {e}")
-        raise HTTPException(status_code=500, detail="Account deletion failed. Please try again or contact us.")
-
-    if not api_cleanup_errors:
-        try:
-            api_account_cleanup.clear_completed_block(uid)
-        except Exception:
-            # Firebase deletion plus successful credential cleanup already
-            # fail closed; retain the minimal tombstone for periodic retry.
-            logging.exception("delete_account: completed API block cleanup failed for %s", uid)
-            try:
-                api_account_cleanup.mark_cleanup_pending(uid)
-            except Exception:
-                logging.exception("delete_account: API block retry marker failed for %s", uid)
-
     if errors:
-        logging.warning(f"delete_account: partial cleanup for {uid}, failed: {errors}")
-
-    if api_cleanup_errors:
         return JSONResponse(
             status_code=202,
             content={
-                "status": "deleted",
+                "status": "cleanup_pending",
                 "cleanup_pending": True,
-                "message": "Account access is blocked; remaining API data cleanup is queued for retry.",
+                "message": (
+                    "Account access is blocked. Remaining personal-data cleanup "
+                    "is queued and will be retried automatically."
+                ),
             },
         )
-
     return {"status": "deleted", "cleanup_pending": False}
 
 

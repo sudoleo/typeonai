@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.routers import auth as auth_router
+from app.core.rate_limit import limiter
 
 
 class AuthSessionTests(unittest.TestCase):
@@ -15,6 +16,9 @@ class AuthSessionTests(unittest.TestCase):
         app = FastAPI()
         app.include_router(auth_router.router)
         cls.client = TestClient(app)
+
+    def setUp(self):
+        limiter.reset()
 
     def test_confirm_registration_sets_httponly_session_cookie(self):
         with (
@@ -65,11 +69,6 @@ class AuthSessionTests(unittest.TestCase):
             ),
             patch.object(auth_router.auth, "create_user", return_value=user),
             patch.object(
-                auth_router.auth,
-                "create_custom_token",
-                return_value=b"custom-token",
-            ),
-            patch.object(
                 auth_router,
                 "send_new_user_registration_notification",
             ) as notify,
@@ -80,7 +79,7 @@ class AuthSessionTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["uid"], "new-owner")
+        self.assertEqual(response.json(), {"status": "check_inbox"})
         notify.assert_called_once_with("email/password", "new-owner")
 
     def test_existing_email_registration_does_not_notify(self):
@@ -103,6 +102,33 @@ class AuthSessionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "check_inbox"})
         notify.assert_not_called()
+
+    def test_new_and_existing_registration_responses_are_identical(self):
+        new_user = SimpleNamespace(uid="new-owner", email="same@example.test")
+        with (
+            patch.object(
+                auth_router.auth,
+                "get_user_by_email",
+                side_effect=auth_router.firebase_admin.auth.UserNotFoundError("missing"),
+            ),
+            patch.object(auth_router.auth, "create_user", return_value=new_user),
+        ):
+            created = self.client.post(
+                "/register",
+                json={"email": "same@example.test", "password": "secret123"},
+            )
+        with patch.object(
+            auth_router.auth,
+            "get_user_by_email",
+            return_value=SimpleNamespace(uid="existing-owner"),
+        ):
+            existing = self.client.post(
+                "/register",
+                json={"email": "same@example.test", "password": "secret123"},
+            )
+
+        self.assertEqual(created.status_code, existing.status_code)
+        self.assertEqual(created.content, existing.content)
 
     def test_logout_clears_session_cookie(self):
         response = self.client.delete("/auth/session")

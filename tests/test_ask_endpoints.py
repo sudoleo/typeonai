@@ -106,6 +106,53 @@ def test_deep_search_is_pro_only():
     assert "Pro users" in response.json()["detail"]
 
 
+def test_megabyte_style_one_word_question_is_rejected_before_provider_work():
+    client = make_client()
+    p1, p2 = auth_patches()
+    with p1, p2, patch.object(chat_router, "_run_ask") as provider_call:
+        response = client.post(
+            "/ask_openai",
+            headers=AUTH_HEADER,
+            json={
+                "question": "x" * (chat_router.MAX_QUESTION_CHARS + 1),
+                "model": free_model("openai"),
+                "api_key": "own-key",
+            },
+        )
+
+    assert response.status_code == 400
+    provider_call.assert_not_called()
+
+
+def test_multibyte_question_and_system_prompt_obey_utf8_byte_caps():
+    client = make_client()
+    p1, p2 = auth_patches()
+    with p1, p2, patch.object(chat_router, "_run_ask") as provider_call:
+        question_response = client.post(
+            "/ask_openai",
+            headers=AUTH_HEADER,
+            json={
+                "question": "🙂" * 4_001,
+                "model": free_model("openai"),
+                "api_key": "own-key",
+            },
+        )
+        prompt_response = client.post(
+            "/ask_openai",
+            headers=AUTH_HEADER,
+            json={
+                "question": "small",
+                "system_prompt": "🙂" * 8_001,
+                "model": free_model("openai"),
+                "api_key": "own-key",
+            },
+        )
+
+    assert question_response.status_code == 400
+    assert prompt_response.status_code == 400
+    provider_call.assert_not_called()
+
+
 def test_usage_limit_blocks_developer_key_path(reset_rate_limiter):
     client = make_client()
     uid = "uid-limit-reached"

@@ -2,12 +2,14 @@ import base64
 import io
 import unittest
 import zipfile
+from unittest.mock import patch
 
 from fastapi import HTTPException
 
 from app.services.llm.attachments import (
     DOCX_MIME,
     MAX_ATTACHMENT_BYTES,
+    MAX_ATTACHMENT_BASE64_CHARS,
     MAX_ATTACHMENTS,
     TEXT_MIME,
     extract_docx_text,
@@ -107,6 +109,42 @@ class ParseAttachmentsTests(unittest.TestCase):
         data = {"attachments": [make_attachment("big.png", big)]}
         with self.assertRaises(HTTPException) as ctx:
             parse_attachments(data, is_pro=True)
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_encoded_size_limit_is_checked_before_base64_decode(self):
+        data = {
+            "attachments": [
+                {"name": "big.png", "data": "A" * (MAX_ATTACHMENT_BASE64_CHARS + 1)}
+            ]
+        }
+        with patch("app.services.llm.attachments.base64.b64decode") as decode:
+            with self.assertRaises(HTTPException) as ctx:
+                parse_attachments(data, is_pro=True)
+        self.assertEqual(ctx.exception.status_code, 400)
+        decode.assert_not_called()
+
+    def test_docx_zip_bomb_ratio_is_rejected_during_parse(self):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("word/document.xml", b"A" * (2 * 1024 * 1024))
+        data = {"attachments": [make_attachment("bomb.docx", buffer.getvalue())]}
+
+        with self.assertRaises(HTTPException) as ctx:
+            parse_attachments(data, is_pro=True)
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("safe Word document", ctx.exception.detail)
+
+    def test_docx_traversal_entry_is_rejected(self):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("word/document.xml", "<w:document/>")
+            archive.writestr("../secret.txt", "secret")
+        data = {"attachments": [make_attachment("unsafe.docx", buffer.getvalue())]}
+
+        with self.assertRaises(HTTPException) as ctx:
+            parse_attachments(data, is_pro=True)
+
         self.assertEqual(ctx.exception.status_code, 400)
 
     def test_attachment_count_limit_is_enforced(self):

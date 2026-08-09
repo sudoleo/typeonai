@@ -16,8 +16,10 @@ from app.services.usage_repository import (
     UsageLimitExceeded,
     UsageLimits,
     UsageRunConflict,
+    UsageRunExpired,
     UsageRunNotFound,
     UsageTransitionError,
+    canonical_request_fingerprint,
 )
 
 
@@ -295,3 +297,112 @@ def test_missing_reservation_cannot_be_consumed_or_released(usage_repo):
         repo.consume("missing-user", "missing")
     with pytest.raises(UsageRunNotFound):
         repo.release("missing-user", "missing")
+
+
+def test_request_fingerprint_binds_reused_key(usage_repo):
+    repo, _ = usage_repo
+    first = canonical_request_fingerprint({"question": "first"})
+    second = canonical_request_fingerprint({"question": "second"})
+    repo.reserve(
+        "bound-user",
+        "bound-key",
+        RunKind.REGULAR,
+        LIMITS,
+        request_fingerprint=first,
+        now=UTC_NOON,
+    )
+
+    with pytest.raises(UsageRunConflict):
+        repo.reserve(
+            "bound-user",
+            "bound-key",
+            RunKind.REGULAR,
+            LIMITS,
+            request_fingerprint=second,
+            now=UTC_NOON,
+        )
+
+
+def test_parallel_operation_claim_allows_exactly_one_winner(usage_repo):
+    repo, _ = usage_repo
+    fingerprint = canonical_request_fingerprint({"question": "same"})
+    repo.reserve(
+        "claim-user",
+        "claim-key",
+        RunKind.REGULAR,
+        LIMITS,
+        request_fingerprint=fingerprint,
+        now=UTC_NOON,
+    )
+    repo.consume("claim-user", "claim-key")
+    operation_fingerprint = canonical_request_fingerprint({"model": "gpt"})
+
+    def claim(_):
+        return repo.claim_operation(
+            "claim-user",
+            "claim-key",
+            "ask:openai",
+            operation_fingerprint,
+            now=UTC_NOON,
+        )
+
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        claims = list(pool.map(claim, range(24)))
+
+    assert sum(not item.idempotent for item in claims) == 1
+    assert sum(item.idempotent for item in claims) == 23
+
+
+def test_cross_operation_claims_are_independent_and_payload_bound(usage_repo):
+    repo, _ = usage_repo
+    run_fingerprint = canonical_request_fingerprint({"question": "same"})
+    repo.reserve(
+        "cross-operation",
+        "claim-key",
+        RunKind.REGULAR,
+        LIMITS,
+        request_fingerprint=run_fingerprint,
+        now=UTC_NOON,
+    )
+    repo.consume("cross-operation", "claim-key")
+    ask = canonical_request_fingerprint({"provider": "openai"})
+    consensus = canonical_request_fingerprint({"engine": "gemini"})
+
+    assert repo.claim_operation(
+        "cross-operation", "claim-key", "ask:openai", ask, now=UTC_NOON
+    ).idempotent is False
+    assert repo.claim_operation(
+        "cross-operation", "claim-key", "consensus", consensus, now=UTC_NOON
+    ).idempotent is False
+    with pytest.raises(UsageRunConflict):
+        repo.claim_operation(
+            "cross-operation",
+            "claim-key",
+            "ask:openai",
+            canonical_request_fingerprint({"provider": "openai", "changed": True}),
+            now=UTC_NOON,
+        )
+
+
+def test_cross_day_replay_cannot_claim_provider_work(usage_repo):
+    repo, _ = usage_repo
+    run_fingerprint = canonical_request_fingerprint({"question": "today"})
+    repo.reserve(
+        "expired-user",
+        "expired-key",
+        RunKind.REGULAR,
+        LIMITS,
+        request_fingerprint=run_fingerprint,
+        now=UTC_NOON,
+    )
+    repo.consume("expired-user", "expired-key")
+    tomorrow = UTC_NOON + timedelta(days=1)
+
+    with pytest.raises(UsageRunExpired):
+        repo.claim_operation(
+            "expired-user",
+            "expired-key",
+            "ask:openai",
+            canonical_request_fingerprint({"model": "gpt"}),
+            now=tomorrow,
+        )

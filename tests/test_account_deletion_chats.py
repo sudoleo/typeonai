@@ -75,46 +75,58 @@ def delete_account_api(monkeypatch):
     monkeypatch.setattr(users_router, "db_firestore", EmptyDatabase())
     monkeypatch.setattr(users_router, "verify_user_token", lambda token, **kw: UID)
     monkeypatch.setattr(users_router, "invalidate_tier_cache", lambda uid: None)
-    monkeypatch.setattr(
-        users_router,
-        "api_account_cleanup",
-        SimpleNamespace(
-            block=lambda uid: None,
-            cleanup_uid=lambda uid: [],
-            clear_completed_block=lambda uid: None,
-        ),
+    deletion = SimpleNamespace(
+        started=[],
+        cleaned=[],
+        errors=[],
     )
-    monkeypatch.setattr(users_router.auth, "delete_user", lambda uid: None)
+    deletion.start = lambda uid, email="": deletion.started.append((uid, email))
+    deletion.cleanup_uid = lambda uid: deletion.cleaned.append(uid) or deletion.errors
+    monkeypatch.setattr(users_router, "account_deletion", deletion)
+    monkeypatch.setattr(
+        users_router.auth,
+        "get_user",
+        lambda uid: SimpleNamespace(email="owner@example.test"),
+    )
 
     app = FastAPI()
     app.state.limiter = limiter
     app.include_router(users_router.router)
-    return TestClient(app)
+    return TestClient(app), deletion
 
 
 def test_delete_account_cascades_into_the_owner_chats(delete_account_api):
-    with patch.object(users_router, "ChatStore", RecordingChatStore):
-        response = delete_account_api.post("/delete_account", headers=AUTH, json={})
+    client, deletion = delete_account_api
+    response = client.post("/delete_account", headers=AUTH, json={})
 
     assert response.status_code == 200
-    assert [store.deleted for store in RecordingChatStore.instances] == [[UID]]
+    assert deletion.started == [(UID, "owner@example.test")]
+    assert deletion.cleaned == [UID]
 
 
 def test_delete_account_reports_a_failed_chat_cascade_instead_of_hiding_it(
     delete_account_api, caplog
 ):
-    class FailingChatStore(RecordingChatStore):
-        def __init__(self, db):
-            super().__init__(db)
-            self.error = RuntimeError("firestore unavailable")
+    client, deletion = delete_account_api
+    deletion.errors = ["chats"]
+    response = client.post("/delete_account", headers=AUTH, json={})
 
-    with caplog.at_level("WARNING"):
-        with patch.object(users_router, "ChatStore", FailingChatStore):
-            response = delete_account_api.post("/delete_account", headers=AUTH, json={})
+    assert response.status_code == 202
+    assert response.json()["cleanup_pending"] is True
+    assert response.json()["status"] == "cleanup_pending"
 
-    # The auth account still goes away so the user is never locked out of a
-    # retry, but the chat cascade lands in the same partial-cleanup report as
-    # every other subcollection instead of failing silently.
-    assert response.status_code == 200
-    assert "chats" in caplog.text
-    assert "partial cleanup" in caplog.text
+
+def test_delete_account_reports_durable_job_when_immediate_cleanup_crashes(
+    delete_account_api,
+):
+    client, deletion = delete_account_api
+
+    def fail_cleanup(_uid):
+        raise RuntimeError("temporary Firestore outage")
+
+    deletion.cleanup_uid = fail_cleanup
+    response = client.post("/delete_account", headers=AUTH, json={})
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "cleanup_pending"
+    assert deletion.started == [(UID, "owner@example.test")]

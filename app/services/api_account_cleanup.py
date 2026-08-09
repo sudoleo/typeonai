@@ -55,7 +55,13 @@ class FirestoreApiAccountCleanup:
     def is_blocked(self, uid: str) -> bool:
         uid = _validate_uid(uid)
         snap = self._block_ref(uid).get()
-        return bool(snap.exists and (snap.to_dict() or {}).get("blocked") is True)
+        if snap.exists and (snap.to_dict() or {}).get("blocked") is True:
+            return True
+        deletion = self._db.collection("account_deletion_jobs").document(uid).get()
+        return bool(
+            deletion.exists
+            and (deletion.to_dict() or {}).get("status") in {"pending", "completed"}
+        )
 
     def ensure_active(self, uid: str) -> None:
         uid = _validate_uid(uid)

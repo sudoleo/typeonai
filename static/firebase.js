@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, increment, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithCustomToken, signOut, onAuthStateChanged, sendPasswordResetEmail, sendEmailVerification, onIdTokenChanged } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, sendEmailVerification, onIdTokenChanged } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 import {
   GoogleAuthProvider,
   signInWithPopup,
@@ -718,21 +718,6 @@ function mapFirebaseLoginError(error) {
   }
 }
 
-function mapFirebaseRegisterError(error) {
-  switch (error.code) {
-    case "auth/email-already-in-use":
-      return "This e-mail address is already in use.";
-    case "auth/invalid-email":
-      return "Please enter a valid e-mail address.";
-    case "auth/weak-password":
-      return "Password is too weak. Please choose a stronger password.";
-    case "auth/network-request-failed":
-      return "Network error. Please check your internet connection and try again.";
-    default:
-      return "Registration failed. Please try again.";
-  }
-}
-
 function mapPasswordResetError(error) {
   switch (error.code) {
     case "auth/user-not-found":
@@ -913,44 +898,23 @@ confirmRegisterBtn.addEventListener("click", () => {
     body: JSON.stringify({ email: email, password: password })
   })
     .then((response) => response.json())
-    .then((data) => {
-      if (data.customToken) {
-        // Nutzer mit dem Custom Token anmelden
-        signInWithCustomToken(auth, data.customToken)
-          .then(() => {
-            sendVerificationMail(auth.currentUser)
-              .then(() => {
-                // Angemeldet bleiben: das Modal geht zu, die App wird
-                // sichtbar, und der Bestaetigungs-Streifen uebernimmt. Der
-                // frueher hier stehende signOut() war der Moment, in dem die
-                // meisten Neuregistrierungen verloren gingen.
-                setRegisterPending(false);
-                document.getElementById("loginModal").style.display = "none";
-                trackAppEvent("auth_register_result", { status: "success" });
-              })
-              .catch((error) => {
-                // Keine rohen Firebase-Texte
-                console.error("Error sending verification e-mail:", error);
-                registerErr.textContent = "Error sending the verification e-mail. Please try again later.";
-                setRegisterPending(false);
-                signOut(auth).catch(() => {});
-                trackAppEvent("auth_register_result", { status: "email_error" });
-              });
-          })
-          .catch((error) => {
-            const msg = mapFirebaseRegisterError(error);
-            registerErr.textContent = msg;
-            setRegisterPending(false);
-            trackAppEvent("auth_register_result", { status: "error" });
-          });
-      } else if (data.status === "check_inbox") {
-        // Die Adresse ist bereits registriert. Das Backend verraet das bewusst
-        // nicht (Konto-Enumeration), also zeigen wir denselben Screen wie nach
-        // einer echten Registrierung - der Text deckt beide Faelle ab.
-        showRegistrationSuccess(email);
+    .then(async (data) => {
+      if (data.status === "check_inbox") {
+        // Der Server liefert fuer Neuanlage, Bestand und Create-Race exakt
+        // dieselbe Form. Ein Loginversuch mit den gerade eingegebenen Daten ist
+        // nur fuer deren Besitzer aussagekraeftig und gibt nichts an den
+        // anonymen /register-Aufrufer preis.
+        try {
+          await signInWithEmailAndPassword(auth, email, password);
+          await sendVerificationMail(auth.currentUser);
+          setRegisterPending(false);
+          document.getElementById("loginModal").style.display = "none";
+        } catch (error) {
+          showRegistrationSuccess(email);
+        }
         trackAppEvent("auth_register_result", { status: "success" });
-      } else if (data.detail) {
-        registerErr.textContent = data.detail;
+      } else if (data.detail || data.error) {
+        registerErr.textContent = data.detail || data.error;
         setRegisterPending(false);
         trackAppEvent("auth_register_result", { status: "error" });
       } else {
@@ -1037,7 +1001,13 @@ document.getElementById("deleteAccountBtn")?.addEventListener("click", async () 
       body: JSON.stringify({ id_token: token })
     });
     const data = await res.json().catch(() => ({}));
-    if (res.ok && data.status === "deleted") {
+    if (res.status === 202 && data.cleanup_pending === true) {
+      trackAppEvent("auth_account_deletion_result", { status: "cleanup_pending" });
+      try { localStorage.removeItem("id_token"); } catch {}
+      alert(data.message || "Your account is blocked. Remaining data cleanup is queued and will be retried automatically.");
+      await signOut(auth).catch(() => {});
+      window.location.href = "/?landing=1";
+    } else if (res.ok && data.status === "deleted" && data.cleanup_pending !== true) {
       trackAppEvent("auth_account_deletion_result", { status: "success" });
       try { localStorage.removeItem("id_token"); } catch {}
       alert("Your account and data have been deleted.");

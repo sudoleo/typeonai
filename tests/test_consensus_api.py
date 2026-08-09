@@ -651,8 +651,8 @@ def test_deep_think_reservation_uses_separate_usage_kind(monkeypatch):
     captured = {}
 
     class UsageRepo:
-        def reserve(self, uid, key, kind, limits):
-            captured.update(uid=uid, key=key, kind=kind, limits=limits)
+        def reserve(self, uid, key, kind, limits, **kwargs):
+            captured.update(uid=uid, key=key, kind=kind, limits=limits, **kwargs)
             return SimpleNamespace(status=RunStatus.RESERVED)
 
     class RunRepo:
@@ -673,6 +673,7 @@ def test_deep_think_reservation_uses_separate_usage_kind(monkeypatch):
 
     assert captured["kind"] is RunKind.DEEP_THINK
     assert captured["key"] == "consensus-api:" + "b" * 64
+    assert len(captured["request_fingerprint"]) == 64
 
 
 def test_scheduler_deduplicates_and_bounds_pending_work(monkeypatch):

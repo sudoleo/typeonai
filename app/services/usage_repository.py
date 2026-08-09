@@ -9,7 +9,8 @@ Firestore-Datenmodell (unter ``users/{uid}``):
 * ``usage_days/{YYYY-MM-DD}`` enthaelt die aggregierten Integer-Zaehler
   ``total_reserved``, ``total_consumed``, ``deep_think_reserved`` und
   ``deep_think_consumed`` fuer den UTC-Tag der Reservierung.
-* ``usage_runs/{sha256(idempotency_key)}`` enthaelt Run-Typ, UTC-Tag und Status.
+* ``usage_runs/{sha256(idempotency_key)}`` enthaelt Run-Typ, UTC-Tag, Ablauf,
+  kanonischen Request-Fingerprint, Status und transaktionale Operations-Claims.
   Der Klartext-Idempotency-Key wird nicht persistiert; die UID ist bereits Teil
   des Dokumentpfads, wodurch die Idempotenz aus UID + Key entsteht.
 
@@ -19,17 +20,18 @@ oder ``reserved -> released``.
 ``consumed`` und ``released`` sind terminal. Wiederholungen derselben Operation
 sind idempotent; ein Key darf nicht fuer einen anderen Run-Typ wiederverwendet
 werden. Reservierungen zaehlen bereits gegen das Limit, werden aber erst durch
-``consume`` als verbraucht markiert. Provider-Aufrufe gehoeren deshalb zwischen
-``reserve`` und ``consume``/``release`` und niemals in eine Firestore-
-Transaktion.
+``consume`` als verbraucht markiert. Kostenpflichtige Arbeit darf erst nach
+``consume`` und einem erfolgreichen Operations-Claim beginnen; Provider-Aufrufe
+gehoeren niemals in eine Firestore-Transaktion.
 """
 
 from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
 from enum import Enum
 from typing import Callable, Protocol, TypeVar
 
@@ -38,8 +40,10 @@ from firebase_admin import firestore
 
 USAGE_DAYS_COLLECTION = "usage_days"
 USAGE_RUNS_COLLECTION = "usage_runs"
-USAGE_SCHEMA_VERSION = 1
+USAGE_SCHEMA_VERSION = 2
 MAX_IDEMPOTENCY_KEY_BYTES = 256
+MAX_OPERATION_NAME_BYTES = 80
+FINGERPRINT_HEX_LENGTH = 64
 
 
 class RunKind(str, Enum):
@@ -90,6 +94,17 @@ class UsageRunResult:
     idempotent: bool
 
 
+@dataclass(frozen=True)
+class UsageOperationClaim:
+    uid: str
+    idempotency_hash: str
+    operation: str
+    request_fingerprint: str
+    claimed_at: datetime
+    expires_at: datetime
+    idempotent: bool
+
+
 class UsageRepositoryError(Exception):
     """Basisklasse fuer erwartbare Usage-Repository-Fehler."""
 
@@ -124,6 +139,14 @@ class UsageTransitionError(UsageRepositoryError):
     pass
 
 
+class UsageRunExpired(UsageRepositoryError):
+    pass
+
+
+class UsageOperationAlreadyClaimed(UsageRepositoryError):
+    pass
+
+
 class UsageDataError(UsageRepositoryError):
     pass
 
@@ -136,6 +159,7 @@ class UsageRepository(Protocol):
         kind: RunKind,
         limits: UsageLimits,
         *,
+        request_fingerprint: str | None = None,
         now: datetime | None = None,
     ) -> UsageRunResult: ...
 
@@ -148,6 +172,16 @@ class UsageRepository(Protocol):
     def bind_context_target(
         self, uid: str, idempotency_key: str, target_scope: str
     ) -> None: ...
+
+    def claim_operation(
+        self,
+        uid: str,
+        idempotency_key: str,
+        operation: str,
+        request_fingerprint: str,
+        *,
+        now: datetime | None = None,
+    ) -> UsageOperationClaim: ...
 
     def snapshot(
         self,
@@ -180,13 +214,21 @@ class FirestoreUsageRepository:
         kind: RunKind,
         limits: UsageLimits,
         *,
+        request_fingerprint: str | None = None,
         now: datetime | None = None,
     ) -> UsageRunResult:
         uid = _validate_uid(uid)
         key_hash = _idempotency_hash(idempotency_key)
         kind = _coerce_kind(kind)
+        request_fingerprint = _validate_fingerprint(
+            request_fingerprint
+            or canonical_request_fingerprint({"internal_idempotency_hash": key_hash})
+        )
         now = _as_utc(now)
         utc_date = now.date().isoformat()
+        expires_at = datetime.combine(
+            now.date() + timedelta(days=1), time.min, tzinfo=timezone.utc
+        )
         run_ref = self._run_ref(uid, key_hash)
 
         def operation(tx):
@@ -199,6 +241,14 @@ class FirestoreUsageRepository:
                         "Idempotency key is already bound to a different run kind"
                     )
                 run_date = _stored_utc_date(run_data)
+                stored_fingerprint = _stored_request_fingerprint(run_data)
+                if not hmac.compare_digest(stored_fingerprint, request_fingerprint):
+                    raise UsageRunConflict(
+                        "Idempotency key is already bound to a different request"
+                    )
+                stored_expires_at = _stored_expires_at(run_data)
+                if now >= stored_expires_at:
+                    raise UsageRunExpired("Usage run has expired")
                 day_data = self._read_day(tx, uid, run_date)
                 return _result(
                     uid,
@@ -251,6 +301,9 @@ class FirestoreUsageRepository:
                     "utc_date": utc_date,
                     "total_limit_at_reservation": limits.total,
                     "deep_think_limit_at_reservation": limits.deep_think,
+                    "request_fingerprint": request_fingerprint,
+                    "expires_at": expires_at,
+                    "operation_claims": {},
                     "created_at": now,
                     "updated_at": now,
                 },
@@ -267,6 +320,93 @@ class FirestoreUsageRepository:
             )
 
         return self._transaction(operation)
+
+    def claim_operation(
+        self,
+        uid: str,
+        idempotency_key: str,
+        operation: str,
+        request_fingerprint: str,
+        *,
+        now: datetime | None = None,
+    ) -> UsageOperationClaim:
+        """Atomically authorize one billable logical operation once.
+
+        Accounting idempotency and execution authorization are deliberately
+        separate. Repeating a consumed run may read its counters, but it may
+        never acquire the same operation slot twice.
+        """
+        uid = _validate_uid(uid)
+        key_hash = _idempotency_hash(idempotency_key)
+        operation = _validate_operation(operation)
+        request_fingerprint = _validate_fingerprint(request_fingerprint)
+        now = _as_utc(now)
+        run_ref = self._run_ref(uid, key_hash)
+
+        def claim(tx):
+            run_snap = run_ref.get(transaction=tx)
+            if not run_snap.exists:
+                raise UsageRunNotFound("Usage reservation does not exist")
+            run_data = run_snap.to_dict() or {}
+            if _stored_status(run_data) is not RunStatus.CONSUMED:
+                raise UsageTransitionError(
+                    "Only a consumed usage run can authorize provider work"
+                )
+            expires_at = _stored_expires_at(run_data)
+            if now >= expires_at:
+                raise UsageRunExpired("Usage run has expired")
+
+            claims = run_data.get("operation_claims")
+            if claims is None:
+                claims = {}
+            if not isinstance(claims, dict):
+                raise UsageDataError("Invalid operation claims in Firestore")
+            existing = claims.get(operation)
+            if existing is not None:
+                if not isinstance(existing, dict):
+                    raise UsageDataError("Invalid operation claim in Firestore")
+                stored_fingerprint = _validate_fingerprint(
+                    existing.get("request_fingerprint"),
+                    error_type=UsageDataError,
+                )
+                if not hmac.compare_digest(stored_fingerprint, request_fingerprint):
+                    raise UsageRunConflict(
+                        "Operation is already bound to a different request"
+                    )
+                claimed_at = _stored_datetime(existing.get("claimed_at"), "claim time")
+                return UsageOperationClaim(
+                    uid=uid,
+                    idempotency_hash=key_hash,
+                    operation=operation,
+                    request_fingerprint=stored_fingerprint,
+                    claimed_at=claimed_at,
+                    expires_at=expires_at,
+                    idempotent=True,
+                )
+
+            updated_claims = dict(claims)
+            updated_claims[operation] = {
+                "request_fingerprint": request_fingerprint,
+                "claimed_at": now,
+            }
+            tx.update(
+                run_ref,
+                {
+                    "operation_claims": updated_claims,
+                    "updated_at": now,
+                },
+            )
+            return UsageOperationClaim(
+                uid=uid,
+                idempotency_hash=key_hash,
+                operation=operation,
+                request_fingerprint=request_fingerprint,
+                claimed_at=now,
+                expires_at=expires_at,
+                idempotent=False,
+            )
+
+        return self._transaction(claim)
 
     def consume(self, uid: str, idempotency_key: str) -> UsageRunResult:
         return self._finish(uid, idempotency_key, RunStatus.CONSUMED)
@@ -491,6 +631,42 @@ def _idempotency_hash(key: str) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def canonical_request_fingerprint(value) -> str:
+    """Return a stable SHA-256 fingerprint for a JSON-compatible request."""
+    try:
+        encoded = json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Request fingerprint input must be canonical JSON") from exc
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _validate_fingerprint(value, *, error_type=ValueError) -> str:
+    if not isinstance(value, str) or len(value) != FINGERPRINT_HEX_LENGTH:
+        raise error_type("Invalid request fingerprint")
+    try:
+        int(value, 16)
+    except ValueError:
+        raise error_type("Invalid request fingerprint") from None
+    return value.lower()
+
+
+def _validate_operation(value: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("operation must not be empty")
+    normalized = value.strip().lower()
+    if len(normalized.encode("utf-8")) > MAX_OPERATION_NAME_BYTES:
+        raise ValueError("operation is too long")
+    if not all(char.isalnum() or char in {":", "_", "-"} for char in normalized):
+        raise ValueError("operation contains invalid characters")
+    return normalized
+
+
 def _coerce_kind(kind: RunKind) -> RunKind:
     try:
         return RunKind(kind)
@@ -570,6 +746,24 @@ def _stored_utc_date(data: dict) -> str:
     if parsed.isoformat() != value:
         raise UsageDataError("Invalid usage run UTC date in Firestore")
     return value
+
+
+def _stored_request_fingerprint(data: dict) -> str:
+    return _validate_fingerprint(
+        data.get("request_fingerprint"), error_type=UsageDataError
+    )
+
+
+def _stored_datetime(value, label: str) -> datetime:
+    if not isinstance(value, datetime):
+        raise UsageDataError(f"Invalid usage run {label} in Firestore")
+    if value.tzinfo is None:
+        raise UsageDataError(f"Invalid usage run {label} in Firestore")
+    return value.astimezone(timezone.utc)
+
+
+def _stored_expires_at(data: dict) -> datetime:
+    return _stored_datetime(data.get("expires_at"), "expiry")
 
 
 def _stored_limits(data: dict) -> UsageLimits:

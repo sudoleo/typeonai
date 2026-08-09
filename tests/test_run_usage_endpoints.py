@@ -124,6 +124,29 @@ def test_prepare_and_parallel_models_consume_exactly_one_run(run_api):
     assert snapshot.total.remaining == FREE_TOTAL - 1
 
 
+def test_parallel_same_provider_operation_runs_only_once(run_api):
+    client, _repository = run_api
+    key = "same-provider-race"
+    assert _prepare(client, key).status_code == 200
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        responses = list(
+            pool.map(
+                lambda _index: _ask(client, "/ask_openai", "openai", key),
+                range(5),
+            )
+        )
+
+    assert sum(response.status_code == 200 for response in responses) == 1
+    rejected = [response for response in responses if response.status_code == 409]
+    assert len(rejected) == 4
+    assert all(
+        response.json()["detail"]["error_code"]
+        == "usage_operation_already_claimed"
+        for response in rejected
+    )
+
+
 def test_consensus_reuses_consumed_run_without_second_charge(run_api):
     client, repository = run_api
     key = "answers-plus-consensus"
@@ -138,13 +161,17 @@ def test_consensus_reuses_consumed_run_without_second_charge(run_api):
         "answer_openai": "OpenAI answer",
         "answer_mistral": "Mistral answer",
     }
-    with patch.object(chat_router, "query_consensus", return_value="Consensus"), \
+    with patch.object(chat_router, "query_consensus", return_value="Consensus") as consensus_mock, \
          patch.object(chat_router, "query_differences", return_value=("Differences", None)), \
          patch.object(chat_router, "persist_pending_result", return_value=None), \
          patch.object(chat_router, "record_differences_stats"):
         response = client.post("/consensus", headers=AUTH, json=payload)
+        repeated = client.post("/consensus", headers=AUTH, json=payload)
 
     assert response.status_code == 200
+    assert repeated.status_code == 409
+    assert repeated.json()["detail"]["error_code"] == "usage_operation_already_claimed"
+    assert consensus_mock.call_count == 1
     assert response.json()["usage_run_status"] == "consumed"
     snapshot = repository.snapshot(UID, _limits())
     assert snapshot.total.consumed == 1

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 from dotenv import load_dotenv
@@ -67,6 +68,7 @@ DEFAULT_LIMITS = {
 }
 
 LIMITS = DEFAULT_LIMITS.copy()
+_RUNTIME_CONFIG_LOCK = threading.RLock()
 
 MAX_WORDS = LIMITS["free_max_words"]
 DEEP_SEARCH_MAX_WORDS = LIMITS["pro_deep_search_max_words"]
@@ -1054,11 +1056,16 @@ def _sync_limit_constants():
     GEMINI_DEEP_MAX_TOKENS = DEEP_SEARCH_MAX_TOKENS
 
 
-def apply_limits(limits_data=None):
+def normalize_limits_config(limits_data=None) -> dict:
     incoming = limits_data if isinstance(limits_data, dict) else {}
-    normalized = {}
-    for key, fallback in DEFAULT_LIMITS.items():
-        normalized[key] = _coerce_limit(incoming.get(key, fallback), fallback)
+    return {
+        key: _coerce_limit(incoming.get(key, fallback), fallback)
+        for key, fallback in DEFAULT_LIMITS.items()
+    }
+
+
+def apply_limits(limits_data=None):
+    normalized = normalize_limits_config(limits_data)
 
     LIMITS.clear()
     LIMITS.update(normalized)
@@ -1128,10 +1135,67 @@ def get_output_token_limit(is_pro: bool, deep_search: bool = False) -> int:
     return LIMITS[key]
 
 
-def load_models_from_db():
+def _capture_runtime_config() -> dict:
+    return {
+        "providers": {
+            provider: set(models) for provider, models in _provider_allowed_sets().items()
+        },
+        "premium": set(PREMIUM_MODELS),
+        "consensus": list(ALLOWED_CONSENSUS_MODELS),
+        "presets": {key: dict(value) for key, value in CONSENSUS_PRESET_MODELS.items()},
+        "deep_think": DEEP_THINK_CONSENSUS_MODEL,
+        "judges": dict(DIFFERENCES_JUDGE_MODEL_BY_PROVIDER),
+        "pro_judges": dict(PRO_JUDGE_MODEL_BY_PROVIDER),
+        "memory": dict(CHAT_MEMORY_MODEL_BY_PROVIDER),
+        "families": dict(JUDGE_FAMILY_BY_ENGINE),
+        "order": {key: list(value) for key, value in MODEL_ORDER_BY_PROVIDER.items()},
+        "defaults": dict(FREE_DEFAULT_MODEL_BY_PROVIDER),
+        "watch": {key: dict(value) for key, value in WATCH_MODELS_BY_TIER.items()},
+        "limits": dict(LIMITS),
+    }
+
+
+def _restore_runtime_config(state: dict) -> None:
+    global ALL_ALLOWED_MODELS, DEEP_THINK_CONSENSUS_MODEL
+    for provider, target in _provider_allowed_sets().items():
+        target.clear()
+        target.update(state["providers"][provider])
+    PREMIUM_MODELS.clear()
+    PREMIUM_MODELS.update(state["premium"])
+    ALLOWED_CONSENSUS_MODELS.clear()
+    ALLOWED_CONSENSUS_MODELS.extend(state["consensus"])
+    CONSENSUS_PRESET_MODELS.clear()
+    CONSENSUS_PRESET_MODELS.update(
+        {key: dict(value) for key, value in state["presets"].items()}
+    )
+    DEEP_THINK_CONSENSUS_MODEL = state["deep_think"]
+    for target, key in (
+        (DIFFERENCES_JUDGE_MODEL_BY_PROVIDER, "judges"),
+        (PRO_JUDGE_MODEL_BY_PROVIDER, "pro_judges"),
+        (CHAT_MEMORY_MODEL_BY_PROVIDER, "memory"),
+        (JUDGE_FAMILY_BY_ENGINE, "families"),
+        (FREE_DEFAULT_MODEL_BY_PROVIDER, "defaults"),
+    ):
+        target.clear()
+        target.update(state[key])
+    for provider in MODEL_ORDER_BY_PROVIDER:
+        MODEL_ORDER_BY_PROVIDER[provider] = list(state["order"].get(provider, []))
+    for tier in WATCH_MODELS_BY_TIER:
+        WATCH_MODELS_BY_TIER[tier].clear()
+        WATCH_MODELS_BY_TIER[tier].update(state["watch"].get(tier, {}))
+    LIMITS.clear()
+    LIMITS.update(state["limits"])
+    _sync_limit_constants()
+    ALL_ALLOWED_MODELS = set().union(*_provider_allowed_sets().values())
+    rebuild_model_configs()
+
+
+def load_models_from_db(*, strict: bool = False) -> bool:
     global ALL_ALLOWED_MODELS
     import logging
     from app.core.security import db_firestore
+    _RUNTIME_CONFIG_LOCK.acquire()
+    previous_state = _capture_runtime_config()
     try:
         doc_ref = db_firestore.collection("app_config").document("models")
         # Model defaults are already present in code. On quota exhaustion we
@@ -1266,7 +1330,14 @@ def load_models_from_db():
             }, timeout=5.0, retry=None)
             rebuild_model_configs()
             logging.info("Created default models configuration in Firestore.")
+        return True
     except Exception as e:
+        _restore_runtime_config(previous_state)
         logging.error(f"Failed to load models from Firestore: {e}")
+        if strict:
+            raise
+        return False
+    finally:
+        _RUNTIME_CONFIG_LOCK.release()
 
 DEEP_THINK_PROMPT = "Deep Think: Focus as hard as you can! But only on the essentials."

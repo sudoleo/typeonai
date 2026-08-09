@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 
@@ -5,6 +6,7 @@ import firebase_admin
 from firebase_admin import auth
 from fastapi import APIRouter, BackgroundTasks, Request, Body, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.rate_limit import limiter
 from app.core.security import verify_user_token
@@ -12,6 +14,21 @@ from app.services.telegram_notifier import send_new_user_registration_notificati
 
 router = APIRouter()
 _NEW_USER_WINDOW_MS = 10 * 60 * 1000
+_REGISTER_RESPONSE_FLOOR_SECONDS = 0.35
+
+
+class RegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=8, max_length=256)
+
+
+async def _neutral_registration_response(started_at: float) -> dict:
+    remaining = _REGISTER_RESPONSE_FLOOR_SECONDS - (time.monotonic() - started_at)
+    if remaining > 0:
+        await asyncio.sleep(remaining)
+    return {"status": "check_inbox"}
 
 
 def _recent_registration_method(user) -> str:
@@ -41,12 +58,11 @@ def _recent_registration_method(user) -> str:
 async def register_user(
     request: Request,
     background_tasks: BackgroundTasks,
-    data: dict = Body(...),
+    data: RegisterRequest,
 ):
-    email = data.get("email")
-    password = data.get("password")
-    if not email or not password:
-        raise HTTPException(status_code=400, detail="Email and password must be provided.")
+    started_at = time.monotonic()
+    email = data.email.strip().lower()
+    password = data.password
 
     try:
         # Konto-Enumeration vermeiden: eine bereits registrierte Adresse darf
@@ -56,7 +72,7 @@ async def register_user(
         # in beiden Faellen denselben "Check your inbox"-Screen.
         try:
             auth.get_user_by_email(email)
-            return {"status": "check_inbox"}
+            return await _neutral_registration_response(started_at)
         except firebase_admin.auth.UserNotFoundError:
             # Keine Registrierung mit dieser E-Mail gefunden, also weiter
             pass
@@ -65,20 +81,13 @@ async def register_user(
             user = auth.create_user(email=email, password=password)
         except firebase_admin.auth.EmailAlreadyExistsError:
             # Wettlauf zwischen Pruefung und Anlage: ebenfalls neutral bleiben.
-            return {"status": "check_inbox"}
-        custom_token = auth.create_custom_token(user.uid)
-        custom_token_str = custom_token.decode("utf-8")
+            return await _neutral_registration_response(started_at)
         background_tasks.add_task(
             send_new_user_registration_notification,
             "email/password",
             user.uid,
         )
-        return {
-            "status": "check_inbox",
-            "uid": user.uid,
-            "email": user.email,
-            "customToken": custom_token_str,
-        }
+        return await _neutral_registration_response(started_at)
 
     except HTTPException:
         # bereits bewusst gesetzte Meldungen durchreichen
@@ -87,7 +96,7 @@ async def register_user(
         # Keine E-Mail-Adresse in die Server-Logs schreiben (Datenminimierung)
         logging.error(f"/register failed: {e}")
         # generische Meldung an den Client
-        raise HTTPException(status_code=400, detail="Registration failed. Please try again later.")
+        raise HTTPException(status_code=503, detail="Registration is temporarily unavailable.")
     
 
 @router.post("/confirm-registration")
@@ -101,7 +110,11 @@ async def confirm_registration(
         raise HTTPException(status_code=400, detail="Authentication failed")
 
     try:
-        uid = verify_user_token(token, allow_unverified=True)
+        uid = verify_user_token(
+            token,
+            allow_unverified=True,
+            check_revoked=True,
+        )
         user = auth.get_user(uid)
     except Exception as e:
         logging.error(f"/confirm-registration token error: {e}")

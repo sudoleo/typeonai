@@ -5,10 +5,16 @@ from firebase_admin import auth
 from fastapi import APIRouter, Request, Body, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.security import extract_id_token, verify_user_token, is_user_admin, db_firestore
+from app.core.security import (
+    TierStatusUnavailable,
+    extract_id_token,
+    verify_user_token,
+    is_user_admin,
+    db_firestore,
+)
 from app.core.rate_limit import limiter
 import app.core.config as cfg
-from app.core.config import apply_limits, get_limits_config, load_models_from_db
+from app.core.config import get_limits_config, load_models_from_db, normalize_limits_config
 from app.services import share_snapshots as snapshots
 from app.services import (
     mailer,
@@ -96,10 +102,17 @@ def _require_admin(request, data):
     if not id_token:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
-        uid = verify_user_token(id_token)
+        uid = verify_user_token(id_token, check_revoked=True)
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed")
-    if not is_user_admin(uid):
+    try:
+        is_admin = is_user_admin(uid)
+    except TierStatusUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="Account role is temporarily unavailable. Please retry.",
+        ) from None
+    if not is_admin:
         raise HTTPException(status_code=403, detail="Admin privileges required")
     return uid
 
@@ -994,8 +1007,7 @@ def get_models(request: Request):
         if doc.exists:
             raw_data = doc.to_dict() or {}
             data = normalize_models_document(raw_data)
-            apply_limits(data.get("limits"))
-            data["limits"] = get_limits_config()
+            data["limits"] = normalize_limits_config(raw_data.get("limits"))
             # GET bleibt strikt read-only. Der fruehere komplette doc_ref.set
             # konnte einen kurz zuvor gespeicherten Judge-Family-Wert mit dem
             # veralteten Snapshot eines parallelen Admin-Reads ueberschreiben.
@@ -1039,8 +1051,8 @@ def update_models(request: Request, data: dict = Body(...)):
             raise HTTPException(status_code=400, detail=f"Missing or invalid format for {k}. Must be a list of strings.")
 
     try:
-        apply_limits(data.get("limits"))
         normalized = normalize_models_document(data)
+        normalized["limits"] = normalize_limits_config(data.get("limits"))
         _validate_admin_models_input(data, normalized)
         incoming_presets = data.get("preset_models")
         if not isinstance(incoming_presets, dict):
@@ -1100,11 +1112,11 @@ def update_models(request: Request, data: dict = Body(...)):
             "judge_models_pro": normalized["judge_models_pro"],
             "judge_families": normalized["judge_families"],
             "chat_memory_models": normalized["chat_memory_models"],
-            "limits": get_limits_config()
+            "limits": normalized["limits"]
         })
 
         # Refresh the cache in config.py
-        load_models_from_db()
+        load_models_from_db(strict=True)
 
         return {"status": "success", "message": "Configuration updated successfully."}
     except HTTPException:

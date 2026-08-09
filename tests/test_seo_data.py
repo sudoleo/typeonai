@@ -433,7 +433,7 @@ def test_admin_endpoints_require_admin(monkeypatch):
     monkeypatch.setattr(admin_router, "seo_data_service", StubSeoService())
     monkeypatch.setattr(admin_router, "seo_recommendation_service", StubRecommendationService())
     monkeypatch.setattr(admin_router, "seo_weekly_review_service", StubWeeklyReviewService())
-    monkeypatch.setattr(admin_router, "verify_user_token", lambda token: "uid-1")
+    monkeypatch.setattr(admin_router, "verify_user_token", lambda token, **kwargs: "uid-1")
     monkeypatch.setattr(admin_router, "is_user_admin", lambda uid: False)
     app = FastAPI()
     app.include_router(admin_router.router)

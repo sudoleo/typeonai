@@ -27,6 +27,74 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ModelConfigurationTests(unittest.TestCase):
+    def _valid_admin_payload(self):
+        return {
+            "openai": list(cfg.ALLOWED_OPENAI_MODELS),
+            "mistral": list(cfg.ALLOWED_MISTRAL_MODELS),
+            "anthropic": list(cfg.ALLOWED_ANTHROPIC_MODELS),
+            "gemini": list(cfg.ALLOWED_GEMINI_MODELS),
+            "deepseek": list(cfg.ALLOWED_DEEPSEEK_MODELS),
+            "grok": list(cfg.ALLOWED_GROK_MODELS),
+            "premium": list(cfg.PREMIUM_MODELS),
+            "consensus": list(cfg.ALLOWED_CONSENSUS_MODELS),
+            "preset_models": cfg.get_consensus_preset_models(),
+            "defaults": dict(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER),
+            "watch_models": {
+                tier: dict(models) for tier, models in cfg.WATCH_MODELS_BY_TIER.items()
+            },
+            "deep_think_model": cfg.get_deep_think_consensus_model(),
+            "judge_models": cfg.get_judge_models(),
+            "judge_models_pro": cfg.get_pro_judge_models(),
+            "judge_families": cfg.get_judge_families(),
+            "chat_memory_models": cfg.get_chat_memory_models(),
+            "limits": cfg.get_limits_config(),
+        }
+
+    def test_rejected_admin_document_cannot_mutate_runtime_limits(self):
+        payload = self._valid_admin_payload()
+        payload["limits"] = {**payload["limits"], "free_consensus_run_limit": 999}
+        payload["preset_models"] = {}
+        before = cfg.get_limits_config()
+        fake_document = mock.Mock()
+        fake_db = mock.Mock()
+        fake_db.collection.return_value.document.return_value = fake_document
+
+        with (
+            mock.patch.object(admin_router, "_require_admin"),
+            mock.patch.object(admin_router, "db_firestore", fake_db),
+            self.assertRaises(HTTPException) as exc_info,
+        ):
+            admin_router.update_models(mock.Mock(), payload)
+
+        self.assertEqual(exc_info.exception.status_code, 400)
+        self.assertEqual(cfg.get_limits_config(), before)
+        fake_document.set.assert_not_called()
+
+    def test_runtime_reload_rolls_back_all_mutations_on_activation_error(self):
+        payload = self._valid_admin_payload()
+
+        class Snapshot:
+            exists = True
+
+            def to_dict(self):
+                return payload
+
+        document = mock.Mock()
+        document.get.return_value = Snapshot()
+        database = mock.Mock()
+        database.collection.return_value.document.return_value = document
+        before_limits = cfg.get_limits_config()
+        before_openai = set(cfg.ALLOWED_OPENAI_MODELS)
+
+        with (
+            mock.patch("app.core.security.db_firestore", database),
+            mock.patch.object(cfg, "apply_watch_models", side_effect=RuntimeError("boom")),
+            self.assertRaises(RuntimeError),
+        ):
+            cfg.load_models_from_db(strict=True)
+
+        self.assertEqual(cfg.get_limits_config(), before_limits)
+        self.assertEqual(set(cfg.ALLOWED_OPENAI_MODELS), before_openai)
     def test_engine_developer_keys_use_shared_credentials_source(self):
         expected = {
             "OpenAI": "openai-dev",

@@ -51,6 +51,7 @@ from app.services.usage_repository import (
     UsageRunConflict,
     UsageRunNotFound,
     UsageTransitionError,
+    canonical_request_fingerprint,
 )
 
 
@@ -176,6 +177,13 @@ def reserve_run(run: dict):
         usage_key_for_run(run),
         RunKind.DEEP_THINK if deep_think else RunKind.REGULAR,
         usage_limits_for_run(run),
+        request_fingerprint=canonical_request_fingerprint(
+            {
+                "schema": 1,
+                "request": run.get("request") or {},
+                "model_plan": run.get("model_plan") or {},
+            }
+        ),
     )
     if result.status is RunStatus.RELEASED:
         raise UsageRunConflict("Idempotency-Key belongs to a released usage run")

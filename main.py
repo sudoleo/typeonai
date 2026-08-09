@@ -20,6 +20,7 @@ if os.environ.get("E2E_TEST_MODE") != "1":
 logging.basicConfig(level=logging.INFO)
 
 from app.core.security import CustomSecurityMiddleware, db_firestore
+from app.core.request_limits import RequestBodyLimitMiddleware
 from app.core.e2e_profile import e2e_test_mode_enabled
 from app.core.rate_limit import limiter
 
@@ -40,6 +41,7 @@ from app.api.routers import (
 )
 from app.core.config import load_models_from_db
 from app.services.api_account_cleanup import FirestoreApiAccountCleanup
+from app.services.account_deletion import FirestoreAccountDeletion
 from app.services.api_consensus_runner import (
     api_run_maintenance_loop,
     recover_persisted_runs,
@@ -114,6 +116,7 @@ async def lifespan(app: FastAPI):
     # Fail-closed Account-Tombstones bleiben bestehen; nur ihre idempotente
     # Datenbereinigung wird nach transienten Firestore-Fehlern wiederholt.
     api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
+    account_deletion = FirestoreAccountDeletion(db_firestore)
     await _run_startup_jobs((
         # Modell-Defaults bleiben bei einem Timeout aktiv.
         ("load_models_from_db", load_models_from_db),
@@ -121,6 +124,7 @@ async def lifespan(app: FastAPI):
         ("cleanup_expired_pending", cleanup_expired_pending),
         ("cleanup_revoked_shares", cleanup_revoked_shares),
         ("blocked Consensus API account cleanup retry", api_account_cleanup.retry_pending),
+        ("full account deletion retry", account_deletion.retry_pending),
         # reserved->running bleibt transaktional und wird zusätzlich vom
         # 60-Sekunden-Maintenance-Loop wieder aufgenommen.
         ("recover_persisted_runs", recover_persisted_runs),
@@ -144,6 +148,9 @@ async def lifespan(app: FastAPI):
     api_account_cleanup_task = asyncio.create_task(
         api_account_cleanup.retry_loop(), name="consensus-api-account-cleanup"
     )
+    account_deletion_task = asyncio.create_task(
+        account_deletion.retry_loop(), name="full-account-deletion-cleanup"
+    )
     try:
         yield
     finally:
@@ -152,6 +159,7 @@ async def lifespan(app: FastAPI):
         seo_review_task.cancel()
         api_maintenance_task.cancel()
         api_account_cleanup_task.cancel()
+        account_deletion_task.cancel()
         lineage_backfill_task.cancel()
         telegram_webhook_task.cancel()
         try:
@@ -168,6 +176,10 @@ async def lifespan(app: FastAPI):
             pass
         try:
             await api_account_cleanup_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await account_deletion_task
         except asyncio.CancelledError:
             pass
         try:
@@ -192,6 +204,7 @@ app = FastAPI(
 
 # Add Custom Security Middleware
 app.add_middleware(CustomSecurityMiddleware)
+app.add_middleware(RequestBodyLimitMiddleware)
 
 # Add Rate Limiter state
 app.state.limiter = limiter

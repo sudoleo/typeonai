@@ -11,7 +11,7 @@ normaler Lauf und zaehlt gegen das Tagesbudget), Injektion nur in handle_ask
 from unittest.mock import patch
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 import app.core.config as cfg
@@ -93,17 +93,17 @@ class TestNormalizeFollowupContext:
         )
         assert ctx == {"previous_question": "q", "previous_consensus": "c"}
 
-    def test_oversized_texts_are_capped_at_the_limits(self):
+    def test_oversized_texts_are_rejected(self):
         q_limit = cfg.get_followup_question_char_limit()
         c_limit = cfg.get_followup_consensus_char_limit()
-        ctx = normalize_followup_context(
-            {
-                "previous_question": "q" * (q_limit + 5_000),
-                "previous_consensus": "c" * (c_limit + 50_000),
-            }
-        )
-        assert len(ctx["previous_question"]) == q_limit
-        assert len(ctx["previous_consensus"]) == c_limit
+        with pytest.raises(HTTPException) as exc_info:
+            normalize_followup_context(
+                {
+                    "previous_question": "q" * (q_limit + 5_000),
+                    "previous_consensus": "c" * (c_limit + 50_000),
+                }
+            )
+        assert exc_info.value.status_code == 400
 
     def test_exactly_one_context_level_no_history(self):
         # Zusaetzliche Felder (z.B. ein verschachtelter Verlauf) werden
@@ -237,7 +237,7 @@ def test_prepare_with_context_works_for_free_users():
     assert response.status_code == 200
 
 
-def test_ask_injects_capped_context_into_system_prompt_for_pro():
+def test_ask_rejects_oversized_context_before_provider_call():
     client = make_client()
     uid = "uid-followup-pro"
     captured = {}
@@ -263,13 +263,8 @@ def test_ask_injects_capped_context_into_system_prompt_for_pro():
                     },
                 },
             )
-        assert response.status_code == 200
-        system_prompt = captured["system_prompt"]
-        assert FOLLOWUP_CONTEXT_HEADER in system_prompt
-        assert "What is quantum entanglement?" in system_prompt
-        assert system_prompt.endswith("BASE PROMPT")
-        # Der Konsens-Text wurde serverseitig gekappt, nicht 1:1 uebernommen.
-        assert len(system_prompt) < len(oversized_consensus)
+        assert response.status_code == 400
+        assert captured == {}
     finally:
         pass
 

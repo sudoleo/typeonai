@@ -122,6 +122,10 @@ Befehle: `docs/testing.md`).
 - [ ] Kontolöschung entfernt neben Bookmarks/Usage auch alle Chats inklusive
       Turns, Modellantworten und Context-Versionen — in der Firestore-Konsole
       darf unter `users/{uid}/chats` nichts zurückbleiben.
+- [ ] Bei absichtlich unterbrochenem Löschbereich antwortet `/delete_account`
+      mit `202 cleanup_pending`; die UI behauptet nicht „deleted“, beendet aber
+      die lokale Session. Nach Wiederherstellung räumt der Maintenance-Retry
+      nur die offenen Bereiche auf und der Job wechselt zu `completed`.
 - [ ] Ein Chat-Bookmark mit vielen Turns öffnet sich zügig: pro Seite genau ein
       Chat-Read und eine Query je Turn statt sechs Einzel-Gets pro Turn.
 - [ ] Ein Follow-up-Lauf löst den Kontext genau einmal auf, nicht sechsmal:
@@ -361,6 +365,9 @@ Befehle: `docs/testing.md`).
 - [ ] Bookmark-Attachments werden angezeigt.
 
 ## Auth / Usage / Tier
+- [ ] E-Mail-Registrierung mit neuer und bestehender Adresse zeigt denselben
+      neutralen „Check your inbox“-Zustand; die `/register`-Bodies sind exakt
+      gleich und enthalten weder UID/E-Mail noch Custom-Token.
 - [ ] Login (E-Mail + Google), Logout.
 - [ ] Nach Logout verschwinden Account-Label, Kontingent-Ring/-Panel, Usage-
       Zahlen, Watch-Kontingent und Bookmark-Inhalte sofort; Bookmarks und Suche
@@ -368,6 +375,9 @@ Befehle: `docs/testing.md`).
       gestartete langsame Usage-/Bookmark-Antwort darf nichts wieder einblenden.
 - [ ] Free-User: Usage-Counter + Limit-Anzeige korrekt, Limit-Fehler greift.
 - [ ] Pro-User: Premium-Modelle freigeschaltet, UI-Status korrekt.
+- [ ] Derselbe `usage_run_key` löst pro Provider/Consensus/Resolve nur einen
+      externen Lauf aus; ein paralleler oder wiederholter Request endet vor
+      Providerarbeit eindeutig mit 409.
 
 ## Bookmarks / Sidebar
 - [ ] Models und Bookmarks beginnen auf derselben Icon-/Textachse und verwenden

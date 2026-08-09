@@ -2,6 +2,7 @@
 import time
 import logging
 import re
+import hashlib
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -11,6 +12,7 @@ from google.api_core.exceptions import Aborted as FirestoreAborted
 
 from app.core.rate_limit import limiter
 from app.core.security import (
+    TierStatusUnavailable,
     db_firestore,
     extract_id_token,
     is_user_pro,
@@ -86,13 +88,20 @@ from app.services.usage_repository import (
     RunStatus,
     UsageLimitExceeded,
     UsageLimits,
+    UsageRunExpired,
     UsageRunConflict,
+    UsageRunNotFound,
     UsageTransitionError,
+    canonical_request_fingerprint,
 )
 
 router = APIRouter()
 
 OWN_KEYS_LOGIN_REQUIRED = "Please log in to use your own API keys."
+MAX_QUESTION_CHARS = 8_000
+MAX_QUESTION_BYTES = 16_000
+MAX_SYSTEM_PROMPT_CHARS = 12_000
+MAX_SYSTEM_PROMPT_BYTES = 32_000
 run_usage_repository = FirestoreUsageRepository(db_firestore)
 chat_store = ChatStore(db_firestore)
 chat_context_service = ChatContextService(FirestoreChatContextRepository(db_firestore))
@@ -120,6 +129,17 @@ def get_usage_run_key(data: dict) -> str:
     return value.strip()
 
 
+def usage_run_fingerprint(data: dict, *, question: str, deep_think: bool) -> str:
+    """Bind a usage run to the logical fields known before the fan-out."""
+    return canonical_request_fingerprint(
+        {
+            "schema": 1,
+            "question": question,
+            "deep_think": bool(deep_think),
+        }
+    )
+
+
 def usage_response_fields(snapshot, is_pro: bool) -> dict:
     return {
         "free_usage_remaining": snapshot.total.remaining,
@@ -135,7 +155,15 @@ def reserve_usage_run(uid: str, data: dict, *, is_pro: bool, deep_think: bool):
     kind = RunKind.DEEP_THINK if deep_think else RunKind.REGULAR
     try:
         result = run_usage_repository.reserve(
-            uid, key, kind, get_run_usage_limits(is_pro)
+            uid,
+            key,
+            kind,
+            get_run_usage_limits(is_pro),
+            request_fingerprint=usage_run_fingerprint(
+                data,
+                question=str(data.get("question") or "").strip(),
+                deep_think=deep_think,
+            ),
         )
     except UsageLimitExceeded as exc:
         detail = usage_response_fields(exc.snapshot, is_pro)
@@ -154,6 +182,11 @@ def reserve_usage_run(uid: str, data: dict, *, is_pro: bool, deep_think: bool):
         raise HTTPException(
             status_code=409,
             detail={"error": str(exc), "error_code": "usage_run_conflict"},
+        ) from None
+    except UsageRunExpired as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": str(exc), "error_code": "usage_run_expired"},
         ) from None
     except FirestoreAborted:
         raise HTTPException(
@@ -190,6 +223,54 @@ def consume_usage_run(uid: str, key: str, *, is_pro: bool):
                 "error_code": "usage_storage_busy",
             },
         ) from None
+
+
+def claim_usage_operation(uid: str, key: str, operation: str, request_payload):
+    """Claim one provider/Judge operation before external work begins."""
+    try:
+        claim = run_usage_repository.claim_operation(
+            uid,
+            key,
+            operation,
+            canonical_request_fingerprint(request_payload),
+        )
+    except UsageRunNotFound as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": str(exc), "error_code": "usage_run_not_found"},
+        ) from None
+    except UsageRunExpired as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": str(exc), "error_code": "usage_run_expired"},
+        ) from None
+    except UsageRunConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": str(exc), "error_code": "usage_operation_conflict"},
+        ) from None
+    except UsageTransitionError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": str(exc), "error_code": "usage_run_transition"},
+        ) from None
+    except FirestoreAborted:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "Usage authorization is temporarily busy. Please retry.",
+                "error_code": "usage_storage_busy",
+            },
+        ) from None
+    if claim.idempotent:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "This logical operation was already started.",
+                "error_code": "usage_operation_already_claimed",
+            },
+        )
+    return claim
 
 def parse_boolean_flag(value) -> bool:
     return str(value).strip().lower() == "true"
@@ -230,6 +311,43 @@ def cap_engine_text(value, limit: int):
     if not isinstance(value, str) or len(value) <= limit:
         return value
     return value[:limit].rstrip()
+
+
+def validate_text_size(
+    value,
+    *,
+    label: str,
+    max_chars: int,
+    max_bytes: int,
+    required: bool = False,
+) -> str:
+    if not isinstance(value, str):
+        if required:
+            raise HTTPException(status_code=400, detail=f"{label} must be text.")
+        return ""
+    normalized = value.strip()
+    if required and not normalized:
+        raise HTTPException(status_code=400, detail=f"{label} must not be empty.")
+    if len(normalized) > max_chars or len(normalized.encode("utf-8")) > max_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{label} exceeds the limit of {max_chars} characters "
+                f"or {max_bytes} UTF-8 bytes."
+            ),
+        )
+    return normalized
+
+
+def validate_client_system_prompt(value) -> str:
+    if value is None or value == "":
+        return ""
+    return validate_text_size(
+        value,
+        label="System prompt",
+        max_chars=MAX_SYSTEM_PROMPT_CHARS,
+        max_bytes=MAX_SYSTEM_PROMPT_BYTES,
+    )
 
 
 def _chat_turn_ids(data: dict) -> Optional[tuple[str, str]]:
@@ -479,13 +597,23 @@ def normalize_followup_context(raw):
         return None
     if not isinstance(previous_consensus, str) or not previous_consensus.strip():
         return None
+    previous_question = validate_text_size(
+        previous_question,
+        label="Previous question",
+        max_chars=cfg.get_followup_question_char_limit(),
+        max_bytes=cfg.get_followup_question_char_limit() * 4,
+        required=True,
+    )
+    previous_consensus = validate_text_size(
+        previous_consensus,
+        label="Previous consensus",
+        max_chars=cfg.get_followup_consensus_char_limit(),
+        max_bytes=cfg.get_followup_consensus_char_limit() * 4,
+        required=True,
+    )
     return {
-        "previous_question": cap_engine_text(
-            previous_question.strip(), cfg.get_followup_question_char_limit()
-        ),
-        "previous_consensus": cap_engine_text(
-            previous_consensus.strip(), cfg.get_followup_consensus_char_limit()
-        ),
+        "previous_question": previous_question,
+        "previous_consensus": previous_consensus,
     }
 
 
@@ -542,12 +670,29 @@ def _resolve_authoritative_chat_context(
 
 
 def validate_question_word_limit(question: str, is_pro: bool, deep_search: bool):
-    if not isinstance(question, str) or not question.strip():
-        raise HTTPException(status_code=400, detail="Question must not be empty.")
+    question = validate_text_size(
+        question,
+        label="Question",
+        max_chars=MAX_QUESTION_CHARS,
+        max_bytes=MAX_QUESTION_BYTES,
+        required=True,
+    )
 
     max_words_limit = cfg.get_word_limit(is_pro, deep_search)
     if count_words(question) > max_words_limit:
         raise HTTPException(status_code=400, detail=f"Input exceeds word limit of {max_words_limit}.")
+    return question
+
+
+def _attachment_claim_payload(attachments: list[dict]) -> list[dict]:
+    return [
+        {
+            "name": str(item.get("name") or ""),
+            "mime": str(item.get("mime") or ""),
+            "sha256": hashlib.sha256(item.get("raw") or b"").hexdigest(),
+        }
+        for item in attachments
+    ]
 
 # ---------------------------------------------------------------------------
 # /ask_*-Endpoints: ein gemeinsamer Ablauf (handle_ask) fuer alle sechs
@@ -661,7 +806,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     question = data.get("question")
     deep_search = parse_boolean_flag(data.get("deep_search", False))
     stream_requested = parse_boolean_flag(data.get("stream", False))
-    system_prompt = data.get("system_prompt")
+    system_prompt = validate_client_system_prompt(data.get("system_prompt"))
     id_token = extract_id_token(request, data)
     alt_key = data.get(provider.alt_key_field) if provider.alt_key_field else None
     api_key = str(data.get("api_key") or alt_key or "").strip()
@@ -673,15 +818,21 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     if id_token:
         try:
             uid = verify_user_token(id_token)
-            is_pro_user = is_user_pro(uid)
         except Exception:
             raise HTTPException(status_code=401, detail="Authentication failed")
+        try:
+            is_pro_user = is_user_pro(uid)
+        except TierStatusUnavailable:
+            raise HTTPException(
+                status_code=503,
+                detail="Account tier is temporarily unavailable. Please retry.",
+            ) from None
 
     # Deep Think ist strikt Pro-only.
     if deep_search and not is_pro_user:
         raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
 
-    validate_question_word_limit(question, is_pro_user, deep_search)
+    question = validate_question_word_limit(question, is_pro_user, deep_search)
     validate_model(
         model,
         getattr(cfg, provider.allowed_models_attr),
@@ -704,7 +855,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
         )
 
     # Legacy-Follow-up-Kontext: genau eine vorherige Frage/Konsens-Ebene,
-    # serverseitig gekappt und hier in den System-Prompt injiziert — nicht in
+    # serverseitig hart begrenzt und hier in den System-Prompt injiziert — nicht in
     # /prepare, damit der Kontext auch dann ankommt, wenn das Frontend nach
     # einem /prepare-Fehler mit dem Basis-Prompt weitermacht. Kein Tier-Gate:
     # ein Follow-up ist ein normaler Lauf und zaehlt gegen das Tagesbudget.
@@ -758,6 +909,24 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
             uid, data, is_pro=is_pro_user, deep_think=deep_search
         )
         usage_result = consume_usage_run(uid, usage_key, is_pro=is_pro_user)
+        claim_usage_operation(
+            uid,
+            usage_key,
+            f"ask:{provider.label.lower()}",
+            {
+                "schema": 1,
+                "provider": provider.label,
+                "question": question,
+                "system_prompt": system_prompt or "",
+                "deep_search": deep_search,
+                "model": model,
+                "stream": stream_requested,
+                "attachments": _attachment_claim_payload(attachments),
+                "chat_id": data.get("chat_id"),
+                "turn_id": data.get("turn_id"),
+                "context_version_id": data.get("context_version_id"),
+            },
+        )
 
         return _run_ask(
             provider,
@@ -821,9 +990,13 @@ def ask_grok_post(request: Request, data: dict = Body(...)):
 
 @router.post("/prepare")
 async def prepare(request: Request, data: dict = Body(...)):
-    question = (data.get("question") or "").strip()
-    if not question:
-        raise HTTPException(status_code=400, detail="Missing 'question' in request body.")
+    question = validate_text_size(
+        data.get("question"),
+        label="Question",
+        max_chars=MAX_QUESTION_CHARS,
+        max_bytes=MAX_QUESTION_BYTES,
+        required=True,
+    )
 
     use_own_keys = parse_boolean_flag(data.get("useOwnKeys", False))
     deep_think = parse_boolean_flag(data.get("deep_search", False))
@@ -833,7 +1006,13 @@ async def prepare(request: Request, data: dict = Body(...)):
 
     try:
         uid = verify_user_token(id_token)
-        is_pro = is_user_pro(uid)
+        try:
+            is_pro = is_user_pro(uid)
+        except TierStatusUnavailable:
+            raise HTTPException(
+                status_code=503,
+                detail="Account tier is temporarily unavailable. Please retry.",
+            ) from None
         if deep_think and not is_pro:
             raise HTTPException(
                 status_code=403,
@@ -852,7 +1031,8 @@ async def prepare(request: Request, data: dict = Body(...)):
     # er erst in den /ask_*-Endpoints (handle_ask), sonst stuende er doppelt im
     # System-Prompt. Ein Tier-Gate gibt es nicht mehr.
 
-    raw_system_prompt = data.get("system_prompt")
+    validate_question_word_limit(question, is_pro, deep_think)
+    raw_system_prompt = validate_client_system_prompt(data.get("system_prompt"))
     if not raw_system_prompt or not str(raw_system_prompt).strip():
         base_system_prompt = get_system_prompt()
     else:
@@ -908,15 +1088,24 @@ def consensus(request: Request, data: dict = Body(...)):
 
     try:
         uid = verify_user_token(id_token)
-        is_pro = is_user_pro(uid)  # WICHTIG: Pro-Status prüfen
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
+    try:
+        is_pro = is_user_pro(uid)  # WICHTIG: Pro-Status prüfen
+    except TierStatusUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="Account tier is temporarily unavailable. Please retry.",
+        ) from None
 
     # A completed turn is owner-bound stored history, not a new engine run.
     # Resolve it before current model/tier/credential checks so a later plan or
     # allowlist change cannot make an already completed answer unreadable.
-    question = cap_engine_text(
-        data.get("question"), cfg.get_consensus_question_char_limit()
+    question = validate_text_size(
+        data.get("question"),
+        label="Question",
+        max_chars=min(MAX_QUESTION_CHARS, cfg.get_consensus_question_char_limit()),
+        max_bytes=MAX_QUESTION_BYTES,
     )
     validated_chat_turn_ids = None
     if question and chat_turn_ids is not None:
@@ -941,7 +1130,7 @@ def consensus(request: Request, data: dict = Body(...)):
             )
 
     # Parameter extrahieren. Frage und Antworten kommen als freier Text vom
-    # Client und werden serverseitig gekappt: der Consensus-Prompt enthaelt
+    # Client und werden serverseitig hart begrenzt: der Consensus-Prompt enthaelt
     # sonst unbegrenzte Eingaben gegen den Developer-Key (Kostenleck).
     answer_char_limit = cfg.get_consensus_answer_char_limit()
     answer_openai   = cap_engine_text(data.get("answer_openai"), answer_char_limit)
@@ -1103,6 +1292,24 @@ def consensus(request: Request, data: dict = Body(...)):
             uid, data, is_pro=is_pro, deep_think=deep_think
         )
         usage_result = consume_usage_run(uid, usage_key, is_pro=is_pro)
+        claim_usage_operation(
+            uid,
+            usage_key,
+            "consensus",
+            {
+                "schema": 1,
+                "question": question,
+                "consensus_model": consensus_model,
+                "deep_think": deep_think,
+                "stream": stream_requested,
+                "answers": included_answers,
+                "excluded_models": sorted(excluded_models),
+                "model_sources": model_sources,
+                "chat_id": data.get("chat_id"),
+                "turn_id": data.get("turn_id"),
+                "context_version_id": context_version_id,
+            },
+        )
 
     # Share-Feature: Ergebnis nur für verifizierte Nutzer persistieren.
     share_uid = uid
@@ -1486,9 +1693,15 @@ def resolve(request: Request, data: dict = Body(...)):
         )
     try:
         uid = verify_user_token(id_token)
-        is_pro = is_user_pro(uid)
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
+    try:
+        is_pro = is_user_pro(uid)
+    except TierStatusUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="Account tier is temporarily unavailable. Please retry.",
+        ) from None
 
     # Resolve ist ein Pro-Feature; Free-Nutzer sehen den Button nur als Teaser.
     # Serverseitig gilt das Gate auch mit eigenen Keys (wie bei Deep Think).
@@ -1501,7 +1714,13 @@ def resolve(request: Request, data: dict = Body(...)):
             },
         )
 
-    question = cap_engine_text(data.get("question"), cfg.get_consensus_question_char_limit())
+    question = validate_text_size(
+        data.get("question"),
+        label="Question",
+        max_chars=min(MAX_QUESTION_CHARS, cfg.get_consensus_question_char_limit()),
+        max_bytes=MAX_QUESTION_BYTES,
+        required=True,
+    )
     if not isinstance(question, str) or not question.strip():
         raise HTTPException(status_code=400, detail="Missing 'question' in request body.")
 
@@ -1516,6 +1735,17 @@ def resolve(request: Request, data: dict = Body(...)):
             uid, data, is_pro=is_pro, deep_think=False
         )
         usage_result = consume_usage_run(uid, usage_key, is_pro=is_pro)
+        claim_usage_operation(
+            uid,
+            usage_key,
+            "resolve",
+            {
+                "schema": 1,
+                "question": question,
+                "claim": claim,
+                "positions": positions,
+            },
+        )
 
     api_keys = build_engine_api_keys(data, use_own_keys)
 

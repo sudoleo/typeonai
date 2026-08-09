@@ -37,11 +37,12 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 
 **`main.py`** ist der App-Entry: lädt `.env`, setzt außerhalb des E2E-Profils
 `GOOGLE_APPLICATION_CREDENTIALS`,
-fügt `CustomSecurityMiddleware` (CSP etc.) + slowapi-Limiter hinzu, mountet
+fügt das vor dem Framework-Parsing greifende `RequestBodyLimitMiddleware`,
+`CustomSecurityMiddleware` (CSP etc.) + slowapi-Limiter hinzu, mountet
 `/static`, registriert globale Exception-Handler und inkludiert alle Router.
 Im `lifespan`-Startup: `load_models_from_db()` + Share-Cleanups (siehe §7),
 Recovery/Retention noch nicht abgeschlossener Consensus-API-Runs und Retry
-blockierter API-Account-Cleanups. Diese synchronen Firestore-Jobs laufen
+blockierter API- sowie vollständiger Account-Cleanups. Diese synchronen Firestore-Jobs laufen
 sequenziell in einem Worker-Thread unter einem gemeinsamen, standardmäßig
 15-sekündigen Readiness-Budget; bei Firestore-Störungen startet die App mit
 Code-Defaults und die regulären Maintenance-Loops übernehmen Retries, statt den
@@ -69,8 +70,8 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
 | `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; ohne sie war das Bookmark der einzige Griff an einem Chat und ein gelöschtes Bookmark strandete das Transcript), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn` finalisiert pending Turns samt höchstens sechs separaten Modellantworten atomar und per Payload-Fingerprint idempotent; `fail_turn` setzt nur einen allowgelisteten Fehlercode. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Finalisiert wird weiterhin ausschließlich serverseitig über `/consensus`. |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP) und übergibt sie als nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
-| `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (Logout-Cleanup). Nach einem tatsächlich neu angelegten E-Mail/Passwort-Konto plant `/register` außerdem einen PII-freien, nicht-blockierenden Telegram-Admin-Alert ein; `/confirm-registration` erkennt damit auch gerade neu angelegte Google-Konten serverseitig. Normale Logins, Reloads und neutrale Antworten für bereits bestehende Adressen bleiben ruhig. |
-| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/delete_account` räumt die Nutzer-Subcollections einzeln ab, weil Firestore nicht kaskadiert; Chats brauchen dafür eine eigene dreistufige Kaskade über `ChatStore.delete_all_chats` (`chats` → `turns` → `model_answers`, plus `context_versions`), sonst überlebten Fragen und vollständige Modellantworten die Kontolöschung als unerreichbare Waisen (DSGVO Art. 17). `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
+| `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token; nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. Der Browser versucht danach ausschließlich mit den vom Nutzer selbst eingegebenen Credentials einzuloggen. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig. |
+| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Watches/Briefs, E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und kostet damit `2 + N` statt `2 + 8N` Firestore-Reads. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. `DELETE /bookmark` liest die Chat-Bindung **vor** dem Löschen und räumt den gebundenen Chat per `ChatStore.delete_chat` mit ab — best effort, damit eine fehlgeschlagene Kaskade eine bereits erfolgte Löschung nicht in einen Retry verwandelt. Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
@@ -1236,10 +1237,22 @@ Dateiauswahldialog die vollständige PDF/DOCX/TXT/MD/CSV/PNG/JPEG/WebP-Whitelist
 alle Wege nutzen dasselbe Pro-Gate sowie dieselben Anzahl-/Größenlimits.
 Solange ein sendbarer Anhang vorliegt, schließt der Client DeepSeek sowohl im
 sichtbaren Auswahlzustand als auch defensiv im tatsächlichen Request-Fan-out aus.
+Base64 wird anhand der kodierten Länge **vor** dem Dekodieren begrenzt. DOCX
+akzeptiert nur sichere Word-Pfade und höchstens 256 ZIP-Einträge; Einzeldatei,
+Gesamtexpansion und Kompressionsverhältnis besitzen feste Budgets. `document.xml`
+wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen.
 
 ### Auth / Usage / Tier
 - Firebase-ID-Token wird mit `verify_user_token` geprüft (Standard: nur
   E-Mail-verifizierte Nutzer; `allow_unverified=True` nur für Registrierung/Delete).
+- **Revocation-Entscheidung:** seltene sensible Grenzen (`/confirm-registration`,
+  `/delete_account`, sämtliche Admin-Endpunkte) verwenden den live prüfenden
+  `check_revoked=True`-Pfad. Normale App-Requests prüfen das signierte ID-Token
+  plus den allgemeinen `account_deletion_jobs`-Tombstone mit 30-s-Cache, damit
+  nicht jeder Fan-out einen Firebase-Revocation-Read auslöst. Pending Jobs sperren
+  ohne Ablauf; completed Jobs bleiben mindestens zwei Stunden (länger als ein
+  ID-Token) gesperrt. Logout beendet nur lokale Firebase-/Cookie-Sessions und
+  ist ausdrücklich kein globaler Token-Widerruf.
 - Token-Quelle: `extract_id_token` liest Body `id_token`, sonst `Authorization:
   Bearer`, sonst Cookie `session`.
 - **Unbestätigte Sessions bleiben angemeldet (seit 2026-08-04).** Früher hat
@@ -1260,11 +1273,19 @@ sichtbaren Auswahlzustand als auch defensiv im tatsächlichen Request-Fan-out au
   Umweg über das Postfach.
 - Eigene API-Keys sind ein eingeloggtes Feature: `/check_keys`, `/ask_*` mit
   User-Key und `/consensus` mit `useOwnKeys` verlangen ein verifiziertes Token.
+- **Unvertrauenswürdige Request-Größen sind vor teurer Arbeit begrenzt:** Das
+  ASGI-Bodylimit verwirft sowohl zu großes `Content-Length` als auch erst beim
+  chunked Lesen anwachsende Bodies mit 413, bevor FastAPI JSON/Form parst.
+  Chat-Frage und System-Prompt besitzen getrennte Zeichen- und UTF-8-Bytecaps;
+  Legacy-Follow-up-Kontext wird bei Überschreitung abgewiesen statt still
+  gekappt. Dadurch fallen auch extrem lange Ein-Wort-Strings vor Providerarbeit.
 - Pro-Status: `is_user_pro` liest Firestore `users/{uid}.tier ∈ {premium, pro}`.
   Admin: `users/{uid}.role == admin`.
 - **Tier-Flags sind gecacht**: `is_user_pro`/`is_user_admin`
   teilen sich einen TTL-Cache (60s, `security.py::_tier_cache`) über das
   `users/{uid}`-Dokument — ein Firestore-Read statt zwei pro Aufrufstelle.
+  Firestore-Ausfälle werden als `TierStatusUnavailable` statt als Free-/Nicht-
+  Admin-Status behandelt und von User-/Chat-/Admin-Grenzen als 503 abgebildet.
   Fehler werden nicht gecacht; `/delete_account` invalidiert via
   `invalidate_tier_cache(uid)`. Manuell vergebene Pro-Tags greifen dadurch
   erst nach ≤60s. Ein separates Early-Tier existiert nicht mehr.
@@ -1274,9 +1295,15 @@ sichtbaren Auswahlzustand als auch defensiv im tatsächlichen Request-Fan-out au
   Consensus-Run reserviert genau **einen Integer-Slot**, unabhängig von
   Modellanzahl oder Provider-Fan-out. Deep Think zählt ebenfalls genau einmal
   gegen dieses Total und zusätzlich gegen ein separates Deep-Think-Kontingent.
-  `reserve` führt Idempotenzprüfung, Limitprüfung und Reservierung gemeinsam in
-  einer Firestore-Transaktion aus; `consume` und `release` wechseln den Status
-  ebenfalls transaktional, `snapshot` liest das einzelne UTC-Tagesaggregat.
+  `reserve` bindet den Key an einen kanonischen Request-Fingerprint und den
+  nächsten UTC-Tageswechsel, führt Idempotenz-, Ablauf- und Limitprüfung
+  gemeinsam in einer Firestore-Transaktion aus; `consume` und `release`
+  wechseln den Status ebenfalls transaktional, `snapshot` liest das einzelne
+  UTC-Tagesaggregat. Nach `consume` claimt jede kostenpflichtige logische
+  Operation transaktional genau einen Slot (`ask:<provider>`, `consensus`,
+  `resolve`) mit eigenem Payload-Fingerprint. Gleiche/konkurrierende Retries
+  werden eindeutig mit 409 abgelehnt, bevor Provider- oder Judge-Arbeit startet;
+  verschiedene Operations-Slots desselben Laufs bleiben unabhängig.
   Die Transaktionen verwenden 12 Retry-Versuche, weil der parallele Provider-
   Fan-out denselben Run gleichzeitig konsumiert. Sind die Retries dennoch
   ausgeschöpft, antwortet `/ask_*` strukturiert mit HTTP 503 statt mit einem
@@ -1287,8 +1314,9 @@ sichtbaren Auswahlzustand als auch defensiv im tatsächlichen Request-Fan-out au
   alte Sackgasse); reguläre und Deep-Think-Run-Limits je Tier sind
   als vier eigene `app_config/models.limits`-Felder konfigurierbar. `/prepare`
   reserviert und konsumiert den Slot sofort; Provider-Fan-out und `/consensus`
-  bestätigen denselben Consume danach nur noch idempotent. `/resolve` erzeugt einen
-  eigenen Run. `/usage` und `/user_status` lesen die Firestore-Tagesbasis;
+  bestätigen denselben Consume danach nur noch idempotent und claimen dann ihre
+  Operation. `/resolve` erzeugt einen eigenen Run und Claim. `/usage` und
+  `/user_status` lesen die Firestore-Tagesbasis;
   `/usage/run/release` gibt nur noch nicht konsumierte Reservierungen frei.
   `app/core/state.py` enthält nur noch den kurzlebigen Feedback-Cooldown; die
   alten Float-/Request-Counter sind entfernt.
@@ -1555,6 +1583,7 @@ main.py                      App-Entry, Middleware, Router-Registrierung, lifesp
 app/core/
   config.py                  Modell-Kataloge, Tier-Limits, Firestore-Sync (load_models_from_db)
   security.py                Firebase-Init, Token/Tier/Admin-Checks, CSP-Middleware
+  request_limits.py          ASGI-Bodylimit vor JSON-/Form-Parsing (Content-Length + chunked)
   rate_limit.py              slowapi-Limiter (Client-IP hinter Render-Proxy via XFF)
   state.py                   Kurzlebiger In-Memory-Feedback-Cooldown
 app/api/routers/             siehe §2
@@ -1573,6 +1602,7 @@ app/services/
   chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Budgets, Lease/Idempotenz, Fallback-Rendering + Fan-out-Cache
   usage_repository.py        Firestore-Usage fuer logische Runs (reserve/consume/release/get_run/context-target-binding/snapshot)
   api_account_cleanup.py     Fail-closed Account-Blocks + retrybare API-Datenlöschung
+  account_deletion.py         Persistenter Vollkonto-Tombstone + bereichsweise Retry-Kaskade
   api_key_repository.py      SHA-256-gehashte, UID-gebundene API-Schluessel
   api_run_repository.py      Idempotenz + persistente API-Run-State-Machine
   api_consensus_runner.py    Asynchroner At-most-once-Orchestrator auf bestehenden Engines
@@ -1717,7 +1747,8 @@ Deploy manuell über die Firebase Console):
   - `usage_runs/{sha256(idempotency_key)}` — idempotenter Run je UID + Key; der
     Klartext-Key wird nicht gespeichert. Enthält `kind=regular|deep_think`, den
     UTC-Tag der Reservierung, beide serverseitigen Limits zum
-    Reservierungszeitpunkt und
+    Reservierungszeitpunkt, `request_fingerprint`, `expires_at` am nächsten
+    UTC-Tageswechsel, `operation_claims` mit Claim-Zeit/Payload-Fingerprint und
     `status=reserved|consumed|released`. Ein für Chat-Memory verwendeter Run
     erhält zusätzlich ausschließlich `context_target_hash` und
     `context_bound_at`; derselbe konsumierte Key kann damit nur einen
@@ -1726,9 +1757,10 @@ Deploy manuell über die Firebase Console):
     Run-Einheit) oder
     `reserved → released` (fehlgeschlagener/abgebrochener Run gibt den Slot
     frei); beide Zielzustände sind terminal, Wiederholungen idempotent. Der Key
-    kann nicht für einen anderen Run-Typ wiederverwendet werden. Provider-/LLM-
-    Aufrufe finden immer außerhalb der Transaktion zwischen Reservierung und
-    Abschluss statt. Beim Account-Löschen werden beide Subcollections entfernt.
+    kann nicht für einen anderen Run-Typ/Request wiederverwendet oder über den
+    UTC-Tag hinaus abgespielt werden. Provider-/LLM-Aufrufe finden immer
+    außerhalb der Transaktion und erst nach Consume plus erfolgreichem
+    Operations-Claim statt. Beim Account-Löschen werden beide Subcollections entfernt.
   - `api_consensus_idempotency/{sha256(idempotency_key)}` — Mapping von UID +
     gehashtem HTTP-Idempotency-Key auf `run_id` und kanonischen `request_hash`;
     verhindert auch bei parallelen POSTs doppelte Runs. Kein Klartext-Key.
@@ -1741,6 +1773,12 @@ Deploy manuell über die Firebase Console):
   Er wird vor jeder Löschkaskade geschrieben, von HTTP und Worker geprüft und
   nach erfolgreichem Cleanup plus Firebase-Löschung entfernt; transiente
   Cleanup-Fehler werden periodisch wiederholt.
+- `account_deletion_jobs/{uid}` — allgemeiner, idempotenter Löschauftrag und
+  Auth-Tombstone mit `status=pending|completed`, `completed_areas`, aktuellen
+  Fehlern und Audit-Zeitstempeln. Pending sperrt ohne Zeitlimit; nach kompletter
+  Kaskade werden E-Mail/sonstige Hilfsdaten entfernt und nur der UID-Tombstone
+  noch zwei Stunden behalten. Der Maintenance-Loop wiederholt ausschließlich
+  nicht quittierte Bereiche und entfernt abgelaufene completed Tombstones.
 - `api_consensus_runs/{run_id}` — UID-gebundener v1-API-Run mit serverseitig
   eingefrorenem Request/Modellplan, `idempotency_hash`, Status und Status-
   Zeitstempeln, einstündigem Running-Lease sowie terminal `result` oder
@@ -1759,7 +1797,10 @@ Deploy manuell über die Firebase Console):
   einen frisch gespeicherten Judge-Wert mit einem älteren Komplett-Snapshot
   überschreibt. Nur `POST /api/admin/models` persistiert die Modellkonfiguration
   und wird bei inkonsistenten Defaults/Presets/Watches/Judges mit 400
-  abgelehnt statt serverseitig still korrigiert. `consensus` steuert den App-Consensus-Picker;
+  abgelehnt statt serverseitig still korrigiert. Erst danach wird persistiert
+  und unter einem Runtime-Lock vollständig neu geladen; schlägt ein Apply-Schritt
+  fehl, werden alle zuvor aktiven Sets/Maps/Limits restauriert und der Admin-
+  Request schlägt fehl. `consensus` steuert den App-Consensus-Picker;
   Fehlende Limitfelder werden beim Startup normalisiert und per Merge in das
   Admin-Dokument zurückgeschrieben (Schema-Backfill ohne Verlust vorhandener Werte).
   Werte können historische Engine-Aliase (`Gemini-Pro`) oder direkte Modell-IDs aus
@@ -1897,6 +1938,8 @@ Deploy manuell über die Firebase Console):
 `GOOGLE_APPLICATION_CREDENTIALS`).
 
 **Umgebungsvariablen** (`.env`, Beispiel in `.env.example`):
+- Request-Schutz: `MAX_REQUEST_BODY_BYTES` (Default 16 MiB, erlaubter Bereich
+  1 KiB bis 32 MiB) begrenzt den vollständigen HTTP-Body vor Framework-Parsing.
 - Firebase Web-Config: `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`,
   `FIREBASE_PROJECT_ID`, `FIREBASE_STORAGE_BUCKET`, `FIREBASE_MESSAGING_SENDER_ID`,
   `FIREBASE_APP_ID` (ans Frontend durchgereicht via `/app`-Template).
@@ -2233,10 +2276,11 @@ ersten Check statt eines leeren Consensus-Panels.
   davon zusammen mit `RENDER_SERVICE_NAME` oder `ENVIRONMENT=production` gesetzt
   ist. Außerhalb expliziter pytest-/E2E-Läufe ändert sich lokal nichts.
 - **`/register` darf nie verraten, ob eine E-Mail existiert.** Beide Fälle geben
-  `{"status": "check_inbox"}` zurück; nur der echte Neuzugang bekommt zusätzlich
-  ein `customToken`. `static/firebase.js` zeigt in beiden Fällen denselben
-  Erfolgs-Screen, dessen Text beide Fälle abdeckt. Eine spezifische Fehlermeldung
-  wie „already registered" wäre eine Konto-Enumeration.
+  exakt `{"status": "check_inbox"}` zurück; das gilt auch für das Create-Race.
+  UID, E-Mail und Custom-Token werden nie zurückgegeben. `static/firebase.js`
+  kann nur mit den vom Besucher selbst eingegebenen Credentials einloggen und
+  zeigt sonst den neutralen Erfolgs-Screen. Eine spezifische Fehlermeldung wie
+  „already registered" wäre eine Konto-Enumeration.
 - **Script-Ladereihenfolge in `templates/index.html` ist ein Vertrag.**
   `app-core.js` definiert `window.App` und muss vor allen Feature-Modulen laufen;
   `chat-session.js` muss vor `consensus-run.js` und `query-send.js` laufen;
@@ -2345,7 +2389,10 @@ ersten Check statt eines leeren Consensus-Panels.
   `/consensus`; Resolve nutzt einen eigenen Key. Run-Typ (`regular` oder
   `deep_think`) und Limits werden ausschließlich serverseitig bestimmt. Niemals
   clientseitige Kosten, Modellanzahl oder Float-Inkremente übernehmen; niemals
-  Provider-Aufrufe in die Firestore-Transaktionsfunktion verschieben. Der
+  Provider-Aufrufe in die Firestore-Transaktionsfunktion verschieben. Vor jeder
+  Developer-Key-Operation muss nach Consume der passende einmalige Claim
+  (`ask:<provider>`, `consensus`, `resolve`) erfolgreich sein; ein bereits
+  belegter Claim ist kein Retry-Ticket und wird vor externer Arbeit abgewiesen. Der
   Chat-Context-Endpoint darf im Developer-Modus nur einen bereits konsumierten
   Run verwenden und bindet dessen Hash-Metadaten vor dem LLM-Call einmalig an
   genau einen Chat/Turn; diese Bindung verändert keine Usage-Zähler.

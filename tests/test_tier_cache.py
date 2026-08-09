@@ -100,9 +100,11 @@ def test_firestore_errors_are_not_cached(fresh_cache):
     db = MagicMock()
     db.collection.return_value.document.return_value.get.side_effect = RuntimeError("boom")
     with patch.object(security, "db_firestore", db):
-        # Fail-closed wie vorher: Fehler -> keine Rechte.
-        assert security.is_user_pro("uid-err") is False
-        assert security.is_user_admin("uid-err") is False
+        # Infrastrukturfehler sind kein fachlicher Free-/Non-Admin-Status.
+        with pytest.raises(security.TierStatusUnavailable):
+            security.is_user_pro("uid-err")
+        with pytest.raises(security.TierStatusUnavailable):
+            security.is_user_admin("uid-err")
     # Beide Aufrufe haben Firestore erneut versucht (kein Caching des Fehlers).
     assert get_call_count(db) == 2
 

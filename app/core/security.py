@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import logging
 import os
 import threading
+from datetime import datetime, timezone
 from typing import Optional
 from cachetools import TTLCache
 from fastapi import Request
@@ -21,6 +24,7 @@ from app.core.e2e_profile import (
 # gesetzt; alle Hooks sind dann No-ops.
 E2E_MOCK_TOKEN = "e2e-mock-token"
 E2E_MOCK_UID = "e2e-mock-user"
+ACCOUNT_DELETION_JOBS_COLLECTION = "account_deletion_jobs"
 
 # Test-Flags, die Sicherheitskontrollen abschalten. Ein Kommentar "nie in
 # Produktion setzen" ist keine Kontrolle - ein einziges versehentlich in Render
@@ -168,7 +172,57 @@ if not firebase_admin._apps:
 
 db_firestore = firestore.client()
 
-def verify_user_token(token: str, allow_unverified: bool = False) -> str:
+
+class AuthenticationUnavailable(Exception):
+    pass
+
+
+class TierStatusUnavailable(Exception):
+    pass
+
+
+AUTH_TOMBSTONE_CACHE_TTL_SECONDS = 30
+_auth_tombstone_cache = TTLCache(maxsize=4096, ttl=AUTH_TOMBSTONE_CACHE_TTL_SECONDS)
+_auth_tombstone_cache_lock = threading.Lock()
+
+
+def invalidate_auth_tombstone_cache(uid: str, *, blocked: bool | None = None) -> None:
+    with _auth_tombstone_cache_lock:
+        _auth_tombstone_cache.pop(uid, None)
+        if blocked is not None:
+            _auth_tombstone_cache[uid] = bool(blocked)
+
+
+def _is_account_tombstoned(uid: str) -> bool:
+    with _auth_tombstone_cache_lock:
+        cached = _auth_tombstone_cache.get(uid)
+    if cached is not None:
+        return bool(cached)
+    try:
+        snap = db_firestore.collection(ACCOUNT_DELETION_JOBS_COLLECTION).document(uid).get()
+        data = snap.to_dict() if snap.exists else {}
+    except Exception as exc:
+        raise AuthenticationUnavailable(
+            "Account status is temporarily unavailable"
+        ) from exc
+    blocked = bool(data and data.get("status") == "pending")
+    if data and data.get("status") == "completed":
+        expires_at = data.get("tombstone_expires_at")
+        blocked = (
+            not isinstance(expires_at, datetime)
+            or expires_at.tzinfo is None
+            or expires_at.astimezone(timezone.utc) > datetime.now(timezone.utc)
+        )
+    with _auth_tombstone_cache_lock:
+        _auth_tombstone_cache[uid] = blocked
+    return blocked
+
+def verify_user_token(
+    token: str,
+    allow_unverified: bool = False,
+    *,
+    check_revoked: bool = False,
+) -> str:
     """
     Verifiziert das Firebase-ID-Token. Standardmäßig NUR verifizierte E-Mails zulassen.
     Mit allow_unverified=True kann man Endpoints wie /confirm-registration erlauben.
@@ -176,12 +230,20 @@ def verify_user_token(token: str, allow_unverified: bool = False) -> str:
     if _mock_auth_enabled() and token == E2E_MOCK_TOKEN:
         return E2E_MOCK_UID
     try:
-        decoded_token = auth.verify_id_token(token, clock_skew_seconds=5)
+        kwargs = {"clock_skew_seconds": 5}
+        if check_revoked:
+            kwargs["check_revoked"] = True
+        decoded_token = auth.verify_id_token(token, **kwargs)
         if not allow_unverified and not decoded_token.get("email_verified", False):
             raise Exception("Email not verified")
-        return decoded_token["uid"]
+        uid = decoded_token["uid"]
+        if _is_account_tombstoned(uid):
+            raise Exception("Account deletion is in progress")
+        return uid
+    except AuthenticationUnavailable:
+        raise
     except Exception as e:
-        logging.error(f"verify_user_token failed: {e}")
+        logging.warning("verify_user_token failed: %s", type(e).__name__)
         raise Exception("Invalid token")
     
 
@@ -233,7 +295,7 @@ def _get_tier_flags(uid: str) -> dict:
         data = doc.to_dict() if doc.exists else {}
     except Exception as e:
         logging.error(f"Tier-Lookup Fehler für {uid}: {e}")
-        return _TIER_FLAGS_DEFAULT
+        raise TierStatusUnavailable("Account tier is temporarily unavailable") from e
     flags = _compute_tier_flags(data or {})
     with _tier_cache_lock:
         _tier_cache[uid] = flags

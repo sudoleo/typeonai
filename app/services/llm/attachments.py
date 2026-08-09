@@ -12,8 +12,14 @@ logger = logging.getLogger(__name__)
 
 MAX_ATTACHMENTS = 2
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024  # 5 MB pro Datei
+MAX_ATTACHMENT_BASE64_CHARS = 4 * ((MAX_ATTACHMENT_BYTES + 2) // 3)
 MAX_PDF_EXTRACT_CHARS = 24000
 MAX_TEXT_EXTRACT_CHARS = 24000
+MAX_DOCX_ENTRIES = 256
+MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES = 20 * 1024 * 1024
+MAX_DOCX_ENTRY_UNCOMPRESSED_BYTES = 8 * 1024 * 1024
+MAX_DOCX_COMPRESSION_RATIO = 100
+DOCX_READ_CHUNK_BYTES = 64 * 1024
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 TEXT_MIME = "text/plain"
@@ -36,6 +42,61 @@ ATTACHMENT_TYPES_LABEL = "PDF, Word (.docx), text (.txt/.md/.csv), PNG, JPG, Web
 PROVIDER_IMAGE_SUPPORT = {"openai", "anthropic", "gemini", "grok"}
 PROVIDER_PDF_SUPPORT = {"openai", "anthropic", "gemini"}
 
+_DOCX_ALLOWED_EXACT = {"[Content_Types].xml"}
+_DOCX_ALLOWED_PREFIXES = ("_rels/", "docProps/", "word/", "customXml/")
+
+
+class InvalidDocx(ValueError):
+    pass
+
+
+def _validate_docx_archive(raw: bytes) -> zipfile.ZipInfo:
+    """Validate the ZIP directory without expanding attacker-controlled data."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            entries = archive.infolist()
+            if not entries or len(entries) > MAX_DOCX_ENTRIES:
+                raise InvalidDocx("invalid entry count")
+            total_uncompressed = 0
+            document_info = None
+            for info in entries:
+                name = info.filename
+                normalized_parts = name.replace("\\", "/").split("/")
+                if (
+                    not name
+                    or name.startswith(("/", "\\"))
+                    or "\\" in name
+                    or ".." in normalized_parts
+                    or (
+                        name not in _DOCX_ALLOWED_EXACT
+                        and not name.startswith(_DOCX_ALLOWED_PREFIXES)
+                    )
+                ):
+                    raise InvalidDocx("unexpected ZIP entry")
+                if info.flag_bits & 0x1:
+                    raise InvalidDocx("encrypted ZIP entries are not allowed")
+                if info.is_dir():
+                    continue
+                if info.file_size > MAX_DOCX_ENTRY_UNCOMPRESSED_BYTES:
+                    raise InvalidDocx("ZIP entry expansion exceeds budget")
+                total_uncompressed += info.file_size
+                if total_uncompressed > MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES:
+                    raise InvalidDocx("DOCX expansion exceeds total budget")
+                if info.file_size:
+                    if info.compress_size <= 0:
+                        raise InvalidDocx("invalid compressed size")
+                    if info.file_size / info.compress_size > MAX_DOCX_COMPRESSION_RATIO:
+                        raise InvalidDocx("ZIP compression ratio exceeds budget")
+                if name == "word/document.xml":
+                    document_info = info
+            if document_info is None:
+                raise InvalidDocx("word/document.xml is missing")
+            return document_info
+    except InvalidDocx:
+        raise
+    except (OSError, zipfile.BadZipFile, zipfile.LargeZipFile) as exc:
+        raise InvalidDocx("invalid DOCX ZIP") from exc
+
 
 def _sniff_mime(raw: bytes) -> str | None:
     if raw.startswith(b"%PDF"):
@@ -57,9 +118,9 @@ def _is_docx(raw: bytes) -> bool:
     """DOCX ist ein ZIP mit word/document.xml — andere ZIPs (xlsx, pptx, ...)
     werden bewusst nicht akzeptiert."""
     try:
-        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-            return "word/document.xml" in archive.namelist()
-    except Exception:
+        _validate_docx_archive(raw)
+        return True
+    except InvalidDocx:
         return False
 
 
@@ -111,6 +172,21 @@ def parse_attachments(data: dict, is_pro: bool) -> list[dict]:
         if b64_data.startswith("data:"):
             b64_data = b64_data.split(",", 1)[-1]
 
+        # Reject before allocating the decoded byte buffer. validate=True below
+        # intentionally disallows whitespace, so the encoded length is exact.
+        if len(b64_data) > MAX_ATTACHMENT_BASE64_CHARS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Attachment '{name}' exceeds the encoded size limit.",
+            )
+        try:
+            b64_data.encode("ascii")
+        except UnicodeEncodeError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Attachment '{name}' is not valid base64.",
+            ) from None
+
         try:
             raw = base64.b64decode(b64_data, validate=True)
         except Exception:
@@ -121,6 +197,15 @@ def parse_attachments(data: dict, is_pro: bool) -> list[dict]:
                 status_code=400,
                 detail=f"Attachment '{name}' exceeds the {MAX_ATTACHMENT_BYTES // (1024 * 1024)} MB size limit.",
             )
+
+        if raw.startswith(b"PK\x03\x04"):
+            try:
+                _validate_docx_archive(raw)
+            except InvalidDocx:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Attachment '{name}' is not a safe Word document.",
+                ) from None
 
         mime = _sniff_mime(raw)
         if mime is None or mime not in ALLOWED_ATTACHMENT_MIMES:
@@ -172,8 +257,23 @@ def extract_docx_text(raw: bytes) -> str | None:
     """Extrahiert den Absatztext aus word/document.xml (kein python-docx nötig)."""
     W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
     try:
+        document_info = _validate_docx_archive(raw)
         with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-            document_xml = archive.read("word/document.xml")
+            with archive.open(document_info, "r") as source:
+                chunks = []
+                expanded = 0
+                while True:
+                    chunk = source.read(DOCX_READ_CHUNK_BYTES)
+                    if not chunk:
+                        break
+                    expanded += len(chunk)
+                    if expanded > MAX_DOCX_ENTRY_UNCOMPRESSED_BYTES:
+                        raise InvalidDocx("document.xml expansion exceeds budget")
+                    chunks.append(chunk)
+            document_xml = b"".join(chunks)
+        lowered = document_xml.lower()
+        if b"<!doctype" in lowered or b"<!entity" in lowered:
+            raise InvalidDocx("DTD/entity declarations are not allowed")
         root = ET.fromstring(document_xml)
         paragraphs = []
         total = 0
