@@ -77,6 +77,7 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
         "shares": 0,
         "pending": 0,
         "watches": 0,
+        "watch_indexes": 0,
         "follows": 0,
         "auth": 0,
     }
@@ -111,6 +112,18 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
     monkeypatch.setattr(service, "_delete_query", delete_query)
     monkeypatch.setattr(
         service,
+        "_delete_orphan_watches",
+        lambda uid: calls.__setitem__("watches", calls["watches"] + 1),
+    )
+    monkeypatch.setattr(
+        service,
+        "_delete_watch_indexes",
+        lambda uid: calls.__setitem__(
+            "watch_indexes", calls["watch_indexes"] + 1
+        ),
+    )
+    monkeypatch.setattr(
+        service,
         "_delete_email_follows",
         lambda email: calls.__setitem__("follows", calls["follows"] + 1),
     )
@@ -138,6 +151,8 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
     assert calls["api"] == 1
     assert calls["subcollections"] == 1
     assert calls["chats"] == 1
+    assert calls["watches"] == 1
+    assert calls["watch_indexes"] == 1
     assert calls["auth"] == 1
     job = db.collection("account_deletion_jobs").document("owner").data
     assert job["status"] == "completed"

@@ -726,7 +726,9 @@ def test_context_endpoint_is_additive_idempotent_and_never_persists_request_key(
     repository = FirestoreChatContextRepository(db)
     compressor = RecordingCompressor()
     received_keys = []
-    monkeypatch.setattr(chat_history_router, "_chat_uid", lambda _request: UID)
+    monkeypatch.setattr(
+        chat_history_router, "_chat_uid", lambda _request, _operation="": UID
+    )
     monkeypatch.setattr(chat_history_router, "_context_repository", lambda: repository)
 
     def credentials(_uid, _target, payload, **_scope):

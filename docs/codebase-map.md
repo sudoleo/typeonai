@@ -68,7 +68,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 |---|---|
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache), `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
-| `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; ohne sie war das Bookmark der einzige Griff an einem Chat und ein gelöschtes Bookmark strandete das Transcript), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn` finalisiert pending Turns samt höchstens sechs separaten Modellantworten atomar und per Payload-Fingerprint idempotent; `fail_turn` setzt nur einen allowgelisteten Fehlercode. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Finalisiert wird weiterhin ausschließlich serverseitig über `/consensus`. |
+| `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn` finalisiert pending Turns samt höchstens sechs separaten Modellantworten atomar und per Payload-Fingerprint idempotent; `fail_turn` setzt nur einen allowgelisteten Fehlercode. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Finalisiert wird weiterhin ausschließlich serverseitig über `/consensus`. |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP) und übergibt sie als nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token; nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. Der Browser versucht danach ausschließlich mit den vom Nutzer selbst eingegebenen Credentials einzuloggen. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig. |
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Watches/Briefs, E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
@@ -76,7 +76,7 @@ Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (`?version=<run_id>`, rendert Position Map + Agreement-Kurve über `services/history_view.py` — dieselbe Darstellung wie die Watch-Seiten, bewusst nur bis zum gewählten Snapshot), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe`; Admin-CRUD unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
-| `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` ohne DeepSeek und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil und DeepSeek-Ausschluss. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
+| `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, transaktional idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` ohne DeepSeek und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil und DeepSeek-Ausschluss; dessen globale Kapazität wird zusammen mit Watch und Publisher-Zähler in derselben Transaktion geprüft. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 
 Der Scheduled Publisher läuft per GitHub Actions montags, mittwochs und freitags.
 Seine identisch in `scripts/publish_consensus.py` und
@@ -1439,7 +1439,13 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   verwendet werden. Ein Versions-Gate verhindert, dass eine verspätete Antwort
   auf ein inzwischen anderes angezeigtes Ergebnis zeigt.
 - `POST /api/share` (`share.py` → `share_snapshots.create_share_from_pending`)
-  macht daraus einen unveränderlichen Share-Snapshot (`shares`-Collection) mit Slug.
+  macht daraus einen unveränderlichen Share-Snapshot (`shares`-Collection) mit
+  Slug. Pending-Backlink, Tagesquote und Share-Anlage bilden eine einzige
+  Firestore-Transaktion; parallele Retries liefern denselben aktiven Share und
+  verbrauchen die Quote nur einmal. Dasselbe gilt für die deterministische
+  Publikation erfolgreicher API-Runs. Besucher-Reports aktualisieren
+  Gesamtzähler, Grundaggregat und den Auto-Noindex-Übergang ab fünf Reports
+  ebenfalls transaktional, sodass parallele Meldungen keine Increments verlieren.
 - **`GET /s/{slug_id}`** rendert read-only aus dem Snapshot (keine LLM-Calls).
   `public_markdown.py` erhält LaTeX-Delimiter im serverseitigen HTML; die
   Share-Seite setzt sie anschließend mit derselben KaTeX-Brücke wie die App.
@@ -1470,8 +1476,10 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   `topics/{id}/runs/{run_id}`: Consensus-Markdown, Agreement, Change-Typ/
   -Summary, wichtige Modellbewegungen, Differences/Opinion Map, Modelle,
   Quellenregeln und Evidence.
-  Anschließend werden nur Latest-Pointer/-Score und `run_count` am Topic
-  fortgeschrieben. Mindestens zwei konfigurierte Provider sind Pflicht; Links,
+  Run-Dokument und Latest-Pointer/-Score/`run_count` am Topic werden gemeinsam
+  in einer Transaktion veröffentlicht. Automatische Completion und
+  Fehlerabschluss sind an `current_run_id` gebunden; ein abgelaufener Worker
+  kann deshalb keinen neueren Claim überschreiben. Mindestens zwei konfigurierte Provider sind Pflicht; Links,
   Consensus-Text, Agreement und Meinungsänderungen werden nicht manuell für
   normale Runs eingegeben. Der eigene 60-Sekunden-Scheduler in `main.py`
   beansprucht fällige Topics per Firestore-Lease; manuelle Admin-Runs benutzen
@@ -1654,7 +1662,8 @@ Deploy manuell über die Firebase Console):
   sie vorher aus `users/{uid}` herauslösen (z. B. Firebase Custom Claims).
 
 **Firestore-Collections** (verifiziert über Code):
-- `users/{uid}` — `tier`, `role`; Subcollections `bookmarks`, `counters`, `chats` sowie
+- `users/{uid}` — `tier`, `role`; Subcollections `bookmarks`, `counters`, `chats`,
+  `chat_state`, `watch_state` und `watch_uniques` sowie
   die produktive run-basierte Usage:
   `bookmarks` speichert pro laufender Unterhaltung genau ein Dokument unter der
   stabilen ID des ersten Turns. `query`/`responses` bilden den letzten Stand;
@@ -1664,7 +1673,7 @@ Deploy manuell über die Firebase Console):
   als Legacy-Fallback für Bookmarks ohne Chat-Bindung.
   - `chats/{chat_id}` — serverseitig zufällig erzeugte, nicht aus Titel oder
     Frage abgeleitete 32-Hex-ID; Felder `schema_version`, `title`,
-    `status=active`, `created_at`, `updated_at`, `turn_count` und
+    `status=active|deleting`, `created_at`, `updated_at`, `turn_count` und
     `latest_question`. Letzteres ist nur eine NFKC-normalisierte, whitespace-
     zusammengefasste Vorschau von höchstens 300 Zeichen; die vollständige Frage
     bleibt ausschließlich im Turn. Ein leer erstellter Chat erhält mit dem ersten Turn einen
@@ -1672,6 +1681,11 @@ Deploy manuell über die Firebase Console):
     Alle Zugriffe beginnen beim verifizierten Pfad `users/{uid}`; unbekannte und
     fremde IDs liefern gleichförmig 404. `GET /chats` liefert nur kompakte
     Metadaten, absteigend nach `updated_at`, höchstens 50 Dokumente pro Seite.
+    `chat_state/quota` hält den transaktionell serialisierten `active_count`;
+    Altbestände initialisieren ihn beim ersten Schreibzugriff aus dem begrenzten
+    Owner-Bestand. Create und das Setzen von `status=deleting` erhöhen bzw.
+    verringern ihn in derselben Transaktion. Erst danach löscht die idempotente
+    Kaskade Turns, Modellantworten, Context-Versionen und zuletzt den Chat.
   - `chats/{chat_id}/turns/{turn_id}` — `schema_version`, monoton aus dem
     Chat-Zähler vergebene `position`, `status=pending|completed|failed`, begrenzte `question` und
     `mode`, boolesches `deep_search`, begrenzte/normalisierte
@@ -1719,6 +1733,12 @@ Deploy manuell über die Firebase Console):
     Provider 40) sind serverseitig begrenzt. Responses und Persistenz verwenden
     Feld-Allowlists; API-Keys, Tokens, Credentials, Roh-Attachments und
     unbekannte Felder werden verworfen.
+  - `watch_state/quota` serialisiert die Zahl aktiver Owner-Watches;
+    `watch_uniques/{sha256(uid,scope,key)}` bindet je nach Anlage entweder die
+    Share-ID oder den Query-`question_hash` an genau eine Watch. Anlage,
+    Pause/Resume, Auto-Pause und Löschung pflegen Zähler, Uniqueness-Key und bei
+    Query-first zusätzlich die Share-Hülle transaktional. Die Kontolöschung
+    entfernt beide Subcollections nach der Watch-Kaskade.
   - `chats/{chat_id}/context_versions/{version_id}` ist eine ausschließlich
     abgeleitete, owner-gebundene Context-Version. Sie referenziert Ziel-Turn,
     jüngsten wörtlichen completed Turn und die bis zu einer Position
@@ -2165,7 +2185,11 @@ Historien-Scans gelesen.
 **Consensus Watch** läuft als eigener asyncio-Lifespan-Task alle 30 Minuten.
 Firestore-Transaktionen claimen einen globalen Worker-Lease, den einzelnen
 Watch-Lease und das globale Tagesbudget; innerhalb eines Workers laufen Watches
-strikt sequenziell. Die Reruns ermitteln den aktuellen Pro-Status des Eigentümers und
+strikt sequenziell. Jeder Einzel-Claim verwendet den dann aktuellen Zeitpunkt
+(nicht den Tick-Start), erneuert seine 15-Minuten-Lease während langer Läufe
+alle fünf Minuten und fenced Completion wie Fehlerabschluss über
+`current_run_id`. History, Watch-Pointer und Share-Pointer committen gemeinsam;
+ein alter Worker kann einen neueren Claim weder leeren noch pausieren. Die Reruns ermitteln den aktuellen Pro-Status des Eigentümers und
 nutzen das entsprechende `WATCH_MODELS_BY_TIER`-Mapping aus Firestore `watch_models`;
 je konfiguriertem Provider läuft genau ein Modell (mindestens zwei), deren Antwort-Calls
 laufen innerhalb des einzelnen Watch-Runs parallel. Keine Attachments/Follow-ups und keine
@@ -2257,7 +2281,12 @@ Der manuelle Lauf verbraucht reale Modellaufrufe, schreibt reguläre History, r�
 und wendet unverändert die konfigurierte Mailregel an. Der unabhängige SMTP-Test führt
 keinen Watch-Lauf aus und ändert keinen Zeitplan.
 Query-first-Watches legen beim Erstellen nur eine nicht indexierte Share-Hülle
-mit Frage und `awaiting_first_watch_run=true` an. Der erste planmäßige Watch-Lauf
+mit Frage und `awaiting_first_watch_run=true` an. Share-Hülle, Watch,
+Owner-Zähler und Query-Uniqueness-Key entstehen gemeinsam; normale Share-Watches
+verwenden entsprechend einen Share-Uniqueness-Key. Altbestände initialisieren
+diese Indizes beim ersten Schreibzugriff. Auch die globale Publisher-Kapazität
+wird innerhalb dieser Anlage-Transaktion statt über einen vorgelagerten Count
+durchgesetzt. Der erste planmäßige Watch-Lauf
 gilt ausdrücklich als Baseline (kein Changes-only-Alert durch den vorher leeren
 Text), schreibt zugleich die erste immutable History-Version und füllt die
 Share-Baseline. Condition- und Every-run-Regeln dürfen beim ersten Lauf bereits

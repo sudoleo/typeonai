@@ -30,9 +30,11 @@ class FakeSnap:
 
 
 class FakeDocRef:
-    def __init__(self, store, key):
+    def __init__(self, store, key, db=None, path=()):
         self._store = store
         self._key = key
+        self._db = db
+        self._path = tuple(path) + (key,)
 
     @property
     def id(self):
@@ -50,27 +52,39 @@ class FakeDocRef:
     def delete(self):
         self._store.pop(self._key, None)
 
+    def collection(self, name):
+        return FakeCollection(
+            self._db.stores["/".join((*self._path, name))],
+            db=self._db,
+            path=(*self._path, name),
+        )
+
 
 class FakeQueryDoc:
-    def __init__(self, store, key):
+    def __init__(self, store, key, db=None, path=()):
         self.id = key
         self._store = store
-        self.reference = FakeDocRef(store, key)
+        self.reference = FakeDocRef(store, key, db=db, path=path)
 
     def to_dict(self):
         return dict(self._store[self.id])
 
 
 class FakeQuery:
-    def __init__(self, store, field, op, value, max_items=None):
+    def __init__(self, store, field, op, value, max_items=None, db=None, path=()):
         self._store = store
         self._field = field
         self._op = op
         self._value = value
         self._max_items = max_items
+        self._db = db
+        self._path = tuple(path)
 
     def limit(self, n):
-        return FakeQuery(self._store, self._field, self._op, self._value, n)
+        return FakeQuery(
+            self._store, self._field, self._op, self._value, n,
+            db=self._db, path=self._path,
+        )
 
     def _matches(self, data):
         if self._field is None:
@@ -88,32 +102,82 @@ class FakeQuery:
         for key, data in list(self._store.items()):
             if not self._matches(data):
                 continue
-            yield FakeQueryDoc(self._store, key)
+            yield FakeQueryDoc(
+                self._store, key, db=self._db, path=self._path
+            )
             emitted += 1
             if self._max_items is not None and emitted >= self._max_items:
                 break
 
 
 class FakeCollection:
-    def __init__(self, store):
+    def __init__(self, store, db=None, path=()):
         self._store = store
+        self._db = db
+        self._path = tuple(path)
 
     def document(self, doc_id):
-        return FakeDocRef(self._store, doc_id)
+        return FakeDocRef(self._store, doc_id, db=self._db, path=self._path)
 
     def where(self, field, op, value):
-        return FakeQuery(self._store, field, op, value)
+        return FakeQuery(
+            self._store, field, op, value, db=self._db, path=self._path
+        )
 
     def limit(self, n):
-        return FakeQuery(self._store, None, None, None, n)
+        return FakeQuery(
+            self._store, None, None, None, n, db=self._db, path=self._path
+        )
+
+    def stream(self):
+        return FakeQuery(
+            self._store, None, None, None, db=self._db, path=self._path
+        ).stream()
 
 
 class FakeDb:
     def __init__(self):
         self.stores = defaultdict(dict)
+        self.fail_transaction_after_staged_writes = None
 
     def collection(self, name):
-        return FakeCollection(self.stores[name])
+        return FakeCollection(self.stores[name], db=self, path=(name,))
+
+    def run_transaction(self, operation):
+        transaction = FakeTransaction(self)
+        result = operation(transaction)
+        transaction.commit()
+        return result
+
+
+class FakeTransaction:
+    def __init__(self, db):
+        self.db = db
+        self.operations = []
+
+    def _stage(self, operation, ref, data):
+        self.operations.append((operation, ref, data))
+        fail_after = self.db.fail_transaction_after_staged_writes
+        if fail_after is not None and len(self.operations) >= fail_after:
+            raise RuntimeError("injected transaction failure")
+
+    def set(self, ref, data):
+        self._stage("set", ref, dict(data))
+
+    def update(self, ref, data):
+        self._stage("update", ref, dict(data))
+
+    def delete(self, ref):
+        self._stage("delete", ref, None)
+
+    def commit(self):
+        for operation, ref, data in self.operations:
+            if operation == "set":
+                ref.set(data)
+            elif operation == "update":
+                ref.update(data)
+            else:
+                ref.delete()
 
 
 def make_pending(uid="user-1", **overrides):
@@ -601,6 +665,23 @@ class ShareFlowTests(unittest.TestCase):
         self.assertEqual(first["share_id"], second["share_id"])
         self.assertFalse(second["created"])
         self.assertEqual(len(quota_calls), 1)
+
+    def test_publication_failure_cannot_leave_share_without_backlink(self):
+        result_id = self._store_pending()
+        self.db.fail_transaction_after_staged_writes = 2
+
+        with self.assertRaisesRegex(RuntimeError, "injected transaction failure"):
+            snapshots.create_share_from_pending(
+                self.uid,
+                result_id,
+                db=self.db,
+                consume_quota=lambda: True,
+            )
+
+        pending = self.db.stores[snapshots.PENDING_COLLECTION][result_id]
+        self.assertNotIn("share_id", pending)
+        self.assertNotIn("public_share_id", pending)
+        self.assertEqual(self.db.stores[snapshots.SHARES_COLLECTION], {})
 
     def test_private_and_public_snapshots_are_distinct_and_idempotent(self):
         result_id = self._store_pending()

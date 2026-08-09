@@ -552,13 +552,10 @@ class ChatStore:
 
     def create_chat(self, uid: str, *, title: str = "") -> dict:
         title = normalize_title(title)
-        if self._chat_count(uid) >= MAX_CHATS_PER_OWNER:
-            raise ChatQuotaExceeded(
-                f"At most {MAX_CHATS_PER_OWNER} chats per account",
-                error_code="chat_limit_reached",
-            )
+        self._ensure_chat_counter(uid)
         chat_id = secrets.token_hex(16)
         ref = self._chats_ref(uid).document(chat_id)
+        counter_ref = self._chat_counter_ref(uid)
         document = {
             "schema_version": CHAT_SCHEMA_VERSION,
             "title": title,
@@ -568,7 +565,27 @@ class ChatStore:
             "turn_count": 0,
             "latest_question": "",
         }
-        ref.set(document)
+
+        def operation(transaction):
+            counter_snapshot = counter_ref.get(transaction=transaction)
+            existing_snapshot = ref.get(transaction=transaction)
+            if existing_snapshot.exists:
+                raise ChatStoreError("Chat ID collision")
+            counter = counter_snapshot.to_dict() if counter_snapshot.exists else {}
+            count = _safe_non_negative_int((counter or {}).get("active_count"))
+            if count >= MAX_CHATS_PER_OWNER:
+                raise ChatQuotaExceeded(
+                    f"At most {MAX_CHATS_PER_OWNER} chats per account",
+                    error_code="chat_limit_reached",
+                )
+            transaction.set(ref, document)
+            transaction.set(counter_ref, {
+                "schema_version": 1,
+                "active_count": count + 1,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            })
+
+        self._transaction(operation)
         snapshot = ref.get()
         return chat_metadata(snapshot.id, snapshot.to_dict() or {})
 
@@ -715,6 +732,8 @@ class ChatStore:
         def operation(transaction):
             chat_snapshot = chat_ref.get(transaction=transaction)
             if not chat_snapshot.exists:
+                raise ChatNotFound("Chat not found")
+            if (chat_snapshot.to_dict() or {}).get("status") != CHAT_STATUS_ACTIVE:
                 raise ChatNotFound("Chat not found")
 
             if client_request_id:
@@ -1057,6 +1076,31 @@ class ChatStore:
             counted += 1
         return counted
 
+    def _chat_counter_ref(self, uid: str):
+        return (
+            self.db.collection("users").document(uid).collection("chat_state")
+            .document("quota")
+        )
+
+    def _ensure_chat_counter(self, uid: str) -> None:
+        """Initialize the serialized owner counter for pre-migration chats."""
+        counter_ref = self._chat_counter_ref(uid)
+        if counter_ref.get().exists:
+            return
+        existing_count = self._chat_count(uid)
+
+        def operation(transaction):
+            snapshot = counter_ref.get(transaction=transaction)
+            if snapshot.exists:
+                return
+            transaction.set(counter_ref, {
+                "schema_version": 1,
+                "active_count": existing_count,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            })
+
+        self._transaction(operation)
+
     def _chats_ref(self, uid: str):
         return self.db.collection("users").document(uid).collection("chats")
 
@@ -1081,13 +1125,41 @@ class ChatStore:
         repeated without ever stranding a level.
         """
         for chat_ref in _child_documents(self._chats_ref(uid)):
-            self._delete_chat_tree(chat_ref)
+            self.delete_chat(uid, chat_ref.id)
+        for state_ref in _child_documents(
+            self.db.collection("users").document(uid).collection("chat_state")
+        ):
+            state_ref.delete()
 
     def delete_chat(self, uid: str, chat_id: str) -> None:
         """Delete one owner-bound chat with the same three-level cascade."""
         chat_ref = self._chat_ref(uid, chat_id)
-        if not chat_ref.get().exists:
-            raise ChatNotFound("Chat not found")
+        self._ensure_chat_counter(uid)
+        counter_ref = self._chat_counter_ref(uid)
+
+        def mark_deleting(transaction):
+            chat_snapshot = chat_ref.get(transaction=transaction)
+            counter_snapshot = counter_ref.get(transaction=transaction)
+            if not chat_snapshot.exists:
+                raise ChatNotFound("Chat not found")
+            data = chat_snapshot.to_dict() or {}
+            if data.get("status") == "deleting":
+                return
+            if data.get("status") != CHAT_STATUS_ACTIVE:
+                raise ChatNotFound("Chat not found")
+            counter = counter_snapshot.to_dict() if counter_snapshot.exists else {}
+            count = _safe_non_negative_int((counter or {}).get("active_count"))
+            transaction.update(chat_ref, {
+                "status": "deleting",
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            })
+            transaction.set(counter_ref, {
+                "schema_version": 1,
+                "active_count": max(0, count - 1),
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            })
+
+        self._transaction(mark_deleting)
         self._delete_chat_tree(chat_ref)
 
     def _delete_chat_tree(self, chat_ref) -> None:

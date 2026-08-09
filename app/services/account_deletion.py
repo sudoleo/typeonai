@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from firebase_admin import auth, firestore
 
 from app.core.security import invalidate_auth_tombstone_cache
-from app.services import share_snapshots
+from app.services import share_snapshots, watch_service
 from app.services.api_account_cleanup import FirestoreApiAccountCleanup
 from app.services.chat_store import ChatStore
 
@@ -85,7 +85,8 @@ class FirestoreAccountDeletion:
             ("waitlist_feedback", lambda: self._delete_uid_queries(uid)),
             ("owned_shares", lambda: self._delete_owned_shares(uid)),
             ("pending_results", lambda: self._delete_query("pending_results", "owner_uid", uid)),
-            ("orphan_watches", lambda: self._delete_query("watches", "owner_uid", uid)),
+            ("orphan_watches", lambda: self._delete_orphan_watches(uid)),
+            ("watch_indexes", lambda: self._delete_watch_indexes(uid)),
             ("watch_brief", lambda: self._db.collection("watch_briefs").document(uid).delete()),
             ("email_follows", lambda: self._delete_email_follows(email)),
             ("profile", lambda: self._db.collection("users").document(uid).delete()),
@@ -200,6 +201,15 @@ class FirestoreAccountDeletion:
         for name in ("bookmarks", "counters", "usage_days", "usage_runs"):
             for snap in user_ref.collection(name).stream():
                 snap.reference.delete()
+
+    def _delete_watch_indexes(self, uid: str) -> None:
+        user_ref = self._db.collection("users").document(uid)
+        for name in ("watch_state", "watch_uniques"):
+            for snap in user_ref.collection(name).stream():
+                snap.reference.delete()
+
+    def _delete_orphan_watches(self, uid: str) -> None:
+        watch_service.delete_watches_for_owner(uid, db=self._db)
 
     def _delete_uid_queries(self, uid: str) -> None:
         for name in ("pro_waitlist", "feedback"):

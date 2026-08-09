@@ -33,7 +33,9 @@ class FakeDocument:
         self.path = tuple(path)
         self.id = self.path[-1]
 
-    def get(self):
+    def get(self, transaction=None):
+        if transaction is not None:
+            return transaction.get(self)
         return FakeSnapshot(self, self.db.documents.get(self.path))
 
     def set(self, data, merge=False):
@@ -41,6 +43,9 @@ class FakeDocument:
             self.db.documents[self.path].update(dict(data))
         else:
             self.db.documents[self.path] = dict(data)
+
+    def update(self, data):
+        self.db.documents[self.path].update(dict(data))
 
     def delete(self):
         self.db.documents.pop(self.path, None)
@@ -89,9 +94,41 @@ class FakeCollection:
 class FakeFirestore:
     def __init__(self):
         self.documents = {}
+        self.fail_transaction_after_staged_writes = None
 
     def collection(self, name):
         return FakeCollection(self, (name,))
+
+    def run_transaction(self, operation):
+        transaction = FakeTransaction(self)
+        result = operation(transaction)
+        transaction.commit()
+        return result
+
+
+class FakeTransaction:
+    def __init__(self, db):
+        self.db = db
+        self.operations = []
+
+    def get(self, ref):
+        return FakeSnapshot(ref, self.db.documents.get(ref.path))
+
+    def set(self, ref, data, merge=False):
+        self.operations.append(("set", ref, dict(data), merge))
+        fail_after = self.db.fail_transaction_after_staged_writes
+        if fail_after is not None and len(self.operations) >= fail_after:
+            raise RuntimeError("injected transaction failure")
+
+    def update(self, ref, data):
+        self.operations.append(("update", ref, dict(data), False))
+
+    def commit(self):
+        for operation, ref, data, merge in self.operations:
+            if operation == "set":
+                ref.set(data, merge=merge)
+            else:
+                ref.update(data)
 
 
 def topic_payload(**overrides):
@@ -184,6 +221,54 @@ def test_topic_runs_are_immutable_and_keep_historical_editorial_state():
     assert current["latest_agreement_score"] == 61
     assert current["run_count"] == 2
     assert topics.list_public_topics(db=db)[0]["slug"] == "gpt-6-release"
+
+
+def test_topic_run_and_latest_pointer_commit_or_fail_together():
+    db = FakeFirestore()
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    before = dict(db.documents[("topics", topic["id"])])
+    db.fail_transaction_after_staged_writes = 2
+
+    with pytest.raises(RuntimeError, match="injected transaction failure"):
+        topics.create_run(
+            topic["id"], run_payload(), actor_uid="admin", db=db, now=NOW
+        )
+
+    assert db.documents[("topics", topic["id"])] == before
+    assert not any(
+        len(path) == 4 and path[:3] == ("topics", topic["id"], "runs")
+        for path in db.documents
+    )
+
+
+def test_stale_topic_claim_cannot_publish_or_mark_newer_claim_failed():
+    db = FakeFirestore()
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    topic_path = ("topics", topic["id"])
+    db.documents[topic_path].update({
+        "current_run_id": "new-claim",
+        "last_run_status": "running",
+    })
+
+    with pytest.raises(topics.TopicError, match="lease is no longer current"):
+        topics.create_run(
+            topic["id"],
+            run_payload(),
+            actor_uid="admin",
+            db=db,
+            now=NOW,
+            run_id="old-claim",
+            expected_claim_id="old-claim",
+        )
+    assert topics.fail_topic_run(
+        topic["id"],
+        "old worker failed",
+        db=db,
+        now=NOW,
+        expected_claim_id="old-claim",
+    ) is False
+    assert db.documents[topic_path]["current_run_id"] == "new-claim"
+    assert db.documents[topic_path]["last_run_status"] == "running"
 
 
 def test_archived_topics_leave_public_discovery_and_reject_new_runs():
@@ -411,6 +496,11 @@ def test_automatic_topic_run_researches_sources_and_builds_timeline_point():
         "current_run_id": "automatic-run",
         "claimed_until": NOW,
     }
+    db.documents[("topics", topic["id"])].update({
+        "current_run_id": "automatic-run",
+        "claimed_until": NOW,
+        "last_run_status": "running",
+    })
 
     def execute(question, previous_consensus, **kwargs):
         assert "Research the current state" in question

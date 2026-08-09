@@ -907,10 +907,17 @@ def test_publisher_watch_capacity_returns_successful_skip(monkeypatch):
         "max_active_publisher_watches": 12,
     })
     monkeypatch.setattr(api_v1.watch_service, "publisher_watch_counts", lambda: {"active": 12, "paused": 3})
-    monkeypatch.setattr(api_v1.watch_service, "find_watch_for_share", lambda share_id: None)
+    monkeypatch.setattr(api_v1, "is_user_pro", lambda uid: False)
+
+    def reject_at_transaction_boundary(*args, **kwargs):
+        assert kwargs["publisher_active_limit"] == 12
+        raise api_v1.watch_service.WatchError(
+            "publisher_capacity", "Active Publisher Watch limit reached."
+        )
+
     monkeypatch.setattr(
         api_v1.watch_service, "create_watch",
-        lambda *args, **kwargs: pytest.fail("capacity skip must not create a Watch"),
+        reject_at_transaction_boundary,
     )
     response = TestClient(main.app).post(
         f"/api/v1/shares/{'C' * 16}/watch", headers={"X-API-Key": "cns_publisher"}

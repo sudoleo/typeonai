@@ -34,9 +34,11 @@ class FakeSnap:
 
 
 class FakeDocRef:
-    def __init__(self, store, key):
+    def __init__(self, store, key, db=None, path=()):
         self.store = store
         self.id = key
+        self.db = db
+        self.path = tuple(path) + (key,)
 
     def get(self, transaction=None):
         return FakeSnap(self.store.get(self.id))
@@ -50,42 +52,57 @@ class FakeDocRef:
     def delete(self):
         self.store.pop(self.id, None)
 
+    def collection(self, name):
+        return FakeCollection(
+            self.db.stores["/".join((*self.path, name))],
+            db=self.db,
+            path=(*self.path, name),
+        )
+
 
 class FakeQueryDoc:
-    def __init__(self, store, key):
+    def __init__(self, store, key, db=None, path=()):
         self.store = store
         self.id = key
-        self.reference = FakeDocRef(store, key)
+        self.reference = FakeDocRef(store, key, db=db, path=path)
 
     def to_dict(self):
         return dict(self.store[self.id])
 
 
 class FakeQuery:
-    def __init__(self, store, field, value):
+    def __init__(self, store, field, value, db=None, path=()):
         self.store = store
         self.field = field
         self.value = value
+        self.db = db
+        self.path = tuple(path)
 
     def stream(self):
         for key, data in list(self.store.items()):
             if self.field is None or data.get(self.field) == self.value:
-                yield FakeQueryDoc(self.store, key)
+                yield FakeQueryDoc(
+                    self.store, key, db=self.db, path=self.path
+                )
 
 
 class FakeCollection:
-    def __init__(self, store):
+    def __init__(self, store, db=None, path=()):
         self.store = store
+        self.db = db
+        self.path = tuple(path)
 
     def document(self, key):
-        return FakeDocRef(self.store, key)
+        return FakeDocRef(self.store, key, db=self.db, path=self.path)
 
     def where(self, field, op, value):
         assert op == "=="
-        return FakeQuery(self.store, field, value)
+        return FakeQuery(self.store, field, value, db=self.db, path=self.path)
 
     def stream(self):
-        return FakeQuery(self.store, None, None).stream()
+        return FakeQuery(
+            self.store, None, None, db=self.db, path=self.path
+        ).stream()
 
 
 class FakeDb:
@@ -93,7 +110,36 @@ class FakeDb:
         self.stores = defaultdict(dict)
 
     def collection(self, name):
-        return FakeCollection(self.stores[name])
+        return FakeCollection(self.stores[name], db=self, path=(name,))
+
+    def run_transaction(self, operation):
+        transaction = AtomicFakeTransaction()
+        result = operation(transaction)
+        transaction.commit()
+        return result
+
+
+class AtomicFakeTransaction:
+    def __init__(self):
+        self.operations = []
+
+    def set(self, ref, data):
+        self.operations.append(("set", ref, dict(data)))
+
+    def update(self, ref, data):
+        self.operations.append(("update", ref, dict(data)))
+
+    def delete(self, ref):
+        self.operations.append(("delete", ref, None))
+
+    def commit(self):
+        for operation, ref, data in self.operations:
+            if operation == "set":
+                ref.set(data)
+            elif operation == "update":
+                ref.update(data)
+            else:
+                ref.delete()
 
 
 class FakeTransaction:
@@ -216,6 +262,29 @@ class WatchCrudTests(unittest.TestCase):
         second = watch_service.create_watch("u1", share_id=second_share_id, interval="daily", is_pro=True, db=self.db)
         self.assertNotEqual(first["id"], second["id"])
 
+    def test_pause_delete_and_resume_keep_owner_counter_consistent(self):
+        second_share_id = "B" * 16
+        self.db.stores["shares"][second_share_id] = share(slug="two")
+        first = watch_service.create_watch(
+            "u1", share_id=self.share_id, interval="weekly", is_pro=True, db=self.db
+        )
+        second = watch_service.create_watch(
+            "u1", share_id=second_share_id, interval="weekly", is_pro=True, db=self.db
+        )
+        state_store = self.db.stores["users/u1/watch_state"]
+        self.assertEqual(state_store["quota"]["active_count"], 2)
+
+        watch_service.update_watch(
+            "u1", first["id"], {"status": "paused"}, True, db=self.db
+        )
+        self.assertEqual(state_store["quota"]["active_count"], 1)
+        watch_service.update_watch(
+            "u1", first["id"], {"status": "active"}, True, db=self.db
+        )
+        self.assertEqual(state_store["quota"]["active_count"], 2)
+        watch_service.delete_watch("u1", second["id"], db=self.db)
+        self.assertEqual(state_store["quota"]["active_count"], 1)
+
     def test_cannot_watch_foreign_or_duplicate_share(self):
         foreign_id = "F" * 16
         self.db.stores["shares"][foreign_id] = share(owner="u2")
@@ -254,6 +323,28 @@ class WatchCrudTests(unittest.TestCase):
         self.assertEqual(
             watch_service.list_watches("u1", db=self.db)[0]["excluded_providers"],
             ["deepseek"],
+        )
+
+    def test_publisher_watch_resume_bypasses_owner_limit_but_keeps_counter(self):
+        cfg.apply_limits({**self.old_limits, "watch_pro_active_limit": 1})
+        created = watch_service.create_watch(
+            "u1",
+            share_id=self.share_id,
+            interval="weekly",
+            is_pro=True,
+            model_tier="free",
+            bypass_active_limit=True,
+            db=self.db,
+        )
+        watch_service.update_watch(
+            "u1", created["id"], {"status": "paused"}, True, db=self.db
+        )
+        resumed = watch_service.update_watch(
+            "u1", created["id"], {"status": "active"}, True, db=self.db
+        )
+        self.assertEqual(resumed["status"], "active")
+        self.assertEqual(
+            self.db.stores["users/u1/watch_state"]["quota"]["active_count"], 1
         )
 
     def test_legacy_free_watch_counts_and_verified_lineage_is_backfilled(self):
@@ -484,7 +575,12 @@ class UnsubscribeTokenTests(unittest.TestCase):
         self.env.stop()
 
     def test_valid_token_pauses_without_login(self):
-        self.db.stores["watches"]["w1"] = {"status": "active", "question": "Q"}
+        self.db.stores["watches"]["w1"] = {
+            "status": "active",
+            "question": "Q",
+            "owner_uid": "u1",
+            "share_id": "A" * 16,
+        }
         token = watch_service.make_unsubscribe_token("w1", now=self.now)
         with patch.object(watch_service, "utcnow", return_value=self.now):
             result = watch_service.unsubscribe(token, db=self.db)
@@ -670,17 +766,11 @@ class SchedulerSafetyTests(unittest.TestCase):
         self.assertEqual(result["condition_status"], "met")
 
     def test_complete_run_persists_full_version_and_simple_event_type(self):
-        db = MagicMock()
-        share_ref = MagicMock()
-        history_ref = MagicMock()
-        watch_ref = MagicMock()
-        share_ref.collection.return_value.document.return_value = history_ref
-        db.collection.side_effect = lambda name: (
-            MagicMock(document=MagicMock(return_value=share_ref))
-            if name == "shares"
-            else MagicMock(document=MagicMock(return_value=watch_ref))
-        )
-        batch = db.batch.return_value
+        db = FakeDb()
+        db.stores["shares"]["A" * 16] = share()
+        db.stores["watches"]["w1"] = {
+            "status": "active", "current_run_id": "run12345678"
+        }
         claimed = {
             "share_id": "A" * 16,
             "current_run_id": "run12345678",
@@ -705,21 +795,19 @@ class SchedulerSafetyTests(unittest.TestCase):
         self.assertEqual(history["consensus_md"], "The current consensus.")
         self.assertEqual(history["event_type"], "watch.changed")
         self.assertEqual(history["trigger"], "changed")
-        batch.set.assert_called_once_with(history_ref, history)
-        share_updates = batch.update.call_args_list[1].args[1]
-        self.assertEqual(share_updates["latest_watch_run_id"], "run12345678")
+        stored = db.stores[f"shares/{'A' * 16}/watch_history"]["run12345678"]
+        self.assertEqual(stored, history)
+        self.assertEqual(
+            db.stores["shares"]["A" * 16]["latest_watch_run_id"],
+            "run12345678",
+        )
 
     def test_first_query_watch_run_promotes_result_to_share_baseline(self):
-        db = MagicMock()
-        share_ref = MagicMock()
-        history_ref = MagicMock()
-        watch_ref = MagicMock()
-        share_ref.collection.return_value.document.return_value = history_ref
-        db.collection.side_effect = lambda name: (
-            MagicMock(document=MagicMock(return_value=share_ref))
-            if name == "shares"
-            else MagicMock(document=MagicMock(return_value=watch_ref))
-        )
+        db = FakeDb()
+        db.stores["shares"]["A" * 16] = share()
+        db.stores["watches"]["w1"] = {
+            "status": "active", "current_run_id": "run12345678"
+        }
         claimed = {
             "share_id": "A" * 16,
             "current_run_id": "run12345678",
@@ -743,10 +831,62 @@ class SchedulerSafetyTests(unittest.TestCase):
                 "w1", claimed, result,
                 now=datetime(2026, 7, 21, tzinfo=timezone.utc), db=db,
             )
-        share_updates = db.batch.return_value.update.call_args_list[1].args[1]
+        share_updates = db.stores["shares"]["A" * 16]
         self.assertEqual(share_updates["consensus_md"], "The first scheduled consensus.")
         self.assertFalse(share_updates["awaiting_first_watch_run"])
         self.assertEqual(share_updates["answered_at"], "2026-07-21T00:00:00+00:00")
+
+    def test_stale_run_cannot_complete_or_fail_newer_claim(self):
+        db = FakeDb()
+        share_id = "A" * 16
+        db.stores["shares"][share_id] = share()
+        db.stores["watches"]["w1"] = {
+            "status": "active",
+            "current_run_id": "new-run",
+            "owner_uid": "u1",
+            "share_id": share_id,
+            "question_hash": "abc",
+            "interval": "weekly",
+            "consecutive_failures": 0,
+        }
+        claimed = {
+            **db.stores["watches"]["w1"],
+            "current_run_id": "old-run",
+        }
+        result = {
+            "consensus": "Stale result",
+            "agreement_score": 50,
+            "changed": False,
+            "differences_data": {},
+        }
+
+        self.assertIsNone(
+            watch_service.complete_watch_run("w1", claimed, result, db=db)
+        )
+        self.assertIsNone(watch_service.fail_watch_run("w1", claimed, db=db))
+        self.assertEqual(db.stores["watches"]["w1"]["current_run_id"], "new-run")
+        self.assertEqual(db.stores[f"shares/{share_id}/watch_history"], {})
+
+    def test_watch_lease_renewal_is_fenced_by_run_id(self):
+        db = FakeDb()
+        db.stores["watches"]["w1"] = {
+            "status": "active", "current_run_id": "run-1"
+        }
+        renewed_at = self.now + timedelta(minutes=5)
+        self.assertFalse(
+            watch_service.renew_watch_lease(
+                "w1", "stale-run", now=renewed_at, db=db
+            )
+        )
+        self.assertTrue(
+            watch_service.renew_watch_lease(
+                "w1", "run-1", now=renewed_at, db=db
+            )
+        )
+        self.assertEqual(
+            db.stores["watches"]["w1"]["claimed_until"],
+            renewed_at + timedelta(minutes=watch_service.WATCH_LEASE_MINUTES),
+        )
 
     def test_watch_uses_all_configured_models_for_the_selected_tier(self):
         configured = {

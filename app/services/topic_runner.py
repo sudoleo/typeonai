@@ -174,10 +174,17 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
             db=db,
             now=now,
             run_id=str(claimed.get("current_run_id") or ""),
+            expected_claim_id=str(claimed.get("current_run_id") or ""),
         )
         return run
     except Exception as exc:
-        topics.fail_topic_run(claimed["id"], str(exc), db=db, now=now)
+        topics.fail_topic_run(
+            claimed["id"],
+            str(exc),
+            db=db,
+            now=now,
+            expected_claim_id=str(claimed.get("current_run_id") or ""),
+        )
         raise
 
 

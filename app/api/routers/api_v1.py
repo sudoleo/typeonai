@@ -514,17 +514,7 @@ def create_api_publisher_watch(
             raise HTTPException(
                 status_code=409, detail="Weekly watches are disabled in Publisher configuration"
             )
-        counts = watch_service.publisher_watch_counts()
         limit = int(config.get("max_active_publisher_watches") or 12)
-        existing = watch_service.find_watch_for_share(share_id)
-        if counts["active"] >= limit and not existing:
-            return {
-                "status": "success",
-                "watch": None,
-                "watch_status": "watch_skipped_capacity",
-                "active_publisher_watches": counts["active"],
-                "watch_limit": limit,
-            }
         watch = watch_service.create_watch(
             identity.uid,
             share_id=share_id,
@@ -539,10 +529,20 @@ def create_api_publisher_watch(
             return_existing=True,
             bypass_active_limit=True,
             excluded_providers=("deepseek",),
+            publisher_active_limit=limit,
         )
     except HTTPException:
         raise
     except watch_service.WatchError as exc:
+        if exc.code == "publisher_capacity":
+            counts = watch_service.publisher_watch_counts()
+            return {
+                "status": "success",
+                "watch": None,
+                "watch_status": "watch_skipped_capacity",
+                "active_publisher_watches": counts["active"],
+                "watch_limit": limit,
+            }
         status_by_code = {
             "not_found": 404,
             "forbidden": 404,

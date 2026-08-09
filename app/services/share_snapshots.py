@@ -637,6 +637,44 @@ def consume_daily_share_quota(uid, db=None, limit=SHARE_DAILY_LIMIT):
     return _consume(transaction)
 
 
+def _run_transaction(db, operation):
+    """Run one Firestore transaction with the lightweight test seam."""
+    fake_runner = getattr(db, "run_transaction", None)
+    if callable(fake_runner):
+        return fake_runner(operation)
+    transaction = db.transaction(max_attempts=12)
+
+    @firestore.transactional
+    def run(tx):
+        return operation(tx)
+
+    return run(transaction)
+
+
+def _daily_share_quota_ref(db, uid):
+    return (
+        db.collection("users").document(uid).collection("counters")
+        .document("shares_daily")
+    )
+
+
+def _consume_share_quota_in_transaction(
+    transaction, quota_ref, *, today: str, limit: int
+):
+    snapshot = quota_ref.get(transaction=transaction)
+    data = snapshot.to_dict() if snapshot.exists else {}
+    data = data or {}
+    count = data.get("count", 0) if data.get("date") == today else 0
+    if not isinstance(count, int) or count < 0:
+        count = 0
+    if count >= limit:
+        raise ShareError(
+            "quota_exceeded",
+            "Daily share limit reached. Please try again tomorrow.",
+        )
+    transaction.set(quota_ref, {"date": today, "count": count + 1})
+
+
 def get_share(share_id, db=None):
     if not is_valid_share_id(share_id):
         return None
@@ -754,22 +792,6 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
 
     run_id = str(run.get("run_id") or "")
     share_id = share_id_for_api_run(run_id)
-    existing = get_share(share_id, db=db)
-    if existing is not None:
-        if existing.get("owner_uid") != uid or existing.get("source_api_run_id") != run_id:
-            raise ShareError("conflict", "The publication ID is already in use.")
-        if existing.get("status") != "active":
-            raise ShareError(
-                "share_not_active",
-                "This run's published page is no longer active.",
-            )
-        return {
-            "share_id": share_id,
-            "slug": existing.get("slug") or "",
-            "created": False,
-            "visibility": "public",
-        }
-
     answers = result.get("model_answers")
     answers = answers if isinstance(answers, list) else []
     included_providers = []
@@ -805,12 +827,6 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
     if isinstance(succeeded_at, datetime):
         payload["answered_at"] = succeeded_at.isoformat()
 
-    if consume_quota is None:
-        def consume_quota():
-            return consume_daily_share_quota(uid, db=db)
-    if not consume_quota():
-        raise ShareError("quota_exceeded", "Daily share limit reached. Please try again tomorrow.")
-
     share_doc = _build_share_document(
         uid,
         payload,
@@ -821,13 +837,53 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
             if bool((run.get("request") or {}).get("publisher_mode")) else ""
         ),
     )
-    db.collection(SHARES_COLLECTION).document(share_id).set(share_doc)
-    return {
-        "share_id": share_id,
-        "slug": share_doc["slug"],
-        "created": True,
-        "visibility": "public",
-    }
+    share_ref = db.collection(SHARES_COLLECTION).document(share_id)
+    quota_ref = _daily_share_quota_ref(db, uid)
+    today = _utcnow().strftime("%Y-%m-%d")
+
+    def publish(transaction):
+        existing_snapshot = share_ref.get(transaction=transaction)
+        existing = existing_snapshot.to_dict() if existing_snapshot.exists else None
+        if existing is not None:
+            if (
+                existing.get("owner_uid") != uid
+                or existing.get("source_api_run_id") != run_id
+            ):
+                raise ShareError("conflict", "The publication ID is already in use.")
+            if existing.get("status") != "active":
+                raise ShareError(
+                    "share_not_active",
+                    "This run's published page is no longer active.",
+                )
+            return {
+                "share_id": share_id,
+                "slug": existing.get("slug") or "",
+                "created": False,
+                "visibility": "public",
+            }
+
+        if consume_quota is not None:
+            if not consume_quota():
+                raise ShareError(
+                    "quota_exceeded",
+                    "Daily share limit reached. Please try again tomorrow.",
+                )
+        else:
+            _consume_share_quota_in_transaction(
+                transaction,
+                quota_ref,
+                today=today,
+                limit=SHARE_DAILY_LIMIT,
+            )
+        transaction.set(share_ref, share_doc)
+        return {
+            "share_id": share_id,
+            "slug": share_doc["slug"],
+            "created": True,
+            "visibility": "public",
+        }
+
+    return _run_transaction(db, publish)
 
 
 def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
@@ -860,29 +916,6 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
     if pending.get("owner_uid") != uid:
         raise ShareError("forbidden", "You can only share your own results.")
 
-    visibility_id_field = f"{visibility}_share_id"
-    existing_id = pending.get(visibility_id_field)
-    if not existing_id and visibility == "public":
-        # Legacy pending documents used one public share_id backlink.
-        existing_id = pending.get("share_id")
-    if existing_id:
-        existing = get_share(existing_id, db=db)
-        existing_visibility = str(existing.get("visibility") or "public") if existing else ""
-        if (existing is not None and existing.get("status") == "active"
-                and existing_visibility == visibility):
-            return {
-                "share_id": existing_id,
-                "slug": existing.get("slug") or "",
-                "created": False,
-                "visibility": visibility,
-            }
-
-    if consume_quota is None:
-        def consume_quota():
-            return consume_daily_share_quota(uid, db=db)
-    if not consume_quota():
-        raise ShareError("quota_exceeded", "Daily share limit reached. Please try again tomorrow.")
-
     share_id = generate_share_id()
     share_doc = _build_share_document(
         uid,
@@ -890,32 +923,77 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
         visibility=visibility,
         source_result_id=result_id,
     )
-    db.collection(SHARES_COLLECTION).document(share_id).set(share_doc)
+    share_ref = db.collection(SHARES_COLLECTION).document(share_id)
+    quota_ref = _daily_share_quota_ref(db, uid)
+    today = _utcnow().strftime("%Y-%m-%d")
+    visibility_id_field = f"{visibility}_share_id"
 
-    try:
+    def publish(transaction):
+        pending_snapshot = pending_ref.get(transaction=transaction)
+        current = pending_snapshot.to_dict() if pending_snapshot.exists else None
+        if not current:
+            raise ShareError("not_found", "Result not found or expired.")
+        current_expiry = current.get("expires_at")
+        if isinstance(current_expiry, datetime) and current_expiry < _utcnow():
+            raise ShareError("not_found", "Result not found or expired.")
+        if current.get("owner_uid") != uid:
+            raise ShareError("forbidden", "You can only share your own results.")
+
+        existing_id = current.get(visibility_id_field)
+        if not existing_id and visibility == "public":
+            # Legacy pending documents used one public share_id backlink.
+            existing_id = current.get("share_id")
+        if existing_id:
+            existing_ref = db.collection(SHARES_COLLECTION).document(str(existing_id))
+            existing_snapshot = existing_ref.get(transaction=transaction)
+            existing = (
+                existing_snapshot.to_dict() if existing_snapshot.exists else None
+            )
+            existing_visibility = (
+                str(existing.get("visibility") or "public") if existing else ""
+            )
+            if (
+                existing is not None
+                and existing.get("status") == "active"
+                and existing_visibility == visibility
+            ):
+                return {
+                    "share_id": str(existing_id),
+                    "slug": existing.get("slug") or "",
+                    "created": False,
+                    "visibility": visibility,
+                }
+
+        if consume_quota is not None:
+            if not consume_quota():
+                raise ShareError(
+                    "quota_exceeded",
+                    "Daily share limit reached. Please try again tomorrow.",
+                )
+        else:
+            _consume_share_quota_in_transaction(
+                transaction,
+                quota_ref,
+                today=today,
+                limit=SHARE_DAILY_LIMIT,
+            )
         backlinks = {visibility_id_field: share_id}
         if visibility == "public":
             backlinks["share_id"] = share_id
-        pending_ref.update(backlinks)
-    except Exception:
-        logging.exception("pending_result share_id backlink failed")
+        transaction.set(share_ref, share_doc)
+        transaction.update(pending_ref, backlinks)
+        return {
+            "share_id": share_id,
+            "slug": share_doc["slug"],
+            "created": True,
+            "visibility": visibility,
+        }
 
-    return {
-        "share_id": share_id,
-        "slug": share_doc["slug"],
-        "created": True,
-        "visibility": visibility,
-    }
+    return _run_transaction(db, publish)
 
 
-def create_share_for_watch_query(uid, question, *, visibility="private", db=None):
-    """Create the empty, non-indexed page behind a query-first Watch.
-
-    Unlike a regular Share this document has no generated answer yet.  The
-    first scheduled Watch run atomically promotes its result to the immutable
-    baseline and clears ``awaiting_first_watch_run``.
-    """
-    db = db if db is not None else db_firestore
+def build_share_for_watch_query(uid, question, *, visibility="private"):
+    """Build, but do not persist, the page behind a query-first Watch."""
     visibility = validate_share_visibility(visibility)
     question = _clip(question, MAX_QUESTION_CHARS)
     if not question:
@@ -937,6 +1015,20 @@ def create_share_for_watch_query(uid, question, *, visibility="private", db=None
         "watch_query_only": True,
         "awaiting_first_watch_run": True,
     })
+    return share_id, share_doc
+
+
+def create_share_for_watch_query(uid, question, *, visibility="private", db=None):
+    """Create the empty, non-indexed page behind a query-first Watch.
+
+    Unlike a regular Share this document has no generated answer yet.  The
+    first scheduled Watch run atomically promotes its result to the immutable
+    baseline and clears ``awaiting_first_watch_run``.
+    """
+    db = db if db is not None else db_firestore
+    share_id, share_doc = build_share_for_watch_query(
+        uid, question, visibility=visibility
+    )
     db.collection(SHARES_COLLECTION).document(share_id).set(share_doc)
     return {
         "share_id": share_id,
@@ -1424,43 +1516,49 @@ REPORT_REASONS = ("inaccurate", "harmful", "spam", "copyright", "other")
 
 
 def report_share(share_id, reason, db=None):
-    """Besucher-Report: Zähler + Grund-Aggregat, bewusst ohne IP/UA-Speicherung.
-
-    Read-modify-write statt Transaktion: bei Reports ist ein verlorenes
-    Increment unter Race-Bedingungen verschmerzbar. Auto-noindex ab 5 Reports
-    und die Admin-Review-Priorisierung folgen in Etappe 3.
-    """
+    """Atomically aggregate one privacy-preserving visitor report."""
     db = db if db is not None else db_firestore
-    data = get_share(share_id, db=db)
-    if (data is None or data.get("status") != "active"
-            or str(data.get("visibility") or "public") != "public"):
-        raise ShareError("not_found", "Share not found.")
     if reason not in REPORT_REASONS:
         reason = "other"
+    ref = db.collection(SHARES_COLLECTION).document(share_id)
 
-    reasons = data.get("report_reasons")
-    reasons = dict(reasons) if isinstance(reasons, dict) else {}
-    reasons[reason] = (reasons.get(reason) or 0) + 1
-    count = data.get("reports_count")
-    count = count + 1 if isinstance(count, int) and count >= 0 else 1
+    def aggregate(transaction):
+        snapshot = ref.get(transaction=transaction)
+        data = snapshot.to_dict() if snapshot.exists else None
+        if (
+            data is None
+            or data.get("status") != "active"
+            or str(data.get("visibility") or "public") != "public"
+        ):
+            raise ShareError("not_found", "Share not found.")
+        reasons = data.get("report_reasons")
+        reasons = dict(reasons) if isinstance(reasons, dict) else {}
+        old_reason_count = reasons.get(reason)
+        reasons[reason] = (
+            old_reason_count + 1
+            if isinstance(old_reason_count, int) and old_reason_count >= 0
+            else 1
+        )
+        old_count = data.get("reports_count")
+        count = old_count + 1 if isinstance(old_count, int) and old_count >= 0 else 1
+        updates = {
+            "reports_count": count,
+            "report_reasons": reasons,
+            "last_reported_at": firestore.SERVER_TIMESTAMP,
+        }
+        auto_noindexed = count >= AUTO_NOINDEX_REPORTS and bool(data.get("indexed"))
+        if count >= AUTO_NOINDEX_REPORTS:
+            updates["needs_review"] = True
+            if data.get("indexed"):
+                updates["indexed"] = False
+        transaction.update(ref, updates)
+        return count, auto_noindexed
 
-    updates = {
-        "reports_count": count,
-        "report_reasons": reasons,
-        "last_reported_at": firestore.SERVER_TIMESTAMP,
-    }
-    # Ab der Schwelle: kein Auto-Unpublish, aber raus aus dem Index und
-    # priorisiert in die Admin-Review (Re-Indexierung nur durch den Admin).
-    if count >= AUTO_NOINDEX_REPORTS:
-        updates["needs_review"] = True
-        if data.get("indexed"):
-            updates["indexed"] = False
-            logging.warning(
-                "report_share: auto-noindex for %s after %d reports", share_id, count
-            )
-
-    db.collection(SHARES_COLLECTION).document(share_id).update(updates)
-    if "indexed" in updates:
+    count, auto_noindexed = _run_transaction(db, aggregate)
+    if auto_noindexed:
+        logging.warning(
+            "report_share: auto-noindex for %s after %d reports", share_id, count
+        )
         invalidate_share_cache(share_id)
     return count
 

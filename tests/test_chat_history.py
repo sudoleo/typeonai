@@ -1419,6 +1419,24 @@ def test_deleting_a_chat_twice_reports_404_and_changes_nothing(chat_api):
     assert len(database.write_log) == writes
 
 
+def test_deleting_chat_state_rejects_a_late_turn_before_it_can_write(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    chat_path = ("users", "owner-uid", "chats", chat["id"])
+    database.documents[chat_path]["status"] = "deleting"
+    before = dict(database.documents)
+
+    response = client.post(
+        f"/chats/{chat['id']}/turns",
+        json=TURN_PAYLOAD,
+        headers=AUTH_OWNER,
+    )
+
+    assert response.status_code == 404
+    assert database.turns("owner-uid", chat["id"]) == {}
+    assert database.documents == before
+
+
 # ---------------------------------------------------------------------------
 # Verwaiste pending Turns: ein Reload verliert die Browser-Bindung, danach kann
 # kein Lauf den Turn je abschliessen.
@@ -1576,6 +1594,52 @@ def test_write_endpoints_are_rate_limited_per_account_not_only_per_ip(
 
     # Lesende Endpoints haengen nicht am Schreib-Budget.
     assert client.get("/chats", headers=AUTH_OWNER).status_code == 200
+
+
+def test_context_uid_budget_is_charged_on_post_not_turn_get(chat_api, monkeypatch):
+    client, _database = chat_api
+    operations = []
+
+    def uid_for(_request, operation=""):
+        operations.append(operation)
+        return "owner-uid"
+
+    class Store:
+        def get_turn(self, uid, chat_id, turn_id):
+            return {"id": turn_id, "status": "pending"}
+
+    class Repository:
+        def load_target_and_predecessors(self, uid, chat_id, turn_id):
+            return {"status": "completed"}, []
+
+    class ContextService:
+        def __init__(self, repository):
+            self.repository = repository
+
+        def build_for_turn(self, uid, chat_id, turn_id, compressor=None, **_kwargs):
+            return {"id": "context-version"}
+
+    monkeypatch.setattr(chat_history_router, "_chat_uid", uid_for)
+    monkeypatch.setattr(chat_history_router, "_store", lambda: Store())
+    monkeypatch.setattr(
+        chat_history_router, "_context_repository", lambda: Repository()
+    )
+    monkeypatch.setattr(chat_history_router, "ChatContextService", ContextService)
+
+    chat_id = "a" * 32
+    turn_id = "b" * 32
+    get_response = client.get(
+        f"/chats/{chat_id}/turns/{turn_id}", headers=AUTH_OWNER
+    )
+    post_response = client.post(
+        f"/chats/{chat_id}/turns/{turn_id}/context",
+        json={},
+        headers=AUTH_OWNER,
+    )
+
+    assert get_response.status_code == 200
+    assert post_response.status_code == 200
+    assert operations == ["", "build_context"]
 
 
 def test_creating_a_turn_retires_an_abandoned_predecessor(chat_api):

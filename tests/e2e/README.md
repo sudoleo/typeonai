@@ -75,6 +75,12 @@ werden, landen aber nur im kurzlebigen Emulator. Inventar:
 - für neue Tests erreichbar, aber weiterhin emulatorgebunden: Completions,
   Shares, Votes, Bookmarks, Watches und sonstige App-Endpunkt-Writer.
 
+`test_phase2_transactions.py` spricht den isolierten Emulator zusätzlich direkt
+über die Service-Seams an. Die Tests starten je mindestens zwei konkurrierende
+Worker für Watch- und Chat-Limits sowie Share-Publikation und prüfen parallele
+Share-Reports. Damit werden echte Firestore-Transaktionskonflikte und Retries
+getestet; In-Memory-Fakes allein reichen für diese Race-Verträge nicht aus.
+
 ## Testprofil
 
 - `MOCK_LLM=1` liefert deterministische Fixtures am untersten Provider-Seam;

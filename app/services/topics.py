@@ -80,6 +80,21 @@ PROVIDER_LABELS = {
     "grok": "Grok",
 }
 TOPIC_RUN_LEASE_MINUTES = 30
+
+
+def _run_transaction(db, operation):
+    fake_runner = getattr(db, "run_transaction", None)
+    if callable(fake_runner):
+        return fake_runner(operation)
+    from firebase_admin import firestore
+
+    transaction = db.transaction(max_attempts=12)
+
+    @firestore.transactional
+    def run(tx):
+        return operation(tx)
+
+    return run(transaction)
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
 
@@ -602,7 +617,14 @@ def _normalize_score(value) -> int:
 
 
 def create_run(
-    topic_id: str, data: dict, *, actor_uid: str, db=None, now=None, run_id: str = ""
+    topic_id: str,
+    data: dict,
+    *,
+    actor_uid: str,
+    db=None,
+    now=None,
+    run_id: str = "",
+    expected_claim_id: str = "",
 ) -> dict:
     """Create one immutable snapshot and advance only the topic's latest pointer."""
     db = db if db is not None else db_firestore
@@ -650,9 +672,8 @@ def create_run(
         raise TopicError("bad_request", "A Topic snapshot needs at least two models.")
     if any(item["type"] not in source_rules["allowed_types"] for item in evidence):
         raise TopicError("bad_request", "Snapshot evidence violates the Topic source rules.")
-    run = {
+    run_base = {
         "topic_id": topic_id,
-        "version": int(topic.get("run_count") or 0) + 1,
         "observed_at": observed_at.astimezone(timezone.utc),
         "created_at": now,
         "created_by": actor_uid,
@@ -681,27 +702,53 @@ def create_run(
         },
     }
     topic_ref = db.collection(TOPICS_COLLECTION).document(topic_id)
-    topic_ref.collection("runs").document(run_id).set(run)
-    topic_ref.set({
-        "latest_run_id": run_id,
-        "latest_run_at": run["observed_at"],
-        "latest_agreement_score": run["agreement_score"],
-        "latest_change_type": change_type,
-        "latest_change_summary": run["change_summary"],
-        "run_count": run["version"],
-        "next_run_at": (
-            next_run_at(topic.get("update_interval") or "manual", now=now)
-            if topic.get("status") == "active" else None
-        ),
-        "claimed_until": None,
-        "current_run_id": "",
-        "last_run_status": "success",
-        "last_run_error": "",
-        "consecutive_failures": 0,
-        "updated_at": now,
-        "updated_by": actor_uid,
-    }, merge=True)
-    return {"id": run_id, **run}
+    run_ref = topic_ref.collection("runs").document(run_id)
+
+    def publish(transaction):
+        topic_snapshot = topic_ref.get(transaction=transaction)
+        current = topic_snapshot.to_dict() if topic_snapshot.exists else None
+        if not current:
+            raise TopicError("not_found", "Topic not found.")
+        if current.get("status") == "archived":
+            raise TopicError("conflict", "Archived topics cannot receive new runs.")
+        if expected_claim_id and str(current.get("current_run_id") or "") != expected_claim_id:
+            raise TopicError("lease_lost", "Topic run lease is no longer current.")
+
+        existing_snapshot = run_ref.get(transaction=transaction)
+        if existing_snapshot.exists:
+            existing = existing_snapshot.to_dict() or {}
+            if str(current.get("latest_run_id") or "") == run_id:
+                return {"id": run_id, **existing}
+            raise TopicError("conflict", "Topic run ID is already in use.")
+
+        try:
+            version = max(0, int(current.get("run_count") or 0)) + 1
+        except (TypeError, ValueError):
+            version = 1
+        run = {**run_base, "version": version}
+        transaction.set(run_ref, run)
+        transaction.set(topic_ref, {
+            "latest_run_id": run_id,
+            "latest_run_at": run["observed_at"],
+            "latest_agreement_score": run["agreement_score"],
+            "latest_change_type": change_type,
+            "latest_change_summary": run["change_summary"],
+            "run_count": version,
+            "next_run_at": (
+                next_run_at(current.get("update_interval") or "manual", now=now)
+                if current.get("status") == "active" else None
+            ),
+            "claimed_until": None,
+            "current_run_id": "",
+            "last_run_status": "success",
+            "last_run_error": "",
+            "consecutive_failures": 0,
+            "updated_at": now,
+            "updated_by": actor_uid,
+        }, merge=True)
+        return {"id": run_id, **run}
+
+    return _run_transaction(db, publish)
 
 
 def list_runs(topic_id: str, *, db=None, max_items: int = 100) -> list[dict]:
@@ -792,22 +839,43 @@ def claim_topic_run(topic_id: str, *, force=False, now=None, db=None) -> dict:
     raise TopicError(code, message)
 
 
-def fail_topic_run(topic_id: str, message: str, *, now=None, db=None) -> None:
+def fail_topic_run(
+    topic_id: str,
+    message: str,
+    *,
+    now=None,
+    db=None,
+    expected_claim_id: str = "",
+) -> bool:
     db = db if db is not None else db_firestore
     now = now or utcnow()
-    topic = get_topic(topic_id, db=db) or {}
-    failures = int(topic.get("consecutive_failures") or 0) + 1
-    db.collection(TOPICS_COLLECTION).document(topic_id).set({
-        "claimed_until": None,
-        "current_run_id": "",
-        "last_run_status": "failed",
-        "last_run_error": _clean(message, limit=500, label="Run error"),
-        "consecutive_failures": failures,
-        "next_run_at": next_run_at(
-            topic.get("update_interval") or "manual", now=now
-        ),
-        "updated_at": now,
-    }, merge=True)
+    ref = db.collection(TOPICS_COLLECTION).document(topic_id)
+
+    def fail(transaction):
+        snapshot = ref.get(transaction=transaction)
+        topic = snapshot.to_dict() if snapshot.exists else None
+        if not topic:
+            return False
+        if expected_claim_id and str(topic.get("current_run_id") or "") != expected_claim_id:
+            return False
+        try:
+            failures = max(0, int(topic.get("consecutive_failures") or 0)) + 1
+        except (TypeError, ValueError):
+            failures = 1
+        transaction.set(ref, {
+            "claimed_until": None,
+            "current_run_id": "",
+            "last_run_status": "failed",
+            "last_run_error": _clean(message, limit=500, label="Run error"),
+            "consecutive_failures": failures,
+            "next_run_at": next_run_at(
+                topic.get("update_interval") or "manual", now=now
+            ),
+            "updated_at": now,
+        }, merge=True)
+        return True
+
+    return _run_transaction(db, fail)
 
 
 def topic_public_view(topic: dict) -> dict:

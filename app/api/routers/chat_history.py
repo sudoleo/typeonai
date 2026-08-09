@@ -361,7 +361,7 @@ def create_turn(request: Request, chat_id: str, payload: TurnCreateRequest):
 @router.get("/chats/{chat_id}/turns/{turn_id}")
 @limiter.limit("60/minute")
 def get_turn(request: Request, chat_id: str, turn_id: str):
-    uid = _chat_uid(request, "build_context")
+    uid = _chat_uid(request)
     try:
         return {
             "status": "success",
@@ -379,7 +379,7 @@ def build_turn_context(
     turn_id: str,
     payload: ContextBuildRequest,
 ):
-    uid = _chat_uid(request)
+    uid = _chat_uid(request, "build_context")
     repository = _context_repository()
     service = ChatContextService(repository)
     try:

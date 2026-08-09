@@ -39,6 +39,7 @@ from app.services.llm.mock_llm import mock_ask_result, mock_llm_enabled
 
 
 TICK_SECONDS = 30 * 60
+WATCH_LEASE_HEARTBEAT_SECONDS = 5 * 60
 _scheduler_wake_event: asyncio.Event | None = None
 PROVIDER_ORDER = ("openai", "mistral", "gemini", "anthropic", "deepseek", "grok")
 PROVIDER_LABELS = {
@@ -384,6 +385,27 @@ async def _send_paused_mail(watch_id: str, watch: dict):
     ))
 
 
+async def _renew_watch_lease_until_stopped(
+    watch_id: str, run_id: str, stop: asyncio.Event
+) -> None:
+    while True:
+        try:
+            await asyncio.wait_for(
+                stop.wait(), timeout=WATCH_LEASE_HEARTBEAT_SECONDS
+            )
+            return
+        except asyncio.TimeoutError:
+            renewed = await asyncio.to_thread(
+                watch_service.renew_watch_lease,
+                watch_id,
+                run_id,
+                now=watch_service.utcnow(),
+            )
+            if not renewed:
+                logging.warning("Consensus Watch lease lost for %s", watch_id)
+                return
+
+
 async def run_watch_tick() -> int:
     # MOCK_LLM instances share the production Firestore: a mock tick would take
     # the worker lease from the live deployment and persist fixture answers as
@@ -397,11 +419,23 @@ async def run_watch_tick() -> int:
     try:
         due_ids = await asyncio.to_thread(watch_service.list_due_watch_ids, now=now)
         for watch_id in due_ids:
-            claimed, reason = await asyncio.to_thread(watch_service.claim_watch, watch_id, now=now)
+            claimed, reason = await asyncio.to_thread(
+                watch_service.claim_watch,
+                watch_id,
+                now=watch_service.utcnow(),
+            )
             if reason == "budget":
                 break
             if not claimed:
                 continue
+            lease_stop = asyncio.Event()
+            lease_heartbeat = asyncio.create_task(
+                _renew_watch_lease_until_stopped(
+                    watch_id,
+                    str(claimed.get("current_run_id") or ""),
+                    lease_stop,
+                )
+            )
             try:
                 share = await asyncio.to_thread(share_snapshots.get_share, claimed["share_id"])
                 if not share or share.get("status") != "active":
@@ -464,11 +498,16 @@ async def run_watch_tick() -> int:
                 )
                 mail_kind = notification_kind(claimed, result)
                 run_id = str(claimed.get("current_run_id") or "")
-                await asyncio.to_thread(
+                persisted = await asyncio.to_thread(
                     watch_service.complete_watch_run, watch_id, claimed, result,
                     now=watch_service.utcnow(),
                     defer_condition_status=mail_kind == "condition",
                 )
+                if persisted is None:
+                    logging.warning(
+                        "Consensus Watch completion fenced out for %s", watch_id
+                    )
+                    continue
             except Exception:
                 logging.exception("Consensus Watch run failed for %s", watch_id)
                 paused = await asyncio.to_thread(watch_service.fail_watch_run, watch_id, claimed, now=watch_service.utcnow())
@@ -517,11 +556,15 @@ async def run_watch_tick() -> int:
                         await asyncio.to_thread(
                             watch_service.set_condition_status, watch_id, "met",
                             claimed.get("condition") or "",
+                            expected_run_id=run_id,
                         )
                 try:
                     await _send_follower_mails(watch_id, claimed, result)
                 except Exception:
                     logging.exception("Consensus Watch follower mails failed for %s", watch_id)
+            finally:
+                lease_stop.set()
+                await lease_heartbeat
     finally:
         try:
             await asyncio.to_thread(watch_service.release_worker_lease)
