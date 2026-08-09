@@ -117,6 +117,15 @@
             return (box && box.dataset.shortLabel) || model;
           }
 
+          const LIVE_ANSWER_NAVIGATION = {
+            canOpen: function (model) {
+              return !!$(MODEL_BOX_IDS[model] || "");
+            },
+            open: function (model, quote) {
+              jumpToModelAnswer(model, quote);
+            }
+          };
+
           function isMobileViewport() {
             return window.matchMedia("(max-width: 768px)").matches;
           }
@@ -194,7 +203,7 @@
 
           // Sucht den normalisierten Needle in einem Rohtext und liefert die
           // Original-Offsets (für splitText/Range) zurück.
-          function findRangeInText(raw, normNeedle) {
+          function findRangesInText(raw, normNeedle) {
             let norm = "";
             const map = [];
             for (let i = 0; i < raw.length; i++) {
@@ -207,9 +216,19 @@
               norm += ch;
               map.push(i);
             }
-            const idx = norm.indexOf(normNeedle);
-            if (idx === -1 || !normNeedle) return null;
-            return { start: map[idx], end: map[idx + normNeedle.length - 1] + 1 };
+            if (!normNeedle) return [];
+            const ranges = [];
+            let from = 0;
+            let idx;
+            while ((idx = norm.indexOf(normNeedle, from)) !== -1) {
+              ranges.push({ start: map[idx], end: map[idx + normNeedle.length - 1] + 1 });
+              from = idx + Math.max(1, normNeedle.length);
+            }
+            return ranges;
+          }
+
+          function findRangeInText(raw, normNeedle) {
+            return findRangesInText(raw, normNeedle)[0] || null;
           }
 
           function findRangeInTextNode(node, normNeedle) {
@@ -283,25 +302,6 @@
             ".claim-badge, .cx-marker, .source-link, .src-ref, .src-ref-sep, code, pre, .katex";
           const BLOCK_SELECTOR = "p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, dd, dt";
 
-          function findAnchorTarget(container, anchor) {
-            for (const needle of searchVariants(anchor)) {
-              const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-              let node;
-              while ((node = walker.nextNode())) {
-                if (!node.nodeValue || node.parentElement?.closest(MARK_SKIP_SELECTOR)) continue;
-                const range = findRangeInTextNode(node, needle);
-                if (range) return { type: "exact", node, range };
-              }
-              const blocks = container.querySelectorAll("p, li, h1, h2, h3, h4, td, blockquote");
-              for (const block of blocks) {
-                if (normalizeForSearch(block.textContent).includes(needle)) {
-                  return { type: "block", block };
-                }
-              }
-            }
-            return null;
-          }
-
           // --- Inline-Marker: Satzgrenzen und Text-Wrapping -----------------
           // Der verifizierte Anker ist absichtlich kurz (5-12 Wörter). Als
           // Markierungseinheit wäre er zu klein: ein unterstrichenes Fragment
@@ -334,7 +334,9 @@
               const prev = text[i - 1] || "";
               const next = text[i + 1] || "";
               if (/\d/.test(prev) && /\d/.test(next)) return false;          // 1.5
-              if (text.slice(i - 2, i + 1) === "..." || next === ".") return false;
+              // Bei "..." sind die ersten beiden Punkte kein Ende; der letzte
+              // wird wie das einzelne Unicode-Ellipsis behandelt.
+              if (next === ".") return false;
               // Einzelner Großbuchstabe davor = Initial ("J. R. R.")
               if (/[A-ZÄÖÜ]/.test(prev) && !/[A-Za-zÄÖÜäöüß]/.test(text[i - 2] || " ")) return false;
               if (isAbbreviationBefore(text, i)) return false;
@@ -368,7 +370,7 @@
             while (s > 0) {
               const i = s - 1;
               if (text[i] === "\n") break;
-              if (/[.!?]/.test(text[i]) && isSentenceEnd(text, i)) break;
+              if (/[.!?…]/.test(text[i]) && isSentenceEnd(text, i)) break;
               s--;
             }
             while (s < end && /\s/.test(text[s])) s++;
@@ -377,7 +379,7 @@
             while (!endsAtSentenceBoundary(text, e) && e < text.length) {
               const ch = text[e];
               if (ch === "\n") break;
-              if (/[.!?]/.test(ch) && isSentenceEnd(text, e)) {
+              if (/[.!?…]/.test(ch) && isSentenceEnd(text, e)) {
                 e++;
                 while (e < text.length && /["'”’»)\]]/.test(text[e])) e++;
                 break;
@@ -416,22 +418,40 @@
           }
 
           // Anker -> konkreter Bereich in der flachen Textsicht seines Blocks.
-          function locateAnchor(container, anchor) {
-            const target = findAnchorTarget(container, anchor);
-            if (!target) return null;
-            const block = target.type === "exact"
-              ? blockOf(target.node, container)
-              : target.block;
-            const { slices, flat } = collectTextSlices(block);
-            if (!slices.length) return null;
+          function locateAnchor(container, anchor, occurrence) {
+            const wanted = Number.isInteger(occurrence) && occurrence >= 0 ? occurrence : 0;
+            const blocks = [];
+            const seenBlocks = new Set();
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+            let node;
+            while ((node = walker.nextNode())) {
+              if (!node.nodeValue || node.parentElement?.closest(MARK_SKIP_SELECTOR)) continue;
+              const block = blockOf(node, container);
+              if (!seenBlocks.has(block)) {
+                seenBlocks.add(block);
+                blocks.push(block);
+              }
+            }
 
             for (const needle of searchVariants(anchor)) {
-              const range = findRangeInText(flat, needle);
-              if (range) return { block, slices, flat, start: range.start, end: range.end };
+              const hits = [];
+              blocks.forEach(function (block) {
+                const view = collectTextSlices(block);
+                if (!view.slices.length) return;
+                findRangesInText(view.flat, needle).forEach(function (range) {
+                  hits.push({
+                    block: block,
+                    slices: view.slices,
+                    flat: view.flat,
+                    start: range.start,
+                    end: range.end
+                  });
+                });
+              });
+              if (hits[wanted]) return hits[wanted];
+              if (occurrence == null && hits[0]) return hits[0];
             }
-            // Im Block gefunden, aber nicht als zusammenhängender Treffer
-            // (z. B. durch übersprungene Code-/KaTeX-Knoten): ganzer Block.
-            return { block, slices, flat, start: 0, end: flat.length };
+            return null;
           }
 
           // Wrappt [start,end) der flachen Sicht in <span class="...">.
@@ -547,9 +567,9 @@
             claimPopoverTrigger = null;
           }
 
-          function buildModelRow(model, quote, agreeing) {
+          function buildModelRow(model, quote, status, answerNavigation) {
             const row = document.createElement("div");
-            row.className = "claim-model-row " + (agreeing ? "is-agree" : "is-dissent");
+            row.className = "claim-model-row is-" + status;
 
             const head = document.createElement("div");
             head.className = "claim-model-head";
@@ -557,14 +577,15 @@
             name.className = "claim-model-name";
             name.textContent = modelDisplayName(model);
             head.appendChild(name);
-            if (MODEL_BOX_IDS[model]) {
+            const navigation = answerNavigation || LIVE_ANSWER_NAVIGATION;
+            if (navigation.canOpen?.(model)) {
               const jump = document.createElement("button");
               jump.type = "button";
               jump.className = "claim-jump-link";
               jump.textContent = "View answer";
               jump.addEventListener("click", function () {
                 closeClaimPopover({ restoreFocus: false });
-                jumpToModelAnswer(model, quote);
+                navigation.open?.(model, quote);
               });
               head.appendChild(jump);
             }
@@ -579,7 +600,15 @@
             return row;
           }
 
-          function openClaimPopover(claim, anchorEl) {
+          function modelsNotAddressingClaim(claim, modelsCompared) {
+            if (!Array.isArray(modelsCompared)) return [];
+            const addressed = new Set(claim.agree.concat(
+              claim.dissent.map(function (item) { return item.model; })
+            ));
+            return modelsCompared.filter(function (model) { return !addressed.has(model); });
+          }
+
+          function openClaimPopover(claim, anchorEl, modelsCompared, answerNavigation) {
             const pop = ensureOverlayOnBody($("claimPopover"));
             const backdrop = ensureOverlayOnBody($("claimSheetBackdrop"));
             if (!pop) return;
@@ -618,7 +647,9 @@
               label.className = "claim-section-label is-agree";
               label.textContent = "Agree";
               section.appendChild(label);
-              claim.agree.forEach(model => section.appendChild(buildModelRow(model, "", true)));
+              claim.agree.forEach(model => section.appendChild(
+                buildModelRow(model, "", "agree", answerNavigation)
+              ));
               pop.appendChild(section);
             }
             if (claim.dissent.length) {
@@ -628,7 +659,22 @@
               label.className = "claim-section-label is-dissent";
               label.textContent = "Deviate";
               section.appendChild(label);
-              claim.dissent.forEach(item => section.appendChild(buildModelRow(item.model, item.quote, false)));
+              claim.dissent.forEach(item => section.appendChild(
+                buildModelRow(item.model, item.quote, "dissent", answerNavigation)
+              ));
+              pop.appendChild(section);
+            }
+            const notAddressed = modelsNotAddressingClaim(claim, modelsCompared);
+            if (notAddressed.length) {
+              const section = document.createElement("div");
+              section.className = "claim-popover-section";
+              const label = document.createElement("div");
+              label.className = "claim-section-label";
+              label.textContent = "Not addressed";
+              section.appendChild(label);
+              notAddressed.forEach(model => section.appendChild(
+                buildModelRow(model, "", "neutral", answerNavigation)
+              ));
               pop.appendChild(section);
             }
 
@@ -735,6 +781,57 @@
               setTimeout(function () { box.classList.remove("jump-flash"); }, 2000);
             }
             window.trackUmamiEvent?.("app_consensus_jump_to_answer", { model: model, found_quote: !!highlight });
+          }
+
+          function storedAnswerNavigation(body) {
+            function targetFor(model) {
+              const turn = body.closest?.(".thread-history-turn");
+              if (!turn) return null;
+              return Array.from(turn.querySelectorAll(
+                ".thread-history-models section[data-provider]"
+              )).find(function (section) {
+                return section.dataset.provider === model;
+              }) || null;
+            }
+
+            return {
+              canOpen: function (model) {
+                return !!targetFor(model);
+              },
+              open: function (model, quote) {
+                const section = targetFor(model);
+                if (!section) return;
+                const panel = section.closest(".thread-history-panel");
+                const turn = section.closest(".thread-history-turn");
+                const tab = panel && turn
+                  ? Array.from(turn.querySelectorAll(".consensus-tab")).find(function (candidate) {
+                      return candidate.getAttribute("aria-controls") === panel.id;
+                    })
+                  : null;
+                if (panel) panel.hidden = false;
+                if (tab) tab.setAttribute("aria-expanded", "true");
+
+                const content = section.querySelector(".thread-history-detail-body");
+                const highlight = (content && quote) ? flashQuote(content, quote) : null;
+                const headerY = section.getBoundingClientRect().top + window.scrollY - 84;
+                if (highlight) {
+                  const quoteY = highlight.getBoundingClientRect().top + window.scrollY;
+                  const targetY = quoteY - headerY < window.innerHeight * 0.7
+                    ? headerY
+                    : quoteY - window.innerHeight / 2;
+                  window.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
+                } else {
+                  window.scrollTo({ top: Math.max(0, headerY), behavior: "smooth" });
+                  section.classList.add("jump-flash");
+                  setTimeout(function () { section.classList.remove("jump-flash"); }, 2000);
+                }
+                window.trackUmamiEvent?.("app_consensus_jump_to_answer", {
+                  model: model,
+                  found_quote: !!highlight,
+                  stored_turn: true
+                });
+              }
+            };
           }
 
           // --- Verdict: worüber, nicht wie viele -------------------------------
@@ -942,15 +1039,18 @@
           }
 
           // --- Agreement-Badges in der Konsens-Antwort -----------------------
-          function claimBadgeLabel(claim) {
+          function claimBadgeLabel(claim, modelsCompared) {
             const agreeCount = claim.agree.length;
             const total = agreeCount + claim.dissent.length;
             // Die Formulierung bleibt fuer Screenreader und den Detaildialog
             // erhalten. Die sichtbare Erklaerung liefert allein die formatierte
             // Hover-Vorschau, nicht zusaetzlich ein nativer Browser-Tooltip.
+            const notAddressed = modelsNotAddressingClaim(claim, modelsCompared).length;
             return (claim.dissent.length
               ? agreeCount + " of " + total + " models support this"
-              : "All " + total + " models that address this agree") + " — open details";
+              : "All " + total + " models that address this agree")
+              + (notAddressed ? "; " + notAddressed + " did not address it" : "")
+              + " — open details";
           }
 
           // Seit 2026-07-27 nur noch ein Punkt, kein "4/6" mehr. Neben den
@@ -961,7 +1061,7 @@
           // im Tooltip und in der Karte beim Klick. Der Punkt bleibt als
           // fokussierbares, tippbares Steuerelement mit 44px-Trefferflaeche —
           // dieselbe Sprache wie der Widerspruchs-Marker daneben.
-          function makeBadge(claim) {
+          function makeBadge(claim, modelsCompared, answerNavigation) {
             const badge = document.createElement("button");
             badge.type = "button";
             badge.className = "claim-badge" + (claim.dissent.length ? " has-dissent" : "");
@@ -974,10 +1074,10 @@
             badge.appendChild(ratio);
             badge.setAttribute("aria-haspopup", "dialog");
             // Tastatur/Screenreader: sprechendes Label statt nacktem "4/6".
-            badge.setAttribute("aria-label", claimBadgeLabel(claim));
+            badge.setAttribute("aria-label", claimBadgeLabel(claim, modelsCompared));
             badge.addEventListener("click", function (event) {
               event.stopPropagation();
-              openClaimPopover(claim, badge);
+              openClaimPopover(claim, badge, modelsCompared, answerNavigation);
             });
             return badge;
           }
@@ -1047,8 +1147,8 @@
 
           // Markiert eine Textstelle satzweise und liefert den letzten Span
           // zurück (dahinter wird der Marker/das Badge eingehängt).
-          function markSentence(container, anchor, severityClass, marked) {
-            const hit = locateAnchor(container, anchor);
+          function markSentence(container, anchor, severityClass, marked, occurrence) {
+            const hit = locateAnchor(container, anchor, occurrence);
             if (!hit) return null;
 
             const bounds = sentenceBounds(hit.flat, hit.start, hit.end);
@@ -1258,7 +1358,7 @@
             return row;
           }
 
-          function buildClaimPreview(claim) {
+          function buildClaimPreview(claim, modelsCompared) {
             const frag = document.createDocumentFragment();
             const agreeCount = claim.agree.length;
             const total = agreeCount + claim.dissent.length;
@@ -1282,6 +1382,11 @@
                 renderInlineMarkdown(q, quote.quote);
                 frag.appendChild(q);
               }
+            }
+            const notAddressed = modelsNotAddressingClaim(claim, modelsCompared);
+            if (notAddressed.length) {
+              frag.appendChild(previewRow(
+                "Not addressed", notAddressed.map(modelDisplayName).join(", ")));
             }
             const foot = document.createElement("div");
             foot.className = "insight-preview-foot";
@@ -1334,9 +1439,11 @@
             }
           }
 
-          function renderInlineMarkers(claims, differences) {
-            const body = window.App.consensusBodyEl();
-            const fallbackBox = $("consensusClaimsFallback");
+          function renderInlineMarkers(claims, differences, modelsCompared, options) {
+            options = options || {};
+            const body = options.body || window.App.consensusBodyEl();
+            const fallbackBox = options.fallbackBox || $("consensusClaimsFallback");
+            const answerNavigation = options.answerNavigation || LIVE_ANSWER_NAVIGATION;
             if (!body || !fallbackBox) return;
 
             // Pro Blockelement eine eigene Liste bereits markierter Bereiche:
@@ -1348,10 +1455,12 @@
             }
             // markSentence braucht die Liste, bevor der Block bekannt ist -
             // deshalb eine gemeinsame Liste je Aufruf und Zuordnung danach.
-            function mark(anchor, severityClass) {
-              const probe = locateAnchor(body, anchor);
+            function mark(anchor, severityClass, occurrence) {
+              const probe = locateAnchor(body, anchor, occurrence);
               if (!probe) return null;
-              return markSentence(body, anchor, severityClass, marksFor(probe.block));
+              return markSentence(
+                body, anchor, severityClass, marksFor(probe.block), occurrence
+              );
             }
 
             // Wenn Claim und Difference denselben Satz meinen, steht dort nur
@@ -1382,7 +1491,11 @@
             differences.forEach(function (diff, index) {
               if (!diff.consensus_anchor) return;
               const isMajor = diff.type === "contradiction" && diff.severity === "major";
-              const result = mark(diff.consensus_anchor, isMajor ? "is-major" : "is-minor");
+              const result = mark(
+                diff.consensus_anchor,
+                isMajor ? "is-major" : "is-minor",
+                diff.anchor_occurrence
+              );
               if (!result) {
                 diffAnchorMisses += 1;
                 return;
@@ -1405,7 +1518,11 @@
             const unanchored = [];
             const claimControls = [];
             claims.forEach(function (claim) {
-              const result = mark(claim.anchor, claim.dissent.length ? "is-split" : "is-unanimous");
+              const result = mark(
+                claim.anchor,
+                claim.dissent.length ? "is-split" : "is-unanimous",
+                claim.anchor_occurrence
+              );
               if (!result) {
                 unanchored.push(claim);
                 return;
@@ -1419,7 +1536,7 @@
               // zweites, schwaecher klingendes Steuerelement daneben.
               if (overlappingDifference && overlappingDifference.isContradiction) return;
 
-              const badge = makeBadge(claim);
+              const badge = makeBadge(claim, modelsCompared, answerNavigation);
               const total = claim.agree.length + claim.dissent.length;
               const support = total ? claim.agree.length / total : 1;
               const existingClaim = claimControls.find(function (entry) {
@@ -1456,8 +1573,8 @@
                 overlappingDifference.marker.tabIndex = -1;
               }
               attachControl(result, badge, function () {
-                openClaimPopover(claim, badge);
-              }, function () { return buildClaimPreview(claim); });
+                openClaimPopover(claim, badge, modelsCompared, answerNavigation);
+              }, function () { return buildClaimPreview(claim, modelsCompared); });
             });
 
             if (unanchored.length) {
@@ -1472,7 +1589,7 @@
                 const text = document.createElement("span");
                 text.className = "claims-fallback-text";
                 renderInlineMarkdown(text, claim.anchor);
-                row.append(text, makeBadge(claim));
+                row.append(text, makeBadge(claim, modelsCompared, answerNavigation));
                 fallbackBox.appendChild(row);
               });
               fallbackBox.hidden = false;
@@ -1480,21 +1597,42 @@
 
             // Legende nur, wenn wirklich etwas markiert wurde. Sie verhindert,
             // dass unmarkierter Text als geprueft-und-bestaetigt gelesen wird.
-            const legend = $("consensusMarkerLegend");
-            if (legend) {
-              legend.hidden = !body.querySelector(".cx-claim, .claim-badge, .cx-marker");
-            }
+            if (!options.stored) {
+              const legend = $("consensusMarkerLegend");
+              if (legend) {
+                legend.hidden = !body.querySelector(".cx-claim, .claim-badge, .cx-marker");
+              }
 
-            // Die Provenance-Zeile zaehlt die strittigen Stellen aus genau
-            // diesen Markern. Sie wird beim Laufende zuerst ohne sie gerendert
-            // (die Marker entstehen erst hier) und holt die Zahl jetzt nach.
-            window.App?.consensusPipeline?.renderProvenance?.();
+              // Die Provenance-Zeile zaehlt die strittigen Stellen aus genau
+              // diesen Markern. Sie wird beim Laufende zuerst ohne sie gerendert
+              // (die Marker entstehen erst hier) und holt die Zahl jetzt nach.
+              window.App?.consensusPipeline?.renderProvenance?.();
+            }
 
             return {
               claims_anchored: claims.length - unanchored.length,
               claims_unanchored: unanchored.length,
               diffs_unanchored: diffAnchorMisses
             };
+          }
+
+          // Gespeicherte Chat-Turns besitzen eigene Antwortcontainer und keine
+          // globalen Live-IDs. Claims werden deshalb containerlokal erneut
+          // verankert; Hover und Detaildialog bleiben genauso erreichbar wie
+          // beim aktuell sichtbaren Consensus.
+          function renderStoredConsensusClaims(body, data, fallbackBox) {
+            if (!body || !data || typeof data !== "object") return false;
+            const claims = (Array.isArray(data.claims) ? data.claims : [])
+              .filter(c => c && c.anchor && Array.isArray(c.agree) && Array.isArray(c.dissent));
+            const modelsCompared = Array.isArray(data.models_compared)
+              ? data.models_compared : [];
+            renderInlineMarkers(claims, [], modelsCompared, {
+              body: body,
+              fallbackBox: fallbackBox,
+              stored: true,
+              answerNavigation: storedAnswerNavigation(body)
+            });
+            return claims.length > 0;
           }
 
           // --- Resolve-Runde ---------------------------------------------------
@@ -2080,6 +2218,8 @@
               .filter(d => d && d.claim && Array.isArray(d.positions) && d.positions.length);
             const modelCount = (Array.isArray(data.models_compared) && data.models_compared.length)
               || includedCount || 0;
+            const modelsCompared = Array.isArray(data.models_compared)
+              ? data.models_compared : [];
             const agreement = (data.agreement && typeof data.agreement === "object") ? data.agreement : null;
             const judge = (data.judges && typeof data.judges === "object"
               && data.judges.differences && typeof data.judges.differences === "object")
@@ -2088,7 +2228,7 @@
             renderVerdictHeader(differences, modelCount, agreement, judge);
             // Karten zuerst: die Inline-Marker verlinken per Index auf sie.
             renderDifferenceCards(differences, modelCount);
-            const marks = renderInlineMarkers(claims, differences) || {};
+            const marks = renderInlineMarkers(claims, differences, modelsCompared) || {};
             window.trackUmamiEvent?.("app_consensus_insights_rendered", {
               claims: claims.length,
               // Wie viele Claims wirklich IM Text markiert wurden statt nur in
@@ -2106,8 +2246,7 @@
           }
 
           window.renderConsensusInsights = renderConsensusInsights;
+          window.renderStoredConsensusClaims = renderStoredConsensusClaims;
           window.resetConsensusInsights = resetConsensusInsights;
           window.jumpToModelAnswer = jumpToModelAnswer;
         })();
-
-

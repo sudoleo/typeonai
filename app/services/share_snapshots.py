@@ -433,11 +433,20 @@ def sanitize_differences_data(data):
                     "model": _clip(entry.get("model"), 40),
                     "quote": _clip(entry.get("quote"), 500),
                 })
-        claims.append({
+        sanitized_claim = {
             "anchor": anchor,
             "agree": _sanitize_str_list(claim.get("agree"), 40, 12),
             "dissent": dissent,
-        })
+        }
+        sentence_id = claim.get("sentence_id")
+        occurrence = claim.get("anchor_occurrence")
+        if isinstance(sentence_id, int) and not isinstance(sentence_id, bool) and 1 <= sentence_id <= 80:
+            sanitized_claim["sentence_id"] = sentence_id
+            sanitized_claim["anchor_occurrence"] = (
+                occurrence if isinstance(occurrence, int)
+                and not isinstance(occurrence, bool) and 0 <= occurrence < 80 else 0
+            )
+        claims.append(sanitized_claim)
 
     differences = []
     for diff in (data.get("differences") or [])[:20]:
@@ -457,11 +466,20 @@ def sanitize_differences_data(data):
             continue
         entry = {
             "claim": claim_text,
+            "consensus_anchor": _clip(diff.get("consensus_anchor"), 500),
             "type": _clip(diff.get("type"), 40),
             "severity": _clip(diff.get("severity"), 20),
             "positions": positions,
             "verify": _clip(diff.get("verify"), 500),
         }
+        sentence_id = diff.get("sentence_id")
+        occurrence = diff.get("anchor_occurrence")
+        if isinstance(sentence_id, int) and not isinstance(sentence_id, bool) and 1 <= sentence_id <= 80:
+            entry["sentence_id"] = sentence_id
+            entry["anchor_occurrence"] = (
+                occurrence if isinstance(occurrence, int)
+                and not isinstance(occurrence, bool) and 0 <= occurrence < 80 else 0
+            )
         # Ergebnis einer Resolve-Runde (Pro): bleibt am Widerspruch hängen,
         # damit Bookmarks den gelösten Zustand wieder anzeigen können.
         resolution = _sanitize_resolution(diff.get("resolution"))

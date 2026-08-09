@@ -777,6 +777,16 @@ _SENTENCE_SPLIT_RE = re.compile(
     r"(?<=[.!?…])(?P<close>[\"'”’»)\]]*)(?:\[S?\d+(?:\s*,\s*S?\d+)*\])*[ \t]+"
 )
 _THEMATIC_BREAK_RE = re.compile(r"^[-*_\s]{3,}$")
+_SENTENCE_SOURCE_TAG_RE = re.compile(r"\[S?\d+(?:\s*,\s*S?\d+)*\]", re.IGNORECASE)
+_INLINE_MARKDOWN_LINK_RE = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
+_INLINE_MARKDOWN_DECORATION_RE = re.compile(r"\*\*\*|\*\*|___|__|~~|`")
+_INLINE_MARKDOWN_UNDERSCORE_RE = re.compile(
+    r"(^|[\s(\[\"'])_([^_\n]+)_(?=$|[\s).,;:!?\]\"'])"
+)
+_VISIBLE_QUOTE_TRANSLATION = str.maketrans({
+    "“": '"', "”": '"', "„": '"', "‘": '"', "’": '"',
+    "«": '"', "»": '"',
+})
 
 # Abkuerzungen, deren Punkt kein Satzende ist (Gegenstueck zu ABBREVIATIONS in
 # consensus-insights.js).
@@ -921,6 +931,48 @@ def _sentence_anchor(value, sentences: list) -> str:
     if number != 0:
         logging.info(f"Differences engine used an unknown sentence number: {number!r}")
     return ""
+
+
+def _sentence_reference(value, sentences: list):
+    """Aufgeloester Satzanker plus stabile Identitaet und Vorkommen.
+
+    Der Wortlaut allein ist keine Identitaet: derselbe Satz kann in einer
+    Antwort mehrfach vorkommen. `sentence_id` haelt die Judge-Referenz stabil,
+    `anchor_occurrence` sagt dem Browser, welches gleiche Textvorkommen gemeint
+    ist (nullbasiert). Legacy-Anker ohne Satznummer bleiben beim ersten Treffer.
+    """
+    number = _sentence_number(value)
+    anchor = _sentence_anchor(value, sentences)
+    if not anchor or number is None or not (1 <= number <= len(sentences)):
+        return anchor, None, 0
+    # Der Browser sucht im gerenderten, sichtbaren Text: Markdown-Auszeichnung
+    # ist dort kein Text mehr und Quellenchips werden bei der Ankersuche
+    # uebersprungen. Die Vorkommensnummer muss dieselbe Aequivalenz verwenden,
+    # sonst zeigen etwa zwei gleichlautende Saetze mit [S1]/[S2] beide auf das
+    # erste sichtbare Vorkommen.
+    visible_anchor = _visible_sentence_key(anchor)
+    occurrence = sum(
+        1 for sentence in sentences[:number - 1]
+        if _visible_sentence_key(_clip(sentence, MAX_DIFF_TEXT_CHARS)) == visible_anchor
+    )
+    return anchor, number, occurrence
+
+
+def _visible_sentence_key(value) -> str:
+    """Normalisierte Textform, die der DOM-Ankersuche entspricht.
+
+    `stripMarkdown()`/`withoutSourceTags()` im Browser arbeiten auf dem
+    gerenderten Satz. Fuer die reine Vorkommenszaehlung reicht dieselbe
+    konservative Inline-Markdown-Reduktion; der gespeicherte Anker selbst
+    bleibt unveraendert und wird weiterhin serverseitig verifiziert.
+    """
+    text = str(value or "").strip()
+    text = _INLINE_MARKDOWN_LINK_RE.sub(r"\1", text)
+    text = _INLINE_MARKDOWN_DECORATION_RE.sub("", text).replace("*", "")
+    text = _INLINE_MARKDOWN_UNDERSCORE_RE.sub(r"\1\2", text)
+    text = _SENTENCE_SOURCE_TAG_RE.sub(" ", text)
+    text = re.sub(r"\s+([.,;:!?])", r"\1", text)
+    return " ".join(text.translate(_VISIBLE_QUOTE_TRANSLATION).lower().split())
 
 
 def _build_differences_prompt(
@@ -1186,29 +1238,41 @@ def _normalize_claims(raw_claims, anon_map: dict, sentences: list = None) -> lis
     # Zwei Claims koennen auf denselben Satz zeigen. Sichtbar ist im Frontend
     # ohnehin nur die konservativere Quote - hier gilt dieselbe Regel, damit
     # der Agreement-Score einen Satz nicht doppelt zaehlt.
-    by_anchor = {}
+    by_identity = {}
     for entry in raw_claims if isinstance(raw_claims, list) else []:
         if not isinstance(entry, dict):
             continue
         # Bevorzugt der nummerierte Satz (per Konstruktion auffindbar); die
         # woertliche Abschrift bleibt als Pfad fuer aeltere Judge-Ausgaben.
-        anchor = _sentence_anchor(entry.get("s"), sentences) \
-            or _clip(entry.get("anchor"), MAX_DIFF_TEXT_CHARS)
+        sentence_anchor, sentence_id, anchor_occurrence = _sentence_reference(
+            entry.get("s"), sentences
+        )
+        anchor = sentence_anchor or _clip(entry.get("anchor"), MAX_DIFF_TEXT_CHARS)
         if not anchor:
             continue
 
         agree = _real_model_names(entry.get("agree"), anon_map)
         dissent = []
+        dissent_by_model = {}
         for item in entry.get("dissent") if isinstance(entry.get("dissent"), list) else []:
             if not isinstance(item, dict):
                 continue
             real = _real_model_names([item.get("model")], anon_map)
             if not real:
                 continue
-            dissent.append({
+            normalized = {
                 "model": real[0],
                 "quote": _clip(item.get("quote"), MAX_DIFF_QUOTE_CHARS),
-            })
+            }
+            existing_index = dissent_by_model.get(real[0])
+            if existing_index is not None:
+                # Pro Modell genau eine Stimme. Falls nur eine der doppelten
+                # Ausgaben ein Zitat traegt, bleibt die belegte Fassung stehen.
+                if not dissent[existing_index]["quote"] and normalized["quote"]:
+                    dissent[existing_index] = normalized
+                continue
+            dissent_by_model[real[0]] = len(dissent)
+            dissent.append(normalized)
 
         # Doppelnennungen auflösen: Abweichler verdrängen die Zustimmung.
         dissent_models = {item["model"] for item in dissent}
@@ -1218,7 +1282,11 @@ def _normalize_claims(raw_claims, anon_map: dict, sentences: list = None) -> lis
             continue
 
         claim = {"anchor": anchor, "agree": agree, "dissent": dissent}
-        position = by_anchor.get(anchor)
+        if sentence_id is not None:
+            claim["sentence_id"] = sentence_id
+            claim["anchor_occurrence"] = anchor_occurrence
+        identity = ("sentence", sentence_id) if sentence_id is not None else ("anchor", anchor)
+        position = by_identity.get(identity)
         if position is not None:
             existing = claims[position]
             existing_total = len(existing["agree"]) + len(existing["dissent"])
@@ -1226,7 +1294,7 @@ def _normalize_claims(raw_claims, anon_map: dict, sentences: list = None) -> lis
                 claims[position] = claim
             continue
 
-        by_anchor[anchor] = len(claims)
+        by_identity[identity] = len(claims)
         claims.append(claim)
         if len(claims) >= MAX_DIFF_CLAIMS:
             break
@@ -1272,7 +1340,10 @@ def _normalize_differences(raw_differences, anon_map: dict, sentences: list = No
                 # Widerspruch, damit fehlende Severity nichts beschönigt.
                 severity = "major"
 
-        differences.append({
+        sentence_anchor, sentence_id, anchor_occurrence = _sentence_reference(
+            entry.get("s"), sentences
+        )
+        difference = {
             "claim": claim,
             # Stelle im Konsenstext, an der der Widerspruch haengt: aus der
             # Satznummer aufgeloest (0 = der Konsens sagt dazu nichts), sonst
@@ -1281,13 +1352,17 @@ def _normalize_differences(raw_differences, anon_map: dict, sentences: list = No
             # und geleert, wenn sie dort nicht auffindbar ist. Das Frontend
             # markiert damit den Satz inline; ohne Anker bleibt der Widerspruch
             # ausschliesslich in der Karte.
-            "consensus_anchor": _sentence_anchor(entry.get("s"), sentences)
+            "consensus_anchor": sentence_anchor
             or _clip(entry.get("consensus_anchor"), MAX_DIFF_TEXT_CHARS),
             "type": diff_type,
             "severity": severity,
             "positions": positions,
             "verify": _clip(entry.get("verify"), MAX_DIFF_TEXT_CHARS),
-        })
+        }
+        if sentence_id is not None:
+            difference["sentence_id"] = sentence_id
+            difference["anchor_occurrence"] = anchor_occurrence
+        differences.append(difference)
         if len(differences) >= MAX_DIFF_ENTRIES:
             break
     return differences

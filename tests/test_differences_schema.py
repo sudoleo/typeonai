@@ -842,6 +842,46 @@ class SentenceAnchorTests(unittest.TestCase):
         self.assertEqual(data["claims"][0]["agree"], ["OpenAI"])
         self.assertEqual([d["model"] for d in data["claims"][0]["dissent"]], ["Grok"])
 
+    def test_identical_sentence_occurrences_keep_distinct_ids(self):
+        consensus = "This remains uncertain. This remains uncertain."
+        payload = self.numbered_payload()
+        payload["claims"] = [
+            {"s": 1, "agree": ["Model A", "Model B"], "dissent": []},
+            {"s": 2, "agree": ["Model A"],
+             "dissent": [{"model": "Model C", "quote": "no"}]},
+        ]
+        payload["differences"][0]["s"] = 2
+        data, _ = parse_differences_payload(
+            json.dumps(payload), ANON_MAP,
+            consensus_answer=consensus, model_answers={},
+        )
+        self.assertEqual([claim["sentence_id"] for claim in data["claims"]], [1, 2])
+        self.assertEqual([claim["anchor_occurrence"] for claim in data["claims"]], [0, 1])
+        self.assertEqual(data["differences"][0]["sentence_id"], 2)
+        self.assertEqual(data["differences"][0]["anchor_occurrence"], 1)
+
+    def test_visibly_identical_sentences_ignore_citations_and_markdown(self):
+        consensus = (
+            "**This remains uncertain.**[S1]\n\n"
+            "This remains uncertain.[S2]"
+        )
+        payload = self.numbered_payload()
+        payload["claims"] = [
+            {"s": 1, "agree": ["Model A", "Model B"], "dissent": []},
+            {"s": 2, "agree": ["Model A"],
+             "dissent": [{"model": "Model C", "quote": "no"}]},
+        ]
+        payload["differences"][0]["s"] = 2
+        data, _ = parse_differences_payload(
+            json.dumps(payload), ANON_MAP,
+            consensus_answer=consensus, model_answers={},
+        )
+        self.assertEqual(
+            [claim["anchor_occurrence"] for claim in data["claims"]],
+            [0, 1],
+        )
+        self.assertEqual(data["differences"][0]["anchor_occurrence"], 1)
+
 
 class ClaimSupportThresholdTests(unittest.TestCase):
     """Eine einzelne Stimme belegt nichts: "1/1 - all models agree" liest sich
@@ -867,6 +907,21 @@ class ClaimSupportThresholdTests(unittest.TestCase):
         payload["claims"][1]["dissent"] = [{"model": "Model C", "quote": "nope"}]
         data, _ = parse_differences_payload(json.dumps(payload), ANON_MAP)
         self.assertEqual(len(data["claims"]), 1)
+
+    def test_duplicate_dissent_from_one_model_counts_once(self):
+        payload = valid_payload()
+        payload["claims"][1] = {
+            "anchor": "founded in the third century BC",
+            "agree": ["Model A"],
+            "dissent": [
+                {"model": "Model C", "quote": ""},
+                {"model": "Model C", "quote": "better quote"},
+            ],
+        }
+        data, _ = parse_differences_payload(json.dumps(payload), ANON_MAP)
+        claim = data["claims"][1]
+        self.assertEqual(claim["agree"], ["OpenAI"])
+        self.assertEqual(claim["dissent"], [{"model": "Grok", "quote": "better quote"}])
 
 
 if __name__ == "__main__":

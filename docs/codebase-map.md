@@ -657,7 +657,11 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   „Very low agreement"; Grün beginnt erst bei 65. Contradictions und Emphasis
   stehen getrennt davon in der Detailzeile. Alte Snapshots ohne Score fallen
   weiterhin auf die Difference-Schwere zurück.
-  `findAnchorTarget` löst den verifizierten Anker auf, `sentenceBounds`
+  `locateAnchor` löst den verifizierten Anker auf; bei wiederholtem sichtbarem
+  Wortlaut wählt `anchor_occurrence` das vom Judge gemeinte Vorkommen. Die
+  Vorkommenszählung normalisiert dafür wie der Browser Markdown-Auszeichnung
+  und Quellenchips, sodass etwa gleichlautende Sätze mit `[S1]`/`[S2]` nicht
+  beide an der ersten Passage landen. `sentenceBounds`
   dehnt ihn auf den umgebenden Satz aus, `wrapFlatRange` wrappt die
   betroffenen Textknoten in `<span class="cx-claim is-unanimous|is-minor|
   is-split|is-major">`. Seit dem Satz-Index (2026-08-07) ist der Anker in der
@@ -699,6 +703,13 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   `landing.css` **und die Mockup-Markups** (`landing.html`,
   `consensus-engine.html`, `partials/product_result_mockup.html`) tragen
   dieselbe Mikro-Quote.
+  Hover und Claim-Popover nennen zusätzlich Modelle unter `Not addressed`;
+  Schweigen wird damit erst auf Wunsch sichtbar und weder als Zustimmung noch
+  als Widerspruch ausgegeben. `renderStoredConsensusClaims` verankert dieselben
+  Claims containerlokal in archivierten Chat-Turns, sodass ein Bookmark-Restore
+  nicht nur beim neuesten Turn Claim-Support zeigt. „View answer“ öffnet dort
+  die Answers-Schublade genau dieses archivierten Turns statt der globalen
+  Modellbox des neuesten Turns.
   Ausserdem steht `.src-ref` jetzt im `MARK_SKIP_SELECTOR` — ohne das wurde
   die Quellenzahl selbst als Satzteil gewrappt und trug die Unterstreichung
   der Passage (eine bernsteinfarbene „3" sieht aus wie ein Fehler). Ein Satz wird höchstens einmal dekoriert
@@ -1111,7 +1122,11 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   ältere Payloads erhalten. Ein Claim braucht **mindestens zwei** beteiligte
   Modelle (`MIN_CLAIM_SUPPORT`): „1/1 — all models agree" liest sich wie eine
   Bestätigung, ist aber nur eine Stimme, und verzerrte zusätzlich den
-  Agreement-Score. Zwei Claims auf demselben Satz werden serverseitig auf den
+  Agreement-Score. Jeder nummerierte Eintrag behält zusätzlich `sentence_id`
+  und die nullbasierte `anchor_occurrence`; beide Felder passieren die
+  Snapshot-Whitelist und bleiben damit in Chats, Bookmarks und Shares erhalten.
+  Doppelte Dissent-Einträge desselben Modells zählen nur einmal. Zwei Claims
+  auf demselben Satz werden serverseitig auf den
   am wenigsten gestützten zusammengezogen (dieselbe Regel, die das Frontend
   für die sichtbare Quote anwendet).
 - Kritische Fehleralarmierung: Schlagen alle ausgewählten Modellrequests fehl,

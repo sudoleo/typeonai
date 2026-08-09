@@ -666,12 +666,12 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
           const surface = getComputedStyle(element, "::before");
           return {
             topDelta: actions.top - verdict.top,
-            hasSummarySurface: surface.backgroundImage !== "none",
+            hasSummaryDivider: surface.backgroundColor !== "rgba(0, 0, 0, 0)",
           };
         }"""
     )
     assert 0 <= desktop_footer["topDelta"] <= 12
-    assert desktop_footer["hasSummarySurface"] is True
+    assert desktop_footer["hasSummaryDivider"] is True
     app_page.set_viewport_size({"width": 390, "height": 844})
 
     app_page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
@@ -710,15 +710,14 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     if result_gap["scrollable"]:
         assert abs(result_gap["gap"]) <= 2
 
-    # Nach der fertigen Antwort bleibt der Composer offen: die naechste Frage
-    # ist per Default eine Folgefrage, ohne Zwischenentscheidung, ohne Pro-Gate
-    # und ohne eine eigene Kontext-Flaeche am Feld.
+    # Nach der fertigen Antwort bleibt die Eingabe erreichbar. Auf Mobile ist
+    # die Zusatzzeile bewusst eingeklappt, bis das Feld angetippt wird.
     expect(app_page.locator("#questionInput")).to_have_attribute(
         "placeholder", "Ask a follow-up question", timeout=15000
     )
     expect(app_page.locator("#questionInput")).to_be_visible()
     expect(app_page.locator("#questionInput")).to_be_enabled()
-    expect(app_page.locator(".chat-input-container .consensus-switch-container")).to_be_visible()
+    expect(app_page.locator(".chat-input-container .consensus-switch-container")).to_be_hidden()
 
     # Inline-Confidence: der Widerspruch wird im Antworttext selbst markiert
     # (Linie + Quote), nicht nur in einer Karte daneben.
@@ -754,16 +753,17 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
            })"""
     ), "Gelbe Quote braucht eine Bernstein-Linie, keine graue"
 
-    # Touch: die markierte Passage selbst oeffnet dasselbe Agreement-Sheet wie
-    # der sichtbare Badge. Der Hintergrund ist inert und der Fokus bleibt im
-    # modalen Dialog.
+    # Touch: die unstrittige Claim-Passage selbst oeffnet dasselbe Agreement-
+    # Sheet wie ihr sichtbarer Badge. Die Widerspruchspassage oben bleibt
+    # dagegen korrekt mit der Difference-Karte verbunden.
     # Die Erklaerung liefert die formatierte Hover-Vorschau und der Dialog,
     # NICHT zusaetzlich ein nativer Browser-Tooltip (bewusste Entscheidung an
     # Badge und Marker, siehe makeBadge in consensus-insights.js). Geprueft
     # wird deshalb, dass die Passage bedienbar ist - nicht, dass sie ein
     # title-Attribut traegt.
-    assert "is-interactive" in (marked.get_attribute("class") or "")
-    marked.click()
+    claim_passage = app_page.locator("#consensusAnswerBody .cx-claim.is-unanimous").first
+    assert "is-interactive" in (claim_passage.get_attribute("class") or "")
+    claim_passage.click()
     popover = app_page.locator("#claimPopover")
     expect(popover).to_be_visible()
     expect(popover).to_have_attribute("aria-modal", "true")
@@ -844,9 +844,10 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     app_page.locator("#consensusDifferencesTab").click()
     expect(app_page.locator(".diff-card.is-contradiction").first).to_be_visible(timeout=5000)
 
-    # Beide Sprungpfade öffnen die standardmäßig verborgenen Modellantworten,
-    # fahren die Fundstelle an und markieren das Originalzitat. Der Modus darf
-    # sich dabei nicht als Seiteneffekt ändern.
+    # Beide Sprungpfade öffnen die standardmäßig verborgenen Modellantworten.
+    # Die Difference hat ein Originalzitat und markiert es; ein Modell unter
+    # "Not addressed" öffnet nur dessen Antwort, ohne ein Zitat zu erfinden.
+    # Der Modus darf sich dabei nicht als Seiteneffekt ändern.
     diff_jump = app_page.locator(".diff-card.is-contradiction .diff-jump-link").first
     expect(diff_jump).to_be_visible()
     diff_jump.click()
@@ -859,11 +860,11 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     expect(app_page.locator("#openaiResponse")).to_be_hidden()
 
     claim_badges.first.click()
-    claim_jump = app_page.locator("#claimPopover .claim-model-row.is-dissent .claim-jump-link")
+    claim_jump = app_page.locator("#claimPopover .claim-model-row.is-neutral .claim-jump-link")
     expect(claim_jump).to_be_visible()
     claim_jump.click()
     expect(app_page.locator("body.agent-mode-show-answers")).to_have_count(1)
-    expect(app_page.locator("#grokResponse mark.quote-flash, #grokResponse .quote-flash-block").first).to_be_visible()
+    expect(app_page.locator("#grokResponse")).to_be_visible()
     assert app_page.evaluate("() => window.isAgentModeEnabled()") is False
 
     # Ausgangszustand für die bestehende Disclosure-/Reihenfolge-Prüfung.
@@ -956,7 +957,28 @@ def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_pag
     expect(archived_turn.locator(".thread-history-question-text")).to_have_text(QUESTION)
     archived_answer = archived_turn.locator(".thread-history-answer-body")
     expect(archived_answer).to_be_visible()
-    assert original_answer in archived_answer.text_content()
+    archived_answer_text = archived_answer.evaluate(
+        """element => {
+          const clone = element.cloneNode(true);
+          clone.querySelectorAll(".claim-badge, .cx-marker").forEach(el => el.remove());
+          return clone.textContent.trim();
+        }"""
+    )
+    assert original_answer in archived_answer_text
+    # Derselbe strukturierte Claim-Support wird auch im archivierten Turn neu
+    # verankert. Das ist zugleich der Rendererpfad für ältere Bookmark-Turns.
+    expect(archived_answer.locator(".claim-badge")).to_have_count(2)
+    archived_answer.locator(".claim-badge").first.dispatch_event("click")
+    archived_jump = app_page.locator(
+        "#claimPopover .claim-model-row.is-agree .claim-jump-link"
+    ).first
+    expect(archived_jump).to_be_visible()
+    archived_jump.click()
+    # "View answer" belongs to this archived turn, not to the current live
+    # provider boxes that may already contain a newer exchange.
+    expect(archived_turn.locator(".thread-history-models")).to_be_visible()
+    expect(archived_turn.locator(".thread-history-models section.jump-flash")).to_have_count(1)
+    expect(app_page.locator(".response-box.jump-flash")).to_have_count(0)
     archived_agreement = archived_turn.locator(".thread-history-verdict .verdict-score")
     expect(archived_agreement).to_have_text(original_agreement)
     assert "…" not in archived_turn.locator(".thread-history-verdict .verdict-detail").text_content()
@@ -1014,12 +1036,12 @@ def test_split_claim_underlines_in_the_colour_of_its_badge(app_page):
           window.renderConsensusInsights({
             claims: [{
               anchor: "stands 330 metres tall",
-              agree: [{model: "openai"}, {model: "gemini"}],
+              agree: ["OpenAI", "Gemini"],
               dissent: [{model: "grok", quote: "324 metres"},
                         {model: "claude", quote: "300 metres"}]
             }],
             differences: [],
-            models_compared: ["openai", "gemini", "grok", "claude"]
+            models_compared: ["OpenAI", "Gemini", "Grok", "Anthropic"]
           }, 4);
         }"""
     )
@@ -1041,6 +1063,69 @@ def test_split_claim_underlines_in_the_colour_of_its_badge(app_page):
     )
     for name, (red, _green, blue) in tones.items():
         assert red > blue * 1.5, f"{name} ist nicht bernsteinfarben: {tones[name]}"
+
+
+def test_claim_hover_keeps_silent_models_available_on_demand(app_page):
+    app_page.evaluate(
+        """() => {
+          document.getElementById("consensusAnswerBody").innerHTML =
+            "<p>The tower is 330 metres tall.</p>";
+          window.renderConsensusInsights({
+            claims: [{
+              anchor: "The tower is 330 metres tall.",
+              agree: ["OpenAI", "Gemini"],
+              dissent: []
+            }],
+            differences: [],
+            models_compared: ["OpenAI", "Gemini", "Grok", "Anthropic"]
+          }, 4);
+        }"""
+    )
+    badge = app_page.locator("#consensusAnswerBody .claim-badge")
+    expect(badge).to_have_text("2/2")
+    # Das isolierte Renderer-Fixture steckt in einem verborgenen Ergebnis-
+    # Container; Event-Dispatch testet denselben Hover-Handler ohne Geometrie-
+    # Voraussetzung.
+    badge.dispatch_event("mouseenter")
+    app_page.wait_for_timeout(180)
+    preview = app_page.locator(".insight-preview")
+    expect(preview).to_be_visible()
+    expect(preview).to_contain_text("Not addressed")
+    expect(preview).to_contain_text("Grok")
+    expect(preview).to_contain_text("Claude")
+
+    badge.dispatch_event("click")
+    not_addressed = app_page.locator(
+        "#claimPopover .claim-section-label", has_text="Not addressed"
+    )
+    expect(not_addressed).to_have_count(1)
+    section = not_addressed.locator("xpath=..")
+    expect(section.locator(".claim-model-row.is-neutral")).to_have_count(2)
+
+
+def test_repeated_sentence_claim_marks_the_requested_occurrence(app_page):
+    app_page.evaluate(
+        """() => {
+          document.getElementById("consensusAnswerBody").innerHTML =
+            '<p><span id="firstCopy"><strong>This remains uncertain.</strong></span>'
+            + '<sup class="src-ref">1</sup> '
+            + '<span id="secondCopy">This remains uncertain.</span>'
+            + '<sup class="src-ref">2</sup></p>';
+          window.renderConsensusInsights({
+            claims: [{
+              anchor: "This remains uncertain.[S2]",
+              sentence_id: 2,
+              anchor_occurrence: 1,
+              agree: ["openai", "gemini"],
+              dissent: []
+            }],
+            differences: [],
+            models_compared: ["openai", "gemini"]
+          }, 2);
+        }"""
+    )
+    expect(app_page.locator("#firstCopy .cx-claim")).to_have_count(0)
+    expect(app_page.locator("#secondCopy .cx-claim")).to_have_count(1)
 
 
 def test_claim_anchor_with_markdown_syntax_marks_the_rendered_sentence(app_page):

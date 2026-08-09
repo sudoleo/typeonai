@@ -224,10 +224,18 @@
         answerBody.textContent = turnData.consensus;
       }
       answerBody.classList.add("thread-history-answer-body");
+      const claimsFallback = document.createElement("div");
+      claimsFallback.className = "consensus-claims-fallback thread-history-claims-fallback";
+      claimsFallback.hidden = true;
+      window.renderStoredConsensusClaims?.(
+        answerBody,
+        turnData.differences_data,
+        claimsFallback
+      );
       const verdict = this.staticizeHistoryNode(liveVerdict)
         || this.buildStoredAgreement(turnData.differences_data);
       if (verdict) verdict.classList.add("thread-history-verdict");
-      answer.append(answerLabel, answerBody);
+      answer.append(answerLabel, answerBody, claimsFallback);
 
       // Der Fuss eines archivierten Turns spricht dieselbe Sprache wie der
       // Fuss der aktiven Antwort: EINE Zeile leiser Schubladen nebeneinander
@@ -339,15 +347,16 @@
       }
 
       const storedAnswers = turnData.model_answers && typeof turnData.model_answers === "object"
-        ? Object.values(turnData.model_answers)
+        ? Object.entries(turnData.model_answers).map(([provider, item]) => ({ provider, item }))
         : [];
-      const usableAnswers = storedAnswers.filter(item => String(item?.answer || "").trim());
+      const usableAnswers = storedAnswers.filter(({ item }) => String(item?.answer || "").trim());
       if (usableAnswers.length) {
         addDrawer("Compare answers", "Answers", usableAnswers.length, panel => {
           const models = document.createElement("div");
           models.className = "thread-history-models";
-          usableAnswers.forEach(item => {
+          usableAnswers.forEach(({ provider, item }) => {
             const section = document.createElement("section");
+            section.dataset.provider = String(item.provider || provider);
             const heading = document.createElement("h4");
             heading.textContent = String(item.model_label || item.provider || "Model");
             const body = document.createElement("div");

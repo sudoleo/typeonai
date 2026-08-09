@@ -42,14 +42,14 @@ def test_changed_frontend_scripts_are_cache_busted():
     assert "firebase.js?v=20260806-bookmarkcontinue1" in template
     assert "usage-limit.js?v=20260802-storagebusy1" in template
     # Claim-Abdeckung: Satz-Index-Anker plus tagfreie Ankersuche
-    assert "consensus-insights.js?v=20260807-claimcoverage1" in template
+    assert "consensus-insights.js?v=20260809-claimfix1" in template
+    assert "consensus-run.js?v=20260809-claimfix1" in template
     assert "chat-session.js?v=20260806-chatlimits1" in template
     assert "app-init.js?v=20260806-followupdefault1" in template
     for changed in (
         "app-core.js",
         "attachments.js",
         "consensus-progress.js",
-        "consensus-run.js",
     ):
         assert f"{changed}?v=20260807-threadmessages1" in template
     # Nachtrag: Composer waechst beim Antippen statt beim Scrollen, Cursor
