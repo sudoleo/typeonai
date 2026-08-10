@@ -56,6 +56,43 @@
     return window.App.modelPrefs.find(pref => pref.responseId === responseId) || null;
   }
 
+  // Provider, die der LAUFENDE Lauf bewusst ausgelassen hat (heute: DeepSeek,
+  // solange Anhaenge mitgehen). Der Block gehoert dem Lauf, nicht dem Composer:
+  // beim Senden wandern die Anhaenge an die Nachricht, der Composer ist wieder
+  // leer — und jede /ask-Antwort loest einen Tier-Refresh und damit
+  // restoreModelSelections() aus. Ohne diesen Block schaltet der gespeicherte
+  // Wert das Modell mitten im Lauf wieder ein, obwohl fuer es nie eine Anfrage
+  // rausging: der Konsens wartet dann auf eine Antwort, die nie kommt, und
+  // bricht mit "at least two completed model answers" ab.
+  const runBlockedResponseIds = new Set();
+
+  function setRunModelBlock(responseId, blocked) {
+    const pref = getModelPrefByResponseId(responseId);
+    if (!pref) return;
+
+    if (blocked) {
+      runBlockedResponseIds.add(responseId);
+      setModelSelectionState(pref, false, {
+        persist: false,
+        syncCheckbox: true,
+        animate: false
+      });
+      return;
+    }
+
+    if (!runBlockedResponseIds.delete(responseId)) return;
+    // Der Block faellt: die gespeicherte Nutzerwahl gilt wieder. Ohne Eintrag
+    // bleibt die aktuelle Auswahl stehen (der Composer stellt seinen gemerkten
+    // Wert selbst wieder her, wenn die Dateien entfernt werden).
+    const saved = localStorage.getItem("pref_check_" + pref.key);
+    if (saved === null) return;
+    setModelSelectionState(pref, saved === "true", {
+      persist: false,
+      syncCheckbox: true,
+      animate: false
+    });
+  }
+
   function animateResponseReorder(box, applyStateChange) {
     if (!box || typeof box.animate !== "function") {
       applyStateChange();
@@ -107,12 +144,16 @@
     const box = document.getElementById(pref.responseId);
     const label = document.querySelector(`label[for='${pref.checkId}']`);
     const { persist = false, syncCheckbox = true, animate = persist } = options;
+    // Eine ausdrueckliche Nutzeraktion (persist) ist staerker als der Block des
+    // laufenden Laufs: wer das Modell selbst wieder anhakt, bekommt es zurueck.
+    if (persist) runBlockedResponseIds.delete(pref.responseId);
     // Tier refreshes restore persisted selections after /prepare. A provider
     // disabled by the attachment compatibility gate must stay excluded during
     // that restore; otherwise progress and consensus wait for an answer whose
     // request was intentionally never started.
-    const attachmentBlocked = checkbox?.disabled
-      && checkbox.getAttribute("aria-describedby") === "attachmentProviderNotice";
+    const attachmentBlocked = runBlockedResponseIds.has(pref.responseId)
+      || (checkbox?.disabled
+        && checkbox.getAttribute("aria-describedby") === "attachmentProviderNotice");
     const checked = attachmentBlocked ? false : !!isChecked;
 
     if (checkbox && syncCheckbox) {
@@ -871,6 +912,7 @@
   // --- Exporte fuer das in initApp verbliebene Wiring + andere Module ---
   window.App.applyTierDefaultModels = applyTierDefaultModels;
   window.App.setModelSelectionState = setModelSelectionState;
+  window.App.setRunModelBlock = setRunModelBlock;
   window.App.openModelPicker = openModelPicker;
   window.App.collapseExpandedModelPicker = collapseExpandedModelPicker;
   window.App.initCustomModelPicker = initCustomModelPicker;

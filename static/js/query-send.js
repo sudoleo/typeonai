@@ -497,6 +497,11 @@
       // checkbox or another renderer must never put DeepSeek back into the
       // request fan-out while files are attached.
       const deepSeekBlockedByAttachments = attachmentsPayload.length > 0;
+      // Der Block gehoert ab hier dem Lauf und ueberlebt jeden Tier-Refresh
+      // (jede /ask-Antwort ruft restoreModelSelections). Ohne Anhaenge faellt
+      // er hier — vor der Fan-out-Auswahl, damit die gespeicherte Wahl wieder
+      // gilt und kein Modell erst mitten im Lauf dazukommt.
+      window.App.setRunModelBlock?.("deepseekResponse", deepSeekBlockedByAttachments);
       const consensusModelForRun = document.getElementById("consensusModelDropdown")?.value || "";
       const selectedProviderConfigsForRun = [
         ["OpenAI", "selectOpenAI", "openaiModelSelect"],
@@ -559,11 +564,7 @@
 
       function enforceDeepSeekAttachmentBlock() {
         if (!deepSeekBlockedByAttachments) return;
-        window.App.setModelSelectionState?.("deepseekResponse", false, {
-          persist: false,
-          syncCheckbox: true,
-          animate: false
-        });
+        window.App.setRunModelBlock?.("deepseekResponse", true);
       }
       enforceDeepSeekAttachmentBlock();
 

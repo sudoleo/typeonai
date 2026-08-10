@@ -40,6 +40,9 @@
     let pendingFileReads = 0;
     let dragDepth = 0;
     let deepSeekSelectionBeforeAttachment = null;
+    // Waehrend des Abgebens beim Senden ist der Composer zwar leer, die Dateien
+    // sind aber gerade RAUSGEGANGEN: der Lauf-Block bleibt dann bestehen.
+    let detachingForSend = false;
 
     function hasSendableAttachments() {
       return (window.pendingAttachments || []).some(function (att) {
@@ -85,6 +88,15 @@
       checkbox.removeAttribute("aria-describedby");
       if (label) label.classList.remove("is-attachment-incompatible");
       if (excludeButton) excludeButton.disabled = false;
+
+      // Der Composer ist leer, WEIL der Nutzer die Dateien entfernt hat: der
+      // naechste Lauf geht ohne Anhaenge raus, also faellt auch der Lauf-Block.
+      // Beim Senden (detachingForSend) ist der Composer ebenfalls leer, die
+      // Dateien sind aber gerade mit der Frage rausgegangen — dort bleibt der
+      // Block bis zum naechsten Senden stehen.
+      if (!detachingForSend) {
+        window.App?.setRunModelBlock?.("deepseekResponse", false);
+      }
 
       if (deepSeekSelectionBeforeAttachment !== null) {
         const shouldRestore = deepSeekSelectionBeforeAttachment;
@@ -326,7 +338,12 @@
         });
       if (window.pendingAttachments.length) {
         window.pendingAttachments = [];
-        renderAttachmentChips();
+        detachingForSend = true;
+        try {
+          renderAttachmentChips();
+        } finally {
+          detachingForSend = false;
+        }
       }
       return meta;
     }

@@ -1850,6 +1850,86 @@ def test_attachment_pauses_deepseek_and_restores_previous_selection(app_page):
     assert result["persistedAfter"] == result["persistedBefore"]
 
 
+def test_attachment_block_survives_the_whole_run(app_page):
+    """Beim Senden gibt der Composer die Anhaenge ab — der Ausschluss gehoert
+    aber dem LAUF. Jede /ask-Antwort loest einen Tier-Refresh aus; DeepSeek
+    darf dabei nicht mitten im Lauf wieder in den Konsens rutschen, sonst
+    wartet dieser auf eine Antwort, die nie angefragt wurde ("at least two
+    completed model answers")."""
+    result = app_page.evaluate(
+        """() => {
+          const checkbox = document.getElementById("selectDeepSeek");
+          const box = document.getElementById("deepseekResponse");
+          const snap = () => ({
+            checked: checkbox.checked,
+            excluded: box.classList.contains("excluded"),
+          });
+          const persistedBefore = localStorage.getItem("pref_check_DeepSeek");
+
+          // Der Nutzer hat DeepSeek irgendwann bewusst eingeschaltet.
+          localStorage.setItem("pref_check_DeepSeek", "true");
+          window.App.setModelSelectionState("deepseekResponse", true, {
+            persist: false, syncCheckbox: true, animate: false,
+          });
+
+          window.pendingAttachments = [{
+            name: "screenshot.png",
+            mime: "image/png",
+            size: 48000,
+            data: "iVBORw0KGgo=",
+          }];
+          window.renderAttachmentChips();
+
+          // Ablauf aus query-send.js: Lauf uebernimmt den Block, Composer gibt
+          // die Anhaenge an die Nachricht ab, dann laufen die Modelle.
+          window.App.setRunModelBlock("deepseekResponse", true);
+          window.App.attachments.detachForMessage();
+          const afterDetach = snap();
+          window.updatePremiumModelsState(window.isUserPro === true);
+          const afterModelAnswer = snap();
+
+          // Konsens-Gate: nur Boxen ohne .excluded muessen eine Antwort haben.
+          for (const id of ["openaiResponse", "mistralResponse"]) {
+            const answered = document.getElementById(id);
+            answered.dataset.responseState = "complete";
+            answered.dataset.consensusAnswer = id + " answer";
+            answered.querySelector(".collapsible-content").textContent = id + " answer";
+          }
+          const consensusWaitsForDeepSeek = !box.classList.contains("excluded")
+            && box.dataset.responseError !== "true"
+            && !(box.dataset.consensusAnswer || "").trim();
+
+          // Naechste Frage ohne Anhaenge: der Block faellt, die gespeicherte
+          // Wahl gilt wieder.
+          window.App.setRunModelBlock("deepseekResponse", false);
+          const nextRunWithoutFiles = snap();
+          window.updatePremiumModelsState(window.isUserPro === true);
+          const nextRunAfterRefresh = snap();
+
+          if (persistedBefore === null) {
+            localStorage.removeItem("pref_check_DeepSeek");
+          } else {
+            localStorage.setItem("pref_check_DeepSeek", persistedBefore);
+          }
+          window.clearPendingAttachments();
+
+          return {
+            afterDetach,
+            afterModelAnswer,
+            consensusWaitsForDeepSeek,
+            nextRunWithoutFiles,
+            nextRunAfterRefresh,
+          };
+        }"""
+    )
+
+    assert result["afterDetach"] == {"checked": False, "excluded": True}
+    assert result["afterModelAnswer"] == {"checked": False, "excluded": True}
+    assert result["consensusWaitsForDeepSeek"] is False
+    assert result["nextRunWithoutFiles"] == {"checked": True, "excluded": False}
+    assert result["nextRunAfterRefresh"] == {"checked": True, "excluded": False}
+
+
 def test_pdf_drop_uses_full_attachment_whitelist(app_page):
     """Drag-and-drop akzeptiert dieselben Dokumenttypen wie der Dateidialog."""
     dialogs = []
