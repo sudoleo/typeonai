@@ -156,19 +156,25 @@
    tabellarische Ziffern, transparente Flaeche, feine Kontur. Damit ist sie
    sofort scanbar und zugleich klar von den hochgestellten Quellenzahlen
    unterschieden. Wenn Claim und Difference denselben Satz markieren, bleibt
-   nur diese eine sichtbare Marke; der zusaetzliche Punkt wird ausgeblendet. */
+   nur diese eine sichtbare Marke; der zusaetzliche Punkt wird ausgeblendet.
+
+   Seit 2026-08-10 ohne Kontur: ein 999px-Rahmen mitten im Satz war ein
+   Steuerelement im Fliesstext. Die Quote steht jetzt wie eine Fussnote hinter
+   der Passage - Flaeche gibt es erst im Hover. Deshalb faellt auch die
+   Pillen-Geometrie (min-width, Innenabstand) weg: ohne Rahmen zentrierte sie
+   die Ziffern nur in einer unsichtbaren Box und riss eine Luecke zum Satz. */
 .claim-badge {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   vertical-align: 0.08em;
-  margin: 0 2px 0 5px;
-  padding: 0 5px;
-  min-width: 26px;
+  margin: 0 2px 0 4px;
+  padding: 0 2px;
   height: 16px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 84%, transparent);
-  border-radius: 999px;
+  border: 0;
+  /* Nur noch die Ecke der Hover-Flaeche, kein Rahmen im Ruhezustand. */
+  border-radius: 4px;
   background: transparent;
   color: var(--ink-2);
   font-family: inherit;
@@ -179,15 +185,14 @@
   line-height: var(--line-height-solid);
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 
 /* .is-linked-hover: die zugehoerige Passage wird gehovert (siehe .cx-claim). */
 .claim-badge:hover,
 .claim-badge:focus-visible,
 .claim-badge.is-linked-hover {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--sidebar-border));
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
   color: var(--text-color);
   outline: none;
 }
@@ -197,15 +202,13 @@
 }
 
 .claim-badge.has-dissent {
-  border-color: color-mix(in srgb, var(--cx-major-line) 42%, var(--sidebar-border));
   color: var(--cx-major-line);
 }
 
 .claim-badge.has-dissent:hover,
 .claim-badge.has-dissent:focus-visible,
 .claim-badge.has-dissent.is-linked-hover {
-  border-color: color-mix(in srgb, var(--cx-major-line) 70%, var(--sidebar-border));
-  background: color-mix(in srgb, var(--cx-major-line) 7%, transparent);
+  background: color-mix(in srgb, var(--cx-major-line) 13%, transparent);
   color: var(--cx-major-line);
 }
 
