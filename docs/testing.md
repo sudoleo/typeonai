@@ -59,21 +59,17 @@ darf nie durch beliebige Credentials oder ein Firebase-Standardprojekt ersetzt
 werden. Vollständiges Setup, Writer-Inventar und Befehle:
 [`tests/e2e/README.md`](../tests/e2e/README.md).
 
-## CI und Artefakte
+## CI
 
-`.github/workflows/tests.yml` läuft bei Pull Requests, Pushes auf `main` und
-manuell:
+Es gibt keine CI für die Tests: `.github/workflows/tests.yml` wurde am
+2026-08-10 bewusst entfernt, die Suite läuft ausschließlich lokal (siehe oben).
+Wer das rückgängig machen will, findet den Workflow in der Historie von Commit
+`a529a1e`.
 
-1. `Unit and integration` installiert `requirements-test.txt`, führt die
-   reguläre Suite mit explizit deaktiviertem E2E-Profil aus und blockiert bei
-   jedem Fehler.
-2. `E2E (Firestore emulator)` startet erst nach erfolgreicher regulärer Suite,
-   installiert gepinnte Browser-/Firebase-Werkzeuge und kapselt pytest in
-   `firebase emulators:exec --project demo-consensio-e2e`.
-
-Beide Jobs laden ihre JUnit-XML auch im Fehlerfall als GitHub-Actions-Artefakt
-hoch (`unit-integration-results` beziehungsweise `e2e-results`). Die E2E-
-Umgebung enthält keine produktiven Secrets.
+Damit gilt: Vor einem Deploy die reguläre Suite selbst laufen lassen — es prüft
+sonst niemand. Tests, die still an der lokalen `.env` hängen, fallen dabei nicht
+mehr auf; nötige Environment-Variablen deshalb im Test selbst setzen
+(`monkeypatch.setenv`) statt sie vorauszusetzen.
 
 Für manuelle Frontend-QA bleibt [`smoke-checklist.md`](smoke-checklist.md)
 verbindlich.

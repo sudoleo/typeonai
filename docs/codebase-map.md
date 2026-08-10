@@ -2137,10 +2137,10 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   Ein Service-Account ist weder nötig noch zulässig; Java/Firebase CLI starten
   den Emulator, Netzzugang lädt CDN-Assets. Verifizierte Baseline am
   2026-08-09: **39 passed, 1 warning**. Details in `tests/e2e/README.md`.
-- **CI**: `.github/workflows/tests.yml` führt bei PR, Push auf `main` und
-  manuell zuerst Unit/Integration und danach E2E im Emulator aus. Beide Jobs
-  blockieren bei Fehlern und laden JUnit-XML als Artefakt hoch. Gepinnte
-  Abhängigkeiten, Ausschlüsse und Befehle stehen in `docs/testing.md`.
+- **Keine CI für Tests**: `.github/workflows/tests.yml` ist am 2026-08-10
+  entfernt worden, die Suite läuft nur lokal. Die verbliebenen Workflows
+  (`publish-consensus.yml`, `restart-render.yml`) sind Betriebs-Automationen,
+  keine Tests. Befehle und Ausschlüsse stehen in `docs/testing.md`.
 - **Frontend darüber hinaus manuell.** Nach JS-Änderungen
   an nicht abgedeckten Flows (Resolve, Share, Attachments, Follow-up,
   Bookmarks, Agent Mode, Demo, Mobile) die manuelle
