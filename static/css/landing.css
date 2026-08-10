@@ -426,14 +426,7 @@ img { display: block; max-width: 100%; }
   .lp-prompt.lp-hero-prompt { padding: 16px; padding-bottom: 12px; gap: 18px; min-height: 140px; }
   .lp-demo-btn { height: 38px; padding: 0 16px; font-size: var(--font-size-sm); }
 
-  .lp-hero-pulse {
-    grid-template-columns: 8px minmax(0, 1fr);
-    width: 100%;
-  }
-
-  .lp-hero-pulse-link {
-    grid-column: 2;
-  }
+  .lp-hero-pulse { width: 100%; }
 
   /* Attach + run switch + "Try the demo" need 339px and a phone gives the
      field 311, so the row used to push ~28px past its own edge. The two
@@ -1751,19 +1744,22 @@ img { display: block; max-width: 100%; }
 .claims-fallback-text { min-width: 0; overflow-wrap: anywhere; }
 
 /* Same micro-ratio as /app: immediately scanable, but quieter than the prose
-   and structurally distinct from superscript source numbers. */
+   and structurally distinct from superscript source numbers. No outline at
+   rest — the ratio sits behind the passage like a footnote, and only hover
+   gives it a surface. Mirrors components-consensus-insights.css, including
+   the fact that it is a real control here too. */
 .claim-badge {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   vertical-align: 0.08em;
-  margin: 0 2px 0 5px;
-  padding: 0 5px;
-  min-width: 26px;
+  margin: 0 2px 0 4px;
+  padding: 0 2px;
   height: 16px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 84%, transparent);
-  border-radius: 999px;
+  border: 0;
+  border-radius: 4px;
   background: transparent;
   color: var(--ink-2);
   font-family: inherit;
@@ -1772,13 +1768,49 @@ img { display: block; max-width: 100%; }
   font-variant-numeric: tabular-nums;
   letter-spacing: var(--tracking-tight);
   line-height: var(--line-height-solid);
+  cursor: pointer;
   white-space: nowrap;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
+
+/* >=44px hit area without touching the line height, exactly as in /app. */
+.claim-badge[data-claim-agree]::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+/* .is-linked-hover: the passage this badge belongs to is being hovered. */
+.claim-badge:hover,
+.claim-badge:focus-visible,
+.claim-badge.is-linked-hover {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--text-color);
+  outline: none;
+}
+
+.claim-badge:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* The samples in the reading key are illustrations, not controls. */
+.lp-mark-key .claim-badge { cursor: default; }
+.lp-mark-key .claim-badge:hover { background: transparent; color: var(--ink-2); }
 
 .claims-fallback-row .claim-badge { margin: 0; }
 
 .claim-badge.has-dissent {
-  border-color: color-mix(in srgb, var(--cx-major-line) 42%, var(--sidebar-border));
+  color: var(--cx-major-line);
+}
+
+.claim-badge.has-dissent:hover,
+.claim-badge.has-dissent:focus-visible,
+.claim-badge.has-dissent.is-linked-hover {
+  background: color-mix(in srgb, var(--cx-major-line) 13%, transparent);
   color: var(--cx-major-line);
 }
 
@@ -1827,7 +1859,11 @@ img { display: block; max-width: 100%; }
   transition: background-color 0.14s ease;
 }
 
+/* .is-hovered is the JS-driven half of the pairing (landing-insights.js): a
+   sentence that carries both a mark and a ratio lights up from either side,
+   exactly like .cx-claim.is-hovered in components-consensus-insights.css. */
 .cx-claim.is-interactive:hover,
+.cx-claim.is-interactive.is-hovered,
 .cx-claim.is-interactive:has(+ .cx-marker:hover) {
   border-radius: 3px;
   background: color-mix(in srgb, var(--text-color) 7%, transparent);
@@ -1837,12 +1873,14 @@ img { display: block; max-width: 100%; }
 }
 
 .cx-claim.is-major.is-interactive:hover,
+.cx-claim.is-major.is-interactive.is-hovered,
 .cx-claim.is-major.is-interactive:has(+ .cx-marker:hover) {
   background: var(--cx-flash);
   text-decoration-thickness: 3px;
 }
 
 .cx-claim.is-minor.is-interactive:hover,
+.cx-claim.is-minor.is-interactive.is-hovered,
 .cx-claim.is-minor.is-interactive:has(+ .cx-marker:hover) {
   text-decoration-color: color-mix(in srgb, var(--text-color) 72%, transparent);
   text-decoration-thickness: 2px;
@@ -1894,6 +1932,177 @@ img { display: block; max-width: 100%; }
 
 .cx-marker.is-major .cx-marker-dot { background: var(--cx-major-line); }
 
+/* --------------------------------------------------------------------------
+   Hover preview + claim popover — the two things a mark actually does
+
+   Until now the marks on this page were a picture of a control: the ratio and
+   the dot were rendered but inert, so the one gesture the product is built
+   around ("who said that?") did nothing here. These are the same two surfaces
+   /app uses — the short version on hover (shell.css .insight-preview), the
+   full breakdown on click (components-consensus-insights.css .claim-popover)
+   — rebuilt from the five landing values, because a mock made of different
+   material stops being a mock. Driven by static/js/landing-insights.js.
+   -------------------------------------------------------------------------- */
+.insight-preview {
+  position: absolute;
+  z-index: 1400;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px 13px;
+  border-radius: var(--radius-md);
+  background: var(--raise);
+  color: var(--ink);
+  box-shadow: var(--lift);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+  /* Purely a reading aid: it must never swallow the click it is advertising. */
+  pointer-events: none;
+}
+
+.insight-preview[hidden] { display: none; }
+
+.insight-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.insight-preview-claim { color: var(--ink-2); }
+
+.insight-preview-row {
+  display: grid;
+  grid-template-columns: minmax(0, 84px) minmax(0, 1fr);
+  gap: 9px;
+  color: var(--ink-2);
+  font-size: var(--font-size-micro);
+}
+
+.insight-preview-key {
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.insight-preview-quote {
+  margin: 2px 0 0;
+  padding-left: 9px;
+  border-left: 1px solid var(--line-soft);
+  color: var(--ink-3);
+  font-size: var(--font-size-micro);
+  font-style: italic;
+}
+
+.insight-preview-foot {
+  margin-top: 2px;
+  color: var(--ink-3);
+  font-size: var(--font-size-micro);
+}
+
+.claim-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1399;
+  background: rgba(18, 19, 21, 0.42);
+}
+
+.claim-popover {
+  position: absolute;
+  z-index: 1400;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--raise);
+  box-shadow: var(--lift), 0 0 0 1px var(--line-soft);
+  color: var(--ink);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
+  text-align: left;
+}
+
+.claim-popover[hidden] { display: none; }
+
+/* On a phone an anchored popover would land half off-screen: same content,
+   centred, with the page behind it dimmed. */
+.claim-popover.is-modal {
+  position: fixed;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%);
+  width: min(92vw, 420px) !important;
+  max-height: 72vh;
+  border-radius: var(--radius-xl);
+}
+
+.claim-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.claim-popover-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.claim-popover-close {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--well);
+  color: var(--ink);
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-solid);
+  cursor: pointer;
+}
+
+.claim-popover-claim {
+  margin-bottom: 10px;
+  color: var(--ink-2);
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
+.claim-popover-section + .claim-popover-section { margin-top: 10px; }
+
+.claim-section-label {
+  margin-bottom: 4px;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.claim-section-label.is-agree { color: color-mix(in srgb, var(--agree) 78%, var(--ink)); }
+.claim-section-label.is-dissent { color: color-mix(in srgb, var(--cx-major-line) 82%, var(--ink)); }
+
+.claim-model-row { padding: 5px 0; }
+
+.claim-model-row + .claim-model-row {
+  border-top: 1px solid var(--line-soft);
+}
+
+.claim-model-name { font-weight: var(--font-weight-semibold); }
+
+.claim-model-quote {
+  margin: 4px 0 0;
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--cx-major-line) 50%, var(--line));
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+
 /* The entry a mark just opened: a short amber wash that fades by itself. */
 .diff-card.is-focused {
   border-radius: var(--radius-xs);
@@ -1923,31 +2132,25 @@ img { display: block; max-width: 100%; }
 }
 
 .lp-scene-visual.is-visible .cx-claim.is-minor,
-.lp-slide.is-active .cx-claim.is-minor { animation: cxInkMinor 0.6s ease 0.45s backwards; }
+.lp-step.is-visible .cx-claim.is-minor { animation: cxInkMinor 0.6s ease 0.45s backwards; }
 
 .lp-scene-visual.is-visible .cx-claim.is-major,
-.lp-slide.is-active .cx-claim.is-major { animation: cxInkMajor 0.6s ease 0.45s backwards; }
+.lp-step.is-visible .cx-claim.is-major { animation: cxInkMajor 0.6s ease 0.45s backwards; }
 
 .lp-scene-visual.is-visible .cx-marker,
-.lp-slide.is-active .cx-marker { animation: cxMarkerPop 0.3s ease 0.95s backwards; }
-
-/* Hint under the interactive mockup */
-.lp-scene-hint {
-  margin: 14px 0 0;
-  text-align: center;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-}
+.lp-step.is-visible .cx-marker { animation: cxMarkerPop 0.3s ease 0.95s backwards; }
 
 /* --------------------------------------------------------------------------
-   Reading key — the three states in their real visual vocabulary
+   Reading key — the three states in their real visual vocabulary.
+   Since the Decide rebuild this is not a legend floating above an unexplained
+   mockup any more: it is step 03's own visual, with the sentence that explains
+   it sitting next to it.
    -------------------------------------------------------------------------- */
 .lp-mark-key {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px 34px;
-  margin: clamp(26px, 3.5vw, 38px) 0 clamp(30px, 4vw, 44px);
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -2237,112 +2440,206 @@ img { display: block; max-width: 100%; }
 }
 
 /* --------------------------------------------------------------------------
-   Scene 03 slideshow — more consensus/differences examples
-   -------------------------------------------------------------------------- */
-.lp-diff-slider { margin-top: clamp(52px, 7vw, 84px); }
+   Decide — four steps instead of one wall
 
-.lp-slider-eyebrow {
-  margin: 0 0 22px;
+   One claim per step: a short piece of copy on the left, the real surface
+   slice it is talking about on the right. The slice is not a picture of the
+   product, it is the product's own markup, so the ratios and marks in here
+   work exactly as they do in /app.
+   -------------------------------------------------------------------------- */
+.lp-steps {
+  display: grid;
+  gap: clamp(38px, 5.5vw, 68px);
+  margin: clamp(40px, 5vw, 64px) 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: none;
+}
+
+.lp-step {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  align-items: center;
+  gap: clamp(22px, 3.5vw, 52px);
+}
+
+/* Even steps mirror, so the eye is not marched down one rigid column. */
+.lp-step:nth-child(even) .lp-step-copy { order: 2; }
+
+.lp-step-copy { min-width: 0; }
+
+.lp-step-num {
+  margin: 0 0 10px;
+  color: var(--ink-3);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-wide);
+}
+
+.lp-step-copy h3 {
+  margin: 0 0 12px;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+}
+
+.lp-step-copy p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-ui);
+}
+
+/* An invitation, not a caption: it says the thing next to it is operable. */
+.lp-step-try {
+  margin-top: 12px !important;
+  color: var(--ink-2) !important;
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-semibold);
+}
+
+.lp-step-try::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 8px;
+  vertical-align: 0.18em;
+  border-radius: 50%;
+  background: var(--agree);
+}
+
+.lp-step-visual { min-width: 0; }
+
+/* The panel a slice sits on — the same canvas as the app mock above, so a
+   fragment of the product still looks like it came out of the product. */
+.lp-excerpt {
+  padding: 16px 18px;
+  border-radius: var(--radius-lg);
+  /* --surface, not a named colour: the panel stays one tonal step from
+     whichever section tone it lands in (see .lp-section--white/--grey). */
+  background: var(--surface);
+  box-shadow: var(--lift), 0 0 0 1px var(--line-soft);
+}
+
+.lp-excerpt .consensus-verdict { margin-bottom: 0; }
+.lp-excerpt .consensus-main-text > p:first-child { margin-top: 0; }
+.lp-excerpt .consensus-main-text > p:last-child { margin-bottom: 0; }
+
+/* The sentence that owns the mark, above the card it opens. */
+.lp-excerpt-lead {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.lp-excerpt .differences-cards { margin: 0; }
+.lp-excerpt .diff-card { border-top: 0; }
+
+/* --------------------------------------------------------------------------
+   The same lens on other questions
+
+   Three more full consensus boxes said one thing: the reading changes a lot
+   from question to question. That is a score, a headline and a line — the
+   score is the measurement, so it gets the colour and the weight, and the
+   sentence beside it stays quiet.
+   -------------------------------------------------------------------------- */
+.lp-examples { margin-top: clamp(48px, 6vw, 84px); }
+
+.lp-examples-title {
+  margin: 0 0 18px;
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-heading);
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
-  text-align: center;
 }
 
-/* All slides share one grid cell: the container keeps the height of the
-   tallest slide, inactive slides fade out without collapsing the layout. */
-.lp-slides { display: grid; }
-
-.lp-slide {
-  grid-area: 1 / 1;
-  min-width: 0;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(6px);
-  pointer-events: none;
-  transition: opacity 0.45s ease, transform 0.45s ease, visibility 0s linear 0.45s;
+.lp-example-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.lp-slide.is-active {
-  opacity: 1;
-  visibility: visible;
-  transform: none;
-  pointer-events: auto;
-  transition-delay: 0s;
+.lp-example {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(14px, 2.5vw, 26px);
+  padding: 18px 2px;
+  border-top: 1px solid var(--line-soft);
 }
 
-.lp-slide-q {
-  margin: 0 0 14px;
-  text-align: center;
-  color: var(--text-primary);
-  font-size: var(--font-size-base);
+.lp-example:last-child { border-bottom: 1px solid var(--line-soft); }
+
+.lp-example-score {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--line-height-solid);
+}
+
+.lp-example-score b {
+  font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-semibold);
   letter-spacing: var(--tracking-tight);
 }
 
-/* Compact variant of the consensus box inside slides */
-.lp-mini.consensus-box { gap: 10px; }
-.lp-mini .consensus-main { padding: 6px 12px 8px; }
-.lp-mini .consensus-main > h2 {
-  justify-content: flex-start;
-  padding: 0;
-  margin-bottom: 10px;
-  font-size: var(--font-size-sm);
-}
-.lp-mini .consensus-main-text { font-size: var(--font-size-sm); line-height: var(--line-height-reading); }
-.lp-mini .consensus-marker-legend { margin-top: 10px; font-size: var(--font-size-micro); }
-.lp-mini .consensus-differences { padding: 2px 12px 6px; }
-
-.lp-slider-nav {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  margin-top: 24px;
-}
-
-.lp-slider-arrow {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: var(--surface);
+.lp-example-score i {
+  margin-left: 2px;
   color: var(--ink-3);
-  cursor: pointer;
-  box-shadow: none;
-  transition: color 0.2s ease, background-color 0.2s ease;
+  font-size: var(--font-size-xs);
+  font-style: normal;
 }
 
-.lp-slider-arrow:hover {
-  background: var(--surface-2);
-  color: var(--ink);
+.lp-example-score.is-ok b { color: var(--agree); }
+.lp-example-score.is-warn b { color: var(--partial); }
+
+.lp-example-meter {
+  display: block;
+  width: 100%;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  overflow: hidden;
 }
 
-.lp-slider-arrow svg { width: 15px; height: 15px; }
-
-.lp-slider-dots { display: flex; gap: 8px; }
-
-.lp-slider-dot {
-  width: 8px;
-  height: 8px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--text-secondary) 32%, transparent);
-  cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.2s ease;
+.lp-example-meter span {
+  display: block;
+  width: calc(var(--val, 0) * 1%);
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
 }
 
-.lp-slider-dot.is-active {
-  background: var(--accent);
-  transform: scale(1.2);
+.lp-example-score.is-ok .lp-example-meter span { background: var(--agree); }
+.lp-example-score.is-warn .lp-example-meter span { background: var(--partial); }
+
+.lp-example-body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.lp-example-q {
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--tracking-tight);
+}
+
+.lp-example-note {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
 }
 
 /* --------------------------------------------------------------------------
@@ -2472,7 +2769,6 @@ img { display: block; max-width: 100%; }
 
 @media (prefers-reduced-motion: reduce) {
   .lp-reveal { opacity: 1; transform: none; transition: none; }
-  .lp-slide { transition: none; transform: none; }
   /* Marks are present from the start instead of inking themselves in; the
      flash stays put (the JS removes the class after 2s). */
   .cx-claim, .cx-marker, .consensus-differences-summary::before { animation: none; transition: none; }
@@ -2490,9 +2786,12 @@ img { display: block; max-width: 100%; }
   .lp-watch-story { grid-template-columns: 1fr; }
   .lp-watch-notification { width: min(100%, 430px); justify-self: end; margin-top: -12px; transform: none; }
 
-  /* Scene 03: the consensus box is single-column at every width since the
-     inline-confidence redesign — only the reading key needs to stack. */
-  .lp-mark-key { gap: 12px 22px; }
+  /* Decide: side by side needs a column wide enough for a real sentence.
+     Below that the copy sits on top of the slice it describes, and the
+     mirroring of even steps has nothing left to mirror. */
+  .lp-step { grid-template-columns: 1fr; gap: 18px; }
+  .lp-step:nth-child(even) .lp-step-copy { order: 0; }
+  .lp-mark-key { gap: 12px; }
 
   /* Verdict bar: judge footnote wraps under the headline, indented behind
      the score ring (42px ring + 14px gap), like the /app on small screens.
@@ -2517,8 +2816,6 @@ img { display: block; max-width: 100%; }
   .lp-shell { width: calc(100% - 32px); }
   .lp-nav-links a:not(.lp-nav-cta) { display: none; }
   .lp-app-body, .lp-window-body { padding: 16px 14px 14px; gap: 12px; }
-  .lp-logos { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .lp-logo { padding: 22px 10px; }
   .consensus-main { padding: 10px 16px 12px; }
   .consensus-main > h2 { padding: 0 56px; }
   /* Reading key: one state per row, so no sample wraps mid-underline. */
@@ -2543,4 +2840,114 @@ img { display: block; max-width: 100%; }
   .lp-run-result { padding-inline: 16px; }
   .lp-run-model { grid-template-columns: minmax(58px, 84px) minmax(0, 1fr) 36px; gap: 8px; }
   .lp-run-provenance-tabs { margin-left: 0; gap: 4px 12px; }
+}
+
+/* ==========================================================================
+   Phone — one claim at a time
+
+   Everything above is written for a screen wide enough to hold a display
+   headline, a lead, a product mock and its footnotes at the same time.
+   Poured into a 343px column that stopped being a page and became a wall:
+   a 44px headline running five lines, six named provider pills over two
+   rows, the same consensus box drawn four times in one section, and 152px
+   of nothing between each of them.
+
+   Nothing here deletes an argument. The type steps down one notch, the
+   ornaments collapse to their essential shape, and sentences that are
+   elaboration rather than claim (marked .lp-wide-only in the template) drop
+   out of the layout while staying in the document. What is left is the same
+   page with less said at once.
+   ========================================================================== */
+@media (max-width: 600px) {
+  /* 76px top and bottom put 152px — nearly a fifth of the screen — between
+     two topics, which reads as the page having stalled rather than as air. */
+  :root { --section-pad: 62px; }
+
+  /* The display scale is sized for a headline that fills a wide column; at
+     this width the same value simply runs down the screen. */
+  .lp-display,
+  .lp-hero .lp-display { font-size: 2.05rem; line-height: 1.14; }
+  .lp-h2 { font-size: 1.6rem; line-height: 1.16; }
+  .lp-eyebrow { margin-bottom: 10px; font-size: var(--font-size-xs); }
+  .lp-lead { margin-top: 14px; font-size: var(--font-size-base); }
+  .lp-head .lp-lead,
+  .lp-hero .lp-lead { max-width: none; }
+
+  .lp-wide-only { display: none; }
+
+  /* --- Hero: the field is the call to action, the rest is its caption ----- */
+  .lp-hero.lp-hero--demo { padding-bottom: 32px; }
+  .lp-hero-prompt.lp-prompt { margin-top: 24px; }
+
+  /* Six marks in one row say "six providers" as well as six labelled pills
+     say it over two. The names stay readable to screen readers. */
+  .lp-hero-models { gap: 6px; margin-top: 16px; }
+  .lp-hero-models span { padding: 7px; }
+  .lp-hero-models img { width: 18px; height: 18px; }
+  .lp-hero-models .lp-chip-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    clip-path: inset(50%);
+  }
+
+  .lp-hero-note { margin-top: 14px; font-size: var(--font-size-xs); }
+
+  /* Without its explanatory half the pulse strip is a status line again, so
+     it goes back to one row: dot, label, link. */
+  .lp-hero-pulse {
+    grid-template-columns: 7px minmax(0, 1fr) auto;
+    margin-top: 18px;
+  }
+  .lp-hero-pulse-link { grid-column: auto; }
+  .lp-hero--demo .lp-hero-actions { margin-top: 18px; }
+
+  /* --- Scenes ------------------------------------------------------------ */
+  .lp-scene-visual,
+  .lp-scene-03 .lp-scene-visual { margin-top: 26px; }
+  .lp-scene-notes { margin-top: 14px; gap: 8px; font-size: var(--font-size-sm); }
+
+  /* Reading key: three rows of sample + caption ahead of a mock that shows
+     the same three states in use. The captions carry it on their own. */
+  .lp-mark-key { gap: 10px; margin: 22px 0 26px; }
+
+  .lp-steps { gap: 30px; margin-top: 24px; }
+  .lp-step { gap: 14px; }
+  .lp-step-copy h3 { margin-bottom: 8px; font-size: var(--font-size-lg); }
+  .lp-step-num { margin-bottom: 6px; font-size: var(--font-size-xs); }
+  .lp-step-try { margin-top: 9px !important; }
+  .lp-mark-key { gap: 11px; }
+  .lp-step-copy p { font-size: var(--font-size-sm); }
+  .lp-excerpt { padding: 13px 14px; }
+
+  .lp-examples { margin-top: 38px; }
+  .lp-examples-title { margin-bottom: 12px; }
+  /* 84px of score column next to a question is most of a phone: the score
+     keeps its weight, the column just stops reserving room it does not use. */
+  .lp-example { grid-template-columns: 62px minmax(0, 1fr); gap: 14px; padding: 14px 0; }
+  .lp-example-score b { font-size: var(--font-size-xl); }
+  .lp-example-q { font-size: var(--font-size-sm); }
+  .lp-example-note { font-size: var(--font-size-xs); }
+
+  /* --- Lists of three ---------------------------------------------------- */
+  .lp-card-grid { margin-top: 26px; gap: 8px; }
+  .lp-card { padding: 20px 2px 0; }
+  .lp-card .lp-eyebrow { margin-bottom: 8px; }
+  .lp-card h3 { font-size: var(--font-size-base); }
+  .lp-card p { font-size: var(--font-size-sm); }
+
+  /* Six tiles two-up were three rows of near-empty boxes, and the hero has
+     already shown these marks. Three-up they are a strip, not a section. */
+  .lp-logos { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 26px; }
+  .lp-logo { gap: 9px; padding: 16px 6px; }
+  .lp-logo-mark { height: 26px; }
+  .lp-logo-mark img { height: 24px; }
+  .lp-logo span { font-size: var(--font-size-xs); }
+
+  .lp-watch-story { margin-top: 26px; }
+  .lp-final { gap: 20px; }
 }

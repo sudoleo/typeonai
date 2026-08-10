@@ -23,7 +23,7 @@
   <meta name="twitter:image" content="https://www.consens.io/static/og-home-v2.png?v=20260802">
   <meta name="twitter:image:alt" content="The risk of one perspective | consens.io">
   <title>Track Where AI Answers Disagree and Change | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260809-phase0c1">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260810-decide4">
   <link rel="stylesheet" href="/static/css/benchmark.css?v=20260731-inter1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -81,7 +81,6 @@
     <section class="lp-section lp-section--white lp-section--hero">
       <div class="lp-shell lp-hero lp-hero--demo">
         <div class="lp-hero-copy">
-          <p class="lp-eyebrow">Independent tracking of AI answers</p>
           <h1 class="lp-display">AI answers shape what the world believes.<br>We track when they move.</h1>
         </div>
 
@@ -105,19 +104,25 @@
           </span>
         </a>
 
+        <!-- The provider names are wrapped so a phone can drop them to the
+             accessibility tree and keep just the six marks: the same claim in
+             one quiet row instead of two rows of pills. -->
         <div class="lp-chips lp-hero-models" aria-label="Providers queried in every run">
-          <span><img src="/static/icons/chat_icons/chatgpt.png" alt="">ChatGPT</span>
-          <span><img src="/static/icons/chat_icons/claude.png" alt="">Claude</span>
-          <span><img src="/static/icons/chat_icons/gemini-icon.png" alt="">Gemini</span>
-          <span><img src="/static/icons/chat_icons/mistral.png" alt="">Mistral</span>
-          <span><img src="/static/icons/chat_icons/deepseek.png" alt="">DeepSeek</span>
-          <span><img src="/static/icons/chat_icons/grok.png" alt="">Grok</span>
+          <span><img src="/static/icons/chat_icons/chatgpt.png" alt=""><span class="lp-chip-name">ChatGPT</span></span>
+          <span><img src="/static/icons/chat_icons/claude.png" alt=""><span class="lp-chip-name">Claude</span></span>
+          <span><img src="/static/icons/chat_icons/gemini-icon.png" alt=""><span class="lp-chip-name">Gemini</span></span>
+          <span><img src="/static/icons/chat_icons/mistral.png" alt=""><span class="lp-chip-name">Mistral</span></span>
+          <span><img src="/static/icons/chat_icons/deepseek.png" alt=""><span class="lp-chip-name">DeepSeek</span></span>
+          <span><img src="/static/icons/chat_icons/grok.png" alt=""><span class="lp-chip-name">Grok</span></span>
         </div>
-        <p class="lp-hero-note">No account needed. The demo replays a real run: six independent answers, then one consensus with the contradictions marked inside it.</p>
+        <!-- .lp-wide-only marks a sentence that earns its place on a wide
+             screen and is only weight on a phone. It is hidden, not removed:
+             the reasoning stays in the page for anyone on a desktop. -->
+        <p class="lp-hero-note">No account needed. The demo replays a real run<span class="lp-wide-only">: six independent answers, then one consensus with the contradictions marked inside it</span>.</p>
 
         <a class="lp-hero-pulse" href="/model-pulse" data-umami-event="landing_open_model_pulse">
           <span class="lp-hero-pulse-status" aria-hidden="true"></span>
-          <span><strong>Live model pulse</strong> See which model answers most often earn the judge's pick in real runs.</span>
+          <span><strong>Live model pulse</strong><span class="lp-wide-only">See which model answers most often earn the judge's pick in real runs.</span></span>
           <span class="lp-hero-pulse-link">View leaderboard&nbsp;›</span>
         </a>
 
@@ -274,78 +279,125 @@
       </div>
     </section>
 
-    <!-- Scene 03: the highlight -->
+    <!-- ====================================================== DECIDE
+         Four steps, not one wall.
+
+         This used to be a reading key, a full consensus box, a hint line and
+         a slideshow that repeated the whole consensus box three more times —
+         four copies of the same surface in one section, none of them
+         explained. It is now taken apart into the four things the surface
+         actually does, in the order you meet them: the score, the counts, the
+         marks, and the disagreement behind a mark. Every slice is a real
+         piece of the /app surface and every one of them works: the ratios
+         open their breakdown, the marks open the card in step 04.
+         Behaviour: static/js/landing-insights.js. -->
     <section class="lp-section lp-section--grey lp-scene-03">
       <div class="lp-shell">
         <div class="lp-head lp-reveal">
           <p class="lp-eyebrow">03 · Decide</p>
           <h2 class="lp-h2">The doubt is marked in the answer.</h2>
-          <p class="lp-lead">One answer, read top to bottom. Where the models pull apart, the sentence itself carries the mark, so you never have to read a second document to know what to trust.</p>
+          <p class="lp-lead">One answer, read top to bottom — with the disagreement written into it rather than hidden behind it. Four things carry that, and you can try each one here.</p>
         </div>
 
-        <!-- Reading key: the same three states the app uses, rendered in the
-             actual visual vocabulary instead of described in prose. -->
-        <ul class="lp-mark-key lp-reveal" aria-label="What the marks in a consensus answer mean">
-          <li>
-            <span class="lp-mark-sample">All models that address it agree<span class="claim-badge" aria-hidden="true"><span class="claim-ratio" aria-hidden="true">6/6</span></span></span>
-            <span class="lp-mark-note">no mark, just the count</span>
-          </li>
-          <li>
-            <span class="lp-mark-sample"><span class="cx-claim is-minor">They differ on this detail</span><span class="cx-marker is-minor" aria-hidden="true"><span class="cx-marker-dot"></span></span></span>
-            <span class="lp-mark-note">fine dotted line</span>
-          </li>
-          <li>
-            <span class="lp-mark-sample"><span class="cx-claim is-major">They contradict each other here</span><span class="cx-marker is-major" aria-hidden="true"><span class="cx-marker-dot"></span></span></span>
-            <span class="lp-mark-note">amber wavy line</span>
-          </li>
-        </ul>
-
-        <div class="lp-scene-visual lp-reveal">
-          <div class="consensus-verdict is-calm">
-            <span class="verdict-gauge" style="--val:68" title="Agreement score 68/100">
-              <span class="verdict-score">
-                <span class="verdict-score-num">68</span><span class="verdict-score-unit" aria-hidden="true">/100</span>
-              </span>
-              <span class="verdict-meter" aria-hidden="true"><span class="verdict-meter-fill"></span></span>
-            </span>
-            <span class="verdict-main">
-              <span class="verdict-headline">Strong agreement</span>
-              <span class="verdict-detail">1 minor detail · disputed: where the Amazon starts, 6 models compared</span>
-            </span>
-            <span class="verdict-judge">
-              <span>Analysis by Gemini</span>
-              <span class="verdict-judge-sub">independent of the consensus engine</span>
-            </span>
-          </div>
-          <div class="consensus-box">
-            <div class="consensus-main">
-              <div class="lp-consensus-actions">
-                <button class="consensus-share-pill" type="button" tabindex="-1" aria-label="Share this consensus publicly">
-                  <svg class="share-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"></path><path d="M8.5 7.5 12 4l3.5 3.5"></path><path d="M5 12v7a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-7"></path></svg>
-                </button>
-                <button class="consensus-actions-toggle" type="button" tabindex="-1" aria-label="Copy options">
-                  <svg class="quote-toggle-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"></path></svg>
-                </button>
-              </div>
-              <h2>Consensus Answer</h2>
-              <div class="consensus-main-text consensus-answer-body">
-                <p><strong>The Nile is the conventional longest river, but the Amazon has a credible claim.</strong></p>
-                <p>By convention and in most references the Nile leads at about 6,650 km<button class="claim-badge" type="button" tabindex="-1" aria-label="All 6 models that address this agree. Open details"><span class="claim-ratio" aria-hidden="true">6/6</span></button> <span class="cx-claim is-minor is-interactive" data-diff-open="lpDiffRiver">Whether the Amazon overtakes it depends on where its mouth is drawn: counting the Pará estuary adds several hundred kilometres, and not every survey accepts that boundary.</span><button class="cx-marker is-minor" type="button" data-diff-open="lpDiffRiver" aria-haspopup="dialog" aria-label="The models differ on a detail here. Open details"><span class="cx-marker-dot" aria-hidden="true"></span></button></p>
-                <ul>
-                  <li>The Amazon is unambiguously the largest river by discharge<button class="claim-badge" type="button" tabindex="-1" aria-label="All 6 models that address this agree. Open details"><span class="claim-ratio" aria-hidden="true">6/6</span></button></li>
-                  <li><span class="cx-claim is-minor is-interactive" data-diff-open="lpDiffRiver">The disputed 2007 expedition puts the Amazon at 6,992 km.</span><button class="claim-badge has-dissent" type="button" tabindex="-1" aria-label="3 of 6 models support this. Open details"><span class="claim-ratio" aria-hidden="true">3/6</span></button></li>
-                </ul>
-                <p>A careful answer names both rivers and the measurement dispute instead of hiding it inside one confident number.</p>
-              </div>
-              <p class="consensus-marker-legend">Marked passages are checked key claims. Unmarked text was not compared individually.</p>
+        <ol class="lp-steps">
+          <!-- 01 · the score -->
+          <li class="lp-step lp-reveal">
+            <div class="lp-step-copy">
+              <p class="lp-step-num">01</p>
+              <h3>How far apart they were</h3>
+              <p>Every run opens with one number: how much the six answers actually agreed.<span class="lp-wide-only"> An uninvolved model works it out, so the engine that wrote the answer is not also grading it.</span></p>
             </div>
-            <!-- Collapsed by default, exactly like the app: clicking a mark in the
-                 answer opens this panel on the matching entry. -->
-            <details class="consensus-differences consensus-differences-panel">
-              <summary class="consensus-differences-summary">
-                <span class="consensus-differences-summary-label">See all differences</span>
-              </summary>
-              <div class="consensus-differences-content">
+            <div class="lp-step-visual">
+              <div class="lp-excerpt">
+              <div class="consensus-verdict is-calm">
+                <span class="verdict-gauge" style="--val:68" title="Agreement score 68/100">
+                  <span class="verdict-score">
+                    <span class="verdict-score-num">68</span><span class="verdict-score-unit" aria-hidden="true">/100</span>
+                  </span>
+                  <span class="verdict-meter" aria-hidden="true"><span class="verdict-meter-fill"></span></span>
+                </span>
+                <span class="verdict-main">
+                  <span class="verdict-headline">Strong agreement</span>
+                  <span class="verdict-detail">1 minor detail · disputed: where the Amazon starts, 6 models compared</span>
+                </span>
+                <span class="verdict-judge">
+                  <span>Analysis by Gemini</span>
+                  <span class="verdict-judge-sub">independent of the consensus engine</span>
+                </span>
+              </div>
+              </div>
+            </div>
+          </li>
+
+          <!-- 02 · the counts -->
+          <li class="lp-step lp-reveal">
+            <div class="lp-step-copy">
+              <p class="lp-step-num">02</p>
+              <h3>Who backed each claim</h3>
+              <p>The small number behind a sentence is how many models supported it. Rest on it, or tap it, and it names them: who agreed, who deviated<span class="lp-wide-only">, and in what words</span>.</p>
+              <p class="lp-step-try">Try it on the 3/6.</p>
+            </div>
+            <div class="lp-step-visual">
+              <div class="lp-excerpt">
+                <div class="consensus-main-text consensus-answer-body">
+                  <!-- The data- attributes are what make a ratio a control
+                       rather than a picture of one; the splits match the card
+                       in step 04, because a mock that contradicts itself is
+                       worse than no mock. -->
+                  <p>By convention and in most references the Nile leads at about 6,650 km<button class="claim-badge" type="button"
+                      data-claim-anchor="By convention and in most references the Nile leads at about 6,650 km"
+                      data-claim-agree="ChatGPT, Claude, Gemini, Mistral, DeepSeek, Grok"
+                      aria-label="All 6 models that address this agree — open details"><span class="claim-ratio" aria-hidden="true">6/6</span></button></p>
+                  <p>The disputed 2007 expedition puts the Amazon at 6,992 km<button class="claim-badge has-dissent" type="button"
+                      data-claim-anchor="The disputed 2007 expedition puts the Amazon at 6,992 km."
+                      data-claim-agree="Claude, Gemini, Grok"
+                      data-claim-dissent="ChatGPT: the 2007 survey has not been accepted into the standard references | Mistral: most authorities still put the Amazon at about 6,400 km | DeepSeek: the expedition's measurement remains disputed"
+                      aria-label="3 of 6 models support this — open details"><span class="claim-ratio" aria-hidden="true">3/6</span></button></p>
+                </div>
+              </div>
+            </div>
+          </li>
+
+          <!-- 03 · the marks -->
+          <li class="lp-step lp-reveal">
+            <div class="lp-step-copy">
+              <p class="lp-step-num">03</p>
+              <h3>Where they pull apart</h3>
+              <p>Agreement gets no decoration at all — only the count. A difference in detail gets a fine rule under the sentence, a real contradiction a heavier amber one.<span class="lp-wide-only"> The mark sits on the sentence it belongs to, so you never have to hold two documents open at once.</span></p>
+            </div>
+            <div class="lp-step-visual">
+              <div class="lp-excerpt">
+                <ul class="lp-mark-key" aria-label="What the marks in a consensus answer mean">
+                  <li>
+                    <span class="lp-mark-sample">All models that address it agree<span class="claim-badge" aria-hidden="true"><span class="claim-ratio" aria-hidden="true">6/6</span></span></span>
+                    <span class="lp-mark-note">no mark, just the count</span>
+                  </li>
+                  <li>
+                    <span class="lp-mark-sample"><span class="cx-claim is-minor">They differ on this detail</span><span class="cx-marker is-minor" aria-hidden="true"><span class="cx-marker-dot"></span></span></span>
+                    <span class="lp-mark-note">fine rule</span>
+                  </li>
+                  <li>
+                    <span class="lp-mark-sample"><span class="cx-claim is-major">They contradict each other here</span><span class="cx-marker is-major" aria-hidden="true"><span class="cx-marker-dot"></span></span></span>
+                    <span class="lp-mark-note">heavier amber rule</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </li>
+
+          <!-- 04 · the difference behind the mark -->
+          <li class="lp-step lp-reveal">
+            <div class="lp-step-copy">
+              <p class="lp-step-num">04</p>
+              <h3>What they actually said</h3>
+              <p>Click a mark and the disagreement opens: both camps, named, with the sentence each side actually wrote<span class="lp-wide-only"> and a note on what is worth checking yourself</span>.</p>
+              <p class="lp-step-try">Try the marked sentence.</p>
+            </div>
+            <div class="lp-step-visual">
+              <div class="lp-excerpt">
+                <div class="consensus-main-text consensus-answer-body lp-excerpt-lead">
+                  <p><span class="cx-claim is-minor is-interactive" data-diff-open="lpDiffRiver">Whether the Amazon overtakes the Nile depends on where its mouth is drawn.</span><button class="cx-marker is-minor" type="button" data-diff-open="lpDiffRiver" aria-haspopup="dialog" aria-label="The models differ on a detail here. Open details"><span class="cx-marker-dot" aria-hidden="true"></span></button></p>
+                </div>
                 <div class="differences-cards">
                   <details class="diff-card is-contradiction" id="lpDiffRiver" open>
                     <summary class="diff-card-summary">
@@ -360,235 +412,59 @@
                         <div class="diff-position-label">ChatGPT, Mistral, DeepSeek</div>
                         <div class="diff-position-stance">The Nile is the settled answer at ~6,650 km.</div>
                         <blockquote class="diff-position-quote">the Nile is traditionally listed as the longest river at about 6,650 km</blockquote>
-                        <div class="diff-position-links">
-                          <button class="diff-jump-link" type="button" tabindex="-1">ChatGPT</button>
-                          <button class="diff-jump-link" type="button" tabindex="-1">Mistral</button>
-                          <button class="diff-jump-link" type="button" tabindex="-1">DeepSeek</button>
-                        </div>
                       </div>
                       <div class="diff-position">
                         <div class="diff-position-label">Claude, Gemini, Grok</div>
                         <div class="diff-position-stance">The 2007 Amazon survey is a credible challenger.</div>
                         <blockquote class="diff-position-quote">if the Pará estuary is counted, the Amazon may exceed 7,000 km</blockquote>
-                        <div class="diff-position-links">
-                          <button class="diff-jump-link" type="button" tabindex="-1">Claude</button>
-                          <button class="diff-jump-link" type="button" tabindex="-1">Gemini</button>
-                          <button class="diff-jump-link" type="button" tabindex="-1">Grok</button>
-                        </div>
                       </div>
                       <div class="diff-verify"><b>Worth verifying: </b>check whether the source counts the Pará estuary as part of the Amazon.</div>
-                      <div class="diff-resolve">
-                        <button class="diff-resolve-btn" type="button" tabindex="-1">
-                          <svg class="diff-resolve-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h9M11 5 8.8 2.8M11 5 8.8 7.2"/><path d="M14 11H5M5 11l2.2-2.2M5 11l2.2 2.2"/></svg>
-                          <span class="diff-resolve-btn-label">Resolve with the models</span>
-                          <span class="pro-badge diff-resolve-pro-chip">Pro</span>
-                        </button>
-                      </div>
                     </div>
                   </details>
                 </div>
               </div>
-            </details>
-          </div>
-          <p class="lp-scene-hint">Click a marked passage to open the difference behind it.</p>
-        </div>
-
-        <!-- Slideshow: the same consensus/differences lens on other questions -->
-        <div class="lp-diff-slider lp-reveal" id="diffSlider">
-          <p class="lp-slider-eyebrow">The same lens on other questions</p>
-          <div class="lp-slides">
-
-            <!-- Slide 1: high agreement, no contradictions -->
-            <article class="lp-slide is-active">
-              <p class="lp-slide-q">“Is nuclear power a low-carbon energy source?”</p>
-              <div class="consensus-verdict is-calm">
-                <span class="verdict-gauge" style="--val:94" title="Agreement score 94/100">
-                  <span class="verdict-score">
-                    <span class="verdict-score-num">94</span><span class="verdict-score-unit" aria-hidden="true">/100</span>
-                  </span>
-                  <span class="verdict-meter" aria-hidden="true"><span class="verdict-meter-fill"></span></span>
-                </span>
-                <span class="verdict-main">
-                  <span class="verdict-headline">High agreement</span>
-                  <span class="verdict-detail">no contradictions found, 6 models compared</span>
-                </span>
-                <span class="verdict-judge">
-                  <span>Analysis by Claude</span>
-                  <span class="verdict-judge-sub">independent of the consensus engine</span>
-                </span>
-              </div>
-              <div class="consensus-box lp-mini">
-                <div class="consensus-main">
-                  <h2>Consensus Answer</h2>
-                  <div class="consensus-main-text consensus-answer-body">
-                    <p><strong>Yes. Its lifecycle emissions are on par with wind.</strong></p>
-                    <p>All six models put nuclear power at roughly 10–15 g CO₂-eq per kWh over its full lifecycle<button class="claim-badge" type="button" tabindex="-1" aria-label="All 6 models that address this agree. Open details"><span class="claim-ratio" aria-hidden="true">6/6</span></button>, far below coal and gas. The open questions they name are cost and construction time, not carbon.</p>
-                  </div>
-                  <p class="consensus-marker-legend">Nothing is underlined: no passage in this answer is disputed.</p>
-                </div>
-                <details class="consensus-differences consensus-differences-panel" open>
-                  <summary class="consensus-differences-summary">
-                    <span class="consensus-differences-summary-label">See all differences</span>
-                  </summary>
-                  <div class="consensus-differences-content">
-                    <div class="differences-cards">
-                      <div class="diff-empty-state">
-                        <span class="sev-dot is-ok" aria-hidden="true"></span>
-                        <div class="diff-empty-text">
-                          <div class="diff-empty-headline">No substantive contradictions found across the 6 answers.</div>
-                          <div class="diff-empty-note">Agreement is a good signal, but not a guarantee of correctness.</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </details>
-              </div>
-            </article>
-
-            <!-- Slide 2: difference in emphasis -->
-            <article class="lp-slide">
-              <p class="lp-slide-q">“Which programming language should I learn first?”</p>
-              <div class="consensus-verdict is-calm">
-                <span class="verdict-gauge" style="--val:84" title="Agreement score 84/100">
-                  <span class="verdict-score">
-                    <span class="verdict-score-num">84</span><span class="verdict-score-unit" aria-hidden="true">/100</span>
-                  </span>
-                  <span class="verdict-meter" aria-hidden="true"><span class="verdict-meter-fill"></span></span>
-                </span>
-                <span class="verdict-main">
-                  <span class="verdict-headline">Strong agreement</span>
-                  <span class="verdict-detail">different emphasis on how much the goal decides, no contradictions, 6 models compared</span>
-                </span>
-                <span class="verdict-judge">
-                  <span>Analysis by OpenAI</span>
-                  <span class="verdict-judge-sub">independent of the consensus engine</span>
-                </span>
-              </div>
-              <div class="consensus-box lp-mini">
-                <div class="consensus-main">
-                  <h2>Consensus Answer</h2>
-                  <div class="consensus-main-text consensus-answer-body">
-                    <p><strong>Python is the default first language.</strong></p>
-                    <p>Every model recommends Python for its readable syntax and broad use in data, automation and scripting<button class="claim-badge" type="button" tabindex="-1" aria-label="All 6 models that address this agree. Open details"><span class="claim-ratio" aria-hidden="true">6/6</span></button> <span class="cx-claim is-minor is-interactive" data-diff-open="lpDiffLang">How much the choice should follow your goal is where they set different priorities: for the web, JavaScript gets you to something running sooner.</span><button class="cx-marker is-minor" type="button" data-diff-open="lpDiffLang" aria-haspopup="dialog" aria-label="The models set a different focus here. Open details"><span class="cx-marker-dot" aria-hidden="true"></span></button></p>
-                  </div>
-                  <p class="consensus-marker-legend">Marked passages are checked key claims. Unmarked text was not compared individually.</p>
-                </div>
-                <details class="consensus-differences consensus-differences-panel" open>
-                  <summary class="consensus-differences-summary">
-                    <span class="consensus-differences-summary-label">See all differences</span>
-                  </summary>
-                  <div class="consensus-differences-content">
-                    <div class="differences-cards">
-                      <details class="diff-card is-emphasis" id="lpDiffLang" open>
-                        <summary class="diff-card-summary">
-                          <span class="diff-card-tags">
-                            <span class="sev-dot is-info" aria-hidden="true"></span>
-                            <span class="diff-type-tag">Different emphasis</span>
-                          </span>
-                          <span class="diff-card-claim">How much should the first language depend on your goal?</span>
-                        </summary>
-                        <div class="diff-card-body">
-                          <div class="diff-position">
-                            <div class="diff-position-label">ChatGPT, Gemini, DeepSeek</div>
-                            <div class="diff-position-stance">Start with Python regardless of the goal; switching later is cheap.</div>
-                            <blockquote class="diff-position-quote">Python's simplicity lets the fundamentals stick before you specialise</blockquote>
-                          </div>
-                          <div class="diff-position">
-                            <div class="diff-position-label">Claude, Mistral, Grok</div>
-                            <div class="diff-position-stance">Pick by destination: JavaScript if you want to ship something visible early.</div>
-                            <blockquote class="diff-position-quote">if you want to build for the web, JavaScript gets you to a running product fastest</blockquote>
-                          </div>
-                        </div>
-                      </details>
-                    </div>
-                  </div>
-                </details>
-              </div>
-            </article>
-
-            <!-- Slide 3: critical contradiction -->
-            <article class="lp-slide">
-              <p class="lp-slide-q">“Can I take ibuprofen while on blood thinners?”</p>
-              <div class="consensus-verdict is-warn">
-                <span class="verdict-gauge" style="--val:41" title="Agreement score 41/100">
-                  <span class="verdict-score">
-                    <span class="verdict-score-num">41</span><span class="verdict-score-unit" aria-hidden="true">/100</span>
-                  </span>
-                  <span class="verdict-meter" aria-hidden="true"><span class="verdict-meter-fill"></span></span>
-                </span>
-                <span class="verdict-main">
-                  <span class="verdict-headline">Partial agreement</span>
-                  <span class="verdict-detail"><span class="verdict-detail-crit">1 critical</span> · disputed: an occasional dose, 6 models compared</span>
-                </span>
-                <span class="verdict-judge">
-                  <span>Analysis by Mistral</span>
-                  <span class="verdict-judge-sub">independent of the consensus engine</span>
-                </span>
-              </div>
-              <div class="consensus-box lp-mini">
-                <div class="consensus-main">
-                  <h2>Consensus Answer</h2>
-                  <div class="consensus-main-text consensus-answer-body">
-                    <p><strong>Avoid the combination unless a doctor approves it.</strong></p>
-                    <p>All models agree that ibuprofen raises bleeding risk on anticoagulants<button class="claim-badge" type="button" tabindex="-1" aria-label="All 6 models that address this agree. Open details"><span class="claim-ratio" aria-hidden="true">6/6</span></button> and most name paracetamol as the safer default<button class="claim-badge has-dissent" type="button" tabindex="-1" aria-label="5 of 6 models support this. Open details"><span class="claim-ratio" aria-hidden="true">5/6</span></button> <span class="cx-claim is-major is-interactive" data-diff-open="lpDiffIbu">Whether a single occasional dose is still acceptable is genuinely disputed, because the sources weigh the size of the added bleeding risk differently.</span><button class="cx-marker is-major" type="button" data-diff-open="lpDiffIbu" aria-haspopup="dialog" aria-label="The models contradict each other here. Open details"><span class="cx-marker-dot" aria-hidden="true"></span></button></p>
-                  </div>
-                  <p class="consensus-marker-legend">Marked passages are checked key claims. Unmarked text was not compared individually.</p>
-                </div>
-                <details class="consensus-differences consensus-differences-panel" open>
-                  <summary class="consensus-differences-summary">
-                    <span class="consensus-differences-summary-label">See all differences</span>
-                  </summary>
-                  <div class="consensus-differences-content">
-                    <div class="differences-cards">
-                      <details class="diff-card is-contradiction is-major" id="lpDiffIbu" open>
-                        <summary class="diff-card-summary">
-                          <span class="diff-card-tags">
-                            <span class="sev-dot is-crit" aria-hidden="true"></span>
-                            <span class="diff-type-tag">Contradiction · critical</span>
-                          </span>
-                          <span class="diff-card-claim">Is an occasional ibuprofen dose acceptable?</span>
-                        </summary>
-                        <div class="diff-card-body">
-                          <div class="diff-position">
-                            <div class="diff-position-label">ChatGPT, Claude, Gemini, DeepSeek</div>
-                            <div class="diff-position-stance">No. Avoid NSAIDs entirely unless a doctor explicitly approves.</div>
-                            <blockquote class="diff-position-quote">even single doses can meaningfully increase bleeding risk</blockquote>
-                          </div>
-                          <div class="diff-position">
-                            <div class="diff-position-label">Mistral, Grok</div>
-                            <div class="diff-position-stance">A one-off low dose is usually tolerated.</div>
-                            <blockquote class="diff-position-quote">occasional use is generally considered low risk for most patients</blockquote>
-                          </div>
-                          <div class="diff-verify"><b>Worth verifying: </b>this is a medical decision. Confirm with a doctor or pharmacist before combining the two.</div>
-                          <div class="diff-resolve">
-                            <button class="diff-resolve-btn" type="button" tabindex="-1">
-                              <svg class="diff-resolve-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h9M11 5 8.8 2.8M11 5 8.8 7.2"/><path d="M14 11H5M5 11l2.2-2.2M5 11l2.2 2.2"/></svg>
-                              <span class="diff-resolve-btn-label">Resolve with the models</span>
-                              <span class="pro-badge diff-resolve-pro-chip">Pro</span>
-                            </button>
-                          </div>
-                        </div>
-                      </details>
-                    </div>
-                  </div>
-                </details>
-              </div>
-            </article>
-
-          </div>
-          <div class="lp-slider-nav">
-            <button class="lp-slider-arrow" type="button" data-slide-dir="-1" aria-label="Previous example">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
-            </button>
-            <div class="lp-slider-dots">
-              <button class="lp-slider-dot is-active" type="button" aria-label="Example 1"></button>
-              <button class="lp-slider-dot" type="button" aria-label="Example 2"></button>
-              <button class="lp-slider-dot" type="button" aria-label="Example 3"></button>
             </div>
-            <button class="lp-slider-arrow" type="button" data-slide-dir="1" aria-label="Next example">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
-          </div>
+          </li>
+        </ol>
+
+        <!-- The three other questions used to be three more full consensus
+             boxes in a slideshow. What they were ever there to say is that the
+             same lens gives very different readings — which is a score, a
+             headline and one line, not a fourth copy of the surface. -->
+        <div class="lp-examples lp-reveal">
+          <p class="lp-examples-title">The same lens on other questions</p>
+          <ul class="lp-example-list">
+            <li class="lp-example">
+              <span class="lp-example-score is-ok" style="--val:94">
+                <b>94</b><i aria-hidden="true">/100</i>
+                <span class="lp-example-meter" aria-hidden="true"><span></span></span>
+              </span>
+              <span class="lp-example-body">
+                <span class="lp-example-q">“Is nuclear power a low-carbon energy source?”</span>
+                <span class="lp-example-note">High agreement · nothing marked in the answer</span>
+              </span>
+            </li>
+            <li class="lp-example">
+              <span class="lp-example-score is-ok" style="--val:84">
+                <b>84</b><i aria-hidden="true">/100</i>
+                <span class="lp-example-meter" aria-hidden="true"><span></span></span>
+              </span>
+              <span class="lp-example-body">
+                <span class="lp-example-q">“Which programming language should I learn first?”</span>
+                <span class="lp-example-note">Strong agreement · one difference in emphasis, no contradiction</span>
+              </span>
+            </li>
+            <li class="lp-example">
+              <span class="lp-example-score is-warn" style="--val:41">
+                <b>41</b><i aria-hidden="true">/100</i>
+                <span class="lp-example-meter" aria-hidden="true"><span></span></span>
+              </span>
+              <span class="lp-example-body">
+                <span class="lp-example-q">“Can I take ibuprofen while on blood thinners?”</span>
+                <span class="lp-example-note">Partial agreement · one critical contradiction, marked in the answer</span>
+              </span>
+            </li>
+          </ul>
         </div>
       </div>
     </section>
@@ -736,23 +612,23 @@
         <div class="lp-head lp-reveal">
           <p class="lp-eyebrow">What it costs</p>
           <h2 class="lp-h2">Free while I'm testing it.</h2>
-          <p class="lp-lead">consens.io is a one-person project and still very much a test. Every question you send calls six model providers at once, and that bill lands on me. That's the only reason there are limits at all.</p>
+          <p class="lp-lead">consens.io is a one-person project and still very much a test. Every question you send calls six model providers at once, and that bill lands on me.<span class="lp-wide-only"> That's the only reason there are limits at all.</span></p>
         </div>
         <div class="lp-card-grid lp-reveal">
           <article class="lp-card">
             <p class="lp-eyebrow">Today</p>
             <h3>Nothing to buy right now</h3>
-            <p>No checkout, no price, no waiting list. Where something is switched off, it's one of the expensive runs, and those I enable per account rather than for everyone, because they cost a multiple of a normal one.</p>
+            <p>No checkout, no price, no waiting list.<span class="lp-wide-only"> Where something is switched off, it's one of the expensive runs, and those I enable per account rather than for everyone, because they cost a multiple of a normal one.</span></p>
           </article>
           <article class="lp-card">
             <p class="lp-eyebrow">The limits</p>
             <h3>The cap is what I can afford</h3>
-            <p>Your remaining runs are shown in the app, and that number moves with what the month allows. You can also put your own provider API keys into the settings; then my limits stop applying and the costs are yours.</p>
+            <p>Your remaining runs are shown in the app<span class="lp-wide-only">, and that number moves with what the month allows</span>. You can also put your own provider API keys into the settings<span class="lp-wide-only">; then my limits stop applying and the costs are yours</span>.</p>
           </article>
           <article class="lp-card">
             <p class="lp-eyebrow">Later</p>
             <h3>If enough of you want it, it'll come</h3>
-            <p>There's no membership today and I'm not collecting sign-ups for one. But if people keep telling me they want the expensive runs regularly, that's how I'd make it possible. Write to me either way at <a href="mailto:contact@consens.io">contact@consens.io</a>, and have fun with it :)</p>
+            <p>There's no membership today and I'm not collecting sign-ups for one.<span class="lp-wide-only"> But if people keep telling me they want the expensive runs regularly, that's how I'd make it possible.</span> Write to me either way at <a href="mailto:contact@consens.io">contact@consens.io</a>, and have fun with it :)</p>
           </article>
         </div>
       </div>
@@ -773,6 +649,7 @@
   {% include "partials/public_footer.html" %}
 
   <script defer src="/static/js/landing-scenes.js?v=20260727-scenes2"></script>
+  <script defer src="/static/js/landing-insights.js?v=20260810-claims1"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       // Lean scroll reveal: one fade-up per block when it enters the viewport.
@@ -828,60 +705,21 @@
         }
       });
 
-      // Scene 03 slideshow: cycle through consensus/differences examples.
-      // Auto-advances only while in view; any manual interaction stops it.
-      const slider = document.getElementById("diffSlider");
-      if (slider) {
-        const slides = Array.from(slider.querySelectorAll(".lp-slide"));
-        const dots = Array.from(slider.querySelectorAll(".lp-slider-dot"));
-        let index = 0;
-        let timer = null;
-
-        const show = (next) => {
-          index = (next + slides.length) % slides.length;
-          slides.forEach((slide, i) => slide.classList.toggle("is-active", i === index));
-          dots.forEach((dot, i) => dot.classList.toggle("is-active", i === index));
-        };
-        const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
-        const start = () => {
-          if (reducedMotion || timer) return;
-          timer = setInterval(() => show(index + 1), 7000);
-        };
-
-        slider.querySelectorAll("[data-slide-dir]").forEach(btn => {
-          btn.addEventListener("click", () => {
-            stop();
-            show(index + Number(btn.dataset.slideDir));
-            window.umami?.track?.("landing_diff_slider_arrow");
-          });
-        });
-        dots.forEach((dot, i) => {
-          dot.addEventListener("click", () => {
-            stop();
-            show(i);
-            window.umami?.track?.("landing_diff_slider_dot");
-          });
-        });
-
-        if ("IntersectionObserver" in window) {
-          new IntersectionObserver(entries => {
-            entries.forEach(entry => { entry.isIntersecting ? start() : stop(); });
-          }, { threshold: 0.25 }).observe(slider);
-        } else {
-          start();
-        }
-      }
-
       // Marked passages in the mockups behave like the real ones in /app:
-      // clicking the sentence (or its dot) expands the differences panel and
-      // flashes the entry behind the mark. The hover pairing between passage
-      // and marker is CSS (:has), this only handles the click.
+      // clicking the sentence (or its dot) opens the entry behind the mark and
+      // flashes it. Since the Decide rebuild the card lives in the step below
+      // rather than inside a collapsed panel, so it may be off screen when the
+      // mark is clicked - a flash nobody sees is the same as no answer.
       document.querySelectorAll("[data-diff-open]").forEach(trigger => {
         trigger.addEventListener("click", () => {
           const card = document.getElementById(trigger.dataset.diffOpen);
           if (!card) return;
           card.closest("details.consensus-differences-panel")?.setAttribute("open", "");
           card.open = true;
+          const box = card.getBoundingClientRect();
+          if (box.top < 0 || box.bottom > window.innerHeight) {
+            card.scrollIntoView({ block: "center", behavior: reducedMotion ? "auto" : "smooth" });
+          }
           card.classList.remove("is-focused");
           // Reflow, so a second click restarts the flash instead of ignoring it.
           void card.offsetWidth;
