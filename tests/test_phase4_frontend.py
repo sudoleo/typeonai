@@ -80,7 +80,7 @@ def test_usage_snapshot_can_recover_pro_tier_after_status_failure():
     firebase = read("static/firebase.js")
     usage = section(firebase, "async function fetchUsageData", "window.refreshUsageData")
 
-    assert "window.isUserPro = isPro" in usage
+    assert 'window.App.state.set("isUserPro", isPro, "userTier")' in usage
     assert "window.updateUserTierUI(isPro, true)" in usage
     assert "window.setCurrentUsageLimits(isPro, data)" in usage
 
@@ -88,9 +88,11 @@ def test_usage_snapshot_can_recover_pro_tier_after_status_failure():
 def test_auth_bootstrap_watchdog_precedes_firebase_and_clears_stale_skeletons():
     template = read("templates/index.html")
     watchdog = read("static/js/auth-bootstrap.js")
+    bootstrap = read("static/js/app-bootstrap.js")
 
     assert template.index("/static/js/auth-bootstrap.js?") < template.index("/static/firebase.js?")
-    assert 'document.getElementById("authTopActions").hidden = false' in template
+    assert 'document.getElementById("authTopActions")' in bootstrap
+    assert "authTopActions.hidden = false" in bootstrap
     assert "Login is temporarily unavailable" in watchdog
     assert 'window.dispatchEvent(new CustomEvent("consensio:auth-unavailable"))' in watchdog
 

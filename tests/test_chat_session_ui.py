@@ -304,7 +304,9 @@ def test_session6_frontend_replay_disposition_and_ui_ordering_contracts():
     context_build = query.index("await chatSession.ensureContext({")
     archive = query.index("window.App.followup?.archiveCurrentExchange?.()")
     destructive_reset = query.index("delete box.dataset.consensusAnswer")
-    evidence_reset = query.index("window.currentEvidenceSources = []")
+    evidence_reset = query.index(
+        'window.App.state.set("currentEvidenceSources", [], "evidence")'
+    )
     assert context_build < archive < destructive_reset
     assert context_build < evidence_reset
 

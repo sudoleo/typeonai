@@ -95,6 +95,7 @@ from app.services.usage_repository import (
     UsageTransitionError,
     canonical_request_fingerprint,
 )
+from app.services.consensus_pipeline import analyze_provider_answers
 
 router = APIRouter()
 
@@ -1627,37 +1628,29 @@ def consensus(request: Request, data: dict = Body(...)):
         )
 
     try:
-        consensus_answer = query_consensus(
-            question,
-            answer_openai,
-            answer_mistral,
-            answer_claude,
-            answer_gemini,
-            answer_deepseek,
-            answer_grok,
-            excluded_models,
-            consensus_model,
-            api_keys,
+        analysis = analyze_provider_answers(
+            question=question,
+            answers={
+                "openai": answer_openai,
+                "mistral": answer_mistral,
+                "anthropic": answer_claude,
+                "gemini": answer_gemini,
+                "deepseek": answer_deepseek,
+                "grok": answer_grok,
+            },
+            consensus_model=consensus_model,
+            keys=api_keys,
             model_sources=model_sources,
+            synthesize=query_consensus,
+            judge=query_differences,
+            allow_consensus_error=True,
+            skipped_differences_text=DIFFERENCES_SKIPPED_TEXT,
+            require_differences_data=False,
         )
-
+        consensus_answer = analysis.consensus
         consensus_failed = is_consensus_error_text(consensus_answer)
-        if consensus_failed:
-            # Kein Vergleich gegen einen Fehlertext (siehe Streaming-Pfad).
-            differences, differences_data = DIFFERENCES_SKIPPED_TEXT, None
-        else:
-            differences, differences_data = query_differences(
-                answer_openai,
-                answer_mistral,
-                answer_claude,
-                answer_gemini,
-                answer_deepseek,
-                answer_grok,
-                consensus_answer,
-                api_keys,
-                differences_model=consensus_model,
-                excluded_models=excluded_models,
-            )
+        differences = analysis.differences_text
+        differences_data = analysis.differences_data
     except Exception as exc:
         failed = _fail_chat_turn_best_effort(
             uid,

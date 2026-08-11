@@ -396,7 +396,7 @@ def test_attachment_filter_blocks_one_model_run_before_prepare(browser, phase4_s
         )
         page.evaluate(
             """() => {
-              window.isUserPro = true;
+              window.App.state.set("isUserPro", true, "userTier");
               for (const id of [
                 "selectOpenAI", "selectMistral", "selectClaude",
                 "selectGemini", "selectDeepSeek", "selectGrok"
@@ -436,7 +436,7 @@ def test_watched_navigation_closes_the_shared_modal(browser, phase4_server):
         page.route("**/api/my/telegram", lambda route: _json(route, {"telegram": {}}))
 
         page.evaluate(
-            "() => { window.lastShareResultId = 'phase4-result'; window.openShareDialog('confirm'); }"
+            "() => { window.App.state.set('lastShareResultId', 'phase4-result', 'share'); window.openShareDialog('confirm'); }"
         )
         expect(page.locator("#shareModal")).to_be_visible()
         page.click("#watchListLink")

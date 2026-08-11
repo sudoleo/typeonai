@@ -9,12 +9,12 @@ from urllib.parse import urlsplit
 
 from app.core.background_tasks import task_succeeded
 from app.core.observability import correlation_scope, record_metric
-from app.services import mailer, topics, watch_scheduler
+from app.core.site import SITE_URL
+from app.services import mailer, topic_pipeline, topics
 from app.services.llm.mock_llm import mock_llm_enabled
 
 
 TOPIC_SCHEDULER_INTERVAL_SECONDS = 60
-SITE_URL = "https://www.consens.io"
 
 
 def _guard_mock_mode() -> None:
@@ -127,7 +127,7 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
     _guard_mock_mode()
     db = db if db is not None else topics.db_firestore
     now = now or topics.utcnow()
-    executor = executor or watch_scheduler.execute_watch
+    executor = executor or topic_pipeline.execute_topic
     previous = (
         topics.get_run(claimed["id"], str(claimed.get("latest_run_id") or ""), db=db)
         or {}

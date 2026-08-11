@@ -13,6 +13,7 @@
    ========================================================================== */
 
 @import url('./public-tokens.css?v=20260731-inter1');
+@import url('./components-consensus-visuals.css?v=20260811-phase6');
 
 *,
 *::before,
@@ -1447,133 +1448,21 @@ img { display: block; max-width: 100%; }
 .lp-watch-notification a span { font-size: var(--font-size-lg); transition: transform .18s ease; }
 .lp-watch-notification a:hover span { transform: translateX(3px); }
 
-/* Verdict line (full width, above the box). Mirrors /app exactly: no filled
-   bar, no border, no shadow — score ring, headline, judge footnote. Keep this
-   in step with the .consensus-verdict block in shell.css; the marketing
-   mockups have to be made of the same material as the product. */
+/* Public mockups share the app component and only override their context. */
 .consensus-verdict,
 .consensus-verdict.is-calm,
 .consensus-verdict.is-warn,
 .consensus-verdict.is-alert {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 14px;
+  margin: 0 0 14px;
   padding: 4px 2px;
   border: 0;
   border-radius: 0;
   background: none;
   box-shadow: none;
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-heading);
-  color: var(--text-color);
 }
-
 .consensus-verdict.is-calm { --verdict-ring: var(--agree); }
 .consensus-verdict.is-warn { --verdict-ring: var(--partial); }
 .consensus-verdict.is-alert { --verdict-ring: var(--dispute); }
-
-/* Score: set number over a fine measuring bar, fill level comes from --val
-   (0–100). No ring, no tinted plate — see the .consensus-verdict block in
-   shell.css, this has to be made of the same material as the product. */
-.verdict-gauge {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 7px;
-  width: 92px;
-}
-
-.verdict-score {
-  display: flex;
-  align-items: baseline;
-  gap: 2px;
-  line-height: var(--line-height-solid);
-}
-
-/* The number carries the traffic light colour, not a plate behind it: the
-   colour sits on the element the reader looks at first. */
-.verdict-score-num {
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: -0.03em;
-  font-variant-numeric: tabular-nums;
-  color: var(--verdict-ring, var(--text-color));
-}
-
-.verdict-score-unit {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-secondary);
-}
-
-/* The unfilled stretch carries a hint of the same traffic light colour: at
-   score 0 — where the statement is strongest — a neutral bar would go mute
-   exactly when it matters most. */
-.verdict-meter {
-  width: 100%;
-  height: 4px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--verdict-ring, var(--accent)) 22%, transparent);
-  overflow: hidden;
-}
-
-.verdict-meter-fill {
-  display: block;
-  height: 100%;
-  width: calc(var(--val, 0) * 1%);
-  border-radius: inherit;
-  background: var(--verdict-ring, var(--accent));
-}
-
-/* Fallback without a score (also used by /consensus-engine): small status dot. */
-.consensus-verdict .verdict-icon {
-  flex-shrink: 0;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--verdict-ring, var(--sidebar-text-muted));
-}
-
-.verdict-main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.verdict-headline { font-weight: var(--font-weight-semibold); }
-
-.verdict-detail {
-  font-size: var(--font-size-xs);
-  line-height: var(--line-height-ui);
-  color: var(--sidebar-text-muted);
-}
-
-.verdict-detail-crit {
-  font-weight: var(--font-weight-semibold);
-  color: color-mix(in srgb, #b23b2e 70%, var(--text-color));
-}
-
-.dark-mode .verdict-detail-crit {
-  color: color-mix(in srgb, #f3a08f 78%, var(--text-color));
-}
-
-/* Judge footnote: which independent model family delivered the analysis */
-.consensus-verdict .verdict-judge {
-  margin-left: auto;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  text-align: right;
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-ui);
-  color: var(--sidebar-text-muted);
-}
 
 /* One answer, read top to bottom — the differences live in a collapsible
    overview UNDER it, not in a second column beside it (mirrors /app since
@@ -1743,194 +1632,11 @@ img { display: block; max-width: 100%; }
 }
 .claims-fallback-text { min-width: 0; overflow-wrap: anywhere; }
 
-/* Same micro-ratio as /app: immediately scanable, but quieter than the prose
-   and structurally distinct from superscript source numbers. No outline at
-   rest — the ratio sits behind the passage like a footnote, and only hover
-   gives it a surface. Mirrors components-consensus-insights.css, including
-   the fact that it is a real control here too. */
-.claim-badge {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  vertical-align: 0.08em;
-  margin: 0 2px 0 4px;
-  padding: 0 2px;
-  height: 16px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--ink-2);
-  font-family: inherit;
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: var(--tracking-tight);
-  line-height: var(--line-height-solid);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color 0.15s ease, background-color 0.15s ease;
-}
-
-/* >=44px hit area without touching the line height, exactly as in /app. */
-.claim-badge[data-claim-agree]::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 44px;
-  height: 44px;
-  transform: translate(-50%, -50%);
-}
-
-/* .is-linked-hover: the passage this badge belongs to is being hovered. */
-.claim-badge:hover,
-.claim-badge:focus-visible,
-.claim-badge.is-linked-hover {
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  color: var(--text-color);
-  outline: none;
-}
-
-.claim-badge:focus-visible {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
-}
-
-/* The samples in the reading key are illustrations, not controls. */
+/* Landing-only illustration behavior around the shared controls. */
+.claim-badge { flex-shrink: 0; }
 .lp-mark-key .claim-badge { cursor: default; }
 .lp-mark-key .claim-badge:hover { background: transparent; color: var(--ink-2); }
-
 .claims-fallback-row .claim-badge { margin: 0; }
-
-.claim-badge.has-dissent {
-  color: var(--cx-major-line);
-}
-
-.claim-badge.has-dissent:hover,
-.claim-badge.has-dissent:focus-visible,
-.claim-badge.has-dissent.is-linked-hover {
-  background: color-mix(in srgb, var(--cx-major-line) 13%, transparent);
-  color: var(--cx-major-line);
-}
-
-.claim-ratio { pointer-events: none; }
-
-/* --------------------------------------------------------------------------
-   Inline confidence — the marks inside the consensus answer
-   Spellcheck metaphor, identical to /app: agreement stays undecorated, a
-   difference gets a fine solid rule, a contradiction a heavier amber one.
-   Deliberately only text-decoration — no dimmed text, no background fill, so
-   the contrast of the answer itself is untouched.
-   -------------------------------------------------------------------------- */
-:root {
-  --cx-major-line: #c8862f;
-  --cx-flash: rgba(217, 155, 70, 0.16);
-}
-
-.dark-mode {
-  /* Lighten the amber in dark mode, else the rule disappears. */
-  --cx-major-line: #e8b968;
-  --cx-flash: rgba(243, 198, 111, 0.15);
-}
-
-.cx-claim { text-decoration: none; }
-
-/* Solid, not squiggly — mirrors components-consensus-insights.css. The wavy
-   rule read as a spell-checker error; weight and colour carry the severity. */
-.cx-claim.is-minor {
-  text-decoration: underline solid
-    color-mix(in srgb, var(--text-color) 38%, transparent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 4px;
-}
-
-.cx-claim.is-major {
-  text-decoration: underline solid var(--cx-major-line);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
-}
-
-/* The marked passage is the click target too: on the desktop the sentence is
-   a far bigger target than the 5px dot beside it. The hover pairs both ways so
-   it stays obvious which mark belongs to which sentence. */
-.cx-claim.is-interactive {
-  cursor: pointer;
-  transition: background-color 0.14s ease;
-}
-
-/* .is-hovered is the JS-driven half of the pairing (landing-insights.js): a
-   sentence that carries both a mark and a ratio lights up from either side,
-   exactly like .cx-claim.is-hovered in components-consensus-insights.css. */
-.cx-claim.is-interactive:hover,
-.cx-claim.is-interactive.is-hovered,
-.cx-claim.is-interactive:has(+ .cx-marker:hover) {
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--text-color) 7%, transparent);
-  /* Across a line break each fragment gets its own corners. */
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
-}
-
-.cx-claim.is-major.is-interactive:hover,
-.cx-claim.is-major.is-interactive.is-hovered,
-.cx-claim.is-major.is-interactive:has(+ .cx-marker:hover) {
-  background: var(--cx-flash);
-  text-decoration-thickness: 3px;
-}
-
-.cx-claim.is-minor.is-interactive:hover,
-.cx-claim.is-minor.is-interactive.is-hovered,
-.cx-claim.is-minor.is-interactive:has(+ .cx-marker:hover) {
-  text-decoration-color: color-mix(in srgb, var(--text-color) 72%, transparent);
-  text-decoration-thickness: 2px;
-}
-
-/* Marker at a difference: compact dot button, no counting. */
-.cx-marker {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  vertical-align: 1px;
-  margin: 0 2px 0 4px;
-  padding: 0 4px;
-  min-height: 16px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 90%, transparent);
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--glass-bg-strong) 55%, transparent);
-  line-height: var(--line-height-solid);
-  cursor: pointer;
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-/* >=44px hit area without touching the line height. */
-.cx-marker::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 44px;
-  height: 44px;
-  transform: translate(-50%, -50%);
-}
-
-.cx-marker:hover,
-.cx-marker:focus-visible,
-.cx-claim.is-interactive:hover + .cx-marker {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
-  box-shadow: var(--liquid-focus-ring);
-  outline: none;
-}
-
-.cx-marker .cx-marker-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--text-color) 45%, transparent);
-}
-
-.cx-marker.is-major .cx-marker-dot { background: var(--cx-major-line); }
 
 /* --------------------------------------------------------------------------
    Hover preview + claim popover — the two things a mark actually does

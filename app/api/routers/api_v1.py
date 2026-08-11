@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 import app.core.config as cfg
 from app.core.security import db_firestore, is_user_admin, is_user_pro
-from app.api.routers.pages import SITE_URL
+from app.core.site import SITE_URL
 from app.core.rate_limit import (
     ApiUidRateLimitExceeded,
     api_key_rate_key,

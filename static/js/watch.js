@@ -7,11 +7,7 @@
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
   ];
   let featureNudgeTimer = null;
-  let telegramState = null;
-  let watchLimitState = null;
-  let watchLimitRequest = null;
-  let watchSessionEpoch = 0;
-  let watchRouteAuthUid = window.__consensioAuthState?.uid || null;
+  const watchState = window.App.watchState;
 
   function featureNudgeWasDismissed() {
     try {
@@ -132,7 +128,7 @@
       if (!resultId) throw new Error("This consensus is not saved yet.");
       const payload = Object.assign(nudgeWatchDefaults(), { result_id: resultId });
       const data = await api("POST", "/api/watch", payload);
-      watchLimitState = null;
+      watchState.limits = null;
       window.App?.trackAppEvent?.("app_watch_created", {
         interval: data.watch.interval,
         source: "nudge"
@@ -144,7 +140,7 @@
       // Kontingent voll oder Server-Fehler: der Dialog kann mehr erklaeren
       // (Limits, Upgrade, Telegram) als dieser Streifen.
       if (error.status === 429) {
-        watchLimitState = null;
+        watchState.limits = null;
         dismissWatchFeatureNudge("limit");
         openWatchDialog("confirm");
         return;
@@ -203,9 +199,9 @@
     const user = window.auth?.currentUser;
     if (!user) throw new Error("Please log in first.");
     const userUid = user.uid;
-    const requestEpoch = watchSessionEpoch;
+    const requestEpoch = watchState.sessionEpoch;
     const token = await user.getIdToken();
-    if (requestEpoch !== watchSessionEpoch || window.auth?.currentUser?.uid !== userUid) {
+    if (requestEpoch !== watchState.sessionEpoch || window.auth?.currentUser?.uid !== userUid) {
       throw new Error("Authentication changed.");
     }
     const response = await fetch(path, {
@@ -215,7 +211,7 @@
     });
     let data = {};
     try { data = await response.json(); } catch (_) { /* empty body */ }
-    if (requestEpoch !== watchSessionEpoch || window.auth?.currentUser?.uid !== userUid) {
+    if (requestEpoch !== watchState.sessionEpoch || window.auth?.currentUser?.uid !== userUid) {
       throw new Error("Authentication changed.");
     }
     if (!response.ok) {
@@ -227,10 +223,10 @@
   }
 
   async function loadTelegramState(force) {
-    if (telegramState && !force) return telegramState;
+    if (watchState.telegram && !force) return watchState.telegram;
     const data = await api("GET", "/api/my/telegram");
-    telegramState = data.telegram || { configured: false, connected: false };
-    return telegramState;
+    watchState.telegram = data.telegram || { configured: false, connected: false };
+    return watchState.telegram;
   }
 
   function normalizeWatchLimits(rawLimits, watches) {
@@ -262,19 +258,19 @@
   }
 
   async function loadWatchLimits(force) {
-    if (watchLimitState && !force) return watchLimitState;
-    if (watchLimitRequest && !force) return watchLimitRequest;
+    if (watchState.limits && !force) return watchState.limits;
+    if (watchState.limitRequest && !force) return watchState.limitRequest;
     const request = api("GET", "/api/my/watches")
       .then(data => {
-        watchLimitState = normalizeWatchLimits(data.limits, data.watches);
-        renderSidebarWatchQuota(watchLimitState);
-        return watchLimitState;
+        watchState.limits = normalizeWatchLimits(data.limits, data.watches);
+        renderSidebarWatchQuota(watchState.limits);
+        return watchState.limits;
       })
       .finally(() => {
-        if (watchLimitRequest === request) watchLimitRequest = null;
+        if (watchState.limitRequest === request) watchState.limitRequest = null;
       });
-    watchLimitRequest = request;
-    return watchLimitRequest;
+    watchState.limitRequest = request;
+    return watchState.limitRequest;
   }
 
   function showWatchCostInfo() {
@@ -327,7 +323,7 @@
   function refreshDialogWatchLimit() {
     const target = document.getElementById("watchDialogLimit");
     if (!target) return;
-    if (watchLimitState) applyDialogWatchLimit(watchLimitState);
+    if (watchState.limits) applyDialogWatchLimit(watchState.limits);
     loadWatchLimits().then(applyDialogWatchLimit).catch(() => {
       if (!target.isConnected) return;
       target.hidden = true;
@@ -368,7 +364,7 @@
 
   function dailyIntervalAllowed() {
     if (window.isUserPro === true) return true;
-    if (watchLimitState) return watchLimitState.dailyAvailable === true;
+    if (watchState.limits) return watchState.limits.dailyAvailable === true;
     return Number((window.APP_LIMITS || {}).watch_daily_interval_requires_pro) === 0;
   }
 
@@ -796,7 +792,7 @@
         if (directQuestion) payload.question = directQuestion;
         else payload.result_id = resultId;
         const data = await api("POST", "/api/watch", payload);
-        watchLimitState = null;
+        watchState.limits = null;
         window.App?.trackAppEvent?.("app_watch_created", {
           interval: data.watch.interval,
           source: directQuestion ? "query_first" : "consensus"
@@ -806,7 +802,7 @@
         this.disabled = false;
         this.textContent = "Start watching";
         if (error.status === 429) {
-          watchLimitState = null;
+          watchState.limits = null;
           loadWatchLimits(true).then(applyDialogWatchLimit).catch(() => {});
           if (!window.isUserPro) showWatchCostInfo();
         }
@@ -1295,7 +1291,7 @@
           this.disabled = true;
           try {
             await api("DELETE", "/api/my/telegram", {});
-            telegramState = null;
+            watchState.telegram = null;
             onChanged();
           } catch (error) {
             this.disabled = false;
@@ -1319,7 +1315,7 @@
         this.disabled = true;
         try {
           await api("DELETE", "/api/my/telegram", {});
-          telegramState = null;
+          watchState.telegram = null;
           onChanged();
         } catch (error) {
           this.disabled = false;
@@ -1331,7 +1327,7 @@
       actions.appendChild(makeButton("Connect Telegram", "share-primary-btn", async function () {
         this.disabled = true;
         await connectTelegram(() => {
-          telegramState = null;
+          watchState.telegram = null;
           onChanged();
         });
         if (this.isConnected) this.disabled = false;
@@ -1782,9 +1778,9 @@
   async function renderDashboard() {
     const { body } = dashEls();
     if (!body) return;
-    const requestEpoch = watchSessionEpoch;
+    const requestEpoch = watchState.sessionEpoch;
     const requestUid = window.auth?.currentUser?.uid || null;
-    const dashboardIsCurrent = () => requestEpoch === watchSessionEpoch
+    const dashboardIsCurrent = () => requestEpoch === watchState.sessionEpoch
       && requestUid
       && window.auth?.currentUser?.uid === requestUid
       && onWatchPagePath();
@@ -1802,11 +1798,11 @@
       ]);
       if (!dashboardIsCurrent()) return;
       watches = watchData.watches || [];
-      watchLimitState = normalizeWatchLimits(watchData.limits, watches);
-      renderWatchLimit(limitTarget, watchLimitState);
+      watchState.limits = normalizeWatchLimits(watchData.limits, watches);
+      renderWatchLimit(limitTarget, watchState.limits);
       brief = briefData.brief || {};
       telegram = telegramData.telegram || telegram;
-      telegramState = telegram;
+      watchState.telegram = telegram;
     } catch (error) {
       if (!dashboardIsCurrent()) return;
       if (limitTarget) limitTarget.hidden = true;
@@ -1950,11 +1946,11 @@
 
   function resetAfterLogout() {
     const { page, body } = dashEls();
-    watchSessionEpoch += 1;
+    watchState.sessionEpoch += 1;
     if (body) body.innerHTML = "";
-    telegramState = null;
-    watchLimitState = null;
-    watchLimitRequest = null;
+    watchState.telegram = null;
+    watchState.limits = null;
+    watchState.limitRequest = null;
     const quota = document.getElementById("watchUsageDisplay");
     if (quota) quota.textContent = "";
     if (onWatchPagePath()) {
@@ -1978,8 +1974,8 @@
   initWatchPageRoute();
   window.addEventListener("consensio:auth-state", event => {
     const uid = event.detail?.uid || null;
-    const changed = uid !== watchRouteAuthUid;
-    watchRouteAuthUid = uid;
+    const changed = uid !== watchState.authUid;
+    watchState.authUid = uid;
     if (!onWatchPagePath() || !changed) return;
     if (uid && window.auth?.currentUser?.uid === uid) showWatchPage();
     else renderWatchLoginHint();

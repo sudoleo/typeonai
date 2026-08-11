@@ -590,7 +590,7 @@
       // Ebenso für "excluded" (sofern du das separat erfassen möchtest).
 
       // Aktualisiere die letzte verarbeitete Frage.
-      window.lastQuestion = question;
+      window.App.state.set("lastQuestion", question, "run");
     }
 
     // Setze den Konsens-Bereich (Spinner etc.) und rufe anschließend deinen Konsens-Endpunkt auf.
@@ -834,18 +834,18 @@
       // falls URL-Parsing scheitert, nimm einfach href
     }
 
-    window.consensusCitationMeta = {
+    window.App.state.set("consensusCitationMeta", {
       question,
       includedModels: includedModelsDetailed,
       consensusModel: consensusModelLabel || consensusModelValue,
       dateISO: new Date().toISOString(),
       url: cleanUrl
-    };
+    }, "consensus");
 
     // Share-Feature: result_id des letzten Laufs zurücksetzen; Modell-
     // Labels (Option-Text) für die serverseitige Snapshot-Zitation.
     window.clearPreparedBookmarkShareResult?.();
-    window.lastShareResultId = null;
+    window.App.state.set("lastShareResultId", null, "share");
     // Resolve-Persistenz: Payload des letzten erfolgreichen Laufs invalidieren,
     // damit eine Resolve-Runde nie in ein fremdes Bookmark schreibt.
     window.lastConsensusBookmarkPayload = null;
@@ -974,7 +974,7 @@
         data.consensus_response = completedConsensusText;
       }
       if (Array.isArray(data.sources)) {
-        window.currentEvidenceSources = data.sources;
+        window.App.state.set("currentEvidenceSources", data.sources, "evidence");
         window.renderEvidenceSources?.(data.sources);
       }
       // A replay never ran the providers, so the boxes still hold whatever the
@@ -1038,7 +1038,7 @@
       if (consensusRequestResult.ok && data.consensus_response) {
         // Share-Feature: nur mit result_id aus dem Final-Event ist
         // Teilen möglich (serverseitiger Snapshot vorhanden).
-        window.lastShareResultId = data.result_id || null;
+        window.App.state.set("lastShareResultId", data.result_id || null, "share");
 
         const mainEl = window.App.consensusBodyEl(consensusDiv);
         const diffEl = consensusDiv.querySelector(".consensus-differences p");

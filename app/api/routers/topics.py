@@ -13,7 +13,7 @@ from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Query, Requ
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from app.api.routers.pages import SITE_URL
+from app.core.site import SITE_URL
 from app.core.rate_limit import limiter
 from app.core.security import extract_id_token, is_user_admin, verify_user_token
 from app.services import favicons, mailer, topic_runner, topics

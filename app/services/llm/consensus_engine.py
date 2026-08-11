@@ -18,6 +18,16 @@ from app.core.observability import safe_exception
 from app.core.config import GEMINI_FLASH_MODEL
 from app.services.llm.credentials import gemini_engine_credentials_available
 from app.services.llm.engines import _merge_nested_config
+from app.services.llm.consensus_scoring import (
+    AGREEMENT_LEVEL_THRESHOLDS,
+    compute_agreement_score,
+)
+from app.services.llm.consensus_parsing import (
+    close_open_json as _close_open_json,
+    extract_json_object as _extract_json_object,
+    extract_json_object_inner as _extract_json_object_inner,
+    repair_truncated_json as _repair_truncated_json,
+)
 from app.services.llm.mock_llm import mock_engine_stream, mock_engine_text, mock_llm_enabled
 from app.services.llm.provider_runtime import (
     PROVIDER_HTTP_TIMEOUT,
@@ -1131,106 +1141,6 @@ MAX_DIFF_QUOTE_CHARS = 300
 MAX_DIFF_TEXT_CHARS = 280
 
 
-def _extract_json_object(raw: str, *, with_repair_flag: bool = False):
-    """Parst das JSON-Objekt aus einer (auch verunreinigten) Modellausgabe.
-
-    Mit `with_repair_flag=True` kommt `(objekt, wurde_repariert)` zurueck. Der
-    Aufrufer braucht das, weil eine reparierte Ausgabe abgeschnitten war und
-    damit alles nach dem Schnitt VERLOREN hat - eine dabei leer gebliebene
-    Liste ist fehlende Information, kein Befund."""
-    result = _extract_json_object_inner(raw)
-    return result if with_repair_flag else result[0]
-
-
-def _extract_json_object_inner(raw: str):
-    text = str(raw or "").strip()
-    if not text:
-        return None, False
-
-    candidates = []
-    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if fence:
-        candidates.append(fence.group(1))
-    start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end > start:
-        candidates.append(text[start:end + 1])
-
-    for candidate in candidates:
-        try:
-            parsed = json.loads(candidate)
-        except ValueError:
-            continue
-        if isinstance(parsed, dict):
-            return parsed, False
-
-    # Abgeschnittene Ausgaben (max_tokens mitten im JSON) reparieren: offene
-    # Strings/Arrays/Objekte schließen, halbe Werte am Ende verwerfen.
-    if start != -1:
-        repaired = _repair_truncated_json(text[start:])
-        if repaired is not None:
-            return repaired, True
-    return None, False
-
-
-def _close_open_json(text: str):
-    """Schließt offene Strings/Klammern am Ende eines JSON-Fragments.
-    Liefert None, wenn das Fragment so nicht schließbar ist (der Aufrufer
-    kürzt dann weiter)."""
-    stack = []
-    in_string = False
-    escaped = False
-    for ch in text:
-        if in_string:
-            if escaped:
-                escaped = False
-            elif ch == "\\":
-                escaped = True
-            elif ch == '"':
-                in_string = False
-            continue
-        if ch == '"':
-            in_string = True
-        elif ch in "{[":
-            stack.append(ch)
-        elif ch in "}]":
-            if not stack:
-                return None
-            open_ch = stack.pop()
-            if (open_ch == "{") != (ch == "}"):
-                return None
-    repaired = text
-    if escaped:
-        repaired = repaired[:-1]
-    if in_string:
-        repaired += '"'
-    stripped = repaired.rstrip()
-    if stripped.endswith(","):
-        stripped = stripped[:-1].rstrip()
-    if stripped.endswith(":"):
-        # Schlüssel ohne Wert: hier nicht reparierbar.
-        return None
-    return stripped + "".join("}" if ch == "{" else "]" for ch in reversed(stack))
-
-
-def _repair_truncated_json(fragment: str):
-    text = fragment
-    for _ in range(40):
-        repaired = _close_open_json(text)
-        if repaired is not None:
-            try:
-                parsed = json.loads(repaired)
-            except ValueError:
-                parsed = None
-            if isinstance(parsed, dict):
-                logging.info("Differences engine output was truncated; repaired JSON tail.")
-                return parsed
-        cut = max(text.rfind(","), text.rfind("{"), text.rfind("["))
-        if cut <= 0:
-            return None
-        text = text[:cut]
-    return None
-
 
 def _real_model_names(labels, anon_map: dict) -> list:
     names = []
@@ -1389,13 +1299,6 @@ def _normalize_differences(raw_differences, anon_map: dict, sentences: list = No
 # Credibility-Stufe (Freitext-Satz UND Frontend-Verdict speisen sich daraus).
 # ---------------------------------------------------------------------------
 
-AGREEMENT_LEVEL_THRESHOLDS = [
-    (85, "very"),
-    (65, "largely"),
-    (40, "partially"),
-    (20, "hardly"),
-]
-
 _CREDIBILITY_SENTENCES = {
     "very": "The consensus answer is **very** credible.",
     "largely": "The consensus answer is **largely** credible.",
@@ -1404,64 +1307,6 @@ _CREDIBILITY_SENTENCES = {
     "not": "The consensus answer is **not** credible.",
 }
 
-
-def compute_agreement_score(data: dict) -> dict:
-    """Berechnet den Agreement-Score (0-100) samt Level.
-
-    Basis ist die mittlere Zustimmungsquote über die Claims; Widersprüche
-    ziehen nach Schwere ab (major > minor > emphasis). Caps erhalten die
-    etablierte Stufen-Semantik: "very" gibt es nur ohne jede Differenz,
-    Major-Widersprüche deckeln auf "partially"/"hardly", und wenige
-    verglichene Modelle deckeln das erreichbare Vertrauen."""
-    claims = data.get("claims") or []
-    differences = data.get("differences") or []
-    model_count = len(data.get("models_compared") or [])
-
-    ratios = []
-    for claim in claims:
-        agree = len(claim.get("agree") or [])
-        dissent = len(claim.get("dissent") or [])
-        if agree + dissent:
-            ratios.append(agree / (agree + dissent))
-    base = sum(ratios) / len(ratios) if ratios else 1.0
-
-    contradictions = [d for d in differences if d.get("type") == "contradiction"]
-    major = sum(1 for d in contradictions if d.get("severity") != "minor")
-    minor = len(contradictions) - major
-    emphases = len(differences) - len(contradictions)
-
-    score = base - 0.25 * major - 0.10 * minor - 0.05 * emphases
-
-    caps = [1.0]
-    if differences:
-        caps.append(0.84)   # "very" nur bei völlig differenzfreiem Vergleich
-    if major >= 2:
-        caps.append(0.39)   # mehrere Major-Widersprüche: höchstens "hardly"
-    elif major == 1:
-        caps.append(0.64)   # ein Major-Widerspruch: höchstens "partially"
-    if model_count == 3:
-        caps.append(0.90)
-    elif model_count == 2:
-        caps.append(0.75)   # 2 Modelle können kein "very" belegen
-    elif model_count <= 1:
-        caps.append(0.50)
-    score = max(0.0, min(score, *caps))
-
-    score_pct = int(round(score * 100))
-    level = "not"
-    for threshold, name in AGREEMENT_LEVEL_THRESHOLDS:
-        if score_pct >= threshold:
-            level = name
-            break
-
-    return {
-        "score": score_pct,
-        "level": level,
-        "model_count": model_count,
-        "major_contradictions": major,
-        "minor_contradictions": minor,
-        "emphases": emphases,
-    }
 
 
 def _legacy_differences_text(data: dict) -> str:

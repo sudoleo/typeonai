@@ -502,7 +502,7 @@ def admin_list_shares(request: Request, filter: str = "reported"):
 def snapshots_site_url():
     # Lazy-Import, um den Router-Importgraphen (pages -> LLM-SDKs) nicht in
     # jeden admin.py-Import zu ziehen.
-    from app.api.routers.pages import SITE_URL
+    from app.core.site import SITE_URL
     return SITE_URL
 
 

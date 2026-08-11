@@ -24,11 +24,6 @@
     }
   }
 
-  function setGate(disabled) {
-    const btn = document.getElementById("consensusButton");
-    if (btn) btn.disabled = disabled;
-  }
-
   function revealConsensusOutput() {
     const consensusOutputEl = document.getElementById("consensusOutput");
     if (!consensusOutputEl) return;
@@ -102,30 +97,7 @@
   }
 
   function updateConsensusButtonAvailability() {
-    const canGenerate = canGenerateConsensus();
-    const consensusButton = document.getElementById("consensusButton");
-    if (consensusButton && !consensusRequestRunning) {
-      consensusButton.disabled = !canGenerate;
-      consensusButton.title = canGenerate
-        ? "Generate Consensus"
-        : "Consensus requires at least two completed model answers";
-      consensusButton.setAttribute("aria-label", consensusButton.title);
-    }
-    return canGenerate;
-  }
-
-  function setButtonRunning(isRunning) {
-    const consensusButton = document.getElementById("consensusButton");
-    if (!consensusButton) return;
-
-    consensusButton.disabled = false;
-    consensusButton.classList.toggle("is-cancel-action", isRunning);
-    consensusButton.title = isRunning ? "Cancel consensus" : "Generate Consensus";
-    consensusButton.setAttribute("aria-label", isRunning ? "Cancel consensus" : "Generate Consensus");
-    consensusButton.textContent = isRunning ? "Stop Consensus generation" : "Generate Consensus";
-    if (!isRunning && window.updateConsensusButtonAvailability) {
-      window.updateConsensusButtonAvailability();
-    }
+    return canGenerateConsensus();
   }
 
   function setSynthesizing(isSynthesizing) {
@@ -143,7 +115,6 @@
     currentConsensusRunId++;
     currentConsensusController = new AbortController();
     consensusRequestRunning = true;
-    setButtonRunning(true);
     // Der Send-Button bleibt Cancel, bis auch Consensus/Differences stehen.
     window.App?.syncSendButtonRunning?.();
     window.App?.consensusPipeline?.onConsensusStart?.();
@@ -165,7 +136,6 @@
     consensusRequestRunning = false;
     currentConsensusController = null;
     setSynthesizing(false);
-    setButtonRunning(false);
     window.App?.syncSendButtonRunning?.();
     window.App?.consensusPipeline?.onConsensusEnd?.();
   }
@@ -233,7 +203,6 @@
 
   window.App.consensusLifecycle = {
     initAutoConsensusToggle,
-    setGate,
     startRun,
     isActiveRun,
     finishRun,

@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from app.core import config as cfg
 from app.core.rate_limit import limiter
 from app.core.security import extract_id_token, is_user_pro, verify_user_token
-from app.api.routers.pages import SITE_URL
+from app.core.site import SITE_URL
 from app.services import mailer, telegram_watch, watch_brief, watch_followers, watch_service
 
 

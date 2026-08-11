@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.core.rate_limit import limiter
 from app.core.security import verify_user_token, extract_id_token, is_user_admin
-from app.api.routers.pages import SITE_URL
+from app.core.site import SITE_URL
 from app.services import og_image
 from app.services import share_snapshots as snapshots
 from app.services.history_view import build_history_view

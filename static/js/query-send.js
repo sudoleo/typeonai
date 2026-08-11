@@ -39,10 +39,6 @@
   let consensusGenerated = false;
   let totalRequiredResponses = 0;
 
-  // Local gate wrapper; index.html keeps its own for init/clearResponseBoxes.
-  function setConsensusGate(disabled) {
-    consensusLifecycle.setGate(disabled);
-  }
 
     function getActiveMode() {
       const deepSearchActive = document.getElementById("deepSearchToggle").checked;
@@ -249,7 +245,6 @@
       currentQueryController.abort();
       markPendingQueryResponsesCanceled();
       finishQueryRun(runId);
-      setConsensusGate(true);
       window.hideConsensusOutput?.();
       const chatSession = window.App.chatSession;
       if (chatSession?.pendingClientRequestId) {
@@ -303,7 +298,7 @@
 
       const question = document.getElementById("questionInput").value;
       const followupRequested = window.App.followup?.isArmed?.() === true;
-      window.lastQuestion = question;  // Speichern in einer globalen Variable (auch von consensus-run.js gelesen)
+      window.App.state.set("lastQuestion", question, "run");
 
       if (!question.trim()) {
         alert("Please enter a question.");
@@ -398,7 +393,6 @@
       queryRequestRunning = true;
       setSendButtonRunning(true);
       // Keep consensus unavailable until the current model run produces enough complete answers.
-      setConsensusGate(true);
       // Bei jeder neuen Frage den Konsens-Bereich wieder ausblenden.
       window.hideConsensusOutput?.();
 
@@ -428,7 +422,6 @@
           ? "Please log in before using your own API keys."
           : "Please log in before sending a question.");
         finishQueryRun(queryRunId);
-        setConsensusGate(true);
         return;
       }
 
@@ -445,7 +438,6 @@
       } catch (error) {
         if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
         finishQueryRun(queryRunId);
-        setConsensusGate(true);
         window.App.followup?.restoreAfterBlockedRun?.();
         window.App?.showPopup?.(
           error?.message || "The pending conversation turn could not be checked. Please retry."
@@ -523,7 +515,6 @@
       // ineligible for this run.
       if (selectedProviderConfigsForRun.length < 2) {
         finishQueryRun(queryRunId);
-        setConsensusGate(true);
         setAgentModeStatus("error", "Choose at least two compatible models for this run.");
         window.App.followup?.restoreAfterBlockedRun?.();
         window.App?.showPopup?.("Choose at least two compatible models. Remove the attachment or select another model.");
@@ -557,7 +548,6 @@
         });
         if (missingOwnKeyProviders.length) {
           finishQueryRun(queryRunId);
-          setConsensusGate(true);
           window.App?.showPopup?.(
             `Add API keys for the selected providers before sending: ${missingOwnKeyProviders.join(", ")}.`
           );
@@ -616,7 +606,6 @@
       if (modelBoxes.length < 2) {
         await releaseReservedUsageRun();
         finishQueryRun(queryRunId);
-        setConsensusGate(true);
         setAgentModeStatus("error", "Choose at least two compatible models for this run.");
         return;
       }
@@ -896,7 +885,6 @@
             }
             finishQueryRun(queryRunId);
             setAgentModeStatus("error", message);
-            setConsensusGate(true);
             window.App.usageLimit?.showTemporaryStorageBusy?.();
             window.App.followup?.restoreAfterBlockedRun?.();
             return;
@@ -918,7 +906,6 @@
             // steht danach in #runBlocked — sonst faellt die Seite in genau
             // das leere Nichts zurueck, das dieser Pfad frueher hinterliess.
             setAgentModeStatus("error", message);
-            setConsensusGate(true);
             window.App.usageRun?.clear?.();
             window.App.usageLimit?.show?.({
               data: prepareData,
@@ -1012,7 +999,6 @@
         }
         finishQueryRun(queryRunId);
         setAgentModeStatus("error", message);
-        setConsensusGate(true);
         window.App.followup?.restoreAfterBlockedRun?.();
         window.App?.showPopup?.(message);
         return;
@@ -1069,7 +1055,7 @@
       // Only now may the live response tree be reused. Until /prepare and the
       // optional context binding have succeeded, it remains the readable
       // completed predecessor and must survive credential/202/network errors.
-      window.spinnerHTML = baseSpinnerHTML;
+      window.App.state.set("spinnerHTML", baseSpinnerHTML, "runUi");
       modelBoxes.forEach(box => {
         delete box.dataset.consensusAnswer;
         delete box.dataset.consensusSources;
@@ -1078,14 +1064,13 @@
         box.dataset.responseState = "pending";
         window.setSpinnerEl(box);
       });
-      window.currentEvidenceSources = [];
+      window.App.state.set("currentEvidenceSources", [], "evidence");
       window.renderEvidenceSources?.([]);
 
 
       const deepSearchActive = document.getElementById("deepSearchToggle").checked;
 
       // Konsens unterbinden, solange noch Antworten fehlen
-      setConsensusGate(true);
       totalRequiredResponses = 0;
 
       const openaiBox = document.getElementById("openaiResponse");
@@ -1179,7 +1164,6 @@
               status: "error",
               selected_models: totalActive
             });
-            setConsensusGate(true);
             return;
           }
 
@@ -1220,7 +1204,6 @@
       if (totalActive === 0) {
         setAgentModeStatus("idle");
         finishQueryRun(queryRunId);
-        setConsensusGate(true);
         return;
       }
 
@@ -1247,7 +1230,6 @@
         container.querySelectorAll('pre').forEach(function (pre) {
           // Falls bereits ein Copy-Button existiert, überspringen
           if (pre.querySelector('.response-code-copy, .copy-btn')) return;
-
           var btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'response-code-copy';

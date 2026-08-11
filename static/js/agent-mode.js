@@ -337,7 +337,6 @@
     const enabled = isAgentModeEnabled();
     const panel = document.getElementById("agentModePanel");
     const switchEl = document.getElementById("agentModeSwitch");
-    const toggleBtn = document.getElementById("toggleAllButton");
     const toggleSwitch = document.querySelector(".agent-mode-switch");
     const modelsEl = document.getElementById("agentModeModels");
     const statusEl = document.getElementById("agentModeStatus");
@@ -388,13 +387,6 @@
     }
 
     if (switchEl) switchEl.checked = enabled;
-    if (toggleBtn) {
-      toggleBtn.checked = enabled;
-      toggleBtn.classList.toggle("is-agent-active", enabled);
-      toggleBtn.setAttribute("aria-checked", String(enabled));
-      toggleBtn.title = enabled ? "Disable Agent Mode" : "Enable Agent Mode";
-      toggleBtn.setAttribute("aria-label", toggleBtn.title);
-    }
     if (toggleSwitch) {
       toggleSwitch.title = enabled ? "Disable Agent Mode" : "Enable Agent Mode";
       toggleSwitch.setAttribute("aria-label", toggleSwitch.title);

@@ -341,7 +341,7 @@ function normalizeEvidenceUrl(url) {
 
 function mergeEvidenceSources(incomingSources) {
   if (!Array.isArray(window.currentEvidenceSources)) {
-    window.currentEvidenceSources = [];
+    window.App.state.set("currentEvidenceSources", [], "evidence");
   }
   const idMap = {};
   (incomingSources || []).forEach((src, idx) => {

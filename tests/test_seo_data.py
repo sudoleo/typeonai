@@ -494,28 +494,29 @@ def test_admin_endpoints_require_admin(monkeypatch):
 def test_admin_seo_collect_action_is_hidden_until_admin_request_succeeds():
     root = Path(__file__).resolve().parents[1]
     template = (root / "templates" / "admin.html").read_text(encoding="utf-8")
+    module = (root / "static" / "js" / "admin.js").read_text(encoding="utf-8")
     main_source = (root / "main.py").read_text(encoding="utf-8")
 
     assert 'data-tab="seo"' in template
     assert 'id="collectSeoBtn" type="button" class="admin-btn" hidden' in template
     assert 'id="checkSeoConnectionBtn" type="button" class="admin-btn secondary" hidden' in template
-    assert "shareAdminRequest('GET', '/api/admin/seo')" in template
-    assert "shareAdminRequest('POST', '/api/admin/seo/check', {})" in template
-    assert "Generate recommendation" in template
-    assert "Ask content judge" in template
-    assert "/api/admin/seo/pages/${encodeURIComponent(pageId)}/${suffix}" in template
+    assert "shareAdminRequest('GET', '/api/admin/seo')" in module
+    assert "shareAdminRequest('POST', '/api/admin/seo/check', {})" in module
+    assert "Generate recommendation" in module
+    assert "Ask content judge" in module
+    assert "/api/admin/seo/pages/${encodeURIComponent(pageId)}/${suffix}" in module
     assert 'id="runSeoReviewBtn"' in template
-    assert "'/api/admin/seo/review/run'" in template
-    assert "/api/admin/seo/reviews/${encodeURIComponent(runId)}/preview" in template
-    assert "/api/admin/seo/reviews/${encodeURIComponent(runId)}/apply" in template
+    assert "'/api/admin/seo/review/run'" in module
+    assert "/api/admin/seo/reviews/${encodeURIComponent(runId)}/preview" in module
+    assert "/api/admin/seo/reviews/${encodeURIComponent(runId)}/apply" in module
     assert "Apply all safe recommendations" in template
     assert "Accept suggested Topic Brief" in template
     assert "Reject and keep current" in template
-    assert "Confirm decision" in template
+    assert "Confirm decision" in module
     assert 'id="seoReviewTime" type="time"' in template
     assert 'id="seoReviewTimezone"' in template
     assert "Completed in this review" in template
-    assert "This only records that you reviewed these pages" in template
+    assert "This only records that you reviewed these pages" in module
     assert 'os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", "gen-lang-client-0234219247-53b2b1c0e355.json")' in main_source
     assert "GSC_SERVICE_ACCOUNT_JSON" not in main_source
 

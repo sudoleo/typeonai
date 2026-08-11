@@ -1074,10 +1074,6 @@
     text-align: center;
   }
 
-  #consensusButton {
-    padding: 7px 10px;
-    font-size: var(--font-size-sm);
-  }
 
   .consensus-label {
     display: none;

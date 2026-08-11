@@ -58,11 +58,14 @@ def test_partial_restricts_tracking_to_the_live_domain():
 
 def test_partial_ships_the_self_exclusion_switch():
     partial = (TEMPLATES / PARTIAL).read_text(encoding="utf-8")
+    opt_out = (ROOT / "static" / "js" / "analytics-opt-out.js").read_text(
+        encoding="utf-8"
+    )
 
     # Umami prueft localStorage['umami.disabled'] vor jedem Send; ?notrack=1
     # setzt den Schluessel auch auf Geraeten ohne Konsole, ?notrack=0 loescht ihn.
-    assert 'localStorage.setItem("umami.disabled", "1")' in partial
-    assert 'localStorage.removeItem("umami.disabled")' in partial
-    assert partial.index("notrack") < partial.index("cloud.umami.is"), (
+    assert 'localStorage.setItem("umami.disabled", "1")' in opt_out
+    assert 'localStorage.removeItem("umami.disabled")' in opt_out
+    assert partial.index("analytics-opt-out.js") < partial.index("cloud.umami.is"), (
         "Das Opt-out muss vor dem Tracker laufen, sonst geht der erste Pageview raus."
     )

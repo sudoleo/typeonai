@@ -79,6 +79,7 @@ class CustomSecurityMiddleware:
             return
 
         path = str(scope.get("path") or "")
+        strict_script_page = path in {"/app", "/app/watches", "/admin"}
         sensitive_api_response = (
             path == "/chats"
             or path.startswith("/chats/")
@@ -93,9 +94,16 @@ class CustomSecurityMiddleware:
         async def send_wrapper(message):
             if message["type"] == "http.response.start":
                 headers = dict(message.get("headers", []))
+                script_src = (
+                    "script-src 'self' "
+                    + ("" if strict_script_page else "'unsafe-inline' ")
+                    + "https://cdn.jsdelivr.net https://www.gstatic.com "
+                    "https://apis.google.com https://accounts.google.com https://cloud.umami.is; "
+                )
                 csp = (
                     "default-src 'self' https://cdn.jsdelivr.net https://www.gstatic.com; "
-                    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://accounts.google.com https://cloud.umami.is; "
+                    + script_src
+                    +
                     "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
                     "img-src 'self' data: https://lh3.googleusercontent.com https:; "
                     "connect-src 'self' "

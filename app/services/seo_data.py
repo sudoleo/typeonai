@@ -49,7 +49,8 @@ def normalize_url(value: str) -> str:
 def discover_indexable_pages() -> list[dict]:
     # Lazy import avoids making the heavy pages/router import part of every
     # service import while keeping SITEMAP_URLS the single static-page source.
-    from app.api.routers.pages import SITE_URL, SITEMAP_URLS
+    from app.api.routers.pages import SITEMAP_URLS
+    from app.core.site import SITE_URL
 
     pages = [{
         "url": normalize_url(item["loc"]),

@@ -130,6 +130,7 @@ def test_openapi_contract_declares_api_key_and_idempotency_header():
 
 def test_admin_dashboard_exposes_safe_api_key_management_section():
     template = open("templates/admin.html", encoding="utf-8").read()
+    admin_source = open("static/js/admin.js", encoding="utf-8").read()
 
     assert 'data-tab="api"' in template
     assert 'id="tab-api"' in template
@@ -137,15 +138,15 @@ def test_admin_dashboard_exposes_safe_api_key_management_section():
     assert 'id="issuedApiKeyPanel"' in template
     assert 'id="issuedApiKeyValue"' in template
     assert 'id="apiKeyDirectIndex"' in template
-    assert "'/api/admin/api-keys'" in template
-    assert "`/api/admin/api-keys/${encodeURIComponent(key.key_id)}`" in template
-    assert "input.value = '';" in template
+    assert "'/api/admin/api-keys'" in admin_source
+    assert "`/api/admin/api-keys/${encodeURIComponent(key.key_id)}`" in admin_source
+    assert "input.value = '';" in admin_source
     assert "Only a SHA-256 hash is stored" in template
     assert 'id="publisherEnabled"' in template
     assert 'id="publisherTopicBrief"' in template
     assert "Free Watch providers" in template
     assert "DeepSeek is excluded from both" in template
-    assert "'/api/admin/publisher-config'" in template
+    assert "'/api/admin/publisher-config'" in admin_source
 
 
 def test_admin_can_load_and_save_publisher_configuration(monkeypatch):
@@ -574,8 +575,6 @@ def test_publisher_pipeline_removes_deepseek_provider_and_judge_key(monkeypatch)
         "_provider_answer",
         lambda provider, *args: provider_calls.append(provider) or f"{provider} answer",
     )
-    monkeypatch.setattr(api_consensus_runner, "result_text", lambda value: value)
-    monkeypatch.setattr(api_consensus_runner, "result_sources", lambda value: [])
 
     def consensus(*args, **kwargs):
         consensus_keys.append(args[9])
@@ -587,8 +586,6 @@ def test_publisher_pipeline_removes_deepseek_provider_and_judge_key(monkeypatch)
 
     monkeypatch.setattr(api_consensus_runner, "query_consensus", consensus)
     monkeypatch.setattr(api_consensus_runner, "query_differences", differences)
-    monkeypatch.setattr(api_consensus_runner, "compute_agreement_score", lambda data: {"score": 75})
-
     result = api_consensus_runner.execute_consensus_pipeline(run)
 
     assert provider_calls == ["openai", "mistral"]

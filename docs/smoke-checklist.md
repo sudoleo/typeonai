@@ -7,13 +7,17 @@ Races ab (Lauf: siehe
 `tests/e2e/README.md`). Die übrigen Punkte weiterhin manuell durchgehen
 (oder zumindest die vom Cluster betroffenen), bevor committet wird. Backend
 bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
-(Baseline 2026-08-11: regulär 1068 passed; Phase-4-Browser-Races 8 passed;
+(Baseline 2026-08-11 nach Phase 6: regulär 1076 passed; Phase-4-Browser-Races 8 passed;
 Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 `docs/testing.md`).
 
 ## Browser-Konsole
 - [ ] Beim Laden **keine** JS-Fehler in der Konsole (besonders: keine
       `ReferenceError: X is not defined`, keine `window.X is not a function`).
+- [ ] `/app`, `/app/watches` und `/admin` laden unter der strikten Script-CSP
+      ohne `unsafe-inline`-Violation. Login-/Skeleton-First-Paint, Senden,
+      Bookmark-Auswahl, Provider-Exclude, Settings und API-Key-Test reagieren
+      über die externen Bootstrap-/Eventmodule weiterhin genau einmal.
 - [ ] Ein absichtlich ausgelöster ungefangener Testfehler erzeugt genau einen
       same-origin `POST /api/client-errors`; ein bewusster Stop des laufenden
       Runs erzeugt keinen Fehlerreport.
@@ -30,6 +34,17 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Darstellung. Der Landingpage-Walkthrough verwendet die aktuellen
       Modellnamen, nennt Detail-/Widerspruchsmarker „fine rule“ bzw. „heavier
       amber rule“ und hält Einzelantworten im Agent Mode standardmäßig verborgen.
+- [ ] Agreement-Verdict, Claim-/Difference-Marker und Focus-Wash sind in App,
+      Landing und Consensus-Engine-Mockup visuell identisch; Änderungen kommen
+      aus `components-consensus-visuals.css`, ohne Drift einer Landing-Kopie.
+
+## Admin
+- [ ] `/admin` authentifiziert, wechselt alle Tabs und lädt/speichert Models,
+      Limits, API, Shares, Watches, Topics und SEO mit dem externen
+      `admin.js`/`admin-api.js`; Formular-Submit lädt die Seite nicht neu.
+- [ ] Light-/Dark-unabhängiges Admin-Layout hat nach der Auslagerung nach
+      `admin.css` keine fehlenden Abstände, abgeschnittenen Tabellen oder
+      ungestylten Dialoge. Die Browser-Konsole meldet keine Modul-/CSP-Fehler.
 
 ## Kern-Flow
 - [ ] Frischer `/app`-Load passt ohne vertikales Scrollen in den Desktop-

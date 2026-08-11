@@ -1,11 +1,13 @@
 // static/demo.js
 
-window.spinnerHTML = `
+window.App.state.set("spinnerHTML", `
   <span class="thinking-wrap" role="status" aria-live="polite" aria-busy="true">
     <span class="thinking typing-indicator" data-text="Typing" aria-label="Typing">Typing<span class="typing-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span>
   </span>
-`;
-window.currentEvidenceSources = window.currentEvidenceSources || [];
+`, "runUi");
+if (!Array.isArray(window.currentEvidenceSources)) {
+  window.App.state.set("currentEvidenceSources", [], "evidence");
+}
 
 /* === DEMO: Data & Utilities ======================================= */
 const DEMO_SCENARIO_PROMPT =
@@ -494,13 +496,11 @@ async function runDemoFlow() {
   window.exitHeroMode?.();
   const runId = ++demoRunId;
   const sendBtn = document.getElementById("sendButton");
-  const consensusBtn = document.getElementById("consensusButton");
   if (sendBtn) sendBtn.disabled = true;
-  if (consensusBtn) consensusBtn.disabled = true;
   // Neue Demo-Runde: Konsens-Bereich zunächst ausblenden.
   window.hideConsensusOutput?.();
 
-  window.currentEvidenceSources = [];
+  window.App.state.set("currentEvidenceSources", [], "evidence");
   window.renderEvidenceSources?.([]);
 
   const qi = document.getElementById("questionInput");
@@ -574,7 +574,6 @@ async function runDemoFlow() {
   }
 
   if (sendBtn) sendBtn.disabled = false;
-  if (consensusBtn) consensusBtn.disabled = false;
 }
 
 function createStartDemoChip() {

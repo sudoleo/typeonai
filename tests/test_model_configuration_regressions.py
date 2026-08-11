@@ -301,10 +301,11 @@ class ExistingModelFlowTests(unittest.TestCase):
 
     def test_admin_template_exposes_the_chat_memory_selection(self):
         template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
+        module = (ROOT / "static" / "js" / "admin.js").read_text(encoding="utf-8")
         self.assertIn("chatMemoryModelsContainer", template)
-        self.assertIn("chat_memory_models: currentChatMemoryModels()", template)
-        self.assertIn("data-chatmemory-provider", template)
-        self.assertIn("renderChatMemorySelects();", template)
+        self.assertIn("chat_memory_models: currentChatMemoryModels()", module)
+        self.assertIn("data-chatmemory-provider", module)
+        self.assertIn("renderChatMemorySelects();", module)
 
     def test_judge_engines_resolve_virtual_ids_to_their_api_model(self):
         """Judge-IDs sind interne IDs; der Request muss das API-Modell tragen.
@@ -375,30 +376,32 @@ class ExistingModelFlowTests(unittest.TestCase):
 
     def test_admin_template_lists_premium_models_as_locked_instead_of_hiding(self):
         """Ausgeblendete Eintraege liessen die Liste unvollstaendig wirken."""
-        template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
-        self.assertIn("function apiModelFor(model)", template)
-        self.assertIn("function optionTextFor(model)", template)
-        self.assertIn("' — Pro only'", template)
+        module = (ROOT / "static" / "js" / "admin.js").read_text(encoding="utf-8")
+        self.assertIn("function apiModelFor(model)", module)
+        self.assertIn("function optionTextFor(model)", module)
+        self.assertIn("' — Pro only'", module)
         # Der alte Filter hat Premium-Modelle aus den Free-Listen entfernt.
-        self.assertNotIn("if (tier === 'free' && premium.has(model)) return;", template)
-        self.assertNotIn("if (!definition.pro_only && premium.has(model)) return;", template)
-        self.assertNotIn("if (!definition.pro_only && isLockedConsensusModel(model)) return;", template)
+        self.assertNotIn("if (tier === 'free' && premium.has(model)) return;", module)
+        self.assertNotIn("if (!definition.pro_only && premium.has(model)) return;", module)
+        self.assertNotIn("if (!definition.pro_only && isLockedConsensusModel(model)) return;", module)
 
     def test_admin_template_has_tabs_and_deep_think_control(self):
         template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
+        module = (ROOT / "static" / "js" / "admin.js").read_text(encoding="utf-8")
+        css = (ROOT / "static" / "css" / "admin.css").read_text(encoding="utf-8")
         self.assertIn('deepThinkModelSelect', template)
-        self.assertIn('deep_think_model: currentDeepThinkModel()', template)
-        self.assertIn('judge_models: currentJudgeModels()', template)
-        self.assertIn('judge_models_pro: currentProJudgeModels()', template)
-        self.assertIn('judge_families: currentJudgeFamilies()', template)
+        self.assertIn('deep_think_model: currentDeepThinkModel()', module)
+        self.assertIn('judge_models: currentJudgeModels()', module)
+        self.assertIn('judge_models_pro: currentProJudgeModels()', module)
+        self.assertIn('judge_families: currentJudgeFamilies()', module)
         self.assertIn('judgeModelsContainer', template)
         self.assertIn('judgeFamiliesContainer', template)
         self.assertIn('data-tab="consensus"', template)
         self.assertIn('data-tab="models"', template)
         self.assertIn('id="presetModelsContainer"', template)
-        self.assertIn('preset_models: currentPresetModels()', template)
-        self.assertIn('.top-bar-favicon {', template)
-        self.assertIn('width: 30px;', template)
+        self.assertIn('preset_models: currentPresetModels()', module)
+        self.assertIn('.top-bar-favicon {', css)
+        self.assertIn('width: 30px;', css)
 
     def test_consensus_preset_picker_applies_answers_and_pro_gates_thorough(self):
         module = (ROOT / "static" / "js" / "model-picker.js").read_text(encoding="utf-8")
@@ -417,7 +420,9 @@ class ExistingModelFlowTests(unittest.TestCase):
 
     def test_index_injects_deep_think_consensus_model(self):
         template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("window.DEEP_THINK_CONSENSUS_MODEL", template)
+        bootstrap = (ROOT / "static" / "js" / "app-bootstrap.js").read_text(encoding="utf-8")
+        self.assertIn("data-deep-think-model", template)
+        self.assertIn("window.DEEP_THINK_CONSENSUS_MODEL", bootstrap)
         module = (ROOT / "static" / "js" / "app-init.js").read_text(encoding="utf-8")
         self.assertIn('window.DEEP_THINK_CONSENSUS_MODEL || "gemini-3.5-flash"', module)
 
@@ -465,25 +470,26 @@ class ExistingModelFlowTests(unittest.TestCase):
                 cfg.WATCH_MODELS_BY_TIER[tier].update(models)
 
     def test_admin_model_rows_have_order_and_default_controls(self):
-        template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
-        self.assertIn("default-radio", template)
-        self.assertIn("moveRow(row", template)
-        self.assertIn("data.defaults[p] = modelName", template)
+        module = (ROOT / "static" / "js" / "admin.js").read_text(encoding="utf-8")
+        self.assertIn("default-radio", module)
+        self.assertIn("moveRow(row", module)
+        self.assertIn("data.defaults[p] = modelName", module)
 
     def test_admin_model_rows_have_separate_premium_and_consensus_toggles(self):
-        template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
-        self.assertIn("premium-checkbox", template)
-        self.assertIn("consensus-checkbox", template)
-        self.assertIn("addConsensusValue(modelName)", template)
-        self.assertIn("moveConsensusRow", template)
-        self.assertIn("consensusListValues()", template)
-        self.assertIn("globalModelsData.consensus", template)
+        module = (ROOT / "static" / "js" / "admin.js").read_text(encoding="utf-8")
+        self.assertIn("premium-checkbox", module)
+        self.assertIn("consensus-checkbox", module)
+        self.assertIn("addConsensusValue(modelName)", module)
+        self.assertIn("moveConsensusRow", module)
+        self.assertIn("consensusListValues()", module)
+        self.assertIn("globalModelsData.consensus", module)
 
     def test_admin_exposes_free_and_pro_watch_model_config(self):
         template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
+        module = (ROOT / "static" / "js" / "admin.js").read_text(encoding="utf-8")
         self.assertIn('id="watchModelConfig"', template)
-        self.assertIn("watch_models: { free: {}, pro: {} }", template)
-        self.assertIn("data.watch_models[select.dataset.watchTier]", template)
+        self.assertIn("watch_models: { free: {}, pro: {} }", module)
+        self.assertIn("data.watch_models[select.dataset.watchTier]", module)
 
     def test_provider_errors_are_structured_without_fallback_response(self):
         response = source_response({

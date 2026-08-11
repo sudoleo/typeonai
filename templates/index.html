@@ -13,56 +13,26 @@
   <meta name="robots" content="noindex, follow">
   <link rel="canonical" href="https://www.consens.io/app">
   <title>Compare AI Answers | consens.io</title>
-  <script>
-    window.FIREBASE_CONFIG = {
-      apiKey: "{{ firebase_api_key }}",
-      authDomain: "{{ firebase_auth_domain }}",
-      projectId: "{{ firebase_project_id }}",
-      storageBucket: "{{ firebase_storage_bucket }}",
-      messagingSenderId: "{{ firebase_messaging_sender_id }}",
-      appId: "{{ firebase_app_id }}"
-    };
-    window.APP_LIMITS = JSON.parse('{{ limits | tojson | safe }}');
-    window.FREE_DEFAULT_MODELS = JSON.parse('{{ default_models | tojson | safe }}');
-    window.PRO_DEFAULT_MODELS = JSON.parse('{{ pro_default_models | tojson | safe }}');
-    // Consensus-Engine, auf die Deep Think umschaltet (Admin-konfigurierbar).
-    window.DEEP_THINK_CONSENSUS_MODEL = JSON.parse('{{ deep_think_consensus_model | tojson | safe }}');
-    // Preset-Ebene des Consensus-Pickers (Daily/Balanced/High Quality + Custom).
-    window.CONSENSUS_PRESETS = JSON.parse('{{ consensus_presets | tojson | safe }}');
-    window.DEFAULT_CONSENSUS_PRESET = JSON.parse('{{ default_consensus_preset | tojson | safe }}');
-    // Fallback-Limit für app-init.js (ausgelagertes initApp kann kein Jinja rendern).
-    window.FREE_LIMIT = Number('{{ free_limit }}');
-
-    window.trackUmamiEvent = function (eventName, eventData = {}) {
-      if (!eventName || !window.umami || typeof window.umami.track !== "function") return;
-
-      const blockedKeyPattern = /(email|mail|token|key|prompt|question|message|response|answer|password)/i;
-      const safeData = {};
-
-      Object.entries(eventData || {}).forEach(([key, value]) => {
-        if (!key || blockedKeyPattern.test(key)) return;
-        if (value === null || value === undefined) return;
-
-        const valueType = typeof value;
-        if (valueType === "number" || valueType === "boolean") {
-          if (Number.isFinite(value) || valueType === "boolean") {
-            safeData[key] = value;
-          }
-          return;
-        }
-
-        if (valueType === "string") {
-          const trimmed = value.trim();
-          if (!trimmed || trimmed.length > 120 || /@/.test(trimmed)) return;
-          safeData[key] = trimmed;
-        }
-      });
-
-      window.umami.track(eventName, safeData);
-    };
-  </script>
+  <meta id="appBootstrapConfig"
+        data-firebase-api-key="{{ firebase_api_key | e }}"
+        data-firebase-auth-domain="{{ firebase_auth_domain | e }}"
+        data-firebase-project-id="{{ firebase_project_id | e }}"
+        data-firebase-storage-bucket="{{ firebase_storage_bucket | e }}"
+        data-firebase-messaging-sender-id="{{ firebase_messaging_sender_id | e }}"
+        data-firebase-app-id="{{ firebase_app_id | e }}"
+        data-limits="{{ limits | tojson | forceescape }}"
+        data-free-models="{{ default_models | tojson | forceescape }}"
+        data-pro-models="{{ pro_default_models | tojson | forceescape }}"
+        data-deep-think-model="{{ deep_think_consensus_model | tojson | forceescape }}"
+        data-consensus-presets="{{ consensus_presets | tojson | forceescape }}"
+        data-default-consensus-preset="{{ default_consensus_preset | tojson | forceescape }}"
+        data-free-limit="{{ free_limit }}">
+  <script src="/static/js/app-bootstrap.js?v=20260811-phase6"></script>
+  <script src="/static/js/app-state.js?v=20260811-phase6"></script>
+  <script src="/static/js/auth-session-state.js?v=20260811-phase6"></script>
+  <script src="/static/js/watch-state.js?v=20260811-phase6"></script>
   <!-- Google Fonts -->
-  <link rel="stylesheet" href="/static/style.css?v=20260811-phase4">
+  <link rel="stylesheet" href="/static/style.css?v=20260811-phase6">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
@@ -79,8 +49,8 @@
        Module nicht importiert werden koennen. Muss vor firebase.js stehen. -->
   <script src="/static/js/auth-bootstrap.js?v=20260811-phase4" defer></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260811-phase5"></script>
-  <script type="module" src="/static/demo.js?v=20260807-composergrow1"></script>
+  <script type="module" src="/static/firebase.js?v=20260811-phase6"></script>
+  <script type="module" src="/static/demo.js?v=20260811-phase6"></script>
   <script src="/static/app-ui.js?v=20260811-phase4" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
   <script src="/static/js/app-core.js?v=20260807-threadmessages1" defer></script>
@@ -91,60 +61,41 @@
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
   <script src="/static/js/markdown-stream.js?v=20260809-phase0c1" defer></script>
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
-  <script src="/static/js/sources.js?v=20260727-composerfix1" defer></script>
+  <script src="/static/js/sources.js?v=20260811-phase6" defer></script>
   <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
   <script src="/static/js/attachments.js?v=20260810-runblock1" defer></script>
   <!-- Agent Mode (aus index.html ausgelagert) -->
-  <script src="/static/js/agent-mode.js?v=20260729-disclosurescroll1" defer></script>
+  <script src="/static/js/agent-mode.js?v=20260811-phase6" defer></script>
   <!-- Kompakte Zwei-Phasen-Anzeige fuer regulaere Laeufe (ohne Agent Mode). -->
   <script src="/static/js/consensus-progress.js?v=20260807-threadmessages1" defer></script>
   <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
-  <script src="/static/js/consensus-lifecycle.js?v=20260727-resultactions1" defer></script>
+  <script src="/static/js/consensus-lifecycle.js?v=20260811-phase6" defer></script>
   <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
   <script src="/static/js/share-dialog.js?v=20260811-phase4" defer></script>
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-actions.js?v=20260727-resultactions1" defer></script>
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
-  <script src="/static/js/watch.js?v=20260811-phase4" defer></script>
+  <script src="/static/js/watch.js?v=20260811-phase6" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
-  <script src="/static/js/user-tier.js?v=20260804-verifygate1" defer></script>
+  <script src="/static/js/user-tier.js?v=20260811-phase6" defer></script>
   <!-- Kontingent-Ring + Panel im Sidebar-Footer; spiegelt nur #usageDisplay -->
   <script src="/static/js/sidebar-quota.js?v=20260801-quotablock1" defer></script>
   <!-- Aufgebrauchtes Kontingent: Erkennung, Vorab-Pruefung und die bleibende
        Absage-Karte im Thread. Vor query-send/consensus-run, die sie nutzen. -->
   <script src="/static/js/usage-limit.js?v=20260802-storagebusy1" defer></script>
+  <!-- Deterministische Textanker getrennt von Netzwerk/Modal/Rendering. -->
+  <script src="/static/js/consensus-anchor.js?v=20260811-phase6" defer></script>
   <!-- Consensus-Insights und Credibility-Frames (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-insights.js?v=20260809-claimfix1" defer></script>
+  <script src="/static/js/consensus-insights.js?v=20260811-phase6" defer></script>
   <script src="/static/js/chat-session.js?v=20260806-chatlimits1" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260811-phase5" defer></script>
-  <script src="/static/js/query-send.js?v=20260811-phase4" defer></script>
+  <script src="/static/js/consensus-run.js?v=20260811-phase6" defer></script>
+  <script src="/static/js/query-send.js?v=20260811-phase6" defer></script>
   <!-- Composer einklappen (Handy): eine Zeile beim Lesen, voll beim Anfassen -->
   <script src="/static/js/composer-collapse.js?v=20260807-composergrow1" defer></script>
   {% include "partials/analytics.html" %}
 </head>
 
 <body class="is-hero">
-  <script>
-    // Agent-Mode-Klasse so früh wie möglich setzen: Das Hero-CSS zeigt auf dem
-    // Desktop die Response-Boxen nur ohne Agent Mode — ohne diesen Vorgriff
-    // würden sie für Agent-Mode-Nutzer kurz aufblitzen (agent-mode.js läuft
-    // erst deferred).
-    // Der Default für neue Nutzer (Agent Mode an, Panel aufgeklappt) wird hier
-    // gesetzt und nicht erst in agent-mode.js — sonst blitzen die Boxen genau
-    // beim allerersten Besuch auf. agent-mode.js seedet identisch weiter, falls
-    // dieses Inline-Skript einmal nicht läuft.
-    try {
-      if (localStorage.getItem("agentMode") === null) {
-        localStorage.setItem("agentMode", "true");
-      }
-      if (localStorage.getItem("agentModePanelCollapsed") === null) {
-        localStorage.setItem("agentModePanelCollapsed", "false");
-      }
-      if (localStorage.getItem("agentMode") === "true") {
-        document.body.classList.add("agent-mode-enabled");
-      }
-    } catch (e) {}
-  </script>
   <!-- Schwebende Navigation oben links: Sidebar-Toggle + Mini-Brand
        (Brand nur sichtbar, wenn die Sidebar zu ist). Ersetzt die Topbar. -->
   <div class="app-nav-float">
@@ -162,17 +113,6 @@
     <button type="button" id="authTopLoginBtn" class="auth-top-login">Log in</button>
     <button type="button" id="authTopSignupBtn" class="auth-top-signup">Sign up</button>
   </div>
-  <script>
-    // Gäste sehen die Auth-Buttons sofort (kein Warten auf Firebase). Ein
-    // eingeloggter Nutzer kann sie fuer einen Moment sehen; der autoritative
-    // Firebase-Callback blendet sie wieder aus. So kann ein altes, rein lokal
-    // gespeichertes Token die Login-Aktion bei einem CDN-Ausfall nicht sperren.
-    (function () {
-      try {
-        document.getElementById("authTopActions").hidden = false;
-      } catch (e) {}
-    })();
-  </script>
   <!-- Ansichts-Umschalter oben mittig (Consensus | Watches), immer sichtbar —
        ausgeloggt bittet der Watches-Klick per Popup um Login (watch.js
        verdrahtet Klicks + aktiven Zustand). -->
@@ -265,7 +205,7 @@
       <div class="sidebar-section bookmarks-section is-locked">
         <div class="sidebar-bookmarks-head">
           <h2 class="sidebar-toggle-heading">
-            <button id="bookmarksToggle" class="sidebar-toggle-btn" type="button" onclick="toggleBookmarks()" aria-expanded="true" aria-controls="bookmarksContainer" aria-disabled="true" disabled data-tooltip="All your chats if you are logged in.">
+            <button id="bookmarksToggle" class="sidebar-toggle-btn" type="button" aria-expanded="true" aria-controls="bookmarksContainer" aria-disabled="true" disabled data-tooltip="All your chats if you are logged in.">
               <span class="sidebar-heading-label">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
@@ -294,29 +234,6 @@
         <div id="bookmarksContainer"></div>
       </div>
     </div>
-    <script>
-      // Skeleton-Platzhalter fuer Usage-Zahlen und Bookmarks, solange die
-      // Nutzerdaten nach dem Login noch geladen werden. Nur wenn ein id_token
-      // vorliegt (Nutzer war eingeloggt). fetchUsageData / loadBookmarks
-      // (firebase.js) ersetzen den Inhalt, sobald die Daten da sind.
-      (function () {
-        try {
-          if (!localStorage.getItem("id_token")) return;
-          // <i> statt <span>: die Usage-Spalte blendet leere <span> aus
-          // (#usageDisplay span:empty { display:none }).
-          var line = '<i class="skeleton skeleton-line" style="width:54px"></i>';
-          var fu = document.getElementById("freeUsageDisplay");
-          var du = document.getElementById("deepUsageDisplay");
-          if (fu) fu.innerHTML = "Runs: " + line;
-          if (du) du.innerHTML = "Deep Think: " + line;
-          var bc = document.getElementById("bookmarksContainer");
-          if (bc) {
-            bc.innerHTML =
-              '<div class="skeleton skeleton-bookmark" aria-hidden="true"></div>'.repeat(4);
-          }
-        } catch (e) {}
-      })();
-    </script>
     <!-- Fußzeile: Account-Icon nur für eingeloggte Nutzer; Gäste verwenden
          ausschließlich die Auth-Aktionen oben rechts. -->
     <div class="sidebar-settings">
@@ -351,23 +268,6 @@
       </div>
       <div class="sidebar-footer-row">
         <div id="loginContainer" class="login-text" hidden></div>
-        <script>
-          // Skeleton-Avatar anzeigen, solange der Firebase-Auth-Status noch nicht
-          // aufgeloest ist. Liegt ein id_token vor, war der Nutzer eingeloggt:
-          // statt "Log in" einen grauen Platzhalter-Kreis zeigen, bis
-          // onIdTokenChanged (firebase.js) das echte Avatar-Icon rendert.
-          (function () {
-            try {
-              if (localStorage.getItem("id_token")) {
-                var c = document.getElementById("loginContainer");
-                if (c) {
-                  c.hidden = false;
-                  c.innerHTML = '<span class="skeleton login-skeleton" aria-hidden="true" role="status" aria-label="Loading account"></span>';
-                }
-              }
-            } catch (e) {}
-          })();
-        </script>
         <div class="sidebar-account-meta">
           <span id="accountLabel" class="sidebar-account-label" hidden></span>
           <a id="upgradeLink" href="#" style="display: none;" aria-label="Why there are limits" title="Why there are limits">Why limits?</a>
@@ -570,7 +470,7 @@
           <!-- Ein gefuellter Pfeil im gefuellten Kreis (wie im Mockup): der
                Senden-Knopf ist das einzige massive Element im Composer, also
                traegt er auch ein massives Zeichen statt einer Kontur. -->
-          <button id="sendButton" class="input-action-btn-primary" onclick="sendQuestion()" title="Send question" aria-label="Send question">
+          <button id="sendButton" class="input-action-btn-primary" title="Send question" aria-label="Send question">
             <svg viewBox="0 0 24 24" aria-hidden="true" style="width: 13px; height: 13px;">
               <path d="M3.4 3.6 21 12 3.4 20.4 7 12z" fill="currentColor"></path>
             </svg>
@@ -772,7 +672,7 @@
             </span>
           </span>
           <div class="control-icons">
-            <button type="button" class="exclude-btn" onclick="toggleExclude('openaiResponse')" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
+            <button type="button" class="exclude-btn" data-exclude-target="openaiResponse" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -793,7 +693,7 @@
             </span>
           </span>
           <div class="control-icons">
-            <button type="button" class="exclude-btn" onclick="toggleExclude('mistralResponse')" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
+            <button type="button" class="exclude-btn" data-exclude-target="mistralResponse" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -814,7 +714,7 @@
             </span>
           </span>
           <div class="control-icons">
-            <button type="button" class="exclude-btn" onclick="toggleExclude('claudeResponse')" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
+            <button type="button" class="exclude-btn" data-exclude-target="claudeResponse" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -835,7 +735,7 @@
             </span>
           </span>
           <div class="control-icons">
-            <button type="button" class="exclude-btn" onclick="toggleExclude('geminiResponse')" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
+            <button type="button" class="exclude-btn" data-exclude-target="geminiResponse" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -865,7 +765,7 @@
             </span>
           </span>
           <div class="control-icons">
-            <button type="button" class="exclude-btn" onclick="toggleExclude('deepseekResponse')" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
+            <button type="button" class="exclude-btn" data-exclude-target="deepseekResponse" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
@@ -888,14 +788,15 @@
             </span>
           </span>
           <div class="control-icons">
-            <button type="button" class="exclude-btn" onclick="toggleExclude('grokResponse')" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
+            <button type="button" class="exclude-btn" data-exclude-target="grokResponse" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
           </div>
         </h2>
         <p class="collapsible-content"></p>
       </div>
     </div>
 
-  <script src="/static/js/app-init.js?v=20260811-phase4" defer></script>
+  <script src="/static/js/app-init.js?v=20260811-phase6" defer></script>
+  <script src="/static/js/app-dom-events.js?v=20260811-phase6" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing
@@ -1016,160 +917,6 @@
   </div>
 
   <!-- Share-Modal: öffentliche Links erstellen/verwalten -->
-  <style>
-    html.share-modal-open,
-    html.share-modal-open body {
-      overflow: hidden;
-      overscroll-behavior: none;
-    }
-    #shareModal {
-      align-items: center; justify-content: center; overflow: hidden;
-      box-sizing: border-box; padding: 16px;
-    }
-    .share-modal-content {
-      position: relative; display: flex; flex-direction: column;
-      width: min(100%, 480px); max-width: 480px; max-height: calc(100dvh - 32px);
-      box-sizing: border-box; margin: 0; padding: 0; overflow: hidden;
-      overscroll-behavior: contain; text-align: left;
-    }
-    #shareModal .close {
-      position: absolute; z-index: 3; top: 12px; right: 12px; float: none;
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 30px; height: 30px; padding: 0; border: 0; border-radius: var(--radius-xs);
-      background: transparent; color: var(--sidebar-text-muted); font: inherit;
-      font-size: var(--font-size-lg); font-weight: var(--font-weight-regular); line-height: var(--line-height-solid); cursor: pointer;
-    }
-    #shareModal .close:hover, #shareModal .close:focus-visible {
-      background: color-mix(in srgb, var(--sidebar-hover) 72%, transparent);
-      color: var(--text-color); outline: none;
-    }
-    .share-modal-content h2 {
-      flex: 0 0 auto; margin: 0; padding: 18px 52px 15px 20px;
-      border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 62%, transparent);
-      text-align: left; font-size: var(--font-size-lg); line-height: var(--line-height-heading);
-    }
-    #shareModalBody {
-      min-height: 0; padding: 17px 20px 20px; overflow-y: auto;
-      overscroll-behavior: contain; scrollbar-width: thin;
-      scrollbar-color: color-mix(in srgb, var(--sidebar-text-muted) 34%, transparent) transparent;
-    }
-    .share-modal-content p { margin: 0 0 12px; }
-    .share-modal-notes { margin: 12px 0; padding-left: 18px; font-size: var(--font-size-sm); line-height: var(--line-height-ui); color: color-mix(in srgb, var(--text-color) 86%, var(--sidebar-text-muted)); }
-    .share-modal-notes li { margin-bottom: 6px; padding-left: 2px; }
-    .share-modal-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 18px; }
-    .share-modal-actions .share-link-btn { margin-left: auto; }
-    .share-primary-btn, .share-secondary-btn, .share-danger-btn, .share-link-btn {
-      display: inline-flex; align-items: center; justify-content: center; min-height: 36px;
-      border-radius: var(--radius-sm); padding: 0 15px; font: inherit; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold);
-      line-height: var(--line-height-solid); cursor: pointer; text-decoration: none;
-      transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease;
-    }
-    .share-primary-btn {
-      border: 1px solid color-mix(in srgb, var(--button-bg) 86%, #ffffff 14%);
-      background: linear-gradient(180deg, color-mix(in srgb, #ffffff 14%, transparent), transparent 52%), var(--button-bg);
-      color: var(--button-text);
-      box-shadow: 0 10px 24px color-mix(in srgb, var(--button-bg) 18%, transparent), inset 0 1px 0 color-mix(in srgb, #ffffff 32%, transparent);
-    }
-    .share-primary-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 14px 30px color-mix(in srgb, var(--button-bg) 24%, transparent), inset 0 1px 0 color-mix(in srgb, #ffffff 36%, transparent); }
-    .share-primary-btn:disabled { opacity: 0.55; cursor: default; box-shadow: none; }
-    .share-secondary-btn {
-      border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent);
-      background: color-mix(in srgb, var(--glass-bg-strong) 58%, transparent);
-      color: var(--text-color);
-      box-shadow: inset 0 1px 0 var(--glass-highlight);
-    }
-    .share-secondary-btn:hover { border-color: color-mix(in srgb, var(--accent) 32%, var(--sidebar-border)); background: color-mix(in srgb, var(--accent) 7%, var(--glass-bg-strong)); }
-    .share-danger-btn { border: 1px solid color-mix(in srgb, var(--clear-button-text) 36%, transparent); background: transparent; color: var(--clear-button-text); }
-    .share-danger-btn:hover { background: color-mix(in srgb, var(--clear-button-bg) 64%, transparent); border-color: color-mix(in srgb, var(--clear-button-text) 52%, transparent); }
-    .share-link-btn { border: none; background: transparent; color: var(--sidebar-text-muted); text-decoration: underline; text-underline-offset: 2px; padding: 0 4px; font-weight: var(--font-weight-medium); }
-    .share-link-btn:hover { color: var(--text-color); }
-    .share-url-row { display: flex; gap: 8px; margin: 10px 0; }
-    .share-url-row input {
-      flex: 1; min-width: 0; padding: 8px 11px; border-radius: var(--radius-sm);
-      border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent);
-      background: color-mix(in srgb, var(--input-bg) 84%, transparent); color: inherit; font-size: var(--font-size-sm);
-      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
-    }
-    .share-url-row input:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border)); box-shadow: var(--liquid-focus-ring); }
-    .share-list { list-style: none; margin: 0; padding: 0; max-height: none; overflow: visible; }
-    .share-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent); }
-    .share-list li:last-child { border-bottom: none; }
-    .share-list-question { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-size: var(--font-size-sm); }
-    .share-list-actions { display: flex; gap: 6px; flex-shrink: 0; }
-    .share-list-actions .share-secondary-btn, .share-list-actions .share-danger-btn { min-height: 30px; padding: 0 11px; font-size: var(--font-size-xs); }
-    .watch-public-note { margin: 14px 0; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--sidebar-border)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 7%, transparent); font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
-    .watch-config-intro { color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted)); font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
-    .watch-config-field { min-width: 0; margin-top: 14px; }
-    .watch-config-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
-    .watch-interval-label { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); }
-    .watch-interval-select, .watch-time-input {
-      width: 100%; min-height: 38px; box-sizing: border-box; padding: 0 10px;
-      border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent);
-      border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-color);
-      font: inherit; font-size: var(--font-size-sm);
-    }
-    .watch-time-input { color-scheme: light dark; }
-    .watch-interval-select:focus, .watch-time-input:focus {
-      outline: none; border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border));
-      box-shadow: var(--liquid-focus-ring);
-    }
-    .watch-condition-input { width: 100%; box-sizing: border-box; resize: vertical; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent); border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-color); font: inherit; font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
-    .watch-condition-input:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border)); box-shadow: var(--liquid-focus-ring); }
-    .watch-interval-select[aria-invalid="true"], .watch-time-input[aria-invalid="true"], .watch-condition-input[aria-invalid="true"] {
-      border-color: #c2413a; box-shadow: 0 0 0 3px color-mix(in srgb, #c2413a 16%, transparent);
-    }
-    .watch-field-error { margin: 6px 0 0 !important; color: #b42318; font-size: var(--font-size-micro); font-weight: var(--font-weight-semibold); line-height: var(--line-height-ui); }
-    .dark-mode .watch-field-error { color: #ff9b94; }
-    .watch-field-error[hidden] { display: none; }
-    .watch-weekday-wrap { margin-top: 10px; }
-    .watch-weekday-wrap[hidden] { display: none; }
-    #watchConditionWrap { margin-top: 12px; }
-    .watch-condition-editor { flex: 1 1 100%; display: flex; align-items: flex-end; gap: 7px; }
-    .watch-condition-editor[hidden] { display: none; }
-    .watch-condition-editor .watch-condition-input { flex: 1; }
-    .watch-data-note { margin: 6px 0 0 !important; color: var(--sidebar-text-muted); font-size: var(--font-size-micro); line-height: var(--line-height-ui); }
-    .watch-config-assurance {
-      display: flex; align-items: flex-start; gap: 8px; margin: 16px 0 0 !important;
-      padding: 10px 11px; border-radius: var(--radius-sm);
-      background: color-mix(in srgb, var(--accent) 6%, transparent);
-      color: var(--sidebar-text-muted); font-size: var(--font-size-micro); line-height: var(--line-height-ui);
-    }
-    .watch-config-assurance > span { color: var(--accent); font-weight: var(--font-weight-bold); }
-    #shareModal.is-watch-dialog .share-modal-actions {
-      position: sticky; z-index: 2; bottom: -20px; margin: 18px -20px -20px;
-      padding: 12px 20px 14px;
-      border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 58%, transparent);
-      background: color-mix(in srgb, var(--bg-color) 12%, #ffffff);
-      box-shadow: 0 -8px 18px color-mix(in srgb, var(--bg-color) 34%, transparent);
-      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-    }
-    .dark-mode #shareModal.is-watch-dialog .share-modal-actions {
-      background: color-mix(in srgb, var(--bg-color) 86%, #202b36);
-      box-shadow: 0 -8px 20px rgba(0, 0, 0, .18);
-    }
-    @media (max-width: 600px) {
-      #shareModal {
-        align-items: flex-end; height: 100dvh;
-        padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
-      }
-      #shareModal.is-watch-dialog { align-items: center; }
-      #shareModal .share-modal-content {
-        width: 100%; max-width: none; max-height: 100%;
-        border-radius: var(--radius-lg);
-      }
-      #shareModalBody { padding: 16px; scroll-padding-block: 16px 96px; }
-      .share-modal-content h2 { padding: 17px 48px 14px 16px; }
-      #shareModal .close { top: 10px; right: 10px; }
-      .watch-config-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
-      #shareModal.is-watch-dialog .share-modal-actions {
-        display: grid; grid-template-columns: minmax(0, 1fr) auto;
-        bottom: -16px; margin: 18px -16px -16px; padding: 12px 16px;
-      }
-      #shareModal.is-watch-dialog .share-primary-btn { width: 100%; }
-      #shareModal.is-watch-dialog .share-link-btn { grid-column: 1 / -1; justify-self: center; margin-left: 0; min-height: 28px; }
-    }
-    /* Die Watch-Liste lebt jetzt im Dashboard-Overlay (components-watch.css). */
-  </style>
   <div id="shareModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="shareModalTitle">
     <div class="modal-content share-modal-content">
       <button type="button" class="close" id="closeShareModal" aria-label="Close dialog">&times;</button>
@@ -1335,7 +1082,7 @@
               </div>
 
               <div class="settings-section">
-                <div class="collapse-header" onclick="toggleSettingsCollapse('apiSettingsArea', 'apiArrow')">
+                <div id="apiSettingsToggle" class="collapse-header" role="button" tabindex="0" aria-controls="apiSettingsArea">
                   <div>
                     <h4>Provider API keys</h4>
                     <p>Manage and test credentials for individual providers.</p>
@@ -1371,7 +1118,7 @@
                 <input type="text" id="grokKey" placeholder="Your Grok Key" autocomplete="off">
               </div>
 
-              <button onclick="testAllKeys()" class="save-keys-btn">
+              <button id="testAllKeysButton" type="button" class="save-keys-btn">
                 Save & Test Keys
                 <span id="apiSpinner" class="spinner" style="display: none;"></span>
               </button>

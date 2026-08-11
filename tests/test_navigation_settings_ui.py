@@ -276,7 +276,7 @@ def test_logout_clears_the_loaded_run_and_aborts_active_streams():
     assert 'searchHead?.classList.remove("is-searching");' in firebase
     assert 'document.body.classList.add("is-hero")' in firebase
     assert "window.clearResponseBoxes = function (options = {})" in app_init
-    assert "window.consensusCitationMeta = null" in app_init
+    assert 'window.App.state.set("consensusCitationMeta", null, "consensus")' in app_init
 
 
 def test_watch_change_surfaces_use_tint_without_a_left_rail():
@@ -292,9 +292,10 @@ def test_watch_change_surfaces_use_tint_without_a_left_rail():
 
 def test_watch_requests_cannot_repopulate_account_state_after_logout():
     watch = read("static/js/watch.js")
+    owner = read("static/js/watch-state.js")
 
-    assert "let watchSessionEpoch = 0;" in watch
-    assert "requestEpoch !== watchSessionEpoch" in watch
+    assert "sessionEpoch: 0" in owner
+    assert "requestEpoch !== watchState.sessionEpoch" in watch
     assert "window.auth?.currentUser?.uid !== userUid" in watch
-    assert "watchSessionEpoch += 1;" in watch
-    assert "telegramState = null;" in watch
+    assert "watchState.sessionEpoch += 1;" in watch
+    assert "watchState.telegram = null;" in watch

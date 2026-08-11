@@ -125,8 +125,8 @@ function resetLoadedRunAfterLogout() {
   window.cancelCurrentConsensus?.();
   window.clearResponseBoxes?.({ silent: true });
   window.clearPreparedBookmarkShareResult?.();
-  window.currentEvidenceSources = [];
-  window.consensusCitationMeta = null;
+  window.App.state.set("currentEvidenceSources", [], "evidence");
+  window.App.state.set("consensusCitationMeta", null, "consensus");
   window.App?.chatSession?.reset?.();
   window.App?.bookmarkSession?.reset?.();
   window.App?.sharedModal?.close?.();
@@ -210,8 +210,8 @@ window.LIMITS = {
 };
 
 // Globale Variablen für den aktuellen Zustand (Startwert: Free)
-window.currentMaxLimit = window.LIMITS.FREE.NORMAL;
-window.currentDeepLimit = window.LIMITS.FREE.DEEP;
+window.App.state.set("currentMaxLimit", window.LIMITS.FREE.NORMAL, "userTier");
+window.App.state.set("currentDeepLimit", window.LIMITS.FREE.DEEP, "userTier");
 
 // merken, dass wir Bookmarks schon einmal geladen haben
 let bookmarksLoaded = false;
@@ -220,26 +220,12 @@ let bookmarksLoading = false;
 let bookmarksLoadRequestId = 0;
 let openedBookmarkId = null;
 const bookmarkDetailCache = new Map();
-let activeAuthUid = null;
-let authGeneration = 0;
+const authState = window.App.authState;
 let bookmarkViewEpoch = 0;
 let accountMenuDocumentClickHandler = null;
 
-window.__consensioAuthState = {
-  known: false,
-  uid: null,
-  generation: authGeneration
-};
-
 function publishAuthState(uid) {
-  window.__consensioAuthState = {
-    known: true,
-    uid: uid || null,
-    generation: authGeneration
-  };
-  window.dispatchEvent(new CustomEvent("consensio:auth-state", {
-    detail: window.__consensioAuthState
-  }));
+  authState.publish(uid);
 }
 
 function clearAccountMenuDocumentListener() {
@@ -249,24 +235,11 @@ function clearAccountMenuDocumentListener() {
 }
 
 function setActiveAuthIdentity(uid) {
-  const normalizedUid = uid || null;
-  if (normalizedUid !== activeAuthUid) {
-    activeAuthUid = normalizedUid;
-    authGeneration += 1;
-  }
-  window.__consensioAuthState = {
-    known: window.__consensioAuthState?.known === true,
-    uid: normalizedUid,
-    generation: authGeneration
-  };
-  return authGeneration;
+  return authState.setIdentity(uid);
 }
 
 function isCurrentAuthenticatedUser(uid, generation) {
-  return generation === authGeneration
-    && !!uid
-    && activeAuthUid === uid
-    && auth.currentUser?.uid === uid;
+  return authState.isCurrent(uid, generation, auth.currentUser?.uid);
 }
 
 function setBookmarksAccess(isLoggedIn) {
@@ -309,9 +282,9 @@ function clearAuthenticatedUiState() {
   clearAccountMenuDocumentListener();
   localStorage.removeItem("id_token");
   window.App?.usageRun?.clear?.();
-  window.isUserPro = false;
-  window.currentMaxLimit = window.LIMITS.FREE.NORMAL;
-  window.currentDeepLimit = window.LIMITS.FREE.DEEP;
+  window.App.state.set("isUserPro", false, "userTier");
+  window.App.state.set("currentMaxLimit", window.LIMITS.FREE.NORMAL, "userTier");
+  window.App.state.set("currentDeepLimit", window.LIMITS.FREE.DEEP, "userTier");
 
   ["freeUsageDisplay", "deepUsageDisplay", "watchUsageDisplay", "countdownDisplay"]
     .forEach(id => {
@@ -351,9 +324,9 @@ async function checkUserStatusOnLoad(user, token, generation) {
       if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
 
       // 1. Globale Limits sofort aktualisieren.
-      window.currentMaxLimit = data.limit;
-      window.currentDeepLimit = data.deep_limit;
-      window.isUserPro = data.is_pro;
+      window.App.state.set("currentMaxLimit", data.limit, "userTier");
+      window.App.state.set("currentDeepLimit", data.deep_limit, "userTier");
+      window.App.state.set("isUserPro", data.is_pro, "userTier");
 
       // 2. UI AKTUALISIEREN
 
@@ -364,8 +337,8 @@ async function checkUserStatusOnLoad(user, token, generation) {
       if (typeof window.setCurrentUsageLimits === "function") {
           window.setCurrentUsageLimits(data.is_pro, data);
       } else {
-          window.currentMaxLimit = data.limit;
-          window.currentDeepLimit = data.deep_limit;
+          window.App.state.set("currentMaxLimit", data.limit, "userTier");
+          window.App.state.set("currentDeepLimit", data.deep_limit, "userTier");
       }
 
       // B) FALLBACK (Hier war der Fehler):
@@ -409,7 +382,7 @@ async function checkUserStatusOnLoad(user, token, generation) {
 onIdTokenChanged(auth, async (user) => {
   const loginContainer = document.getElementById("loginContainer");
   const usageOptions   = document.getElementById("usageOptions");
-  const previousAuthUid = activeAuthUid;
+  const previousAuthUid = authState.uid;
   const generation = setActiveAuthIdentity(user?.emailVerified ? user.uid : null);
 
   if (user) {
@@ -669,8 +642,8 @@ onIdTokenChanged(auth, async (user) => {
         if (badge) badge.style.display = "none";
 
         // B) Limits auf Free zurücksetzen
-        window.currentMaxLimit = window.LIMITS.FREE.NORMAL;
-        window.currentDeepLimit = window.LIMITS.FREE.DEEP;
+        window.App.state.set("currentMaxLimit", window.LIMITS.FREE.NORMAL, "userTier");
+        window.App.state.set("currentDeepLimit", window.LIMITS.FREE.DEEP, "userTier");
 
         // C) Premium Modelle wieder sperren (HIER WAR DER FEHLER)
         const premiumOptions = document.querySelectorAll('.premium-option');
@@ -719,7 +692,7 @@ async function fetchUsageData(token, uid, generation) {
     // recover in the same session when the earlier /user_status request had a
     // transient failure.
     const isPro = data.is_pro === true;
-    window.isUserPro = isPro;
+    window.App.state.set("isUserPro", isPro, "userTier");
     if (typeof window.updateUserTierUI === "function") {
       window.updateUserTierUI(isPro, true);
     }
@@ -728,8 +701,8 @@ async function fetchUsageData(token, uid, generation) {
     } else {
       const totalLimit = Number(data.total_limit);
       const deepTotalLimit = Number(data.deep_total_limit);
-      if (Number.isFinite(totalLimit)) window.currentMaxLimit = totalLimit;
-      if (Number.isFinite(deepTotalLimit)) window.currentDeepLimit = deepTotalLimit;
+      if (Number.isFinite(totalLimit)) window.App.state.set("currentMaxLimit", totalLimit, "userTier");
+      if (Number.isFinite(deepTotalLimit)) window.App.state.set("currentDeepLimit", deepTotalLimit, "userTier");
     }
     if (typeof window.App?.renderUsageDisplay === "function") {
       window.App.renderUsageDisplay({
@@ -757,7 +730,7 @@ window.refreshUsageData = async function () {
   const requestUser = auth.currentUser;
   if (!requestUser) return false;
   const requestUid = requestUser.uid;
-  const requestGeneration = authGeneration;
+  const requestGeneration = authState.generation;
   try {
     const token = await requestUser.getIdToken(false);
     if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return false;
@@ -1326,7 +1299,7 @@ async function saveBookmark(question, response, modelName, mode, previousQuestio
   const requestUser = auth.currentUser;
   if (!requestUser) return;
   const requestUid = requestUser.uid;
-  const requestGeneration = authGeneration;
+  const requestGeneration = authState.generation;
   const bookmarkId = window.App.bookmarkSession?.currentId?.()
     || bookmarkIdForQuestion(question);
   const id_token = await requestUser.getIdToken(false);
@@ -1389,7 +1362,7 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
   const requestUser = auth.currentUser;
   if (!requestUser) return;
   const requestUid = requestUser.uid;
-  const requestGeneration = authGeneration;
+  const requestGeneration = authState.generation;
   const bookmarkId = conversation?.bookmarkId
     || window.App.bookmarkSession?.currentId?.()
     || bookmarkIdForQuestion(question);
@@ -1453,7 +1426,7 @@ window.clearPreparedBookmarkShareResult = function () {
   bookmarkShareResultVersion += 1;
   window.currentBookmarkShareResultPromise = null;
   window.currentBookmarkShareResultContext = null;
-  window.lastShareResultId = null;
+  window.App.state.set("lastShareResultId", null, "share");
 };
 
 function prepareBookmarkShareResult(bookmark) {
@@ -1482,7 +1455,7 @@ async function requestBookmarkShareResult() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Could not prepare bookmark.");
       if (version === bookmarkShareResultVersion) {
-        window.lastShareResultId = data.result_id || null;
+        window.App.state.set("lastShareResultId", data.result_id || null, "share");
       }
       return version === bookmarkShareResultVersion ? window.lastShareResultId : null;
     } catch (error) {
@@ -1641,7 +1614,7 @@ async function loadBookmarkConversationOnce(bookmark) {
   if (!bookmark?.chat_id || !auth.currentUser) return [];
   const requestUser = auth.currentUser;
   const requestUid = requestUser.uid;
-  const requestGeneration = authGeneration;
+  const requestGeneration = authState.generation;
   const idToken = await requestUser.getIdToken(false);
   if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
     throw new Error("Authentication changed while loading bookmark");
@@ -1729,13 +1702,9 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
     // A consensus bookmark gets a reusable server-side snapshot on Share/Watch.
     prepareBookmarkShareResult(bookmark);
 
-    // Konsens-Button deaktivieren
-    const conBtn = document.getElementById("consensusButton");
-    if(conBtn) conBtn.disabled = true;
-
     // --- NEU: Quellen wiederherstellen ---
     // 1. Globale Variable setzen, damit injectMarkdown (in index.html) darauf zugreifen kann
-    window.currentEvidenceSources = bookmark.sources || [];
+    window.App.state.set("currentEvidenceSources", bookmark.sources || [], "evidence");
 
     // 2. Die Quellen-Liste (unten im UI) visuell rendern (falls die Funktion existiert)
     if (window.renderEvidenceSources) {
@@ -1921,7 +1890,7 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
             includedModels = window.getIncludedModelNamesForCitation();
         }
 
-        window.consensusCitationMeta = {
+        window.App.state.set("consensusCitationMeta", {
             question: displayQuestion,
             includedModels: includedModels,
             consensusModel: bookmark.consensus_model || "",
@@ -1931,10 +1900,10 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
                 bookmark.createdAt ||
                 bookmark.created_at_iso ||
                 new Date().toISOString()
-        };
+        }, "consensus");
     } catch (err) {
         console.warn("Could not rebuild consensusCitationMeta from bookmark:", err);
-        window.consensusCitationMeta = null;
+        window.App.state.set("consensusCitationMeta", null, "consensus");
     }
     if (options.conversationLoadFailed) {
         const message = authoritativeChatRestored
@@ -1980,7 +1949,7 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
   if (!auth.currentUser || bookmarksLoading) return false;
   const requestUser = auth.currentUser;
   const requestUid = requestUser.uid;
-  const requestGeneration = authGeneration;
+  const requestGeneration = authState.generation;
   const requestId = ++bookmarksLoadRequestId;
   bookmarksLoading = true;
   const container = document.getElementById("bookmarksContainer");
@@ -2026,7 +1995,7 @@ async function loadBookmarkDetail(bookmarkId) {
   if (bookmarkDetailCache.has(bookmarkId)) return bookmarkDetailCache.get(bookmarkId);
   const requestUser = auth.currentUser;
   const requestUid = requestUser.uid;
-  const requestGeneration = authGeneration;
+  const requestGeneration = authState.generation;
   const idToken = await requestUser.getIdToken(false);
   if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
     throw new Error("Authentication changed while loading bookmark");
@@ -2050,7 +2019,7 @@ async function loadBookmarkDetail(bookmarkId) {
 window.openBookmark = async function (bookmarkId) {
   const requestEpoch = ++bookmarkViewEpoch;
   const requestUid = auth.currentUser?.uid || null;
-  const requestGeneration = authGeneration;
+  const requestGeneration = authState.generation;
   const viewIsCurrent = () => requestEpoch === bookmarkViewEpoch
     && isCurrentAuthenticatedUser(requestUid, requestGeneration);
   const row = document.querySelector(`.bookmark[data-id="${bookmarkId}"]`);
@@ -2092,7 +2061,7 @@ async function deleteBookmark(bookmarkId) {
   const requestUser = auth.currentUser;
   if (!requestUser) return;
   const requestUid = requestUser.uid;
-  const requestGeneration = authGeneration;
+  const requestGeneration = authState.generation;
   const id_token = await requestUser.getIdToken(false);
   if (!id_token || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
 

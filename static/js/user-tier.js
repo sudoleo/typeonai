@@ -26,7 +26,7 @@
   }
   function updateUserTierUI(isPro, isLoggedIn = false) {
     // 1. Globalen Status aktualisieren.
-    window.isUserPro = isPro;
+    window.App.state.set("isUserPro", isPro, "userTier");
 
     // Follow-up-Affordance neu rendern (tierunabhängig, aber der Composer
     // wird bei jedem Tier-Wechsel ohnehin neu aufgebaut).

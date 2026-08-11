@@ -24,11 +24,11 @@
         // Zugriff auf die Checkboxen:
 
         // Global verfügbar für alle Funktionen
-        window.spinnerHTML = `
+        window.App.state.set("spinnerHTML", `
           <span class="thinking-wrap" role="status" aria-live="polite" aria-busy="true">
             <span class="thinking typing-indicator" data-text="Typing" aria-label="Typing">Typing<span class="typing-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span>
           </span>
-        `;
+        `, "runUi");
         window.consensusSpinnerHTML = `
           <span class="thinking-wrap consensus-thinking-wrap" role="status" aria-live="polite" aria-busy="true">
             <span class="consensus-loader" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
@@ -555,8 +555,8 @@
             ? deepLimit
             : (isPro ? LIMITS.PRO.DEEP : LIMITS.FREE.DEEP);
 
-          window.currentMaxLimit = currentMaxLimit;
-          window.currentDeepLimit = currentDeepLimit;
+          window.App.state.set("currentMaxLimit", currentMaxLimit, "userTier");
+          window.App.state.set("currentDeepLimit", currentDeepLimit, "userTier");
         }
 
         setCurrentUsageLimits(false);
@@ -862,8 +862,8 @@
           window.cancelCurrentConsensus?.();
           window.clearResponseBoxes?.({ silent: true });
           window.clearPreparedBookmarkShareResult?.();
-          window.currentEvidenceSources = [];
-          window.consensusCitationMeta = null;
+          window.App.state.set("currentEvidenceSources", [], "evidence");
+          window.App.state.set("consensusCitationMeta", null, "consensus");
 
           const input = document.getElementById("questionInput");
           if (input) {
@@ -1131,19 +1131,6 @@
         // global machen, falls du es anderswo brauchst
         window.renderEvidenceSources = renderEvidenceSources;
 
-        // API Testbereich umschalten (für den Pfeil in der API Keys Section)
-        window.toggleApiTest = function () {
-          const area = document.getElementById("apiTestArea");
-          const button = document.getElementById("toggleApiTest");
-          const arrow = button.querySelector(".arrow");
-          if (area.style.display === "none" || area.style.display === "") {
-            area.style.display = "block";
-            arrow.classList.add("rotated");
-          } else {
-            area.style.display = "none";
-            arrow.classList.remove("rotated");
-          }
-        };
 
         // Models remains one compact sidebar row. Its detailed controls open
         // on the composer's existing run picker instead of expanding the
@@ -1270,12 +1257,6 @@
           });
         }
 
-        const inlineAgentModeSwitch = document.getElementById("toggleAllButton");
-        if (inlineAgentModeSwitch) {
-          inlineAgentModeSwitch.addEventListener("change", function () {
-            setAgentMode(this.checked, { persist: true });
-          });
-        }
 
         // --- NEU: Event Listener für Consensus Dropdown ---
         const consensusSelect = document.getElementById("consensusModelDropdown");
@@ -1428,11 +1409,6 @@
 
         // Der frühere "Generate Consensus"-Button ist entfernt - Konsens läuft
         // automatisch. Lokaler Alias hält die bestehenden Aufrufstellen stabil.
-        function setConsensusGate(disabled) {
-          consensusLifecycle.setGate(disabled);
-        }
-
-        setConsensusGate(true);
 
         // Query-Send (window.sendQuestion, Cancel, Query-Run-State und die
         // Query-Helfer isDemoQuery/predictSearchIntent/getActiveMode) ist nach
@@ -1517,7 +1493,7 @@
         // Globale Variable, um die letzte verarbeitete Frage zu speichern.
         // Auf window gehoben: consensus-run.js (window.getConsensus) liest sie,
         // query-send.js (window.sendQuestion) schreibt sie.
-        window.lastQuestion = "";
+        window.App.state.set("lastQuestion", "", "run");
 
         // Consensus-Run (Request/Payload/Rendering) ist nach
         // static/js/consensus-run.js ausgelagert: window.getConsensus baut das
@@ -1697,7 +1673,6 @@
           ];
 
           // Konsens unterbinden und den rahmenlosen Bereich wieder ausblenden.
-          setConsensusGate(true);
           window.hideConsensusOutput?.();
           // Follow-up-Affordance/Chip gehören zum gelöschten Konsens.
           window.App.followup?.reset?.();
@@ -1744,9 +1719,9 @@
           }
           window.App.setAppTitle();
           window.App.setThreadQuestion?.("");
-          window.lastQuestion = "";
-          window.currentEvidenceSources = [];
-          window.consensusCitationMeta = null;
+          window.App.state.set("lastQuestion", "", "run");
+          window.App.state.set("currentEvidenceSources", [], "evidence");
+          window.App.state.set("consensusCitationMeta", null, "consensus");
           window.clearPreparedBookmarkShareResult?.();
 
           setAgentModeStatus("idle");
@@ -1829,7 +1804,7 @@
         // Initialer Aufruf: Alles sperren (Standard)
         updatePremiumModelsState(false);
 
-        window.isUserPro = false;
+        window.App.state.set("isUserPro", false, "userTier");
 
         // Tier-/Pro-UI (updateUserTierUI, updatePremiumModelsState) ist nach
         // static/js/user-tier.js ausgelagert. Exporte gleichen Namens auf window.

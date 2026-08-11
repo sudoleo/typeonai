@@ -343,16 +343,17 @@ class ModelConfigurationTests(unittest.TestCase):
 
     def test_admin_and_picker_have_no_early_contract(self):
         admin = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
+        admin_js = (ROOT / "static" / "js" / "admin.js").read_text(encoding="utf-8")
         index = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
         picker = (ROOT / "static" / "js" / "model-picker.js").read_text(encoding="utf-8")
         tier = (ROOT / "static" / "js" / "user-tier.js").read_text(encoding="utf-8")
-        combined = "\n".join((admin, index, picker, tier))
+        combined = "\n".join((admin, admin_js, index, picker, tier))
         self.assertNotIn("EARLY_DEFAULT_MODELS", combined)
         self.assertNotIn("early-option", combined)
         self.assertNotIn("isUserEarly", combined)
-        self.assertIn("'In use'", admin)
-        self.assertNotIn("re-added automatically", admin)
-        self.assertNotIn("Server-enforced Pro model", admin)
+        self.assertIn("'In use'", admin_js)
+        self.assertNotIn("re-added automatically", combined)
+        self.assertNotIn("Server-enforced Pro model", combined)
 
     def test_provider_errors_are_structured_without_fallback_response(self):
         response = source_response({

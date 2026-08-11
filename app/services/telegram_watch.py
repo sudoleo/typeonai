@@ -15,7 +15,7 @@ from urllib.parse import quote
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from app.api.routers.pages import SITE_URL
+from app.core.site import SITE_URL
 from app.core.security import db_firestore
 from app.services import share_snapshots, telegram_notifier, watch_service
 

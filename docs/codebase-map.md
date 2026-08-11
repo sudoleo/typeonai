@@ -23,8 +23,9 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 - **Auth & Daten**: Firebase Auth (ID-Token) + Firestore (`firebase-admin`).
   Gemini kann zusätzlich über ein Google Service Account laufen.
 - **Frontend**: kein Framework. Jinja2-Templates + Vanilla-JS-Module unter
-  `static/js/`, geladen als klassische `<script defer>`-Tags. Übergangs-State-Bus
-  ist `window.App` plus zahlreiche `window.*`-Globals (siehe §8).
+  `static/js/`, überwiegend als klassische `<script defer>`-Tags. `window.App`
+  ist Bus und State-Owner; ausgewählte `window.*`-Getter/-Funktionen bleiben als
+  Kompatibilitätsvertrag (siehe §8).
 - **Markdown/Mathematik**: `marked` + `DOMPurify` clientseitig und
   `markdown-it-py` + `nh3` für Share-Seiten; KaTeX setzt in beiden Ansichten
   LaTeX-Ausdrücke nach dem sanitisierten Markdown-Rendern.
@@ -156,18 +157,17 @@ Marketing-Mockups die Inline-Confidence-Darstellung der App** (Scene 03 in
 `landing.html` inkl. der drei Slider-Beispiele, `product_result_mockup.html`
 und die beiden Mockups in `consensus-engine.html`): eine Antwort in voller
 Breite, Uneinigkeit als `.cx-claim`/`.cx-marker` im Satz, die Differences als
-zugeklapptes `details.consensus-differences-panel` darunter. `landing.css`
-enthält dafür eine Kopie des Marker-Vokabulars (`--cx-major-line`,
-`--cx-flash`, durchgezogene 1px-/2px-Linien, `.diff-card.is-focused`) — sie muss bei
-Änderungen an `components-consensus-insights.css` mitgezogen werden. Landing-
+zugeklapptes `details.consensus-differences-panel` darunter.
+`components-consensus-visuals.css` enthält dafür das gemeinsame Marker-,
+Verdict- und Differences-Vokabular (`--cx-major-line`, `--cx-flash`,
+durchgezogene 1px-/2px-Linien, `.diff-card.is-focused`) und wird von App und
+Landing importiert. Landing-
 spezifisch sind nur die Lesehilfe `.lp-mark-key` unter der Scene-03-Überschrift,
 das Einlaufen der Marker beim Scroll (`.lp-scene-visual.is-visible` /
 `.lp-slide.is-active`) und ein kleiner Handler in `landing.html`, der
 `[data-diff-open]` auf die passende Karte klickbar macht. Seit 2026-07-27 tragen alle diese Mockups
 zusätzlich die rahmenlose Shell-Sprache: Der Verdict ist eine Zeile (Score-Ring
-+ Headline + Judge-Fußnote) statt eines gefüllten Balkens — die Kopie in
-`landing.css` muss mit dem `.consensus-verdict`-Block in `shell.css` in Schritt
-bleiben. Die gemeinsamen, an `/app`
++ Headline + Judge-Fußnote) statt eines gefüllten Balkens. Die gemeinsamen, an `/app`
 ausgerichteten Light-/Dark-Tokens liegen in `static/css/public-tokens.css` und
 werden von `landing.css` sowie `public-pages.css` importiert; seitenbezogene
 Layouts bleiben in diesen beiden Dateien bzw. in `benchmark.css` und
@@ -181,23 +181,43 @@ definiert die verbindlichen Größen-, Gewichts-, Zeilenhöhen- und Laufweiten-T
 und lässt Formularelemente die Produktschrift erben. Google-Fonts-Links und deren
 CSP-Freigaben existieren nicht mehr; Monospace bleibt ausschließlich für Code und
 technische Identifikatoren, KaTeX behält seine eigene Mathematikschrift.
-`index.html` lädt die App-Module als externe Skripte, enthält aber neben dem
-Jinja-Config-Block vier kleine Inline-Skripte für frühen Agent-Mode-, Auth- und
-Skeleton-State. CSP- oder Script-Refactorings müssen diese Bootstrap-Blöcke
-mitberücksichtigen.
+`index.html` und `admin.html` enthalten keine Inline-Skripte, Inline-Styles oder
+HTML-Eventhandler mehr. Jinja-Konfiguration liegt ausschließlich in escaped
+`data-*`-Metadaten und wird von `app-bootstrap.js` beziehungsweise
+`admin-config.js` gelesen; `app-dom-events.js` bindet die früheren Inline-
+Handler. Die routenspezifische CSP für `/app`, `/app/watches` und `/admin`
+kommt deshalb bei `script-src` ohne `'unsafe-inline'` aus. Öffentliche Seiten
+behalten die bisherige Policy während der weiteren Style-Migration.
 
 ---
 
 ## 3. Frontend-Architektur
 
-Geladen werden (Reihenfolge ist Vertrag, siehe §8): zuerst CDN-Libs
-(`marked`, `DOMPurify`, KaTeX + Auto-Render), dann der same-origin
+Geladen werden (Reihenfolge ist Vertrag, siehe §8): zuerst die synchronen
+`app-bootstrap.js`, `app-state.js`, `auth-session-state.js` und `watch-state.js`,
+dann CDN-Libs (`marked`, `DOMPurify`, KaTeX + Auto-Render), der same-origin
 `auth-bootstrap.js`-Watchdog vor `firebase.js` + `demo.js` (ES-Module),
-`app-ui.js`, dann die übrigen Feature-Module unter `static/js/` in fester
-Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
+`app-ui.js`, danach die Feature-Module unter `static/js/` in fester Reihenfolge.
+Zuletzt — deferred am `</body>` — laufen `app-init.js` und
+`app-dom-events.js`.
 
 **Modul-Verantwortlichkeiten** (alle in `static/js/` außer markiert):
 
+- **`app-bootstrap.js`** — liest die escaped Jinja-Konfiguration aus
+  `#appBootstrapConfig`, initialisiert die bisherigen read-only `window.*`-
+  Configwerte sowie den sicheren Umami-Wrapper und stellt Agent-/Auth-/Skeleton-
+  First-Paint ohne Inline-Skript her.
+- **`app-state.js`** — einzige Schreibschnittstelle für laufbezogene Frage,
+  Evidence, Citation-/Share-Kontext, Tierlimits und Spinner-Markup. Legacy-
+  `window.*`-Namen bleiben als read-only Getter erhalten; direkte Schreiber
+  werfen, jeder State-Key akzeptiert nur seinen deklarierten Owner.
+- **`auth-session-state.js`** — besitzt UID, Auth-Generation und den bekannten
+  Auth-Zustand; Firebase publiziert darüber `consensio:auth-state`, asynchrone
+  UI-Antworten prüfen denselben Snapshot.
+- **`watch-state.js`** — besitzt Telegram-, Limit-, Request- und Session-Epoch-
+  State des Watch-Frontends. `watch.js` hält nur Rendering und Produktaktionen.
+- **`app-dom-events.js`** — zentrale Event-Delegation für Bookmarks, Send,
+  Provider-Exclude, Settings und Key-Test; ersetzt HTML-Eventattribute.
 - **`error-reporter.js`** — lädt vor allen App-Modulen, fängt ungefangene
   Browserfehler, Promise-Rejections und relevante Asset-Ladefehler ab und stellt
   `window.App.reportCriticalError` für explizite Run-Abbrüche bereit. Erwartete
@@ -584,7 +604,7 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   `#modeExplainerTrigger` samt `#modeExplainer`-Section (Modi werden dort
   erklaert, wo man sie schaltet) und `#clearButton` (→ „New comparison").
   Alle betroffenen JS-Stellen waren bereits null-gesichert.
-- **`consensus-lifecycle.js`** — Consensus-Sichtbarkeit, Gate/Availability,
+- **`consensus-lifecycle.js`** — Consensus-Sichtbarkeit/Availability,
   Run-State, Abort/Cancel, Run-ID-Gating, Auto-Consensus-Persistenz. Exponiert die
   `window.App.consensusLifecycle.*`-Brücke (siehe §4/§8).
 - **`share-dialog.js`** — `window.openShareDialog`, Share-Liste und die gemeinsame
@@ -762,6 +782,10 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Bernstein-Wash (`diffCardFlash`), nicht mehr mit einem 2px-Ring: der Ring
   las sich über die volle Listenbreite wie ein grauer Rahmen um den ganzen
   Differences-Bereich.
+- **`consensus-anchor.js`** — reine, deterministische Textnormalisierung,
+  Satzgrenzen-, Range- und Ankersuche für Consensus-Marker. Das Modul kennt
+  weder Netzwerk noch Modal-/Produkt-State und wird von `consensus-insights.js`
+  als gebundener DOM-Adapter verwendet.
 - **`consensus-run.js`** — `window.getConsensus`: baut `/consensus`-Payload, fährt
   den SSE-Stream, rendert Ergebnis + Citation/Share-Meta und archiviert jeden
   abgeschlossenen Turn inklusive turnbezogener Quellen, Differences und
@@ -811,6 +835,11 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   `window.refreshUsageData()` einen neuen autoritativen Serverstand an, statt
   lokal zu früh zu laufen oder die Seite neu zu laden. Läuft als letztes
   Script, ruft `initApp()` direkt auf.
+
+Das Admin-Dashboard ist ebenfalls externisiert: `static/css/admin.css` enthält
+die vormals template-lokalen Styles, `static/js/admin.js` Auth, Rendering und
+Aktionen. `static/js/admin-api.js` kapselt den authentifizierten JSON-Transport;
+`admin.html` bleibt Markup und trägt nur deklarative `data-*`-Konfiguration.
 
 **Nicht unter `static/js/`** (älter, eigene Verantwortung):
 - **`static/firebase.js`** (ES-Modul) — Firebase-Init, Login/Logout, Token-Handling,
@@ -863,10 +892,12 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
 - **`static/app-ui.js`** — alleiniger Binder für System-Prompt-/Help-Modal
   (keine zweite Bindung mehr in `app-init.js`) + App-Width-Resizer.
 
-**Abhängigkeitsrichtung**: `app-core.js` → Feature-Module → `app-init.js`. Module
-kommunizieren über `window.*`-Globals und `window.App`, **nicht** über Imports. DOM
-dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
-Übergangszustand, noch nicht aufgelöst.
+**Abhängigkeitsrichtung**: Bootstrap-/State-Owner → `app-core.js` → Feature-
+Module → `app-init.js`/`app-dom-events.js`. Classic-Script-Module kommunizieren
+weiter über `window.App`; die verbliebenen `window.*`-Namen sind überwiegend
+Kompatibilitäts-Getter oder schmale Funktionsbrücken. DOM bleibt für View-State
+wie `.excluded` und Ergebnis-Datasets maßgeblich, nicht mehr für entfernte
+Controls wie `#consensusButton`, `#toggleAllButton` oder `#apiTestArea`.
 
 ---
 
@@ -1138,7 +1169,8 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   Modell. Beim Ausschalten wird die vorherige Consensus-Auswahl wiederhergestellt,
   ohne die gespeicherte Nutzerpräferenz zu überschreiben. Das Modell bleibt in
   der serverseitig normalisierten Consensus-Liste verpflichtend verfügbar.
-- Backend (`chat.py::consensus` → `consensus_engine.py`): validiert (mind. **2**
+- Backend (`chat.py::consensus` → `consensus_pipeline.py` →
+  `consensus_engine.py`): validiert (mind. **2**
   eingeschlossene Antworten), kappt Frage/Antworten serverseitig
   (`cap_engine_text`, Limits `consensus_max_answer_chars` /
   `consensus_max_question_chars` — Kosten-/Abuse-Schutz, da die Texte vom
@@ -1212,10 +1244,10 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   Reasoning-Effort-Kappung (`low` für OpenAI/Gemini, `none` für Mistral);
   die Consensus-Synthese selbst behält die volle Modell-Denktiefe.
   das Frontend zeigt ihn als Fußnote im Verdict-Header. Außerdem:
-  JSON-Truncation-Repair, serverseitige Anchor-/Quote-Verifikation gegen
+  JSON-Truncation-Repair aus `consensus_parsing.py`, serverseitige Anchor-/Quote-Verifikation gegen
   Konsens- bzw. Modellantworten (nicht belegbare Zitate werden geleert).
   Unparsbares JSON erreicht den Nutzer nie als Rohtext.
-- Agreement-Score (`compute_agreement_score`): 0-100 aus Claim-Zustimmungsquoten
+- Agreement-Score (`consensus_scoring.py::compute_agreement_score`): 0-100 aus Claim-Zustimmungsquoten
   minus severity-gewichteter Widerspruchs-Penalty (major 0.25 / minor 0.10 /
   emphasis 0.05), mit Caps ("very" nur ohne Differenzen; 1 Major → max
   "partially", 2+ Major → max "hardly"; 2 Modelle → max 75). Liegt als
@@ -1421,9 +1453,13 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Einheit; Deep Think zusätzlich genau eine Deep-Think-Einheit. Fehler vor
   Providerstart releasen, Fehler nach Providerstart bleiben konsumiert.
   Provider- und Engine-Aufrufe liegen immer außerhalb aller Transaktionen.
-- `api_consensus_runner.py` orchestriert parallel die bestehenden Provider-
-  Funktionen und danach unverändert `query_consensus` + `query_differences`;
-  es gibt keine zweite Consensus-Engine. `GET /api/v1/consensus/runs/{run_id}`
+- `api_consensus_runner.py` übergibt die Ausführung an die neutrale
+  `consensus_pipeline.py`: `provider_transport.py` führt den deterministischen
+  parallelen Provider-Fan-out aus, danach laufen unverändert `query_consensus`
+  und `query_differences`. Browser, API, Watch und Topic verwenden damit
+  dieselbe Pipeline; es gibt keine zweite Consensus-Engine. Produktadapter
+  projizieren nur ihre zusätzlichen Persistenzfelder.
+  `GET /api/v1/consensus/runs/{run_id}`
   liefert nur eigene Runs und nach Erfolg das persistierte Ergebnis. Reservierte
   Runs werden beim Startup sicher neu eingeplant; laufende Runs werden nie
   wiederholt und nach abgelaufenem Lease als `worker_interrupted` beendet. Vor
@@ -1518,8 +1554,9 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   `active|paused|archived`, `next_run_at` und kurze Lease-/Fehlerfelder. Das
   denormalisierte `models`-Array enthält nur öffentliche Labels; ausführbare
   Modell-IDs stehen ausschließlich in `run_config`.
-- `topic_runner.py` nutzt dieselbe Provider-/Consensus-/Differences-Pipeline wie
-  Watches, aber mit der pro Topic gespeicherten Modellauswahl. Jeder Lauf
+- `topic_runner.py` hängt über den eigenen Adapter `topic_pipeline.py` direkt an
+  der neutralen Provider-/Consensus-/Differences-Pipeline und importiert keine
+  Watch-Services. Die pro Topic gespeicherte Modellauswahl bleibt maßgeblich. Jeder Lauf
   recherchiert aktuelle Webquellen neu, dedupliziert sie zu Evidence, vergleicht
   Consensus und Opinion Map mit dem Vorgänger und schreibt einen unveränderlichen
   Vollsnapshot nach
@@ -1644,6 +1681,7 @@ main.py                      App-Entry, Middleware, Router-Registrierung, lifesp
 app/core/
   background_tasks.py        Supervisor, Restart-Backoff, Alerts und Task-Health
   config.py                  Modell-Kataloge, Tier-Limits, Firestore-Sync (load_models_from_db)
+  site.py                    Validierte kanonische PUBLIC_SITE_URL ohne Router-Abhängigkeit
   security.py                Firebase-Init, Token/Tier/Admin-Checks, CSP-Middleware
   request_limits.py          ASGI-Bodylimit vor JSON-/Form-Parsing (Content-Length + chunked)
   rate_limit.py              slowapi-Limiter (Client-IP hinter Render-Proxy via XFF)
@@ -1653,14 +1691,18 @@ app/api/routers/             siehe §2
   chat_history.py            Owner-gebundene Chat-/Turn-API inkl. vollständigem Turn-Detail
 app/services/llm/
   provider_runtime.py        Zentrale Timeout-/Retry-Policy + Stream-Cancellation
+  provider_transport.py      Kanonischer Provider-Fan-out, Labels, Key-/Transport-Dispatch
   base.py                    System-Prompt, Wortzählung, validate_model
   engines.py                 Provider-Requests (build_provider_payload, query_*)
   streaming.py               SSE-Helfer, stream_*_query, streaming_model_response
-  consensus_engine.py        query/stream_consensus + query/stream_differences, gemeinsamer strukturierter Engine-Dispatch, normalize_model_name
+  consensus_engine.py        query/stream_consensus + query/stream_differences, strukturierter Engine-Dispatch
+  consensus_parsing.py       JSON-Extraktion und abgesicherte Truncation-Reparatur
+  consensus_scoring.py       Deterministischer Agreement-Score und Schwellen
   resolve_engine.py          Resolve-Runde (run_resolve_round, normalize_resolve_positions)
   citations.py               Antwort-Parsing + Quellen (source_response, make_llm_result)
   attachments.py             Attachment-Validierung/Aufbereitung
 app/services/
+  consensus_pipeline.py      Neutraler Fan-out→Synthese→Differences→Score-Vertrag für alle Produkte
   chat_store.py              Firestore-Pfade, Turn-Lifecycle/Antwortdokumente, atomare Finalisierung, Idempotenz, Cursor + Allowlists, Loesch-Kaskade
   chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Budgets, Lease/Idempotenz, Fallback-Rendering + Fan-out-Cache
   usage_repository.py        Firestore-Usage fuer logische Runs (reserve/consume/release/get_run/context-target-binding/snapshot)
@@ -1686,11 +1728,12 @@ app/services/
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
   opinion_map.py             Datenminimierte, mehrdimensionale Provider-Positionen + Direction-Shift-Berechnung
   watch_brief.py             Morning-Brief-Settings (watch_briefs), transaktionaler Claim, Digest-Aggregation, Brief-Unsubscribe-Tokens
-  watch_scheduler.py         Global-Lease, Tagesbudget, sequenzielle tierkonfigurierte Watch-Läufe + run_brief_tick (Morning-Brief-Versand)
+  watch_scheduler.py         Global-Lease, Tagesbudget, Pipeline-Adapter + run_brief_tick (Morning-Brief-Versand)
   mailer.py                  Multipart-HTML/Plaintext-SMTP-Versand via Thread-Executor
   public_markdown.py         Server-Markdown-Rendering für Share-Seiten
   topics.py                  Kuratierte Topic-Konfiguration, immutable Runs, Public-Discovery und eigene Follower/Dedupe-Daten
   topic_runner.py            Leased Topic-Research/Consensus-Runs, automatische Evidence/Meinungsänderungen + Intervall-Scheduler
+  topic_pipeline.py          Topic-spezifische Projektion auf die neutrale Consensus-Pipeline
   differences_stats.py       Anonyme Differences-Telemetrie (differences_stats-Collection, §6)
 ```
 
@@ -2044,6 +2087,10 @@ History zu behaupten.
 - Firebase Web-Config: `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`,
   `FIREBASE_PROJECT_ID`, `FIREBASE_STORAGE_BUCKET`, `FIREBASE_MESSAGING_SENDER_ID`,
   `FIREBASE_APP_ID` (ans Frontend durchgereicht via `/app`-Template).
+- Kanonischer öffentlicher Origin: `PUBLIC_SITE_URL` (Default
+  `https://www.consens.io`). `app/core/site.py` akzeptiert ausschließlich einen
+  absoluten HTTP(S)-Origin ohne Credentials, Pfad, Query oder Fragment; Router
+  und Hintergrundservices importieren ihn ohne gegenseitige Abhängigkeit.
 - Ausschließlich für Tests: `UNIT_TEST_MODE=1` initialisiert Firebase Admin im
   regulären pytest-Lauf ohne Service-Account gegen das nicht produktive
   `demo-consensio-unit` und einen geschlossenen Loopback-Port; ein ungemockter
@@ -2192,7 +2239,7 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   ```
   Reine String-/Quelltextverträge sind mit `source_contract` gekennzeichnet und
   laufen weiterhin mit; sie gelten ausdrücklich nicht als Verhaltensabdeckung.
-  Verifizierte Baseline am 2026-08-11 nach Phase 5: **1068 passed, 6 warnings**.
+  Verifizierte Baseline am 2026-08-11 nach Phase 6: **1076 passed, 5 warnings**.
 - **Playwright-Smoke-Suite** (`tests/e2e/`, Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, kompakte Antwort→Consensus-
@@ -2218,7 +2265,9 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   Ohne `RUN_E2E=1` wird `tests/e2e` nicht eingesammelt (Baseline bleibt).
   Ein Service-Account ist weder nötig noch zulässig; Java/Firebase CLI starten
   den Emulator, Netzzugang lädt CDN-Assets. Verifizierte Baseline am
-  2026-08-09: **39 passed, 1 warning**. Details in `tests/e2e/README.md`.
+  2026-08-09: **39 passed, 1 warning**. Der writerfreie Phase-4-Browserlauf
+  wurde nach Phase 6 erneut mit **8 passed, 1 warning** verifiziert. Details in
+  `tests/e2e/README.md`.
 - **Keine CI für Tests**: `.github/workflows/tests.yml` ist am 2026-08-10
   entfernt worden, die Suite läuft nur lokal. Die verbliebenen Workflows
   (`publish-consensus.yml`, `restart-render.yml`) sind Betriebs-Automationen,
@@ -2405,14 +2454,17 @@ ersten Check statt eines leeren Consensus-Panels.
   zeigt sonst den neutralen Erfolgs-Screen. Eine spezifische Fehlermeldung wie
   „already registered" wäre eine Konto-Enumeration.
 - **Script-Ladereihenfolge in `templates/index.html` ist ein Vertrag.**
-  `app-core.js` definiert `window.App` und muss vor allen Feature-Modulen laufen;
+  `app-bootstrap.js` setzt Config, die drei State-Owner laden vor Firebase und
+  den Feature-Modulen; `app-core.js` ergänzt den bestehenden `window.App`-Bus;
   `chat-session.js` muss vor `consensus-run.js` und `query-send.js` laufen;
+  `consensus-anchor.js` muss vor `consensus-insights.js` laufen;
   KaTeX + Auto-Render müssen vor `math-render.js`, dieses wiederum vor
   `markdown-stream.js` geladen werden;
-  `app-init.js` läuft als letztes (deferred am `</body>`) und verdrahtet das DOM.
+  `app-init.js` initialisiert danach die App; `app-dom-events.js` bindet zuletzt
+  die delegierten DOM-Events (beide deferred am `</body>`).
   Reihenfolge umstellen oder ein Modul rausnehmen ⇒ `ReferenceError` /
   `window.X is not a function`.
-- **`window.*` ist die Modul-Schnittstelle.** Es gibt keine ES-Imports zwischen den
+- **`window.App` ist die Classic-Script-Modulschnittstelle.** Es gibt keine ES-Imports zwischen den
   Feature-Modulen. Wer eine Funktion umbenennt/verschiebt, muss alle `window.`-
   Aufrufstellen mitziehen (Grep über `static/js/` + `static/firebase.js` +
   `static/demo.js`). Wichtige Globals u. a.: `window.sendQuestion`,
@@ -2420,8 +2472,9 @@ ersten Check statt eines leeren Consensus-Panels.
   `window.updateConsensusButtonAvailability`, `window.revealConsensusOutput` /
   `hideConsensusOutput`, `window.cancelCurrentConsensus`, `window.openShareDialog`,
   `window.openWatchDialog`, `window.openWatchDashboard`,
-  `window.currentEvidenceSources`, `window.consensusCitationMeta`,
-  `window.lastShareResultId`, `window.currentBookmarkShareResultContext`,
+  die read-only Kompatibilitäts-Getter `window.currentEvidenceSources`,
+  `window.consensusCitationMeta`, `window.lastShareResultId`,
+  `window.currentBookmarkShareResultContext`,
   `window.currentBookmarkShareResultPromise`,
   `window.resolveCurrentShareResultId`, `window.clearPreparedBookmarkShareResult`,
   `window.isUserPro`, `window.pendingAttachments`, `window.ConsensusMath`,
@@ -2469,7 +2522,7 @@ ersten Check statt eines leeren Consensus-Panels.
   muss `expandForFallback()` rufen — sonst verschwindet die Analyse
   stillschweigend hinter einer zugeklappten Zeile.
 - **`window.App.consensusLifecycle.*`** ist die gezielte Run-State-Brücke
-  (`startRun/isActiveRun/finishRun/setSynthesizing/isRunning/setGate/
+  (`startRun/isActiveRun/finishRun/setSynthesizing/isRunning/
   markPendingCanceled/initAutoConsensusToggle`). Run-ID-Gating nicht umgehen, sonst
   rendern alte Läufe in neue.
 - **`window.App.watch.showFeatureNudge()`** wird nach einem erfolgreichen
@@ -2482,9 +2535,10 @@ ersten Check statt eines leeren Consensus-Panels.
 - **DOM-als-State**: `dataset.consensusAnswer`, `dataset.consensusSources`,
   `dataset.responseState`, `.excluded`-Klassen und die session-lokale
   `.agent-mode-show-answers`-Body-Klasse u. a. sind echte State-Quellen.
-  Vorsicht beim Umbauen von
-  Markup — der State-Refactor ist bewusst noch nicht passiert.
-- **Jinja↔JS-Brücke**: Config geht nur über den `<head>`-`window.*`-Block
+  Vorsicht beim Umbauen von Markup. Alte, nicht vorhandene Control-IDs
+  `#consensusButton`, `#toggleAllButton` und `#apiTestArea` sind kein Vertrag mehr.
+- **Jinja↔JS-Brücke**: Config geht nur über die escaped `data-*`-Attribute von
+  `#appBootstrapConfig`; `app-bootstrap.js` erzeugt daraus die read-only Werte
   (`FIREBASE_CONFIG`, `APP_LIMITS`, `FREE_DEFAULT_MODELS`, `PRO_DEFAULT_MODELS`,
   `CONSENSUS_PRESETS` inklusive Antwort-/Consensus-Model-Sets,
   `DEFAULT_CONSENSUS_PRESET`, `FREE_LIMIT`) oder
@@ -2492,11 +2546,14 @@ ersten Check statt eines leeren Consensus-Panels.
   `consensus_models` für den Consensus-Picker. Dessen
   `data-engine-provider` bestimmt im Own-Key-Modus ausschließlich, welcher
   einzelne lokale API-Key als `memory_api_key` an `/context` geht.
-  `app-init.js` kann kein Jinja
-  rendern — neue Server-Werte müssen hier gebridged werden.
+  `app-init.js` kann kein Jinja rendern — neue Server-Werte müssen im Meta-
+  Vertrag plus `app-bootstrap.js` ergänzt werden. Admin nutzt entsprechend
+  `#adminBootstrapConfig` + `admin-config.js`.
 - **CSP** (`CustomSecurityMiddleware` in `security.py`): neue externe Hosts (Skripte,
   `connect-src`-Ziele, Frames) müssen explizit in die Policy. Sonst blockt der
-  Browser still.
+  Browser still. `/app`, `/app/watches` und `/admin` erzwingen bei `script-src`
+  die strict-variante ohne `'unsafe-inline'`; neue Inline-Skripte/-Handler würden
+  dort deshalb nicht ausgeführt. `style-src` bleibt vorerst kompatibel.
 - **Static-Caching / `?v=`**: Nach CSS/JS-Änderungen den
   `?v=YYYYMMDD-kurzlabel`-Query-String in allen aktiven Referenzen bumpen — für
   App-CSS sowohl in `style.css` als auch den Templates. Der

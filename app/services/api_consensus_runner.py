@@ -22,11 +22,9 @@ from app.services.api_account_cleanup import (
     FirestoreApiAccountCleanup,
 )
 from app.services.api_run_repository import FirestoreApiRunRepository
-from app.services.llm.base import get_system_prompt, validate_model
-from app.services.llm.citations import result_sources, result_text, to_plain
+from app.services.consensus_pipeline import run_consensus_pipeline
+from app.services.llm.base import validate_model
 from app.services.llm.consensus_engine import (
-    compute_agreement_score,
-    is_consensus_error_text,
     query_consensus,
     query_differences,
 )
@@ -35,15 +33,9 @@ from app.services.llm.credentials import (
     missing_credentials,
     resolve_developer_api_keys,
 )
-from app.services.llm.engines import (
-    query_claude,
-    query_deepseek,
-    query_gemini,
-    query_grok,
-    query_mistral,
-    query_openai,
-)
-from app.services.llm.mock_llm import mock_ask_result, mock_llm_enabled
+from app.services.llm.mock_llm import mock_llm_enabled
+from app.services.llm import provider_transport
+from app.services.llm.provider_transport import PROVIDER_LABELS, PROVIDER_ORDER
 from app.services.usage_repository import (
     FirestoreUsageRepository,
     RunKind,
@@ -56,23 +48,6 @@ from app.services.usage_repository import (
 )
 
 
-PROVIDER_ORDER = ("openai", "mistral", "anthropic", "gemini", "deepseek", "grok")
-PROVIDER_LABELS = {
-    "openai": "OpenAI",
-    "mistral": "Mistral",
-    "anthropic": "Anthropic",
-    "gemini": "Gemini",
-    "deepseek": "DeepSeek",
-    "grok": "Grok",
-}
-PROVIDER_FUNCTIONS = {
-    "openai": query_openai,
-    "mistral": query_mistral,
-    "anthropic": query_claude,
-    "gemini": query_gemini,
-    "deepseek": query_deepseek,
-    "grok": query_grok,
-}
 PROVIDER_ALLOWED_ATTR = {
     "openai": "ALLOWED_OPENAI_MODELS",
     "mistral": "ALLOWED_MISTRAL_MODELS",
@@ -382,94 +357,23 @@ def execute_consensus_pipeline(run: dict) -> dict:
         # judges, not just the answer fan-out (including MOCK_LLM runs).
         keys["DeepSeek"] = None
 
-    answers: dict[str, dict] = {}
-    with ThreadPoolExecutor(max_workers=max(1, len(providers))) as pool:
-        futures = {
-            provider: pool.submit(
-                _provider_answer,
-                provider,
-                model,
-                question,
-                keys,
-                is_pro,
-                deep_think,
-            )
-            for provider, model in providers.items()
-        }
-        for provider in PROVIDER_ORDER:
-            if provider not in futures:
-                continue
-            try:
-                raw = futures[provider].result()
-            except Exception:
-                logging.exception("Consensus API provider failed: %s", provider)
-                continue
-            text = result_text(raw).strip()[: cfg.get_consensus_answer_char_limit()]
-            if not text or text.lower().startswith("error") or (
-                isinstance(raw, dict) and raw.get("error")
-            ):
-                continue
-            answers[provider] = {
-                "provider": PROVIDER_LABELS[provider],
-                "model": providers[provider],
-                "response": text,
-                "sources": to_plain(result_sources(raw)),
-            }
-
-    if len(answers) < 2:
-        raise RuntimeError("Fewer than two provider answers completed")
-
-    slots = {
-        provider: (answers.get(provider) or {}).get("response")
-        for provider in PROVIDER_ORDER
-    }
-    excluded = [
-        PROVIDER_LABELS[provider]
-        for provider in PROVIDER_ORDER
-        if provider not in answers
-    ]
-    model_sources = {
-        PROVIDER_LABELS[provider]: answer["sources"] for provider, answer in answers.items()
-    }
     consensus_model = str(plan.get("consensus_model") or "")
-    consensus = query_consensus(
-        question,
-        slots["openai"],
-        slots["mistral"],
-        slots["anthropic"],
-        slots["gemini"],
-        slots["deepseek"],
-        slots["grok"],
-        excluded,
-        consensus_model,
-        keys,
-        model_sources=model_sources,
+    result = run_consensus_pipeline(
+        question=question,
+        provider_models=providers,
+        consensus_model=consensus_model,
+        keys=keys,
+        is_pro=is_pro,
+        deep_think=deep_think,
+        provider_order=PROVIDER_ORDER,
+        provider_call=_provider_answer,
+        synthesize=query_consensus,
+        judge=query_differences,
+        answer_char_limit=cfg.get_consensus_answer_char_limit(),
+        log_context="Consensus API",
     )
-    if is_consensus_error_text(consensus):
-        raise RuntimeError("Consensus synthesis failed")
-    differences_text, differences_data = query_differences(
-        slots["openai"],
-        slots["mistral"],
-        slots["anthropic"],
-        slots["gemini"],
-        slots["deepseek"],
-        slots["grok"],
-        consensus,
-        keys,
-        differences_model=consensus_model,
-        excluded_models=excluded,
-    )
-    if not isinstance(differences_data, dict):
-        raise RuntimeError("Differences analysis failed")
-    differences_data["agreement"] = compute_agreement_score(differences_data)
-    return to_plain(
-        {
-            "consensus_response": consensus,
-            "differences": differences_text,
-            "differences_data": differences_data,
-            "model_answers": [answers[p] for p in PROVIDER_ORDER if p in answers],
-        }
-    )
+    result.pop("agreement", None)
+    return result
 
 
 def _provider_answer(
@@ -480,20 +384,9 @@ def _provider_answer(
     is_pro: bool,
     deep_think: bool,
 ):
-    label = PROVIDER_LABELS[provider]
-    if mock_llm_enabled():
-        return mock_ask_result(label, question)
-    kwargs = {
-        "system_prompt": get_system_prompt(),
-        "deep_search": deep_think,
-        "model_override": model,
-        "max_output_tokens": cfg.get_output_token_limit(is_pro, deep_think),
-        "attachments": [],
-    }
-    key = keys.get(label) or ""
-    if provider == "gemini":
-        return PROVIDER_FUNCTIONS[provider](question, user_api_key=key, **kwargs)
-    return PROVIDER_FUNCTIONS[provider](question, key, **kwargs)
+    return provider_transport.query_provider(
+        provider, model, question, keys, is_pro, deep_think
+    )
 
 
 def _consensus_provider_label(consensus_model: str) -> str | None:

@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import time
-from concurrent.futures import ThreadPoolExecutor
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from firebase_admin import auth
@@ -15,56 +13,30 @@ import app.core.config as cfg
 from app.core import security
 from app.core.background_tasks import task_succeeded
 from app.core.observability import correlation_scope, record_metric
-from app.api.routers.pages import SITE_URL
+from app.core.site import SITE_URL
+from app.services.consensus_pipeline import run_consensus_pipeline
 from app.services import (
     mailer, opinion_map, share_snapshots, telegram_watch, watch_brief,
     watch_followers, watch_service,
 )
-from app.services.llm.base import get_system_prompt
-from app.services.llm.citations import result_sources, result_text
+from app.services.llm import provider_transport
 from app.services.llm.consensus_engine import (
-    compute_agreement_score,
-    is_consensus_error_text,
     query_consensus,
     query_consensus_change,
     query_differences,
 )
-from app.services.llm.engines import (
-    query_claude,
-    query_deepseek,
-    query_gemini,
-    query_grok,
-    query_mistral,
-    query_openai,
-)
-from app.services.llm.credentials import enable_gemini_adc
-from app.services.llm.mock_llm import mock_ask_result, mock_llm_enabled
+from app.services.llm.mock_llm import mock_llm_enabled
 
 
 TICK_SECONDS = 30 * 60
 WATCH_LEASE_HEARTBEAT_SECONDS = 5 * 60
 _scheduler_wake_event: asyncio.Event | None = None
-PROVIDER_ORDER = ("openai", "mistral", "gemini", "anthropic", "deepseek", "grok")
-PROVIDER_LABELS = {
-    "openai": "OpenAI", "mistral": "Mistral", "anthropic": "Anthropic",
-    "gemini": "Gemini", "deepseek": "DeepSeek", "grok": "Grok",
-}
-PROVIDER_FUNCTIONS = {
-    "openai": query_openai, "mistral": query_mistral, "anthropic": query_claude,
-    "gemini": query_gemini, "deepseek": query_deepseek, "grok": query_grok,
-}
-PROVIDER_ENV = {
-    "openai": "DEVELOPER_OPENAI_API_KEY", "mistral": "DEVELOPER_MISTRAL_API_KEY",
-    "anthropic": "DEVELOPER_ANTHROPIC_API_KEY", "gemini": "DEVELOPER_GEMINI_API_KEY",
-    "deepseek": "DEVELOPER_DEEPSEEK_API_KEY", "grok": "DEVELOPER_GROK_API_KEY",
-}
+PROVIDER_ORDER = provider_transport.PROVIDER_ORDER
+PROVIDER_LABELS = provider_transport.PROVIDER_LABELS
 
 
 def _developer_keys() -> dict:
-    return enable_gemini_adc({
-        PROVIDER_LABELS[p]: os.environ.get(env, "").strip()
-        for p, env in PROVIDER_ENV.items()
-    })
+    return provider_transport.developer_keys()
 
 
 def _selected_models(keys: dict, is_pro: bool, excluded_providers=None,
@@ -83,31 +55,18 @@ def _selected_models(keys: dict, is_pro: bool, excluded_providers=None,
             for provider in PROVIDER_ORDER
             if provider not in excluded and configured.get(provider)
         ]
-    adc_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
     return [
         (provider, configured[provider]) for provider in PROVIDER_ORDER
-        if provider not in excluded and configured.get(provider) and (
-            keys.get(PROVIDER_LABELS[provider])
-            or (provider == "gemini" and adc_path and os.path.isfile(adc_path))
-        )
+        if provider not in excluded and configured.get(provider)
+        and provider_transport.provider_available(provider, keys)
     ]
 
 
-def _provider_answer(provider: str, model: str, question: str, keys: dict, is_pro: bool):
-    label = PROVIDER_LABELS[provider]
-    if mock_llm_enabled():
-        return mock_ask_result(label, question)
-    kwargs = {
-        "system_prompt": get_system_prompt(),
-        "deep_search": False,
-        "model_override": model,
-        "max_output_tokens": cfg.get_output_token_limit(is_pro, False),
-        "attachments": [],
-    }
-    key = keys.get(label) or ""
-    if provider == "gemini":
-        return PROVIDER_FUNCTIONS[provider](question, user_api_key=key, **kwargs)
-    return PROVIDER_FUNCTIONS[provider](question, key, **kwargs)
+def _provider_answer(provider: str, model: str, question: str, keys: dict,
+                     is_pro: bool, deep_think: bool = False):
+    return provider_transport.query_provider(
+        provider, model, question, keys, is_pro, deep_think
+    )
 
 
 def execute_watch(question: str, previous_consensus: str, condition: str = "",
@@ -128,49 +87,37 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
     if mock_llm_enabled():
         for provider, _model in selected_models:
             keys[PROVIDER_LABELS[provider]] = "mock"
-    answers = {}
-    model_sources = {}
-    with ThreadPoolExecutor(max_workers=max(1, len(selected_models))) as pool:
-        futures = {
-            provider: pool.submit(_provider_answer, provider, model, question, keys, is_pro)
-            for provider, model in selected_models
-        }
-        # In konfigurierter Provider-Reihenfolge einsammeln, damit Engine-Wahl
-        # und Quellen-Nummerierung trotz parallelem Fan-out deterministisch sind.
-        for provider, _model in selected_models:
-            try:
-                result = futures[provider].result()
-            except Exception:
-                logging.exception("Consensus Watch provider failed: %s", provider)
-                continue
-            text = result_text(result).strip()
-            if text and not text.lower().startswith("error") and not (isinstance(result, dict) and result.get("error")):
-                answers[provider] = text
-                sources = result_sources(result)
-                if sources:
-                    model_sources[PROVIDER_LABELS[provider]] = sources
-    if len(answers) < 2:
-        raise RuntimeError("Fewer than two provider answers completed.")
+    provider_models = dict(selected_models)
+    def first_successful_engine(answers) -> str:
+        provider = next(name for name, _model in selected_models if name in answers)
+        return PROVIDER_LABELS[provider]
 
-    slots = {provider: answers.get(provider, "") for provider in ("openai", "mistral", "anthropic", "gemini", "deepseek", "grok")}
-    excluded = [PROVIDER_LABELS[p] for p in slots if p not in answers]
-    engine_provider = next(iter(answers))
-    engine = PROVIDER_LABELS[engine_provider]
-    consensus = query_consensus(
-        question, slots["openai"], slots["mistral"], slots["anthropic"],
-        slots["gemini"], slots["deepseek"], slots["grok"], excluded, engine, keys,
-        model_sources=model_sources,
+    pipeline = run_consensus_pipeline(
+        question=question,
+        provider_models=provider_models,
+        consensus_model=first_successful_engine,
+        keys=keys,
+        is_pro=is_pro,
+        deep_think=False,
+        provider_order=PROVIDER_ORDER,
+        provider_call=_provider_answer,
+        synthesize=query_consensus,
+        judge=query_differences,
+        log_context="Consensus Watch",
     )
-    if is_consensus_error_text(consensus):
-        raise RuntimeError("Consensus synthesis failed.")
-    _legacy, differences = query_differences(
-        slots["openai"], slots["mistral"], slots["anthropic"], slots["gemini"],
-        slots["deepseek"], slots["grok"], consensus, keys, engine, excluded,
-    )
-    if not isinstance(differences, dict):
-        raise RuntimeError("Differences Judge failed.")
-    agreement = compute_agreement_score(differences)
-    differences["agreement"] = agreement
+    engine = first_successful_engine({
+        provider: True
+        for provider, _model in selected_models
+        if any(item["provider"] == PROVIDER_LABELS[provider] for item in pipeline["model_answers"])
+    })
+    consensus = pipeline["consensus_response"]
+    differences = pipeline["differences_data"]
+    agreement = pipeline["agreement"]
+    model_answers = pipeline["model_answers"]
+    model_sources = {
+        item["provider"]: item.get("sources") or []
+        for item in model_answers if item.get("sources")
+    }
     if str(previous_consensus or "").strip():
         change = query_consensus_change(
             previous_consensus, consensus, keys, engine, condition=condition,
@@ -203,10 +150,9 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
         previous_opinion_map,
         consensus_changed=bool(change.get("changed")),
     )
-    included_providers = [PROVIDER_LABELS[provider] for provider in answers]
+    included_providers = [item["provider"] for item in model_answers]
     model_labels = {
-        PROVIDER_LABELS[provider]: model for provider, model in selected_models
-        if provider in answers
+        item["provider"]: item["model"] for item in model_answers
     }
     return {
         "consensus": consensus,
@@ -214,7 +160,7 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
         "verdict": agreement.get("level") or "",
         "opinion_map": position_map,
         "differences_data": differences,
-        "differences_text": "",
+        "differences_text": pipeline["differences"],
         "sources": share_snapshots.sanitize_sources(model_sources),
         "included_models": share_snapshots.build_included_models(
             included_providers, model_labels,

@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Red
 import requests
 
 from app.core.rate_limit import limiter
+from app.core.site import SITE_URL
 from app.core.security import verify_user_token, extract_id_token, db_firestore
 from firebase_admin import firestore
 import app.core.config as cfg
@@ -67,7 +68,6 @@ class VoteRequest(BaseModel):
     vote_type: StrictStr = Field(min_length=1, max_length=40)
     result_id: StrictStr = Field(min_length=16, max_length=64)
 
-SITE_URL = "https://www.consens.io"
 SITEMAP_URLS = (
     {"loc": f"{SITE_URL}/", "lastmod": "2026-06-03", "changefreq": "weekly", "priority": "1.0"},
     {"loc": f"{SITE_URL}/ai-model-comparison", "lastmod": "2026-06-03", "changefreq": "monthly", "priority": "0.8"},
