@@ -1049,6 +1049,13 @@ body:has(.sidebar.active) .brand-float {
 #bookmarksContainer {
   margin-top: 2px;
 }
+.bookmarks-load-error {
+  padding: 8px 6px 4px;
+  color: var(--sidebar-text-muted);
+  font-size: var(--font-size-xs);
+}
+.bookmarks-load-error p { margin: 0 2px 4px; }
+.bookmarks-load-error .bookmarks-load-more { width: 100%; margin-inline: 0; }
 .bookmarks-load-more {
   width: calc(100% - 12px); margin: 8px 6px 4px; padding: 8px 10px;
   border: 1px solid var(--sidebar-border); border-radius: var(--radius-sm);

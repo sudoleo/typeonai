@@ -81,8 +81,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
+  border: 0;
   border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--sidebar-text-muted);
+  font-family: inherit;
   font-size: var(--font-size-xl);
   line-height: var(--line-height-solid);
 }

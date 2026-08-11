@@ -2,7 +2,8 @@
 
 Teilweise automatisiert: die Playwright-Suite `tests/e2e/` deckt Konsolen-
 Fehler beim Laden, Send→Streaming, Consensus→Differences+Agreement-Score,
-Modell-Ausschluss, Theme-Toggle und Picker-Persistenz ab (Lauf: siehe
+Modell-Ausschluss, Theme-Toggle, Picker-Persistenz und die Phase-4-Auth-/View-
+Races ab (Lauf: siehe
 `tests/e2e/README.md`). Die übrigen Punkte weiterhin manuell durchgehen
 (oder zumindest die vom Cluster betroffenen), bevor committet wird. Backend
 bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
@@ -26,7 +27,8 @@ Befehle: `docs/testing.md`).
       auf Links, Buttons und Formularfeldern klar sichtbar. Landingpage und
       Consensus-Engine-Seite zeigen dieselbe aktuelle Consensus-/Differences-
       Darstellung. Der Landingpage-Walkthrough verwendet die aktuellen
-      Modellnamen und hält Einzelantworten im Agent Mode standardmäßig verborgen.
+      Modellnamen, nennt Detail-/Widerspruchsmarker „fine rule“ bzw. „heavier
+      amber rule“ und hält Einzelantworten im Agent Mode standardmäßig verborgen.
 
 ## Kern-Flow
 - [ ] Frischer `/app`-Load passt ohne vertikales Scrollen in den Desktop-
@@ -38,6 +40,11 @@ Befehle: `docs/testing.md`).
       vollständig deckenden, gut lesbaren Hintergrund.
       Das Eingabefeld steht mit Begrüßung mittig; nach dem ersten Senden gleitet
       es nach oben und die unveränderten Modell-Antwortboxen blenden ein.
+- [ ] Login-Dialog: Fokus wandert beim Öffnen hinein, Tab bleibt im Dialog,
+      Escape/Backdrop/benannter Close-Button schließen ihn und geben den Fokus
+      an den Auslöser zurück. Mit altem `id_token` und blockiertem Firebase-CDN
+      verschwinden die Skeletons; Login/Sign-up bleiben sichtbar und erklären
+      den temporären Auth-Ausfall statt tote Aktionen zu zeigen.
 - [ ] Sidebar-Navigation: Models ist eine einzelne kompakte Zeile mit
       Providerzahl und öffnet den Run-Picker am Composer; sie klappt keine
       sechs Providerzeilen auf. Der Custom-Picker nutzt Checkboxen statt
@@ -55,7 +62,12 @@ Befehle: `docs/testing.md`).
 - [ ] Frage eingeben + senden → alle ausgewählten Modelle streamen Antworten.
 - [ ] Bei null oder einem ausgewählten Modell ist Senden deaktiviert; Sidebar-
       Zähler und Custom-Picker nennen „choose at least 2“. Ab zwei Modellen startet
-      der Lauf normal und endet in Consensus + Differences.
+      der Lauf normal und endet in Consensus + Differences. Mit Anhang und genau
+      OpenAI + stale DeepSeek wird nach dem Attachment-Filter erneut geprüft:
+      kein Usage-Run, kein `/prepare`, kein Ein-Modell-Fan-out.
+- [ ] Antworten alle ausgewählten `/ask_*` mit HTTP-/Netzfehler, endet der Lauf
+      sichtbar und in Analytics als Fehler; kein Consensus startet. Nach dem
+      ersten echten Lauf enthält `#consensusMarkerLegend` weiterhin seinen Text.
 - [ ] Ohne Agent Mode erscheint direkt unter dem Input die kompakte Pipeline:
       Zähler folgt den fertigen Modellantworten, danach wird „Consensus &
       differences“ ohne falsche Prozent-/Zeitprognose aktiv; Abschluss, Fehler
@@ -180,6 +192,14 @@ Befehle: `docs/testing.md`).
       + Modell-Zeilen, Usage-Counter aktualisiert sich, Fehlerfall reaktiviert
       den Button.
 - [ ] Share-Dialog: Link erstellen, Liste anzeigen, Link kopieren.
+- [ ] Während Share-/Bookmark-Requests Konto A → Logout → Konto B wechseln:
+      späte A-Antworten ändern weder B-Sidebar/-Session noch das aktuelle Modal.
+      Bei schnellem Bookmark-Klick A→B bleibt B sichtbar, auch wenn A zuletzt
+      antwortet. Ein Bookmark-Listenfehler zeigt Fehler + Retry statt „leer“.
+- [ ] Tab über UTC-Mitternacht offen lassen: Countdown läuft bis 00:00 UTC und
+      lädt den neuen `/usage`-Stand; ein vorheriges `0 / Limit` blockiert danach
+      nicht weiter. Ein transienter `/user_status`-Fehler wird durch ein
+      erfolgreiches Pro-`/usage` inklusive Badge/Features geheilt.
 
 ## Agent Mode
 - [ ] Agent-Mode an/aus, Timer läuft, Status-Text korrekt, Auto-Consensus-Kopplung.
@@ -244,7 +264,9 @@ Befehle: `docs/testing.md`).
       auf Mobile icon-only) und „Watched“ im Nutzericon-Menü; aktiver Pill-Zustand,
       Browser-Back/Forward
       und Deep-Link/Reload auf `/app/watches` funktionieren (vor dem Login
-      erscheint ein Hinweis statt Daten). Ohne Watch zeigt die Seite statt Null-
+      erscheint ein Hinweis statt Daten). Logout lässt URL und Hinweis stehen;
+      ein später Login rendert ohne Reload das Dashboard. „Watched“ aus einem
+      Share-Dialog schließt das Modal vor dem Ansichtswechsel. Ohne Watch zeigt die Seite statt Null-
       KPIs einen Ask→Check→Alert-Empty-State mit optionalen Beispielfragen; der
       Query-first-Dialog nutzt private/wöchentliche/Changes-only-Defaults, hält
       E-Mail und Telegram sichtbar und legt Zeitplan/Sichtbarkeit/Condition unter
@@ -269,7 +291,8 @@ Befehle: `docs/testing.md`).
 - [ ] Morning Brief (Karte im Dashboard): Toggle aktiviert die tägliche
       Digest-Mail mit Uhrzeit (Browser-Zeitzone) und Modus „Every morning“ /
       „Only when something changed“; Einstellungen überleben ein erneutes
-      Öffnen. Mit Test-SMTP: Brief-Mail listet alle Watches mit Score/Delta und
+      Öffnen. Schlägt PATCH für Uhrzeit oder Modus fehl, springen die Controls
+      auf den letzten serverbestätigten Wert zurück. Mit Test-SMTP: Brief-Mail listet alle Watches mit Score/Delta und
       Änderungs-Summaries; der Abmelde-Link deaktiviert nur den Brief, nicht
       die Watch-Mails.
 - [ ] Ohne Watch ist der Morning-Brief-Toggle deaktiviert und erklärt „Create a

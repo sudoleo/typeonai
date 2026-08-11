@@ -11,6 +11,7 @@
   let watchLimitState = null;
   let watchLimitRequest = null;
   let watchSessionEpoch = 0;
+  let watchRouteAuthUid = window.__consensioAuthState?.uid || null;
 
   function featureNudgeWasDismissed() {
     try {
@@ -494,6 +495,7 @@
       return;
     }
     if (view === "list") {
+      closeDialog();
       openWatchDashboard();
       return;
     }
@@ -962,6 +964,9 @@
       popup("Please log in to use Consensus Watch.");
       return;
     }
+    // Share and Watch share one modal node. A navigation to the full Watch
+    // view must never leave the previous Share surface floating above it.
+    closeDialog();
     acknowledgeViewSwitchHint();
     if (!onWatchPagePath()) {
       window.history.pushState({ watchPage: true }, "", WATCH_PAGE_PATH);
@@ -986,16 +991,29 @@
         renderDashboard();
         return;
       }
+      if (window.__consensioAuthState?.known === true) {
+        renderWatchLoginHint();
+        return;
+      }
       if (Date.now() - startedAt < 8000) {
         setTimeout(waitForAuth, 250);
         return;
       }
-      body.innerHTML = "";
-      const hint = document.createElement("div");
-      hint.className = "watch-dash-empty";
-      hint.textContent = "Please log in to see your Consensus Watch dashboard.";
-      body.appendChild(hint);
+      renderWatchLoginHint();
     })();
+  }
+
+  function renderWatchLoginHint(message) {
+    const { page, body } = dashEls();
+    if (!page || !body || !onWatchPagePath()) return;
+    wireWatchPage();
+    page.hidden = false;
+    setViewSwitchState(true);
+    body.innerHTML = "";
+    const hint = document.createElement("div");
+    hint.className = "watch-dash-empty";
+    hint.textContent = message || "Please log in to see your Consensus Watch dashboard.";
+    body.appendChild(hint);
   }
 
   function formatDateTime(iso) {
@@ -1202,6 +1220,9 @@
     controls.hidden = !toggle.checked;
     timeInput.value = brief.send_time || "07:00";
     modeSelect.value = brief.mode || "always";
+    let persistedEnabled = toggle.checked;
+    let persistedSendTime = timeInput.value;
+    let persistedMode = modeSelect.value;
 
     async function save(changes, revert) {
       toggle.disabled = timeInput.disabled = modeSelect.disabled = true;
@@ -1212,6 +1233,9 @@
         controls.hidden = !saved.enabled;
         if (saved.send_time) timeInput.value = saved.send_time;
         if (saved.mode) modeSelect.value = saved.mode;
+        persistedEnabled = toggle.checked;
+        persistedSendTime = timeInput.value;
+        persistedMode = modeSelect.value;
         popup(saved.enabled ? "Morning brief updated." : "Morning brief disabled.");
       } catch (error) {
         popup("Brief update failed: " + error.message);
@@ -1228,16 +1252,22 @@
         enabled
           ? { enabled: true, send_time: timeInput.value || "07:00", timezone: timezone, mode: modeSelect.value }
           : { enabled: false },
-        () => { toggle.checked = !enabled; controls.hidden = enabled; }
+        () => { toggle.checked = persistedEnabled; controls.hidden = !persistedEnabled; }
       );
     });
     timeInput.addEventListener("change", () => {
       if (!timeInput.value || !toggle.checked) return;
-      save({ send_time: timeInput.value, timezone: timezone });
+      save(
+        { send_time: timeInput.value, timezone: timezone },
+        () => { timeInput.value = persistedSendTime; }
+      );
     });
     modeSelect.addEventListener("change", () => {
       if (!toggle.checked) return;
-      save({ mode: modeSelect.value });
+      save(
+        { mode: modeSelect.value },
+        () => { modeSelect.value = persistedMode; }
+      );
     });
   }
 
@@ -1752,6 +1782,12 @@
   async function renderDashboard() {
     const { body } = dashEls();
     if (!body) return;
+    const requestEpoch = watchSessionEpoch;
+    const requestUid = window.auth?.currentUser?.uid || null;
+    const dashboardIsCurrent = () => requestEpoch === watchSessionEpoch
+      && requestUid
+      && window.auth?.currentUser?.uid === requestUid
+      && onWatchPagePath();
     const limitTarget = document.getElementById("watchDashLimit");
     if (limitTarget) limitTarget.hidden = true;
     body.innerHTML = '<p class="watch-dash-loading">Loading your watches…</p>';
@@ -1764,6 +1800,7 @@
         api("GET", "/api/my/watch-brief").catch(() => ({ brief: {} })),
         api("GET", "/api/my/telegram").catch(() => ({ telegram: {} }))
       ]);
+      if (!dashboardIsCurrent()) return;
       watches = watchData.watches || [];
       watchLimitState = normalizeWatchLimits(watchData.limits, watches);
       renderWatchLimit(limitTarget, watchLimitState);
@@ -1771,6 +1808,7 @@
       telegram = telegramData.telegram || telegram;
       telegramState = telegram;
     } catch (error) {
+      if (!dashboardIsCurrent()) return;
       if (limitTarget) limitTarget.hidden = true;
       body.innerHTML = "";
       const failed = document.createElement("p");
@@ -1919,9 +1957,12 @@
     watchLimitRequest = null;
     const quota = document.getElementById("watchUsageDisplay");
     if (quota) quota.textContent = "";
-    if (page) page.hidden = true;
-    setViewSwitchState(false);
-    if (onWatchPagePath()) window.history.replaceState(null, "", APP_PATH);
+    if (onWatchPagePath()) {
+      renderWatchLoginHint();
+    } else {
+      if (page) page.hidden = true;
+      setViewSwitchState(false);
+    }
   }
 
   window.openWatchDialog = openWatchDialog;
@@ -1935,4 +1976,17 @@
   initViewSwitch();
   initDashboardCreateButton();
   initWatchPageRoute();
+  window.addEventListener("consensio:auth-state", event => {
+    const uid = event.detail?.uid || null;
+    const changed = uid !== watchRouteAuthUid;
+    watchRouteAuthUid = uid;
+    if (!onWatchPagePath() || !changed) return;
+    if (uid && window.auth?.currentUser?.uid === uid) showWatchPage();
+    else renderWatchLoginHint();
+  });
+  window.addEventListener("consensio:auth-unavailable", () => {
+    if (onWatchPagePath()) {
+      renderWatchLoginHint("Login is temporarily unavailable. Check your connection and reload to try again.");
+    }
+  });
 })();

@@ -725,45 +725,9 @@
           localStorage.setItem("systemPrompt", defaultPrompt);
         }
 
-        // Öffnen des Modals beim Klick auf das Zahnrad
-        document.getElementById("editSystemPromptBtn").addEventListener("click", function () {
-          const modal = document.getElementById("systemPromptModal");
-          const textarea = document.getElementById("systemPromptInput");
-          textarea.value = localStorage.getItem("systemPrompt");
-          modal.style.display = "block";
-          trackAppEvent("app_settings_open");
-        });
-
-        // Schließen des Modals
-        document.getElementById("closeSystemPromptModal").addEventListener("click", function () {
-          document.getElementById("systemPromptModal").style.display = "none";
-        });
-
-        // Speichern des neuen Prompts
-        document.getElementById("saveSystemPromptBtn").addEventListener("click", function () {
-          const newPrompt = document.getElementById("systemPromptInput").value.trim();
-          localStorage.setItem("systemPrompt", newPrompt); // Speichert auch leere Strings!
-          document.getElementById("systemPromptModal").style.display = "none";
-          trackAppEvent("app_settings_saved");
-        });
-
-        // Öffnen des Hilfemodals beim Klick auf den Hilfebutton
-        document.getElementById("helpButton").addEventListener("click", function () {
-          document.getElementById("helpModal").style.display = "block";
-          trackAppEvent("app_help_open");
-        });
-
-        // Schließen des Modals beim Klick auf das Schließen-Symbol
-        document.getElementById("closeHelpModal").addEventListener("click", function () {
-          document.getElementById("helpModal").style.display = "none";
-        });
-
-        // Optional: Modal schließen, wenn außerhalb geklickt wird
-        window.addEventListener("click", function (event) {
-          if (event.target === document.getElementById("helpModal")) {
-            document.getElementById("helpModal").style.display = "none";
-          }
-        });
+        // Settings- und Help-Controls werden ausschliesslich von app-ui.js
+        // gebunden. Zwei Binder fuehrten jeden Klick und globale Backdrop-
+        // Listener doppelt aus.
 
         // Öffnen des Feedback-Modals beim Klick auf den Feedback-Button
         document.getElementById("feedbackButton").addEventListener("click", function () {
@@ -1790,20 +1754,33 @@
 
         // getActiveMode lebt jetzt in static/js/query-send.js (einziger Aufrufer war sendQuestion).
 
+        let countdownUtcDay = null;
+        let usageRefreshUtcDay = null;
+
+        function utcDayKey(date) {
+          return `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}`;
+        }
+
         function updateCountdown() {
-          // Aktuelles Datum und Uhrzeit
           const now = new Date();
-
-          // Erstelle ein Datum für heute um 00:15
-          let resetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 15, 0, 0);
-
-          // Falls aktuelle Zeit bereits nach 00:15 liegt, setze resetTime auf morgen um 00:15
-          if (now >= resetTime) {
-            resetTime.setDate(resetTime.getDate() + 1);
+          const currentUtcDay = utcDayKey(now);
+          if (countdownUtcDay === null) {
+            countdownUtcDay = currentUtcDay;
+          } else if (currentUtcDay !== countdownUtcDay) {
+            countdownUtcDay = currentUtcDay;
+            if (usageRefreshUtcDay !== currentUtcDay) {
+              usageRefreshUtcDay = currentUtcDay;
+              // Refresh the authoritative server snapshot instead of reloading
+              // the page. A tab that slept across midnight catches up on its
+              // first timer tick and a stale zero can no longer block sends.
+              Promise.resolve(window.refreshUsageData?.()).catch(() => {});
+            }
           }
 
-          // Differenz in Millisekunden bis zur festgelegten Reset-Zeit (00:15)
-          const diff = resetTime - now;
+          const resetTime = new Date(Date.UTC(
+            now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1
+          ));
+          const diff = Math.max(0, resetTime - now);
 
           // Berechne Stunden, Minuten und Sekunden
           const hours = Math.floor(diff / (1000 * 60 * 60));
@@ -1816,12 +1793,10 @@
           const formattedSeconds = seconds.toString().padStart(2, "0");
 
           // Ausgabe im HTML-Element aktualisieren
-          document.getElementById('countdownDisplay').innerHTML =
-            "Resets in: " + formattedHours + ":" + formattedMinutes + ":" + formattedSeconds;
-
-          // Wenn der Countdown abgelaufen ist, wird der Server (oder die Seite) neu gestartet
-          if (diff <= 0) {
-            location.reload(); // Hier kann auch ein anderer Reset-Mechanismus aufgerufen werden
+          const countdown = document.getElementById('countdownDisplay');
+          if (countdown) {
+            countdown.textContent =
+              "Resets in: " + formattedHours + ":" + formattedMinutes + ":" + formattedSeconds;
           }
         }
 

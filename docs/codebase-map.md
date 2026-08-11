@@ -186,8 +186,9 @@ mitberücksichtigen.
 ## 3. Frontend-Architektur
 
 Geladen werden (Reihenfolge ist Vertrag, siehe §8): zuerst CDN-Libs
-(`marked`, `DOMPurify`, KaTeX + Auto-Render), dann `firebase.js` + `demo.js`
-(ES-Module), `app-ui.js`, dann die Feature-Module unter `static/js/` in fester
+(`marked`, `DOMPurify`, KaTeX + Auto-Render), dann der same-origin
+`auth-bootstrap.js`-Watchdog vor `firebase.js` + `demo.js` (ES-Module),
+`app-ui.js`, dann die übrigen Feature-Module unter `static/js/` in fester
 Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
 
 **Modul-Verantwortlichkeiten** (alle in `static/js/` außer markiert):
@@ -197,6 +198,12 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   `window.App.reportCriticalError` für explizite Run-Abbrüche bereit. Erwartete
   `AbortError`-Abbrüche werden ignoriert; Session-Deduplizierung verhindert
   Wiederholungen desselben Fehlers.
+- **`auth-bootstrap.js`** — kleiner same-origin Classic-Script-Watchdog vor dem
+  Firebase-ES-Modul. Falls dessen gstatic-Imports nicht ausführbar sind, räumt
+  er stale Auth-/Usage-/Bookmark-Skeletons ab, zeigt die Gastaktionen trotz
+  altem `localStorage.id_token` und öffnet einen bedienbaren Fehlerdialog statt
+  einer toten Login-Aktion. `consensio:auth-state` beendet den Watchdog;
+  `consensio:auth-unavailable` informiert insbesondere den Watch-Deep-Link.
 - **`app-core.js`** — MUSS zuerst laden. Definiert `window.App`-Bus, `modelPrefs`
   (zentrales Mapping Provider→DOM-IDs), `deepThinkModelLabels`, gemeinsame Helfer
   (`getModelOptionLabel`, `getSelectedModelCount`, `setAppTitle`, `showPopup`,
@@ -579,7 +586,10 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   `window.App.sharedModal.*`-Steuerung für den Share-/Watch-Dialog (einziger
   innerer Scrollbereich, Background-Scroll-Lock, Escape/Focus-Restore). Der
   normale Share-Dialog schließt weiterhin über den Backdrop; im Watch-Modus
-  verhindern unbeabsichtigte Außenklicks das Schließen.
+  verhindern unbeabsichtigte Außenklicks das Schließen. Jeder Share-Request ist
+  an UID/Auth-Generation und eine Modal-/View-Epoch gebunden; Ansichtswechsel,
+  Logout und Schließen aborten laufende Fetches, späte Antworten dürfen den
+  gemeinsam mit Watch genutzten DOM-Knoten nicht mehr überschreiben.
 - **`consensus-actions.js`** — Copy/Citation/Share-Buttons am Consensus.
 - **`watch.js`** — `window.openWatchDialog` (Create-Dialog im Share-Modal) und
   `window.openWatchDashboard` (eigene Seite `/app/watches`: Vollbild-View
@@ -620,9 +630,15 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   (`run_weekday`) und können ihn im Dashboard nachträglich ändern.
   Der gemeinsame Notifications-Bereich ist ein einklappbares `<details>`-Panel;
   dessen lokaler Offen-/Zu-Zustand liegt in `consensus_watch_notifications_open`.
-  `window.App.watch.resetAfterLogout()` leert und schließt das bereits geladene
-  Dashboard beim Session-Ende; ein Session-Epoch verwirft danach eintreffende
-  Watch-/Telegram-/Limit-Antworten und verhindert accountübergreifende Caches.
+  `window.App.watch.resetAfterLogout()` leert das bereits geladene Dashboard
+  beim Session-Ende; auf einem direkten `/app/watches`-Deep-Link bleiben URL
+  und Seite stehen und wechseln deterministisch zum Login-Hinweis. Das globale
+  `consensio:auth-state`-Event rendert nach einem späteren Login sofort neu. Ein
+  Session-Epoch verwirft danach eintreffende Watch-/Telegram-/Limit-Antworten
+  und verhindert accountübergreifende Caches. Ein Wechsel aus dem gemeinsamen
+  Share-Modal zu „Watched“ schließt das Modal vor der Seitennavigation;
+  fehlgeschlagene Morning-Brief-Zeit-/Modusänderungen rollen auf die letzte
+  serverbestätigte Einstellung zurück.
   Das Dashboard bietet zusätzlich einen professionell geführten Query-first-
   Einstieg: Ohne Watch ersetzen ein dreistufiger Empty State und optionale
   Beispielfragen die leeren KPI-/Notification-Flächen. Nach der Frage verwendet
@@ -759,7 +775,11 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   `/prepare` gilt eine harte Mindestzahl von zwei ausgewählten Modellen;
   `app-init.js::updateQuestionInputAccess` deaktiviert den Send-Button bereits
   synchron dazu, während `query-send.js` programmgesteuerte Starts nochmals
-  abweist.
+  abweist. Nach Attachment-/Tier-/Run-Filtern wird dieselbe Mindestzahl vor
+  Usage-Reservierung erneut geprüft. Schlagen sämtliche tatsächlichen
+  Modellrequests fehl, endet der Lauf als Fehler (inklusive Fehlertelemetrie),
+  nicht als erfolgreicher Agent-Mode-Abschluss. Beim Laufstart wird gezielt nur
+  `#consensusAnswerBody` geleert; die Markerlegende bleibt erhalten.
   Ein `usage_storage_busy` aus `/prepare` wird mit demselben Idempotency-Key
   kurz erneut versucht; bleibt Firestore beschäftigt, endet der Lauf vor dem
   Fan-out mit einer erneut versuchbaren Thread-Karte (kein falscher
@@ -781,8 +801,11 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Desktop-Enter sendet. Der Sidebar-Eintrag „Models“ erklärt bei geschlossenem
   Composer-Gate zuerst die notwendige Follow-up-/Neuvergleich-Wahl, statt einen
   unsichtbaren Picker zu öffnen. `clearResponseBoxes({silent?})` entfernt außerdem den kompletten
-  fragebezogenen Share-/Citation-/Evidence-State. Läuft als letztes Script,
-  ruft `initApp()` direkt auf.
+  fragebezogenen Share-/Citation-/Evidence-State. Der Usage-Countdown rechnet
+  bis UTC-Mitternacht und fordert beim erkannten UTC-Tageswechsel über
+  `window.refreshUsageData()` einen neuen autoritativen Serverstand an, statt
+  lokal zu früh zu laufen oder die Seite neu zu laden. Läuft als letztes
+  Script, ruft `initApp()` direkt auf.
 
 **Nicht unter `static/js/`** (älter, eigene Verantwortung):
 - **`static/firebase.js`** (ES-Modul) — Firebase-Init, Login/Logout, Token-Handling,
@@ -820,14 +843,20 @@ Reihenfolge, zuletzt — deferred am `</body>` — `app-init.js`.
   Dabei werden laufende Query-/Consensus-Streams abgebrochen, Run-, Usage-,
   Watch-, Bookmark-/Share-UI und Detail-Caches sowie lokal gespeicherte eigene
   Provider-API-Keys geleert und der Hero-
-  Ausgangszustand wiederhergestellt. Auth-Generationen verhindern, dass spät
-  eintreffende Usage-/Bookmark-Antworten Daten einer beendeten oder gewechselten
-  Sitzung erneut rendern.
+  Ausgangszustand wiederhergestellt. UID/Auth-Generation schützen nach jedem
+  relevanten Await Usage sowie Bookmark-List/Detail/Conversation/Save/Delete;
+  eine zusätzliche Bookmark-View-Epoch macht die letzte Auswahl autoritativ.
+  Listenfehler zeigen einen eigenen Retry-Zustand statt einer scheinbar leeren
+  Liste. `/usage` synchronisiert neben Zahlen auch den Tierstatus und kann so
+  einen transient fehlgeschlagenen `/user_status`-Startcheck in derselben
+  Sitzung heilen. Der dynamische Account-Menü-Außenklick-Listener wird bei
+  jedem Token-Callback entfernt, bevor ein neuer gebunden wird.
 - **`static/demo.js`** (ES-Modul) — Demo-Flow (`runDemoFlow`) für die „Demo"-Query;
   zeigt Gästen nach Abschluss der Demo am Eingabebereich eine Login-/Registrierungs-
   Aufforderung, ohne die Demo-Frage aus dem deaktivierten Feld zu entfernen, und
   beendet beim Start denselben Hero-Leerzustand wie eine echte Anfrage.
-- **`static/app-ui.js`** — System-Prompt-/Help-Modal + App-Width-Resizer.
+- **`static/app-ui.js`** — alleiniger Binder für System-Prompt-/Help-Modal
+  (keine zweite Bindung mehr in `app-init.js`) + App-Width-Resizer.
 
 **Abhängigkeitsrichtung**: `app-core.js` → Feature-Module → `app-init.js`. Module
 kommunizieren über `window.*`-Globals und `window.App`, **nicht** über Imports. DOM
@@ -1257,6 +1286,9 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
 ### Auth / Usage / Tier
 - Firebase-ID-Token wird mit `verify_user_token` geprüft (Standard: nur
   E-Mail-verifizierte Nutzer; `allow_unverified=True` nur für Registrierung/Delete).
+- Das Login-Overlay ist ein echtes `role="dialog"` mit `aria-modal`,
+  Überschriftsreferenz, fokussierbarem benanntem Close-Button, Fokus-Einstieg,
+  Tab-Schleife, Escape/Backdrop-Abbruch und Fokus-Rückgabe an den Auslöser.
 - **Revocation-Entscheidung:** seltene sensible Grenzen (`/confirm-registration`,
   `/delete_account`, sämtliche Admin-Endpunkte) verwenden den live prüfenden
   `check_revoked=True`-Pfad. Normale App-Requests prüfen das signierte ID-Token

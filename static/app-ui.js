@@ -35,6 +35,7 @@ function openSettingsModal() {
 
   textarea.value = getStoredSystemPrompt();
   modal.style.display = "block";
+  window.App?.trackAppEvent?.("app_settings_open");
 }
 
 function closeSettingsModal() {
@@ -50,12 +51,14 @@ function saveSystemPrompt() {
     localStorage.setItem("systemPrompt", textarea.value.trim());
   }
   closeSettingsModal();
+  window.App?.trackAppEvent?.("app_settings_saved");
 }
 
 function openHelpModal() {
   const helpModal = document.getElementById("helpModal");
   if (helpModal) {
     helpModal.style.display = "block";
+    window.App?.trackAppEvent?.("app_help_open");
   }
 }
 

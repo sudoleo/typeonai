@@ -9,6 +9,52 @@
 
 (function () {
   let dialogReturnFocus = null;
+  let sharedModalEpoch = 0;
+  let sharedModalMode = null;
+  const activeShareControllers = new Set();
+
+  function invalidateSharedModalRequests() {
+    sharedModalEpoch += 1;
+    activeShareControllers.forEach(controller => controller.abort());
+    activeShareControllers.clear();
+    return sharedModalEpoch;
+  }
+
+  function beginShareView() {
+    sharedModalMode = "share";
+    return invalidateSharedModalRequests();
+  }
+
+  function shareViewIsCurrent(epoch) {
+    const { modal } = shareDialogEls();
+    return epoch === sharedModalEpoch
+      && sharedModalMode === "share"
+      && modal?.style.display === "flex";
+  }
+
+  function staleShareRequest() {
+    const error = new Error("This view is no longer active.");
+    error.stale = true;
+    return error;
+  }
+
+  function currentAuthSnapshot() {
+    const user = window.auth?.currentUser;
+    if (!user) throw new Error("Not logged in");
+    return {
+      user,
+      uid: user.uid,
+      generation: window.__consensioAuthState?.generation
+    };
+  }
+
+  function authSnapshotIsCurrent(snapshot) {
+    const current = window.auth?.currentUser;
+    const currentGeneration = window.__consensioAuthState?.generation;
+    return current === snapshot.user
+      && current?.uid === snapshot.uid
+      && (snapshot.generation == null || currentGeneration === snapshot.generation);
+  }
 
   function shareDialogEls() {
     return {
@@ -22,6 +68,8 @@
     const { modal, body } = shareDialogEls();
     if (!modal) return;
     if (isOpen) {
+      if (sharedModalMode !== mode) invalidateSharedModalRequests();
+      sharedModalMode = mode || null;
       if (modal.style.display !== "flex") dialogReturnFocus = document.activeElement;
       modal.classList.toggle("is-watch-dialog", mode === "watch");
       modal.classList.toggle("is-share-dialog", mode !== "watch");
@@ -32,6 +80,8 @@
       });
       return;
     }
+    invalidateSharedModalRequests();
+    sharedModalMode = null;
     modal.style.display = "none";
     modal.classList.remove("is-watch-dialog", "is-share-dialog");
     document.documentElement.classList.remove("share-modal-open");
@@ -61,24 +111,42 @@
     }
   }
 
-  async function shareApiRequest(method, path, body) {
-    const user = window.auth?.currentUser;
-    if (!user) throw new Error("Not logged in");
-    const idToken = await user.getIdToken();
-    const response = await fetch(path, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + idToken
-      },
-      body: body ? JSON.stringify(body) : undefined
-    });
-    let data = {};
-    try { data = await response.json(); } catch (e) { /* leerer Body */ }
-    if (!response.ok) {
-      throw new Error(data.error || data.detail || ("HTTP " + response.status));
+  async function shareApiRequest(method, path, body, viewEpoch) {
+    const authSnapshot = currentAuthSnapshot();
+    const controller = new AbortController();
+    activeShareControllers.add(controller);
+    try {
+      const idToken = await authSnapshot.user.getIdToken();
+      if (!authSnapshotIsCurrent(authSnapshot) || !shareViewIsCurrent(viewEpoch)) {
+        throw staleShareRequest();
+      }
+      const response = await fetch(path, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + idToken
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal
+      });
+      if (!authSnapshotIsCurrent(authSnapshot) || !shareViewIsCurrent(viewEpoch)) {
+        throw staleShareRequest();
+      }
+      let data = {};
+      try { data = await response.json(); } catch (e) { /* leerer Body */ }
+      if (!authSnapshotIsCurrent(authSnapshot) || !shareViewIsCurrent(viewEpoch)) {
+        throw staleShareRequest();
+      }
+      if (!response.ok) {
+        throw new Error(data.error || data.detail || ("HTTP " + response.status));
+      }
+      return data;
+    } catch (error) {
+      if (error?.name === "AbortError") throw staleShareRequest();
+      throw error;
+    } finally {
+      activeShareControllers.delete(controller);
     }
-    return data;
   }
 
   function copyShareUrl(url) {
@@ -100,6 +168,7 @@
   }
 
   function renderShareConfirmView() {
+    const viewEpoch = beginShareView();
     const { body, title } = shareDialogEls();
     if (!body) return;
     title.textContent = "Share this consensus publicly";
@@ -127,7 +196,7 @@
       confirmBtn.disabled = true;
       confirmBtn.textContent = "Preparing saved consensus…";
       window.resolveCurrentShareResultId?.().then(resultId => {
-        if (!confirmBtn.isConnected) return;
+        if (!confirmBtn.isConnected || !shareViewIsCurrent(viewEpoch)) return;
         confirmBtn.disabled = !resultId;
         confirmBtn.textContent = resultId ? "Create public link" : "Saved consensus unavailable";
       });
@@ -138,6 +207,7 @@
     confirmBtn.addEventListener("click", async function () {
       const resultId = await (window.resolveCurrentShareResultId?.()
         || Promise.resolve(window.lastShareResultId));
+      if (!shareViewIsCurrent(viewEpoch)) return;
       if (!resultId) {
         window.App.showPopup("Please run a consensus first.");
         return;
@@ -145,10 +215,12 @@
       this.disabled = true;
       this.textContent = "Creating link…";
       try {
-        const data = await shareApiRequest("POST", "/api/share", { result_id: resultId });
+        const data = await shareApiRequest("POST", "/api/share", { result_id: resultId }, viewEpoch);
+        if (!shareViewIsCurrent(viewEpoch)) return;
         window.App.trackAppEvent("app_share_created", { reused: data.created === false });
         renderShareSuccessView(data.url);
       } catch (err) {
+        if (err?.stale) return;
         this.disabled = false;
         this.textContent = "Create public link";
         window.App.showPopup("Sharing failed: " + err.message);
@@ -157,6 +229,7 @@
   }
 
   function renderShareSuccessView(url) {
+    beginShareView();
     const { body, title } = shareDialogEls();
     if (!body) return;
     title.textContent = "Public link created";
@@ -182,14 +255,16 @@
   }
 
   async function renderShareListView() {
+    const viewEpoch = beginShareView();
     const { body, title } = shareDialogEls();
     if (!body) return;
     title.textContent = "My shared links";
     body.innerHTML = `<p class="share-list-loading">Loading…</p>`;
     let data;
     try {
-      data = await shareApiRequest("GET", "/api/my/shares");
+      data = await shareApiRequest("GET", "/api/my/shares", undefined, viewEpoch);
     } catch (err) {
+      if (err?.stale || !shareViewIsCurrent(viewEpoch)) return;
       body.innerHTML = "";
       const p = document.createElement("p");
       p.textContent = "Could not load your shared links: " + err.message;
@@ -197,6 +272,7 @@
       return;
     }
 
+    if (!shareViewIsCurrent(viewEpoch)) return;
     body.innerHTML = "";
     const shares = (data.shares || []).filter(s => s.status === "active");
     if (!shares.length) {
@@ -238,12 +314,14 @@
           : "Revoke this public link? Visitors will no longer be able to open it.")) return;
         revokeBtn.disabled = true;
         try {
-          await shareApiRequest("DELETE", "/api/share/" + encodeURIComponent(share.share_id));
+          await shareApiRequest("DELETE", "/api/share/" + encodeURIComponent(share.share_id), undefined, viewEpoch);
+          if (!shareViewIsCurrent(viewEpoch)) return;
           window.App.trackAppEvent("app_share_revoked", {});
           window.App.showPopup("Share link revoked.");
           item.remove();
           if (!list.children.length) renderShareListView();
         } catch (err) {
+          if (err?.stale) return;
           revokeBtn.disabled = false;
           window.App.showPopup("Revoking failed: " + err.message);
         }

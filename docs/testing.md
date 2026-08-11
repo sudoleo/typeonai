@@ -70,6 +70,15 @@ darf nie durch beliebige Credentials oder ein Firebase-Standardprojekt ersetzt
 werden. Vollständiges Setup, Writer-Inventar und Befehle:
 [`tests/e2e/README.md`](../tests/e2e/README.md).
 
+Die vollständig gemockten Phase-4-Frontend-Races sind separat ohne Java/
+Firestore-Emulator ausführbar (weiterhin `RUN_E2E=1`, writerfreies E2E-Profil):
+
+```powershell
+$env:RUN_E2E = "1"
+venv\Scripts\python.exe -m pytest tests\e2e\test_phase4_frontend.py -q
+Remove-Item Env:RUN_E2E
+```
+
 ## CI
 
 Es gibt keine CI für die Tests: `.github/workflows/tests.yml` wurde am

@@ -62,7 +62,7 @@
     };
   </script>
   <!-- Google Fonts -->
-  <link rel="stylesheet" href="/static/style.css?v=20260810-badgeframe1">
+  <link rel="stylesheet" href="/static/style.css?v=20260811-phase4">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
@@ -75,10 +75,13 @@
   <!-- KaTeX: mathematische Ausdruecke aus Modellantworten lesbar setzen. -->
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.js" integrity="sha384-AtrdNsnxl/75rvBneBVH7DtOvCxSVahR2zWqle1coBKd8DEmLoviqNeJSx64gNAs" crossorigin="anonymous"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"></script>
+  <!-- Same-origin watchdog: bleibt selbst dann aktiv, wenn Firebase-CDN-
+       Module nicht importiert werden koennen. Muss vor firebase.js stehen. -->
+  <script src="/static/js/auth-bootstrap.js?v=20260811-phase4" defer></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260809-phase1"></script>
+  <script type="module" src="/static/firebase.js?v=20260811-phase4"></script>
   <script type="module" src="/static/demo.js?v=20260807-composergrow1"></script>
-  <script src="/static/app-ui.js?v=20260727-thread12" defer></script>
+  <script src="/static/app-ui.js?v=20260811-phase4" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
   <script src="/static/js/app-core.js?v=20260807-threadmessages1" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
@@ -98,11 +101,11 @@
   <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
   <script src="/static/js/consensus-lifecycle.js?v=20260727-resultactions1" defer></script>
   <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
-  <script src="/static/js/share-dialog.js?v=20260727-thread12" defer></script>
+  <script src="/static/js/share-dialog.js?v=20260811-phase4" defer></script>
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-actions.js?v=20260727-resultactions1" defer></script>
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
-  <script src="/static/js/watch.js?v=20260804-verifygate1" defer></script>
+  <script src="/static/js/watch.js?v=20260811-phase4" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260804-verifygate1" defer></script>
   <!-- Kontingent-Ring + Panel im Sidebar-Footer; spiegelt nur #usageDisplay -->
@@ -114,7 +117,7 @@
   <script src="/static/js/consensus-insights.js?v=20260809-claimfix1" defer></script>
   <script src="/static/js/chat-session.js?v=20260806-chatlimits1" defer></script>
   <script src="/static/js/consensus-run.js?v=20260809-claimfix1" defer></script>
-  <script src="/static/js/query-send.js?v=20260810-runblock1" defer></script>
+  <script src="/static/js/query-send.js?v=20260811-phase4" defer></script>
   <!-- Composer einklappen (Handy): eine Zeile beim Lesen, voll beim Anfassen -->
   <script src="/static/js/composer-collapse.js?v=20260807-composergrow1" defer></script>
   {% include "partials/analytics.html" %}
@@ -160,14 +163,13 @@
     <button type="button" id="authTopSignupBtn" class="auth-top-signup">Sign up</button>
   </div>
   <script>
-    // Gäste sehen die Auth-Buttons sofort (kein Warten auf Firebase); lag ein
-    // id_token vor, bleibt der Bereich versteckt, bis onIdTokenChanged
-    // (firebase.js) den echten Zustand kennt.
+    // Gäste sehen die Auth-Buttons sofort (kein Warten auf Firebase). Ein
+    // eingeloggter Nutzer kann sie fuer einen Moment sehen; der autoritative
+    // Firebase-Callback blendet sie wieder aus. So kann ein altes, rein lokal
+    // gespeichertes Token die Login-Aktion bei einem CDN-Ausfall nicht sperren.
     (function () {
       try {
-        if (!localStorage.getItem("id_token")) {
-          document.getElementById("authTopActions").hidden = false;
-        }
+        document.getElementById("authTopActions").hidden = false;
       } catch (e) {}
     })();
   </script>
@@ -893,16 +895,16 @@
       </div>
     </div>
 
-  <script src="/static/js/app-init.js?v=20260806-followupdefault1" defer></script>
+  <script src="/static/js/app-init.js?v=20260811-phase4" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing
        Block für position:fixed – das klemmt das Login-Modal in die App-Spalte. -->
 
   <!-- Login Modal -->
-  <div id="loginModal" class="modal">
+  <div id="loginModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
       <div class="modal-content auth-modal" id="loginModalContent">
-        <span class="close" id="closeLoginModal">&times;</span>
+        <button type="button" class="close" id="closeLoginModal" aria-label="Close login dialog">&times;</button>
 
         <div class="auth-brand">
           <img src="/static/favicon.png" alt="consens.io" />

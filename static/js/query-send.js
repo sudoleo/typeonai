@@ -517,6 +517,22 @@
       const selectedModelConfigsForRun = selectedProviderConfigsForRun
         .map(([, , selectId]) => document.getElementById(selectId)?.value)
         .filter(Boolean);
+      // Attachment/tier/run filters are authoritative. Re-check the minimum
+      // here, before a usage run or /prepare can be created; the initial
+      // checkbox count may include a stale DeepSeek selection that files make
+      // ineligible for this run.
+      if (selectedProviderConfigsForRun.length < 2) {
+        finishQueryRun(queryRunId);
+        setConsensusGate(true);
+        setAgentModeStatus("error", "Choose at least two compatible models for this run.");
+        window.App.followup?.restoreAfterBlockedRun?.();
+        window.App?.showPopup?.("Choose at least two compatible models. Remove the attachment or select another model.");
+        trackAppEvent("app_query_blocked", {
+          reason: "minimum_models_after_filters",
+          selected_models: selectedProviderConfigsForRun.length
+        });
+        return;
+      }
       const selectedConsensusOptionForRun = document.getElementById("consensusModelDropdown")
         ?.selectedOptions?.[0];
       const memoryProviderForRun = String(
@@ -597,10 +613,11 @@
         const box = document.getElementById("grokResponse");
         if (box) modelBoxes.push(box);
       }
-      if (modelBoxes.length === 0) {
+      if (modelBoxes.length < 2) {
         await releaseReservedUsageRun();
         finishQueryRun(queryRunId);
         setConsensusGate(true);
+        setAgentModeStatus("error", "Choose at least two compatible models for this run.");
         return;
       }
 
@@ -1116,7 +1133,8 @@
       if (activeModels.includes("Grok")) {
         document.getElementById("grokResponse").querySelector(".collapsible-content").innerHTML = window.spinnerHTML;
       }
-      document.getElementById("consensusResponse").querySelector("p").innerHTML = "";
+      const consensusAnswerBody = document.getElementById("consensusAnswerBody");
+      if (consensusAnswerBody) consensusAnswerBody.innerHTML = "";
       // Veraltete Auswertung (Verdict, Badges, Karten) der vorherigen Frage entfernen
       window.resetConsensusInsights?.();
 
@@ -1152,6 +1170,7 @@
                 message: `All ${totalActive} selected model requests failed.`,
                 details: failedModels.join(" | ")
               });
+              markQueryBlockingError("All selected model requests failed.");
             }
           }
           if (queryHadBlockingError) {

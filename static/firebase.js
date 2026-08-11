@@ -217,10 +217,36 @@ window.currentDeepLimit = window.LIMITS.FREE.DEEP;
 let bookmarksLoaded = false;
 let bookmarksNextCursor = null;
 let bookmarksLoading = false;
+let bookmarksLoadRequestId = 0;
 let openedBookmarkId = null;
 const bookmarkDetailCache = new Map();
 let activeAuthUid = null;
 let authGeneration = 0;
+let bookmarkViewEpoch = 0;
+let accountMenuDocumentClickHandler = null;
+
+window.__consensioAuthState = {
+  known: false,
+  uid: null,
+  generation: authGeneration
+};
+
+function publishAuthState(uid) {
+  window.__consensioAuthState = {
+    known: true,
+    uid: uid || null,
+    generation: authGeneration
+  };
+  window.dispatchEvent(new CustomEvent("consensio:auth-state", {
+    detail: window.__consensioAuthState
+  }));
+}
+
+function clearAccountMenuDocumentListener() {
+  if (!accountMenuDocumentClickHandler) return;
+  document.removeEventListener("click", accountMenuDocumentClickHandler);
+  accountMenuDocumentClickHandler = null;
+}
 
 function setActiveAuthIdentity(uid) {
   const normalizedUid = uid || null;
@@ -228,6 +254,11 @@ function setActiveAuthIdentity(uid) {
     activeAuthUid = normalizedUid;
     authGeneration += 1;
   }
+  window.__consensioAuthState = {
+    known: window.__consensioAuthState?.known === true,
+    uid: normalizedUid,
+    generation: authGeneration
+  };
   return authGeneration;
 }
 
@@ -274,6 +305,8 @@ function clearLocalProviderKeys() {
 }
 
 function clearAuthenticatedUiState() {
+  bookmarkViewEpoch += 1;
+  clearAccountMenuDocumentListener();
   localStorage.removeItem("id_token");
   window.App?.usageRun?.clear?.();
   window.isUserPro = false;
@@ -293,6 +326,7 @@ function clearAuthenticatedUiState() {
   bookmarksLoaded = false;
   bookmarksNextCursor = null;
   bookmarksLoading = false;
+  bookmarksLoadRequestId += 1;
   openedBookmarkId = null;
   bookmarkDetailCache.clear();
   window.bookmarksData = [];
@@ -310,6 +344,7 @@ async function checkUserStatusOnLoad(user, token, generation) {
         "Content-Type": "application/json"
       }
     });
+    if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
 
     if (response.ok) {
       const data = await response.json();
@@ -436,6 +471,7 @@ onIdTokenChanged(auth, async (user) => {
       // steigt bei bestehender Session aus). Der Ausweg steht im Streifen.
       const unverifiedTopActions = document.getElementById("authTopActions");
       if (unverifiedTopActions) unverifiedTopActions.hidden = true;
+      publishAuthState(null);
       return; // <--- ganz wichtig
     }
 
@@ -513,6 +549,7 @@ onIdTokenChanged(auth, async (user) => {
 
     // 5) E‑Mail & Logout als Popup (öffnet aus der Sidebar-Fußzeile nach oben)
     const emailInitial = user.email.charAt(0).toUpperCase();
+    clearAccountMenuDocumentListener();
     loginContainer.innerHTML = `
       <div class="email-container">
         <span id="emailIcon" class="email-icon" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" aria-label="Open account menu">${emailInitial}</span>
@@ -581,11 +618,13 @@ onIdTokenChanged(auth, async (user) => {
       openLogoutConfirm();
     });
 
-    document.addEventListener("click", e => {
+    accountMenuDocumentClickHandler = e => {
       if (!loginContainer.contains(e.target)) {
         setAccountMenuOpen(false);
       }
-    });
+    };
+    document.addEventListener("click", accountMenuDocumentClickHandler);
+    publishAuthState(user.uid);
 
     } else {
         // Cleanup bei Logout
@@ -651,10 +690,11 @@ onIdTokenChanged(auth, async (user) => {
         if (typeof window.updateUserTierUI === "function") {
             window.updateUserTierUI(false, false); // isPro=false, isLoggedIn=false
         }
+        publishAuthState(null);
       }
     });
 
-function fetchUsageData(token, uid, generation) {
+async function fetchUsageData(token, uid, generation) {
   // DOM-Elemente innerhalb der Funktion abrufen:
   const freeDisplay = document.getElementById("freeUsageDisplay");
   const deepDisplay = document.getElementById("deepUsageDisplay");
@@ -665,39 +705,70 @@ function fetchUsageData(token, uid, generation) {
     return;
   }
   
-  // API-Aufruf starten:
-  fetch("/usage", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id_token: token })
-  })
-    .then(async response => ({ response, data: await response.json() }))
-    .then(({ response, data }) => {
-      if (!response.ok || !isCurrentAuthenticatedUser(uid, generation)) return;
-      if (typeof window.setCurrentUsageLimits === "function") {
-        window.setCurrentUsageLimits(data.is_pro === true, data);
-      } else {
-        const totalLimit = Number(data.total_limit);
-        const deepTotalLimit = Number(data.deep_total_limit);
-        if (Number.isFinite(totalLimit)) window.currentMaxLimit = totalLimit;
-        if (Number.isFinite(deepTotalLimit)) window.currentDeepLimit = deepTotalLimit;
-      }
-      if (typeof window.App?.renderUsageDisplay === "function") {
-        window.App.renderUsageDisplay({
-          remaining: data.remaining,
-          deepRemaining: data.deep_remaining,
-          totalLimit: window.currentMaxLimit,
-          deepLimit: window.currentDeepLimit
-        });
-      } else {
-        // Modul- und defer-Skripte koennen bei kaltem Cache unterschiedlich
-        // schnell eintreffen. Der Fallback bewahrt denselben DOM-Vertrag.
-        freeDisplay.innerHTML = 'Runs: <strong>' + data.remaining + ' / ' + window.currentMaxLimit + '</strong>';
-        deepDisplay.innerHTML = 'Deep Think: <strong>' + data.deep_remaining + ' / ' + window.currentDeepLimit + '</strong>';
-      }
-    })
-    .catch(err => console.error("Error when retrieving the quota:", err));
+  try {
+    const response = await fetch("/usage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_token: token })
+    });
+    if (!isCurrentAuthenticatedUser(uid, generation)) return false;
+    const data = await response.json();
+    if (!response.ok || !isCurrentAuthenticatedUser(uid, generation)) return false;
+
+    // /usage is an authoritative tier snapshot too. This lets a Pro account
+    // recover in the same session when the earlier /user_status request had a
+    // transient failure.
+    const isPro = data.is_pro === true;
+    window.isUserPro = isPro;
+    if (typeof window.updateUserTierUI === "function") {
+      window.updateUserTierUI(isPro, true);
+    }
+    if (typeof window.setCurrentUsageLimits === "function") {
+      window.setCurrentUsageLimits(isPro, data);
+    } else {
+      const totalLimit = Number(data.total_limit);
+      const deepTotalLimit = Number(data.deep_total_limit);
+      if (Number.isFinite(totalLimit)) window.currentMaxLimit = totalLimit;
+      if (Number.isFinite(deepTotalLimit)) window.currentDeepLimit = deepTotalLimit;
+    }
+    if (typeof window.App?.renderUsageDisplay === "function") {
+      window.App.renderUsageDisplay({
+        remaining: data.remaining,
+        deepRemaining: data.deep_remaining,
+        totalLimit: window.currentMaxLimit,
+        deepLimit: window.currentDeepLimit
+      });
+    } else {
+      // Modul- und defer-Skripte koennen bei kaltem Cache unterschiedlich
+      // schnell eintreffen. Der Fallback bewahrt denselben DOM-Vertrag.
+      freeDisplay.innerHTML = 'Runs: <strong>' + data.remaining + ' / ' + window.currentMaxLimit + '</strong>';
+      deepDisplay.innerHTML = 'Deep Think: <strong>' + data.deep_remaining + ' / ' + window.currentDeepLimit + '</strong>';
+    }
+    return true;
+  } catch (err) {
+    if (isCurrentAuthenticatedUser(uid, generation)) {
+      console.error("Error when retrieving the quota:", err);
+    }
+    return false;
+  }
 }
+
+window.refreshUsageData = async function () {
+  const requestUser = auth.currentUser;
+  if (!requestUser) return false;
+  const requestUid = requestUser.uid;
+  const requestGeneration = authGeneration;
+  try {
+    const token = await requestUser.getIdToken(false);
+    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return false;
+    return await fetchUsageData(token, requestUid, requestGeneration);
+  } catch (error) {
+    if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
+      console.error("Could not refresh usage after UTC reset:", error);
+    }
+    return false;
+  }
+};
 
 function mapFirebaseLoginError(error) {
   // Sicherheitsfreundliche, generische Messages
@@ -762,7 +833,7 @@ document.getElementById("loginButton").addEventListener("click", () => {
         // ist da, und der Streifen (onIdTokenChanged) erklaert den einen
         // fehlenden Schritt inklusive Resend.
         try { localStorage.removeItem("id_token"); } catch {}
-        document.getElementById("loginModal").style.display = "none";
+        closeAuthModal();
       }
       trackAppEvent("auth_email_login_result", { status: user.emailVerified ? "success" : "unverified" });
     })
@@ -908,7 +979,7 @@ confirmRegisterBtn.addEventListener("click", () => {
           await signInWithEmailAndPassword(auth, email, password);
           await sendVerificationMail(auth.currentUser);
           setRegisterPending(false);
-          document.getElementById("loginModal").style.display = "none";
+          closeAuthModal();
         } catch (error) {
           showRegistrationSuccess(email);
         }
@@ -957,28 +1028,85 @@ document.getElementById("forgotPasswordButton").addEventListener("click", () => 
 // Eingeloggt passiert hier bewusst NICHTS - das User-Icon öffnet sein eigenes
 // Popup (stopPropagation), Logout läuft ausschließlich über den bestätigten
 // Logout-Button im Popup. Vorher loggte ein Klick knapp neben das Icon aus.
-document.getElementById("loginContainer").addEventListener("click", () => {
+let authModalReturnFocus = null;
+
+function authModalFocusableElements() {
+  const content = document.getElementById("loginModalContent");
+  if (!content) return [];
+  return Array.from(content.querySelectorAll(
+    'button:not([disabled]):not([hidden]), a[href], input:not([disabled]):not([type="hidden"]), [tabindex]:not([tabindex="-1"])'
+  )).filter(element => !element.hidden && element.getClientRects().length > 0);
+}
+
+function showAuthModal(mode, trigger) {
+  const modal = document.getElementById("loginModal");
+  if (!modal) return;
+  if (mode) setMode(mode);
+  if (modal.style.display !== "block") authModalReturnFocus = trigger || document.activeElement;
+  modal.style.display = "block";
+  const initialFocus = mode === "register"
+    ? document.getElementById("loginEmail")
+    : document.getElementById("loginEmail");
+  (initialFocus || document.getElementById("closeLoginModal"))?.focus({ preventScroll: true });
+}
+
+function closeAuthModal() {
+  const modal = document.getElementById("loginModal");
+  if (!modal || modal.style.display !== "block") return;
+  modal.style.display = "none";
+  if (authModalReturnFocus?.isConnected && typeof authModalReturnFocus.focus === "function") {
+    authModalReturnFocus.focus({ preventScroll: true });
+  }
+  authModalReturnFocus = null;
+}
+
+document.getElementById("loginContainer").addEventListener("click", event => {
   if (!auth.currentUser) {
-    document.getElementById("loginModal").style.display = "block";
+    showAuthModal("login", event.currentTarget);
     trackAppEvent("auth_modal_open");
   }
 });
 
 // Auth-Buttons oben rechts (nur ausgeloggt sichtbar): öffnen das Modal direkt
 // im passenden Modus — "Sign up" landet ohne Umweg im Registrierungsformular.
-function openAuthModal(mode) {
+function openAuthModal(mode, trigger) {
   if (auth.currentUser) return;
-  setMode(mode);
-  document.getElementById("loginModal").style.display = "block";
+  showAuthModal(mode, trigger);
   trackAppEvent("auth_modal_open", { mode });
 }
 
-document.getElementById("authTopLoginBtn")?.addEventListener("click", () => openAuthModal("login"));
-document.getElementById("authTopSignupBtn")?.addEventListener("click", () => openAuthModal("register"));
+document.getElementById("authTopLoginBtn")?.addEventListener("click", event => openAuthModal("login", event.currentTarget));
+document.getElementById("authTopSignupBtn")?.addEventListener("click", event => openAuthModal("register", event.currentTarget));
 
 // Schließen des Modals
-document.getElementById("closeLoginModal").addEventListener("click", () => {
-  document.getElementById("loginModal").style.display = "none";
+document.getElementById("closeLoginModal").addEventListener("click", closeAuthModal);
+document.getElementById("loginModal")?.addEventListener("click", event => {
+  if (event.target === event.currentTarget) closeAuthModal();
+});
+document.addEventListener("keydown", event => {
+  const modal = document.getElementById("loginModal");
+  if (!modal || modal.style.display !== "block") return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeAuthModal();
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const focusable = authModalFocusableElements();
+  if (!focusable.length) {
+    event.preventDefault();
+    document.getElementById("loginModalContent")?.focus();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 });
 
 // --- Account löschen (DSGVO Art. 17) ---
@@ -1194,11 +1322,14 @@ function upsertBookmarkMeta(bookmark, { prepend = true } = {}) {
 }
 
 async function saveBookmark(question, response, modelName, mode, previousQuestion = "") {
-  if (!auth.currentUser) return;
+  const requestUser = auth.currentUser;
+  if (!requestUser) return;
+  const requestUid = requestUser.uid;
+  const requestGeneration = authGeneration;
   const bookmarkId = window.App.bookmarkSession?.currentId?.()
     || bookmarkIdForQuestion(question);
-  const id_token = await auth.currentUser.getIdToken(false);
-  if (!id_token) return;
+  const id_token = await requestUser.getIdToken(false);
+  if (!id_token || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
 
   // HIER: Quellen holen
   const sources = window.currentEvidenceSources || [];
@@ -1224,7 +1355,9 @@ async function saveBookmark(question, response, modelName, mode, previousQuestio
         attachments: attachmentsMeta
       })
     });
+    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
     const data = await res.json();
+    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
 
     if (!res.ok) {
       console.error("Error saving bookmark:", data.detail);
@@ -1252,12 +1385,15 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
                                      resultId, consensusModel, modelLabels,
                                      previousQuestion = "", previousTurn = null,
                                      conversation = null) {
-  if (!auth.currentUser) return;
+  const requestUser = auth.currentUser;
+  if (!requestUser) return;
+  const requestUid = requestUser.uid;
+  const requestGeneration = authGeneration;
   const bookmarkId = conversation?.bookmarkId
     || window.App.bookmarkSession?.currentId?.()
     || bookmarkIdForQuestion(question);
-  const id_token = await auth.currentUser?.getIdToken(/* forceRefresh= */ false);
-  if (!id_token) return;
+  const id_token = await requestUser.getIdToken(/* forceRefresh= */ false);
+  if (!id_token || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
 
   // HIER: Quellen holen
   const sources = window.currentEvidenceSources || [];
@@ -1286,7 +1422,9 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
          previousTurn: previousTurn || null
        })
     });
+    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
     const data = await res.json();
+    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
     if (!res.ok) {
       console.error("Error saving consensus bookmark:", data.detail);
       return;
@@ -1504,6 +1642,9 @@ async function loadBookmarkConversationOnce(bookmark) {
   const requestUid = requestUser.uid;
   const requestGeneration = authGeneration;
   const idToken = await requestUser.getIdToken(false);
+  if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
+    throw new Error("Authentication changed while loading bookmark");
+  }
   const turns = [];
   const seenTurnIds = new Set();
   const seenCursors = new Set();
@@ -1515,6 +1656,9 @@ async function loadBookmarkConversationOnce(bookmark) {
     const response = await fetch(path, {
       headers: { "Authorization": "Bearer " + idToken }
     });
+    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
+      throw new Error("Authentication changed while loading bookmark");
+    }
     const data = await response.json();
     if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
       throw new Error("Authentication changed while loading bookmark");
@@ -1813,11 +1957,30 @@ function renderBookmarksLoadMore() {
   container.appendChild(button);
 }
 
+function renderBookmarksLoadError(container) {
+  if (!container) return;
+  container.innerHTML = "";
+  const state = document.createElement("div");
+  state.className = "bookmarks-load-error";
+  const message = document.createElement("p");
+  message.textContent = "Bookmarks could not be loaded.";
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "bookmarks-load-more";
+  retry.textContent = "Try again";
+  retry.addEventListener("click", async () => {
+    bookmarksLoaded = await loadBookmarks();
+  });
+  state.append(message, retry);
+  container.appendChild(state);
+}
+
 async function loadBookmarks({ append = false, loadAll = false } = {}) {
   if (!auth.currentUser || bookmarksLoading) return false;
   const requestUser = auth.currentUser;
   const requestUid = requestUser.uid;
   const requestGeneration = authGeneration;
+  const requestId = ++bookmarksLoadRequestId;
   bookmarksLoading = true;
   const container = document.getElementById("bookmarksContainer");
   try {
@@ -1834,8 +1997,10 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
       // sonst dauerhaft unter einer Liste, die ohnehin komplett sichtbar war.
       const path = "/bookmarks?limit=35" + (cursor ? "&cursor=" + encodeURIComponent(cursor) : "");
       const response = await fetch(path, { headers: { "Authorization": "Bearer " + idToken } });
+      if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return false;
       const data = await response.json();
-      if (!response.ok || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return false;
+      if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return false;
+      if (!response.ok) throw new Error(data.detail || `Could not load bookmarks (${response.status})`);
       (data.bookmarks || []).forEach(item => upsertBookmarkMeta(item, { prepend: false }));
       bookmarksNextCursor = data.next_cursor || null;
       cursor = bookmarksNextCursor;
@@ -1844,11 +2009,14 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
     window.filterBookmarks?.(document.getElementById("chatSearch")?.value || "");
     return true;
   } catch (error) {
-    console.error("Error in loadBookmarks:", error);
+    if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
+      console.error("Error in loadBookmarks:", error);
+      if (!append || !window.bookmarksData?.length) renderBookmarksLoadError(container);
+      else window.App?.showPopup?.("More bookmarks could not be loaded.");
+    }
     return false;
   } finally {
-    bookmarksLoading = false;
-    if (!append && container && !window.bookmarksData?.length) container.innerHTML = "";
+    if (requestId === bookmarksLoadRequestId) bookmarksLoading = false;
   }
 }
 
@@ -1859,9 +2027,15 @@ async function loadBookmarkDetail(bookmarkId) {
   const requestUid = requestUser.uid;
   const requestGeneration = authGeneration;
   const idToken = await requestUser.getIdToken(false);
+  if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
+    throw new Error("Authentication changed while loading bookmark");
+  }
   const response = await fetch("/bookmarks/" + encodeURIComponent(bookmarkId), {
     headers: { "Authorization": "Bearer " + idToken }
   });
+  if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
+    throw new Error("Authentication changed while loading bookmark");
+  }
   const data = await response.json();
   if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) {
     throw new Error("Authentication changed while loading bookmark");
@@ -1873,22 +2047,32 @@ async function loadBookmarkDetail(bookmarkId) {
 }
 
 window.openBookmark = async function (bookmarkId) {
+  const requestEpoch = ++bookmarkViewEpoch;
+  const requestUid = auth.currentUser?.uid || null;
+  const requestGeneration = authGeneration;
+  const viewIsCurrent = () => requestEpoch === bookmarkViewEpoch
+    && isCurrentAuthenticatedUser(requestUid, requestGeneration);
   const row = document.querySelector(`.bookmark[data-id="${bookmarkId}"]`);
   row?.classList.add("is-loading");
   try {
     const bookmark = await loadBookmarkDetail(bookmarkId);
+    if (!viewIsCurrent()) return;
     let conversationTurns = [];
     let conversationLoadFailed = false;
     try {
       conversationTurns = await loadBookmarkConversation(bookmark);
+      if (!viewIsCurrent()) return;
     } catch (conversationError) {
+      if (!viewIsCurrent()) return;
       conversationLoadFailed = Boolean(bookmark?.chat_id);
       console.warn("Could not load full bookmark conversation; using saved continuation data.", conversationError);
     }
+    if (!viewIsCurrent()) return;
     openedBookmarkId = bookmarkId;
     loadSingleBookmarkUI(bookmark, conversationTurns, { conversationLoadFailed });
     trackAppEvent("app_bookmark_opened");
   } catch (error) {
+    if (!viewIsCurrent()) return;
     console.error("Error opening bookmark:", error);
     window.App?.showPopup?.("Could not load this bookmark.");
   } finally {
@@ -1904,9 +2088,12 @@ window.loadAllBookmarkMetadata = async function () {
 window.loadBookmarks = loadBookmarks;
 
 async function deleteBookmark(bookmarkId) {
-  if (!auth.currentUser) return;
-  const id_token = await auth.currentUser.getIdToken(false);
-  if (!id_token) return;
+  const requestUser = auth.currentUser;
+  if (!requestUser) return;
+  const requestUid = requestUser.uid;
+  const requestGeneration = authGeneration;
+  const id_token = await requestUser.getIdToken(false);
+  if (!id_token || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
 
   try {
     const res = await fetch("/bookmark", {
@@ -1914,7 +2101,9 @@ async function deleteBookmark(bookmarkId) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id_token, bookmarkId })
     });
+    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
     const data = await res.json();
+    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
 
     if (!res.ok) {
       console.error("Error deleting bookmark:", data.detail);

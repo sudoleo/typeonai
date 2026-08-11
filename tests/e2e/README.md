@@ -48,6 +48,26 @@ Ohne `RUN_E2E=1` wird `tests/e2e/` von der regulären Suite ignoriert. Ohne
 erreichbaren Emulator bricht die E2E-Suite ab. Es gibt keinen Fallback auf ein
 Service-Account-JSON oder ein entferntes Firebase-Projekt.
 
+### Phase-4-Browserregressionen ohne Java
+
+`test_phase4_frontend.py` ist absichtlich ein enger, vollständig gemockter
+Browserlauf: Er startet nur die App-Shell im writerfreien `E2E_TEST_MODE`,
+setzt weiterhin die fest erlaubte Demo-Projekt-ID und einen Loopback-
+Emulatorhost, lässt aber keinen Request Firestore erreichen. Auth-, Usage-,
+Bookmark-, Share-, Watch-, `/prepare`- und Providerantworten werden im Browser
+ersetzt. Dadurch sind die Konto-/Request-/Modal-Races auch ohne Java separat
+ausführbar:
+
+```powershell
+$env:RUN_E2E = "1"
+venv\Scripts\python.exe -m pytest tests\e2e\test_phase4_frontend.py -q
+Remove-Item Env:RUN_E2E
+```
+
+Diese Ausnahme gilt nur für diese eine Datei. Der vollständige E2E-Lauf und
+alle echten Transaktions-/Request-Writer verlangen weiterhin den erreichbaren
+Firestore-Emulator wie oben beschrieben.
+
 ## Erzwungene Isolation
 
 `tests/e2e/conftest.py` setzt vor dem uvicorn-Start:
@@ -95,5 +115,7 @@ getestet; In-Memory-Fakes allein reichen für diese Race-Verträge nicht aus.
   daher Netzzugang.
 
 Noch nicht automatisiert sind unter anderem echte Firebase-Auth-Flows,
-Provideraufrufe, Mail-/Telegram-Zustellung und Admin-Produktionsabläufe. Diese
-gehören ausdrücklich nicht in das E2E-Emulatorprofil.
+Provideraufrufe, Mail-/Telegram-Zustellung und Admin-Produktionsabläufe. Die
+Phase-4-Suite mockt Firebase-Module, wechselt damit aber real durch die
+produktive `firebase.js`-Callback-/Generation-Logik. Echte externe Auth bleibt
+ausdrücklich außerhalb des E2E-Profils.
