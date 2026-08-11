@@ -24,11 +24,12 @@ def _hash(value: str) -> str:
 
 
 def _get(ref, tx):
-    if hasattr(tx, "get"):
-        return tx.get(ref)
     try:
         return ref.get(transaction=tx)
     except TypeError:
+        # Firestore Transaction.get(ref) yields a generator in 2.20.x.  Read
+        # through the DocumentReference to receive the single snapshot while
+        # still binding the read to the transaction.
         return ref.get()
 
 

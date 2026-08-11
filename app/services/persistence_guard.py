@@ -69,11 +69,14 @@ def _deep_merge(current: dict, incoming: dict) -> dict:
 
 
 def _get(ref, transaction=None):
-    if transaction is not None and hasattr(transaction, "get"):
-        return transaction.get(ref)
     try:
         return ref.get(transaction=transaction)
     except TypeError:
+        # Compatibility for deliberately small unit-test doubles.  The real
+        # Firestore DocumentReference accepts ``transaction=`` and returns one
+        # DocumentSnapshot.  Transaction.get(ref), in contrast, returns a
+        # generator in google-cloud-firestore 2.20.x and must not be used as a
+        # snapshot.
         return ref.get()
 
 

@@ -114,7 +114,11 @@ class Collection:
 
 class Transaction:
     def get(self, ref):
-        return ref.get()
+        # Match google-cloud-firestore 2.20.x: Transaction.get() is a
+        # generator, not a DocumentSnapshot.  Production code must use
+        # DocumentReference.get(transaction=transaction) for single-document
+        # reads.
+        yield ref.get()
 
     def set(self, ref, data, merge=False):
         ref.set(data, merge=merge)
@@ -162,6 +166,25 @@ def test_bookmark_quota_counts_merges_and_rejects_oversize(monkeypatch):
         persistence_guard.write_bookmark(
             uid="u1", doc_ref=ref, patch={"responses": {"OpenAI": "x" * 100}}, db=db
         )
+
+
+def test_bookmark_delete_updates_quota_with_firestore_transaction_contract():
+    db = Database()
+    ref = db.collection("users").document("u1").collection("bookmarks").document("b1")
+    persistence_guard.write_bookmark(
+        uid="u1", doc_ref=ref, patch={"query": "Q", "responses": {"OpenAI": "A"}}, db=db
+    )
+
+    deleted = persistence_guard.delete_bookmark(uid="u1", doc_ref=ref, db=db)
+
+    usage = next(
+        data for path, data in db.data.items()
+        if path[0] == persistence_guard.USAGE_COLLECTION
+    )
+    assert deleted["query"] == "Q"
+    assert ref.path not in db.data
+    assert usage["bookmark_count"] == 0
+    assert usage["bookmark_bytes"] == 0
 
 
 def test_feedback_cooldown_and_daily_limit_are_persistent(monkeypatch):
