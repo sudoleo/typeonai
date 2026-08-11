@@ -1,15 +1,19 @@
+from __future__ import annotations
+
 import re
 import base64
 import json
 import logging
+from typing import Literal
 from firebase_admin import firestore
 from fastapi import APIRouter, Request, Body, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
 from app.core import config as cfg
 from app.core.rate_limit import limiter
 from app.core.security import verify_user_token, extract_id_token, db_firestore
 from app.services.llm.attachments import ALLOWED_ATTACHMENT_MIMES, MAX_ATTACHMENTS
-from app.services import share_snapshots
+from app.services import persistence_guard, share_snapshots
 from app.services.chat_store import (
     TURN_PAGE_SIZE,
     TURN_PAGE_SIZE_MAX,
@@ -26,6 +30,49 @@ BOOKMARK_PAGE_SIZE = 35
 BOOKMARK_PAGE_SIZE_MAX = 50
 BOOKMARK_ID_RE = re.compile(r"[A-Za-z0-9_]{1,100}")
 CHAT_ID_RE = re.compile(r"[0-9a-f]{32}")
+
+
+class BookmarkModelRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    id_token: StrictStr = Field(min_length=1, max_length=20_000)
+    question: StrictStr = Field(min_length=1, max_length=8_000)
+    response: StrictStr = Field(min_length=1, max_length=40_000)
+    modelName: Literal["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"]
+    mode: Literal["Standard", "Deep Think"]
+    bookmarkId: StrictStr | None = Field(default=None, max_length=100)
+    previousQuestion: StrictStr = Field(default="", max_length=4_000)
+    chatId: StrictStr | None = Field(default=None, max_length=32)
+    turnId: StrictStr | None = Field(default=None, max_length=32)
+    sources: list[dict] | None = Field(default=None, max_length=24)
+    attachments: list[dict] | None = Field(default=None, max_length=10)
+
+
+class BookmarkConsensusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    id_token: StrictStr | None = Field(default=None, max_length=20_000)
+    question: StrictStr = Field(min_length=1, max_length=8_000)
+    consensusText: StrictStr = Field(max_length=100_000)
+    differencesText: StrictStr = Field(max_length=50_000)
+    differencesData: dict | None = None
+    sources: list[dict] | None = Field(default=None, max_length=24)
+    resultId: StrictStr | None = Field(default=None, max_length=64)
+    consensusModel: StrictStr | None = Field(default=None, max_length=80)
+    modelLabels: dict[str, StrictStr] | None = None
+    modelResponses: dict[str, StrictStr] | None = None
+    bookmarkId: StrictStr | None = Field(default=None, max_length=100)
+    chatId: StrictStr | None = Field(default=None, max_length=32)
+    turnId: StrictStr | None = Field(default=None, max_length=32)
+    previousQuestion: StrictStr = Field(default="", max_length=4_000)
+    previousTurn: dict | None = None
+
+
+class BookmarkDeleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    id_token: StrictStr = Field(min_length=1, max_length=20_000)
+    bookmarkId: StrictStr = Field(min_length=1, max_length=100)
 
 
 def _clean_previous_question(value):
@@ -93,6 +140,52 @@ def _sanitize_model_responses(raw):
         provider: str(raw.get(provider) or "").strip()[:limit]
         for provider in share_snapshots.PROVIDER_ORDER
     }
+
+
+def _authoritative_consensus_payload(uid: str, result_id: str, chat_binding: dict | None):
+    """Materialize consensus fields from an owner-bound completed server run."""
+    if result_id:
+        pending = share_snapshots.get_pending_result(uid, result_id, db=db_firestore)
+        if pending:
+            return {
+                "question": str(pending.get("question") or ""),
+                "consensus": str(pending.get("consensus_md") or ""),
+                "differences": str(pending.get("differences_text") or ""),
+                "differences_data": pending.get("differences_data"),
+                "sources": pending.get("sources"),
+                "result_id": result_id,
+            }
+    if chat_binding:
+        try:
+            turn = _chat_store().get_turn(
+                uid, chat_binding["chat_id"], chat_binding["turn_id"]
+            )
+        except ChatNotFound:
+            turn = None
+        if turn and turn.get("status") == "completed":
+            answers = turn.get("model_answers")
+            clean_answers = {}
+            if isinstance(answers, dict):
+                clean_answers = {
+                    provider: (
+                        str(value.get("answer") or "")
+                        if isinstance(value, dict) else str(value or "")
+                    )
+                    for provider, value in answers.items()
+                }
+            return {
+                "question": str(turn.get("question") or ""),
+                "consensus": str(turn.get("consensus") or ""),
+                "differences": str(turn.get("differences") or ""),
+                "differences_data": turn.get("differences_data"),
+                "sources": turn.get("sources"),
+                "model_responses": clean_answers,
+                "result_id": str(turn.get("result_id") or ""),
+            }
+    raise HTTPException(
+        status_code=409,
+        detail="Consensus bookmarks require an owned completed run.",
+    )
 
 
 def _chat_store():
@@ -337,13 +430,14 @@ def load_bookmark_conversation(
 
 @router.post("/bookmark")
 @limiter.limit("20/minute")
-def save_bookmark(request: Request, data: dict = Body(...)):
+def save_bookmark(request: Request, payload: BookmarkModelRequest):
+    data = payload.model_dump()
     id_token     = data.get("id_token")
     question     = data.get("question")
     response_text= data.get("response")
     modelName    = data.get("modelName")
     mode         = data.get("mode")
-    sources      = data.get("sources") # <--- NEU: Quellen auslesen
+    sources      = share_snapshots.sanitize_sources(data.get("sources"))
     attachments  = sanitize_attachment_meta(data.get("attachments"))
     previous_question = _clean_previous_question(data.get("previousQuestion"))
     chat_binding = _chat_binding(data)
@@ -392,13 +486,10 @@ def save_bookmark(request: Request, data: dict = Body(...)):
             .collection("bookmarks")
             .document(doc_id)
         )
-        # speichern (merge)
-        doc_ref.set(dataToMerge, merge=True)
-
-        # **Neu:** direkt danach auslesen
-        snap = doc_ref.get()
-        bm = snap.to_dict()
-        bm["id"] = snap.id
+        bm = persistence_guard.write_bookmark(
+            uid=uid, doc_ref=doc_ref, patch=dataToMerge, db=db_firestore
+        )
+        bm["id"] = doc_id
 
         return {
             "status":  "success",
@@ -406,19 +497,19 @@ def save_bookmark(request: Request, data: dict = Body(...)):
             "bookmark": bm
         }
         
+    except persistence_guard.PersistenceLimitError as exc:
+        status = 413 if exc.code in {"bookmark_too_large", "bookmark_storage_limit"} else 429
+        raise HTTPException(status_code=status, detail=exc.message) from None
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error saving bookmark")
 
 
 @router.post("/bookmark/consensus")
 @limiter.limit("3/minute")
-def save_bookmark_consensus(request: Request, data: dict = Body(...)):
+def save_bookmark_consensus(request: Request, payload: BookmarkConsensusRequest):
+    data = payload.model_dump()
     id_token = extract_id_token(request, data)
     question = data.get("question")
-    consensusText = data.get("consensusText")
-    differencesText = data.get("differencesText")
-    differencesData = data.get("differencesData")
-    sources = data.get("sources")
     result_id = str(data.get("resultId") or "").strip()
     consensus_model = str(data.get("consensusModel") or "").strip()[:80]
     model_labels = data.get("modelLabels")
@@ -427,13 +518,24 @@ def save_bookmark_consensus(request: Request, data: dict = Body(...)):
     chat_binding = _chat_binding(data)
     model_responses = _sanitize_model_responses(data.get("modelResponses"))
 
-    if not id_token or not question or consensusText is None or differencesText is None:
+    if not id_token or not question:
         raise HTTPException(status_code=400, detail="Missing required fields.")
 
     try:
         uid = verify_user_token(id_token)
     except Exception as e:
         raise HTTPException(status_code=401, detail="Authentication failed")
+
+    authoritative = _authoritative_consensus_payload(uid, result_id, chat_binding)
+    if authoritative["question"].strip() != question.strip():
+        raise HTTPException(status_code=409, detail="Bookmark question does not match the completed run.")
+    consensusText = authoritative["consensus"][:100_000]
+    differencesText = authoritative["differences"][:50_000]
+    differencesData = authoritative.get("differences_data")
+    sources = share_snapshots.sanitize_sources(authoritative.get("sources"))
+    if authoritative.get("model_responses") is not None:
+        model_responses = _sanitize_model_responses(authoritative["model_responses"])
+    result_id = authoritative.get("result_id") or result_id
 
     doc_id = _bookmark_document_id(question, data.get("bookmarkId"))
 
@@ -474,9 +576,7 @@ def save_bookmark_consensus(request: Request, data: dict = Body(...)):
         # Ein Bookmark-Share muss spaeter serverseitig neu aufgebaut werden und
         # darf keinen alten Result-Verweis wiederverwenden.
         dataToMerge["share_result_id"] = ""
-    elif result_id and share_snapshots.pending_result_is_available(
-        uid, result_id, db=db_firestore
-    ):
+    elif result_id:
         dataToMerge["share_result_id"] = result_id
     if consensus_model:
         dataToMerge["consensus_model"] = consensus_model
@@ -494,15 +594,18 @@ def save_bookmark_consensus(request: Request, data: dict = Body(...)):
             .collection("bookmarks")
             .document(doc_id)
         )
-        doc_ref.set(dataToMerge, merge=True)
-        snap = doc_ref.get()
-        bookmark = snap.to_dict()
-        bookmark["id"] = snap.id
+        bookmark = persistence_guard.write_bookmark(
+            uid=uid, doc_ref=doc_ref, patch=dataToMerge, db=db_firestore
+        )
+        bookmark["id"] = doc_id
         return {
             "status": "success",
             "message": "Consensus and differences saved.",
             "bookmark": bookmark,
         }
+    except persistence_guard.PersistenceLimitError as exc:
+        status = 413 if exc.code in {"bookmark_too_large", "bookmark_storage_limit"} else 429
+        raise HTTPException(status_code=status, detail=exc.message) from None
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error saving consensus")
 
@@ -569,7 +672,8 @@ def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
 
 
 @router.delete("/bookmark")
-def delete_bookmark(data: dict):
+def delete_bookmark(data: BookmarkDeleteRequest):
+    data = data.model_dump()
     id_token = data.get("id_token")
     bookmark_id = data.get("bookmarkId")
     
@@ -589,9 +693,10 @@ def delete_bookmark(data: dict):
         # Read the chat binding BEFORE the delete: afterwards the bookmark is
         # the only handle on that chat, and the transcript would be stranded
         # with no way to reach or remove it.
-        snap = ref.get()
-        chat_id = str((snap.to_dict() or {}).get("chat_id") or "") if snap.exists else ""
-        ref.delete()
+        deleted = persistence_guard.delete_bookmark(
+            uid=uid, doc_ref=ref, db=db_firestore
+        )
+        chat_id = str((deleted or {}).get("chat_id") or "")
     except Exception:
         raise HTTPException(status_code=500, detail="Error deleting bookmark")
 

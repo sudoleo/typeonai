@@ -11,6 +11,8 @@ gebaut (Whitelist) – ``owner_uid``, Report-Zähler und Moderations-Flags
 verlassen den Server nie.
 """
 
+from __future__ import annotations
+
 import hashlib
 import logging
 import re
@@ -612,6 +614,17 @@ def pending_result_is_available(uid, result_id, db=None):
         return False
     expires_at = pending.get("expires_at")
     return not isinstance(expires_at, datetime) or expires_at >= _utcnow()
+
+
+def get_pending_result(uid, result_id, db=None) -> dict | None:
+    """Return one unexpired owner-bound completed browser result."""
+    if not pending_result_is_available(uid, result_id, db=db):
+        return None
+    db = db if db is not None else db_firestore
+    snap = db.collection(PENDING_COLLECTION).document(result_id).get()
+    if not snap.exists:
+        return None
+    return {"id": result_id, **(snap.to_dict() or {})}
 
 
 def consume_daily_share_quota(uid, db=None, limit=SHARE_DAILY_LIMIT):

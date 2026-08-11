@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import Literal, Optional
 from firebase_admin import auth
-from fastapi import APIRouter, Request, Body, HTTPException
+from fastapi import APIRouter, Request, Body, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.security import (
@@ -430,17 +430,25 @@ def admin_update_publisher_config(
 
 
 @router.get("/api/admin/watches")
-def admin_list_watches(request: Request):
+def admin_list_watches(
+    request: Request,
+    cursor: str = Query(default="", max_length=128),
+    limit: int = Query(default=100, ge=1, le=200),
+):
     _require_admin(request, {})
     try:
-        watches = watch_service.list_watches_for_admin()
+        page = watch_service.list_watches_for_admin_page(
+            cursor=cursor, max_items=limit
+        )
     except Exception:
         logging.exception("admin_list_watches failed")
         raise HTTPException(status_code=500, detail="Failed to load watches")
     return {
         "status": "success",
         "smtp_configured": mailer.is_configured(),
-        "watches": watches,
+        "watches": page["items"],
+        "next_cursor": page["next_cursor"],
+        "has_more": page["has_more"],
     }
 
 

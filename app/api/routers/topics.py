@@ -26,6 +26,7 @@ from app.services.public_markdown import (
 
 
 router = APIRouter()
+_FAVICON_CONCURRENCY = asyncio.Semaphore(8)
 templates = Jinja2Templates(directory="templates")
 
 _STATUS_BY_CODE = {
@@ -241,8 +242,7 @@ async def topics_hub(request: Request):
             } for index, entry in enumerate(entries, start=1)],
         },
     }
-    response = templates.TemplateResponse("topics.html", {
-        "request": request,
+    response = templates.TemplateResponse(request=request, name="topics.html", context={
         "entries": entries,
         "categories": categories,
         "jsonld": json.dumps(jsonld, ensure_ascii=False).replace("</", "<\\/"),
@@ -357,8 +357,7 @@ async def topic_page(
         "citation": list(dict.fromkeys(citations))[:30],
         "isAccessibleForFree": True,
     }
-    response = templates.TemplateResponse("topic.html", {
-        "request": request,
+    response = templates.TemplateResponse(request=request, name="topic.html", context={
         "topic": public_topic,
         "selected": selected,
         "runs": runs_desc,
@@ -390,9 +389,20 @@ _GLOBE_SVG = (
 
 
 @router.get("/api/topics/favicon")
-@limiter.limit("300/minute")
+@limiter.limit("30/minute")
 async def topic_favicon(request: Request, d: str = Query(default="", max_length=253)):
-    data, content_type = await asyncio.to_thread(favicons.get_favicon, d)
+    acquired = False
+    try:
+        await asyncio.wait_for(_FAVICON_CONCURRENCY.acquire(), timeout=0.02)
+        acquired = True
+        data, content_type = await asyncio.get_running_loop().run_in_executor(
+            favicons.EXECUTOR, favicons.get_favicon, d
+        )
+    except asyncio.TimeoutError:
+        data, content_type = None, ""
+    finally:
+        if acquired:
+            _FAVICON_CONCURRENCY.release()
     if not data:
         return Response(
             content=_GLOBE_SVG,

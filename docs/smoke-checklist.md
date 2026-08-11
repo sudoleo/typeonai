@@ -7,8 +7,9 @@ Races ab (Lauf: siehe
 `tests/e2e/README.md`). Die übrigen Punkte weiterhin manuell durchgehen
 (oder zumindest die vom Cluster betroffenen), bevor committet wird. Backend
 bleibt durch `venv/Scripts/python -m pytest tests/` abgesichert
-(Baseline 2026-08-09: regulär 1003 passed; Emulator-E2E 39 passed. Sichere
-Befehle: `docs/testing.md`).
+(Baseline 2026-08-11: regulär 1068 passed; Phase-4-Browser-Races 8 passed;
+Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
+`docs/testing.md`).
 
 ## Browser-Konsole
 - [ ] Beim Laden **keine** JS-Fehler in der Konsole (besonders: keine
@@ -418,6 +419,10 @@ Befehle: `docs/testing.md`).
       lassen sich ohne erneuten Consensus-Lauf erstellen (während der kurzen
       Vorbereitung zeigt der Dialog einen deaktivierten Ladezustand).
 - [ ] Model insights über Help → FAQ öffnen/schließen; im Thread bleibt es verborgen.
+- [ ] Nach einem echten abgeschlossenen Consensus lässt sich genau dessen
+      Consensus-Bookmark speichern; ein frei erfundenes oder fremdes
+      `result_id` wird abgewiesen. Wiederholtes Klicken auf denselben
+      Best-answer-Vote erhöht Model Pulse nicht erneut.
 
 ## Demo & Sonstiges
 - [ ] „Demo"-Query startet den Demo-Flow (demo.js Integration intakt).

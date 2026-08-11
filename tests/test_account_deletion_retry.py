@@ -78,10 +78,16 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
         "pending": 0,
         "watches": 0,
         "watch_indexes": 0,
+        "guards": 0,
         "follows": 0,
         "auth": 0,
     }
 
+    monkeypatch.setattr(
+        service,
+        "_delete_persistence_guards",
+        lambda uid, email: calls.__setitem__("guards", calls["guards"] + 1),
+    )
     monkeypatch.setattr(
         service,
         "_delete_api_access",
@@ -153,6 +159,8 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
     assert calls["chats"] == 1
     assert calls["watches"] == 1
     assert calls["watch_indexes"] == 1
+    assert calls["guards"] == 1
+    assert calls["follows"] == 1
     assert calls["auth"] == 1
     job = db.collection("account_deletion_jobs").document("owner").data
     assert job["status"] == "completed"

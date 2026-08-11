@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -13,6 +14,7 @@ from firebase_admin import auth
 import app.core.config as cfg
 from app.core import security
 from app.core.background_tasks import task_succeeded
+from app.core.observability import correlation_scope, record_metric
 from app.api.routers.pages import SITE_URL
 from app.services import (
     mailer, opinion_map, share_snapshots, telegram_watch, watch_brief,
@@ -636,8 +638,23 @@ async def watch_scheduler_loop():
             # Clear before the tick so a wake-up arriving during a long run is
             # retained and causes another immediate scan afterwards.
             wake_event.clear()
-            watches_ran = await run_watch_tick()
-            briefs_sent = await run_brief_tick()
+            started = time.monotonic()
+            with correlation_scope(prefix="watch-tick"):
+                try:
+                    watches_ran = await run_watch_tick()
+                    briefs_sent = await run_brief_tick()
+                except Exception:
+                    record_metric(
+                        "scheduler", "consensus-watch",
+                        duration_ms=(time.monotonic() - started) * 1000,
+                        outcome="failure",
+                    )
+                    raise
+                record_metric(
+                    "scheduler", "consensus-watch",
+                    duration_ms=(time.monotonic() - started) * 1000,
+                    processed=int(watches_ran or 0) + int(briefs_sent or 0),
+                )
             task_succeeded(
                 "consensus-watch-scheduler",
                 watches_ran=watches_ran,

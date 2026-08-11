@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from urllib.parse import urlsplit
 
 from app.core.background_tasks import task_succeeded
+from app.core.observability import correlation_scope, record_metric
 from app.services import mailer, topics, watch_scheduler
 from app.services.llm.mock_llm import mock_llm_enabled
 
@@ -266,6 +268,21 @@ async def run_due_topic_tick() -> int:
 
 async def topic_scheduler_loop() -> None:
     while True:
-        ran = await run_due_topic_tick()
+        started = time.monotonic()
+        with correlation_scope(prefix="topic-tick"):
+            try:
+                ran = await run_due_topic_tick()
+            except Exception:
+                record_metric(
+                    "scheduler", "topics",
+                    duration_ms=(time.monotonic() - started) * 1000,
+                    outcome="failure",
+                )
+                raise
+            record_metric(
+                "scheduler", "topics",
+                duration_ms=(time.monotonic() - started) * 1000,
+                processed=ran,
+            )
         task_succeeded("topic-scheduler", runs=ran)
         await asyncio.sleep(TOPIC_SCHEDULER_INTERVAL_SECONDS)

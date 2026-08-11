@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import os
 import logging
-from datetime import datetime, timedelta
+import re
+from datetime import datetime, timezone
 
 import openai
 from mistralai import Mistral
@@ -12,8 +15,9 @@ import requests
 from app.core.rate_limit import limiter
 from app.core.security import verify_user_token, extract_id_token, db_firestore
 from firebase_admin import firestore
-from app.core.state import last_feedback_time
 import app.core.config as cfg
+from app.services import persistence_guard
+from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 from app.services.llm.provider_runtime import (
     PROVIDER_KEY_CHECK_TIMEOUT_SECONDS,
     managed_provider_resource,
@@ -27,6 +31,41 @@ from fastapi.templating import Jinja2Templates
 templates = Jinja2Templates(directory="templates")
 
 router = APIRouter()
+
+
+class FeedbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    id_token: StrictStr | None = Field(default=None, max_length=20_000)
+    message: StrictStr = Field(min_length=1, max_length=4_000)
+    email: StrictStr | None = Field(default=None, max_length=254)
+
+    @field_validator("message")
+    @classmethod
+    def clean_message(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Feedback message must not be empty.")
+        return cleaned
+
+    @field_validator("email")
+    @classmethod
+    def clean_email(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        cleaned = value.strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]{2,}", cleaned):
+            raise ValueError("Enter a valid e-mail address.")
+        return cleaned
+
+
+class VoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    id_token: StrictStr | None = Field(default=None, max_length=20_000)
+    model: StrictStr = Field(min_length=1, max_length=40)
+    vote_type: StrictStr = Field(min_length=1, max_length=40)
+    result_id: StrictStr = Field(min_length=16, max_length=64)
 
 SITE_URL = "https://www.consens.io"
 SITEMAP_URLS = (
@@ -92,46 +131,46 @@ def sitemap_pages_xml():
 
 @router.get("/", response_class=HTMLResponse)
 def landing(request: Request):
-    return templates.TemplateResponse("landing.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="landing.html")
 
 @router.get("/privacy", response_class=HTMLResponse)
 def privacy(req: Request):
-    response = templates.TemplateResponse("privacy.html", {"request": req})
+    response = templates.TemplateResponse(request=req, name="privacy.html")
     response.headers["X-Robots-Tag"] = "noindex, noarchive"
     return response
 
 @router.get("/imprint", response_class=HTMLResponse)
 def imprint(req: Request):
-    response = templates.TemplateResponse("imprint.html", {"request": req})
+    response = templates.TemplateResponse(request=req, name="imprint.html")
     response.headers["X-Robots-Tag"] = "noindex, noarchive"
     return response
 
 @router.get("/terms", response_class=HTMLResponse)
 def terms(req: Request):
-    response = templates.TemplateResponse("terms.html", {"request": req})
+    response = templates.TemplateResponse(request=req, name="terms.html")
     response.headers["X-Robots-Tag"] = "noindex, noarchive"
     return response
 
 @router.get("/about", response_class=HTMLResponse)
 def about(req: Request):
-    return templates.TemplateResponse("about.html", {"request": req})
+    return templates.TemplateResponse(request=req, name="about.html")
 
 @router.get("/ai-model-comparison", response_class=HTMLResponse)
 def ai_model_comparison(req: Request):
-    return templates.TemplateResponse("ai-model-comparison.html", {"request": req})
+    return templates.TemplateResponse(request=req, name="ai-model-comparison.html")
 
 @router.get("/consensus-engine", response_class=HTMLResponse)
 def consensus_engine_page(req: Request):
-    return templates.TemplateResponse("consensus-engine.html", {"request": req})
+    return templates.TemplateResponse(request=req, name="consensus-engine.html")
 
 @router.get("/benchmark", response_class=HTMLResponse)
 def benchmark(req: Request):
-    return templates.TemplateResponse("benchmark.html", {"request": req})
+    return templates.TemplateResponse(request=req, name="benchmark.html")
 
 
 @router.get("/model-pulse", response_class=HTMLResponse)
 def model_pulse(req: Request):
-    return templates.TemplateResponse("model-pulse.html", {"request": req})
+    return templates.TemplateResponse(request=req, name="model-pulse.html")
 
 
 def _leaderboard_family(model: str) -> str:
@@ -219,8 +258,7 @@ def read_root(request: Request):
         for model in cfg.ALLOWED_CONSENSUS_MODELS
     ]
 
-    response = templates.TemplateResponse("index.html", {
-        "request": request, 
+    response = templates.TemplateResponse(request=request, name="index.html", context={
         "free_limit": cfg.get_consensus_run_limit(False),
         "limits": cfg.get_limits_config(),
         "models": models,
@@ -248,8 +286,7 @@ def admin_page(request: Request):
         "firebase_messaging_sender_id": os.environ.get("FIREBASE_MESSAGING_SENDER_ID"),
         "firebase_app_id": os.environ.get("FIREBASE_APP_ID")
     }
-    return templates.TemplateResponse("admin.html", {
-        "request": request,
+    return templates.TemplateResponse(request=request, name="admin.html", context={
         **firebase_config
     })
 
@@ -263,8 +300,7 @@ def admin_benchmark_page(request: Request):
         "firebase_messaging_sender_id": os.environ.get("FIREBASE_MESSAGING_SENDER_ID"),
         "firebase_app_id": os.environ.get("FIREBASE_APP_ID")
     }
-    return templates.TemplateResponse("admin_benchmark.html", {
-        "request": request,
+    return templates.TemplateResponse(request=request, name="admin_benchmark.html", context={
         **firebase_config
     })
 
@@ -275,7 +311,8 @@ def admin_topics_page():
 
 @router.post("/feedback")
 @limiter.limit("3/minute")
-def submit_feedback(request: Request, data: dict = Body(...)):
+def submit_feedback(request: Request, payload: FeedbackRequest):
+    data = payload.model_dump()
     message = data.get("message")
     email = data.get("email")
     id_token = extract_id_token(request, data)
@@ -288,15 +325,7 @@ def submit_feedback(request: Request, data: dict = Body(...)):
     except Exception as e:
         raise HTTPException(status_code=401, detail="Authentication failed")
     
-    now = datetime.utcnow()
-    last_time = last_feedback_time.get(uid)
-    if last_time and now - last_time < timedelta(seconds=30):
-        raise HTTPException(status_code=429, detail="Please wait a few seconds before sending feedback again.")
-    
-    last_feedback_time[uid] = now
-
-    if not message or message.strip() == "":
-        raise HTTPException(status_code=400, detail="Feedback message must not be empty.")
+    now = datetime.now(timezone.utc)
 
     # Datenminimierung: keine IP-Adresse speichern, Spam-Schutz läuft über
     # Rate-Limit und das 30-Sekunden-Fenster pro UID.
@@ -308,7 +337,11 @@ def submit_feedback(request: Request, data: dict = Body(...)):
     }
 
     try:
-        db_firestore.collection("feedback").add(feedback_data)
+        persistence_guard.create_feedback(
+            uid=uid, feedback=feedback_data, db=db_firestore, now=now
+        )
+    except persistence_guard.PersistenceLimitError as exc:
+        raise HTTPException(status_code=429, detail=exc.message) from None
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error when saving the feedback.")
     
@@ -318,10 +351,12 @@ ALLOWED_VOTE_TYPES = {"BestModel"}
 
 @router.post("/vote")
 @limiter.limit("3/minute")
-def record_vote(request: Request, data: dict = Body(...)):
+def record_vote(request: Request, payload: VoteRequest):
+    data = payload.model_dump()
     id_token = extract_id_token(request, data)
     model = data.get("model")
     vote_type = data.get("vote_type")
+    result_id = data.get("result_id")
 
     if not id_token or not model or not vote_type:
         raise HTTPException(status_code=400, detail="Missing required fields: id_token, model or vote_type.")
@@ -338,9 +373,20 @@ def record_vote(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=401, detail="Authentication failed")
 
     try:
-        doc_ref = db_firestore.collection("leaderboard").document(model)
-        doc_ref.set({ vote_type: firestore.Increment(1) }, merge=True)
-        return {"status": "success", "message": f"{vote_type} vote recorded for {model}"}
+        created = persistence_guard.record_model_vote(
+            uid=uid,
+            result_id=result_id,
+            model=model,
+            vote_type=vote_type,
+            db=db_firestore,
+        )
+        return {
+            "status": "success",
+            "recorded": created,
+            "message": f"{vote_type} vote recorded for {model}" if created else "Vote already recorded",
+        }
+    except persistence_guard.PersistenceLimitError as exc:
+        raise HTTPException(status_code=409, detail=exc.message) from None
     except Exception as e:
         logging.exception("vote update failed")
         raise HTTPException(status_code=500, detail="Internal error")

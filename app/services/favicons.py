@@ -17,6 +17,8 @@ from __future__ import annotations
 import re
 import threading
 import time
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
@@ -24,14 +26,16 @@ _HOST_RE = re.compile(
     r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
 )
 _SERVICE = "https://www.google.com/s2/favicons"
-_TIMEOUT = 4
+_TIMEOUT = 2
 _MAX_BYTES = 100_000
 _OK_TTL = 60 * 60 * 24 * 7      # 7 days for a resolved icon
-_MISS_TTL = 60 * 60            # 1 hour before retrying a failure
-_MAX_ENTRIES = 4000
+_MISS_TTL = 60 * 60 * 24       # negative cache prevents retry amplification
+_MAX_ENTRIES = 2000
 
-_CACHE: dict[str, tuple[float, bytes | None, str]] = {}
+_CACHE: OrderedDict[str, tuple[float, bytes | None, str]] = OrderedDict()
+_INFLIGHT: dict[str, threading.Event] = {}
 _LOCK = threading.Lock()
+EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="favicon-proxy")
 
 
 def normalize_host(value) -> str:
@@ -71,11 +75,32 @@ def get_favicon(value) -> tuple[bytes | None, str]:
     with _LOCK:
         cached = _CACHE.get(host)
         if cached and cached[0] > now:
+            _CACHE.move_to_end(host)
             return cached[1], cached[2]
+        if cached:
+            _CACHE.pop(host, None)
+        pending = _INFLIGHT.get(host)
+        if pending is None:
+            pending = threading.Event()
+            _INFLIGHT[host] = pending
+            leader = True
+        else:
+            leader = False
+    if not leader:
+        pending.wait(timeout=_TIMEOUT + 0.5)
+        with _LOCK:
+            cached = _CACHE.get(host)
+            if cached and cached[0] > time.time():
+                _CACHE.move_to_end(host)
+                return cached[1], cached[2]
+        return None, ""
     data, content_type = _fetch(host)
     ttl = _OK_TTL if data else _MISS_TTL
     with _LOCK:
-        if len(_CACHE) >= _MAX_ENTRIES:
-            _CACHE.clear()
         _CACHE[host] = (now + ttl, data, content_type)
+        _CACHE.move_to_end(host)
+        while len(_CACHE) > _MAX_ENTRIES:
+            _CACHE.popitem(last=False)
+        _INFLIGHT.pop(host, None)
+        pending.set()
     return data, content_type

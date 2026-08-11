@@ -1201,14 +1201,14 @@ async function afterGoogleLogin(user) {
   location.replace("/app");
 }
 
-async function recordModelVote(model, type) {
+async function recordModelVote(model, type, resultId = window.lastShareResultId) {
   // Prüfe, ob der Nutzer eingeloggt ist.
   if (!auth.currentUser) {
     return;
   }
   
   const id_token = await auth.currentUser?.getIdToken(/* forceRefresh= */ false);
-  if (!id_token) {
+  if (!id_token || !resultId) {
     console.error("No id_token available for voting.");
     return;
   }
@@ -1220,7 +1220,8 @@ async function recordModelVote(model, type) {
       body: JSON.stringify({
         id_token: id_token,
         model: model,
-        vote_type: type
+        vote_type: type,
+        result_id: resultId
       })
     });
     const data = await response.json();

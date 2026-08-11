@@ -16,7 +16,7 @@ from datetime import datetime
 from firebase_admin import firestore
 
 from app.core.security import db_firestore
-from app.services import share_snapshots
+from app.services import follow_challenges, share_snapshots
 from app.services.watch_service import (
     WatchError,
     get_public_watch_meta,
@@ -75,10 +75,13 @@ def request_follow(share_id: str, email, db=None) -> dict:
     doc = db.collection(FOLLOWERS_COLLECTION).document(follower_id(share_id, email)).get()
     if doc.exists:
         return {"email": email, "question": str(share.get("question") or ""), "token": ""}
+    may_send = follow_challenges.claim_confirmation_send(
+        resource_type="watch", resource_id=share_id, email=email, db=db
+    )
     return {
         "email": email,
         "question": str(share.get("question") or ""),
-        "token": make_confirm_token(share_id, email),
+        "token": make_confirm_token(share_id, email) if may_send else "",
     }
 
 

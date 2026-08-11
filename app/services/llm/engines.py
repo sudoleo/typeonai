@@ -10,6 +10,7 @@ import google.auth
 from google.auth.transport.requests import Request as GoogleAuthRequest
 
 import app.core.config as cfg
+from app.core.observability import safe_exception
 from app.core.config import (
     REASONING_EFFORT_FOR_DEEP,
     DEEP_THINK_PROMPT,
@@ -47,8 +48,8 @@ logger = logging.getLogger(__name__)
 
 
 def _error(provider: str, error: Exception | str):
-    error_text = str(error)
-    logger.error("Provider request failed for %s: %s", provider, error_text)
+    category = safe_exception(error) if isinstance(error, BaseException) else "provider_error"
+    logger.error("Provider request failed provider=%s category=%s", provider, category)
     return {
         "text": "",
         "sources": [],

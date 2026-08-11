@@ -7,7 +7,9 @@ Die Abhängigkeiten sind nach Zweck getrennt:
 - `requirements.txt`: produktive Laufzeit,
 - `requirements-test.txt`: reguläre Unit-/Integrationstests,
 - `requirements-e2e.txt`: zusätzlich Python Playwright und das gepinnte
-  `greenlet`.
+  `greenlet`,
+- `benchmark/requirements-benchmark.txt`: ausschließlich Offline-Benchmark-
+  Dataset-/Parquet-Abhängigkeiten (`huggingface-hub`, `pandas`, `pyarrow`).
 
 Installation der regulären Testumgebung:
 
@@ -47,6 +49,17 @@ Sie prüfen Threadpool-Parallelität für blockierende Router, zentrale effektiv
 Provider-Budgets ohne SDK-Retries, das Schließen von Streams bei Disconnect und
 Supervisor-Restart/Health/Alerting. Der Retention-Paginationstest liegt in
 `tests/test_share_feature.py`.
+
+Die Phase-5-Betriebs- und Abuse-Verträge sind gebündelt prüfbar:
+
+```powershell
+venv\Scripts\python.exe -m pytest tests\test_phase5_operations.py tests\test_bookmarks.py tests\test_watch_feature.py tests\test_account_deletion_retry.py -q
+```
+
+Sie decken persistente Bookmark-/Feedback-Quoten, run-gebundene genau-einmalige
+Votes, Double-Opt-in-Budgets, Favicon-Singleflight/LRU, Correlation/Metriken,
+indexierte Fälligkeitsabfragen, Admin-Pagination, Account-Cleanup und die
+Frontend-`result_id`-Bindung ab.
 
 Reine Quelltextverträge tragen den Marker `source_contract`. Sie laufen in der
 regulären Suite mit, gelten aber nicht als Ersatz für Browserverhalten. Eine

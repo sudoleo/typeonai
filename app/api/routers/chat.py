@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from google.api_core.exceptions import Aborted as FirestoreAborted
 
 from app.core.rate_limit import limiter
+from app.core.observability import record_metric
 from app.core.security import (
     TierStatusUnavailable,
     db_firestore,
@@ -798,8 +799,52 @@ def _run_ask(provider: AskProvider, *, stream_requested, question, key,
         args = (question, key)
 
     if stream_requested:
-        return streaming_model_response(provider.stream_fn(*args, **kwargs), provider.label, extras)
-    return source_response(provider.query_fn(*args, **kwargs), **extras)
+        source = provider.stream_fn(*args, **kwargs)
+
+        def observed_stream():
+            started = time.monotonic()
+            outcome = "success"
+            try:
+                for event in source:
+                    result = event.get("result") if isinstance(event, dict) else None
+                    if isinstance(result, dict) and result.get("error"):
+                        outcome = "failure"
+                    yield event
+            except TimeoutError:
+                outcome = "timeout"
+                raise
+            except Exception:
+                outcome = "failure"
+                raise
+            finally:
+                record_metric(
+                    "provider",
+                    provider.label,
+                    duration_ms=(time.monotonic() - started) * 1000,
+                    outcome=outcome,
+                )
+
+        return streaming_model_response(observed_stream(), provider.label, extras)
+    started = time.monotonic()
+    outcome = "success"
+    try:
+        result = provider.query_fn(*args, **kwargs)
+        if isinstance(result, dict) and result.get("error"):
+            outcome = "failure"
+        return source_response(result, **extras)
+    except TimeoutError:
+        outcome = "timeout"
+        raise
+    except Exception:
+        outcome = "failure"
+        raise
+    finally:
+        record_metric(
+            "provider",
+            provider.label,
+            duration_ms=(time.monotonic() - started) * 1000,
+            outcome=outcome,
+        )
 
 
 def handle_ask(provider: AskProvider, request: Request, data: dict):

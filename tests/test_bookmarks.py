@@ -159,9 +159,16 @@ def test_consensus_save_returns_complete_merged_bookmark():
         patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
         patch.object(bookmarks_router, "db_firestore", fake_db),
         patch.object(
-            bookmarks_router.share_snapshots,
-            "pending_result_is_available",
-            return_value=True,
+            bookmarks_router,
+            "_authoritative_consensus_payload",
+            return_value={
+                "question": "Why?",
+                "consensus": "Merged consensus",
+                "differences": "Merged differences",
+                "differences_data": None,
+                "sources": [],
+                "result_id": "N" * 16,
+            },
         ),
     ):
         response = TestClient(app).post(
@@ -205,9 +212,16 @@ def test_followup_bookmark_keeps_complete_previous_turn_for_restore():
         patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
         patch.object(bookmarks_router, "db_firestore", fake_db),
         patch.object(
-            bookmarks_router.share_snapshots,
-            "pending_result_is_available",
-            return_value=True,
+            bookmarks_router,
+            "_authoritative_consensus_payload",
+            return_value={
+                "question": current,
+                "consensus": "Follow-up consensus",
+                "differences": "No material differences",
+                "differences_data": None,
+                "sources": [],
+                "result_id": "",
+            },
         ),
     ):
         response = TestClient(app).post(
@@ -265,6 +279,19 @@ def test_followup_consensus_updates_one_stable_chat_bookmark():
     with (
         patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
         patch.object(bookmarks_router, "db_firestore", fake_db),
+        patch.object(
+            bookmarks_router,
+            "_authoritative_consensus_payload",
+            return_value={
+                "question": "Second question",
+                "consensus": "Second consensus",
+                "differences": "Second differences",
+                "differences_data": None,
+                "sources": [],
+                "model_responses": {"OpenAI": "new answer", "Gemini": "other answer"},
+                "result_id": "",
+            },
+        ),
     ):
         response = TestClient(app).post(
             "/bookmark/consensus",
@@ -317,6 +344,22 @@ def test_bookmark_name_stays_the_first_question_of_the_conversation():
         patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
         patch.object(bookmarks_router, "db_firestore", fake_db),
         patch.object(bookmarks_router, "_chat_store", return_value=FakeChatStore()),
+        patch.object(
+            bookmarks_router,
+            "_authoritative_consensus_payload",
+            side_effect=[
+                {
+                    "question": "First question", "consensus": "First consensus",
+                    "differences": "First differences", "differences_data": None,
+                    "sources": [], "result_id": "",
+                },
+                {
+                    "question": "Second question", "consensus": "Second consensus",
+                    "differences": "Second differences", "differences_data": None,
+                    "sources": [], "result_id": "",
+                },
+            ],
+        ),
     ):
         client = TestClient(app)
         opening = client.post(
@@ -360,7 +403,7 @@ def test_a_legacy_bookmark_without_a_title_falls_back_to_its_question():
     assert meta["title"] == "Only question"
 
 
-def test_a_followup_without_a_chat_never_renames_its_bookmark():
+def test_a_consensus_bookmark_without_a_completed_run_is_rejected():
     bookmark_id = "legacy_followup"
     bookmark_ref = FakeBookmarkRef(
         bookmark_id, {"query": "First", "title": "First", "responses": {}}
@@ -374,11 +417,6 @@ def test_a_followup_without_a_chat_never_renames_its_bookmark():
     with (
         patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
         patch.object(bookmarks_router, "db_firestore", fake_db),
-        patch.object(
-            bookmarks_router.share_snapshots,
-            "pending_result_is_available",
-            return_value=True,
-        ),
     ):
         response = TestClient(app).post(
             "/bookmark/consensus",
@@ -392,9 +430,7 @@ def test_a_followup_without_a_chat_never_renames_its_bookmark():
             },
         )
 
-    assert response.status_code == 200
-    assert response.json()["bookmark"]["title"] == "First"
-    assert response.json()["bookmark"]["query"] == "Second"
+    assert response.status_code == 409
 
 
 def test_chat_bookmark_conversation_returns_complete_owner_bound_turns():

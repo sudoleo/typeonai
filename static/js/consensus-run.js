@@ -1182,7 +1182,7 @@
           (data.differences_data && data.differences_data.best_model) ||
           parseBestModel(data.differences);
         if (!completedReplay && bestModelFromConsensus) {
-          window.recordModelVote(bestModelFromConsensus, "BestModel");
+          window.recordModelVote(bestModelFromConsensus, "BestModel", data.result_id);
         }
       } else {
         if (window.resetCredibilityFrame) {

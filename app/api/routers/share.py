@@ -350,8 +350,9 @@ def report_share(request: Request, share_id: str, data: dict = Body(default={}))
 
 def _unavailable_response(request, status_code, heading, message):
     response = templates.TemplateResponse(
-        "share_unavailable.html",
-        {"request": request, "heading": heading, "message": message},
+        request=request,
+        name="share_unavailable.html",
+        context={"heading": heading, "message": message},
         status_code=status_code,
     )
     response.headers["X-Robots-Tag"] = "noindex, noarchive"
@@ -432,8 +433,7 @@ def questions_hub(request: Request):
     }
     jsonld_html = json.dumps(jsonld, ensure_ascii=False).replace("</", "<\\/")
 
-    response = templates.TemplateResponse("questions.html", {
-        "request": request,
+    response = templates.TemplateResponse(request=request, name="questions.html", context={
         "entries": entries,
         "total_count": len(entries),
         "watch_count": watch_count,
@@ -779,8 +779,7 @@ def share_page(request: Request, slug_id: str):
     # "</" escapen, damit Snapshot-Inhalte das <script>-Element nie schließen können.
     jsonld_html = json.dumps(jsonld, ensure_ascii=False).replace("</", "<\\/")
 
-    response = templates.TemplateResponse("share.html", {
-        "request": request,
+    response = templates.TemplateResponse(request=request, name="share.html", context={
         "share_id": share_id,
         "is_private": is_private,
         "question": payload["question"],

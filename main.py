@@ -19,6 +19,12 @@ if os.environ.get("E2E_TEST_MODE") != "1":
     os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", "gen-lang-client-0234219247-53b2b1c0e355.json")
 logging.basicConfig(level=logging.INFO)
 
+from app.core.observability import (
+    CorrelationMiddleware,
+    configure_logging,
+    metrics_snapshot,
+)
+configure_logging()
 from app.core.security import CustomSecurityMiddleware, db_firestore
 from app.core.background_tasks import (
     mark_task_disabled,
@@ -176,9 +182,15 @@ def maintenance_health():
         "tasks": tasks,
     }
 
+
+@app.get("/health/metrics", include_in_schema=False)
+def operational_metrics():
+    return {"status": "ok", "metrics": metrics_snapshot()}
+
 # Add Custom Security Middleware
 app.add_middleware(CustomSecurityMiddleware)
 app.add_middleware(RequestBodyLimitMiddleware)
+app.add_middleware(CorrelationMiddleware)
 
 # Add Rate Limiter state
 app.state.limiter = limiter

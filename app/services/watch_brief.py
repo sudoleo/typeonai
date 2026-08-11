@@ -14,6 +14,7 @@ import hmac
 import json
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.core.security import db_firestore
 from app.services import watch_service
@@ -154,16 +155,30 @@ def update_brief(uid: str, changes: dict, db=None) -> dict:
 def list_due_brief_uids(*, now=None, db=None, max_items=200) -> list[str]:
     db = db if db is not None else db_firestore
     now = now or utcnow()
-    due = []
-    for doc in watch_service._where_equal(
-        db.collection(BRIEFS_COLLECTION), "enabled", True
-    ).stream():
-        data = doc.to_dict() or {}
-        if isinstance(data.get("next_send_at"), datetime) and data["next_send_at"] <= now:
-            due.append(doc.id)
-        if len(due) >= max_items:
-            break
-    return due
+    collection = db.collection(BRIEFS_COLLECTION)
+    try:
+        query = (
+            collection
+            .where(filter=FieldFilter("enabled", "==", True))
+            .where(filter=FieldFilter("next_send_at", "<=", now))
+        )
+    except TypeError:
+        query = collection.where("enabled", "==", True)
+        if not hasattr(query, "where"):
+            docs = [
+                doc for doc in query.stream()
+                if isinstance((doc.to_dict() or {}).get("next_send_at"), datetime)
+                and (doc.to_dict() or {})["next_send_at"] <= now
+            ]
+            docs.sort(key=lambda doc: (doc.to_dict() or {})["next_send_at"])
+            return [doc.id for doc in docs[:max_items]]
+        query = query.where("next_send_at", "<=", now)
+    if not hasattr(query, "order_by"):
+        docs = list(query.stream())
+        docs.sort(key=lambda doc: (doc.to_dict() or {})["next_send_at"])
+        return [doc.id for doc in docs[:max_items]]
+    query = query.order_by("next_send_at").limit(max(1, min(500, int(max_items))))
+    return [doc.id for doc in query.stream()]
 
 
 def _claim_in_transaction(tx, ref, now: datetime):

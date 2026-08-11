@@ -394,7 +394,7 @@ class ConsensusRetryTests(unittest.TestCase):
 
         events, call_count = self._run(fake_engine)
         self.assertEqual(call_count, 2)
-        self.assertEqual(events[-1]["text"], "Consensus error: 503 - UNAVAILABLE")
+        self.assertEqual(events[-1]["text"], "Consensus error: provider request failed.")
         self.assertTrue(events[-1]["error"])
 
     def test_empty_stream_counts_as_failure(self):

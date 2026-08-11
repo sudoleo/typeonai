@@ -3,6 +3,8 @@
 # Render-Image bleiben unveraendert. Lokal installieren mit:
 #   pip install -r benchmark/requirements-benchmark.txt
 #
-# huggingface-hub und pandas sind bereits in der Haupt-requirements.txt vorhanden;
-# fuer das Lesen der MMLU-Pro-Parquets fehlt nur ein Parquet-Engine:
+# Benchmark-Dataset-Download und Parquet-Auswertung bleiben vollstaendig aus
+# dem Produktions-Image heraus:
+huggingface-hub==0.29.1
+pandas==2.3.3
 pyarrow==21.0.0

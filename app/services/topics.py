@@ -15,7 +15,9 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlsplit
 
 import app.core.config as cfg
+from google.cloud.firestore_v1.base_query import FieldFilter
 from app.core.security import db_firestore
+from app.services import follow_challenges
 from app.services.watch_service import WatchError, parse_token_payload, sign_token_payload
 
 
@@ -779,15 +781,30 @@ def get_run(topic_id: str, run_id: str, *, db=None) -> dict | None:
 def list_due_topic_ids(*, now=None, db=None, max_items=50) -> list[str]:
     db = db if db is not None else db_firestore
     now = now or utcnow()
-    due = []
-    for doc in db.collection(TOPICS_COLLECTION).where("status", "==", "active").stream():
-        data = doc.to_dict() or {}
-        scheduled = data.get("next_run_at")
-        if isinstance(scheduled, datetime) and scheduled <= now:
-            due.append(doc.id)
-        if len(due) >= max_items:
-            break
-    return due
+    collection = db.collection(TOPICS_COLLECTION)
+    try:
+        query = (
+            collection
+            .where(filter=FieldFilter("status", "==", "active"))
+            .where(filter=FieldFilter("next_run_at", "<=", now))
+        )
+    except TypeError:
+        query = collection.where("status", "==", "active")
+        if not hasattr(query, "where"):
+            docs = [
+                doc for doc in query.stream()
+                if isinstance((doc.to_dict() or {}).get("next_run_at"), datetime)
+                and (doc.to_dict() or {})["next_run_at"] <= now
+            ]
+            docs.sort(key=lambda doc: (doc.to_dict() or {})["next_run_at"])
+            return [doc.id for doc in docs[:max_items]]
+        query = query.where("next_run_at", "<=", now)
+    if not hasattr(query, "order_by"):
+        docs = list(query.stream())
+        docs.sort(key=lambda doc: (doc.to_dict() or {})["next_run_at"])
+        return [doc.id for doc in docs[:max_items]]
+    query = query.order_by("next_run_at").limit(max(1, min(200, int(max_items))))
+    return [doc.id for doc in query.stream()]
 
 
 def _claim_topic_transaction(transaction, ref, now: datetime, *, force: bool):
@@ -998,11 +1015,14 @@ def request_follow(topic_id: str, email, *, db=None) -> dict:
     topic = _followable_topic(topic_id, db)
     doc_id = follower_id(topic_id, email)
     exists = db.collection(FOLLOWERS_COLLECTION).document(doc_id).get().exists
+    may_send = False if exists else follow_challenges.claim_confirmation_send(
+        resource_type="topic", resource_id=topic_id, email=email, db=db
+    )
     return {
         "email": email,
         "title": topic["title"],
         "slug": topic["slug"],
-        "token": "" if exists else make_confirm_token(topic_id, email),
+        "token": make_confirm_token(topic_id, email) if may_send else "",
     }
 
 

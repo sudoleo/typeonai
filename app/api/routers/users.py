@@ -14,7 +14,6 @@ from app.core.security import (
     invalidate_tier_cache,
     db_firestore,
 )
-from app.core.state import last_feedback_time
 from app.services.usage_repository import (
     FirestoreUsageRepository,
     UsageLimits,
@@ -195,7 +194,6 @@ def delete_account(request: Request, data: dict = Body(default={})):
         # the maintenance loop will retry the same idempotent job.
         logging.exception("delete_account: cleanup attempt failed for %s", uid)
         errors = ["cleanup_coordinator"]
-    last_feedback_time.pop(uid, None)
     invalidate_tier_cache(uid)
     if errors:
         return JSONResponse(

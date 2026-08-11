@@ -6,11 +6,13 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import secrets
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from firebase_admin import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 import app.core.config as cfg
@@ -625,20 +627,34 @@ def serialize_history_points(points, max_items=WATCH_HISTORY_POINTS) -> list[dic
 
 def list_watches(uid: str, db=None, include_history=False) -> list[dict]:
     db = db if db is not None else db_firestore
+    watch_docs = list(
+        _where_equal(db.collection(WATCHES_COLLECTION), "owner_uid", uid).stream()
+    )
+    share_ids = [str((doc.to_dict() or {}).get("share_id") or "") for doc in watch_docs]
+    shares = _get_shares_by_id(db, share_ids)
     items = []
-    for doc in _where_equal(db.collection(WATCHES_COLLECTION), "owner_uid", uid).stream():
+    for doc in watch_docs:
         data = doc.to_dict() or {}
         share_id = str(data.get("share_id") or "")
-        share = share_snapshots.get_share(share_id, db=db) or {}
+        share = shares.get(share_id) or {}
         item = _serialize_watch(doc.id, data, share)
         if include_history:
-            try:
-                points = share_snapshots.list_watch_history(
-                    share_id, db=db, max_items=WATCH_HISTORY_POINTS,
-                )
-            except Exception:
-                points = []
+            points = data.get("history_points")
+            history_status = "ok"
+            if not isinstance(points, list):
+                try:
+                    points = share_snapshots.list_watch_history(
+                        share_id, db=db, max_items=WATCH_HISTORY_POINTS,
+                    )
+                    # One-time lazy backfill: subsequent dashboard loads no
+                    # longer issue a history query per Watch.
+                    doc.reference.update({"history_points": points[-WATCH_HISTORY_POINTS:]})
+                except Exception:
+                    logging.warning("Watch history unavailable for watch_id=%s", doc.id)
+                    points = []
+                    history_status = "unavailable"
             item["history"] = serialize_history_points(points)
+            item["history_status"] = history_status
             if item["history"]:
                 latest_map = item["history"][-1].get("opinion_map") or {}
                 item["last_drift_score"] = latest_map.get("shift_score")
@@ -647,13 +663,63 @@ def list_watches(uid: str, db=None, include_history=False) -> list[dict]:
     return items
 
 
-def list_watches_for_admin(db=None) -> list[dict]:
-    """Return operational watch metadata for the admin diagnostics page."""
+def _get_shares_by_id(db, share_ids: list[str]) -> dict[str, dict]:
+    unique_ids = list(dict.fromkeys(share_id for share_id in share_ids if share_id))
+    refs = [db.collection(share_snapshots.SHARES_COLLECTION).document(share_id) for share_id in unique_ids]
+    if not refs:
+        return {}
+    if hasattr(db, "get_all"):
+        snapshots = list(db.get_all(refs))
+        return {
+            snapshot.id: (snapshot.to_dict() or {})
+            for snapshot in snapshots
+            if snapshot.exists
+        }
+    else:
+        snapshots = [ref.get() for ref in refs]
+        return {
+            ref.id: (snapshot.to_dict() or {})
+            for ref, snapshot in zip(refs, snapshots)
+            if snapshot.exists
+        }
+
+
+def list_watches_for_admin_page(*, db=None, cursor="", max_items=100) -> dict:
+    """Return one bounded operational page with batched Share reads."""
     db = db if db is not None else db_firestore
+    max_items = max(1, min(200, int(max_items)))
+    collection = db.collection(WATCHES_COLLECTION)
+    try:
+        query = collection.order_by(
+            "created_at", direction=firestore.Query.DESCENDING
+        )
+        if cursor:
+            cursor_snapshot = collection.document(str(cursor)).get()
+            if cursor_snapshot.exists:
+                query = query.start_after(cursor_snapshot)
+        docs = list(query.limit(max_items + 1).stream())
+    except (AttributeError, TypeError):
+        # Compatibility for local unit doubles; production Firestore always
+        # executes the bounded ordered query above.
+        docs = list(collection.stream())
+        docs.sort(
+            key=lambda doc: (doc.to_dict() or {}).get("created_at")
+            or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
+        if cursor:
+            ids = [doc.id for doc in docs]
+            docs = docs[ids.index(cursor) + 1:] if cursor in ids else docs
+        docs = docs[:max_items + 1]
+    has_more = len(docs) > max_items
+    page = docs[:max_items]
+    shares = _get_shares_by_id(
+        db, [str((doc.to_dict() or {}).get("share_id") or "") for doc in page]
+    )
     items = []
-    for doc in db.collection(WATCHES_COLLECTION).stream():
+    for doc in page:
         data = doc.to_dict() or {}
-        share = share_snapshots.get_share(str(data.get("share_id") or ""), db=db) or {}
+        share = shares.get(str(data.get("share_id") or "")) or {}
         item = _serialize_watch(doc.id, data, share)
         item.update({
             "owner_uid": str(data.get("owner_uid") or ""),
@@ -664,8 +730,15 @@ def list_watches_for_admin(db=None) -> list[dict]:
             ),
         })
         items.append(item)
-    items.sort(key=lambda item: item["created_at"], reverse=True)
-    return items
+    return {
+        "items": items,
+        "has_more": has_more,
+        "next_cursor": page[-1].id if has_more and page else None,
+    }
+
+
+def list_watches_for_admin(db=None) -> list[dict]:
+    return list_watches_for_admin_page(db=db, max_items=200)["items"]
 
 
 def publisher_watch_counts(db=None) -> dict:
@@ -1289,14 +1362,30 @@ def renew_watch_lease(
 def list_due_watch_ids(*, now=None, db=None, max_items=200) -> list[str]:
     db = db if db is not None else db_firestore
     now = now or utcnow()
-    result = []
-    for doc in _where_equal(db.collection(WATCHES_COLLECTION), "status", "active").stream():
-        data = doc.to_dict() or {}
-        if isinstance(data.get("next_run_at"), datetime) and data["next_run_at"] <= now:
-            result.append(doc.id)
-        if len(result) >= max_items:
-            break
-    return result
+    collection = db.collection(WATCHES_COLLECTION)
+    try:
+        query = (
+            collection
+            .where(filter=FieldFilter("status", "==", "active"))
+            .where(filter=FieldFilter("next_run_at", "<=", now))
+        )
+    except TypeError:
+        query = collection.where("status", "==", "active")
+        if not hasattr(query, "where"):
+            docs = [
+                doc for doc in query.stream()
+                if isinstance((doc.to_dict() or {}).get("next_run_at"), datetime)
+                and (doc.to_dict() or {})["next_run_at"] <= now
+            ]
+            docs.sort(key=lambda doc: (doc.to_dict() or {})["next_run_at"])
+            return [doc.id for doc in docs[:max_items]]
+        query = query.where("next_run_at", "<=", now)
+    if not hasattr(query, "order_by"):
+        docs = list(query.stream())
+        docs.sort(key=lambda doc: (doc.to_dict() or {})["next_run_at"])
+        return [doc.id for doc in docs[:max_items]]
+    query = query.order_by("next_run_at").limit(max(1, min(500, int(max_items))))
+    return [doc.id for doc in query.stream()]
 
 
 def _worker_lease_transaction(tx, ref, now: datetime):
@@ -1431,8 +1520,20 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
             != str(claimed.get("current_run_id") or "")
         ):
             return False
+        existing_points = current.get("history_points")
+        existing_points = existing_points if isinstance(existing_points, list) else []
+        compact_history = {
+            key: value for key, value in history.items()
+            if key in {
+                "ts", "agreement_score", "changed", "severity", "change_summary",
+                "trigger", "event_type", "baseline_changed", "baseline_severity",
+                "baseline_summary", "opinion_map",
+            }
+        }
+        updates = dict(watch_updates)
+        updates["history_points"] = (existing_points + [compact_history])[-WATCH_HISTORY_POINTS:]
         transaction.set(history_ref, history)
-        transaction.update(watch_ref, watch_updates)
+        transaction.update(watch_ref, updates)
         transaction.update(share_ref, share_updates)
         return True
 

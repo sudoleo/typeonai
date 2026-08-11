@@ -39,8 +39,13 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 **`main.py`** ist der App-Entry: lädt `.env`, setzt außerhalb des E2E-Profils
 `GOOGLE_APPLICATION_CREDENTIALS`,
 fügt das vor dem Framework-Parsing greifende `RequestBodyLimitMiddleware`,
-`CustomSecurityMiddleware` (CSP etc.) + slowapi-Limiter hinzu, mountet
+`CustomSecurityMiddleware` (CSP etc.), `CorrelationMiddleware` + slowapi-Limiter
+hinzu, mountet
 `/static`, registriert globale Exception-Handler und inkludiert alle Router.
+Jeder Request erhält eine PII-freie `req-*`-Correlation-ID (auch als
+`X-Correlation-ID` in der Response); `GET /health/metrics` liefert nur
+prozesslokale, aggregierte Provider-/Scheduler-Zähler und Laufzeiten ohne
+Prompts, Antworten, E-Mails oder andere Nutzdaten.
 Im `lifespan`-Startup ist nur `load_models_from_db()` readiness-kritisch; dessen
 Firestore-Read deaktiviert SDK-Retries und besitzt ein echtes Fünf-Sekunden-
 Budget. Alle nicht abbrechbaren Cleanup-/Recovery-Arbeiten starten erst nach
@@ -70,16 +75,16 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache), `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). |
+| `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache), `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
 | `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn` finalisiert pending Turns samt höchstens sechs separaten Modellantworten atomar und per Payload-Fingerprint idempotent; `fail_turn` setzt nur einen allowgelisteten Fehlercode. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Finalisiert wird weiterhin ausschließlich serverseitig über `/consensus`. |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP) und übergibt sie als nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token; nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. Der Browser versucht danach ausschließlich mit den vom Nutzer selbst eingegebenen Credentials einzuloggen. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig. |
-| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Watches/Briefs, E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
-| `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und kostet damit `2 + N` statt `2 + 8N` Firestore-Reads. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. `DELETE /bookmark` liest die Chat-Bindung **vor** dem Löschen und räumt den gebundenen Chat per `ChatStore.delete_chat` mit ab — best effort, damit eine fehlgeschlagene Kaskade eine bereits erfolgte Löschung nicht in einen Retry verwandelt. Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. |
+| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
+| `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und kostet damit `2 + N` statt `2 + 8N` Firestore-Reads. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Sämtliche Save-Payloads sind strikt typisiert und größen-/feldbegrenzt; Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern. Persistent gelten höchstens 100 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. `DELETE /bookmark` liest die Chat-Bindung **vor** dem Löschen und räumt den gebundenen Chat per `ChatStore.delete_chat` mit ab — best effort, damit eine fehlgeschlagene Kaskade eine bereits erfolgte Löschung nicht in einen Retry verwandelt. Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
-| `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (`?version=<run_id>`, rendert Position Map + Agreement-Kurve über `services/history_view.py` — dieselbe Darstellung wie die Watch-Seiten, bewusst nur bis zum gewählten Snapshot), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe`; Admin-CRUD unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
+| `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (`?version=<run_id>`, rendert Position Map + Agreement-Kurve über `services/history_view.py` — dieselbe Darstellung wie die Watch-Seiten, bewusst nur bis zum gewählten Snapshot), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe`; der Versand-Claim ist persistent gehasht und besitzt Resend-, Empfänger- und globales Stundenbudget. Der Favicon-Proxy ist auf 30 Requests/Minute, acht parallele Requests, einen eigenen Vierer-Executor, zwei Sekunden Upstream-Zeit sowie einen 2.000-Einträge-LRU einschließlich 24-h-Negativcache begrenzt. Admin-CRUD liegt unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, transaktional idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` ohne DeepSeek und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil und DeepSeek-Ausschluss; dessen globale Kapazität wird zusammen mit Watch und Publisher-Zähler in derselben Transaktion geprüft. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 
 Der Scheduled Publisher läuft per GitHub Actions montags, mittwochs und freitags.
@@ -87,7 +92,7 @@ Seine identisch in `scripts/publish_consensus.py` und
 `app/services/publisher_config.py` gehaltenen `Search-opportunity requirements`
 wählen dauerhaft nachgefragte, strittige Fragen und schließen News-Zyklen,
 Memes, Leaks und virale Posts ausdrücklich aus.
-| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (Diagnose-Liste; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo`, sanitisierten Live-Check `POST /api/admin/seo/check`, manueller Search-Console-Lauf `POST /api/admin/seo/collect` sowie speicherbare read-only Judgements per `POST /api/admin/seo/pages/{page_id}/recommendation` und optional `.../content-judge`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
+| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (cursor-paginierte Diagnose-Liste mit `limit`, `next_cursor`, `has_more`; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo`, sanitisierten Live-Check `POST /api/admin/seo/check`, manueller Search-Console-Lauf `POST /api/admin/seo/collect` sowie speicherbare read-only Judgements per `POST /api/admin/seo/pages/{page_id}/recommendation` und optional `.../content-judge`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 Weekly-SEO-Admin-Erweiterung: `GET /api/admin/seo/review`, `PUT
 /api/admin/seo/review/config` und `POST /api/admin/seo/review/run` liefern bzw.
@@ -1365,8 +1370,9 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Operation. `/resolve` erzeugt einen eigenen Run und Claim. `/usage` und
   `/user_status` lesen die Firestore-Tagesbasis;
   `/usage/run/release` gibt nur noch nicht konsumierte Reservierungen frei.
-  `app/core/state.py` enthält nur noch den kurzlebigen Feedback-Cooldown; die
-  alten Float-/Request-Counter sind entfernt.
+  Bookmark-, Feedback- und Vote-Grenzen liegen ebenfalls persistent in
+  Firestore (`persistence_guard.py`); es gibt keinen prozesslokalen Abuse-
+  Counter mehr.
 - Limits/Defaults kommen aus `app/core/config.py` (`get_consensus_run_limit`,
   `get_deep_think_run_limit`, `get_word_limit`, `get_output_token_limit`, …)
   und können per Firestore
@@ -1641,7 +1647,7 @@ app/core/
   security.py                Firebase-Init, Token/Tier/Admin-Checks, CSP-Middleware
   request_limits.py          ASGI-Bodylimit vor JSON-/Form-Parsing (Content-Length + chunked)
   rate_limit.py              slowapi-Limiter (Client-IP hinter Render-Proxy via XFF)
-  state.py                   Kurzlebiger In-Memory-Feedback-Cooldown
+  observability.py           PII-freie Correlation-IDs, strukturierte Logs + Prozessmetriken
 app/api/routers/             siehe §2
   api_v1.py                  Gescopte Run-, Publish-, Share-Lifecycle- und Indexing-API + OpenAPI-Modelle
   chat_history.py            Owner-gebundene Chat-/Turn-API inkl. vollständigem Turn-Detail
@@ -1660,6 +1666,8 @@ app/services/
   usage_repository.py        Firestore-Usage fuer logische Runs (reserve/consume/release/get_run/context-target-binding/snapshot)
   api_account_cleanup.py     Fail-closed Account-Blocks + retrybare API-Datenlöschung
   account_deletion.py         Persistenter Vollkonto-Tombstone + bereichsweise Retry-Kaskade
+  persistence_guard.py       Transaktionale Bookmark-/Feedback-Budgets + run-gebundene Votes
+  follow_challenges.py       Gehashte persistente Resend-/Empfänger-/Globalbudgets für Double-Opt-in
   api_key_repository.py      SHA-256-gehashte, UID-gebundene API-Schluessel
   api_run_repository.py      Idempotenz + persistente API-Run-State-Machine
   api_consensus_runner.py    Asynchroner At-most-once-Orchestrator auf bestehenden Engines
@@ -1673,6 +1681,7 @@ app/services/
   telegram_notifier.py      Gemeinsamer Bot-API-Client + Best-effort-Statusmeldungen für SEO-Reviews
   telegram_watch.py         User-Link-Deep-Links/Webhook, Callback-Aktionen + deduplizierte Watch-Zustellung
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
+  favicons.py                Begrenzter Favicon-Fetch, Singleflight, LRU-/Negativcache
   retention_maintenance.py   Periodischer Pending-/Revoked-Share-Cleanup
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
   opinion_map.py             Datenminimierte, mehrdimensionale Provider-Positionen + Direction-Shift-Berechnung
@@ -1695,8 +1704,9 @@ Wichtige Verträge im Backend:
 
 ## 6. Datenhaltung / Firebase / Konfiguration
 
-**Firestore-Sicherheitsregeln** (`firestore.rules`, Quelle der Wahrheit im Repo;
-Deploy manuell über die Firebase Console):
+**Firestore-Sicherheitsregeln und Indizes** (`firestore.rules` und
+`firestore.indexes.json`, Quellen der Wahrheit im Repo; Deployment per Firebase
+CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
 - **Deny-all für alle Clients.** Kein Browser-Code spricht direkt mit Firestore —
   `static/firebase.js` initialisiert zwar `getFirestore()`, benutzt die Variable
   `db` aber nirgends. Sämtlicher Datenzugriff läuft über das Backend mit dem
@@ -1901,6 +1911,14 @@ Deploy manuell über die Firebase Console):
   lokale `run_time` + IANA-`timezone`, `last_run_at`, `next_run_at` sowie
   kurzlebiger `lease_run_id`/`lease_until`.
 - `pending_results` — kurzlebige Consensus-Ergebnisse fürs Sharing (TTL/Cleanup).
+- `persistence_usage/{kind-sha256(uid)}` — transaktionale, restart- und
+  multi-worker-feste Bookmark-Anzahl/-Bytes sowie Feedback-Cooldown/-Tageszahl;
+  weder UID noch E-Mail stehen im Dokumentpfad. `model_votes/{sha256(uid:result)}`
+  bindet genau einen Vote an Owner, Pending Result und serverseitigen Gewinner.
+  Erst derselbe Firestore-Commit erhöht `leaderboard/{provider}`.
+- `follow_challenges/{sha256(scope:resource:email)}` — ausschließlich gehashte
+  Double-Opt-in-Challenges mit 15-Minuten-Resendfenster, höchstens fünf Sends
+  pro Empfänger/UTC-Tag und global höchstens 500/Stunde; kein E-Mail-Klartext.
 - `shares` — unveränderliche Snapshots (Slug, `visibility=public|private`,
   `indexed`, `status`, `owner_uid`, `question_hash`, optional interne
   `source_api_run_id`, `publication_source=scheduled_publisher` und Index-
@@ -1926,7 +1944,8 @@ Deploy manuell über die Firebase Console):
   Alert-Regel `changes_only|condition|every_run`, `email_enabled`,
   `telegram_enabled`, optionales `telegram_muted_until`, private
   `condition`, `last_condition_status`, Status, nächste Ausführung,
-  Lease/Fehlerzähler); keine IP-/User-Agent-Daten. Conditions werden nie in
+  Lease/Fehlerzähler sowie bis zu 16 denormalisierte `history_points` für
+  Dashboard-Listen); keine IP-/User-Agent-Daten. Conditions werden nie in
   öffentliche Share-Payloads oder History-Punkte kopiert.
   Verlaufspunkte liegen datenminimiert in `shares/{id}/watch_history` und
   verändern den Share-Snapshot nicht. Neben Score/Change-Metadaten können sie
@@ -2001,7 +2020,19 @@ Deploy manuell über die Firebase Console):
   oder IP (anonym i. S. v. ErwGr. 26 DSGVO). Schema + Datenschutz-Regeln in
   `app/services/differences_stats.py`; geschrieben aus `chat.py::consensus`
   (fire-and-forget, Mock-Läufe schreiben nicht).
-- `feedback`, `pro_waitlist`, `leaderboard`.
+- `feedback`, `pro_waitlist`, `leaderboard`. Feedback speichert nur den
+  validierten Inhalt und die UID; Abuse-Grenzen liegen separat in
+  `persistence_usage`. Leaderboard-Zähler können nur über den transaktionalen,
+  run-gebundenen Vote-Claim wachsen.
+
+Die drei Scheduler lesen Fälligkeit index-first statt über Collection-Scans:
+`watches(status,next_run_at)`, `topics(status,next_run_at)` und
+`watch_briefs(enabled,next_send_at)`, jeweils sortiert und mit hartem `limit`.
+Die benötigten Composite-Indizes stehen in `firestore.indexes.json`. Listen von
+Watches lesen Shares gesammelt per `get_all`; die kompakte Dashboard-History
+kommt aus `watches.history_points`. Kann die Detail-History nicht geladen
+werden, meldet die API `history_status=unavailable` statt fälschlich eine leere
+History zu behaupten.
 
 **Service-Account-JSONs** im Root (gitignored): `consensai-firebase-adminsdk-*.json`
 (Firebase Admin) und `gen-lang-client-*.json` (Google ADC für Gemini, via
@@ -2161,7 +2192,7 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   ```
   Reine String-/Quelltextverträge sind mit `source_contract` gekennzeichnet und
   laufen weiterhin mit; sie gelten ausdrücklich nicht als Verhaltensabdeckung.
-  Verifizierte Baseline am 2026-08-11: **1048 passed, 44 warnings**.
+  Verifizierte Baseline am 2026-08-11 nach Phase 5: **1068 passed, 6 warnings**.
 - **Playwright-Smoke-Suite** (`tests/e2e/`, Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, kompakte Antwort→Consensus-
@@ -2321,14 +2352,20 @@ vergleichbaren Dimensionssätzen zeigt die UI keinen erfundenen Voll-Shift.
 konfiguriert im Watch-Dashboard (`/api/my/watch-brief`), gespeichert in
 `watch_briefs/{uid}`; Aktivierung setzt mindestens eine vorhandene Watch voraus.
 Der 30-Minuten-Loop ruft nach `run_watch_tick` ein
-`run_brief_tick` auf: fällige Briefs werden transaktional geclaimt (Zeitplan
-rückt VOR dem Versand vor — at-most-once, nie doppelt), dann wird der Digest
+`run_brief_tick` auf: fällige Briefs werden über den Composite-Index begrenzt
+gelesen und transaktional geclaimt (Zeitplan rückt VOR dem Versand vor —
+at-most-once, nie doppelt), dann wird der Digest
 aus `list_watches(include_history=True)` aggregiert (Score/Delta, notable
 Changes seit dem letzten Brief = changed-Flag oder Score-Sprung ≥15) und als
 Multipart-Mail versendet. Modus `changes_only` überspringt Briefs ohne notable
 Changes. Kein LLM-Call, kein Watch-Lease nötig; unverifizierte E-Mail-Adressen
 werden übersprungen. `/watch/brief/unsubscribe` (eigener HMAC-Token-Typ,
 gleicher `WATCH_UNSUBSCRIBE_SECRET`) deaktiviert nur den Brief.
+**Bewusste Zustellgarantie (Phase 5):** Morning Brief bleibt at-most-once. Ein
+Prozessabbruch nach dem Claim kann daher einen einzelnen Brief auslassen; dafür
+gibt es bei SMTP-Timeouts/Worker-Restarts garantiert keinen Doppelversand. Ein
+Wechsel zu at-least-once würde eine persistente Outbox plus idempotente
+Provider-Zustellung benötigen und ist eine eigene Produkt-/Architekturentscheidung.
 Im Admin-Dashboard kann eine aktive Watch fällig gestellt und der In-Process-Scheduler
 sofort aufgeweckt werden; der HTTP-Request wartet nicht auf die Modellaufrufe.
 Der manuelle Lauf verbraucht reale Modellaufrufe, schreibt reguläre History, rückt den Zeitplan vor
@@ -2475,6 +2512,11 @@ ersten Check statt eines leeren Consensus-Panels.
   Disconnect bedeutet „Serverarbeit abbrechen“; aktive Responses müssen am
   normalen Ende und bei Cancellation geschlossen werden. Automatische
   Transport-Retries dürfen keinen zweiten kostenpflichtigen Versuch verstecken.
+- **Observability ist content-frei.** Request- und Scheduler-Correlation-IDs,
+  Provider/Job-Name, Erfolg/Fehler/Timeout, Anzahl und Laufzeit dürfen geloggt
+  bzw. unter `/health/metrics` aggregiert werden. Prompts, Modellantworten,
+  Difference-Quotes/Anchors, E-Mails, Tokens und rohe Exception-Strings externer
+  Provider dürfen nicht in Logs oder Metrik-Labels gelangen.
 - **Blocking-I/O-Vertrag**: Router mit synchronem Firebase-/Firestore-SDK sind
   `def`; echte Async-Routen lagern vollständige blockierende Bündel per
   `asyncio.to_thread` aus. Einzelne SDK-Calls dürfen nicht direkt in einem

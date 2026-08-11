@@ -154,14 +154,20 @@ def _query_resolve_model(model_label: str, question: str, claim: str,
             json_mode=True,
         )
     except Exception as e:
-        logging.warning(f"Resolve call failed for {model_label} ({provider}/{judge_model}): {e}")
+        logging.warning(
+            "Resolve call failed model=%s provider=%s judge=%s error_type=%s",
+            model_label, provider, judge_model, type(e).__name__,
+        )
         result["reason"] = "provider error"
         return result
 
     parsed = _extract_json_object(raw)
     decision = str((parsed or {}).get("decision") or "").strip().lower()
     if decision not in ("maintain", "revise"):
-        logging.warning(f"Resolve output unparsable for {model_label}: {raw!r:.200}")
+        logging.warning(
+            "Resolve output unparsable model=%s output_chars=%d",
+            model_label, len(str(raw or "")),
+        )
         result["reason"] = "unparsable output"
         return result
 

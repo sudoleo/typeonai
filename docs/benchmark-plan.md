@@ -105,9 +105,10 @@ Der Runner umgeht ohnehin `/prepare` und baut den System-Prompt selbst.
   nach dem Pilot adoptiert wird (E5).
 - **Persistenz-Lücke:** Token-Usage/Kosten werden **nirgends** erfasst —
   `parse_*_response` verwirft `usage`/`usageMetadata`; das einzige „usage" im Code
-  ist der In-Memory-Quota-Zähler (`app/core/state.py`). Der Benchmark muss Usage
-  selbst aus den Roh-JSONs ziehen.
-- **Dependencies:** `huggingface-hub==0.29.1` + `pandas==2.3.3` sind vorhanden →
+  sind die persistenten logischen Run-Quoten (`app/services/usage_repository.py`),
+  nicht Provider-Tokens. Der Benchmark muss Usage selbst aus den Roh-JSONs ziehen.
+- **Dependencies:** `huggingface-hub==0.29.1` + `pandas==2.3.3` sind ausschließlich
+  in `benchmark/requirements-benchmark.txt` vorhanden →
   MMLU‑Pro per `hf_hub_download` + `pandas.read_parquet` laden, **ohne** die
   schwere `datasets`-Lib. Input-Token-Schätzung im Dry-Run via `len/4`-Heuristik
   statt `tiktoken`. **Korrektur (Phase 2):** `pandas.read_parquet` benötigt

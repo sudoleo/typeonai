@@ -14,6 +14,7 @@ from google.auth.transport.requests import Request as GoogleAuthRequest
 from urllib.parse import quote
 
 import app.core.config as cfg
+from app.core.observability import safe_exception
 from app.core.config import GEMINI_FLASH_MODEL
 from app.services.llm.credentials import gemini_engine_credentials_available
 from app.services.llm.engines import _merge_nested_config
@@ -738,8 +739,11 @@ def query_consensus(
                 temperature=CONSENSUS_TEMPERATURE,
             )
         except Exception as e:
-            last_error = str(e)
-            logging.warning(f"Consensus attempt failed on {provider}/{api_model}: {e}")
+            last_error = "provider request failed."
+            logging.warning(
+                "Consensus attempt failed provider=%s model=%s category=%s",
+                provider, api_model, safe_exception(e),
+            )
             continue
         if result:
             return result
@@ -1233,7 +1237,10 @@ def _real_model_names(labels, anon_map: dict) -> list:
     for label in labels if isinstance(labels, list) else []:
         real = anon_map.get(str(label or "").strip())
         if not real:
-            logging.warning(f"Differences engine used unknown model label: {label!r}")
+            logging.warning(
+                "Differences engine used unknown model label chars=%d",
+                len(str(label or "")),
+            )
             continue
         if real not in names:
             names.append(real)
@@ -1567,7 +1574,10 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
         if span:
             claim["anchor"] = _clip(span, MAX_DIFF_TEXT_CHARS)
         else:
-            logging.info(f"Differences anchor not found in consensus answer: {claim.get('anchor')!r}")
+            logging.info(
+                "Differences anchor not found in consensus answer anchor_chars=%d",
+                len(str(claim.get("anchor") or "")),
+            )
         for item in claim.get("dissent") or []:
             if not item.get("quote"):
                 continue
@@ -1575,7 +1585,10 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
             if span:
                 item["quote"] = _clip(span, MAX_DIFF_QUOTE_CHARS)
             else:
-                logging.info(f"Dropping unverifiable dissent quote for {item['model']}: {item['quote']!r}")
+                logging.info(
+                    "Dropping unverifiable dissent quote model=%s quote_chars=%d",
+                    item["model"], len(str(item.get("quote") or "")),
+                )
                 item["quote"] = ""
 
     for diff in data.get("differences") or []:
@@ -1588,7 +1601,8 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
                 diff["consensus_anchor"] = _clip(span, MAX_DIFF_TEXT_CHARS)
             else:
                 logging.info(
-                    f"Difference anchor not found in consensus answer: {diff['consensus_anchor']!r}"
+                    "Difference anchor not found in consensus answer anchor_chars=%d",
+                    len(str(diff.get("consensus_anchor") or "")),
                 )
                 diff["consensus_anchor"] = ""
 
@@ -1603,7 +1617,10 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
             if span:
                 position["quote"] = _clip(span, MAX_DIFF_QUOTE_CHARS)
             else:
-                logging.info(f"Dropping unverifiable position quote for {position.get('models')}: {position['quote']!r}")
+                logging.info(
+                    "Dropping unverifiable position quote models=%s quote_chars=%d",
+                    position.get("models"), len(str(position.get("quote") or "")),
+                )
                 position["quote"] = ""
 
 
@@ -1654,7 +1671,10 @@ def parse_differences_payload(
     best_label = str(parsed.get("best_model") or "").strip()
     best_model = anon_map.get(best_label, "")
     if best_label and not best_model:
-        logging.warning(f"Differences engine hallucinated best_model label: {best_label!r}")
+        logging.warning(
+            "Differences engine hallucinated best_model label chars=%d",
+            len(best_label),
+        )
 
     data = {
         "claims": _normalize_claims(parsed.get("claims"), anon_map, sentences),
@@ -1682,7 +1702,10 @@ def _translate_best_model(result: str, anon_map: dict) -> str:
                 result
             )
         else:
-            logging.warning(f"LLM hallucinated ID {anon_label} in differences.")
+            logging.warning(
+                "LLM hallucinated an unknown differences ID chars=%d",
+                len(str(anon_label or "")),
+            )
 
     return result
 
@@ -2032,12 +2055,14 @@ def query_differences(
                 json_schema=DIFFERENCES_JSON_SCHEMA,
             )
         except Exception as e:
-            last_error = str(e)
+            last_error = "provider request failed."
             if not _provider_error_is_retryable(e):
                 skip_retries_for.add(attempt_key)
             logging.warning(
-                f"Differences attempt {attempt_no} failed on {provider}/{api_model} "
-                f"after {time.monotonic() - attempt_started:.1f}s: {e}"
+                "Differences attempt failed attempt=%d provider=%s model=%s "
+                "duration_ms=%d category=%s",
+                attempt_no, provider, api_model,
+                int((time.monotonic() - attempt_started) * 1000), safe_exception(e),
             )
             continue
         duration_ms = int((time.monotonic() - attempt_started) * 1000)
@@ -2132,7 +2157,11 @@ def query_consensus_change(old_consensus: str, new_consensus: str, api_keys: dic
                 })
             return result
         except Exception as exc:
-            last_error = str(exc)
+            last_error = safe_exception(exc)
+            logging.warning(
+                "Change judge attempt failed category=%s",
+                last_error,
+            )
             continue
     raise RuntimeError(f"Change Judge failed: {last_error}")
 
@@ -2215,8 +2244,11 @@ def stream_consensus(
             yield {"type": "final", "text": str(e), "error": True}
             return
         except Exception as e:
-            last_error = str(e)
-            logging.warning(f"Consensus stream attempt failed on {engine_model}: {e}")
+            last_error = "provider request failed."
+            logging.warning(
+                "Consensus stream attempt failed engine=%s category=%s",
+                engine_model, safe_exception(e),
+            )
             continue
 
         final_text = "".join(parts).strip()
@@ -2296,12 +2328,14 @@ def stream_differences(
                 # nur die SSE-Verbindung aktiv (auch während der Retries).
                 yield {"type": "delta", "text": text}
         except Exception as e:
-            last_error = str(e)
+            last_error = "provider request failed."
             if not _provider_error_is_retryable(e):
                 skip_retries_for.add(attempt_key)
             logging.warning(
-                f"Differences stream attempt {attempt_no} failed on {provider}/{api_model} "
-                f"after {time.monotonic() - attempt_started:.1f}s: {e}"
+                "Differences stream attempt failed attempt=%d provider=%s model=%s "
+                "duration_ms=%d category=%s",
+                attempt_no, provider, api_model,
+                int((time.monotonic() - attempt_started) * 1000), safe_exception(e),
             )
             continue
 

@@ -10,7 +10,7 @@ from firebase_admin import auth, firestore
 
 from app.core.background_tasks import task_succeeded
 from app.core.security import invalidate_auth_tombstone_cache
-from app.services import share_snapshots, watch_service
+from app.services import follow_challenges, persistence_guard, share_snapshots, watch_service
 from app.services.api_account_cleanup import FirestoreApiAccountCleanup
 from app.services.chat_store import ChatStore
 
@@ -89,6 +89,7 @@ class FirestoreAccountDeletion:
             ("orphan_watches", lambda: self._delete_orphan_watches(uid)),
             ("watch_indexes", lambda: self._delete_watch_indexes(uid)),
             ("watch_brief", lambda: self._db.collection("watch_briefs").document(uid).delete()),
+            ("persistence_guards", lambda: self._delete_persistence_guards(uid, email)),
             ("email_follows", lambda: self._delete_email_follows(email)),
             ("profile", lambda: self._db.collection("users").document(uid).delete()),
             ("firebase_auth", lambda: self._delete_auth_user(uid)),
@@ -212,6 +213,10 @@ class FirestoreAccountDeletion:
 
     def _delete_orphan_watches(self, uid: str) -> None:
         watch_service.delete_watches_for_owner(uid, db=self._db)
+
+    def _delete_persistence_guards(self, uid: str, email: str) -> None:
+        persistence_guard.delete_owner_data(uid, db=self._db)
+        follow_challenges.delete_for_email(email, db=self._db)
 
     def _delete_uid_queries(self, uid: str) -> None:
         for name in ("pro_waitlist", "feedback"):

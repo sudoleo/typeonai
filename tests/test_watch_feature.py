@@ -2192,7 +2192,11 @@ class AdminWatchRouteTests(unittest.TestCase):
     def test_watch_diagnostics_lists_and_starts_run(self):
         token_patch, verify_patch, admin_patch = self._admin_patches()
         with token_patch, verify_patch, admin_patch, \
-                patch.object(admin_router.watch_service, "list_watches_for_admin", return_value=[]), \
+                patch.object(
+                    admin_router.watch_service,
+                    "list_watches_for_admin_page",
+                    return_value={"items": [], "next_cursor": None, "has_more": False},
+                ), \
                 patch.object(admin_router.mailer, "is_configured", return_value=True):
             response = self.client.get("/api/admin/watches")
         self.assertEqual(response.status_code, 200)

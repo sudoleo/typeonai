@@ -154,7 +154,7 @@ class QueryConsensusFallbackTests(unittest.TestCase):
 
         result, patched = self._query(engine, {"OpenAI": "sk-1"})
         self.assertEqual(patched.call_count, 2)
-        self.assertEqual(result, "Consensus error: 503 - UNAVAILABLE")
+        self.assertEqual(result, "Consensus error: provider request failed.")
 
     def test_failed_fallback_yields_error_text(self):
         def engine(*args, **kwargs):
@@ -162,7 +162,7 @@ class QueryConsensusFallbackTests(unittest.TestCase):
 
         result, patched = self._query(engine, {"OpenAI": "sk-1", "Mistral": "sk-2"})
         self.assertEqual(patched.call_count, 3)
-        self.assertEqual(result, "Consensus error: 503 - UNAVAILABLE")
+        self.assertEqual(result, "Consensus error: provider request failed.")
 
 
 class StreamConsensusFallbackTests(unittest.TestCase):
