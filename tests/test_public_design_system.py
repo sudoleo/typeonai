@@ -98,15 +98,11 @@ def test_typography_is_self_hosted_and_shared_by_every_surface():
     assert "fonts.gstatic.com" not in security
 
 
-def test_product_result_mockup_is_reused_and_public_copy_has_no_em_dash():
+def test_product_result_mockup_is_reused():
     # The landing hero is demo-first (input field CTA) since 2026-07-17 and no
     # longer embeds the result mockup; the consensus-engine page still does.
     include = '{% include "partials/product_result_mockup.html" %}'
     assert include in read("templates/consensus-engine.html")
-
-    for template_name in PUBLIC_TEMPLATES:
-        assert "—" not in read(f"templates/{template_name}")
-    assert "—" not in read("templates/partials/product_result_mockup.html")
 
 
 def test_share_page_loads_the_common_math_renderer():

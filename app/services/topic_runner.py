@@ -6,6 +6,7 @@ import asyncio
 import logging
 from urllib.parse import urlsplit
 
+from app.core.background_tasks import task_succeeded
 from app.services import mailer, topics, watch_scheduler
 from app.services.llm.mock_llm import mock_llm_enabled
 
@@ -265,10 +266,6 @@ async def run_due_topic_tick() -> int:
 
 async def topic_scheduler_loop() -> None:
     while True:
-        try:
-            await run_due_topic_tick()
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logging.exception("Topic scheduler tick failed")
+        ran = await run_due_topic_tick()
+        task_succeeded("topic-scheduler", runs=ran)
         await asyncio.sleep(TOPIC_SCHEDULER_INTERVAL_SECONDS)

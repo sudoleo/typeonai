@@ -14,6 +14,7 @@ import openai
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.services import seo_data, seo_dossier
+from app.services.llm.provider_runtime import managed_provider_resource, openai_client
 from app.services.seo_repository import FirestoreSeoRepository
 
 
@@ -373,22 +374,23 @@ class SeoContentJudge:
         if self.caller:
             raw = self.caller(prompt, CONTENT_JUDGE_SCHEMA)
         else:
-            client = openai.OpenAI(api_key=self.api_key, timeout=45)
-            response = client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are a conservative SEO content reviewer."},
-                    {"role": "user", "content": prompt},
-                ],
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "seo_content_judgement",
-                        "strict": True,
-                        "schema": CONTENT_JUDGE_SCHEMA,
+            client = openai_client(api_key=self.api_key, timeout_seconds=45)
+            with managed_provider_resource(client):
+                response = client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": "You are a conservative SEO content reviewer."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "seo_content_judgement",
+                            "strict": True,
+                            "schema": CONTENT_JUDGE_SCHEMA,
+                        },
                     },
-                },
-            )
+                )
             raw = response.choices[0].message.content or ""
         return self.validate_response(
             raw, deterministic_recommendation_value=deterministic_recommendation_value

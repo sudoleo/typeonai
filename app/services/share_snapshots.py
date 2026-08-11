@@ -40,8 +40,8 @@ def _where(collection, field: str, operator: str, value):
         return collection.where(field, operator, value)
 
 # Hinweis Betrieb: Für pending_results sollte zusätzlich eine Firestore-
-# TTL-Policy auf dem Feld "expires_at" konfiguriert werden; bis dahin räumt
-# cleanup_expired_pending() beim App-Start (täglicher Render-Restart) auf.
+# TTL-Policy auf dem Feld "expires_at" konfiguriert werden; der periodische
+# Retention-Task bleibt der anwendungsseitige Fallback.
 PENDING_TTL_HOURS = 24
 SHARE_DAILY_LIMIT = 20
 
@@ -1297,28 +1297,55 @@ def list_shares_for_admin(db=None, only_reported=False, max_items=500):
 
 
 def cleanup_revoked_shares(db=None, max_docs=500):
-    """30-Tage-Hard-Delete für widerrufene Shares (Aufruf beim App-Start,
-    kein eigener Scheduler – der tägliche Render-Restart reicht)."""
+    """Delete every retention-eligible revoked share in deterministic pages."""
     db = db if db is not None else db_firestore
     cutoff = _utcnow() - timedelta(days=REVOKED_RETENTION_DAYS)
-    docs = (
-        _where(db.collection(SHARES_COLLECTION), "status", "==", "revoked")
-        .limit(max_docs)
-        .stream()
-    )
+    collection = db.collection(SHARES_COLLECTION)
+    batch_size = max(1, min(int(max_docs), 1000))
+    query = _where(collection, "revoked_at", "<", cutoff)
+    paginated = hasattr(query, "order_by") and hasattr(query, "start_after")
+    if paginated:
+        # The age query excludes fresh rows before paging without requiring a
+        # composite index. Status is still fail-closed below before deletion;
+        # Firestore adds document ID as deterministic cursor tie-breaker.
+        query = query.order_by("revoked_at")
     deleted = 0
-    for doc in docs:
-        data = doc.to_dict() or {}
-        revoked_at = data.get("revoked_at")
-        if isinstance(revoked_at, datetime) and revoked_at < cutoff:
-            # Alte Unit-Test-Doubles modellieren keine Subcollections; der
-            # reale Firestore-DocumentReference tut es.
-            if hasattr(doc.reference, "collection"):
-                for history_doc in doc.reference.collection("watch_history").stream():
-                    history_doc.reference.delete()
-            doc.reference.delete()
-            invalidate_share_cache(doc.id)
-            deleted += 1
+    cursor = None
+    while True:
+        page = query
+        if cursor is not None:
+            page = page.start_after(cursor)
+        docs = list(page.limit(batch_size).stream())
+        if not docs:
+            break
+        deleted_this_page = 0
+        for doc in docs:
+            data = doc.to_dict() or {}
+            revoked_at = data.get("revoked_at")
+            if (
+                data.get("status") == "revoked"
+                and isinstance(revoked_at, datetime)
+                and revoked_at < cutoff
+            ):
+                # Alte Unit-Test-Doubles modellieren keine Subcollections; der
+                # reale Firestore-DocumentReference tut es.
+                if hasattr(doc.reference, "collection"):
+                    for history_doc in doc.reference.collection("watch_history").stream():
+                        history_doc.reference.delete()
+                doc.reference.delete()
+                invalidate_share_cache(doc.id)
+                deleted += 1
+                deleted_this_page += 1
+        if len(docs) < batch_size:
+            break
+        if not paginated:
+            # Lightweight test doubles have no cursor API. Requerying after
+            # deletion still proves the bounded-page algorithm; stop if a page
+            # contained only malformed/ineligible rows to avoid a busy loop.
+            if deleted_this_page == 0:
+                break
+            continue
+        cursor = docs[-1]
     if deleted:
         logging.info("cleanup_revoked_shares: hard-deleted %d revoked shares", deleted)
     return deleted

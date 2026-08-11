@@ -35,6 +35,15 @@ from app.services.llm.engines import (
     build_provider_payload,
     query_mistral,
 )
+from app.services.llm.provider_runtime import (
+    PROVIDER_HTTP_TIMEOUT,
+    ProviderCancellation,
+    ProviderCancelled,
+    bind_provider_cancellation,
+    managed_provider_resource,
+    openai_client,
+    raise_if_provider_cancelled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +63,11 @@ def sse_pack(event: str, data: Dict[str, Any]) -> str:
 SSE_KEEPALIVE_INTERVAL_SECONDS = 15.0
 
 
-def iter_sse_with_keepalive(source, interval_seconds: float = SSE_KEEPALIVE_INTERVAL_SECONDS):
+def iter_sse_with_keepalive(
+    source,
+    interval_seconds: float = SSE_KEEPALIVE_INTERVAL_SECONDS,
+    cancellation: ProviderCancellation | None = None,
+):
     """Reicht einen SSE-Event-Generator durch und schiebt einen SSE-Kommentar
     (": keepalive") ein, wenn `interval_seconds` lang kein Event kam.
 
@@ -64,55 +77,64 @@ def iter_sse_with_keepalive(source, interval_seconds: float = SSE_KEEPALIVE_INTE
     stehen. Kommentarzeilen sind laut SSE-Spec zu ignorieren; das Frontend
     (readSSEStream) überspringt Events ohne data:-Zeilen ohnehin.
 
-    Der Quellgenerator läuft dafür in einem Thread; nach einem
-    Client-Disconnect läuft er als Daemon-Thread leer, statt hart abgebrochen
-    zu werden (unkritisch: ein Lauf endet spätestens mit dem final-Event)."""
+    Der Quellgenerator läuft dafür in einem Thread. Wird der Downstream-
+    Generator geschlossen (Browserabbruch), schließt das gemeinsame
+    Abbruchsignal aktive Provider-Responses und beendet den Produzenten."""
     events: queue.Queue = queue.Queue()
     _done = object()
+    cancellation = cancellation or ProviderCancellation()
 
     def _pump():
         try:
-            for item in source:
-                events.put(item)
+            with bind_provider_cancellation(cancellation):
+                for item in source:
+                    cancellation.raise_if_cancelled()
+                    events.put(item)
+            events.put(_done)
+        except ProviderCancelled:
             events.put(_done)
         except BaseException as exc:  # noqa: BLE001 — Fehler im Stream weiterreichen
             events.put(exc)
 
     threading.Thread(target=_pump, daemon=True, name="sse-keepalive-pump").start()
 
-    while True:
-        try:
-            item = events.get(timeout=interval_seconds)
-        except queue.Empty:
-            yield ": keepalive\n\n"
-            continue
-        if item is _done:
-            return
-        if isinstance(item, BaseException):
-            raise item
-        yield item
+    try:
+        while True:
+            try:
+                item = events.get(timeout=interval_seconds)
+            except queue.Empty:
+                yield ": keepalive\n\n"
+                continue
+            if item is _done:
+                return
+            if isinstance(item, BaseException):
+                raise item
+            yield item
+    finally:
+        cancellation.cancel()
 
 
 def iter_sse_events(response: requests.Response) -> Iterator[Tuple[Optional[str], str]]:
     """Liest Server-Sent Events (event/data-Paare) aus einer requests-Streaming-Response."""
-    event_name: Optional[str] = None
-    data_lines: list = []
-    for raw_line in response.iter_lines():
-        line = raw_line.decode("utf-8", "replace") if isinstance(raw_line, bytes) else (raw_line or "")
-        if line == "":
-            if data_lines:
-                yield event_name, "\n".join(data_lines)
-            event_name = None
-            data_lines = []
-            continue
-        if line.startswith(":"):
-            continue
-        if line.startswith("event:"):
-            event_name = line[len("event:"):].strip()
-        elif line.startswith("data:"):
-            data_lines.append(line[len("data:"):].lstrip())
-    if data_lines:
-        yield event_name, "\n".join(data_lines)
+    with managed_provider_resource(response):
+        event_name: Optional[str] = None
+        data_lines: list = []
+        for raw_line in response.iter_lines():
+            line = raw_line.decode("utf-8", "replace") if isinstance(raw_line, bytes) else (raw_line or "")
+            if line == "":
+                if data_lines:
+                    yield event_name, "\n".join(data_lines)
+                event_name = None
+                data_lines = []
+                continue
+            if line.startswith(":"):
+                continue
+            if line.startswith("event:"):
+                event_name = line[len("event:"):].strip()
+            elif line.startswith("data:"):
+                data_lines.append(line[len("data:"):].lstrip())
+        if data_lines:
+            yield event_name, "\n".join(data_lines)
 
 
 def _parse_json(data_str: str) -> Optional[dict]:
@@ -131,6 +153,7 @@ def _parse_json(data_str: str) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 def _stream_openai_responses(*, api_key: str, base_url: str, payload: dict, provider: str) -> Generator[StreamEvent, None, None]:
+    raise_if_provider_cancelled()
     request_payload = dict(payload)
     request_payload["stream"] = True
     resp = requests.post(
@@ -140,7 +163,7 @@ def _stream_openai_responses(*, api_key: str, base_url: str, payload: dict, prov
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        timeout=120,
+        timeout=PROVIDER_HTTP_TIMEOUT,
         stream=True,
     )
     if resp.status_code >= 400:
@@ -181,6 +204,7 @@ def _stream_openai_responses(*, api_key: str, base_url: str, payload: dict, prov
 
 
 def _stream_anthropic_messages(*, api_key: str, payload: dict) -> Generator[StreamEvent, None, None]:
+    raise_if_provider_cancelled()
     request_payload = dict(payload)
     request_payload["stream"] = True
     resp = requests.post(
@@ -191,7 +215,7 @@ def _stream_anthropic_messages(*, api_key: str, payload: dict) -> Generator[Stre
             "Content-Type": "application/json",
             "anthropic-version": "2023-06-01",
         },
-        timeout=120,
+        timeout=PROVIDER_HTTP_TIMEOUT,
         stream=True,
     )
     if resp.status_code >= 400:
@@ -254,9 +278,10 @@ def _stream_gemini_generate(*, model_name: str, payload: dict, api_key: Optional
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{quote(model_name, safe='')}:streamGenerateContent"
 
     def _request(request_payload: dict) -> requests.Response:
+        raise_if_provider_cancelled()
         request_kwargs: Dict[str, Any] = {
             "json": request_payload,
-            "timeout": 120,
+            "timeout": PROVIDER_HTTP_TIMEOUT,
             "stream": True,
             "params": {"alt": "sse"},
         }
@@ -347,11 +372,12 @@ def _stream_mistral_conversations(*, api_key: str, payload: dict) -> Generator[S
     request_payload["stream"] = True
 
     def _request() -> requests.Response:
+        raise_if_provider_cancelled()
         return requests.post(
             "https://api.mistral.ai/v1/conversations",
             json=request_payload,
             headers=_mistral_headers(api_key),
-            timeout=120,
+            timeout=PROVIDER_HTTP_TIMEOUT,
             stream=True,
         )
 
@@ -383,24 +409,27 @@ def _stream_mistral_conversations(*, api_key: str, payload: dict) -> Generator[S
 
 
 def _stream_chat_completions(*, client: openai.OpenAI, payload: dict) -> Generator[StreamEvent, None, None]:
+    raise_if_provider_cancelled()
     request_payload = dict(payload)
     request_payload["stream"] = True
-    stream = client.chat.completions.create(**request_payload)
     parts: list = []
     finish_reason = None
-    for chunk in stream:
-        choices = getattr(chunk, "choices", None) or []
-        if not choices:
-            continue
-        if getattr(choices[0], "finish_reason", None):
-            finish_reason = choices[0].finish_reason
-        delta = getattr(choices[0], "delta", None)
-        text = getattr(delta, "content", None) if delta else None
-        if text:
-            parts.append(text)
-            yield {"type": "delta", "text": text}
-        elif delta is not None and getattr(delta, "reasoning_content", None):
-            yield {"type": "reasoning"}
+    with managed_provider_resource(client):
+        stream = client.chat.completions.create(**request_payload)
+        with managed_provider_resource(stream):
+            for chunk in stream:
+                choices = getattr(chunk, "choices", None) or []
+                if not choices:
+                    continue
+                if getattr(choices[0], "finish_reason", None):
+                    finish_reason = choices[0].finish_reason
+                delta = getattr(choices[0], "delta", None)
+                text = getattr(delta, "content", None) if delta else None
+                if text:
+                    parts.append(text)
+                    yield {"type": "delta", "text": text}
+                elif delta is not None and getattr(delta, "reasoning_content", None):
+                    yield {"type": "reasoning"}
 
     answer = "".join(parts).strip()
     if not answer:
@@ -576,7 +605,7 @@ def stream_deepseek_query(
             attachments=attachments,
         )
         _log_model_selection("DeepSeek", request_data["api_model"], deep_search, model_override)
-        client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        client = openai_client(api_key=api_key, base_url="https://api.deepseek.com")
         yield from _stream_chat_completions(client=client, payload=request_data["payload"])
     except Exception as e:
         yield {"type": "final", "result": _error("DeepSeek", e)}
@@ -648,7 +677,8 @@ def stream_chat_completion_text(
     response_format: Optional[dict] = None,
     reasoning_effort: Optional[str] = None,
 ) -> Iterator[StreamEvent]:
-    client = openai.OpenAI(api_key=api_key, base_url=base_url) if base_url else openai.OpenAI(api_key=api_key)
+    raise_if_provider_cancelled()
+    client = openai_client(api_key=api_key, base_url=base_url)
     kwargs = {"model": model, "messages": messages, "stream": True, token_param: max_tokens}
     if temperature is not None:
         kwargs["temperature"] = temperature
@@ -656,17 +686,20 @@ def stream_chat_completion_text(
         kwargs["response_format"] = response_format
     if reasoning_effort is not None:
         kwargs["reasoning_effort"] = reasoning_effort
-    for chunk in client.chat.completions.create(**kwargs):
-        choices = getattr(chunk, "choices", None) or []
-        if not choices:
-            continue
-        delta = getattr(choices[0], "delta", None)
-        text = getattr(delta, "content", None) if delta else None
-        if text:
-            yield {"type": "delta", "text": text}
-        elif delta is not None and getattr(delta, "reasoning_content", None):
-            # DeepSeek-Reasoning streamt den Denkprozess als reasoning_content.
-            yield {"type": "reasoning"}
+    with managed_provider_resource(client):
+        stream = client.chat.completions.create(**kwargs)
+        with managed_provider_resource(stream):
+            for chunk in stream:
+                choices = getattr(chunk, "choices", None) or []
+                if not choices:
+                    continue
+                delta = getattr(choices[0], "delta", None)
+                text = getattr(delta, "content", None) if delta else None
+                if text:
+                    yield {"type": "delta", "text": text}
+                elif delta is not None and getattr(delta, "reasoning_content", None):
+                    # DeepSeek-Reasoning streamt den Denkprozess als reasoning_content.
+                    yield {"type": "reasoning"}
 
 
 def stream_mistral_chat_text(
@@ -679,6 +712,7 @@ def stream_mistral_chat_text(
     response_format: Optional[dict] = None,
     reasoning_effort: Optional[str] = None,
 ) -> Iterator[StreamEvent]:
+    raise_if_provider_cancelled()
     payload = {"model": model, "messages": messages, "max_tokens": max_tokens, "stream": True}
     if temperature is not None:
         payload["temperature"] = temperature
@@ -690,7 +724,7 @@ def stream_mistral_chat_text(
         "https://api.mistral.ai/v1/chat/completions",
         json=payload,
         headers=_mistral_headers(api_key),
-        timeout=120,
+        timeout=PROVIDER_HTTP_TIMEOUT,
         stream=True,
     )
     if resp.status_code >= 400:
@@ -774,7 +808,11 @@ def stream_gemini_payload_text(*, api_model: str, payload: dict, api_key: Option
 # FastAPI-Helfer
 # ---------------------------------------------------------------------------
 
-def streaming_model_response(stream_gen: Generator[StreamEvent, None, None], provider_label: str, extra_fields: Optional[dict] = None) -> StreamingResponse:
+def streaming_model_response(
+    stream_gen: Generator[StreamEvent, None, None],
+    provider_label: str,
+    extra_fields: Optional[dict] = None,
+) -> StreamingResponse:
     """Verpackt einen Engine-Stream als SSE-Response mit delta/final-Events.
 
     Das final-Event hat dieselbe Struktur wie die bisherige JSON-Antwort
@@ -782,26 +820,31 @@ def streaming_model_response(stream_gen: Generator[StreamEvent, None, None], pro
     bestehende Auswertung weiterverwenden kann.
     """
     extras = dict(extra_fields or {})
+    cancellation = ProviderCancellation()
 
     def event_source():
         # Reasoning-Marker gedrosselt weiterreichen: das Frontend braucht nur
         # ein Lebenszeichen, keine hochfrequenten Events.
         last_reasoning_at = None
         try:
-            for item in stream_gen:
-                if item.get("type") == "delta":
-                    text = coerce_text(item.get("text"))
-                    if text:
-                        yield sse_pack("delta", {"text": text})
-                elif item.get("type") == "reasoning":
-                    now = time.monotonic()
-                    if last_reasoning_at is None or now - last_reasoning_at >= 2.0:
-                        last_reasoning_at = now
-                        yield sse_pack("reasoning", {"text": ""})
-                elif item.get("type") == "final":
-                    yield sse_pack("final", source_response(item.get("result"), **extras))
-                    return
-        except Exception as exc:
+            with bind_provider_cancellation(cancellation):
+                for item in stream_gen:
+                    cancellation.raise_if_cancelled()
+                    if item.get("type") == "delta":
+                        text = coerce_text(item.get("text"))
+                        if text:
+                            yield sse_pack("delta", {"text": text})
+                    elif item.get("type") == "reasoning":
+                        now = time.monotonic()
+                        if last_reasoning_at is None or now - last_reasoning_at >= 2.0:
+                            last_reasoning_at = now
+                            yield sse_pack("reasoning", {"text": ""})
+                    elif item.get("type") == "final":
+                        yield sse_pack("final", source_response(item.get("result"), **extras))
+                        return
+        except ProviderCancelled:
+            return
+        except Exception:
             logger.exception("Streaming failed for %s", provider_label)
             payload = {
                 "error": f"{provider_label} could not complete this request. Please try again later.",
@@ -811,5 +854,7 @@ def streaming_model_response(stream_gen: Generator[StreamEvent, None, None], pro
             }
             payload.update(extras)
             yield sse_pack("final", payload)
+        finally:
+            cancellation.cancel()
 
     return StreamingResponse(event_source(), media_type="text/event-stream", headers=dict(SSE_HEADERS))

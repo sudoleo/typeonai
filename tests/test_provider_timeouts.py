@@ -11,7 +11,7 @@ import ast
 from pathlib import Path
 from unittest.mock import patch
 
-from app.services.llm import engines
+from app.services.llm import engines, provider_runtime
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 AUDITED_DIRS = [
@@ -29,7 +29,42 @@ def test_query_claude_sets_timeout():
         engines.query_claude("hello", api_key="sk-test")
 
     assert mock_post.called
-    assert mock_post.call_args.kwargs.get("timeout") == 120
+    assert mock_post.call_args.kwargs.get("timeout") == provider_runtime.PROVIDER_HTTP_TIMEOUT
+
+
+def test_openai_compatible_clients_disable_sdk_retries_and_set_timeout():
+    with patch.object(provider_runtime.openai, "OpenAI") as constructor:
+        provider_runtime.openai_client(
+            api_key="sk-test", base_url="https://provider.invalid/v1"
+        )
+
+    constructor.assert_called_once_with(
+        api_key="sk-test",
+        base_url="https://provider.invalid/v1",
+        timeout=provider_runtime.PROVIDER_READ_TIMEOUT_SECONDS,
+        max_retries=0,
+    )
+
+
+def test_provider_modules_use_only_the_central_openai_client_factory():
+    violations = []
+    for directory in AUDITED_DIRS:
+        for path in sorted(directory.rglob("*.py")):
+            if path.name == "provider_runtime.py":
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                func = node.func
+                if (
+                    isinstance(func, ast.Attribute)
+                    and func.attr == "OpenAI"
+                    and isinstance(func.value, ast.Name)
+                    and func.value.id == "openai"
+                ):
+                    violations.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno}")
+    assert not violations, f"OpenAI SDK clients outside central factory: {violations}"
 
 
 def _is_requests_call(node: ast.Call) -> bool:

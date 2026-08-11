@@ -12,6 +12,7 @@ from firebase_admin import auth
 
 import app.core.config as cfg
 from app.core import security
+from app.core.background_tasks import task_succeeded
 from app.api.routers.pages import SITE_URL
 from app.services import (
     mailer, opinion_map, share_snapshots, telegram_watch, watch_brief,
@@ -635,18 +636,13 @@ async def watch_scheduler_loop():
             # Clear before the tick so a wake-up arriving during a long run is
             # retained and causes another immediate scan afterwards.
             wake_event.clear()
-            try:
-                await run_watch_tick()
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                logging.exception("Consensus Watch scheduler tick failed")
-            try:
-                await run_brief_tick()
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                logging.exception("Morning brief scheduler tick failed")
+            watches_ran = await run_watch_tick()
+            briefs_sent = await run_brief_tick()
+            task_succeeded(
+                "consensus-watch-scheduler",
+                watches_ran=watches_ran,
+                briefs_sent=briefs_sent,
+            )
             try:
                 await asyncio.wait_for(wake_event.wait(), timeout=TICK_SECONDS)
             except asyncio.TimeoutError:

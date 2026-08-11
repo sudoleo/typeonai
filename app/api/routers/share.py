@@ -260,7 +260,7 @@ def _raise_share_error(exc):
 
 @router.post("/api/share")
 @limiter.limit("5/minute")
-async def create_share(request: Request, data: dict = Body(...)):
+def create_share(request: Request, data: dict = Body(...)):
     uid = _require_uid(request, data)
     result_id = str(data.get("result_id") or "").strip()
     if not result_id:
@@ -286,7 +286,7 @@ async def create_share(request: Request, data: dict = Body(...)):
 
 @router.delete("/api/share/{share_id}")
 @limiter.limit("10/minute")
-async def delete_share(request: Request, share_id: str, data: dict = Body(default={})):
+def delete_share(request: Request, share_id: str, data: dict = Body(default={})):
     uid = _require_uid(request, data)
     try:
         snapshots.revoke_share(share_id, uid, is_admin=is_user_admin(uid))
@@ -300,7 +300,7 @@ async def delete_share(request: Request, share_id: str, data: dict = Body(defaul
 
 @router.get("/api/my/shares")
 @limiter.limit("20/minute")
-async def my_shares(request: Request):
+def my_shares(request: Request):
     uid = _require_uid(request, {})
     try:
         shares = snapshots.list_shares_for_owner(uid)
@@ -312,7 +312,7 @@ async def my_shares(request: Request):
 
 @router.post("/api/share/{share_id}/indexing-request")
 @limiter.limit("10/minute")
-async def request_indexing(request: Request, share_id: str, data: dict = Body(default={})):
+def request_indexing(request: Request, share_id: str, data: dict = Body(default={})):
     """Owner nominiert die eigene öffentliche Seite für den Google-Index.
 
     Setzt nur ``index_requested`` – die eigentliche Freigabe (``indexed``)
@@ -334,7 +334,7 @@ async def request_indexing(request: Request, share_id: str, data: dict = Body(de
 
 @router.post("/api/share/{share_id}/report")
 @limiter.limit("3/minute")
-async def report_share(request: Request, share_id: str, data: dict = Body(default={})):
+def report_share(request: Request, share_id: str, data: dict = Body(default={})):
     # Bewusst ohne Auth (Besucher sollen melden können) und ohne IP/UA-
     # Speicherung; Missbrauchsschutz nur über das Rate-Limit.
     reason = str(data.get("reason") or "other")
@@ -360,7 +360,7 @@ def _unavailable_response(request, status_code, heading, message):
 
 @router.get("/sitemap-shares.xml")
 @limiter.limit("30/minute")
-async def sitemap_shares(request: Request):
+def sitemap_shares(request: Request):
     """Nur vom Admin indexierte UND aktive Shares – alles andere ist noindex
     und hat in der Sitemap nichts verloren."""
     try:
@@ -392,7 +392,7 @@ async def sitemap_shares(request: Request):
 
 @router.get("/questions", response_class=HTMLResponse)
 @limiter.limit("30/minute")
-async def questions_hub(request: Request):
+def questions_hub(request: Request):
     """Öffentliche Hub-Seite: verlinkt alle indexierten Share-Seiten intern.
 
     SEO-Zweck: indexierte Shares hingen bisher nur in der Sitemap ("verwaiste
@@ -445,7 +445,7 @@ async def questions_hub(request: Request):
 
 @router.get("/s/{slug_id}/og.png")
 @limiter.limit("60/minute")
-async def share_og_card(request: Request, slug_id: str):
+def share_og_card(request: Request, slug_id: str):
     """Generierte Open-Graph-Karte (PNG) einer öffentlichen Share-Seite."""
     _slug, share_id = snapshots.split_slug_id(slug_id)
     if not snapshots.is_valid_share_id(share_id) or not og_image.is_available():
@@ -510,7 +510,7 @@ async def share_og_card(request: Request, slug_id: str):
 
 @router.get("/s/{slug_id}", response_class=HTMLResponse)
 @limiter.limit("30/minute")
-async def share_page(request: Request, slug_id: str):
+def share_page(request: Request, slug_id: str):
     slug, share_id = snapshots.split_slug_id(slug_id)
     if not snapshots.is_valid_share_id(share_id):
         return _unavailable_response(

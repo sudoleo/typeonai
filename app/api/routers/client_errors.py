@@ -48,7 +48,7 @@ def _require_same_origin(request: Request) -> None:
 
 @router.post("/api/client-errors", status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("5/minute")
-async def report_client_error(
+def report_client_error(
     request: Request,
     background_tasks: BackgroundTasks,
     data: dict = Body(...),

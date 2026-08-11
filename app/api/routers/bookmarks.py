@@ -195,7 +195,7 @@ def sanitize_attachment_meta(raw):
 
 @router.get("/bookmarks")
 @limiter.limit("20/minute")
-async def load_bookmarks(
+def load_bookmarks(
     request: Request,
     cursor: str = Query(default="", max_length=256),
     limit: int = Query(default=BOOKMARK_PAGE_SIZE, ge=1, le=BOOKMARK_PAGE_SIZE_MAX),
@@ -230,7 +230,7 @@ async def load_bookmarks(
 
 @router.get("/bookmarks/{bookmark_id}")
 @limiter.limit("30/minute")
-async def load_bookmark_detail(request: Request, bookmark_id: str):
+def load_bookmark_detail(request: Request, bookmark_id: str):
     uid = _bookmark_uid(request)
     if not BOOKMARK_ID_RE.fullmatch(bookmark_id):
         raise HTTPException(status_code=404, detail="Bookmark not found")
@@ -337,7 +337,7 @@ def load_bookmark_conversation(
 
 @router.post("/bookmark")
 @limiter.limit("20/minute")
-async def save_bookmark(request: Request, data: dict = Body(...)):
+def save_bookmark(request: Request, data: dict = Body(...)):
     id_token     = data.get("id_token")
     question     = data.get("question")
     response_text= data.get("response")
@@ -412,7 +412,7 @@ async def save_bookmark(request: Request, data: dict = Body(...)):
 
 @router.post("/bookmark/consensus")
 @limiter.limit("3/minute")
-async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
+def save_bookmark_consensus(request: Request, data: dict = Body(...)):
     id_token = extract_id_token(request, data)
     question = data.get("question")
     consensusText = data.get("consensusText")
@@ -509,7 +509,7 @@ async def save_bookmark_consensus(request: Request, data: dict = Body(...)):
 
 @router.post("/bookmark/consensus/share-result")
 @limiter.limit("10/minute")
-async def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
+def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
     """Create or reuse a share/watch pending result for an owned bookmark."""
     id_token = extract_id_token(request, data)
     bookmark_id = str(data.get("bookmarkId") or "").strip()
@@ -569,7 +569,7 @@ async def prepare_bookmark_share_result(request: Request, data: dict = Body(...)
 
 
 @router.delete("/bookmark")
-async def delete_bookmark(data: dict):
+def delete_bookmark(data: dict):
     id_token = data.get("id_token")
     bookmark_id = data.get("bookmarkId")
     

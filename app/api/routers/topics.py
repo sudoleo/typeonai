@@ -486,7 +486,7 @@ async def _notify_topic_followers(topic: dict, run: dict, old_score) -> None:
 @router.get("/api/admin/topics")
 @limiter.limit("30/minute")
 async def admin_list_topics(request: Request):
-    _require_admin(request)
+    await asyncio.to_thread(_require_admin, request)
     try:
         items = await asyncio.to_thread(topics.list_admin_topics)
         return {"status": "success", "topics": items}
@@ -498,7 +498,7 @@ async def admin_list_topics(request: Request):
 @router.post("/api/admin/topics")
 @limiter.limit("20/minute")
 async def admin_create_topic(request: Request, data: dict = Body(...)):
-    actor_uid = _require_admin(request, data)
+    actor_uid = await asyncio.to_thread(_require_admin, request, data)
     payload = {key: value for key, value in data.items() if key != "id_token"}
     try:
         topic = await asyncio.to_thread(
@@ -515,7 +515,7 @@ async def admin_create_topic(request: Request, data: dict = Body(...)):
 @router.get("/api/admin/topics/{topic_id}")
 @limiter.limit("30/minute")
 async def admin_get_topic(request: Request, topic_id: str):
-    _require_admin(request)
+    await asyncio.to_thread(_require_admin, request)
     topic = await asyncio.to_thread(topics.get_topic, topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -533,7 +533,7 @@ async def admin_get_topic(request: Request, topic_id: str):
 async def admin_update_topic(
     request: Request, topic_id: str, data: dict = Body(...)
 ):
-    actor_uid = _require_admin(request, data)
+    actor_uid = await asyncio.to_thread(_require_admin, request, data)
     payload = {key: value for key, value in data.items() if key != "id_token"}
     try:
         topic = await asyncio.to_thread(
@@ -555,7 +555,7 @@ async def admin_create_topic_run(
     topic_id: str,
     data: dict = Body(...),
 ):
-    actor_uid = _require_admin(request, data)
+    actor_uid = await asyncio.to_thread(_require_admin, request, data)
     payload = {key: value for key, value in data.items() if key != "id_token"}
     try:
         topic_before = await asyncio.to_thread(topics.get_topic, topic_id)

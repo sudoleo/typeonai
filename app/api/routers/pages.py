@@ -14,6 +14,12 @@ from app.core.security import verify_user_token, extract_id_token, db_firestore
 from firebase_admin import firestore
 from app.core.state import last_feedback_time
 import app.core.config as cfg
+from app.services.llm.provider_runtime import (
+    PROVIDER_KEY_CHECK_TIMEOUT_SECONDS,
+    managed_provider_resource,
+    openai_client,
+    provider_http_timeout,
+)
 
 # To be supplied by main.py dependency injection or imported 
 # We'll import templates from main or setup a generic one here.
@@ -85,7 +91,7 @@ def sitemap_pages_xml():
     return Response(content=xml, media_type="application/xml")
 
 @router.get("/", response_class=HTMLResponse)
-async def landing(request: Request):
+def landing(request: Request):
     return templates.TemplateResponse("landing.html", {"request": request})
 
 @router.get("/privacy", response_class=HTMLResponse)
@@ -177,7 +183,7 @@ def public_model_leaderboard(request: Request):
 # Deep-Link auf das Watch-Dashboard: gleiche App-Shell, das Frontend öffnet
 # die Watch-Seite anhand des Pfads (watch.js).
 @router.get("/app/watches", response_class=HTMLResponse)
-async def read_root(request: Request):
+def read_root(request: Request):
     firebase_config = {
         "firebase_api_key": os.environ.get("FIREBASE_API_KEY"),
         "firebase_auth_domain": os.environ.get("FIREBASE_AUTH_DOMAIN"),
@@ -233,7 +239,7 @@ async def read_root(request: Request):
     return response
 
 @router.get("/admin", response_class=HTMLResponse)
-async def admin_page(request: Request):
+def admin_page(request: Request):
     firebase_config = {
         "firebase_api_key": os.environ.get("FIREBASE_API_KEY"),
         "firebase_auth_domain": os.environ.get("FIREBASE_AUTH_DOMAIN"),
@@ -248,7 +254,7 @@ async def admin_page(request: Request):
     })
 
 @router.get("/admin/benchmark", response_class=HTMLResponse)
-async def admin_benchmark_page(request: Request):
+def admin_benchmark_page(request: Request):
     firebase_config = {
         "firebase_api_key": os.environ.get("FIREBASE_API_KEY"),
         "firebase_auth_domain": os.environ.get("FIREBASE_AUTH_DOMAIN"),
@@ -264,12 +270,12 @@ async def admin_benchmark_page(request: Request):
 
 
 @router.get("/admin/topics")
-async def admin_topics_page():
+def admin_topics_page():
     return RedirectResponse("/admin#topics", status_code=308)
 
 @router.post("/feedback")
 @limiter.limit("3/minute")
-async def submit_feedback(request: Request, data: dict = Body(...)):
+def submit_feedback(request: Request, data: dict = Body(...)):
     message = data.get("message")
     email = data.get("email")
     id_token = extract_id_token(request, data)
@@ -312,7 +318,7 @@ ALLOWED_VOTE_TYPES = {"BestModel"}
 
 @router.post("/vote")
 @limiter.limit("3/minute")
-async def record_vote(request: Request, data: dict = Body(...)):
+def record_vote(request: Request, data: dict = Body(...)):
     id_token = extract_id_token(request, data)
     model = data.get("model")
     vote_type = data.get("vote_type")
@@ -345,7 +351,7 @@ def is_valid(key):
 
 @router.post("/check_keys")
 @limiter.limit("3/minute")
-async def check_keys(request: Request, data: dict = Body(...)):
+def check_keys(request: Request, data: dict = Body(...)):
     id_token = extract_id_token(request, data)
     if not id_token:
         raise HTTPException(status_code=401, detail="Please log in to test and use your own API keys.")
@@ -371,15 +377,19 @@ async def check_keys(request: Request, data: dict = Body(...)):
         # OpenAI Handshake
         try:
             if openai_key and len(openai_key) > 10:
-                client = openai.OpenAI(api_key=openai_key, timeout=15)
-                response = client.chat.completions.create(
-                    model=cfg.DEFAULT_MODEL_BY_PROVIDER["openai"],
-                    messages=[
-                        {"role": "system", "content": "ping"},
-                        {"role": "user", "content": "ping"}
-                    ],
-                    max_completion_tokens=5
+                client = openai_client(
+                    api_key=openai_key,
+                    timeout_seconds=PROVIDER_KEY_CHECK_TIMEOUT_SECONDS,
                 )
+                with managed_provider_resource(client):
+                    client.chat.completions.create(
+                        model=cfg.DEFAULT_MODEL_BY_PROVIDER["openai"],
+                        messages=[
+                            {"role": "system", "content": "ping"},
+                            {"role": "user", "content": "ping"}
+                        ],
+                        max_completion_tokens=5
+                    )
                 results["OpenAI"] = "valid"
             else:
                 results["OpenAI"] = "invalid"
@@ -390,12 +400,16 @@ async def check_keys(request: Request, data: dict = Body(...)):
         # Mistral Handshake
         try:
             if mistral_key and len(mistral_key) > 10:
-                client = Mistral(api_key=mistral_key, timeout_ms=15000)
-                response = client.chat.complete(
-                    model=cfg.DEFAULT_MODEL_BY_PROVIDER["mistral"],
-                    messages=[{"role": "user", "content": "ping"}],
-                    max_tokens=5
+                client = Mistral(
+                    api_key=mistral_key,
+                    timeout_ms=int(PROVIDER_KEY_CHECK_TIMEOUT_SECONDS * 1000),
                 )
+                with managed_provider_resource(client):
+                    client.chat.complete(
+                        model=cfg.DEFAULT_MODEL_BY_PROVIDER["mistral"],
+                        messages=[{"role": "user", "content": "ping"}],
+                        max_tokens=5
+                    )
                 results["Mistral"] = "valid"
             else:
                 results["Mistral"] = "invalid"
@@ -417,11 +431,17 @@ async def check_keys(request: Request, data: dict = Body(...)):
                     "max_tokens": 5,
                     "messages": [{"role": "user", "content": "ping"}]
                 }
-                resp = requests.post(url, json=payload, headers=headers, timeout=15)
-                if resp.status_code == 200:
-                    results["Anthropic"] = "valid"
-                else:
-                    results["Anthropic"] = "invalid"
+                resp = requests.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    timeout=provider_http_timeout(PROVIDER_KEY_CHECK_TIMEOUT_SECONDS),
+                )
+                with managed_provider_resource(resp):
+                    if resp.status_code == 200:
+                        results["Anthropic"] = "valid"
+                    else:
+                        results["Anthropic"] = "invalid"
             else:
                 results["Anthropic"] = "invalid"
         except Exception as e:
@@ -436,7 +456,7 @@ async def check_keys(request: Request, data: dict = Body(...)):
                 resp = model.generate_content(
                     "ping",
                     generation_config={"max_output_tokens": 5},
-                    request_options={"timeout": 15},
+                    request_options={"timeout": PROVIDER_KEY_CHECK_TIMEOUT_SECONDS},
                 )
                 results["Gemini"] = "valid"
             else:
@@ -448,12 +468,17 @@ async def check_keys(request: Request, data: dict = Body(...)):
         # DeepSeek Handshake
         try:
             if deepseek_key and len(deepseek_key) > 10:
-                client = openai.OpenAI(api_key=deepseek_key, base_url="https://api.deepseek.com", timeout=15)
-                response = client.chat.completions.create(
-                    model=cfg.DEFAULT_MODEL_BY_PROVIDER["deepseek"],
-                    messages=[{"role": "user", "content": "ping"}],
-                    max_tokens=5
+                client = openai_client(
+                    api_key=deepseek_key,
+                    base_url="https://api.deepseek.com",
+                    timeout_seconds=PROVIDER_KEY_CHECK_TIMEOUT_SECONDS,
                 )
+                with managed_provider_resource(client):
+                    client.chat.completions.create(
+                        model=cfg.DEFAULT_MODEL_BY_PROVIDER["deepseek"],
+                        messages=[{"role": "user", "content": "ping"}],
+                        max_tokens=5
+                    )
                 results["DeepSeek"] = "valid"
             else:
                 results["DeepSeek"] = "invalid"
@@ -464,12 +489,17 @@ async def check_keys(request: Request, data: dict = Body(...)):
         # Grok Handshake
         try:
             if grok_key and len(grok_key) > 10:
-                client = openai.OpenAI(api_key=grok_key, base_url="https://api.x.ai/v1", timeout=15)
-                response = client.chat.completions.create(
-                    model=cfg.DEFAULT_MODEL_BY_PROVIDER["grok"],
-                    messages=[{"role": "user", "content": "ping"}],
-                    max_tokens=5
+                client = openai_client(
+                    api_key=grok_key,
+                    base_url="https://api.x.ai/v1",
+                    timeout_seconds=PROVIDER_KEY_CHECK_TIMEOUT_SECONDS,
                 )
+                with managed_provider_resource(client):
+                    client.chat.completions.create(
+                        model=cfg.DEFAULT_MODEL_BY_PROVIDER["grok"],
+                        messages=[{"role": "user", "content": "ping"}],
+                        max_tokens=5
+                    )
                 results["Grok"] = "valid"
             else:
                 results["Grok"] = "invalid"

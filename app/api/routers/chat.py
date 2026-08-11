@@ -989,7 +989,7 @@ def ask_grok_post(request: Request, data: dict = Body(...)):
 
 
 @router.post("/prepare")
-async def prepare(request: Request, data: dict = Body(...)):
+def prepare(request: Request, data: dict = Body(...)):
     question = validate_text_size(
         data.get("question"),
         label="Question",

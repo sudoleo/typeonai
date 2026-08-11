@@ -204,7 +204,7 @@ def test_portfolio_judge_sends_terra_with_medium_reasoning(monkeypatch):
         def __init__(self, **kwargs):
             self.chat = type("Chat", (), {"completions": Completions()})()
 
-    monkeypatch.setattr(weekly.openai, "OpenAI", Client)
+    monkeypatch.setattr(weekly, "openai_client", lambda **kwargs: Client(**kwargs))
     judge = weekly.SeoPortfolioJudge(api_key="test-key", model="gpt-5.6-terra")
     assert judge.ask([], "Current brief")["summary"] == "Stable"
     assert captured["model"] == "gpt-5.6-terra"

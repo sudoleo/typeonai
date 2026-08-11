@@ -38,7 +38,7 @@ def _raise(exc: watch_service.WatchError):
 
 @router.post("/api/watch")
 @limiter.limit("5/minute")
-async def create_watch(request: Request, data: dict = Body(...)):
+def create_watch(request: Request, data: dict = Body(...)):
     uid = _uid(request, data)
     if "visibility" not in data:
         raise HTTPException(status_code=400, detail="Choose whether the watch page is private or public.")
@@ -71,7 +71,7 @@ async def create_watch(request: Request, data: dict = Body(...)):
 
 @router.get("/api/my/watches")
 @limiter.limit("20/minute")
-async def my_watches(request: Request):
+def my_watches(request: Request):
     uid = _uid(request, {})
     try:
         watches = watch_service.list_watches(uid, include_history=True)
@@ -97,7 +97,7 @@ async def my_watches(request: Request):
 
 @router.patch("/api/watch/{watch_id}")
 @limiter.limit("10/minute")
-async def patch_watch(request: Request, watch_id: str, data: dict = Body(...)):
+def patch_watch(request: Request, watch_id: str, data: dict = Body(...)):
     uid = _uid(request, data)
     changes = {key: value for key, value in data.items() if key != "id_token"}
     if changes.get("telegram_enabled") is True and not telegram_watch.get_connection(uid).get("connected"):
@@ -114,7 +114,7 @@ async def patch_watch(request: Request, watch_id: str, data: dict = Body(...)):
 
 @router.get("/api/my/telegram")
 @limiter.limit("20/minute")
-async def my_telegram(request: Request):
+def my_telegram(request: Request):
     uid = _uid(request, {})
     try:
         return {"status": "success", "telegram": telegram_watch.get_connection(uid)}
@@ -125,7 +125,7 @@ async def my_telegram(request: Request):
 
 @router.post("/api/my/telegram/link")
 @limiter.limit("5/minute")
-async def create_telegram_link(request: Request, data: dict = Body(default={})):
+def create_telegram_link(request: Request, data: dict = Body(default={})):
     uid = _uid(request, data)
     try:
         link = telegram_watch.create_link(uid)
@@ -140,7 +140,7 @@ async def create_telegram_link(request: Request, data: dict = Body(default={})):
 @router.post("/api/my/telegram/test")
 @limiter.limit("3/minute")
 async def test_telegram(request: Request, data: dict = Body(default={})):
-    uid = _uid(request, data)
+    uid = await asyncio.to_thread(_uid, request, data)
     try:
         result = await asyncio.to_thread(telegram_watch.send_test, uid)
     except watch_service.WatchError as exc:
@@ -153,7 +153,7 @@ async def test_telegram(request: Request, data: dict = Body(default={})):
 
 @router.delete("/api/my/telegram")
 @limiter.limit("5/minute")
-async def disconnect_telegram(request: Request, data: dict = Body(default={})):
+def disconnect_telegram(request: Request, data: dict = Body(default={})):
     uid = _uid(request, data)
     try:
         state = telegram_watch.disconnect(uid)
@@ -180,7 +180,7 @@ async def telegram_webhook(request: Request, data: dict = Body(default={})):
 
 @router.delete("/api/watch/{watch_id}")
 @limiter.limit("10/minute")
-async def remove_watch(request: Request, watch_id: str, data: dict = Body(default={})):
+def remove_watch(request: Request, watch_id: str, data: dict = Body(default={})):
     uid = _uid(request, data)
     try:
         watch_service.delete_watch(uid, watch_id)
@@ -200,7 +200,7 @@ async def remove_watch(request: Request, watch_id: str, data: dict = Body(defaul
 
 @router.get("/api/my/watch-brief")
 @limiter.limit("20/minute")
-async def my_watch_brief(request: Request):
+def my_watch_brief(request: Request):
     uid = _uid(request, {})
     try:
         return {
@@ -215,7 +215,7 @@ async def my_watch_brief(request: Request):
 
 @router.patch("/api/my/watch-brief")
 @limiter.limit("10/minute")
-async def patch_watch_brief(request: Request, data: dict = Body(...)):
+def patch_watch_brief(request: Request, data: dict = Body(...)):
     uid = _uid(request, data)
     changes = {key: value for key, value in data.items() if key != "id_token"}
     try:
@@ -250,7 +250,9 @@ async def follow_share(request: Request, share_id: str, data: dict = Body(defaul
     generisch, damit Adressen nicht enumeriert werden können.
     """
     try:
-        pending = watch_followers.request_follow(share_id, data.get("email"))
+        pending = await asyncio.to_thread(
+            watch_followers.request_follow, share_id, data.get("email")
+        )
     except watch_service.WatchError as exc:
         _raise(exc)
     except Exception:
@@ -272,7 +274,7 @@ async def follow_share(request: Request, share_id: str, data: dict = Body(defaul
 
 @router.get("/watch/follow/confirm", response_class=HTMLResponse)
 @limiter.limit("20/minute")
-async def follow_confirm(request: Request, token: str = ""):
+def follow_confirm(request: Request, token: str = ""):
     try:
         result = watch_followers.confirm_follow(token)
         question = " ".join(str(result.get("question") or "").split())[:120]
@@ -287,7 +289,7 @@ async def follow_confirm(request: Request, token: str = ""):
 
 @router.get("/watch/follow/unsubscribe", response_class=HTMLResponse)
 @limiter.limit("20/minute")
-async def follow_unsubscribe(request: Request, token: str = ""):
+def follow_unsubscribe(request: Request, token: str = ""):
     try:
         watch_followers.unsubscribe_follow(token)
         return _unsubscribe_page(
@@ -299,7 +301,7 @@ async def follow_unsubscribe(request: Request, token: str = ""):
 
 @router.get("/watch/unsubscribe", response_class=HTMLResponse)
 @limiter.limit("20/minute")
-async def unsubscribe(request: Request, token: str = ""):
+def unsubscribe(request: Request, token: str = ""):
     try:
         watch_service.unsubscribe(token)
         heading, message, status_code = "Watch paused", "You will no longer receive updates for this consensus watch.", 200
@@ -310,7 +312,7 @@ async def unsubscribe(request: Request, token: str = ""):
 
 @router.get("/watch/brief/unsubscribe", response_class=HTMLResponse)
 @limiter.limit("20/minute")
-async def unsubscribe_brief(request: Request, token: str = ""):
+def unsubscribe_brief(request: Request, token: str = ""):
     try:
         watch_brief.unsubscribe_brief(token)
         heading, message, status_code = "Morning brief disabled", "You will no longer receive the daily watch digest. Individual watch alerts are unaffected.", 200

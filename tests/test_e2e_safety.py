@@ -83,7 +83,7 @@ def test_e2e_lifespan_starts_no_maintenance_or_background_tasks(monkeypatch):
     monkeypatch.setenv("E2E_TEST_MODE", "1")
 
     async def enter_lifespan():
-        with patch.object(main, "_run_startup_jobs") as startup_jobs, patch.object(
+        with patch.object(main, "_load_startup_configuration") as startup_jobs, patch.object(
             main.asyncio, "create_task"
         ) as create_task:
             async with main.lifespan(main.app):

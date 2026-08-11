@@ -37,11 +37,14 @@ def test_public_mockups_use_the_same_score_semantics():
     assert '<div class="consensus-verdict is-calm">' in product
     assert '<span class="verdict-headline">Strong agreement</span>' in product
     assert (
-        'style="--val:94" title="Agreement score 94/100"' in landing
-        and '<span class="verdict-headline">High agreement</span>' in landing
+        'style="--val:68" title="Agreement score 68/100"' in landing
+        and '<span class="verdict-headline">Strong agreement</span>' in landing
     )
     assert (
-        'style="--val:84" title="Agreement score 84/100"' in landing
-        and landing.count('<span class="verdict-headline">Strong agreement</span>')
-        >= 2
+        'style="--val:64" title="Agreement score 64/100"' in engine
+        and '<span class="verdict-headline">Partial agreement</span>' in engine
+    )
+    assert (
+        'style="--val:82" title="Agreement score 82/100"' in engine
+        and '<span class="verdict-headline">Strong agreement</span>' in engine
     )

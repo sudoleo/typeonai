@@ -1,4 +1,5 @@
 import json
+import threading
 import unittest
 from unittest import mock
 
@@ -11,10 +12,12 @@ from app.services.llm.streaming import (
     _stream_chat_completions,
     _stream_openai_responses,
     iter_sse_events,
+    iter_sse_with_keepalive,
     sse_pack,
     stream_grok_query,
     streaming_model_response,
 )
+from app.services.llm.provider_runtime import managed_provider_resource
 from app.services.llm.consensus_engine import (
     is_consensus_error_text,
     stream_consensus,
@@ -49,6 +52,39 @@ def parse_sse_text(raw: str):
     for event_name, data_str in iter_sse_events(fake):
         events.append((event_name, json.loads(data_str)))
     return events
+
+
+class ProviderCancellationTests(unittest.TestCase):
+    def test_disconnect_closes_active_provider_resource(self):
+        closed = threading.Event()
+        producer_stopped = threading.Event()
+
+        class BlockingResponse:
+            def close(self):
+                closed.set()
+
+        def source():
+            try:
+                with managed_provider_resource(BlockingResponse()):
+                    yield "event: delta\ndata: {}\n\n"
+                    closed.wait(timeout=2)
+            finally:
+                producer_stopped.set()
+
+        downstream = iter_sse_with_keepalive(source(), interval_seconds=0.01)
+        self.assertIn("event: delta", next(downstream))
+        downstream.close()
+
+        self.assertTrue(closed.wait(timeout=1))
+        self.assertTrue(producer_stopped.wait(timeout=1))
+
+    def test_sse_response_is_closed_after_normal_exhaustion(self):
+        response = FakeSSEResponse("event: final\ndata: {}\n\n")
+        response.closed = False
+        response.close = lambda: setattr(response, "closed", True)
+
+        self.assertEqual(list(iter_sse_events(response)), [("final", "{}")])
+        self.assertTrue(response.closed)
 
 
 class SSEPackTests(unittest.TestCase):

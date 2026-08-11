@@ -20,6 +20,11 @@ if os.environ.get("E2E_TEST_MODE") != "1":
 logging.basicConfig(level=logging.INFO)
 
 from app.core.security import CustomSecurityMiddleware, db_firestore
+from app.core.background_tasks import (
+    mark_task_disabled,
+    supervise_background_task,
+    task_health_snapshot,
+)
 from app.core.request_limits import RequestBodyLimitMiddleware
 from app.core.e2e_profile import e2e_test_mode_enabled
 from app.core.rate_limit import limiter
@@ -44,10 +49,9 @@ from app.services.api_account_cleanup import FirestoreApiAccountCleanup
 from app.services.account_deletion import FirestoreAccountDeletion
 from app.services.api_consensus_runner import (
     api_run_maintenance_loop,
-    recover_persisted_runs,
 )
 from app.services.llm.mock_llm import mock_llm_enabled
-from app.services.share_snapshots import cleanup_expired_pending, cleanup_revoked_shares
+from app.services.retention_maintenance import retention_maintenance_loop
 from app.services.topic_runner import topic_scheduler_loop
 from app.services.watch_scheduler import watch_scheduler_loop
 from app.services.watch_service import backfill_publisher_watch_lineage
@@ -56,38 +60,12 @@ from app.services.telegram_watch import run_startup_maintenance as telegram_star
 from app.services.telegram_notifier import send_critical_error_notification
 
 
-def _startup_job_timeout_seconds() -> int:
+def _load_startup_configuration() -> None:
+    """Load the only readiness-critical document with its SDK-side 5s budget."""
     try:
-        configured = int(os.environ.get("STARTUP_JOB_TIMEOUT_SECONDS", "15"))
-    except (TypeError, ValueError):
-        configured = 15
-    return max(5, min(configured, 60))
-
-
-STARTUP_JOB_TIMEOUT_SECONDS = _startup_job_timeout_seconds()
-
-
-def _run_startup_jobs_blocking(jobs):
-    for name, func in jobs:
-        try:
-            func()
-        except Exception:
-            logging.exception("%s failed on startup", name)
-
-
-async def _run_startup_jobs(jobs):
-    """Bound all blocking Firestore startup work by one readiness deadline."""
-    try:
-        await asyncio.wait_for(
-            asyncio.to_thread(_run_startup_jobs_blocking, jobs),
-            timeout=STARTUP_JOB_TIMEOUT_SECONDS,
-        )
-    except asyncio.TimeoutError:
-        logging.error(
-            "Firestore startup maintenance timed out after %ss; "
-            "startup continues with safe defaults",
-            STARTUP_JOB_TIMEOUT_SECONDS,
-        )
+        load_models_from_db()
+    except Exception:
+        logging.exception("load_models_from_db failed on startup; using code defaults")
 
 async def _disabled_loop() -> None:
     return None
@@ -99,8 +77,28 @@ def _scheduler_task(loop_factory, name: str):
     claim due schedule slots and publish fixture answers as real snapshots."""
     if mock_llm_enabled():
         logging.info("%s not started: MOCK_LLM=1", name)
+        mark_task_disabled(name, "MOCK_LLM=1")
         return asyncio.create_task(_disabled_loop(), name=name)
-    return asyncio.create_task(loop_factory(), name=name)
+    return _supervised_task(loop_factory, name)
+
+
+def _supervised_task(loop_factory, name: str, *, restart: bool = True):
+    return asyncio.create_task(
+        supervise_background_task(
+            name,
+            loop_factory,
+            restart=restart,
+            alert=send_critical_error_notification,
+        ),
+        name=name,
+    )
+
+
+def _one_shot_task(func, name: str):
+    async def run_once():
+        await asyncio.to_thread(func)
+
+    return _supervised_task(run_once, name, restart=False)
 
 
 @asynccontextmanager
@@ -117,25 +115,12 @@ async def lifespan(app: FastAPI):
     # Datenbereinigung wird nach transienten Firestore-Fehlern wiederholt.
     api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
     account_deletion = FirestoreAccountDeletion(db_firestore)
-    await _run_startup_jobs((
-        # Modell-Defaults bleiben bei einem Timeout aktiv.
-        ("load_models_from_db", load_models_from_db),
-        # TTL-Fallbacks; der tägliche Render-Restart triggert sie regelmäßig.
-        ("cleanup_expired_pending", cleanup_expired_pending),
-        ("cleanup_revoked_shares", cleanup_revoked_shares),
-        ("blocked Consensus API account cleanup retry", api_account_cleanup.retry_pending),
-        ("full account deletion retry", account_deletion.retry_pending),
-        # reserved->running bleibt transaktional und wird zusätzlich vom
-        # 60-Sekunden-Maintenance-Loop wieder aufgenommen.
-        ("recover_persisted_runs", recover_persisted_runs),
-    ))
-    lineage_backfill_task = asyncio.create_task(
-        asyncio.to_thread(backfill_publisher_watch_lineage),
-        name="publisher-watch-lineage-backfill",
+    _load_startup_configuration()
+    lineage_backfill_task = _one_shot_task(
+        backfill_publisher_watch_lineage, "publisher-watch-lineage-backfill"
     )
-    telegram_webhook_task = asyncio.create_task(
-        asyncio.to_thread(telegram_startup_maintenance),
-        name="telegram-watch-startup-maintenance",
+    telegram_webhook_task = _one_shot_task(
+        telegram_startup_maintenance, "telegram-watch-startup-maintenance"
     )
     watch_task = _scheduler_task(watch_scheduler_loop, "consensus-watch-scheduler")
     topic_task = _scheduler_task(topic_scheduler_loop, "topic-scheduler")
@@ -145,55 +130,32 @@ async def lifespan(app: FastAPI):
     api_maintenance_task = _scheduler_task(
         api_run_maintenance_loop, "consensus-api-maintenance"
     )
-    api_account_cleanup_task = asyncio.create_task(
-        api_account_cleanup.retry_loop(), name="consensus-api-account-cleanup"
+    retention_task = _supervised_task(
+        retention_maintenance_loop, "retention-maintenance"
     )
-    account_deletion_task = asyncio.create_task(
-        account_deletion.retry_loop(), name="full-account-deletion-cleanup"
+    api_account_cleanup_task = _supervised_task(
+        api_account_cleanup.retry_loop, "consensus-api-account-cleanup"
+    )
+    account_deletion_task = _supervised_task(
+        account_deletion.retry_loop, "full-account-deletion-cleanup"
+    )
+    tasks = (
+        watch_task,
+        topic_task,
+        seo_review_task,
+        api_maintenance_task,
+        retention_task,
+        api_account_cleanup_task,
+        account_deletion_task,
+        lineage_backfill_task,
+        telegram_webhook_task,
     )
     try:
         yield
     finally:
-        watch_task.cancel()
-        topic_task.cancel()
-        seo_review_task.cancel()
-        api_maintenance_task.cancel()
-        api_account_cleanup_task.cancel()
-        account_deletion_task.cancel()
-        lineage_backfill_task.cancel()
-        telegram_webhook_task.cancel()
-        try:
-            await watch_task
-        except asyncio.CancelledError:
-            pass
-        try:
-            await topic_task
-        except asyncio.CancelledError:
-            pass
-        try:
-            await seo_review_task
-        except asyncio.CancelledError:
-            pass
-        try:
-            await api_account_cleanup_task
-        except asyncio.CancelledError:
-            pass
-        try:
-            await account_deletion_task
-        except asyncio.CancelledError:
-            pass
-        try:
-            await api_maintenance_task
-        except asyncio.CancelledError:
-            pass
-        try:
-            await lineage_backfill_task
-        except asyncio.CancelledError:
-            pass
-        try:
-            await telegram_webhook_task
-        except asyncio.CancelledError:
-            pass
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 app = FastAPI(
     title="consens.io API",
@@ -201,6 +163,18 @@ app = FastAPI(
     description="Asynchronous, user-bound Consensus runs.",
     lifespan=lifespan,
 )
+
+
+@app.get("/health/maintenance", include_in_schema=False)
+def maintenance_health():
+    tasks = task_health_snapshot()
+    degraded = any(
+        item.get("state") in {"failed", "restarting"} for item in tasks.values()
+    )
+    return {
+        "status": "degraded" if degraded else "ok",
+        "tasks": tasks,
+    }
 
 # Add Custom Security Middleware
 app.add_middleware(CustomSecurityMiddleware)

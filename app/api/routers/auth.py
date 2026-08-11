@@ -53,6 +53,20 @@ def _recent_registration_method(user) -> str:
     return "firebase"
 
 
+def _find_or_create_password_user(email: str, password: str):
+    """Run the complete blocking Firebase Auth bundle in one worker thread."""
+    try:
+        auth.get_user_by_email(email)
+        return None
+    except firebase_admin.auth.UserNotFoundError:
+        pass
+    try:
+        return auth.create_user(email=email, password=password)
+    except firebase_admin.auth.EmailAlreadyExistsError:
+        # Create race: preserve the same non-enumerating response.
+        return None
+
+
 @router.post("/register")
 @limiter.limit("3/minute")
 async def register_user(
@@ -70,23 +84,15 @@ async def register_user(
         # hier Kunde ist. Beide Faelle liefern dieselbe neutrale Antwort; nur der
         # echte Neuzugang bekommt zusaetzlich ein customToken. Der Client zeigt
         # in beiden Faellen denselben "Check your inbox"-Screen.
-        try:
-            auth.get_user_by_email(email)
-            return await _neutral_registration_response(started_at)
-        except firebase_admin.auth.UserNotFoundError:
-            # Keine Registrierung mit dieser E-Mail gefunden, also weiter
-            pass
-
-        try:
-            user = auth.create_user(email=email, password=password)
-        except firebase_admin.auth.EmailAlreadyExistsError:
-            # Wettlauf zwischen Pruefung und Anlage: ebenfalls neutral bleiben.
-            return await _neutral_registration_response(started_at)
-        background_tasks.add_task(
-            send_new_user_registration_notification,
-            "email/password",
-            user.uid,
+        user = await asyncio.to_thread(
+            _find_or_create_password_user, email, password
         )
+        if user is not None:
+            background_tasks.add_task(
+                send_new_user_registration_notification,
+                "email/password",
+                user.uid,
+            )
         return await _neutral_registration_response(started_at)
 
     except HTTPException:
@@ -100,7 +106,7 @@ async def register_user(
     
 
 @router.post("/confirm-registration")
-async def confirm_registration(
+def confirm_registration(
     request: Request,
     background_tasks: BackgroundTasks,
     data: dict = Body(...),
@@ -148,7 +154,7 @@ async def confirm_registration(
 
 
 @router.delete("/auth/session")
-async def clear_session():
+def clear_session():
     response = JSONResponse({"status": "signed_out"})
     response.headers["Cache-Control"] = "no-store"
     response.delete_cookie("session", path="/", httponly=True, samesite="lax")

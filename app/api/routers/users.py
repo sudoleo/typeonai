@@ -42,7 +42,7 @@ def _run_limits(is_pro: bool) -> UsageLimits:
 
 @router.get("/user_status")
 @limiter.limit("20/minute")
-async def get_user_status(request: Request):
+def get_user_status(request: Request):
     """
     Prüft den Status des Nutzers (Free vs. Pro) basierend auf dem ID-Token.
     Wird beim Seiten-Load (checkUserStatusOnLoad) aufgerufen.
@@ -85,7 +85,7 @@ async def get_user_status(request: Request):
 
 @router.post("/usage")
 @limiter.limit("20/minute")
-async def get_usage_post(request: Request, data: UsageRequest):
+def get_usage_post(request: Request, data: UsageRequest):
     """
     Liefert den persistenten Run-Stand des aktuellen UTC-Tags zurück.
     """
@@ -126,7 +126,7 @@ async def get_usage_post(request: Request, data: UsageRequest):
 
 @router.post("/usage/run/release")
 @limiter.limit("20/minute")
-async def release_usage_run(request: Request, data: dict = Body(...)):
+def release_usage_run(request: Request, data: dict = Body(...)):
     token = extract_id_token(request, data)
     if not token:
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -156,7 +156,7 @@ async def release_usage_run(request: Request, data: dict = Body(...)):
 
 @router.post("/delete_account")
 @limiter.limit("3/minute")
-async def delete_account(request: Request, data: dict = Body(default={})):
+def delete_account(request: Request, data: dict = Body(default={})):
     """
     Löscht den Account vollständig (DSGVO Art. 17): Auth-Account, users-Dokument
     inkl. Bookmarks, Usage-Daten, Einträgen in pro_waitlist und feedback.
@@ -214,7 +214,7 @@ async def delete_account(request: Request, data: dict = Body(default={})):
 
 @router.post("/track-interest")
 @limiter.limit("5/minute")
-async def track_interest(request: Request, data: dict = Body(...)):
+def track_interest(request: Request, data: dict = Body(...)):
     """
     Speichert das Interesse an der Pro-Version in der DB.
     """

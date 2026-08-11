@@ -28,8 +28,9 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 - **Markdown/Mathematik**: `marked` + `DOMPurify` clientseitig und
   `markdown-it-py` + `nh3` für Share-Seiten; KaTeX setzt in beiden Ansichten
   LaTeX-Ausdrücke nach dem sanitisierten Markdown-Rendern.
-- **Hosting**: Render. Täglicher Render-Restart wird bewusst als Reset für
-  In-Memory-State und als Trigger für Cleanup-Jobs genutzt (siehe §7).
+- **Hosting**: Render. Der tägliche Render-Restart setzt weiterhin flüchtigen
+  Prozess-State zurück; Retention/Cleanup läuft davon unabhängig periodisch
+  im überwachten Background-Task (siehe §7).
 
 ---
 
@@ -40,20 +41,18 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 fügt das vor dem Framework-Parsing greifende `RequestBodyLimitMiddleware`,
 `CustomSecurityMiddleware` (CSP etc.) + slowapi-Limiter hinzu, mountet
 `/static`, registriert globale Exception-Handler und inkludiert alle Router.
-Im `lifespan`-Startup: `load_models_from_db()` + Share-Cleanups (siehe §7),
-Recovery/Retention noch nicht abgeschlossener Consensus-API-Runs und Retry
-blockierter API- sowie vollständiger Account-Cleanups. Diese synchronen Firestore-Jobs laufen
-sequenziell in einem Worker-Thread unter einem gemeinsamen, standardmäßig
-15-sekündigen Readiness-Budget; bei Firestore-Störungen startet die App mit
-Code-Defaults und die regulären Maintenance-Loops übernehmen Retries, statt den
-Web-Event-Loop dauerhaft zu blockieren. Der Modell-Config-Read selbst deaktiviert
-den langen SDK-Retry und bricht nach fünf Sekunden ab. Ein separater, nicht die
-Readiness blockierender Einmal-Task verifiziert und ergänzt fehlende Publisher-
+Im `lifespan`-Startup ist nur `load_models_from_db()` readiness-kritisch; dessen
+Firestore-Read deaktiviert SDK-Retries und besitzt ein echtes Fünf-Sekunden-
+Budget. Alle nicht abbrechbaren Cleanup-/Recovery-Arbeiten starten erst nach
+Readiness in überwachten Tasks. Ein separater Einmal-Task verifiziert und ergänzt fehlende Publisher-
 Lineage bei alten Free-Publisher-Watches; ein weiterer best-effort Einmal-Task
 räumt abgelaufene Telegram-Link-/Delivery-Metadaten auf und registriert bei
 vollständiger Telegram-Konfiguration den User-Bot-Webhook.
-Cancellable asyncio-Tasks übernehmen danach
-den 60-Sekunden-API-Maintenance-, 5-Minuten-Account-Cleanup- und
+`app/core/background_tasks.py` überwacht alle Lifespan-Tasks, startet abgestürzte
+Loops mit exponentiellem Backoff neu, alarmiert nach drei aufeinanderfolgenden
+Fehlern und hält Start-/Fehler-/letzte Erfolgszeiten für
+`GET /health/maintenance`. Cancellable Tasks übernehmen den 60-Sekunden-API-
+Maintenance-, 5-Minuten-Account-Cleanup-, stündlichen Retention- und
 30-Minuten-Consensus-Watch-Tick.
 Im expliziten Browser-Testprofil `E2E_TEST_MODE=1` überspringt der Lifespan
 dagegen alle Startup-, Cleanup-, Recovery-, Backfill-, Webhook- und Scheduler-
@@ -63,6 +62,11 @@ mit der festen Demo-Projekt-ID `demo-consensio-e2e` und einem lokalen
 den Emulator. Produktive Credentials sind kein E2E-Fallback.
 
 Router liegen unter `app/api/routers/` und werden in `main.py` eingebunden:
+
+Handler mit synchroner Firebase-/Firestore-Arbeit sind normale `def`-Handler;
+FastAPI führt ihr zusammenhängendes Auth-/Read-/Transaktionsbündel im Worker-
+Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
+`asyncio.to_thread`, Webhook) und darf nicht ohne Await eingeführt werden.
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
@@ -862,6 +866,12 @@ dient vielerorts als State (z. B. `.excluded`-Klasse, Datasets) — bewusster
    Nicht-SSE-Antworten werden zuerst als Text gelesen und, falls möglich, als
    JSON geparst; Plain-Text-/Proxy-/HTTP-Fehler bleiben dadurch sichtbar und
    werden nicht mehr zur generischen „No response received“-Meldung.
+   `llm/provider_runtime.py` setzt für alle OpenAI-kompatiblen SDK-Clients und
+   REST-Transporte zentrale Connect-/Read-Budgets (Default 10/120 s) und
+   `max_retries=0`; fachliche Judge-Fallbacks bleiben explizit im Engine-Code.
+   Browserabbruch beendet einen begonnenen SSE-Lauf: das Cancellation-Signal
+   schließt aktive HTTP-/SDK-Streams, unterbindet weitere Provider-Retries und
+   der abgebrochene Generator erreicht keine nachgelagerte Persistenz.
 4. Ohne Agent Mode begleitet `consensus-progress.js` den Lauf rahmenlos unter
    dem Input: Antwortfortschritt basiert auf `dataset.responseState`; nach dem
    Fan-out wechselt die Anzeige zur nicht prozentual geschätzten Synthesephase
@@ -1042,7 +1052,9 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   `POST /chats` oder `POST /turns` blockieren einen aktiven Follow-up vor dem
   Fan-out; eine frische erste Frage darf bei ausgefallener optionaler Persistenz
   weiterhin ohne Chat-Bindung laufen. Ein lokaler Abort behauptet keine
-  serverseitige Terminalität und erhält bekannte pending IDs. Ein Abbruch oder
+  serverseitige Terminalität und erhält bekannte pending IDs. Der Server bricht
+  den zugehörigen SSE-Providerlauf kooperativ ab und persistiert kein nur
+  teilweise erzeugtes Ergebnis. Ein Abbruch oder
   Verlassen der Seite nach der frühen Follow-up-Turn-Anlage, aber vor einer
   autoritativen `/consensus`-Disposition kann daher weiterhin einen pending
   Turn hinterlassen; ein Retry im laufenden Browser ist durch die stabile
@@ -1592,6 +1604,7 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
 ```
 main.py                      App-Entry, Middleware, Router-Registrierung, lifespan
 app/core/
+  background_tasks.py        Supervisor, Restart-Backoff, Alerts und Task-Health
   config.py                  Modell-Kataloge, Tier-Limits, Firestore-Sync (load_models_from_db)
   security.py                Firebase-Init, Token/Tier/Admin-Checks, CSP-Middleware
   request_limits.py          ASGI-Bodylimit vor JSON-/Form-Parsing (Content-Length + chunked)
@@ -1601,6 +1614,7 @@ app/api/routers/             siehe §2
   api_v1.py                  Gescopte Run-, Publish-, Share-Lifecycle- und Indexing-API + OpenAPI-Modelle
   chat_history.py            Owner-gebundene Chat-/Turn-API inkl. vollständigem Turn-Detail
 app/services/llm/
+  provider_runtime.py        Zentrale Timeout-/Retry-Policy + Stream-Cancellation
   base.py                    System-Prompt, Wortzählung, validate_model
   engines.py                 Provider-Requests (build_provider_payload, query_*)
   streaming.py               SSE-Helfer, stream_*_query, streaming_model_response
@@ -1627,6 +1641,7 @@ app/services/
   telegram_notifier.py      Gemeinsamer Bot-API-Client + Best-effort-Statusmeldungen für SEO-Reviews
   telegram_watch.py         User-Link-Deep-Links/Webhook, Callback-Aktionen + deduplizierte Watch-Zustellung
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
+  retention_maintenance.py   Periodischer Pending-/Revoked-Share-Cleanup
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
   opinion_map.py             Datenminimierte, mehrdimensionale Provider-Positionen + Direction-Shift-Berechnung
   watch_brief.py             Morning-Brief-Settings (watch_briefs), transaktionaler Claim, Digest-Aggregation, Brief-Unsubscribe-Tokens
@@ -2030,8 +2045,12 @@ Deploy manuell über die Firebase Console):
   `${SITE_URL}/api/telegram/webhook` mit Telegrams Secret-Token-Header. Chat-IDs
   kommen ausschließlich aus dem verifizierten `/start`-Webhook, nie aus
   Nutzereingaben.
-- Optional `STARTUP_JOB_TIMEOUT_SECONDS` (Default 15, Clamp 5–60): gemeinsames
-  Readiness-Zeitbudget für die blockierenden Firestore-Startup-Jobs.
+- Provider-Transport: `PROVIDER_CONNECT_TIMEOUT_SECONDS` (Default 10, Clamp
+  1–30) und `PROVIDER_READ_TIMEOUT_SECONDS` (Default 120, Clamp 10–300).
+  Automatische SDK-Retries bleiben fest deaktiviert; semantische Judge-Retries
+  stehen explizit im Code.
+- Retention: `RETENTION_MAINTENANCE_INTERVAL_SECONDS` (Default 3600, Clamp
+  60–86400) steuert den vom Prozess-Restart unabhängigen Cleanup-Tick.
 
 Code-Fallback-Modell-IDs und Labels liegen in `app/core/config.py`
 (`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
@@ -2110,7 +2129,7 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   ```
   Reine String-/Quelltextverträge sind mit `source_contract` gekennzeichnet und
   laufen weiterhin mit; sie gelten ausdrücklich nicht als Verhaltensabdeckung.
-  Verifizierte Baseline am 2026-08-09: **1003 passed, 43 warnings**.
+  Verifizierte Baseline am 2026-08-11: **1048 passed, 44 warnings**.
 - **Playwright-Smoke-Suite** (`tests/e2e/`, Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, kompakte Antwort→Consensus-
@@ -2162,11 +2181,14 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   .\venv\Scripts\python.exe -m uvicorn main:app --reload
   ```
 
-**Cleanup-Jobs**: Share-Cleanups laufen im `lifespan`-Startup von `main.py`
-(zusätzlich durch den täglichen Render-Restart getriggert):
-`cleanup_expired_pending`, `cleanup_revoked_shares`. Consensus-API-Retention,
-Lease-/Queue-Recovery laufen zusätzlich alle 60 Sekunden; fehlgeschlagene
-API-Account-Löschkaskaden alle fünf Minuten.
+**Cleanup-Jobs**: `retention_maintenance_loop` führt
+`cleanup_expired_pending` und `cleanup_revoked_shares` direkt nach Task-Start
+und danach standardmäßig stündlich aus; der tägliche Render-Restart ist keine
+Voraussetzung mehr. Revoked-Shares werden bereits per `revoked_at < cutoff`
+gefiltert, deterministisch sortiert und vollständig in begrenzten Seiten
+abgearbeitet. Consensus-API-Retention/Lease-/Queue-Recovery laufen alle 60
+Sekunden; fehlgeschlagene API- und Vollkonto-Löschkaskaden alle fünf Minuten.
+Alle Loops werden beaufsichtigt und melden nach jedem erfolgreichen Tick Health.
 
 **Weekly SEO Review** läuft in einem eigenen Lifespan-Task mit 15-minütigem
 Fälligkeitscheck; `next_run_at` wird aus Intervall, lokaler Uhrzeit und Zeitzone
@@ -2416,6 +2438,15 @@ ersten Check statt eines leeren Consensus-Panels.
 - **Provider-Label-Konvention**: Frontend nutzt teils `Claude`, Backend kanonisch
   `Anthropic`. Beim Verdrahten neuer Modelle Mapping in `app-core.js::modelPrefs`
   und Backend-`normalize_model_name` synchron halten.
+- **Provider-Laufzeitvertrag**: Neue LLM-Transporte verwenden ausschließlich
+  `llm/provider_runtime.py` für Timeout-/SDK-Retry-Konfiguration. Ein SSE-
+  Disconnect bedeutet „Serverarbeit abbrechen“; aktive Responses müssen am
+  normalen Ende und bei Cancellation geschlossen werden. Automatische
+  Transport-Retries dürfen keinen zweiten kostenpflichtigen Versuch verstecken.
+- **Blocking-I/O-Vertrag**: Router mit synchronem Firebase-/Firestore-SDK sind
+  `def`; echte Async-Routen lagern vollständige blockierende Bündel per
+  `asyncio.to_thread` aus. Einzelne SDK-Calls dürfen nicht direkt in einem
+  `async def` landen. `test_router_event_loop_contract.py` schützt dies.
 - **Usage-Key ist ein Backend-/Frontend-Vertrag.** Ein frischer logischer Lauf
   nutzt denselben `usage_run_key` in `/prepare`, allen `/ask_*` und
   `/consensus`; Resolve nutzt einen eigenen Key. Run-Typ (`regular` oder

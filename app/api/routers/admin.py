@@ -122,7 +122,7 @@ _SHARE_ERROR_STATUS = {"not_found": 404, "bad_request": 400}
 
 @router.get("/api/admin/seo")
 async def admin_get_seo_overview(request: Request):
-    _require_admin(request, {})
+    await asyncio.to_thread(_require_admin, request, {})
     try:
         result = await asyncio.to_thread(seo_data_service.overview)
         result["content_judge"] = seo_recommendation_service.content_judge.status()
@@ -135,7 +135,7 @@ async def admin_get_seo_overview(request: Request):
 
 @router.post("/api/admin/seo/check")
 async def admin_check_seo_connection(request: Request, data: dict = Body(default={})):
-    _require_admin(request, data)
+    await asyncio.to_thread(_require_admin, request, data)
     try:
         return await asyncio.to_thread(seo_data_service.check_connection)
     except Exception:
@@ -148,7 +148,7 @@ async def admin_check_seo_connection(request: Request, data: dict = Body(default
 
 @router.post("/api/admin/seo/collect")
 async def admin_collect_seo_data(request: Request, data: dict = Body(default={})):
-    _require_admin(request, data)
+    await asyncio.to_thread(_require_admin, request, data)
     try:
         return await asyncio.to_thread(seo_data_service.collect)
     except seo_data.CollectionAlreadyRunning:
@@ -187,7 +187,7 @@ def _raise_seo_review_error(exc):
 
 @router.get("/api/admin/seo/review")
 async def admin_get_seo_weekly_review(request: Request):
-    _require_admin(request, {})
+    await asyncio.to_thread(_require_admin, request, {})
     try:
         return await asyncio.to_thread(seo_weekly_review_service.status)
     except Exception:
@@ -199,7 +199,7 @@ async def admin_get_seo_weekly_review(request: Request):
 async def admin_save_seo_weekly_review_config(
     request: Request, data: AdminSeoReviewConfigRequest = Body(...)
 ):
-    _require_admin(request, {})
+    await asyncio.to_thread(_require_admin, request, {})
     try:
         return await asyncio.to_thread(
             seo_weekly_review_service.save_config,
@@ -218,7 +218,7 @@ async def admin_save_seo_weekly_review_config(
 @router.post("/api/admin/seo/review/run")
 @limiter.limit("3/minute")
 async def admin_run_seo_weekly_review(request: Request, data: dict = Body(default={})):
-    _require_admin(request, data)
+    await asyncio.to_thread(_require_admin, request, data)
     try:
         return await asyncio.to_thread(seo_weekly_review_service.run, force=True)
     except seo_weekly_review.ReviewAlreadyRunning:
@@ -232,7 +232,7 @@ async def admin_run_seo_weekly_review(request: Request, data: dict = Body(defaul
 async def admin_preview_seo_review_actions(
     request: Request, run_id: str, data: AdminSeoReviewActionRequest = Body(...)
 ):
-    _require_admin(request, {})
+    await asyncio.to_thread(_require_admin, request, {})
     try:
         return await asyncio.to_thread(
             seo_weekly_review_service.preview,
@@ -250,7 +250,7 @@ async def admin_preview_seo_review_actions(
 async def admin_apply_seo_review_actions(
     request: Request, run_id: str, data: AdminSeoReviewActionRequest = Body(...)
 ):
-    admin_uid = _require_admin(request, {})
+    admin_uid = await asyncio.to_thread(_require_admin, request, {})
     try:
         return await asyncio.to_thread(
             seo_weekly_review_service.apply,
@@ -269,7 +269,7 @@ async def admin_apply_seo_review_actions(
 async def admin_accept_seo_review_topic_brief(
     request: Request, run_id: str, data: dict = Body(default={})
 ):
-    admin_uid = _require_admin(request, data)
+    admin_uid = await asyncio.to_thread(_require_admin, request, data)
     try:
         return await asyncio.to_thread(
             seo_weekly_review_service.accept_topic_brief, run_id, admin_uid=admin_uid
@@ -282,7 +282,7 @@ async def admin_accept_seo_review_topic_brief(
 async def admin_reject_seo_review_topic_brief(
     request: Request, run_id: str, data: dict = Body(default={})
 ):
-    admin_uid = _require_admin(request, data)
+    admin_uid = await asyncio.to_thread(_require_admin, request, data)
     try:
         return await asyncio.to_thread(
             seo_weekly_review_service.reject_topic_brief, run_id, admin_uid=admin_uid
@@ -295,7 +295,7 @@ async def admin_reject_seo_review_topic_brief(
 async def admin_record_seo_editorial_decision(
     request: Request, run_id: str, data: AdminSeoEditorialDecisionRequest = Body(...)
 ):
-    admin_uid = _require_admin(request, {})
+    admin_uid = await asyncio.to_thread(_require_admin, request, {})
     try:
         return await asyncio.to_thread(
             seo_weekly_review_service.record_editorial_decision,
@@ -313,7 +313,7 @@ async def admin_record_seo_editorial_decision(
 async def admin_generate_seo_recommendation(
     request: Request, page_id: str, data: dict = Body(default={})
 ):
-    _require_admin(request, data)
+    await asyncio.to_thread(_require_admin, request, data)
     try:
         return await asyncio.to_thread(seo_recommendation_service.generate, page_id)
     except seo_recommendation.SeoRecommendationError as exc:
@@ -328,7 +328,7 @@ async def admin_generate_seo_recommendation(
 async def admin_ask_seo_content_judge(
     request: Request, page_id: str, data: dict = Body(default={})
 ):
-    _require_admin(request, data)
+    await asyncio.to_thread(_require_admin, request, data)
     try:
         return await asyncio.to_thread(
             seo_recommendation_service.ask_content_judge, page_id
@@ -446,7 +446,7 @@ def admin_list_watches(request: Request):
 
 @router.post("/api/admin/watches/{watch_id}/run")
 async def admin_run_watch(request: Request, watch_id: str, data: dict = Body(default={})):
-    _require_admin(request, data)
+    await asyncio.to_thread(_require_admin, request, data)
     try:
         watch = await asyncio.to_thread(watch_service.queue_watch_run, watch_id)
         watch_scheduler.wake_watch_scheduler()
@@ -461,7 +461,7 @@ async def admin_run_watch(request: Request, watch_id: str, data: dict = Body(def
 
 @router.post("/api/admin/watches/test-email")
 async def admin_send_watch_test_email(request: Request, data: dict = Body(default={})):
-    uid = _require_admin(request, data)
+    uid = await asyncio.to_thread(_require_admin, request, data)
     if not mailer.is_configured():
         raise HTTPException(status_code=503, detail="SMTP_HOST and MAIL_FROM must be configured")
     try:

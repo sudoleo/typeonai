@@ -37,6 +37,11 @@ from app.services.llm.citations import (
     parse_openai_response,
     result_text,
 )
+from app.services.llm.provider_runtime import (
+    PROVIDER_HTTP_TIMEOUT,
+    managed_provider_resource,
+    openai_client,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +184,7 @@ def _openai_responses_call(
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        timeout=120,
+        timeout=PROVIDER_HTTP_TIMEOUT,
     )
     if resp.status_code >= 400:
         raise RuntimeError(f"{resp.status_code} - {resp.text}")
@@ -529,7 +534,7 @@ def query_mistral(
             "https://api.mistral.ai/v1/conversations",
             json=payload,
             headers=_mistral_headers(api_key),
-            timeout=120,
+            timeout=PROVIDER_HTTP_TIMEOUT,
         )
         if _mistral_builtin_tools_unsupported(response):
             payload.pop("tools", None)
@@ -537,7 +542,7 @@ def query_mistral(
                 "https://api.mistral.ai/v1/conversations",
                 json=payload,
                 headers=_mistral_headers(api_key),
-                timeout=120,
+                timeout=PROVIDER_HTTP_TIMEOUT,
             )
         if response.status_code >= 400:
             raise RuntimeError(f"{response.status_code} - {response.text}")
@@ -591,7 +596,9 @@ def query_claude(
 
         _log_model_selection("Claude", payload["model"], deep_search, model_override)
 
-        response = requests.post(url, json=payload, headers=headers, timeout=120)
+        response = requests.post(
+            url, json=payload, headers=headers, timeout=PROVIDER_HTTP_TIMEOUT
+        )
         if response.status_code == 200:
             data = response.json()
             parsed = parse_anthropic_response(data)
@@ -632,7 +639,7 @@ def query_gemini(
         payload = request_data["payload"]
         request_kwargs = {
             "json": payload,
-            "timeout": 120,
+            "timeout": PROVIDER_HTTP_TIMEOUT,
         }
         if api_key:
             request_kwargs["params"] = {"key": api_key}
@@ -683,7 +690,7 @@ def query_deepseek(
     max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
 
     try:
-        client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        client = openai_client(api_key=api_key, base_url="https://api.deepseek.com")
         request_data = build_provider_payload(
             "deepseek",
             question=question,
@@ -694,7 +701,8 @@ def query_deepseek(
             attachments=attachments,
         )
         _log_model_selection("DeepSeek", request_data["api_model"], deep_search, model_override)
-        response = client.chat.completions.create(**request_data["payload"])
+        with managed_provider_resource(client):
+            response = client.chat.completions.create(**request_data["payload"])
         choice = response.choices[0]
         content = (choice.message.content or "").strip()
         if not content:

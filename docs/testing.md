@@ -37,6 +37,17 @@ Datenzugriffe verwenden weiterhin die jeweiligen In-Memory-Fakes. Unit-/
 Integrationstests dürfen daher keine Browserinstallation, Firebase-Credentials
 oder externen Dienste voraussetzen.
 
+Die Laufzeitstabilitäts-Verträge sind zusätzlich gezielt prüfbar:
+
+```powershell
+venv\Scripts\python.exe -m pytest tests\test_router_event_loop_contract.py tests\test_provider_timeouts.py tests\test_streaming.py tests\test_background_task_supervision.py -q
+```
+
+Sie prüfen Threadpool-Parallelität für blockierende Router, zentrale effektive
+Provider-Budgets ohne SDK-Retries, das Schließen von Streams bei Disconnect und
+Supervisor-Restart/Health/Alerting. Der Retention-Paginationstest liegt in
+`tests/test_share_feature.py`.
+
 Reine Quelltextverträge tragen den Marker `source_contract`. Sie laufen in der
 regulären Suite mit, gelten aber nicht als Ersatz für Browserverhalten. Eine
 gezielte Bestandsaufnahme ist möglich mit:

@@ -18,6 +18,12 @@ from app.core.config import GEMINI_FLASH_MODEL
 from app.services.llm.credentials import gemini_engine_credentials_available
 from app.services.llm.engines import _merge_nested_config
 from app.services.llm.mock_llm import mock_engine_stream, mock_engine_text, mock_llm_enabled
+from app.services.llm.provider_runtime import (
+    PROVIDER_HTTP_TIMEOUT,
+    managed_provider_resource,
+    openai_client,
+    raise_if_provider_cancelled,
+)
 
 CANONICAL_MODEL_NAMES = {
     "openai": "OpenAI",
@@ -116,7 +122,7 @@ def _gemini_engine_payload(
 
 
 def _gemini_generate_content(api_model: str, payload: dict, api_key: str | None) -> str:
-    request_kwargs = {"json": payload, "timeout": 120}
+    request_kwargs = {"json": payload, "timeout": PROVIDER_HTTP_TIMEOUT}
     if api_key and api_key.strip():
         request_kwargs["params"] = {"key": api_key.strip()}
     else:
@@ -191,7 +197,7 @@ def _mistral_chat_complete(
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        timeout=120,
+        timeout=PROVIDER_HTTP_TIMEOUT,
     )
     if response.status_code >= 400:
         raise RuntimeError(f"{response.status_code} - {response.text}")
@@ -286,6 +292,7 @@ def _call_engine_text(
     effort: str | None = None,
     json_schema: dict | None = None,
 ) -> str:
+    raise_if_provider_cancelled()
     if mock_llm_enabled():
         # E2E-Suite: deterministische Engine-Antwort; Prompt-Bau, Parsing,
         # Verifikation und Agreement-Score laufen weiterhin echt.
@@ -297,7 +304,7 @@ def _call_engine_text(
     if provider in ("openai", "deepseek", "grok"):
         base_url = _OPENAI_COMPAT_BASE_URLS.get(provider)
         api_key = api_keys.get(_PROVIDER_KEY_NAMES[provider])
-        client = openai.OpenAI(api_key=api_key, base_url=base_url) if base_url else openai.OpenAI(api_key=api_key)
+        client = openai_client(api_key=api_key, base_url=base_url)
         token_param = _openai_token_param(api_model) if provider == "openai" else "max_tokens"
         kwargs = {
             "model": api_model,
@@ -315,7 +322,8 @@ def _call_engine_text(
             # Nur echte OpenAI-Reasoning-Modelle kennen reasoning_effort;
             # DeepSeek/Grok (OpenAI-kompatibel) lehnen den Parameter ab.
             kwargs["reasoning_effort"] = effort
-        response = client.chat.completions.create(**kwargs)
+        with managed_provider_resource(client):
+            response = client.chat.completions.create(**kwargs)
         return (response.choices[0].message.content or "").strip()
 
     if provider == "mistral":
@@ -354,7 +362,7 @@ def _call_engine_text(
                 "Content-Type": "application/json",
                 "anthropic-version": "2023-06-01",
             },
-            timeout=120,
+            timeout=PROVIDER_HTTP_TIMEOUT,
         )
         if response.status_code >= 400:
             raise RuntimeError(f"Anthropic: {response.status_code} - {response.text}")

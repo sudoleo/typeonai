@@ -923,6 +923,26 @@ class ModerationAndCleanupTests(unittest.TestCase):
         self.assertIn(recent, store)
         self.assertIn(active, store)
 
+    def test_cleanup_revoked_shares_drains_more_than_one_page(self):
+        old_ids = [
+            self._make_share(
+                status="revoked",
+                revoked_at=datetime.now(timezone.utc) - timedelta(days=31 + index),
+            )
+            for index in range(5)
+        ]
+        recent = self._make_share(
+            status="revoked",
+            revoked_at=datetime.now(timezone.utc) - timedelta(days=2),
+        )
+
+        deleted = snapshots.cleanup_revoked_shares(db=self.db, max_docs=2)
+
+        store = self.db.stores[snapshots.SHARES_COLLECTION]
+        self.assertEqual(deleted, 5)
+        self.assertTrue(all(share_id not in store for share_id in old_ids))
+        self.assertIn(recent, store)
+
     def test_find_canonical_share_prefers_oldest_indexed(self):
         qh = snapshots.question_hash("Wie funktioniert Photosynthese in Pflanzen?")
         self._make_share(indexed=False)  # nicht indexiert: kein Canonical-Ziel

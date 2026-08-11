@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from firebase_admin import auth
 from google.cloud.firestore_v1.base_query import FieldFilter
 
+from app.core.background_tasks import task_succeeded
 from app.services import telegram_watch
 
 
@@ -157,8 +158,9 @@ class FirestoreApiAccountCleanup:
 
     async def retry_loop(self) -> None:
         while True:
+            completed = await asyncio.to_thread(self.retry_pending)
+            task_succeeded("consensus-api-account-cleanup", completed=completed)
             await asyncio.sleep(API_ACCOUNT_CLEANUP_INTERVAL_SECONDS)
-            await asyncio.to_thread(self.retry_pending)
 
     def clear_completed_block(self, uid: str) -> bool:
         """Remove the temporary tombstone after cleanup and Auth deletion."""

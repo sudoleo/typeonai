@@ -14,6 +14,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 import app.core.config as cfg
+from app.core.background_tasks import task_succeeded
 from app.core.security import db_firestore
 from app.services.api_account_cleanup import (
     ApiAccountInactive,
@@ -301,14 +302,16 @@ def recover_persisted_runs() -> int:
             fail_expired_run(run["run_id"])
     except Exception:
         logging.exception("Consensus API recovery scan failed")
+        raise
     return recovered
 
 
 async def api_run_maintenance_loop() -> None:
     """Periodically retry durable work and close expired worker leases."""
     while True:
+        recovered = await asyncio.to_thread(recover_persisted_runs)
+        task_succeeded("consensus-api-maintenance", recovered_runs=recovered)
         await asyncio.sleep(API_MAINTENANCE_INTERVAL_SECONDS)
-        await asyncio.to_thread(recover_persisted_runs)
 
 
 def execute_persisted_run(run_id: str) -> None:

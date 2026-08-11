@@ -18,9 +18,11 @@ from firebase_admin import firestore
 from google.cloud.firestore_v1 import Query
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from app.core.background_tasks import task_succeeded
 from app.core.security import db_firestore
 from app.services import publisher_config, seo_data, seo_recommendation
 from app.services import share_snapshots, telegram_notifier, watch_service
+from app.services.llm.provider_runtime import managed_provider_resource, openai_client
 from app.services.seo_repository import FirestoreSeoRepository
 
 
@@ -261,23 +263,24 @@ class SeoPortfolioJudge:
         if self.caller:
             raw = self.caller(prompt, PORTFOLIO_JUDGE_SCHEMA)
         else:
-            client = openai.OpenAI(api_key=self.api_key, timeout=60)
-            response = client.chat.completions.create(
-                model=self.model,
-                reasoning_effort="medium",
-                messages=[
-                    {"role": "system", "content": "You are a conservative SEO portfolio reviewer."},
-                    {"role": "user", "content": prompt},
-                ],
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "seo_portfolio_review",
-                        "strict": True,
-                        "schema": PORTFOLIO_JUDGE_SCHEMA,
+            client = openai_client(api_key=self.api_key, timeout_seconds=60)
+            with managed_provider_resource(client):
+                response = client.chat.completions.create(
+                    model=self.model,
+                    reasoning_effort="medium",
+                    messages=[
+                        {"role": "system", "content": "You are a conservative SEO portfolio reviewer."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "seo_portfolio_review",
+                            "strict": True,
+                            "schema": PORTFOLIO_JUDGE_SCHEMA,
+                        },
                     },
-                },
-            )
+                )
             raw = response.choices[0].message.content or ""
         try:
             parsed = (
@@ -1111,13 +1114,15 @@ async def seo_review_scheduler_loop():
         while True:
             wake_event.clear()
             try:
-                await run_due_review_tick()
+                result = await run_due_review_tick()
             except asyncio.CancelledError:
                 raise
             except ReviewAlreadyRunning:
-                pass
-            except Exception:
-                logging.exception("Weekly SEO review scheduler tick failed")
+                result = {"status": "already_running"}
+            task_succeeded(
+                "seo-weekly-review-scheduler",
+                result=str((result or {}).get("status") or "completed"),
+            )
             try:
                 await asyncio.wait_for(wake_event.wait(), timeout=SCHEDULER_TICK_SECONDS)
             except asyncio.TimeoutError:

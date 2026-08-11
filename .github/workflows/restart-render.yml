@@ -11,7 +11,10 @@ jobs:
     steps:
       - name: Trigger Render Restart
         run: |
-          curl -v --request POST \
+          curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 --max-time 60 \
+            --retry 3 --retry-delay 2 --retry-all-errors \
+            --request POST \
             --url "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/restart" \
             --header "Accept: application/json" \
             --header "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}"

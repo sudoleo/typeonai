@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from firebase_admin import auth, firestore
 
+from app.core.background_tasks import task_succeeded
 from app.core.security import invalidate_auth_tombstone_cache
 from app.services import share_snapshots, watch_service
 from app.services.api_account_cleanup import FirestoreApiAccountCleanup
@@ -187,8 +188,9 @@ class FirestoreAccountDeletion:
 
     async def retry_loop(self) -> None:
         while True:
+            completed = await asyncio.to_thread(self.retry_pending)
+            task_succeeded("full-account-deletion-cleanup", completed=completed)
             await asyncio.sleep(ACCOUNT_DELETION_RETRY_INTERVAL_SECONDS)
-            await asyncio.to_thread(self.retry_pending)
 
     def _delete_api_access(self, uid: str) -> None:
         self._api_cleanup.block(uid)
