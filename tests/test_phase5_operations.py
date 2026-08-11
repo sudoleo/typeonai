@@ -8,8 +8,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from fastapi.encoders import jsonable_encoder
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from firebase_admin import firestore
 
 from app.core.observability import CorrelationMiddleware, metrics_snapshot, record_metric
 from app.services import favicons, follow_challenges, persistence_guard, watch_brief
@@ -42,7 +44,9 @@ class Document:
     def set(self, data, merge=False):
         current = dict(self.db.data.get(self.path) or {}) if merge else {}
         for key, value in dict(data).items():
-            if type(value).__name__ == "Increment":
+            if value is firestore.SERVER_TIMESTAMP:
+                current[key] = datetime.now(timezone.utc)
+            elif type(value).__name__ == "Increment":
                 amount = getattr(value, "value", 1)
                 current[key] = int(current.get(key) or 0) + int(amount)
             elif merge and isinstance(value, dict) and isinstance(current.get(key), dict):
@@ -148,12 +152,20 @@ def test_bookmark_quota_counts_merges_and_rejects_oversize(monkeypatch):
     db = Database()
     ref = db.collection("users").document("u1").collection("bookmarks").document("b1")
     first = persistence_guard.write_bookmark(
-        uid="u1", doc_ref=ref, patch={"query": "Q", "responses": {"OpenAI": "A"}}, db=db
+        uid="u1", doc_ref=ref,
+        patch={
+            "query": "Q",
+            "responses": {"OpenAI": "A"},
+            "timestamp": firestore.SERVER_TIMESTAMP,
+        },
+        db=db,
     )
     second = persistence_guard.write_bookmark(
         uid="u1", doc_ref=ref, patch={"responses": {"Gemini": "B"}}, db=db
     )
     assert first["query"] == "Q"
+    assert isinstance(first["timestamp"], datetime)
+    assert jsonable_encoder(first)["timestamp"] == first["timestamp"].isoformat()
     assert second["responses"] == {"OpenAI": "A", "Gemini": "B"}
     usage = next(
         data for path, data in db.data.items()

@@ -164,7 +164,16 @@ def write_bookmark(*, uid: str, doc_ref, patch: dict, db) -> dict:
         })
         return _deep_merge(current, patch_with_size)
 
-    return _run_transaction(db, persist)
+    _run_transaction(db, persist)
+    # Firestore resolves transforms such as SERVER_TIMESTAMP only when the
+    # transaction commits.  Returning the in-memory merge from ``persist``
+    # would leak the Sentinel object into FastAPI's response encoder.  Read the
+    # authoritative document after commit, matching the bookmark endpoint's
+    # pre-quota contract and returning only persisted, JSON-safe values.
+    stored_snapshot = _get(doc_ref)
+    if not stored_snapshot.exists:
+        raise RuntimeError("Bookmark disappeared after the transaction committed.")
+    return stored_snapshot.to_dict() or {}
 
 
 def delete_bookmark(*, uid: str, doc_ref, db) -> dict | None:
