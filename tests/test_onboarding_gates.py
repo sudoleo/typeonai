@@ -95,6 +95,18 @@ def test_verification_link_returns_to_the_app_with_the_typed_question():
     assert "window.App.clearQuestionDraft?.()" in query_send
 
 
+def test_registration_never_probes_account_existence_with_caller_credentials():
+    firebase = read("static/firebase.js")
+    register = firebase[firebase.index('fetch("/register"'):]
+    register = register[:register.index(
+        'document.getElementById("forgotPasswordButton").addEventListener', 1
+    )]
+
+    assert "password: password" not in register
+    assert "signInWithEmailAndPassword" not in register
+    assert "showRegistrationSuccess(email)" in register
+
+
 # ---------------------------------------------------------------------------
 # 2. Follow-ups: frei, aber gezaehlt
 # ---------------------------------------------------------------------------

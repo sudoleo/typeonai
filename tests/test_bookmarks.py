@@ -161,14 +161,18 @@ def test_consensus_save_returns_complete_merged_bookmark():
         patch.object(
             bookmarks_router,
             "_authoritative_consensus_payload",
-            return_value={
-                "question": "Why?",
-                "consensus": "Merged consensus",
-                "differences": "Merged differences",
-                "differences_data": None,
-                "sources": [],
-                "result_id": "N" * 16,
-            },
+                return_value={
+                    "question": "Why?",
+                    "consensus": "Merged consensus",
+                    "differences": "Merged differences",
+                    "differences_data": None,
+                    "sources": [],
+                    "included_models": ["Gemini: Gemini-Pro"],
+                    "consensus_model": "Gemini-Pro",
+                    "model_responses": {"Gemini": "Authoritative answer"},
+                    "vote_subject_id": "authoritative-run-1",
+                    "result_id": "N" * 16,
+                },
         ),
     ):
         response = TestClient(app).post(
@@ -188,14 +192,13 @@ def test_consensus_save_returns_complete_merged_bookmark():
     bookmark = response.json()["bookmark"]
     assert bookmark["id"] == bookmark_id
     assert bookmark["query"] == "Why?"
-    assert bookmark["responses"] == {
-        "OpenAI": "Existing model answer",
-        "consensus": "Merged consensus",
-        "differences": "Merged differences",
-    }
+    assert bookmark["responses"]["Gemini"] == "Authoritative answer"
+    assert bookmark["responses"]["OpenAI"] == ""
+    assert bookmark["responses"]["consensus"] == "Merged consensus"
+    assert bookmark["responses"]["differences"] == "Merged differences"
     assert bookmark["share_result_id"] == "N" * 16
     assert bookmark["consensus_model"] == "Gemini-Pro"
-    assert bookmark["model_labels"] == {"OpenAI": "GPT-5.4 mini"}
+    assert bookmark["model_labels"] == {"Gemini": "Gemini-Pro"}
 
 
 def test_followup_bookmark_keeps_complete_previous_turn_for_restore():
@@ -431,6 +434,44 @@ def test_a_consensus_bookmark_without_a_completed_run_is_rejected():
         )
 
     assert response.status_code == 409
+
+
+def test_completed_turn_is_the_authoritative_source_for_model_provenance():
+    chat_id = "c" * 32
+    turn_id = "2" * 32
+
+    class FakeChatStore:
+        def get_turn(self, uid, requested_chat_id, requested_turn_id):
+            assert (uid, requested_chat_id, requested_turn_id) == (
+                "uid-1", chat_id, turn_id,
+            )
+            return {
+                "status": "completed",
+                "question": "Which source is authoritative?",
+                "consensus": "The completed turn is authoritative.",
+                "differences": "No material differences.",
+                "differences_data": {"agreement": {"score": 81}},
+                "sources": [],
+                "included_models": ["OpenAI: Historical GPT"],
+                "consensus_model": "Gemini-Pro",
+                "model_answers": {
+                    "OpenAI": {
+                        "answer": "A server-owned answer.",
+                        "model_label": "Historical GPT",
+                        "model": "untrusted-wrong-field",
+                    },
+                },
+                "result_id": "R" * 16,
+            }
+
+    with patch.object(bookmarks_router, "_chat_store", return_value=FakeChatStore()):
+        payload = bookmarks_router._authoritative_consensus_payload(
+            "uid-1", "", {"chat_id": chat_id, "turn_id": turn_id},
+        )
+
+    assert payload["model_responses"] == {"OpenAI": "A server-owned answer."}
+    assert payload["model_labels"] == {"OpenAI": "Historical GPT"}
+    assert payload["consensus_model"] == "Gemini-Pro"
 
 
 def test_chat_bookmark_conversation_returns_complete_owner_bound_turns():

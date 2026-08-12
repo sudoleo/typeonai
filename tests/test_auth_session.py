@@ -62,12 +62,11 @@ class AuthSessionTests(unittest.TestCase):
     def test_new_email_registration_schedules_telegram_notification(self):
         user = SimpleNamespace(uid="new-owner", email="new@example.test")
         with (
+            patch.object(auth_router, "is_password_setup_configured", return_value=True),
             patch.object(
-                auth_router.auth,
-                "get_user_by_email",
-                side_effect=auth_router.firebase_admin.auth.UserNotFoundError("missing"),
-            ),
-            patch.object(auth_router.auth, "create_user", return_value=user),
+                auth_router, "find_or_provision_user", return_value=(user, True)
+            ) as provision,
+            patch.object(auth_router, "deliver_password_setup_email") as deliver,
             patch.object(
                 auth_router,
                 "send_new_user_registration_notification",
@@ -75,20 +74,24 @@ class AuthSessionTests(unittest.TestCase):
         ):
             response = self.client.post(
                 "/register",
-                json={"email": "new@example.test", "password": "secret123"},
+                json={"email": "new@example.test"},
             )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "check_inbox"})
+        provision.assert_called_once_with("new@example.test")
+        deliver.assert_called_once_with("new@example.test")
         notify.assert_called_once_with("email/password", "new-owner")
 
     def test_existing_email_registration_does_not_notify(self):
         with (
+            patch.object(auth_router, "is_password_setup_configured", return_value=True),
             patch.object(
-                auth_router.auth,
-                "get_user_by_email",
-                return_value=SimpleNamespace(uid="existing-owner"),
+                auth_router,
+                "find_or_provision_user",
+                return_value=(SimpleNamespace(uid="existing-owner"), False),
             ),
+            patch.object(auth_router, "deliver_password_setup_email") as deliver,
             patch.object(
                 auth_router,
                 "send_new_user_registration_notification",
@@ -96,39 +99,75 @@ class AuthSessionTests(unittest.TestCase):
         ):
             response = self.client.post(
                 "/register",
-                json={"email": "existing@example.test", "password": "secret123"},
+                json={"email": "existing@example.test"},
             )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "check_inbox"})
+        deliver.assert_called_once_with("existing@example.test")
         notify.assert_not_called()
 
     def test_new_and_existing_registration_responses_are_identical(self):
         new_user = SimpleNamespace(uid="new-owner", email="same@example.test")
         with (
+            patch.object(auth_router, "is_password_setup_configured", return_value=True),
             patch.object(
-                auth_router.auth,
-                "get_user_by_email",
-                side_effect=auth_router.firebase_admin.auth.UserNotFoundError("missing"),
+                auth_router,
+                "find_or_provision_user",
+                return_value=(new_user, True),
             ),
-            patch.object(auth_router.auth, "create_user", return_value=new_user),
+            patch.object(auth_router, "deliver_password_setup_email"),
+            patch.object(auth_router, "send_new_user_registration_notification"),
         ):
             created = self.client.post(
                 "/register",
-                json={"email": "same@example.test", "password": "secret123"},
+                json={"email": "same@example.test"},
             )
-        with patch.object(
-            auth_router.auth,
-            "get_user_by_email",
-            return_value=SimpleNamespace(uid="existing-owner"),
+        with (
+            patch.object(auth_router, "is_password_setup_configured", return_value=True),
+            patch.object(
+                auth_router,
+                "find_or_provision_user",
+                return_value=(SimpleNamespace(uid="existing-owner"), False),
+            ),
+            patch.object(auth_router, "deliver_password_setup_email"),
+            patch.object(auth_router, "send_new_user_registration_notification"),
         ):
             existing = self.client.post(
                 "/register",
-                json={"email": "same@example.test", "password": "secret123"},
+                json={"email": "same@example.test"},
             )
 
         self.assertEqual(created.status_code, existing.status_code)
         self.assertEqual(created.content, existing.content)
+
+    def test_registration_ignores_cached_client_password(self):
+        user = SimpleNamespace(uid="new-owner")
+        with (
+            patch.object(auth_router, "is_password_setup_configured", return_value=True),
+            patch.object(
+                auth_router, "find_or_provision_user", return_value=(user, True)
+            ) as provision,
+            patch.object(auth_router, "deliver_password_setup_email"),
+            patch.object(auth_router, "send_new_user_registration_notification"),
+        ):
+            response = self.client.post(
+                "/register",
+                json={"email": "new@example.test", "password": "attacker-known"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        provision.assert_called_once_with("new@example.test")
+
+    def test_registration_rejects_control_characters_before_firebase(self):
+        with patch.object(auth_router, "find_or_provision_user") as provision:
+            response = self.client.post(
+                "/register",
+                json={"email": "log-line-one\nlog-line-two@example.test"},
+            )
+
+        self.assertEqual(response.status_code, 422)
+        provision.assert_not_called()
 
     def test_logout_clears_session_cookie(self):
         response = self.client.delete("/auth/session")

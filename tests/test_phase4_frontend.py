@@ -29,6 +29,8 @@ def test_usage_countdown_tracks_utc_midnight_and_refreshes_server_state():
     assert "getUTCFullYear()" in countdown
     assert "Date.UTC(" in countdown
     assert "window.refreshUsageData?.()" in countdown
+    assert "usageRefreshTargetUtcDay" in countdown
+    assert "refreshed === true" in countdown
     assert "location.reload()" not in countdown
 
 
@@ -109,6 +111,19 @@ def test_watch_modal_route_and_brief_state_have_deterministic_rollback_contracts
     assert "persistedSendTime" in watch and "persistedMode" in watch
     assert "timeInput.value = persistedSendTime" in watch
     assert "modeSelect.value = persistedMode" in watch
+    assert "watchModalIntentIsCurrent" in watch
+    assert "window.App.sharedModal.isCurrent(intent)" in watch
+
+
+def test_bookmark_restore_uses_owned_run_state_and_token_wait_is_fenced():
+    firebase = read("static/firebase.js")
+    query = read("static/js/query-send.js")
+
+    assert 'window.App.state.set("lastQuestion", displayQuestion, "run")' in firebase
+    assert "lastQuestion = displayQuestion" not in firebase
+    token_wait = section(query, "validIdToken = await queryAuthUser.getIdToken()", "if (!validIdToken)")
+    assert "isActiveQueryRun(queryRunId)" in token_wait
+    assert "queryAuthIsCurrent()" in token_wait
 
 
 def test_bookmark_load_failure_has_a_visible_retry_state():

@@ -7,7 +7,10 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from firebase_admin import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
+
+from app.services import persistence_guard
 
 
 API_KEYS_COLLECTION = "api_consensus_keys"
@@ -68,19 +71,29 @@ class FirestoreApiKeyRepository:
         plaintext = API_KEY_PREFIX + secrets.token_urlsafe(API_KEY_SECRET_BYTES)
         key_id = hash_api_key(plaintext)
         now = datetime.now(timezone.utc)
-        self._ref(key_id).set(
-            {
-                "schema_version": 1,
-                "uid": uid,
-                "label": clean_label,
-                "prefix": plaintext[:18],
-                "status": "active",
-                "scopes": list(clean_scopes),
-                "created_at": now,
-                "created_by": str(created_by or "").strip(),
-                "updated_at": now,
-            }
-        )
+        key_ref = self._ref(key_id)
+        key_document = {
+            "schema_version": 1,
+            "uid": uid,
+            "label": clean_label,
+            "prefix": plaintext[:18],
+            "status": "active",
+            "scopes": list(clean_scopes),
+            "created_at": now,
+            "created_by": str(created_by or "").strip(),
+            "updated_at": now,
+        }
+
+        def persist(transaction):
+            # Key issuance must share a transaction with the durable deletion
+            # tombstone read. Otherwise account cleanup can finish after a
+            # route-level pre-check and this write can recreate API access.
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid, db=self._db, transaction=transaction
+            )
+            transaction.set(key_ref, key_document)
+
+        self._transaction(persist)
         return {
             "key_id": key_id,
             "api_key": plaintext,
@@ -149,6 +162,18 @@ class FirestoreApiKeyRepository:
 
     def _ref(self, key_id: str):
         return self._db.collection(API_KEYS_COLLECTION).document(key_id)
+
+    def _transaction(self, operation):
+        fake_runner = getattr(self._db, "run_transaction", None)
+        if callable(fake_runner):
+            return fake_runner(operation)
+        transaction = self._db.transaction()
+
+        @firestore.transactional
+        def run(tx):
+            return operation(tx)
+
+        return run(transaction)
 
 
 def _validate_key_id(key_id: str) -> str:

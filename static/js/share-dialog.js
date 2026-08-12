@@ -64,11 +64,25 @@
     };
   }
 
+  function sharedModalSnapshot() {
+    return Object.freeze({ epoch: sharedModalEpoch, mode: sharedModalMode });
+  }
+
+  function sharedModalSnapshotIsCurrent(snapshot) {
+    const { modal } = shareDialogEls();
+    return !!snapshot
+      && snapshot.epoch === sharedModalEpoch
+      && snapshot.mode === sharedModalMode
+      && modal?.style.display === "flex";
+  }
+
   function setSharedModalOpen(isOpen, mode) {
     const { modal, body } = shareDialogEls();
-    if (!modal) return;
+    if (!modal) return null;
     if (isOpen) {
-      if (sharedModalMode !== mode) invalidateSharedModalRequests();
+      // Every explicit open is a new user intent, including a second Watch or
+      // Share open while the same modal mode is already visible.
+      invalidateSharedModalRequests();
       sharedModalMode = mode || null;
       if (modal.style.display !== "flex") dialogReturnFocus = document.activeElement;
       modal.classList.toggle("is-watch-dialog", mode === "watch");
@@ -78,7 +92,7 @@
       requestAnimationFrame(() => {
         if (body) body.scrollTop = 0;
       });
-      return;
+      return sharedModalSnapshot();
     }
     invalidateSharedModalRequests();
     sharedModalMode = null;
@@ -90,6 +104,7 @@
       dialogReturnFocus.focus({ preventScroll: true });
     }
     dialogReturnFocus = null;
+    return sharedModalSnapshot();
   }
 
   function closeShareDialog() {
@@ -341,7 +356,9 @@
   window.openShareDialog = openShareDialog;
   window.App.sharedModal = {
     open: (mode) => setSharedModalOpen(true, mode),
-    close: closeShareDialog
+    close: closeShareDialog,
+    snapshot: sharedModalSnapshot,
+    isCurrent: sharedModalSnapshotIsCurrent
   };
 
   (function initShareModal() {

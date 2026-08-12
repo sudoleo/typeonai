@@ -16,7 +16,7 @@ from app.api.routers import admin as admin_router
 from app.api.routers import pages as pages_router
 from app.api.routers import watch as watch_router
 from app.core.rate_limit import limiter
-from app.services import telegram_watch, watch_service
+from app.services import persistence_guard, share_snapshots, telegram_watch, watch_service
 from app.services import mailer, opinion_map, watch_brief, watch_followers, watch_scheduler
 from app.services.watch_service import WatchError
 
@@ -187,6 +187,134 @@ class WatchCrudTests(unittest.TestCase):
         self.assertEqual(monthly["interval"], "monthly")
         watch_service.delete_watch("u1", created["id"], db=self.db)
         self.assertEqual(watch_service.list_watches("u1", db=self.db), [])
+
+    def test_account_deletion_fences_watch_mutations_but_cleanup_delete_continues(self):
+        self.db.stores[persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION]["u1"] = {
+            "status": "pending"
+        }
+        with self.assertRaises(persistence_guard.AccountDeletionInProgress):
+            watch_service.create_watch(
+                "u1",
+                share_id=self.share_id,
+                interval="weekly",
+                is_pro=False,
+                db=self.db,
+            )
+        self.assertEqual(self.db.stores[watch_service.WATCHES_COLLECTION], {})
+
+        self.db.stores[persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION].clear()
+        created = watch_service.create_watch(
+            "u1",
+            share_id=self.share_id,
+            interval="weekly",
+            is_pro=False,
+            db=self.db,
+        )
+        self.db.stores[persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION]["u1"] = {
+            "status": "pending"
+        }
+        before = dict(self.db.stores[watch_service.WATCHES_COLLECTION][created["id"]])
+
+        with self.assertRaises(persistence_guard.AccountDeletionInProgress):
+            watch_service.update_watch(
+                "u1", created["id"], {"status": "paused"}, False, db=self.db
+            )
+        with self.assertRaises(persistence_guard.AccountDeletionInProgress):
+            watch_service.delete_watch("u1", created["id"], db=self.db)
+
+        self.assertEqual(
+            self.db.stores[watch_service.WATCHES_COLLECTION][created["id"]], before
+        )
+        self.assertEqual(watch_service.delete_watches_for_owner("u1", db=self.db), 1)
+        self.assertEqual(self.db.stores[watch_service.WATCHES_COLLECTION], {})
+
+    def test_account_deletion_retry_does_not_recreate_deleted_watch_indexes(self):
+        created = watch_service.create_watch(
+            "u1",
+            share_id=self.share_id,
+            interval="weekly",
+            is_pro=True,
+            model_tier="free",
+            db=self.db,
+        )
+        self.assertIn(created["id"], self.db.stores[watch_service.WATCHES_COLLECTION])
+
+        # This is the durable retry state that exposed the race: watch cleanup
+        # is still pending, while its owner indexes were already deleted and
+        # the watch-index area was acknowledged in an earlier pass.
+        self.db.stores["users/u1/watch_state"].clear()
+        self.db.stores["users/u1/watch_uniques"].clear()
+        self.db.stores[watch_service.RUNTIME_COLLECTION].clear()
+        self.db.stores[persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION]["u1"] = {
+            "status": "pending",
+            "completed_areas": {"watch_indexes": True},
+        }
+
+        self.assertEqual(watch_service.delete_watches_for_owner("u1", db=self.db), 1)
+        self.assertEqual(self.db.stores[watch_service.WATCHES_COLLECTION], {})
+        self.assertEqual(self.db.stores["users/u1/watch_state"], {})
+        self.assertEqual(self.db.stores["users/u1/watch_uniques"], {})
+        self.assertEqual(self.db.stores[watch_service.RUNTIME_COLLECTION], {})
+
+        # A repeated cleanup remains idempotent and cannot resurrect indexes.
+        self.assertEqual(watch_service.delete_watches_for_owner("u1", db=self.db), 0)
+        self.assertEqual(self.db.stores["users/u1/watch_state"], {})
+        self.assertEqual(self.db.stores["users/u1/watch_uniques"], {})
+
+    def test_owned_share_cleanup_does_not_recreate_deleted_watch_indexes(self):
+        created = watch_service.create_watch(
+            "u1",
+            share_id=self.share_id,
+            interval="weekly",
+            is_pro=True,
+            model_tier="free",
+            db=self.db,
+        )
+        self.db.stores["users/u1/watch_state"].clear()
+        self.db.stores["users/u1/watch_uniques"].clear()
+        self.db.stores[watch_service.RUNTIME_COLLECTION].clear()
+        self.db.stores[persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION]["u1"] = {
+            "status": "pending",
+            "completed_areas": {"watch_indexes": True},
+        }
+
+        result = share_snapshots.hard_delete_share(
+            self.share_id,
+            db=self.db,
+            allow_account_deletion=True,
+        )
+
+        self.assertEqual(result["watches_deleted"], 1)
+        self.assertNotIn(created["id"], self.db.stores[watch_service.WATCHES_COLLECTION])
+        self.assertEqual(self.db.stores["users/u1/watch_state"], {})
+        self.assertEqual(self.db.stores["users/u1/watch_uniques"], {})
+        self.assertEqual(self.db.stores[watch_service.RUNTIME_COLLECTION], {})
+
+    def test_normal_delete_reseeds_missing_watch_indexes_for_counter_updates(self):
+        created = watch_service.create_watch(
+            "u1",
+            share_id=self.share_id,
+            interval="weekly",
+            is_pro=True,
+            model_tier="free",
+            db=self.db,
+        )
+        self.db.stores["users/u1/watch_state"].clear()
+        self.db.stores["users/u1/watch_uniques"].clear()
+        self.db.stores[watch_service.RUNTIME_COLLECTION].clear()
+
+        watch_service.delete_watch("u1", created["id"], db=self.db)
+
+        self.assertEqual(
+            self.db.stores["users/u1/watch_state"]["quota"]["active_count"], 0
+        )
+        self.assertEqual(self.db.stores["users/u1/watch_uniques"], {})
+        self.assertEqual(
+            self.db.stores[watch_service.RUNTIME_COLLECTION][
+                watch_service.PUBLISHER_COUNTER_ID
+            ]["active_count"],
+            0,
+        )
 
     def test_watch_requires_one_notification_channel(self):
         with self.assertRaisesRegex(WatchError, "e-mail or Telegram"):
@@ -901,6 +1029,58 @@ class SchedulerSafetyTests(unittest.TestCase):
         self.assertEqual(dict(selected), configured)
         self.assertEqual(len(selected), 4)
 
+    def test_watch_preserves_its_provider_and_fallback_engine_order(self):
+        expected = [
+            "openai", "mistral", "gemini", "anthropic", "deepseek", "grok",
+        ]
+        configured = {
+            "anthropic": "anthropic-model",
+            "gemini": "gemini-model",
+            "mistral": "mistral-model",
+            "openai": "openai-model",
+            "grok": "grok-model",
+            "deepseek": "deepseek-model",
+        }
+
+        def pipeline(**kwargs):
+            self.assertEqual(list(kwargs["provider_order"]), expected)
+            self.assertEqual(list(kwargs["provider_models"]), expected)
+            # OpenAI and Mistral failed: Watch must keep its established
+            # Gemini-before-Anthropic engine preference.
+            self.assertEqual(
+                kwargs["consensus_model"]({"anthropic": object(), "gemini": object()}),
+                "Gemini",
+            )
+            differences = {
+                "agreement": {"score": 72, "level": "strong"},
+                "claims": [],
+                "differences": [],
+            }
+            return {
+                "consensus_response": "Consensus",
+                "differences": "No material differences.",
+                "differences_data": differences,
+                "agreement": differences["agreement"],
+                "model_answers": [
+                    {
+                        "provider": "Gemini", "model": "gemini-model",
+                        "response": "Gemini answer", "sources": [],
+                    },
+                    {
+                        "provider": "Anthropic", "model": "anthropic-model",
+                        "response": "Anthropic answer", "sources": [],
+                    },
+                ],
+            }
+
+        self.assertEqual(list(watch_scheduler.PROVIDER_ORDER), expected)
+        with patch.dict(os.environ, {"MOCK_LLM": "1"}), \
+                patch.object(cfg, "get_watch_models", return_value=configured), \
+                patch.object(watch_scheduler, "run_consensus_pipeline", side_effect=pipeline):
+            result = watch_scheduler.execute_watch("Question", "")
+
+        self.assertEqual(result["consensus_model"], "Gemini")
+
     def test_publisher_watch_excludes_deepseek_even_if_configured_for_free(self):
         configured = {
             "openai": cfg.DEFAULT_OPENAI_MODEL,
@@ -1374,6 +1554,38 @@ class TelegramWatchTests(unittest.TestCase):
             )
         self.assertFalse(telegram_watch.disconnect("u1", db=self.db)["connected"])
 
+    def test_account_deletion_fences_link_creation_consumption_and_delivery_claim(self):
+        tombstones = self.db.stores[persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION]
+        tombstones["u1"] = {"status": "pending"}
+        with self.assertRaises(persistence_guard.AccountDeletionInProgress):
+            telegram_watch.create_link("u1", now=self.now, db=self.db)
+        self.assertEqual(self.db.stores[telegram_watch.LINKS_COLLECTION], {})
+
+        tombstones.clear()
+        link = telegram_watch.create_link("u1", now=self.now, db=self.db)
+        token = link["url"].split("start=", 1)[1]
+        tombstones["u1"] = {"status": "pending"}
+        link_before = dict(self.db.stores[telegram_watch.LINKS_COLLECTION])
+        with self.assertRaises(persistence_guard.AccountDeletionInProgress):
+            telegram_watch.consume_link(
+                token,
+                {"id": 123, "type": "private"},
+                {"id": 123, "username": "alice"},
+                now=self.now,
+                db=self.db,
+            )
+        self.assertEqual(self.db.stores[telegram_watch.LINKS_COLLECTION], link_before)
+        self.assertEqual(self.db.stores[telegram_watch.CONNECTIONS_COLLECTION], {})
+        self.assertEqual(self.db.stores[telegram_watch.CHATS_COLLECTION], {})
+
+        with self.assertRaises(persistence_guard.AccountDeletionInProgress):
+            telegram_watch._claim_delivery(
+                "delivery-1",
+                {"uid": "u1", "watch_id": "w1", "status": "sending"},
+                self.db,
+            )
+        self.assertEqual(self.db.stores[telegram_watch.DELIVERIES_COLLECTION], {})
+
     def test_startup_registers_secret_header_webhook(self):
         with patch.object(
             telegram_watch.telegram_notifier, "call_bot_api",
@@ -1533,7 +1745,7 @@ class WatchFrontendContractTests(unittest.TestCase):
         source = Path("static/js/watch.js").read_text(encoding="utf-8")
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
         share_source = Path("templates/share.html").read_text(encoding="utf-8")
-        self.assertIn('renderQuestionStep(options?.question)', source)
+        self.assertIn('renderQuestionStep(options?.question, modalIntent)', source)
         self.assertIn('payload.question = directQuestion', source)
         self.assertIn('No model run starts until the Watch reaches its scheduled check.', source)
         self.assertIn('id="watchDashCreate"', html_source)
@@ -1741,6 +1953,18 @@ class BriefSettingsTests(unittest.TestCase):
         self.assertEqual(brief["send_time"], "07:00")
         self.assertEqual(brief["mode"], "always")
         self.assertEqual(brief["next_send_at"], "")
+
+    def test_account_deletion_tombstone_fences_brief_upsert(self):
+        self.db.stores[persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION]["u1"] = {
+            "status": "pending"
+        }
+
+        with self.assertRaises(persistence_guard.AccountDeletionInProgress):
+            watch_brief.update_brief(
+                "u1", {"mode": "changes_only"}, db=self.db
+            )
+
+        self.assertEqual(self.db.stores[watch_brief.BRIEFS_COLLECTION], {})
 
     def test_enabling_without_a_watch_is_rejected(self):
         self.db.stores["watches"].clear()
@@ -2257,6 +2481,8 @@ class FollowerTests(unittest.TestCase):
         self.assertEqual(confirmed["share_id"], self.share_id)
         followers = watch_followers.list_followers(self.share_id, db=self.db)
         self.assertEqual([f["email"] for f in followers], ["visitor@example.com"])
+        with self.assertRaisesRegex(WatchError, "invalid or expired"):
+            watch_followers.confirm_follow(pending["token"], db=self.db)
 
         # Erneuter Request derselben Adresse: kein neuer Token (keine Mail).
         again = watch_followers.request_follow(self.share_id, "visitor@example.com", db=self.db)
@@ -2288,14 +2514,16 @@ class FollowerTests(unittest.TestCase):
 
     def test_delete_followers_for_share(self):
         for email in ("a@example.com", "b@example.com"):
-            token = watch_followers.make_confirm_token(self.share_id, email)
-            watch_followers.confirm_follow(token, db=self.db)
+            pending = watch_followers.request_follow(self.share_id, email, db=self.db)
+            watch_followers.confirm_follow(pending["token"], db=self.db)
         self.assertEqual(watch_followers.delete_followers_for_share(self.share_id, db=self.db), 2)
         self.assertEqual(watch_followers.list_followers(self.share_id, db=self.db), [])
 
     def test_follower_mails_only_on_material_change(self):
-        token = watch_followers.make_confirm_token(self.share_id, "a@example.com")
-        watch_followers.confirm_follow(token, db=self.db)
+        pending = watch_followers.request_follow(
+            self.share_id, "a@example.com", db=self.db
+        )
+        watch_followers.confirm_follow(pending["token"], db=self.db)
         watch = {
             "share_id": self.share_id, "share_slug": "follow-me",
             "visibility": "public", "question": "Q",
@@ -2327,6 +2555,24 @@ class FollowerTests(unittest.TestCase):
                 {"agreement_score": 5, "changed": True, "severity": "major"},
             ))
             self.assertEqual(sent, 0)
+
+    def test_cleanup_or_removed_watch_invalidates_outstanding_confirm_link(self):
+        email = "cleanup@example.com"
+        pending = watch_followers.request_follow(self.share_id, email, db=self.db)
+        self.assertTrue(pending["token"])
+
+        from app.services import follow_challenges
+
+        follow_challenges.delete_for_email(email, db=self.db)
+        with self.assertRaisesRegex(WatchError, "invalid or expired"):
+            watch_followers.confirm_follow(pending["token"], db=self.db)
+        self.assertEqual(self.db.stores[watch_followers.FOLLOWERS_COLLECTION], {})
+
+        pending = watch_followers.request_follow(self.share_id, email, db=self.db)
+        self.db.stores[watch_service.WATCHES_COLLECTION].pop("w1")
+        with self.assertRaisesRegex(WatchError, "no Consensus Watch"):
+            watch_followers.confirm_follow(pending["token"], db=self.db)
+        self.assertEqual(self.db.stores[watch_followers.FOLLOWERS_COLLECTION], {})
 
 
 class FollowRouteTests(unittest.TestCase):

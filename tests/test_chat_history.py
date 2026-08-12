@@ -1330,6 +1330,26 @@ def test_delete_all_chats_removes_every_nested_level(chat_api):
     assert survivors == []
 
 
+def test_delete_all_chats_descends_into_missing_parent_documents(chat_api):
+    _client, database = chat_api
+    chat_id = "a" * 32
+    turn_id = "b" * 32
+    chat_path = ("users", "owner-uid", "chats", chat_id)
+    turn_path = (*chat_path, "turns", turn_id)
+    answer_path = (*turn_path, "model_answers", "openai")
+    context_path = (*chat_path, "context_versions", "c" * 32)
+    # A None parent models Firestore's missing document that remains visible
+    # through list_documents() because it still owns subcollections.
+    database.documents[chat_path] = None
+    database.documents[turn_path] = {"status": "completed", "position": 1}
+    database.documents[answer_path] = {"answer": "private answer"}
+    database.documents[context_path] = {"memory": {"private": "context"}}
+
+    chat_store.ChatStore(database).delete_all_chats("owner-uid")
+
+    assert not any(path[: len(chat_path)] == chat_path for path in database.documents)
+
+
 def test_delete_all_chats_leaves_other_owners_untouched(chat_api):
     client, database = chat_api
     store = chat_store.ChatStore(database)
@@ -1435,6 +1455,93 @@ def test_deleting_chat_state_rejects_a_late_turn_before_it_can_write(chat_api):
     assert response.status_code == 404
     assert database.turns("owner-uid", chat["id"]) == {}
     assert database.documents == before
+
+
+def test_deleting_chat_state_rejects_late_completion_and_failure_writes(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    turn = create_turn(client, chat["id"])
+    chat_path = ("users", "owner-uid", "chats", chat["id"])
+    database.documents[chat_path]["status"] = "deleting"
+    before = copy.deepcopy(database.documents)
+    store = chat_store.ChatStore(database)
+
+    with pytest.raises(chat_store.ChatNotFound):
+        store.complete_turn(
+            "owner-uid", chat["id"], turn["id"], **completion_payload()
+        )
+    with pytest.raises(chat_store.ChatNotFound):
+        store.fail_turn(
+            "owner-uid",
+            chat["id"],
+            turn["id"],
+            error_code="consensus_failed",
+        )
+
+    assert database.documents == before
+    assert database.model_answers("owner-uid", chat["id"], turn["id"]) == {}
+
+
+def test_account_deletion_tombstone_fences_late_chat_completion(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    turn = create_turn(client, chat["id"])
+    database.documents[("account_deletion_jobs", "owner-uid")] = {
+        "status": "pending"
+    }
+    before = copy.deepcopy(database.documents)
+
+    with pytest.raises(chat_store.persistence_guard.AccountDeletionInProgress):
+        chat_store.ChatStore(database).complete_turn(
+            "owner-uid", chat["id"], turn["id"], **completion_payload()
+        )
+
+    assert database.documents == before
+    assert database.model_answers("owner-uid", chat["id"], turn["id"]) == {}
+
+
+def test_account_deletion_tombstone_fences_late_chat_and_turn_creation(chat_api):
+    client, database = chat_api
+    existing_chat = create_chat(client)
+    database.documents[("account_deletion_jobs", "owner-uid")] = {
+        "status": "pending"
+    }
+    before = copy.deepcopy(database.documents)
+    store = chat_store.ChatStore(database)
+
+    with pytest.raises(chat_store.persistence_guard.AccountDeletionInProgress):
+        store.create_chat("owner-uid", title="must not survive")
+    with pytest.raises(chat_store.persistence_guard.AccountDeletionInProgress):
+        store.create_turn(
+            "owner-uid",
+            existing_chat["id"],
+            **TURN_PAYLOAD,
+        )
+
+    assert database.documents == before
+    assert database.turns("owner-uid", existing_chat["id"]) == {}
+
+
+def test_account_deletion_fences_normal_chat_delete_but_cleanup_can_continue(chat_api):
+    client, database = chat_api
+    chat = create_chat(client)
+    turn = create_turn(client, chat["id"])
+    store = chat_store.ChatStore(database)
+    database.documents[("account_deletion_jobs", "owner-uid")] = {
+        "status": "pending"
+    }
+    before = copy.deepcopy(database.documents)
+
+    with pytest.raises(chat_store.persistence_guard.AccountDeletionInProgress):
+        store.delete_chat("owner-uid", chat["id"])
+
+    assert database.documents == before
+    assert database.turns("owner-uid", chat["id"])[turn["id"]]["status"] == "pending"
+
+    store.delete_all_chats("owner-uid")
+
+    assert database.chats("owner-uid") == {}
+    assert database.turns("owner-uid", chat["id"]) == {}
 
 
 # ---------------------------------------------------------------------------

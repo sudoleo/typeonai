@@ -27,10 +27,10 @@ def test_client_error_report_is_accepted_and_sanitized(monkeypatch):
         json={
             "type": "run_failed",
             "phase": "model_fanout",
-            "message": "All selected models failed.",
-            "details": "OpenAI: connection lost",
-            "stack": "stack",
-            "path": "/app",
+            "message": "private.prompt@example.test token=browser-secret",
+            "details": "OpenAI body: private provider response",
+            "stack": "stack containing browser-secret",
+            "path": "/s/private-share-id",
         },
     )
 
@@ -40,10 +40,33 @@ def test_client_error_report_is_accepted_and_sanitized(monkeypatch):
         "source": "browser",
         "type": "run_failed",
         "phase": "model_fanout",
-        "message": "All selected models failed.",
-        "details": "OpenAI: connection lost",
-        "stack": "stack",
-        "path": "/app",
+        "message": "A browser run failed.",
+        "path": "/s/{share_id}",
+    }]
+
+
+def test_client_error_report_replaces_unknown_phase_and_route(monkeypatch):
+    captured = []
+    client = _client(monkeypatch, captured)
+
+    response = client.post(
+        "/api/client-errors",
+        headers={"Origin": "http://testserver", "Sec-Fetch-Site": "same-origin"},
+        json={
+            "type": "unhandled_error",
+            "phase": "secret-phase@example.test",
+            "message": "private runtime text",
+            "path": "/account/private-user-id",
+        },
+    )
+
+    assert response.status_code == 202
+    assert captured == [{
+        "source": "browser",
+        "type": "unhandled_error",
+        "phase": "browser",
+        "message": "An unhandled browser error occurred.",
+        "path": "/other",
     }]
 
 
@@ -54,6 +77,22 @@ def test_client_error_report_rejects_cross_origin(monkeypatch):
     response = client.post(
         "/api/client-errors",
         headers={"Origin": "https://attacker.example", "Sec-Fetch-Site": "cross-site"},
+        json={"type": "unhandled_error", "message": "boom", "path": "/app"},
+    )
+
+    assert response.status_code == 403
+    assert captured == []
+
+
+def test_client_error_report_rejects_foreign_origin_without_fetch_metadata(
+    monkeypatch,
+):
+    captured = []
+    client = _client(monkeypatch, captured)
+
+    response = client.post(
+        "/api/client-errors",
+        headers={"Origin": "https://attacker.example"},
         json={"type": "unhandled_error", "message": "boom", "path": "/app"},
     )
 

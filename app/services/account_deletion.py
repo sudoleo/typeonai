@@ -9,8 +9,15 @@ from datetime import datetime, timedelta, timezone
 from firebase_admin import auth, firestore
 
 from app.core.background_tasks import task_succeeded
+from app.core.observability import safe_exception
 from app.core.security import invalidate_auth_tombstone_cache
-from app.services import follow_challenges, persistence_guard, share_snapshots, watch_service
+from app.services import (
+    follow_challenges,
+    persistence_guard,
+    share_snapshots,
+    topics,
+    watch_service,
+)
 from app.services.api_account_cleanup import FirestoreApiAccountCleanup
 from app.services.chat_store import ChatStore
 
@@ -108,8 +115,12 @@ class FirestoreAccountDeletion:
                     },
                     merge=True,
                 )
-            except Exception:
-                logging.exception("Account deletion area %s failed for UID %s", name, uid)
+            except Exception as exc:
+                logging.error(
+                    "Account deletion area %s failed category=%s",
+                    name,
+                    safe_exception(exc),
+                )
                 errors.append(name)
 
         now = datetime.now(timezone.utc)
@@ -142,13 +153,17 @@ class FirestoreAccountDeletion:
         )
         try:
             self._api_cleanup.clear_completed_block(uid)
-        except Exception:
-            logging.exception("Completed API tombstone cleanup failed for UID %s", uid)
+        except Exception as exc:
+            logging.error(
+                "Completed API tombstone cleanup failed category=%s",
+                safe_exception(exc),
+            )
             try:
                 self._api_cleanup.mark_cleanup_pending(uid)
-            except Exception:
-                logging.exception(
-                    "API tombstone retry marker failed for UID %s", uid
+            except Exception as marker_exc:
+                logging.error(
+                    "API tombstone retry marker failed category=%s",
+                    safe_exception(marker_exc),
                 )
         invalidate_auth_tombstone_cache(uid, blocked=True)
         return []
@@ -164,8 +179,11 @@ class FirestoreAccountDeletion:
             try:
                 if not self.cleanup_uid(snap.id):
                     completed += 1
-            except Exception:
-                logging.exception("Account deletion retry failed for UID %s", snap.id)
+            except Exception as exc:
+                logging.error(
+                    "Account deletion retry failed category=%s",
+                    safe_exception(exc),
+                )
         self.delete_expired_tombstones()
         return completed
 
@@ -228,7 +246,9 @@ class FirestoreAccountDeletion:
         )
         for snap in docs:
             try:
-                share_snapshots.hard_delete_share(snap.id, db=self._db)
+                share_snapshots.hard_delete_share(
+                    snap.id, db=self._db, allow_account_deletion=True
+                )
             except share_snapshots.ShareError as exc:
                 if exc.code != "not_found":
                     raise
@@ -241,14 +261,10 @@ class FirestoreAccountDeletion:
             _where_equal(self._db.collection("topic_followers"), "email", email).stream()
         )
         for follower in topic_followers:
-            deliveries = _where_equal(
-                self._db.collection("topic_follower_deliveries"),
-                "follower_id",
-                follower.id,
-            )
-            for delivery in deliveries.stream():
-                delivery.reference.delete()
-            follower.reference.delete()
+            # Delete the follower first. A concurrent delivery transaction that
+            # already read it must then retry, see it missing and decline to
+            # recreate delivery state before this sweep runs.
+            topics.delete_follower_and_deliveries(follower.id, db=self._db)
 
     def _delete_query(self, collection: str, field: str, value) -> None:
         query = _where_equal(self._db.collection(collection), field, value)

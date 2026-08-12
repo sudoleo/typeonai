@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Red
 import requests
 
 from app.core.rate_limit import limiter
+from app.core.observability import safe_exception
 from app.core.site import SITE_URL
 from app.core.security import verify_user_token, extract_id_token, db_firestore
 from firebase_admin import firestore
@@ -203,8 +204,11 @@ def public_model_leaderboard(request: Request):
                 continue
             family = _leaderboard_family(snapshot.id)
             totals[family] = totals.get(family, 0) + selections
-    except Exception:
-        logging.exception("public model leaderboard read failed")
+    except Exception as exc:
+        logging.error(
+            "public model leaderboard read failed category=%s",
+            safe_exception(exc),
+        )
         raise HTTPException(status_code=503, detail="Model leaderboard is temporarily unavailable")
 
     rows = [
@@ -364,7 +368,7 @@ def record_vote(request: Request, payload: VoteRequest):
         raise HTTPException(status_code=400, detail="Invalid vote type provided.")
     model = cfg.LEADERBOARD_MODEL_ALIASES.get(model, model)
     if model not in cfg.VALID_LEADERBOARD_MODELS:
-         logging.warning(f"Invalid vote attempt for model '{model}'")
+         logging.warning("Invalid vote model rejected")
          raise HTTPException(status_code=400, detail="Invalid model name.")
 
     try:
@@ -387,8 +391,8 @@ def record_vote(request: Request, payload: VoteRequest):
         }
     except persistence_guard.PersistenceLimitError as exc:
         raise HTTPException(status_code=409, detail=exc.message) from None
-    except Exception as e:
-        logging.exception("vote update failed")
+    except Exception as exc:
+        logging.error("vote update failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Internal error")
 
 
@@ -439,8 +443,8 @@ def check_keys(request: Request, data: dict = Body(...)):
                 results["OpenAI"] = "valid"
             else:
                 results["OpenAI"] = "invalid"
-        except Exception as e:
-            logging.warning("OpenAI key check failed: %s", e)
+        except Exception as exc:
+            logging.warning("OpenAI key check failed category=%s", safe_exception(exc))
             results["OpenAI"] = "invalid"
         
         # Mistral Handshake
@@ -459,8 +463,8 @@ def check_keys(request: Request, data: dict = Body(...)):
                 results["Mistral"] = "valid"
             else:
                 results["Mistral"] = "invalid"
-        except Exception as e:
-            logging.warning("Mistral key check failed: %s", e)
+        except Exception as exc:
+            logging.warning("Mistral key check failed category=%s", safe_exception(exc))
             results["Mistral"] = "invalid"
             
         # Anthropic Handshake
@@ -490,8 +494,8 @@ def check_keys(request: Request, data: dict = Body(...)):
                         results["Anthropic"] = "invalid"
             else:
                 results["Anthropic"] = "invalid"
-        except Exception as e:
-            logging.warning("Anthropic key check failed: %s", e)
+        except Exception as exc:
+            logging.warning("Anthropic key check failed category=%s", safe_exception(exc))
             results["Anthropic"] = "invalid"
             
         # Gemini Handshake
@@ -507,8 +511,8 @@ def check_keys(request: Request, data: dict = Body(...)):
                 results["Gemini"] = "valid"
             else:
                 results["Gemini"] = "invalid"
-        except Exception as e:
-            logging.warning("Gemini key check failed: %s", e)
+        except Exception as exc:
+            logging.warning("Gemini key check failed category=%s", safe_exception(exc))
             results["Gemini"] = "invalid"
 
         # DeepSeek Handshake
@@ -528,8 +532,8 @@ def check_keys(request: Request, data: dict = Body(...)):
                 results["DeepSeek"] = "valid"
             else:
                 results["DeepSeek"] = "invalid"
-        except Exception as e:
-            logging.warning("DeepSeek key check failed: %s", e)
+        except Exception as exc:
+            logging.warning("DeepSeek key check failed category=%s", safe_exception(exc))
             results["DeepSeek"] = "invalid"
             
         # Grok Handshake
@@ -549,14 +553,14 @@ def check_keys(request: Request, data: dict = Body(...)):
                 results["Grok"] = "valid"
             else:
                 results["Grok"] = "invalid"
-        except Exception as e:
-            logging.warning("Grok key check failed: %s", e)
+        except Exception as exc:
+            logging.warning("Grok key check failed category=%s", safe_exception(exc))
             results["Grok"] = "invalid"
             
         return {"results": results}
         
     except HTTPException:
         raise
-    except Exception as e:
-        logging.exception("Error checking API keys")
+    except Exception as exc:
+        logging.error("Error checking API keys category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error checking API keys.")

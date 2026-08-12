@@ -340,21 +340,21 @@ function normalizeEvidenceUrl(url) {
 }
 
 function mergeEvidenceSources(incomingSources) {
-  if (!Array.isArray(window.currentEvidenceSources)) {
-    window.App.state.set("currentEvidenceSources", [], "evidence");
-  }
+  const evidenceSources = Array.isArray(window.currentEvidenceSources)
+    ? [...window.currentEvidenceSources]
+    : [];
   const idMap = {};
   (incomingSources || []).forEach((src, idx) => {
     const localId = String(src.id || `S${idx + 1}`);
     const key = normalizeEvidenceUrl(src.url) || String(src.title || "").trim().toLowerCase();
-    let existingIndex = window.currentEvidenceSources.findIndex(existing => {
+    let existingIndex = evidenceSources.findIndex(existing => {
       const existingKey = normalizeEvidenceUrl(existing.url) || String(existing.title || "").trim().toLowerCase();
       return existingKey && existingKey === key;
     });
 
     if (existingIndex === -1) {
-      existingIndex = window.currentEvidenceSources.length;
-      window.currentEvidenceSources.push({
+      existingIndex = evidenceSources.length;
+      evidenceSources.push({
         ...src,
         id: `S${existingIndex + 1}`
       });
@@ -367,8 +367,9 @@ function mergeEvidenceSources(incomingSources) {
     idMap[String(idx + 1)] = globalNumber;
   });
 
+  window.App.state.set("currentEvidenceSources", evidenceSources, "evidence");
   if (window.renderEvidenceSources) {
-    window.renderEvidenceSources(window.currentEvidenceSources);
+    window.renderEvidenceSources(evidenceSources);
   }
   return idMap;
 }

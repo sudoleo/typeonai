@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.core.security import db_firestore
-from app.services import watch_service
+from app.services import persistence_guard, watch_service
 from app.services.watch_service import WatchError
 
 
@@ -144,12 +144,23 @@ def update_brief(uid: str, changes: dict, db=None) -> dict:
         updates.setdefault("created_at", now)
         updates.setdefault("mode", "always")
         updates.setdefault("send_time", DEFAULT_SEND_TIME)
-    if snap.exists:
-        ref.update(updates)
-    else:
-        ref.set(updates)
-    data.update(updates)
-    return _serialize_brief(data)
+    def persist(transaction):
+        # The tombstone and brief must be read in the same transaction as the
+        # write.  A standalone pre-check leaves a window where account cleanup
+        # can finish before this upsert recreates the brief.
+        persistence_guard.ensure_account_write_allowed(
+            uid=uid, db=db, transaction=transaction
+        )
+        current_snap = ref.get(transaction=transaction)
+        current = (current_snap.to_dict() if current_snap.exists else None) or {}
+        if current_snap.exists:
+            transaction.update(ref, updates)
+        else:
+            transaction.set(ref, updates)
+        current.update(updates)
+        return current
+
+    return _serialize_brief(watch_service._run_transaction(db, persist))
 
 
 def list_due_brief_uids(*, now=None, db=None, max_items=200) -> list[str]:

@@ -59,6 +59,8 @@ import logging
 
 from firebase_admin import firestore
 
+from app.core.observability import safe_exception
+
 from app.core.security import db_firestore
 from app.services.share_snapshots import sanitize_model_labels
 
@@ -184,6 +186,8 @@ def record_differences_stats(differences_data, *, db=None, **meta):
         ref = db.collection(DIFFERENCES_STATS_COLLECTION).document()
         ref.set(doc)
         return ref.id
-    except Exception:
-        logging.warning("Recording differences stats failed", exc_info=True)
+    except Exception as exc:
+        logging.warning(
+            "Recording differences stats failed category=%s", safe_exception(exc)
+        )
         return None

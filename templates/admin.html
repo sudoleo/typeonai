@@ -12,8 +12,8 @@
           data-firebase-messaging-sender-id="{{ firebase_messaging_sender_id | e }}"
           data-firebase-app-id="{{ firebase_app_id | e }}">
     <script src="/static/js/admin-config.js?v=20260811-phase6"></script>
-<link rel="stylesheet" href="/static/style.css?v=20260811-phase6">
-    <link rel="stylesheet" href="/static/css/admin.css?v=20260811-phase6">
+<link rel="stylesheet" href="/static/style.css?v=20260812-auditfix">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20260812-auditfix">
 
     <script type="module" src="/static/js/admin.js?v=20260811-phase6"></script>
 </head>
@@ -53,7 +53,7 @@
         </div>
 
         <section id="tab-models" class="admin-tab-panel" role="tabpanel" hidden>
-            <p class="section-hint" style="margin: 0 0 14px; font-size: var(--font-size-sm); color: var(--sidebar-text-muted);">
+            <p class="section-hint section-hint-compact">
                 Per-provider model lists shown in the app's model pickers (row order = picker order).
                 <strong>Default</strong> sets the Free-tier preselection. <strong>Premium</strong> marks Pro-only models.
                 <strong>Consensus</strong> offers the model in the Consensus picker.
@@ -141,13 +141,13 @@
                 </div>
                 <div class="consensus-add-row">
                     <select id="consensusAddSelect" aria-label="Add consensus engine"></select>
-                    <button id="consensusAddBtn" type="button" class="add-btn" style="margin-top: 0;">+ Add</button>
+                    <button id="consensusAddBtn" type="button" class="add-btn u-mt-0">+ Add</button>
                 </div>
             </div>
         </section>
 
         <section id="tab-limits" class="admin-tab-panel" role="tabpanel" hidden>
-            <p class="section-hint" style="margin: 0 0 14px; font-size: var(--font-size-sm); color: var(--sidebar-text-muted);">
+            <p class="section-hint section-hint-compact">
                 Request, input, and token limits for Free and Pro users. Limits apply after the daily reset.
             </p>
             <div id="limitsContainer" class="limits-grid">
@@ -205,7 +205,7 @@
                 <div class="publisher-config-actions">
                     <button id="savePublisherConfigBtn" type="button" class="admin-btn">Save Publisher</button>
                     <button id="reloadPublisherConfigBtn" type="button" class="admin-btn secondary">Reload</button>
-                    <span id="publisherConfigStatus" role="status" style="font-size: var(--font-size-sm);"></span>
+                    <span id="publisherConfigStatus" class="admin-status-text" role="status"></span>
                 </div>
             </div>
 
@@ -254,7 +254,7 @@
                         <input id="apiKeyFilterUid" type="text" maxlength="128" autocomplete="off" spellcheck="false" placeholder="Leave empty for all keys">
                     </div>
                     <button id="reloadApiKeysBtn" type="button" class="admin-btn secondary">Reload keys</button>
-                    <span id="apiKeysStatus" role="status" style="font-size: var(--font-size-sm);"></span>
+                    <span id="apiKeysStatus" class="admin-status-text" role="status"></span>
                 </div>
                 <div id="apiKeysContainer">
                     <!-- Populated by JavaScript -->
@@ -270,7 +270,7 @@
                 </p>
                 <div class="watch-admin-toolbar">
                     <button id="reloadPublisherWatchesBtn" type="button" class="admin-btn secondary">Reload pages</button>
-                    <span id="publisherWatchesStatus" role="status" style="font-size: var(--font-size-sm);"></span>
+                    <span id="publisherWatchesStatus" class="admin-status-text" role="status"></span>
                 </div>
                 <div id="publisherWatchesContainer">
                     <!-- Populated by JavaScript -->
@@ -289,7 +289,7 @@
                 <div class="shares-toolbar">
                     <button id="loadReportedSharesBtn" type="button" class="admin-btn secondary">Load reported</button>
                     <button id="loadAllSharesBtn" type="button" class="admin-btn secondary">Load all</button>
-                    <span id="sharesStatus" style="font-size: var(--font-size-sm);"></span>
+                    <span id="sharesStatus" class="admin-status-text"></span>
                 </div>
                 <div id="sharesContainer">
                     <!-- Populated by JavaScript -->
@@ -311,7 +311,7 @@
                     <button id="loadWatchesBtn" type="button" class="admin-btn secondary">Reload watches</button>
                     <button id="sendWatchTestMailBtn" type="button" class="admin-btn">Send test e-mail</button>
                     <span id="smtpConfigState" class="admin-chip">SMTP unknown</span>
-                    <span id="watchesStatus" style="font-size: var(--font-size-sm);" role="status"></span>
+                    <span id="watchesStatus" class="admin-status-text" role="status"></span>
                 </div>
                 <div id="watchesContainer">
                     <!-- Populated by JavaScript -->
@@ -328,7 +328,7 @@
                     material opinion movement, and appends an immutable point to the public timeline.
                     Seed links and manual Consensus text are not required.
                 </p>
-                <div class="topic-admin-actions" style="margin-bottom: 14px;">
+                <div class="topic-admin-actions u-mb-14">
                     <button id="newAdminTopicBtn" type="button" class="admin-btn">New Topic</button>
                     <button id="reloadAdminTopicsBtn" type="button" class="admin-btn secondary">Reload</button>
                     <span id="topicAdminStatus" class="topic-status-line" role="status"></span>
@@ -363,7 +363,7 @@
                             </div>
 
                             <div>
-                                <h4 style="margin-bottom: 5px;">Models that collect the new state</h4>
+                                <h4 class="u-mb-5">Models that collect the new state</h4>
                                 <p class="section-hint">Enable at least two providers. The stored configuration uses concrete provider-to-model IDs, just like Watch model profiles.</p>
                                 <div id="topicModelPlan" class="topic-model-grid"></div>
                             </div>
@@ -375,10 +375,10 @@
 
                             <details>
                                 <summary>Search appearance</summary>
-                                <div class="topic-form-grid" style="margin-top: 10px;">
+                                <div class="topic-form-grid u-mt-10">
                                     <label>SEO title<input id="adminTopicSeoTitle" maxlength="160"></label>
                                     <label>Meta description<input id="adminTopicSeoDescription" maxlength="300"></label>
-                                    <label class="wide"><span><input id="adminTopicNoindex" type="checkbox" style="width:auto;"> Keep out of search indexes</span></label>
+                                    <label class="wide"><span><input id="adminTopicNoindex" class="checkbox-auto-width" type="checkbox"> Keep out of search indexes</span></label>
                                 </div>
                             </details>
 
@@ -409,7 +409,7 @@
                     <button id="checkSeoConnectionBtn" type="button" class="admin-btn secondary" hidden>Check Search Console connection</button>
                     <button id="collectSeoBtn" type="button" class="admin-btn" hidden>Collect Search Console data now</button>
                     <button id="reloadSeoBtn" type="button" class="admin-btn secondary">Reload</button>
-                    <span id="seoStatus" role="status" style="font-size: var(--font-size-sm);"></span>
+                    <span id="seoStatus" class="admin-status-text" role="status"></span>
                 </div>
                 <div class="seo-summary-grid">
                     <div class="seo-summary-card"><span>Configuration</span><strong id="seoConfigState">unknown</strong><span id="seoConfigMessage"></span></div>
@@ -422,14 +422,14 @@
                 <div class="seo-review-panel">
                     <div class="seo-review-group-head">
                         <div>
-                            <h3 style="margin: 0 0 5px;">Weekly portfolio review</h3>
-                            <p class="section-hint" style="margin: 0;">No action or Topic Brief change is automatic. Indexing and Watch status stay independent.</p>
+                            <h3 class="seo-review-title">Weekly portfolio review</h3>
+                            <p class="section-hint u-m-0">No action or Topic Brief change is automatic. Indexing and Watch status stay independent.</p>
                         </div>
-                        <div class="watch-admin-toolbar" style="margin: 0;">
+                        <div class="watch-admin-toolbar u-m-0">
                             <label><input id="seoReviewEnabled" type="checkbox"> enabled</label>
-                            <label>Every <input id="seoReviewInterval" type="number" min="1" max="90" value="7" style="width: 62px;"> days</label>
+                            <label>Every <input id="seoReviewInterval" class="seo-review-interval-input" type="number" min="1" max="90" value="7"> days</label>
                             <label>at <input id="seoReviewTime" type="time" value="09:00"></label>
-                            <label>timezone <input id="seoReviewTimezone" type="text" maxlength="64" value="Europe/Berlin" style="width: 130px;" spellcheck="false"></label>
+                            <label>timezone <input id="seoReviewTimezone" class="seo-review-timezone-input" type="text" maxlength="64" value="Europe/Berlin" spellcheck="false"></label>
                             <button id="saveSeoReviewConfigBtn" type="button" class="admin-btn secondary">Save schedule</button>
                             <button id="runSeoReviewBtn" type="button" class="admin-btn">Run now</button>
                         </div>
@@ -443,12 +443,12 @@
                     <p id="seoReviewProgress" class="section-hint">No review progress yet.</p>
                     <button id="applyAllSeoReviewBtn" type="button" class="admin-btn" hidden>Apply all safe recommendations</button>
                     <div id="seoReviewGroups" class="seo-review-groups"></div>
-                    <details id="seoReviewCompleted" hidden style="margin-top: 12px;">
+                    <details id="seoReviewCompleted" class="u-mt-12" hidden>
                         <summary>Completed in this review</summary>
                         <div id="seoReviewCompletedList" class="seo-review-completed-list"></div>
                     </details>
                     <div id="seoTopicBriefPanel" class="seo-review-panel" hidden>
-                        <h4 style="margin-top: 0;">Publisher prompt decision</h4>
+                        <h4 class="u-mt-0">Publisher prompt decision</h4>
                         <p class="section-hint">Terra proposed a Topic Brief change from the collected SEO portfolio data. It is never applied automatically.</p>
                         <p id="seoTopicBriefReason" class="section-hint"></p>
                         <p class="section-hint"><strong>Evidence:</strong> <span id="seoTopicBriefEvidence"></span></p>
@@ -462,7 +462,7 @@
                             <span id="seoTopicBriefDecision" class="section-hint">Decision: pending</span>
                         </div>
                     </div>
-                    <details style="margin-top: 12px;">
+                    <details class="u-mt-12">
                         <summary>Read-only hard-coded search opportunity rules</summary>
                         <p id="seoSearchRules" class="section-hint"></p>
                     </details>

@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient
 from app.api.routers import pages as pages_router
 from app.api.routers import topics as topics_router
 from app.core.rate_limit import limiter
-from app.services import mailer, topic_runner, topics
+from app.services import follow_challenges, mailer, topic_runner, topics
+from app.services.account_deletion import FirestoreAccountDeletion
 
 
 NOW = datetime(2026, 7, 23, 12, 0, tzinfo=timezone.utc)
@@ -123,12 +124,17 @@ class FakeTransaction:
     def update(self, ref, data):
         self.operations.append(("update", ref, dict(data), False))
 
+    def delete(self, ref):
+        self.operations.append(("delete", ref, None, False))
+
     def commit(self):
         for operation, ref, data, merge in self.operations:
             if operation == "set":
                 ref.set(data, merge=merge)
-            else:
+            elif operation == "update":
                 ref.update(data)
+            else:
+                ref.delete()
 
 
 def topic_payload(**overrides):
@@ -394,14 +400,69 @@ def test_topic_followers_use_separate_collection_and_double_opt_in(monkeypatch):
     ]
     assert len(follower_paths) == 1
     assert not any(path[0] == "watch_followers" for path in db.documents)
+    with pytest.raises(topics.TopicError, match="invalid or expired"):
+        topics.confirm_follow(pending["token"], db=db, now=NOW)
 
+    follower_doc_id = follower_paths[0][1]
+    assert topics.claim_delivery(
+        topic["id"], "run-before-unsubscribe", follower_doc_id, db=db
+    )
     token = topics.make_unsubscribe_token(topic["id"], confirmed["email"], now=NOW)
     topics.unsubscribe_follow(token, db=db)
     assert not any(path[0] == topics.FOLLOWERS_COLLECTION for path in db.documents)
+    assert not any(path[0] == topics.DELIVERIES_COLLECTION for path in db.documents)
+
+
+def test_topic_account_cleanup_invalidates_outstanding_confirm_link(monkeypatch):
+    monkeypatch.setenv("WATCH_UNSUBSCRIBE_SECRET", "topic-test-secret")
+    db = FakeFirestore()
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    topics.create_run(topic["id"], run_payload(), actor_uid="admin", db=db, now=NOW)
+    email = "cleanup@example.com"
+    pending = topics.request_follow(topic["id"], email, db=db)
+
+    assert follow_challenges.delete_for_email(email, db=db) >= 1
+    with pytest.raises(topics.TopicError, match="invalid or expired"):
+        topics.confirm_follow(pending["token"], db=db, now=NOW)
+    assert not any(path[0] == topics.FOLLOWERS_COLLECTION for path in db.documents)
+
+
+def test_topic_confirm_consumes_challenge_atomically_with_follower_write(monkeypatch):
+    monkeypatch.setenv("WATCH_UNSUBSCRIBE_SECRET", "topic-test-secret")
+    db = FakeFirestore()
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    topics.create_run(topic["id"], run_payload(), actor_uid="admin", db=db, now=NOW)
+    pending = topics.request_follow(topic["id"], "atomic@example.com", db=db)
+    challenge_paths = [
+        path for path in db.documents
+        if path[0] == follow_challenges.COLLECTION
+        and str(path[1]).startswith("challenge-")
+    ]
+    assert len(challenge_paths) == 1
+
+    # Challenge delete is staged first, follower create second. A transaction
+    # failure must commit neither side of that pair.
+    db.fail_transaction_after_staged_writes = 2
+    with pytest.raises(RuntimeError, match="injected transaction failure"):
+        topics.confirm_follow(pending["token"], db=db, now=NOW)
+
+    assert challenge_paths[0] in db.documents
+    assert not any(path[0] == topics.FOLLOWERS_COLLECTION for path in db.documents)
+
+    db.fail_transaction_after_staged_writes = None
+    assert topics.confirm_follow(pending["token"], db=db, now=NOW)["email"] == (
+        "atomic@example.com"
+    )
+    assert challenge_paths[0] not in db.documents
 
 
 def test_topic_notification_delivery_is_deduplicated_and_multipart():
     db = FakeFirestore()
+    db.documents[(topics.FOLLOWERS_COLLECTION, "follower")] = {
+        "topic_id": "topic",
+        "email": "reader@example.com",
+        "created_at": NOW,
+    }
     assert topics.claim_delivery("topic", "run", "follower", db=db) is True
     assert topics.claim_delivery("topic", "run", "follower", db=db) is False
     topics.finish_delivery(
@@ -429,6 +490,57 @@ def test_topic_notification_delivery_is_deduplicated_and_multipart():
     assert "Primary evidence changed the consensus." in message.get_body(
         preferencelist=("plain",)
     ).get_content()
+
+
+def test_topic_delivery_claim_requires_a_live_topic_bound_follower():
+    db = FakeFirestore()
+    follower_path = (topics.FOLLOWERS_COLLECTION, "follower")
+    db.documents[follower_path] = {
+        "topic_id": "other-topic",
+        "email": "reader@example.com",
+        "created_at": NOW,
+    }
+
+    assert topics.claim_delivery("topic", "run", "follower", db=db) is False
+    db.documents.pop(follower_path)
+    assert topics.claim_delivery("topic", "run", "follower", db=db) is False
+    assert not any(path[0] == topics.DELIVERIES_COLLECTION for path in db.documents)
+
+
+def test_topic_delivery_finish_does_not_recreate_a_cleaned_claim():
+    db = FakeFirestore()
+    follower_path = (topics.FOLLOWERS_COLLECTION, "follower")
+    db.documents[follower_path] = {
+        "topic_id": "topic",
+        "email": "reader@example.com",
+        "created_at": NOW,
+    }
+    assert topics.claim_delivery("topic", "run", "follower", db=db) is True
+
+    assert topics.delete_follower_and_deliveries("follower", db=db) == 1
+    assert topics.finish_delivery(
+        "topic", "run", "follower", success=True, db=db
+    ) is False
+    assert follower_path not in db.documents
+    assert not any(path[0] == topics.DELIVERIES_COLLECTION for path in db.documents)
+    assert topics.claim_delivery("topic", "run", "follower", db=db) is False
+
+
+def test_account_deletion_fences_claims_before_topic_delivery_cleanup():
+    db = FakeFirestore()
+    follower_path = (topics.FOLLOWERS_COLLECTION, "follower")
+    db.documents[follower_path] = {
+        "topic_id": "topic",
+        "email": "owner@example.com",
+        "created_at": NOW,
+    }
+    assert topics.claim_delivery("topic", "run", "follower", db=db) is True
+
+    FirestoreAccountDeletion(db)._delete_email_follows("owner@example.com")
+
+    assert follower_path not in db.documents
+    assert not any(path[0] == topics.DELIVERIES_COLLECTION for path in db.documents)
+    assert topics.claim_delivery("topic", "run", "follower", db=db) is False
 
 
 def test_topic_templates_expose_timeline_evidence_follow_and_admin_controls():

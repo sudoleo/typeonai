@@ -142,8 +142,25 @@ def test_maintenance_health_reports_degraded_task_state():
 
 def test_startup_readiness_only_loads_bounded_configuration(monkeypatch):
     calls = []
-    monkeypatch.setattr(main, "load_models_from_db", lambda: calls.append("models"))
+    monkeypatch.setattr(
+        main,
+        "load_models_from_db",
+        lambda **kwargs: calls.append(kwargs),
+    )
 
     main._load_startup_configuration()
 
-    assert calls == ["models"]
+    assert calls == [{"persist_backfill": False}]
+
+
+def test_startup_configuration_write_runs_through_one_shot_wrapper(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        main,
+        "load_models_from_db",
+        lambda **kwargs: calls.append(kwargs),
+    )
+
+    main._backfill_startup_configuration()
+
+    assert calls == [{"strict": True, "persist_backfill": True}]

@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import app.core.config as cfg
 from app.core.background_tasks import task_succeeded
+from app.core.observability import safe_exception
 from app.core.security import db_firestore
 from app.services.api_account_cleanup import (
     ApiAccountInactive,
@@ -202,8 +203,10 @@ def fail_expired_run(run_id: str) -> bool:
     try:
         run = api_run_repository.get(run_id)
         changed = api_run_repository.fail_if_lease_expired(run_id)
-    except Exception:
-        logging.exception("Consensus API lease check failed: %s", run_id)
+    except Exception as exc:
+        logging.error(
+            "Consensus API lease check failed category=%s", safe_exception(exc)
+        )
         return False
     if not changed:
         return False
@@ -213,8 +216,11 @@ def fail_expired_run(run_id: str) -> bool:
         # Missing is harmless. Consumed/released are terminal: consumed proves
         # a provider was allowed to start and must remain charged.
         pass
-    except Exception:
-        logging.exception("Consensus API stale reservation reconciliation failed: %s", run_id)
+    except Exception as exc:
+        logging.error(
+            "Consensus API stale reservation reconciliation failed category=%s",
+            safe_exception(exc),
+        )
     return True
 
 
@@ -223,8 +229,10 @@ def cleanup_expired_runs() -> int:
     deleted = 0
     try:
         expired_runs = api_run_repository.list_expired()
-    except Exception:
-        logging.exception("Consensus API retention scan failed")
+    except Exception as exc:
+        logging.error(
+            "Consensus API retention scan failed category=%s", safe_exception(exc)
+        )
         return 0
     for run in expired_runs:
         run_id = str(run.get("run_id") or "")
@@ -238,8 +246,11 @@ def cleanup_expired_runs() -> int:
                 fail_expired_run(run_id)
             if api_run_repository.delete_expired(run_id):
                 deleted += 1
-        except Exception:
-            logging.exception("Consensus API expired run cleanup failed: %s", run_id)
+        except Exception as exc:
+            logging.error(
+                "Consensus API expired run cleanup failed category=%s",
+                safe_exception(exc),
+            )
     return deleted
 
 
@@ -264,10 +275,10 @@ def recover_persisted_runs() -> int:
         for run in api_run_repository.list_by_status(("accepted",)):
             try:
                 reserved, _usage = reserve_run(run)
-            except Exception:
-                logging.exception(
-                    "Consensus API accepted run could not be recovered: %s",
-                    run.get("run_id"),
+            except Exception as exc:
+                logging.error(
+                    "Consensus API accepted run could not be recovered category=%s",
+                    safe_exception(exc),
                 )
                 continue
             if reserved.get("status") == "reserved":
@@ -275,8 +286,10 @@ def recover_persisted_runs() -> int:
                     recovered += 1
         for run in api_run_repository.list_by_status(("running",)):
             fail_expired_run(run["run_id"])
-    except Exception:
-        logging.exception("Consensus API recovery scan failed")
+    except Exception as exc:
+        logging.error(
+            "Consensus API recovery scan failed category=%s", safe_exception(exc)
+        )
         raise
     return recovered
 
@@ -321,13 +334,16 @@ def execute_persisted_run(run_id: str) -> None:
         usage_consumed = True
         result = execute_consensus_pipeline(run)
         api_run_repository.succeed(run_id, result)
-    except Exception:
-        logging.exception("Consensus API run failed: %s", run_id)
+    except Exception as exc:
+        logging.error("Consensus API run failed category=%s", safe_exception(exc))
         if run is not None and not usage_consumed:
             try:
                 release_run_reservation(run)
-            except Exception:
-                logging.exception("Consensus API reservation release failed: %s", run_id)
+            except Exception as release_exc:
+                logging.error(
+                    "Consensus API reservation release failed category=%s",
+                    safe_exception(release_exc),
+                )
         try:
             current = api_run_repository.get(run_id)
             if current.get("status") == "running":
@@ -336,8 +352,11 @@ def execute_persisted_run(run_id: str) -> None:
                     code="run_failed",
                     message="The Consensus run could not be completed.",
                 )
-        except Exception:
-            logging.exception("Consensus API failure state could not be persisted: %s", run_id)
+        except Exception as persist_exc:
+            logging.error(
+                "Consensus API failure state could not be persisted category=%s",
+                safe_exception(persist_exc),
+            )
 
 
 def execute_consensus_pipeline(run: dict) -> dict:

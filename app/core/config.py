@@ -1190,9 +1190,10 @@ def _restore_runtime_config(state: dict) -> None:
     rebuild_model_configs()
 
 
-def load_models_from_db(*, strict: bool = False) -> bool:
+def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) -> bool:
     global ALL_ALLOWED_MODELS
     import logging
+    from app.core.observability import safe_exception
     from app.core.security import db_firestore
     _RUNTIME_CONFIG_LOCK.acquire()
     previous_state = _capture_runtime_config()
@@ -1294,7 +1295,7 @@ def load_models_from_db(*, strict: bool = False) -> bool:
             # Dokument persistieren. Bestehende gueltige Adminwerte bleiben
             # durch apply_limits/get_limits_config erhalten.
             normalized_limits = get_limits_config()
-            if data.get("limits") != normalized_limits:
+            if persist_backfill and data.get("limits") != normalized_limits:
                 doc_ref.set(
                     {"limits": normalized_limits}, merge=True,
                     timeout=5.0, retry=None,
@@ -1306,7 +1307,7 @@ def load_models_from_db(*, strict: bool = False) -> bool:
             )
             rebuild_model_configs()
             logging.info("Models configuration loaded from Firestore successfully.")
-        else:
+        elif persist_backfill:
             # If document doesn't exist, create it with default values
             doc_ref.set({
                 "openai": list(ALLOWED_OPENAI_MODELS),
@@ -1330,10 +1331,18 @@ def load_models_from_db(*, strict: bool = False) -> bool:
             }, timeout=5.0, retry=None)
             rebuild_model_configs()
             logging.info("Created default models configuration in Firestore.")
+        else:
+            logging.info(
+                "Models configuration is missing; using code defaults until the "
+                "supervised post-readiness backfill runs."
+            )
         return True
-    except Exception as e:
+    except Exception as exc:
         _restore_runtime_config(previous_state)
-        logging.error(f"Failed to load models from Firestore: {e}")
+        logging.error(
+            "Failed to load models from Firestore category=%s",
+            safe_exception(exc),
+        )
         if strict:
             raise
         return False

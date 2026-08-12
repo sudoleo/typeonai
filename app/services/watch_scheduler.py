@@ -12,7 +12,7 @@ from firebase_admin import auth
 import app.core.config as cfg
 from app.core import security
 from app.core.background_tasks import task_succeeded
-from app.core.observability import correlation_scope, record_metric
+from app.core.observability import correlation_scope, record_metric, safe_exception
 from app.core.site import SITE_URL
 from app.services.consensus_pipeline import run_consensus_pipeline
 from app.services import (
@@ -31,7 +31,10 @@ from app.services.llm.mock_llm import mock_llm_enabled
 TICK_SECONDS = 30 * 60
 WATCH_LEASE_HEARTBEAT_SECONDS = 5 * 60
 _scheduler_wake_event: asyncio.Event | None = None
-PROVIDER_ORDER = provider_transport.PROVIDER_ORDER
+# Preserve the established Watch engine preference. Topic/API use the shared
+# canonical display order, while Watch historically preferred Gemini before
+# Anthropic when both earlier engines failed.
+PROVIDER_ORDER = ("openai", "mistral", "gemini", "anthropic", "deepseek", "grok")
 PROVIDER_LABELS = provider_transport.PROVIDER_LABELS
 
 
@@ -315,8 +318,12 @@ async def _send_follower_mails(watch_id: str, watch: dict, result: dict) -> int:
             )
             if await mailer.send_message(message):
                 sent += 1
-        except Exception:
-            logging.exception("Consensus Watch follower mail failed for %s", watch_id)
+        except Exception as exc:
+            logging.error(
+                "Consensus Watch follower mail failed for %s category=%s",
+                watch_id,
+                safe_exception(exc),
+            )
     return sent
 
 
@@ -409,10 +416,10 @@ async def run_watch_tick() -> int:
                     history = await asyncio.to_thread(
                         share_snapshots.list_watch_history, claimed["share_id"], max_items=1,
                     )
-                except Exception:
+                except Exception as exc:
                     logging.warning(
-                        "Consensus Watch position baseline unavailable for %s",
-                        watch_id, exc_info=True,
+                        "Consensus Watch position baseline unavailable category=%s",
+                        safe_exception(exc),
                     )
                     history = []
                 previous_position_map = (
@@ -427,10 +434,10 @@ async def run_watch_tick() -> int:
                             share_snapshots.get_watch_version,
                             claimed["share_id"], previous_run_id,
                         )
-                except Exception:
+                except Exception as exc:
                     logging.warning(
-                        "Consensus Watch text baseline unavailable for %s",
-                        watch_id, exc_info=True,
+                        "Consensus Watch text baseline unavailable category=%s",
+                        safe_exception(exc),
                     )
                 original_consensus = share.get("consensus_md") or ""
                 previous_consensus = (
@@ -457,8 +464,12 @@ async def run_watch_tick() -> int:
                         "Consensus Watch completion fenced out for %s", watch_id
                     )
                     continue
-            except Exception:
-                logging.exception("Consensus Watch run failed for %s", watch_id)
+            except Exception as exc:
+                logging.error(
+                    "Consensus Watch run failed for %s category=%s",
+                    watch_id,
+                    safe_exception(exc),
+                )
                 paused = await asyncio.to_thread(watch_service.fail_watch_run, watch_id, claimed, now=watch_service.utcnow())
                 if paused:
                     try:
@@ -469,8 +480,12 @@ async def run_watch_tick() -> int:
                             watch_id, str(claimed.get("current_run_id") or "failed"),
                             "paused_error", claimed, {},
                         )
-                    except Exception:
-                        logging.exception("Consensus Watch pause notification failed for %s", watch_id)
+                    except Exception as exc:
+                        logging.error(
+                            "Consensus Watch pause notification failed for %s category=%s",
+                            watch_id,
+                            safe_exception(exc),
+                        )
             else:
                 completed += 1
                 if mail_kind:
@@ -489,18 +504,26 @@ async def run_watch_tick() -> int:
                                 notification_sent = bool(
                                     await _send_change_mail(watch_id, claimed, result)
                                 )
-                    except Exception:
+                    except Exception as exc:
                         # Mail is best-effort and must never turn a completed
                         # LLM run into a scheduler failure/history rollback.
-                        logging.exception("Consensus Watch result mail failed for %s", watch_id)
+                        logging.error(
+                            "Consensus Watch result mail failed for %s category=%s",
+                            watch_id,
+                            safe_exception(exc),
+                        )
                     try:
                         telegram_sent = await asyncio.to_thread(
                             telegram_watch.send_watch_notification,
                             watch_id, run_id, mail_kind, claimed, result,
                         )
                         notification_sent = notification_sent or telegram_sent
-                    except Exception:
-                        logging.exception("Consensus Watch Telegram delivery failed for %s", watch_id)
+                    except Exception as exc:
+                        logging.error(
+                            "Consensus Watch Telegram delivery failed for %s category=%s",
+                            watch_id,
+                            safe_exception(exc),
+                        )
                     if mail_kind == "condition" and notification_sent:
                         await asyncio.to_thread(
                             watch_service.set_condition_status, watch_id, "met",
@@ -509,16 +532,23 @@ async def run_watch_tick() -> int:
                         )
                 try:
                     await _send_follower_mails(watch_id, claimed, result)
-                except Exception:
-                    logging.exception("Consensus Watch follower mails failed for %s", watch_id)
+                except Exception as exc:
+                    logging.error(
+                        "Consensus Watch follower mails failed for %s category=%s",
+                        watch_id,
+                        safe_exception(exc),
+                    )
             finally:
                 lease_stop.set()
                 await lease_heartbeat
     finally:
         try:
             await asyncio.to_thread(watch_service.release_worker_lease)
-        except Exception:
-            logging.exception("Consensus Watch worker lease release failed")
+        except Exception as exc:
+            logging.error(
+                "Consensus Watch worker lease release failed category=%s",
+                safe_exception(exc),
+            )
     return completed
 
 
@@ -531,8 +561,10 @@ async def run_brief_tick() -> int:
     sent = 0
     try:
         due_uids = await asyncio.to_thread(watch_brief.list_due_brief_uids, now=now)
-    except Exception:
-        logging.exception("Morning brief due-scan failed")
+    except Exception as exc:
+        logging.error(
+            "Morning brief due-scan failed category=%s", safe_exception(exc)
+        )
         return 0
     for uid in due_uids:
         try:
@@ -541,7 +573,7 @@ async def run_brief_tick() -> int:
                 continue
             user = await asyncio.to_thread(auth.get_user, uid)
             if not getattr(user, "email_verified", False) or not getattr(user, "email", None):
-                logging.warning("Morning brief for %s skipped: no verified e-mail", uid)
+                logging.warning("Morning brief skipped: no verified e-mail")
                 continue
             items, changes = await asyncio.to_thread(
                 watch_brief.collect_brief_items, uid, since=claimed["baseline"],
@@ -564,8 +596,10 @@ async def run_brief_tick() -> int:
             if await mailer.send_message(message):
                 await asyncio.to_thread(watch_brief.mark_brief_sent, uid, now=now)
                 sent += 1
-        except Exception:
-            logging.exception("Morning brief delivery failed for %s", uid)
+        except Exception as exc:
+            logging.error(
+                "Morning brief delivery failed category=%s", safe_exception(exc)
+            )
     return sent
 
 

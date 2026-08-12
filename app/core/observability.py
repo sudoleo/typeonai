@@ -69,6 +69,7 @@ def record_metric(
             "count": 0,
             "failures": 0,
             "timeouts": 0,
+            "cancellations": 0,
             "retries": 0,
             "processed": 0,
             "duration_ms_total": 0,
@@ -77,6 +78,7 @@ def record_metric(
         item["count"] += 1
         item["failures"] += int(outcome == "failure")
         item["timeouts"] += int(outcome == "timeout")
+        item["cancellations"] += int(outcome == "cancelled")
         item["retries"] += max(0, int(retries))
         item["processed"] += max(0, int(processed))
         duration = max(0, int(duration_ms))
@@ -92,12 +94,12 @@ def metrics_snapshot() -> dict:
 def safe_exception(exc: BaseException) -> str:
     """Stable error category without exception messages or response bodies."""
     status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
-    if isinstance(status, int):
-        suffix = f":{status}"
-    elif isinstance(status, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,40}", status):
-        suffix = f":{status}"
-    else:
-        suffix = ""
+    if not isinstance(status, (int, str)):
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+    # Numeric HTTP/gRPC status values are operational metadata. Arbitrary
+    # string ``code`` attributes are not: SDKs (and application exceptions)
+    # may populate them with upstream text or identifiers.
+    suffix = f":{status}" if isinstance(status, int) else ""
     return f"{type(exc).__name__}{suffix}"
 
 

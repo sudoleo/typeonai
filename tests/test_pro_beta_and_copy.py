@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.api.routers import users as users_router
 from app.core.rate_limit import limiter
+from app.services import persistence_guard
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,29 +21,36 @@ class WaitlistSnapshot:
     def exists(self):
         return self.data is not None
 
+    def to_dict(self):
+        return None if self.data is None else dict(self.data)
+
 
 class WaitlistDocument:
     def __init__(self):
         self.data = None
         self.writes = 0
 
-    def get(self):
+    def get(self, transaction=None):
         return WaitlistSnapshot(self.data)
 
-    def set(self, data):
+    def set(self, data, merge=False):
+        if merge and self.data is not None:
+            data = {**self.data, **dict(data)}
         self.data = dict(data)
         self.writes += 1
 
 
 class WaitlistCollection:
-    def __init__(self, document):
+    def __init__(self, document, *, allow_query=False):
         self.waitlist_document = document
+        self.allow_query = allow_query
 
     def document(self, uid):
         assert uid == "uid-1"
         return self.waitlist_document
 
     def where(self, *_args):
+        assert self.allow_query
         return self
 
     def limit(self, _value):
@@ -55,10 +63,32 @@ class WaitlistCollection:
 class WaitlistDb:
     def __init__(self):
         self.waitlist_document = WaitlistDocument()
+        self.deletion_document = WaitlistDocument()
 
     def collection(self, name):
-        assert name == "pro_waitlist"
-        return WaitlistCollection(self.waitlist_document)
+        if name == "pro_waitlist":
+            return WaitlistCollection(self.waitlist_document, allow_query=True)
+        if name == persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION:
+            return WaitlistCollection(self.deletion_document)
+        raise AssertionError(f"unexpected collection: {name}")
+
+    def run_transaction(self, operation):
+        transaction = WaitlistTransaction()
+        result = operation(transaction)
+        transaction.commit()
+        return result
+
+
+class WaitlistTransaction:
+    def __init__(self):
+        self.writes = []
+
+    def set(self, ref, data, merge=False):
+        self.writes.append((ref, dict(data), merge))
+
+    def commit(self):
+        for ref, data, merge in self.writes:
+            ref.set(data, merge=merge)
 
 
 def _client():
@@ -90,6 +120,23 @@ def test_pro_beta_request_is_idempotent_and_active_pro_is_rejected():
             patch.object(users_router, "is_user_pro", return_value=True):
         active = _client().post("/track-interest", json={"id_token": "token"})
     assert active.status_code == 409
+
+
+def test_pro_beta_request_is_fenced_during_account_deletion():
+    database = WaitlistDb()
+    database.deletion_document.data = {"status": "pending"}
+    with patch.object(users_router, "verify_user_token", return_value="uid-1"), \
+            patch.object(users_router, "is_user_pro", return_value=False), \
+            patch.object(users_router, "db_firestore", database), \
+            patch.object(users_router.auth, "get_user", return_value=SimpleNamespace(email="user@example.test")):
+        response = _client().post(
+            "/track-interest",
+            json={"id_token": "token", "source": "pro_beta_modal"},
+        )
+
+    assert response.status_code == 503
+    assert database.waitlist_document.data is None
+    assert database.waitlist_document.writes == 0
 
 
 def test_locked_feature_modal_explains_the_cost_and_sells_nothing():

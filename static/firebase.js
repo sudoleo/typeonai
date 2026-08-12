@@ -844,7 +844,7 @@ const registrationLoginBtn = document.getElementById("registrationLoginButton");
 function setRegisterPending(isPending) {
   confirmRegisterBtn.disabled = isPending;
   confirmRegisterBtn.setAttribute("aria-busy", String(isPending));
-  confirmRegisterBtn.textContent = isPending ? "Creating account…" : "Create account";
+  confirmRegisterBtn.textContent = isPending ? "Sending setup link…" : "Send setup link";
 }
 
 function setMode(mode) {
@@ -856,18 +856,19 @@ function setMode(mode) {
   const isRegister = mode === "register";
   // Titel & Hinweise
   titleEl.textContent = isRegister ? "Create account" : "Log in to consens.io";
-  singleMailNoteEl.style.display = isRegister ? "block" : "none";
+  singleMailNoteEl.classList.toggle("u-display-none", !isRegister);
 
   // Felder ein-/ausblenden
-  emailConfirmEl.style.display = isRegister ? "" : "none";
-  passConfirmEl.style.display = isRegister ? "" : "none";
+  emailConfirmEl.classList.toggle("u-display-none", !isRegister);
+  passEl.classList.toggle("u-display-none", isRegister);
+  passConfirmEl.classList.add("u-display-none");
 
   // Primär-Buttons
-  confirmRegisterBtn.style.display = isRegister ? "" : "none";
-  loginBtn.style.display = isRegister ? "none" : "";
+  confirmRegisterBtn.classList.toggle("u-display-none", !isRegister);
+  loginBtn.classList.toggle("u-display-none", isRegister);
 
   // Forgot Password ausblenden im Register-Modus
-  if (forgotBtn) forgotBtn.style.display = isRegister ? "none" : "";
+  forgotBtn?.classList.toggle("u-display-none", isRegister);
 
   // Toggle-Text
   toggleRegisterBtn.textContent = isRegister
@@ -908,9 +909,6 @@ confirmRegisterBtn.addEventListener("click", () => {
 
   const email = (emailEl.value || "").trim();
   const email2 = (emailConfirmEl.value || "").trim();
-  const password = passEl.value || "";
-  const password2 = passConfirmEl.value || "";
-
   // Client-Side-Validierung
   if (!email || !email2) {
     registerErr.textContent = "Please enter your e-mail twice.";
@@ -920,42 +918,21 @@ confirmRegisterBtn.addEventListener("click", () => {
     registerErr.textContent = "E-mail addresses do not match.";
     return;
   }
-  if (!password || !password2) {
-    registerErr.textContent = "Please enter your password twice.";
-    return;
-  }
-  if (password !== password2) {
-    registerErr.textContent = "Passwords do not match.";
-    return;
-  }
-  if (password.length < 8) {
-    registerErr.textContent = "Password must be at least 8 characters.";
-    return;
-  }
-
   setRegisterPending(true);
 
   // Request an Backend
   fetch("/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: email, password: password })
+    body: JSON.stringify({ email: email })
   })
     .then((response) => response.json())
-    .then(async (data) => {
+    .then((data) => {
       if (data.status === "check_inbox") {
-        // Der Server liefert fuer Neuanlage, Bestand und Create-Race exakt
-        // dieselbe Form. Ein Loginversuch mit den gerade eingegebenen Daten ist
-        // nur fuer deren Besitzer aussagekraeftig und gibt nichts an den
-        // anonymen /register-Aufrufer preis.
-        try {
-          await signInWithEmailAndPassword(auth, email, password);
-          await sendVerificationMail(auth.currentUser);
-          setRegisterPending(false);
-          closeAuthModal();
-        } catch (error) {
-          showRegistrationSuccess(email);
-        }
+        // Existing and new addresses follow the same mailbox-only setup path.
+        // Never try caller-chosen credentials here: that would reveal whether
+        // the backend had just created the account.
+        showRegistrationSuccess(email);
         trackAppEvent("auth_register_result", { status: "success" });
       } else if (data.detail || data.error) {
         registerErr.textContent = data.detail || data.error;
@@ -1869,7 +1846,7 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
                 window.syncDemoChipState?.();
             }
             // Falls du eine globale Variable für die letzte Frage hast:
-            if (typeof lastQuestion !== 'undefined') lastQuestion = displayQuestion;
+            window.App.state.set("lastQuestion", displayQuestion, "run");
         }
 
         // Anhänge des Bookmarks als Vorschau-Chips anzeigen (nur Metadaten,

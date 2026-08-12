@@ -553,6 +553,18 @@
 
 .admin-tab-panel[hidden] { display: none; }
 
+.section-hint-compact {
+    margin: 0 0 14px;
+    color: var(--sidebar-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.admin-status-text { font-size: var(--font-size-sm); }
+.checkbox-auto-width { width: auto; }
+.seo-review-title { margin: 0 0 5px; }
+.seo-review-interval-input { width: 62px; }
+.seo-review-timezone-input { width: 130px; }
+
 @media (max-width: 820px) {
     .top-bar { padding-inline: 14px; }
     .top-bar-right { gap: 10px; }
@@ -574,4 +586,3 @@
     .seo-topic-diff { grid-template-columns: 1fr; }
     .topic-admin-layout, .topic-form-grid, .topic-model-grid { grid-template-columns: 1fr; }
 }
-

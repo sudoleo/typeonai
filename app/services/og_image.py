@@ -14,6 +14,8 @@ import os
 
 from cachetools import TTLCache
 
+from app.core.observability import safe_exception
+
 try:
     from PIL import Image, ImageDraw, ImageFont
     _PIL_OK = True
@@ -169,8 +171,8 @@ def share_card_png(share_id: str, *, question: str, score, model_count: int,
             contradiction_count=contradiction_count,
             history_scores=history_scores, checked_label=checked_label,
         )
-    except Exception:
-        logging.exception("og_image rendering failed for %s", share_id)
+    except Exception as exc:
+        logging.error("og_image rendering failed category=%s", safe_exception(exc))
         return None
     _cache[key] = png
     return png

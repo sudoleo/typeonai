@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from app.core import config as cfg
+from app.core.observability import safe_exception
 from app.core.rate_limit import limiter
 from app.core.security import extract_id_token, is_user_pro, verify_user_token
 from app.core.site import SITE_URL
@@ -63,8 +64,8 @@ def create_watch(request: Request, data: dict = Body(...)):
         )
     except watch_service.WatchError as exc:
         _raise(exc)
-    except Exception:
-        logging.exception("create_watch failed")
+    except Exception as exc:
+        logging.error("create_watch failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error creating watch")
     return {"status": "success", "watch": watch}
 
@@ -90,8 +91,8 @@ def my_watches(request: Request):
                 "daily_available": cfg.is_watch_daily_allowed(is_pro),
             },
         }
-    except Exception:
-        logging.exception("my_watches failed")
+    except Exception as exc:
+        logging.error("my_watches failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error loading watches")
 
 
@@ -106,8 +107,8 @@ def patch_watch(request: Request, watch_id: str, data: dict = Body(...)):
         watch = watch_service.update_watch(uid, watch_id, changes, is_user_pro(uid))
     except watch_service.WatchError as exc:
         _raise(exc)
-    except Exception:
-        logging.exception("patch_watch failed")
+    except Exception as exc:
+        logging.error("patch_watch failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error updating watch")
     return {"status": "success", "watch": watch}
 
@@ -118,8 +119,8 @@ def my_telegram(request: Request):
     uid = _uid(request, {})
     try:
         return {"status": "success", "telegram": telegram_watch.get_connection(uid)}
-    except Exception:
-        logging.exception("my_telegram failed")
+    except Exception as exc:
+        logging.error("my_telegram failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error loading Telegram connection")
 
 
@@ -131,8 +132,10 @@ def create_telegram_link(request: Request, data: dict = Body(default={})):
         link = telegram_watch.create_link(uid)
     except watch_service.WatchError as exc:
         _raise(exc)
-    except Exception:
-        logging.exception("create_telegram_link failed")
+    except Exception as exc:
+        logging.error(
+            "create_telegram_link failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Error creating Telegram link")
     return {"status": "success", **link}
 
@@ -145,8 +148,8 @@ async def test_telegram(request: Request, data: dict = Body(default={})):
         result = await asyncio.to_thread(telegram_watch.send_test, uid)
     except watch_service.WatchError as exc:
         _raise(exc)
-    except Exception:
-        logging.exception("test_telegram failed")
+    except Exception as exc:
+        logging.error("test_telegram failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error testing Telegram connection")
     return {"status": "success", "delivery": result}
 
@@ -157,8 +160,10 @@ def disconnect_telegram(request: Request, data: dict = Body(default={})):
     uid = _uid(request, data)
     try:
         state = telegram_watch.disconnect(uid)
-    except Exception:
-        logging.exception("disconnect_telegram failed")
+    except Exception as exc:
+        logging.error(
+            "disconnect_telegram failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Error disconnecting Telegram")
     return {"status": "success", "telegram": state}
 
@@ -171,10 +176,12 @@ async def telegram_webhook(request: Request, data: dict = Body(default={})):
         raise HTTPException(status_code=403, detail="Invalid Telegram webhook secret")
     try:
         await asyncio.to_thread(telegram_watch.handle_update, data)
-    except Exception:
+    except Exception as exc:
         # Return 200 so one malformed update cannot create an endless Telegram
         # retry loop; action-level errors are acknowledged inside the handler.
-        logging.exception("telegram_webhook update failed")
+        logging.error(
+            "telegram_webhook update failed category=%s", safe_exception(exc)
+        )
     return {"ok": True}
 
 
@@ -186,15 +193,18 @@ def remove_watch(request: Request, watch_id: str, data: dict = Body(default={}))
         watch_service.delete_watch(uid, watch_id)
     except watch_service.WatchError as exc:
         _raise(exc)
-    except Exception:
-        logging.exception("delete_watch failed")
+    except Exception as exc:
+        logging.error("delete_watch failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error deleting watch")
     try:
         watch_brief.disable_if_no_watches(uid)
-    except Exception:
+    except Exception as exc:
         # Die Watch ist bereits gelöscht; Brief-Cleanup darf dem Client keinen
         # falschen Delete-Fehler melden. Das Aktivierungs-Gate bleibt intakt.
-        logging.exception("Morning Brief cleanup after final watch failed")
+        logging.error(
+            "Morning Brief cleanup after final watch failed category=%s",
+            safe_exception(exc),
+        )
     return {"status": "success"}
 
 
@@ -208,8 +218,8 @@ def my_watch_brief(request: Request):
             "brief": watch_brief.get_brief(uid),
             "has_watches": watch_brief.has_watches(uid),
         }
-    except Exception:
-        logging.exception("my_watch_brief failed")
+    except Exception as exc:
+        logging.error("my_watch_brief failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error loading brief settings")
 
 
@@ -222,8 +232,10 @@ def patch_watch_brief(request: Request, data: dict = Body(...)):
         brief = watch_brief.update_brief(uid, changes)
     except watch_service.WatchError as exc:
         _raise(exc)
-    except Exception:
-        logging.exception("patch_watch_brief failed")
+    except Exception as exc:
+        logging.error(
+            "patch_watch_brief failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Error updating brief settings")
     return {"status": "success", "brief": brief}
 
@@ -255,8 +267,8 @@ async def follow_share(request: Request, share_id: str, data: dict = Body(defaul
         )
     except watch_service.WatchError as exc:
         _raise(exc)
-    except Exception:
-        logging.exception("follow_share failed")
+    except Exception as exc:
+        logging.error("follow_share failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error processing follow request")
     if pending["token"]:
         if not mailer.is_configured():

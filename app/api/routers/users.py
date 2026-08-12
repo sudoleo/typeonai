@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.rate_limit import limiter
+from app.core.observability import safe_exception
 import app.core.config as cfg
 from app.core.security import (
     TierStatusUnavailable,
@@ -21,6 +22,7 @@ from app.services.usage_repository import (
     UsageTransitionError,
 )
 from app.services.account_deletion import FirestoreAccountDeletion
+from app.services import persistence_guard
 
 router = APIRouter()
 run_usage_repository = FirestoreUsageRepository(db_firestore)
@@ -78,8 +80,8 @@ def get_user_status(request: Request):
 
     except HTTPException:
         raise
-    except Exception as e:
-        logging.error(f"User status check failed: {e}")
+    except Exception as exc:
+        logging.error("User status check failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=401, detail="Authentication failed")
 
 @router.post("/usage")
@@ -179,8 +181,11 @@ def delete_account(request: Request, data: dict = Body(default={})):
     try:
         user = auth.get_user(uid)
         account_deletion.start(uid, email=str(user.email or ""))
-    except Exception:
-        logging.exception("delete_account: durable deletion job could not start for %s", uid)
+    except Exception as exc:
+        logging.error(
+            "delete_account: durable deletion job could not start category=%s",
+            safe_exception(exc),
+        )
         raise HTTPException(
             status_code=503,
             detail="Account deletion could not be started safely. Please try again.",
@@ -188,11 +193,14 @@ def delete_account(request: Request, data: dict = Body(default={})):
 
     try:
         errors = account_deletion.cleanup_uid(uid)
-    except Exception:
+    except Exception as exc:
         # start() has already persisted the fail-closed job. A transient read
         # or cleanup coordinator outage must therefore remain an honest 202;
         # the maintenance loop will retry the same idempotent job.
-        logging.exception("delete_account: cleanup attempt failed for %s", uid)
+        logging.error(
+            "delete_account: cleanup attempt failed category=%s",
+            safe_exception(exc),
+        )
         errors = ["cleanup_coordinator"]
     invalidate_tier_cache(uid)
     if errors:
@@ -252,7 +260,18 @@ def track_interest(request: Request, data: dict = Body(...)):
             "source": source,
             "status": "pending",
         }
-        request_ref.set(interest_data)
+        created = persistence_guard.create_pro_beta_request(
+            uid=uid,
+            doc_ref=request_ref,
+            payload=interest_data,
+            db=db_firestore,
+        )
+        if not created:
+            return {
+                "status": "pending",
+                "already_requested": True,
+                "message": "Your Pro beta request is already pending.",
+            }
         return {
             "status": "success",
             "already_requested": False,
@@ -261,9 +280,9 @@ def track_interest(request: Request, data: dict = Body(...)):
 
     except HTTPException:
         raise
-    except Exception as e:
-        logging.error("Pro beta request failed: %s", e)
+    except Exception as exc:
+        logging.error("Pro beta request failed category=%s", safe_exception(exc))
         raise HTTPException(
             status_code=503,
             detail="Could not request Pro access. Please try again later.",
-        ) from e
+        ) from exc

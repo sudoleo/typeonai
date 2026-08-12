@@ -8,7 +8,7 @@ import time
 from urllib.parse import urlsplit
 
 from app.core.background_tasks import task_succeeded
-from app.core.observability import correlation_scope, record_metric
+from app.core.observability import correlation_scope, record_metric, safe_exception
 from app.core.site import SITE_URL
 from app.services import mailer, topic_pipeline, topics
 from app.services.llm.mock_llm import mock_llm_enabled
@@ -183,7 +183,7 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
     except Exception as exc:
         topics.fail_topic_run(
             claimed["id"],
-            str(exc),
+            f"topic_run_failed:{safe_exception(exc)}",
             db=db,
             now=now,
             expected_claim_id=str(claimed.get("current_run_id") or ""),
@@ -260,9 +260,14 @@ async def run_due_topic_tick() -> int:
             ran += 1
         except topics.TopicError as exc:
             if exc.code != "conflict":
-                logging.warning("Topic scheduler skipped %s: %s", topic_id, exc.message)
-        except Exception:
-            logging.exception("Scheduled Topic run failed for %s", topic_id)
+                logging.warning(
+                    "Topic scheduler skipped category=%s", safe_exception(exc)
+                )
+        except Exception as exc:
+            logging.error(
+                "Scheduled Topic run failed category=%s",
+                safe_exception(exc),
+            )
     return ran
 
 

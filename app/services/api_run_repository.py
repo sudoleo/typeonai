@@ -11,6 +11,8 @@ from typing import Callable, TypeVar
 from firebase_admin import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
+from app.services import persistence_guard
+
 
 API_RUNS_COLLECTION = "api_consensus_runs"
 API_IDEMPOTENCY_COLLECTION = "api_consensus_idempotency"
@@ -82,6 +84,12 @@ class FirestoreApiRunRepository:
         run_ref = self._run_ref(run_id)
 
         def operation(tx):
+            # Account deletion sweeps API runs only once.  Reading the durable
+            # tombstone in this creation transaction prevents an already
+            # authenticated request from recreating a run after that sweep.
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid, db=self._db, transaction=tx
+            )
             mapping_snap = mapping_ref.get(transaction=tx)
             if mapping_snap.exists:
                 mapping = mapping_snap.to_dict() or {}

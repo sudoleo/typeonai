@@ -13,11 +13,18 @@ from app.services.llm.streaming import (
     _stream_openai_responses,
     iter_sse_events,
     iter_sse_with_keepalive,
+    keepalive_streaming_response,
     sse_pack,
     stream_grok_query,
+    stream_openai_query,
     streaming_model_response,
 )
-from app.services.llm.provider_runtime import managed_provider_resource
+from app.services.llm.provider_runtime import (
+    ProviderCancellation,
+    ProviderCancelled,
+    bind_provider_cancellation,
+    managed_provider_resource,
+)
 from app.services.llm.consensus_engine import (
     is_consensus_error_text,
     stream_consensus,
@@ -55,6 +62,29 @@ def parse_sse_text(raw: str):
 
 
 class ProviderCancellationTests(unittest.TestCase):
+    @staticmethod
+    async def _disconnect_response(response, producer_entered):
+        async def receive():
+            await anyio.to_thread.run_sync(lambda: producer_entered.wait(timeout=1))
+            return {"type": "http.disconnect"}
+
+        async def send(_message):
+            return None
+
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.3"},
+            "method": "GET",
+            "path": "/stream",
+            "headers": [],
+            "query_string": b"",
+            "http_version": "1.1",
+            "scheme": "http",
+            "server": ("test", 80),
+            "client": ("test", 123),
+        }
+        await response(scope, receive, send)
+
     def test_disconnect_closes_active_provider_resource(self):
         closed = threading.Event()
         producer_stopped = threading.Event()
@@ -85,6 +115,69 @@ class ProviderCancellationTests(unittest.TestCase):
 
         self.assertEqual(list(iter_sse_events(response)), [("final", "{}")])
         self.assertTrue(response.closed)
+
+    def test_real_asgi_disconnect_closes_model_provider_resource(self):
+        entered = threading.Event()
+        closed = threading.Event()
+        released = threading.Event()
+        producer_stopped = threading.Event()
+
+        class BlockingResponse:
+            def close(self):
+                closed.set()
+                released.set()
+
+        def source():
+            try:
+                with managed_provider_resource(BlockingResponse()):
+                    entered.set()
+                    released.wait(timeout=2)
+                    yield {"type": "delta", "text": "late"}
+            finally:
+                producer_stopped.set()
+
+        response = streaming_model_response(source(), "OpenAI")
+        anyio.run(self._disconnect_response, response, entered)
+
+        self.assertTrue(closed.wait(timeout=1))
+        self.assertTrue(producer_stopped.wait(timeout=1))
+
+    def test_real_asgi_disconnect_stops_consensus_before_followup_work(self):
+        entered = threading.Event()
+        closed = threading.Event()
+        released = threading.Event()
+        producer_stopped = threading.Event()
+        followup_work = threading.Event()
+
+        class BlockingResponse:
+            def close(self):
+                closed.set()
+                released.set()
+
+        def source():
+            try:
+                with managed_provider_resource(BlockingResponse()):
+                    entered.set()
+                    released.wait(timeout=2)
+                    yield "event: delta\ndata: {}\n\n"
+                    followup_work.set()
+            finally:
+                producer_stopped.set()
+
+        response = keepalive_streaming_response(source())
+        anyio.run(self._disconnect_response, response, entered)
+
+        self.assertTrue(closed.wait(timeout=1))
+        self.assertTrue(producer_stopped.wait(timeout=1))
+        self.assertFalse(followup_work.is_set())
+
+    def test_cancelled_provider_wrapper_does_not_emit_a_failure_result(self):
+        cancellation = ProviderCancellation()
+        cancellation.cancel()
+
+        with bind_provider_cancellation(cancellation):
+            with self.assertRaises(ProviderCancelled):
+                list(stream_openai_query("question", "key"))
 
 
 class SSEPackTests(unittest.TestCase):
@@ -166,18 +259,25 @@ class StreamingModelResponseTests(unittest.TestCase):
         ))
 
     def test_generator_exception_yields_error_final(self):
+        secret = "owner@example.test|provider-body-private"
+
         def gen():
             yield {"type": "delta", "text": "x"}
-            raise RuntimeError("connection dropped")
+            raise RuntimeError(secret)
 
         response = streaming_model_response(gen(), "Mistral", {"key_used": "User API Key"})
-        events = parse_sse_text(collect_sse_body(response))
+        with self.assertLogs("app.services.llm.streaming", level="ERROR") as logs:
+            raw = collect_sse_body(response)
+        events = parse_sse_text(raw)
         self.assertEqual(events[-1][0], "final")
         final = events[-1][1]
         self.assertIn("Mistral could not complete this request", final["error"])
         self.assertEqual(final["error_code"], "provider_stream_failed")
         self.assertNotIn("error_detail", final)
         self.assertEqual(final["key_used"], "User API Key")
+        self.assertNotIn(secret, raw)
+        self.assertNotIn(secret, "\n".join(logs.output))
+        self.assertIn("RuntimeError", "\n".join(logs.output))
 
 
 def _chunk(*, content=None, reasoning_content=None, finish_reason=None):

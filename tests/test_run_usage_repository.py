@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 import app.core.config as cfg
 from usage_test_support import FakeFirestore, make_usage_repository
+from app.services import persistence_guard
 from app.services.usage_repository import (
     FirestoreUsageRepository,
     RunKind,
@@ -187,7 +189,7 @@ def test_get_run_is_read_only_and_reports_consumed_status(usage_repo):
     repo.consume("reader", "read-me")
     before = {path: dict(data) for path, data in db.documents.items()}
 
-    result = repo.get_run("reader", "read-me")
+    result = repo.get_run("reader", "read-me", now=UTC_NOON)
 
     assert result.status is RunStatus.CONSUMED
     assert result.idempotent is True
@@ -200,17 +202,99 @@ def test_consumed_run_context_binding_is_idempotent_and_target_specific(usage_re
     repo.consume("binder", "bind-me")
     before_snapshot = repo.snapshot("binder", LIMITS, now=UTC_NOON)
 
-    repo.bind_context_target("binder", "bind-me", "chat-context\0chat-a\0turn-a")
+    repo.bind_context_target(
+        "binder", "bind-me", "chat-context\0chat-a\0turn-a", now=UTC_NOON
+    )
     first_documents = {path: dict(data) for path, data in db.documents.items()}
-    repo.bind_context_target("binder", "bind-me", "chat-context\0chat-a\0turn-a")
+    repo.bind_context_target(
+        "binder", "bind-me", "chat-context\0chat-a\0turn-a", now=UTC_NOON
+    )
 
     assert db.documents == first_documents
     after_snapshot = repo.snapshot("binder", LIMITS, now=UTC_NOON)
     assert after_snapshot == before_snapshot
     with pytest.raises(UsageRunConflict):
         repo.bind_context_target(
-            "binder", "bind-me", "chat-context\0chat-b\0turn-b"
+            "binder",
+            "bind-me",
+            "chat-context\0chat-b\0turn-b",
+            now=UTC_NOON,
         )
+
+
+@pytest.mark.parametrize("operation", ["reserve", "consume", "claim", "bind"])
+def test_pending_account_deletion_fences_every_usage_mutation(usage_repo, operation):
+    repo, db = usage_repo
+    uid = "deleting-usage-owner"
+    key = "logical-run"
+    run_fingerprint = canonical_request_fingerprint({"question": "same"})
+
+    if operation != "reserve":
+        repo.reserve(
+            uid,
+            key,
+            RunKind.REGULAR,
+            LIMITS,
+            request_fingerprint=run_fingerprint,
+            now=UTC_NOON,
+        )
+    if operation in {"claim", "bind"}:
+        repo.consume(uid, key)
+
+    db.documents[(persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION, uid)] = {
+        "status": "pending"
+    }
+    before = deepcopy(db.documents)
+
+    with pytest.raises(persistence_guard.AccountDeletionInProgress):
+        if operation == "reserve":
+            repo.reserve(
+                uid,
+                key,
+                RunKind.REGULAR,
+                LIMITS,
+                request_fingerprint=run_fingerprint,
+                now=UTC_NOON,
+            )
+        elif operation == "consume":
+            repo.consume(uid, key)
+        elif operation == "claim":
+            repo.claim_operation(
+                uid,
+                key,
+                "ask:openai",
+                canonical_request_fingerprint({"model": "gpt"}),
+                now=UTC_NOON,
+            )
+        else:
+            repo.bind_context_target(
+                uid,
+                key,
+                "chat-context\0chat-a\0turn-a",
+                now=UTC_NOON,
+            )
+
+    assert db.documents == before
+
+
+def test_expired_run_cannot_be_read_or_bound_to_new_context(usage_repo):
+    repo, db = usage_repo
+    repo.reserve("expired", "old-run", RunKind.REGULAR, LIMITS, now=UTC_NOON)
+    repo.consume("expired", "old-run")
+    expired_at = UTC_NOON + timedelta(days=1)
+    before = {path: dict(data) for path, data in db.documents.items()}
+
+    with pytest.raises(UsageRunExpired):
+        repo.get_run("expired", "old-run", now=expired_at)
+    with pytest.raises(UsageRunExpired):
+        repo.bind_context_target(
+            "expired",
+            "old-run",
+            "chat-context\0chat-a\0turn-a",
+            now=expired_at,
+        )
+
+    assert db.documents == before
 
 
 def test_release_frees_slot_and_is_idempotent(usage_repo):

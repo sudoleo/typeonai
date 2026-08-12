@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, StrictBool, field_validator
 
 from app.core import config as cfg
+from app.core.observability import safe_exception
 from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
 from app.core.security import (
     db_firestore,
@@ -271,9 +272,11 @@ def _raise_store_error(exc: Exception, *, operation: str, uid: str) -> None:
     if isinstance(exc, TurnStatusConflict):
         raise HTTPException(status_code=409, detail="Turn state conflict") from exc
     if isinstance(exc, ChatStoreError):
-        logging.error("%s failed for uid=%s: %s", operation, uid, exc)
+        logging.error(
+            "%s failed category=%s", operation, safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Chat storage error") from exc
-    logging.exception("%s failed for uid=%s", operation, uid)
+    logging.error("%s failed category=%s", operation, safe_exception(exc))
     raise HTTPException(status_code=500, detail="Chat storage error") from exc
 
 
@@ -422,10 +425,14 @@ def build_turn_context(
     except ChatContextConflict as exc:
         raise HTTPException(status_code=409, detail="Chat context conflict") from exc
     except ChatContextError as exc:
-        logging.error("build chat context failed for uid=%s: %s", uid, exc)
+        logging.error(
+            "build chat context failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=503, detail="Chat context unavailable") from exc
     except Exception as exc:
-        logging.exception("build chat context failed for uid=%s", uid)
+        logging.error(
+            "build chat context failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=503, detail="Chat context unavailable") from exc
 
 

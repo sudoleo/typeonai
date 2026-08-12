@@ -438,6 +438,18 @@ class PendingResultTests(unittest.TestCase):
         self.assertIsNone(snapshots.build_pending_result("u", "", "c", None, "", {}, [], None, "m"))
         self.assertIsNone(snapshots.build_pending_result("u", "q", "  ", None, "", {}, [], None, "m"))
 
+    def test_account_deletion_tombstone_fences_pending_result_write(self):
+        db = FakeDb()
+        db.stores["account_deletion_jobs"]["owner"] = {"status": "pending"}
+        payload = snapshots.build_pending_result(
+            "owner", "Question", "Consensus", None, "", {}, ["OpenAI"], None, "OpenAI"
+        )
+
+        with self.assertRaises(snapshots.persistence_guard.AccountDeletionInProgress):
+            snapshots.save_pending_result(payload, db=db)
+
+        self.assertFalse(db.stores[snapshots.PENDING_COLLECTION])
+
     def test_caps_applied(self):
         payload = snapshots.build_pending_result(
             "u", "q" * 5000, "c" * (snapshots.MAX_CONSENSUS_CHARS + 50),
@@ -652,6 +664,22 @@ class ShareFlowTests(unittest.TestCase):
         pending = self.db.stores[snapshots.PENDING_COLLECTION][result_id]
         self.assertEqual(pending["share_id"], result["share_id"])
 
+    def test_account_deletion_tombstone_fences_share_publication(self):
+        result_id = self._store_pending()
+        self.db.stores["account_deletion_jobs"][self.uid] = {"status": "pending"}
+
+        with self.assertRaises(
+            snapshots.persistence_guard.AccountDeletionInProgress
+        ):
+            snapshots.create_share_from_pending(
+                self.uid,
+                result_id,
+                db=self.db,
+                consume_quota=lambda: True,
+            )
+
+        self.assertFalse(self.db.stores[snapshots.SHARES_COLLECTION])
+
     def test_create_share_is_idempotent(self):
         result_id = self._store_pending()
         quota_calls = []
@@ -718,6 +746,24 @@ class ShareFlowTests(unittest.TestCase):
             datetime.now(timezone.utc) - timedelta(seconds=1)
         )
         self.assertFalse(snapshots.pending_result_is_available("owner", result_id, db=db))
+
+    def test_pending_result_provenance_fails_closed_without_aware_expiry(self):
+        for expires_at in (None, datetime.now() + timedelta(hours=1)):
+            db = FakeDb()
+            result_id = "N" * 16
+            pending = make_pending(uid="owner")
+            if expires_at is None:
+                pending.pop("expires_at", None)
+            else:
+                pending["expires_at"] = expires_at
+            db.stores["pending_results"][result_id] = pending
+
+            self.assertFalse(
+                snapshots.pending_result_is_available("owner", result_id, db=db)
+            )
+            with self.assertRaises(ShareError) as rejected:
+                snapshots.create_share_from_pending("owner", result_id, db=db)
+            self.assertEqual(rejected.exception.code, "not_found")
 
     def test_private_share_cannot_be_reported(self):
         result_id = self._store_pending()
@@ -1835,6 +1881,21 @@ class ApiRunPublishingServiceTests(unittest.TestCase):
         self.assertEqual(share["visibility"], "public")
         self.assertTrue(share["index_eligible"])
         self.assertFalse(self.db.stores[snapshots.PENDING_COLLECTION])
+
+    def test_account_deletion_tombstone_fences_api_run_publication(self):
+        self.db.stores["account_deletion_jobs"][self.uid] = {"status": "pending"}
+
+        with self.assertRaises(
+            snapshots.persistence_guard.AccountDeletionInProgress
+        ):
+            snapshots.create_share_from_api_run(
+                self.uid,
+                self._run(),
+                db=self.db,
+                consume_quota=lambda: True,
+            )
+
+        self.assertFalse(self.db.stores[snapshots.SHARES_COLLECTION])
 
     def test_only_publisher_mode_api_runs_receive_publisher_lineage(self):
         publisher_run = self._run(request={"question": "Why?", "publisher_mode": True})

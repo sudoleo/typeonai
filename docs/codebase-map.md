@@ -49,8 +49,10 @@ prozesslokale, aggregierte Provider-/Scheduler-Zähler und Laufzeiten ohne
 Prompts, Antworten, E-Mails oder andere Nutzdaten.
 Im `lifespan`-Startup ist nur `load_models_from_db()` readiness-kritisch; dessen
 Firestore-Read deaktiviert SDK-Retries und besitzt ein echtes Fünf-Sekunden-
-Budget. Alle nicht abbrechbaren Cleanup-/Recovery-Arbeiten starten erst nach
-Readiness in überwachten Tasks. Ein separater Einmal-Task verifiziert und ergänzt fehlende Publisher-
+Budget. Schema-Backfill und Dokumentanlage sind davon getrennt und laufen erst
+nach Readiness als überwachter Einmal-Task. Alle übrigen nicht abbrechbaren
+Cleanup-/Recovery-Arbeiten starten ebenfalls erst nach Readiness. Ein separater
+Einmal-Task verifiziert und ergänzt fehlende Publisher-
 Lineage bei alten Free-Publisher-Watches; ein weiterer best-effort Einmal-Task
 räumt abgelaufene Telegram-Link-/Delivery-Metadaten auf und registriert bei
 vollständiger Telegram-Konfiguration den User-Bot-Webhook.
@@ -78,10 +80,10 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 |---|---|
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache), `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
-| `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn` finalisiert pending Turns samt höchstens sechs separaten Modellantworten atomar und per Payload-Fingerprint idempotent; `fail_turn` setzt nur einen allowgelisteten Fehlercode. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Finalisiert wird weiterhin ausschließlich serverseitig über `/consensus`. |
-| `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP) und übergibt sie als nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
-| `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token; nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. Der Browser versucht danach ausschließlich mit den vom Nutzer selbst eingegebenen Credentials einzuloggen. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig. |
-| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
+| `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn`/`fail_turn` lesen Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptieren ausschließlich einen weiterhin `active` Chat; eine nach dem `deleting`-Marker eintreffende Completion kann deshalb keine Modellantwort-Waisen erzeugen. Completion bleibt per Payload-Fingerprint idempotent. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Finalisiert wird weiterhin ausschließlich serverseitig über `/consensus`. |
+| `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien und eine abstrahierte Route erreichen den nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
+| `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen durchlaufen danach denselben Firebase-Mailbox-Setup-Pfad. Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig. |
+| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und kostet damit `2 + N` statt `2 + 8N` Firestore-Reads. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Sämtliche Save-Payloads sind strikt typisiert und größen-/feldbegrenzt; Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern. Persistent gelten höchstens 100 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. `DELETE /bookmark` liest die Chat-Bindung **vor** dem Löschen und räumt den gebundenen Chat per `ChatStore.delete_chat` mit ab — best effort, damit eine fehlgeschlagene Kaskade eine bereits erfolgte Löschung nicht in einen Retry verwandelt. Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
@@ -181,11 +183,11 @@ definiert die verbindlichen Größen-, Gewichts-, Zeilenhöhen- und Laufweiten-T
 und lässt Formularelemente die Produktschrift erben. Google-Fonts-Links und deren
 CSP-Freigaben existieren nicht mehr; Monospace bleibt ausschließlich für Code und
 technische Identifikatoren, KaTeX behält seine eigene Mathematikschrift.
-`index.html` und `admin.html` enthalten keine Inline-Skripte, Inline-Styles oder
+`index.html`, `admin.html` und `admin_benchmark.html` enthalten keine Inline-Skripte, Inline-Styles oder
 HTML-Eventhandler mehr. Jinja-Konfiguration liegt ausschließlich in escaped
 `data-*`-Metadaten und wird von `app-bootstrap.js` beziehungsweise
 `admin-config.js` gelesen; `app-dom-events.js` bindet die früheren Inline-
-Handler. Die routenspezifische CSP für `/app`, `/app/watches` und `/admin`
+Handler. Die routenspezifische CSP für `/app`, `/app/watches`, `/admin` und alle `/admin/*`-Unterpfade
 kommt deshalb bei `script-src` ohne `'unsafe-inline'` aus. Öffentliche Seiten
 behalten die bisherige Policy während der weiteren Style-Migration.
 
@@ -833,7 +835,9 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   fragebezogenen Share-/Citation-/Evidence-State. Der Usage-Countdown rechnet
   bis UTC-Mitternacht und fordert beim erkannten UTC-Tageswechsel über
   `window.refreshUsageData()` einen neuen autoritativen Serverstand an, statt
-  lokal zu früh zu laufen oder die Seite neu zu laden. Läuft als letztes
+  lokal zu früh zu laufen oder die Seite neu zu laden. Der neue UTC-Tag wird
+  erst nach einem bestätigten Refresh markiert; Fehler werden begrenzt erneut
+  versucht, damit ein veraltetes `0 / Limit` den neuen Tag nicht blockiert. Läuft als letztes
   Script, ruft `initApp()` direkt auf.
 
 Das Admin-Dashboard ist ebenfalls externisiert: `static/css/admin.css` enthält
@@ -870,8 +874,8 @@ Aktionen. `static/js/admin-api.js` kapselt den authentifizierten JSON-Transport;
   selbst dieser Kontext, nennt der Input den nächsten Lauf ausdrücklich einen
   neuen Vergleich. Sidebar, Thread-Kopf, Titel und Citation verwenden die
   jeweils letzte completed Frage. Nach einer
-  E-Mail-Registrierung zeigt
-  das Auth-Modal einen eigenen Verifizierungs-Erfolgszustand statt eines Browser-Alerts.
+  E-Mail-Registrierung zeigt das Auth-Modal einen neutralen Mailbox-Setup-
+  Erfolgszustand, ohne einen Probe-Login mit dem eingesendeten Legacy-Passwort.
   Logout löscht zuerst erfolgreich die HttpOnly-Session und wartet danach
   Firebase `signOut()` ab; erst dann wird der ausgeloggte Zustand gezeigt.
   Dabei werden laufende Query-/Consensus-Streams abgebrochen, Run-, Usage-,
@@ -1709,6 +1713,7 @@ app/services/
   api_account_cleanup.py     Fail-closed Account-Blocks + retrybare API-Datenlöschung
   account_deletion.py         Persistenter Vollkonto-Tombstone + bereichsweise Retry-Kaskade
   persistence_guard.py       Transaktionale Bookmark-/Feedback-Budgets + run-gebundene Votes
+  registration.py            Nicht-enumerierender Firebase-Mailbox-Setup-Pfad
   follow_challenges.py       Gehashte persistente Resend-/Empfänger-/Globalbudgets für Double-Opt-in
   api_key_repository.py      SHA-256-gehashte, UID-gebundene API-Schluessel
   api_run_repository.py      Idempotenz + persistente API-Run-State-Machine
@@ -1902,6 +1907,11 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   Kaskade werden E-Mail/sonstige Hilfsdaten entfernt und nur der UID-Tombstone
   noch zwei Stunden behalten. Der Maintenance-Loop wiederholt ausschließlich
   nicht quittierte Bereiche und entfernt abgelaufene completed Tombstones.
+  Sämtliche owner-gebundenen Mutationen — unter anderem Usage, Chats/Context,
+  Bookmarks/Votes/Feedback, Pending-/Public-Shares, Watches/Briefs/Telegram,
+  API-Runs/-Keys und Waitlist — lesen diesen Tombstone innerhalb derselben
+  Firestore-Transaktion wie ihren Write. Cleanup-interne Deletes besitzen dafür
+  einen benannten Bypass; normale Requests nicht.
 - `api_consensus_runs/{run_id}` — UID-gebundener v1-API-Run mit serverseitig
   eingefrorenem Request/Modellplan, `idempotency_hash`, Status und Status-
   Zeitstempeln, einstündigem Running-Lease sowie terminal `result` oder
@@ -1922,8 +1932,9 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   und wird bei inkonsistenten Defaults/Presets/Watches/Judges mit 400
   abgelehnt statt serverseitig still korrigiert. Erst danach wird persistiert
   und unter einem Runtime-Lock vollständig neu geladen; schlägt ein Apply-Schritt
-  fehl, werden alle zuvor aktiven Sets/Maps/Limits restauriert und der Admin-
-  Request schlägt fehl. `consensus` steuert den App-Consensus-Picker;
+  fehl, werden sowohl das vorherige Firestore-Dokument als auch alle zuvor
+  aktiven Runtime-Sets/Maps/Limits restauriert und der Admin-Request schlägt
+  fehl. `consensus` steuert den App-Consensus-Picker;
   Fehlende Limitfelder werden beim Startup normalisiert und per Merge in das
   Admin-Dokument zurückgeschrieben (Schema-Backfill ohne Verlust vorhandener Werte).
   Werte können historische Engine-Aliase (`Gemini-Pro`) oder direkte Modell-IDs aus
@@ -2449,10 +2460,11 @@ ersten Check statt eines leeren Consensus-Panels.
   ist. Außerhalb expliziter pytest-/E2E-Läufe ändert sich lokal nichts.
 - **`/register` darf nie verraten, ob eine E-Mail existiert.** Beide Fälle geben
   exakt `{"status": "check_inbox"}` zurück; das gilt auch für das Create-Race.
-  UID, E-Mail und Custom-Token werden nie zurückgegeben. `static/firebase.js`
-  kann nur mit den vom Besucher selbst eingegebenen Credentials einloggen und
-  zeigt sonst den neutralen Erfolgs-Screen. Eine spezifische Fehlermeldung wie
-  „already registered" wäre eine Konto-Enumeration.
+  UID, E-Mail und Custom-Token werden nie zurückgegeben. Ein neuer Firebase-User
+  bekommt nur ein langes serverseitiges Zufallspasswort; anschließend erhalten
+  neue und bestehende Adressen denselben gehosteten Passwort-Setup-Link. Der
+  Browser zeigt den neutralen Erfolgs-Screen und führt keinen Probe-Login aus.
+  Eine spezifische Fehlermeldung oder ein Login-Seitenkanal wäre Konto-Enumeration.
 - **Script-Ladereihenfolge in `templates/index.html` ist ein Vertrag.**
   `app-bootstrap.js` setzt Config, die drei State-Owner laden vor Firebase und
   den Feature-Modulen; `app-core.js` ergänzt den bestehenden `window.App`-Bus;
@@ -2551,7 +2563,7 @@ ersten Check statt eines leeren Consensus-Panels.
   `#adminBootstrapConfig` + `admin-config.js`.
 - **CSP** (`CustomSecurityMiddleware` in `security.py`): neue externe Hosts (Skripte,
   `connect-src`-Ziele, Frames) müssen explizit in die Policy. Sonst blockt der
-  Browser still. `/app`, `/app/watches` und `/admin` erzwingen bei `script-src`
+  Browser still. `/app`, `/app/watches`, `/admin` und `/admin/*` erzwingen bei `script-src`
   die strict-variante ohne `'unsafe-inline'`; neue Inline-Skripte/-Handler würden
   dort deshalb nicht ausgeführt. `style-src` bleibt vorerst kompatibel.
 - **Static-Caching / `?v=`**: Nach CSS/JS-Änderungen den
@@ -2574,6 +2586,15 @@ ersten Check statt eines leeren Consensus-Panels.
   bzw. unter `/health/metrics` aggregiert werden. Prompts, Modellantworten,
   Difference-Quotes/Anchors, E-Mails, Tokens und rohe Exception-Strings externer
   Provider dürfen nicht in Logs oder Metrik-Labels gelangen.
+  Dasselbe gilt für globale Exception-Handler und Browser-Alerts: geloggt und
+  alarmiert werden nur `safe_exception`-/Typkategorien, Route-Templates und
+  allowgelistete Phasen, niemals Stacktraces, Exceptiontexte oder konkrete URLs.
+- **Account-Deletion-Fence:** Jede neue owner-gebundene Firestore-Mutation liest
+  `account_deletion_jobs/{uid}` in derselben Transaktion vor ihrem Write. Ein
+  separater Vorcheck ist wegen TOCTOU nicht ausreichend. Nur idempotente interne
+  Cleanup-Pfade dürfen einen expliziten Bypass verwenden; Double-Opt-in-Tokens
+  müssen einen noch vorhandenen Challenge-State atomar konsumieren, damit die
+  Kontolöschung alte Bestätigungslinks invalidiert.
 - **Blocking-I/O-Vertrag**: Router mit synchronem Firebase-/Firestore-SDK sind
   `def`; echte Async-Routen lagern vollständige blockierende Bündel per
   `asyncio.to_thread` aus. Einzelne SDK-Calls dürfen nicht direkt in einem

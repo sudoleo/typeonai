@@ -10,6 +10,7 @@ from firebase_admin import auth
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.core.background_tasks import task_succeeded
+from app.core.observability import safe_exception
 from app.services import telegram_watch
 
 
@@ -90,8 +91,10 @@ class FirestoreApiAccountCleanup:
             user_ref = self._db.collection("users").document(uid)
             for snap in user_ref.collection(API_IDEMPOTENCY_COLLECTION).stream():
                 snap.reference.delete()
-        except Exception:
-            logging.exception("API idempotency cleanup failed for blocked UID %s", uid)
+        except Exception as exc:
+            logging.error(
+                "API idempotency cleanup failed category=%s", safe_exception(exc)
+            )
             errors.append(API_IDEMPOTENCY_COLLECTION)
 
         for collection_name in (API_KEYS_COLLECTION, API_RUNS_COLLECTION):
@@ -101,14 +104,20 @@ class FirestoreApiAccountCleanup:
                 )
                 for snap in query.stream():
                     snap.reference.delete()
-            except Exception:
-                logging.exception("%s cleanup failed for blocked UID %s", collection_name, uid)
+            except Exception as exc:
+                logging.error(
+                    "%s cleanup failed category=%s",
+                    collection_name,
+                    safe_exception(exc),
+                )
                 errors.append(collection_name)
 
         try:
             telegram_watch.delete_user_data(uid, db=self._db)
-        except Exception:
-            logging.exception("Telegram cleanup failed for blocked UID %s", uid)
+        except Exception as exc:
+            logging.error(
+                "Telegram cleanup failed category=%s", safe_exception(exc)
+            )
             errors.append("telegram")
 
         now = datetime.now(timezone.utc)
@@ -139,11 +148,12 @@ class FirestoreApiAccountCleanup:
                             self.clear_completed_block(snap.id)
                     except auth.UserNotFoundError:
                         self.clear_completed_block(snap.id)
-                    except Exception:
+                    except Exception as exc:
                         # Keep the fail-closed tombstone until Firebase status
                         # can be checked reliably on a later maintenance pass.
-                        logging.exception(
-                            "Blocked API account Auth check failed: %s", snap.id
+                        logging.error(
+                            "Blocked API account Auth check failed category=%s",
+                            safe_exception(exc),
                         )
                         self._block_ref(snap.id).set(
                             {
@@ -152,8 +162,11 @@ class FirestoreApiAccountCleanup:
                             },
                             merge=True,
                         )
-            except Exception:
-                logging.exception("Blocked API account cleanup retry failed: %s", snap.id)
+            except Exception as exc:
+                logging.error(
+                    "Blocked API account cleanup retry failed category=%s",
+                    safe_exception(exc),
+                )
         return completed
 
     async def retry_loop(self) -> None:

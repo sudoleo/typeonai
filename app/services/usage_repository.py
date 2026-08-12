@@ -37,6 +37,8 @@ from typing import Callable, Protocol, TypeVar
 
 from firebase_admin import firestore
 
+from app.services import persistence_guard
+
 
 USAGE_DAYS_COLLECTION = "usage_days"
 USAGE_RUNS_COLLECTION = "usage_runs"
@@ -167,10 +169,21 @@ class UsageRepository(Protocol):
 
     def release(self, uid: str, idempotency_key: str) -> UsageRunResult: ...
 
-    def get_run(self, uid: str, idempotency_key: str) -> UsageRunResult: ...
+    def get_run(
+        self,
+        uid: str,
+        idempotency_key: str,
+        *,
+        now: datetime | None = None,
+    ) -> UsageRunResult: ...
 
     def bind_context_target(
-        self, uid: str, idempotency_key: str, target_scope: str
+        self,
+        uid: str,
+        idempotency_key: str,
+        target_scope: str,
+        *,
+        now: datetime | None = None,
     ) -> None: ...
 
     def claim_operation(
@@ -232,6 +245,9 @@ class FirestoreUsageRepository:
         run_ref = self._run_ref(uid, key_hash)
 
         def operation(tx):
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid, db=self._db, transaction=tx
+            )
             run_snap = run_ref.get(transaction=tx)
             if run_snap.exists:
                 run_data = run_snap.to_dict() or {}
@@ -344,6 +360,9 @@ class FirestoreUsageRepository:
         run_ref = self._run_ref(uid, key_hash)
 
         def claim(tx):
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid, db=self._db, transaction=tx
+            )
             run_snap = run_ref.get(transaction=tx)
             if not run_snap.exists:
                 raise UsageRunNotFound("Usage reservation does not exist")
@@ -414,14 +433,23 @@ class FirestoreUsageRepository:
     def release(self, uid: str, idempotency_key: str) -> UsageRunResult:
         return self._finish(uid, idempotency_key, RunStatus.RELEASED)
 
-    def get_run(self, uid: str, idempotency_key: str) -> UsageRunResult:
+    def get_run(
+        self,
+        uid: str,
+        idempotency_key: str,
+        *,
+        now: datetime | None = None,
+    ) -> UsageRunResult:
         """Read a logical run without changing its lifecycle or counters."""
         uid = _validate_uid(uid)
         key_hash = _idempotency_hash(idempotency_key)
+        now = _as_utc(now)
         snap = self._run_ref(uid, key_hash).get()
         if not snap.exists:
             raise UsageRunNotFound("Usage reservation does not exist")
         run_data = snap.to_dict() or {}
+        if now >= _stored_expires_at(run_data):
+            raise UsageRunExpired("Usage run has expired")
         kind = _stored_kind(run_data)
         status = _stored_status(run_data)
         utc_date = _stored_utc_date(run_data)
@@ -440,7 +468,12 @@ class FirestoreUsageRepository:
         )
 
     def bind_context_target(
-        self, uid: str, idempotency_key: str, target_scope: str
+        self,
+        uid: str,
+        idempotency_key: str,
+        target_scope: str,
+        *,
+        now: datetime | None = None,
     ) -> None:
         """Bind one consumed logical run to one chat-context target.
 
@@ -450,6 +483,7 @@ class FirestoreUsageRepository:
         """
         uid = _validate_uid(uid)
         key_hash = _idempotency_hash(idempotency_key)
+        now = _as_utc(now)
         if not isinstance(target_scope, str) or not target_scope.strip():
             raise ValueError("target_scope must not be empty")
         encoded_scope = target_scope.encode("utf-8")
@@ -459,10 +493,15 @@ class FirestoreUsageRepository:
         run_ref = self._run_ref(uid, key_hash)
 
         def operation(tx):
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid, db=self._db, transaction=tx
+            )
             run_snap = run_ref.get(transaction=tx)
             if not run_snap.exists:
                 raise UsageRunNotFound("Usage reservation does not exist")
             run_data = run_snap.to_dict() or {}
+            if now >= _stored_expires_at(run_data):
+                raise UsageRunExpired("Usage run has expired")
             status = _stored_status(run_data)
             if status is not RunStatus.CONSUMED:
                 raise UsageTransitionError(
@@ -479,8 +518,8 @@ class FirestoreUsageRepository:
                 run_ref,
                 {
                     "context_target_hash": target_hash,
-                    "context_bound_at": datetime.now(timezone.utc),
-                    "updated_at": datetime.now(timezone.utc),
+                    "context_bound_at": now,
+                    "updated_at": now,
                 },
             )
 
@@ -507,6 +546,9 @@ class FirestoreUsageRepository:
         run_ref = self._run_ref(uid, key_hash)
 
         def operation(tx):
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid, db=self._db, transaction=tx
+            )
             run_snap = run_ref.get(transaction=tx)
             if not run_snap.exists:
                 raise UsageRunNotFound("Usage reservation does not exist")

@@ -1016,7 +1016,11 @@ def request_follow(topic_id: str, email, *, db=None) -> dict:
     doc_id = follower_id(topic_id, email)
     exists = db.collection(FOLLOWERS_COLLECTION).document(doc_id).get().exists
     may_send = False if exists else follow_challenges.claim_confirmation_send(
-        resource_type="topic", resource_id=topic_id, email=email, db=db
+        resource_type="topic",
+        resource_id=topic_id,
+        email=email,
+        db=db,
+        binding_id=topic_id,
     )
     return {
         "email": email,
@@ -1039,23 +1043,61 @@ def _parse_topic_token(token: str, *, unsubscribe: bool) -> tuple[str, str]:
 def confirm_follow(token: str, *, db=None, now=None) -> dict:
     db = db if db is not None else db_firestore
     topic_id, email = _parse_topic_token(token, unsubscribe=False)
-    topic = _followable_topic(topic_id, db)
     ref = db.collection(FOLLOWERS_COLLECTION).document(follower_id(topic_id, email))
-    if not ref.get().exists:
-        count = sum(
-            1 for _ in db.collection(FOLLOWERS_COLLECTION)
-            .where("topic_id", "==", topic_id).stream()
+    topic_ref = db.collection(TOPICS_COLLECTION).document(topic_id)
+
+    def persist(transaction):
+        challenge = follow_challenges.get_confirmation_challenge(
+            resource_type="topic",
+            resource_id=topic_id,
+            email=email,
+            db=db,
+            transaction=transaction,
+            now=now,
         )
-        if count >= MAX_FOLLOWERS_PER_TOPIC:
+        if challenge is None:
+            raise TopicError("invalid_token", "This link is invalid or expired.")
+
+        topic_snapshot = topic_ref.get(transaction=transaction)
+        topic = topic_snapshot.to_dict() if topic_snapshot.exists else None
+        if (
+            not topic
+            or topic.get("status") not in {"active", "paused"}
+            or not topic.get("latest_run_id")
+        ):
+            raise TopicError("not_found", "This topic cannot be followed.")
+
+        follower_snapshot = ref.get(transaction=transaction)
+        query = db.collection(FOLLOWERS_COLLECTION).where(
+            "topic_id", "==", topic_id
+        )
+        try:
+            followers = query.stream(transaction=transaction)
+        except TypeError:
+            followers = query.stream()
+        count = sum(1 for _ in followers)
+        if not follower_snapshot.exists and count >= MAX_FOLLOWERS_PER_TOPIC:
             raise TopicError("limit_reached", "This topic has reached its follower limit.")
-        ref.set({"topic_id": topic_id, "email": email, "created_at": now or utcnow()})
+
+        follow_challenges.consume_confirmation_challenge(
+            challenge, transaction=transaction
+        )
+        if not follower_snapshot.exists:
+            transaction.set(ref, {
+                "topic_id": topic_id,
+                "email": email,
+                "created_at": now or utcnow(),
+            })
+        return topic
+
+    topic = _run_transaction(db, persist)
     return {"topic_id": topic_id, "email": email, "title": topic["title"], "slug": topic["slug"]}
 
 
 def unsubscribe_follow(token: str, *, db=None) -> dict:
     db = db if db is not None else db_firestore
     topic_id, email = _parse_topic_token(token, unsubscribe=True)
-    db.collection(FOLLOWERS_COLLECTION).document(follower_id(topic_id, email)).delete()
+    delete_follower_and_deliveries(follower_id(topic_id, email), db=db)
     return {"topic_id": topic_id, "email": email}
 
 
@@ -1077,31 +1119,70 @@ def delivery_id(topic_id: str, run_id: str, follower_doc_id: str) -> str:
 
 
 def claim_delivery(topic_id: str, run_id: str, follower_doc_id: str, *, db=None) -> bool:
-    """Best-effort delivery dedupe. Failed sends delete the claim for retry."""
+    """Claim a delivery only while its topic-bound follower still exists."""
     db = db if db is not None else db_firestore
+    follower_ref = db.collection(FOLLOWERS_COLLECTION).document(follower_doc_id)
     ref = db.collection(DELIVERIES_COLLECTION).document(
         delivery_id(topic_id, run_id, follower_doc_id)
     )
-    if ref.get().exists:
-        return False
-    ref.set({
-        "topic_id": topic_id,
-        "run_id": run_id,
-        "follower_id": follower_doc_id,
-        "status": "sending",
-        "created_at": utcnow(),
-    })
-    return True
+
+    def claim(transaction):
+        follower_snapshot = follower_ref.get(transaction=transaction)
+        delivery_snapshot = ref.get(transaction=transaction)
+        if not follower_snapshot.exists or delivery_snapshot.exists:
+            return False
+        follower = follower_snapshot.to_dict() or {}
+        if str(follower.get("topic_id") or "") != topic_id:
+            return False
+        transaction.set(ref, {
+            "topic_id": topic_id,
+            "run_id": run_id,
+            "follower_id": follower_doc_id,
+            "status": "sending",
+            "created_at": utcnow(),
+        })
+        return True
+
+    return bool(_run_transaction(db, claim))
 
 
 def finish_delivery(
     topic_id: str, run_id: str, follower_doc_id: str, *, success: bool, db=None
-) -> None:
+) -> bool:
     db = db if db is not None else db_firestore
     ref = db.collection(DELIVERIES_COLLECTION).document(
         delivery_id(topic_id, run_id, follower_doc_id)
     )
-    if success:
-        ref.set({"status": "sent", "sent_at": utcnow()}, merge=True)
-    else:
-        ref.delete()
+
+    def finish(transaction):
+        snapshot = ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return False
+        current = snapshot.to_dict() or {}
+        if (
+            str(current.get("topic_id") or "") != topic_id
+            or str(current.get("run_id") or "") != run_id
+            or str(current.get("follower_id") or "") != follower_doc_id
+        ):
+            return False
+        if success:
+            transaction.update(ref, {"status": "sent", "sent_at": utcnow()})
+        else:
+            transaction.delete(ref)
+        return True
+
+    return bool(_run_transaction(db, finish))
+
+
+def delete_follower_and_deliveries(follower_doc_id: str, *, db=None) -> int:
+    """Fence new claims, then remove all delivery state for one follower."""
+    db = db if db is not None else db_firestore
+    db.collection(FOLLOWERS_COLLECTION).document(follower_doc_id).delete()
+    deleted = 0
+    deliveries = db.collection(DELIVERIES_COLLECTION).where(
+        "follower_id", "==", follower_doc_id
+    )
+    for delivery in deliveries.stream():
+        delivery.reference.delete()
+        deleted += 1
+    return deleted

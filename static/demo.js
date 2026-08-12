@@ -690,8 +690,12 @@ document.getElementById("postDemoLoginButton")?.addEventListener("click", () => 
 function toggleSettingsCollapse(contentId, arrowId) {
   const content = document.getElementById(contentId);
   const arrow = document.getElementById(arrowId);
+  if (!content) return;
 
-  if (content.style.display === "none") {
+  // The initial closed state comes from a template CSS class. Inspect the
+  // effective value so the first click opens it even before an inline value
+  // has ever been written.
+  if (window.getComputedStyle(content).display === "none") {
     content.style.display = "block";
     if (arrow) arrow.classList.add("rotated");
     if (arrow) arrow.innerHTML = "&#9650;";

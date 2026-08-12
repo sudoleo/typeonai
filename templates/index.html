@@ -30,9 +30,9 @@
   <script src="/static/js/app-bootstrap.js?v=20260811-phase6"></script>
   <script src="/static/js/app-state.js?v=20260811-phase6"></script>
   <script src="/static/js/auth-session-state.js?v=20260811-phase6"></script>
-  <script src="/static/js/watch-state.js?v=20260811-phase6"></script>
+  <script src="/static/js/watch-state.js?v=20260812-auditfix"></script>
   <!-- Google Fonts -->
-  <link rel="stylesheet" href="/static/style.css?v=20260811-phase6">
+  <link rel="stylesheet" href="/static/style.css?v=20260812-auditfix">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
@@ -49,8 +49,8 @@
        Module nicht importiert werden koennen. Muss vor firebase.js stehen. -->
   <script src="/static/js/auth-bootstrap.js?v=20260811-phase4" defer></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260811-phase6"></script>
-  <script type="module" src="/static/demo.js?v=20260811-phase6"></script>
+  <script type="module" src="/static/firebase.js?v=20260812-auditfix"></script>
+  <script type="module" src="/static/demo.js?v=20260812-auditfix"></script>
   <script src="/static/app-ui.js?v=20260811-phase4" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
   <script src="/static/js/app-core.js?v=20260807-threadmessages1" defer></script>
@@ -61,7 +61,7 @@
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
   <script src="/static/js/markdown-stream.js?v=20260809-phase0c1" defer></script>
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
-  <script src="/static/js/sources.js?v=20260811-phase6" defer></script>
+  <script src="/static/js/sources.js?v=20260812-auditfix" defer></script>
   <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
   <script src="/static/js/attachments.js?v=20260810-runblock1" defer></script>
   <!-- Agent Mode (aus index.html ausgelagert) -->
@@ -71,11 +71,11 @@
   <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
   <script src="/static/js/consensus-lifecycle.js?v=20260811-phase6" defer></script>
   <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
-  <script src="/static/js/share-dialog.js?v=20260811-phase4" defer></script>
+  <script src="/static/js/share-dialog.js?v=20260812-auditfix" defer></script>
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
   <script src="/static/js/consensus-actions.js?v=20260727-resultactions1" defer></script>
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
-  <script src="/static/js/watch.js?v=20260811-phase6" defer></script>
+  <script src="/static/js/watch.js?v=20260812-auditfix" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260811-phase6" defer></script>
   <!-- Kontingent-Ring + Panel im Sidebar-Footer; spiegelt nur #usageDisplay -->
@@ -89,7 +89,7 @@
   <script src="/static/js/consensus-insights.js?v=20260811-phase6" defer></script>
   <script src="/static/js/chat-session.js?v=20260806-chatlimits1" defer></script>
   <script src="/static/js/consensus-run.js?v=20260811-phase6" defer></script>
-  <script src="/static/js/query-send.js?v=20260811-phase6" defer></script>
+  <script src="/static/js/query-send.js?v=20260812-auditfix" defer></script>
   <!-- Composer einklappen (Handy): eine Zeile beim Lesen, voll beim Anfassen -->
   <script src="/static/js/composer-collapse.js?v=20260807-composergrow1" defer></script>
   {% include "partials/analytics.html" %}
@@ -157,7 +157,7 @@
          Usage lebt jetzt im Kontingent-Panel über dem Account-Footer. -->
     <div class="sidebar-pinned">
 
-      <div id="usageOptions" class="visually-hidden" style="margin-top: 0;">
+      <div id="usageOptions" class="visually-hidden u-mt-0">
         <h2 class="sidebar-static-heading">Usage</h2>
         <div id="usageDisplay">
           <span id="freeUsageDisplay">Runs: <strong>...</strong></span><br>
@@ -249,7 +249,7 @@
           <span>Your allowance</span>
           <span class="sidebar-quota-plan">
             <span id="quotaPlanLabel">Free</span>
-            <span id="proBadge" class="pro-badge" style="display: none;">PRO</span>
+            <span id="proBadge" class="pro-badge u-display-none">PRO</span>
           </span>
         </div>
         <div class="quota-row" id="quotaRowRuns" hidden>
@@ -270,7 +270,7 @@
         <div id="loginContainer" class="login-text" hidden></div>
         <div class="sidebar-account-meta">
           <span id="accountLabel" class="sidebar-account-label" hidden></span>
-          <a id="upgradeLink" href="#" style="display: none;" aria-label="Why there are limits" title="Why there are limits">Why limits?</a>
+          <a id="upgradeLink" class="u-display-none" href="#" aria-label="Why there are limits" title="Why there are limits">Why limits?</a>
         </div>
         <!-- Kontingent-Ring: das einzige Element im Shell, das dauerhaft eine
              Zahl über den eigenen Account zeigt. Klick öffnet #sidebarQuota. -->
@@ -397,7 +397,7 @@
     <div class="input-section">
       <!-- Nur im Agent-Mode-Hero und nur bei ausreichender Viewport-Fläche sichtbar. -->
       <p class="hero-greeting">What should the models cross-check?</p>
-      <div class="chat-input-container" style="position: relative;">
+      <div class="chat-input-container u-position-relative">
         <!-- Noch nicht gesendete Anhaenge. Beim Senden wandern sie an die
              Nachricht (#threadAskAttachments) — ein Anhang gehoert zu der
              Frage, mit der er rausgegangen ist, nicht ans leere Feld. -->
@@ -425,7 +425,7 @@
             <span class="attach-menu-toggle-text">
               <span class="search-mode-label deep-switch-label">Deep Think</span>
               <span class="attach-menu-toggle-sub">Stronger reasoning models for harder questions.</span>
-              <span id="deepthinkDisclaimer" class="deepthink-disclaimer" style="display: none;"></span>
+              <span id="deepthinkDisclaimer" class="deepthink-disclaimer u-display-none"></span>
             </span>
             <span class="deep-switch-actions">
               <span class="pro-badge attach-pro-badge model-picker-pro-badge">Pro</span>
@@ -471,7 +471,7 @@
                Senden-Knopf ist das einzige massive Element im Composer, also
                traegt er auch ein massives Zeichen statt einer Kontur. -->
           <button id="sendButton" class="input-action-btn-primary" title="Send question" aria-label="Send question">
-            <svg viewBox="0 0 24 24" aria-hidden="true" style="width: 13px; height: 13px;">
+            <svg class="icon-13" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M3.4 3.6 21 12 3.4 20.4 7 12z" fill="currentColor"></path>
             </svg>
           </button>
@@ -628,7 +628,7 @@
       </div>
     </div>
 
-    <div class="response-section" style="position: relative;" inert aria-hidden="true">
+    <div class="response-section" inert aria-hidden="true">
       <div id="agentModePanel" class="agent-mode-panel" aria-live="polite" aria-hidden="true">
         <div class="agent-mode-header">
           <div class="agent-mode-heading">
@@ -795,7 +795,7 @@
       </div>
     </div>
 
-  <script src="/static/js/app-init.js?v=20260811-phase6" defer></script>
+  <script src="/static/js/app-init.js?v=20260812-auditfix" defer></script>
   <script src="/static/js/app-dom-events.js?v=20260811-phase6" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
@@ -816,14 +816,14 @@
 
         <section id="registrationSuccess" class="auth-success" aria-live="polite" tabindex="-1" hidden>
           <div class="auth-success-icon" aria-hidden="true">&#10003;</div>
-          <p class="auth-success-lead">We sent a verification link to</p>
+          <p class="auth-success-lead">We sent a secure account setup link to</p>
           <strong id="registrationSuccessEmail" class="auth-success-email"></strong>
           <ol class="auth-success-steps">
-            <li>Open the verification e-mail.</li>
-            <li>Click the link to confirm your address.</li>
+            <li>Open the account setup e-mail.</li>
+            <li>Use the link to choose your password.</li>
             <li>Come back here and log in.</li>
           </ol>
-          <p class="auth-success-note">It may take a minute to arrive. Please also check your spam folder. If you already have an account with this address, no new e-mail is sent &ndash; just log in or reset your password.</p>
+          <p class="auth-success-note">For privacy, this confirmation is identical for every address. It may take a minute to arrive; please also check your spam folder.</p>
           <button type="button" id="registrationLoginButton" class="auth-primary-action">Continue to login</button>
         </section>
 
@@ -844,20 +844,20 @@
             <input type="email" id="loginEmail" name="email" placeholder="Email" autocomplete="username" />
 
             <!-- Confirm email (register-only) -->
-            <input type="email" id="loginEmailConfirm" name="email_confirm" placeholder="Confirm Email"
-              autocomplete="username" style="display:none;" />
+            <input type="email" id="loginEmailConfirm" class="u-display-none" name="email_confirm" placeholder="Confirm Email"
+              autocomplete="username" />
 
             <input type="password" id="loginPassword" name="password" placeholder="Password"
               autocomplete="current-password" />
 
             <!-- Confirm password (register-only) -->
-            <input type="password" id="loginPasswordConfirm" name="password_confirm" placeholder="Confirm Password"
-              autocomplete="new-password" style="display:none;" />
+            <input type="password" id="loginPasswordConfirm" class="u-display-none" name="password_confirm" placeholder="Confirm Password"
+              autocomplete="new-password" />
 
             <!-- Primary actions -->
             <div class="auth-actions">
               <button type="button" id="loginButton" class="auth-primary-action">Log in with e-mail</button>
-              <button type="button" id="confirmRegisterButton" class="auth-primary-action" style="display:none;">Create account</button>
+              <button type="button" id="confirmRegisterButton" class="auth-primary-action u-display-none">Send setup link</button>
             </div>
 
             <!-- Inline errors -->
@@ -865,7 +865,7 @@
             <div id="registerError" class="error-message" role="alert" aria-live="polite"></div>
 
             <div id="singleMailNote" class="auth-note">
-              Note: each e-mail address can be used for one account only.
+              We will send a secure link to choose your password. No account status is revealed here.
             </div>
 
             <!-- Secondary row (links only) -->
@@ -877,7 +877,7 @@
             </div>
           </div>
 
-          <div id="authConsentNote" class="auth-note" style="display:block;">
+          <div id="authConsentNote" class="auth-note u-display-block">
             By signing in or creating an account you agree to the
             <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Use</a>, including the
             transmission of your prompts to the AI providers you select (e.g. OpenAI, Anthropic, Google, Mistral,
@@ -1001,7 +1001,7 @@
 
   <div id="popupContainer">
     <!-- Modal zum Editieren des Systemprompts -->
-    <div id="systemPromptModal" class="modal" style="display:none;">
+    <div id="systemPromptModal" class="modal u-display-none">
       <div class="modal-content settings-modal-content">
 
         <div class="settings-header">
@@ -1090,7 +1090,7 @@
                   <span id="apiArrow" class="arrow">&#9660;</span>
                 </div>
 
-                <div id="apiSettingsArea" class="settings-collapsible-area" style="display: none;">
+                <div id="apiSettingsArea" class="settings-collapsible-area u-display-none">
 
               <div class="api-key-group">
                 <label for="openaiKey">OpenAI API Key <span id="openaiFeedback" class="feedback"></span></label>
@@ -1120,7 +1120,7 @@
 
               <button id="testAllKeysButton" type="button" class="save-keys-btn">
                 Save & Test Keys
-                <span id="apiSpinner" class="spinner" style="display: none;"></span>
+                <span id="apiSpinner" class="spinner u-display-none"></span>
               </button>
               <div id="apiKeysStatus" class="api-keys-status" role="status" aria-live="polite" hidden></div>
                 </div>
@@ -1143,7 +1143,7 @@
             </div>
           </section>
 
-          <section id="accountSettingsSection" class="settings-category" aria-labelledby="settingsAccountTitle" style="display: none;">
+          <section id="accountSettingsSection" class="settings-category u-display-none" aria-labelledby="settingsAccountTitle">
             <div class="settings-category-heading">
               <h3 id="settingsAccountTitle">Account</h3>
               <p>Manage permanent account actions.</p>

@@ -16,6 +16,26 @@ _ALLOWED_TYPES = {
     "unhandled_error",
     "unhandled_rejection",
 }
+_ALLOWED_PHASES = {
+    "answers",
+    "asset_load",
+    "browser",
+    "browser_promise",
+    "browser_runtime",
+    "consensus",
+    "consensus_connection",
+    "markdown_render",
+    "model_fanout",
+    "preflight",
+    "prepare",
+}
+_GENERIC_MESSAGES = {
+    "resource_load_failed": "A required browser resource failed to load.",
+    "run_failed": "A browser run failed.",
+    "consensus_failed": "A browser consensus run failed.",
+    "unhandled_error": "An unhandled browser error occurred.",
+    "unhandled_rejection": "An unhandled browser promise rejection occurred.",
+}
 
 
 def _bounded_string(data: dict, field: str, limit: int, *, required: bool = False) -> str:
@@ -46,6 +66,20 @@ def _require_same_origin(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Cross-origin reports are not accepted")
 
 
+def _route_family(path: str) -> str:
+    """Keep operational routing context without forwarding IDs or slugs."""
+    if path in {"/", "/app", "/app/watches", "/admin", "/admin/benchmark"}:
+        return path
+    if path.startswith("/s/"):
+        return "/s/{share_id}"
+    if path.startswith("/topics/"):
+        return "/topics/{slug}"
+    if path.startswith("/app/"):
+        return "/app/{view}"
+    if path.startswith("/admin/"):
+        return "/admin/{view}"
+    return "/other"
+
 @router.post("/api/client-errors", status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("5/minute")
 def report_client_error(
@@ -58,16 +92,21 @@ def report_client_error(
     if error_type not in _ALLOWED_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported error type")
 
-    path = _bounded_string(data, "path", 300)
-    if path and not path.startswith("/"):
-        path = ""
+    # Validate the client fields, but never forward their free-form content to
+    # logs or Telegram. Browser errors routinely contain prompts, URLs, e-mail
+    # addresses, access tokens, and provider response bodies.
+    _bounded_string(data, "message", 700, required=True)
+    _bounded_string(data, "details", 1_500)
+    _bounded_string(data, "stack", 4_000)
+    raw_phase = _bounded_string(data, "phase", 80)
+    phase = raw_phase if raw_phase in _ALLOWED_PHASES else "browser"
+    raw_path = _bounded_string(data, "path", 300)
+    path = _route_family(raw_path) if raw_path.startswith("/") else "/other"
     report = {
         "source": "browser",
         "type": error_type,
-        "phase": _bounded_string(data, "phase", 80),
-        "message": _bounded_string(data, "message", 700, required=True),
-        "details": _bounded_string(data, "details", 1_500),
-        "stack": _bounded_string(data, "stack", 4_000),
+        "phase": phase,
+        "message": _GENERIC_MESSAGES[error_type],
         "path": path,
     }
     background_tasks.add_task(send_critical_error_notification, report)

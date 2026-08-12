@@ -2,9 +2,8 @@
 
 Besucher können eine öffentliche Watch-Seite per E-Mail "followen" und werden
 bei materiellen Konsens-Änderungen benachrichtigt. Double-Opt-in: der POST
-erzeugt nur einen signierten Confirm-Token (keine Persistenz); erst der Klick
-auf den Bestätigungslink legt den Follower an. Bewusst ohne IP/UA-Speicherung –
-gespeichert werden nur share_id, E-Mail und Zeitstempel.
+speichert nur einen gehashten, widerrufbaren Challenge-State; erst der Klick
+auf den Bestätigungslink legt den Follower an. Bewusst ohne IP/UA-Speicherung.
 """
 
 from __future__ import annotations
@@ -16,10 +15,9 @@ from datetime import datetime
 from firebase_admin import firestore
 
 from app.core.security import db_firestore
-from app.services import follow_challenges, share_snapshots
+from app.services import follow_challenges, share_snapshots, watch_service
 from app.services.watch_service import (
     WatchError,
-    get_public_watch_meta,
     parse_token_payload,
     sign_token_payload,
 )
@@ -43,14 +41,22 @@ def follower_id(share_id: str, email: str) -> str:
     return hashlib.sha256(f"{share_id}:{email}".encode("utf-8")).hexdigest()[:32]
 
 
-def _followable_share(share_id: str, db) -> dict:
+def _followable_share(share_id: str, db) -> tuple[dict, str]:
     share = share_snapshots.get_share(share_id, db=db)
     if (not share or share.get("status") != "active"
             or str(share.get("visibility") or "public") != "public"):
         raise WatchError("not_found", "This page cannot be followed.")
-    if get_public_watch_meta(share_id, db=db) is None:
+    watch = watch_service.find_watch_for_share(share_id, db=db, share=share)
+    if not watch or watch.get("status") not in {"active", "paused", "paused_error"}:
         raise WatchError("not_watched", "This page has no Consensus Watch to follow.")
-    return share
+    return share, str(watch.get("id") or "")
+
+
+def _stream_in_transaction(query, transaction):
+    try:
+        return query.stream(transaction=transaction)
+    except TypeError:
+        return query.stream()
 
 
 def make_confirm_token(share_id: str, email: str, *, now=None) -> str:
@@ -64,19 +70,25 @@ def make_follow_unsubscribe_token(share_id: str, email: str, *, now=None) -> str
 
 
 def request_follow(share_id: str, email, db=None) -> dict:
-    """Validate the request and hand back a confirm token (nothing persisted).
+    """Validate the request and hand back a one-time confirm token.
 
     Liefert ``token`` nur, wenn die Adresse noch nicht bestätigt folgt –
     der Router antwortet in beiden Fällen mit derselben generischen Meldung.
+    Vor Bestätigung wird nur gehashter, widerrufbarer Challenge-State
+    persistiert; niemals die rohe ausstehende E-Mail-Adresse.
     """
     db = db if db is not None else db_firestore
     email = normalize_email(email)
-    share = _followable_share(share_id, db)
+    share, watch_id = _followable_share(share_id, db)
     doc = db.collection(FOLLOWERS_COLLECTION).document(follower_id(share_id, email)).get()
     if doc.exists:
         return {"email": email, "question": str(share.get("question") or ""), "token": ""}
     may_send = follow_challenges.claim_confirmation_send(
-        resource_type="watch", resource_id=share_id, email=email, db=db
+        resource_type="watch",
+        resource_id=share_id,
+        email=email,
+        db=db,
+        binding_id=watch_id,
     )
     return {
         "email": email,
@@ -85,28 +97,70 @@ def request_follow(share_id: str, email, db=None) -> dict:
     }
 
 
-def confirm_follow(token: str, db=None) -> dict:
+def confirm_follow(token: str, db=None, *, now=None) -> dict:
     db = db if db is not None else db_firestore
     payload = parse_token_payload(token)
     if payload.get("un"):
         raise WatchError("invalid_token", "This link is invalid.")
     share_id = str(payload.get("sid") or "")
     email = normalize_email(payload.get("em"))
-    share = _followable_share(share_id, db)
-
     ref = db.collection(FOLLOWERS_COLLECTION).document(follower_id(share_id, email))
-    if not ref.get().exists:
-        count = sum(
-            1 for _ in db.collection(FOLLOWERS_COLLECTION)
-            .where("share_id", "==", share_id).stream()
+    share_ref = db.collection(share_snapshots.SHARES_COLLECTION).document(share_id)
+
+    def persist(transaction):
+        challenge = follow_challenges.get_confirmation_challenge(
+            resource_type="watch",
+            resource_id=share_id,
+            email=email,
+            db=db,
+            transaction=transaction,
+            now=now,
         )
-        if count >= MAX_FOLLOWERS_PER_SHARE:
+        if challenge is None or not challenge["binding_id"]:
+            raise WatchError("invalid_token", "This link is invalid or expired.")
+
+        share_snapshot = share_ref.get(transaction=transaction)
+        share = share_snapshot.to_dict() if share_snapshot.exists else None
+        if (
+            not share
+            or share.get("status") != "active"
+            or str(share.get("visibility") or "public") != "public"
+        ):
+            raise WatchError("not_found", "This page cannot be followed.")
+
+        watch_ref = db.collection(watch_service.WATCHES_COLLECTION).document(
+            challenge["binding_id"]
+        )
+        watch_snapshot = watch_ref.get(transaction=transaction)
+        watch = watch_snapshot.to_dict() if watch_snapshot.exists else None
+        if (
+            not watch
+            or str(watch.get("share_id") or "") != share_id
+            or watch.get("status") not in {"active", "paused", "paused_error"}
+        ):
+            raise WatchError("not_watched", "This page has no Consensus Watch to follow.")
+
+        follower_snapshot = ref.get(transaction=transaction)
+        followers = _stream_in_transaction(
+            db.collection(FOLLOWERS_COLLECTION).where("share_id", "==", share_id),
+            transaction,
+        )
+        count = sum(1 for _ in followers)
+        if not follower_snapshot.exists and count >= MAX_FOLLOWERS_PER_SHARE:
             raise WatchError("limit_reached", "This page has reached its follower limit.")
-        ref.set({
-            "share_id": share_id,
-            "email": email,
-            "created_at": firestore.SERVER_TIMESTAMP,
-        })
+
+        follow_challenges.consume_confirmation_challenge(
+            challenge, transaction=transaction
+        )
+        if not follower_snapshot.exists:
+            transaction.set(ref, {
+                "share_id": share_id,
+                "email": email,
+                "created_at": firestore.SERVER_TIMESTAMP,
+            })
+        return share
+
+    share = watch_service._run_transaction(db, persist)
     return {
         "share_id": share_id,
         "email": email,

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 from typing import Literal, Optional
 from firebase_admin import auth
 from fastapi import APIRouter, Request, Body, HTTPException, Query
@@ -14,6 +15,7 @@ from app.core.security import (
 )
 from app.core.rate_limit import limiter
 import app.core.config as cfg
+from app.core.observability import safe_exception
 from app.core.config import get_limits_config, load_models_from_db, normalize_limits_config
 from app.services import share_snapshots as snapshots
 from app.services import (
@@ -38,6 +40,34 @@ api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
 seo_data_service = seo_data.SeoDataService(db_firestore)
 seo_recommendation_service = seo_recommendation.SeoRecommendationService(db_firestore)
 seo_weekly_review_service = seo_weekly_review.default_service
+_MODEL_CONFIG_UPDATE_LOCK = threading.Lock()
+
+
+def _persist_and_activate_models(doc_ref, document: dict) -> None:
+    """Persist one model config and restore it if runtime activation fails."""
+    with _MODEL_CONFIG_UPDATE_LOCK:
+        previous_snapshot = doc_ref.get()
+        previous_exists = bool(previous_snapshot.exists)
+        previous_document = (
+            previous_snapshot.to_dict() or {} if previous_exists else None
+        )
+        doc_ref.set(document)
+        try:
+            load_models_from_db(strict=True)
+        except Exception as exc:
+            try:
+                if previous_exists:
+                    doc_ref.set(previous_document)
+                else:
+                    doc_ref.delete()
+            except Exception as rollback_exc:
+                logging.critical(
+                    "Model configuration activation and persistence rollback both failed "
+                    "activation_category=%s rollback_category=%s",
+                    safe_exception(exc),
+                    safe_exception(rollback_exc),
+                )
+            raise
 
 
 class AdminIssueApiKeyRequest(BaseModel):
@@ -128,8 +158,10 @@ async def admin_get_seo_overview(request: Request):
         result["content_judge"] = seo_recommendation_service.content_judge.status()
         result["weekly_review"] = await asyncio.to_thread(seo_weekly_review_service.status)
         return result
-    except Exception:
-        logging.exception("admin_get_seo_overview failed")
+    except Exception as exc:
+        logging.error(
+            "admin_get_seo_overview failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Failed to load SEO data")
 
 
@@ -153,8 +185,10 @@ async def admin_collect_seo_data(request: Request, data: dict = Body(default={})
         return await asyncio.to_thread(seo_data_service.collect)
     except seo_data.CollectionAlreadyRunning:
         raise HTTPException(status_code=409, detail="SEO collection is already running")
-    except Exception:
-        logging.exception("admin_collect_seo_data failed")
+    except Exception as exc:
+        logging.error(
+            "admin_collect_seo_data failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="SEO collection failed safely")
 
 
@@ -190,8 +224,10 @@ async def admin_get_seo_weekly_review(request: Request):
     await asyncio.to_thread(_require_admin, request, {})
     try:
         return await asyncio.to_thread(seo_weekly_review_service.status)
-    except Exception:
-        logging.exception("admin_get_seo_weekly_review failed")
+    except Exception as exc:
+        logging.error(
+            "admin_get_seo_weekly_review failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Failed to load weekly SEO review")
 
 
@@ -210,8 +246,11 @@ async def admin_save_seo_weekly_review_config(
         )
     except seo_weekly_review.ReviewError as exc:
         _raise_seo_review_error(exc)
-    except Exception:
-        logging.exception("admin_save_seo_weekly_review_config failed")
+    except Exception as exc:
+        logging.error(
+            "admin_save_seo_weekly_review_config failed category=%s",
+            safe_exception(exc),
+        )
         raise HTTPException(status_code=500, detail="Failed to save weekly SEO review configuration")
 
 
@@ -223,8 +262,10 @@ async def admin_run_seo_weekly_review(request: Request, data: dict = Body(defaul
         return await asyncio.to_thread(seo_weekly_review_service.run, force=True)
     except seo_weekly_review.ReviewAlreadyRunning:
         raise HTTPException(status_code=409, detail="A weekly SEO review is already running")
-    except Exception:
-        logging.exception("admin_run_seo_weekly_review failed")
+    except Exception as exc:
+        logging.error(
+            "admin_run_seo_weekly_review failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Weekly SEO review failed safely")
 
 
@@ -318,8 +359,11 @@ async def admin_generate_seo_recommendation(
         return await asyncio.to_thread(seo_recommendation_service.generate, page_id)
     except seo_recommendation.SeoRecommendationError as exc:
         _raise_seo_recommendation_error(exc)
-    except Exception:
-        logging.exception("admin_generate_seo_recommendation failed")
+    except Exception as exc:
+        logging.error(
+            "admin_generate_seo_recommendation failed category=%s",
+            safe_exception(exc),
+        )
         raise HTTPException(status_code=500, detail="SEO recommendation failed safely")
 
 
@@ -335,8 +379,11 @@ async def admin_ask_seo_content_judge(
         )
     except seo_recommendation.SeoRecommendationError as exc:
         _raise_seo_recommendation_error(exc)
-    except Exception:
-        logging.exception("admin_ask_seo_content_judge failed")
+    except Exception as exc:
+        logging.error(
+            "admin_ask_seo_content_judge failed category=%s",
+            safe_exception(exc),
+        )
         raise HTTPException(status_code=500, detail="SEO content judge failed safely")
 
 
@@ -372,8 +419,8 @@ def admin_issue_api_key(
         raise HTTPException(status_code=404, detail="User not found") from None
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
-    except Exception:
-        logging.exception("admin_issue_api_key failed")
+    except Exception as exc:
+        logging.error("admin_issue_api_key failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Failed to issue API key")
 
 
@@ -383,8 +430,8 @@ def admin_list_api_keys(request: Request, uid: Optional[str] = None):
     _require_admin(request, {})
     try:
         return {"keys": api_key_repository.list(uid=uid.strip() if uid else None)}
-    except Exception:
-        logging.exception("admin_list_api_keys failed")
+    except Exception as exc:
+        logging.error("admin_list_api_keys failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Failed to list API keys")
 
 
@@ -396,8 +443,10 @@ def admin_revoke_api_key(request: Request, key_id: str):
         key = api_key_repository.revoke(key_id)
     except ApiKeyNotFound:
         raise HTTPException(status_code=404, detail="API key not found") from None
-    except Exception:
-        logging.exception("admin_revoke_api_key failed")
+    except Exception as exc:
+        logging.error(
+            "admin_revoke_api_key failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Failed to revoke API key")
     return {"key_id": key_id, "status": key["status"]}
 
@@ -408,8 +457,10 @@ def admin_get_publisher_config(request: Request):
     _require_admin(request, {})
     try:
         return {"config": publisher_config.public_config(publisher_config.get_config())}
-    except Exception:
-        logging.exception("admin_get_publisher_config failed")
+    except Exception as exc:
+        logging.error(
+            "admin_get_publisher_config failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Failed to load publisher configuration")
 
 
@@ -423,8 +474,11 @@ def admin_update_publisher_config(
         config = publisher_config.save_config(data.model_dump(), updated_by=admin_uid)
     except publisher_config.PublisherConfigError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
-    except Exception:
-        logging.exception("admin_update_publisher_config failed")
+    except Exception as exc:
+        logging.error(
+            "admin_update_publisher_config failed category=%s",
+            safe_exception(exc),
+        )
         raise HTTPException(status_code=500, detail="Failed to save publisher configuration")
     return {"status": "success", "config": publisher_config.public_config(config)}
 
@@ -440,8 +494,8 @@ def admin_list_watches(
         page = watch_service.list_watches_for_admin_page(
             cursor=cursor, max_items=limit
         )
-    except Exception:
-        logging.exception("admin_list_watches failed")
+    except Exception as exc:
+        logging.error("admin_list_watches failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Failed to load watches")
     return {
         "status": "success",
@@ -461,8 +515,8 @@ async def admin_run_watch(request: Request, watch_id: str, data: dict = Body(def
     except watch_service.WatchError as exc:
         status = 404 if exc.code == "not_found" else 409
         raise HTTPException(status_code=status, detail=exc.message)
-    except Exception:
-        logging.exception("admin_run_watch failed")
+    except Exception as exc:
+        logging.error("admin_run_watch failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Failed to start watch")
     return {"status": "success", "watch": watch, "run_requested": True}
 
@@ -482,8 +536,10 @@ async def admin_send_watch_test_email(request: Request, data: dict = Body(defaul
             raise HTTPException(status_code=502, detail="SMTP did not accept the test message")
     except HTTPException:
         raise
-    except Exception:
-        logging.exception("admin_send_watch_test_email failed")
+    except Exception as exc:
+        logging.error(
+            "admin_send_watch_test_email failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Failed to send watch test e-mail")
     return {"status": "success", "recipient": recipient}
 
@@ -493,8 +549,8 @@ def admin_list_shares(request: Request, filter: str = "reported"):
     _require_admin(request, {})
     try:
         shares = snapshots.list_shares_for_admin(only_reported=(filter != "all"))
-    except Exception:
-        logging.exception("admin_list_shares failed")
+    except Exception as exc:
+        logging.error("admin_list_shares failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Failed to load shares")
     return {"status": "success", "shares": shares, "site_url": snapshots_site_url()}
 
@@ -523,8 +579,10 @@ def admin_moderate_share(request: Request, share_id: str, data: dict = Body(...)
         )
     except ShareError as exc:
         raise HTTPException(status_code=_SHARE_ERROR_STATUS.get(exc.code, 400), detail=exc.message)
-    except Exception:
-        logging.exception("admin_moderate_share failed")
+    except Exception as exc:
+        logging.error(
+            "admin_moderate_share failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Failed to moderate share")
     return {
         "status": "success",
@@ -545,8 +603,8 @@ def admin_delete_share(request: Request, share_id: str):
         deleted = snapshots.hard_delete_share(share_id)
     except ShareError as exc:
         raise HTTPException(status_code=_SHARE_ERROR_STATUS.get(exc.code, 400), detail=exc.message)
-    except Exception:
-        logging.exception("admin_delete_share failed")
+    except Exception as exc:
+        logging.error("admin_delete_share failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Failed to delete share")
     return {"status": "success", "deleted": deleted}
 
@@ -557,8 +615,10 @@ def admin_list_benchmark_runs(request: Request):
     from app.services import benchmark_reports
     try:
         runs = benchmark_reports.list_runs_with_disk_fallback()
-    except Exception:
-        logging.exception("admin_list_benchmark_runs failed")
+    except Exception as exc:
+        logging.error(
+            "admin_list_benchmark_runs failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Failed to load benchmark runs")
     return {"status": "success", "runs": runs}
 
@@ -569,8 +629,10 @@ def admin_get_benchmark_run(request: Request, run_id: str):
     from app.services import benchmark_reports
     try:
         run = benchmark_reports.get_run_with_disk_fallback(run_id)
-    except Exception:
-        logging.exception("admin_get_benchmark_run failed")
+    except Exception as exc:
+        logging.error(
+            "admin_get_benchmark_run failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Failed to load benchmark run")
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -1046,8 +1108,8 @@ def get_models(request: Request):
             }
         data["meta"] = _admin_meta(data)
         return data
-    except Exception as e:
-        logging.error(f"Error fetching models: {e}")
+    except Exception as exc:
+        logging.error("Error fetching models category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Failed to fetch models")
 
 @router.post("/api/admin/models")
@@ -1103,7 +1165,7 @@ def update_models(request: Request, data: dict = Body(...)):
             if len(normalized["watch_models"][tier]) < 2:
                 raise HTTPException(status_code=400, detail=f"Select at least two valid {tier} Watch models")
         doc_ref = db_firestore.collection("app_config").document("models")
-        doc_ref.set({
+        models_document = {
             "openai": normalized["openai"],
             "mistral": normalized["mistral"],
             "anthropic": normalized["anthropic"],
@@ -1121,14 +1183,12 @@ def update_models(request: Request, data: dict = Body(...)):
             "judge_families": normalized["judge_families"],
             "chat_memory_models": normalized["chat_memory_models"],
             "limits": normalized["limits"]
-        })
-
-        # Refresh the cache in config.py
-        load_models_from_db(strict=True)
+        }
+        _persist_and_activate_models(doc_ref, models_document)
 
         return {"status": "success", "message": "Configuration updated successfully."}
     except HTTPException:
         raise
-    except Exception as e:
-        logging.error(f"Error updating models: {e}")
+    except Exception as exc:
+        logging.error("Error updating models category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Failed to update models")

@@ -47,14 +47,35 @@ from app.services.llm.provider_runtime import (
 logger = logging.getLogger(__name__)
 
 
-def _error(provider: str, error: Exception | str):
+class _ProviderHTTPStatusError(RuntimeError):
+    """Content-free upstream status error that keeps retry/metric semantics."""
+
+    def __init__(self, status_code: int):
+        super().__init__("upstream provider returned an HTTP error")
+        self.status_code = int(status_code)
+
+
+def _raise_provider_http_status(response) -> None:
+    """Raise without copying an untrusted provider response body into errors."""
+    raise _ProviderHTTPStatusError(int(response.status_code))
+
+
+def _error(provider: str, error: Exception | str, *, timeout: bool = False):
     category = safe_exception(error) if isinstance(error, BaseException) else "provider_error"
+    error_code = (
+        "provider_timeout"
+        if timeout
+        or (isinstance(error, BaseException) and "timeout" in category.lower())
+        or category.endswith(":408")
+        or category.endswith(":504")
+        else "provider_request_failed"
+    )
     logger.error("Provider request failed provider=%s category=%s", provider, category)
     return {
         "text": "",
         "sources": [],
         "error": f"{provider} could not complete this request. Please try again later.",
-        "error_code": "provider_request_failed",
+        "error_code": error_code,
     }
 
 
@@ -188,7 +209,7 @@ def _openai_responses_call(
         timeout=PROVIDER_HTTP_TIMEOUT,
     )
     if resp.status_code >= 400:
-        raise RuntimeError(f"{resp.status_code} - {resp.text}")
+        _raise_provider_http_status(resp)
     data = resp.json()
     result = parse_openai_response(data, provider=provider)
     if not result_text(result):
@@ -546,7 +567,7 @@ def query_mistral(
                 timeout=PROVIDER_HTTP_TIMEOUT,
             )
         if response.status_code >= 400:
-            raise RuntimeError(f"{response.status_code} - {response.text}")
+            _raise_provider_http_status(response)
         data = response.json()
         content = []
         for output in data.get("outputs", []) or []:
@@ -560,7 +581,7 @@ def query_mistral(
             content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
         return parse_mistral_content(content)
     except Exception as e:
-        return _error("Mistral", str(e))
+        return _error("Mistral", e)
 
 
 def query_claude(
@@ -608,9 +629,13 @@ def query_claude(
             else:
                 return make_llm_result("Error: No response found in the API response.", [])
         else:
-            return _error("Anthropic", f"{response.status_code} - {response.text}")
+            return _error(
+                "Anthropic",
+                "upstream_status",
+                timeout=response.status_code in {408, 504},
+            )
     except Exception as e:
-        return _error("Anthropic", str(e))
+        return _error("Anthropic", e)
 
 def query_gemini(
     question: str,
@@ -658,7 +683,7 @@ def query_gemini(
                 **request_kwargs,
             )
         if response.status_code >= 400:
-            raise RuntimeError(f"{response.status_code} - {response.text}")
+            _raise_provider_http_status(response)
         data = response.json()
         parsed = parse_gemini_response(data)
         if result_text(parsed):
@@ -760,5 +785,5 @@ def query_grok(
             provider="grok",
         )
     except Exception as e:
-        return _error("Grok", str(e))
+        return _error("Grok", e)
 

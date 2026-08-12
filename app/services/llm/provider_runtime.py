@@ -12,6 +12,7 @@ import os
 import threading
 from typing import Callable, Iterator
 
+import httpx
 import openai
 
 
@@ -48,9 +49,13 @@ def openai_client(
     timeout_seconds: float | None = None,
 ) -> openai.OpenAI:
     """Build an OpenAI-compatible client with explicit, shared budgets."""
+    read_budget = float(timeout_seconds or PROVIDER_READ_TIMEOUT_SECONDS)
     kwargs = {
         "api_key": api_key,
-        "timeout": float(timeout_seconds or PROVIDER_READ_TIMEOUT_SECONDS),
+        "timeout": httpx.Timeout(
+            read_budget,
+            connect=min(PROVIDER_CONNECT_TIMEOUT_SECONDS, read_budget),
+        ),
         "max_retries": PROVIDER_SDK_MAX_RETRIES,
     }
     if base_url:

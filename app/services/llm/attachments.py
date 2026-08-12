@@ -8,6 +8,8 @@ import xml.etree.ElementTree as ET
 import zipfile
 from fastapi import HTTPException
 
+from app.core.observability import safe_exception
+
 logger = logging.getLogger(__name__)
 
 MAX_ATTACHMENTS = 2
@@ -249,7 +251,9 @@ def extract_pdf_text(raw: bytes) -> str | None:
             return None
         return combined[:MAX_PDF_EXTRACT_CHARS]
     except Exception as exc:
-        logger.warning("PDF text extraction failed: %s", exc)
+        logger.warning(
+            "PDF text extraction failed category=%s", safe_exception(exc)
+        )
         return None
 
 
@@ -291,7 +295,9 @@ def extract_docx_text(raw: bytes) -> str | None:
             return None
         return combined[:MAX_TEXT_EXTRACT_CHARS]
     except Exception as exc:
-        logger.warning("DOCX text extraction failed: %s", exc)
+        logger.warning(
+            "DOCX text extraction failed category=%s", safe_exception(exc)
+        )
         return None
 
 

@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
 import app.core.config as cfg
+from app.core.observability import record_metric, safe_exception
 from app.services.llm.base import get_system_prompt
 from app.services.llm.citations import result_sources, result_text, to_plain
 from app.services.llm.credentials import enable_gemini_adc, resolve_developer_api_keys
@@ -110,10 +112,11 @@ def fan_out_provider_answers(
     """Run provider transports in parallel and collect results deterministically."""
     ordered = [name for name in provider_order if name in provider_models]
     answers: dict[str, ProviderAnswer] = {}
-    with ThreadPoolExecutor(max_workers=max(1, len(ordered))) as pool:
-        futures = {
-            provider: pool.submit(
-                provider_call,
+
+    def invoke(provider: str):
+        started = time.monotonic()
+        try:
+            raw = provider_call(
                 provider,
                 provider_models[provider],
                 question,
@@ -121,13 +124,35 @@ def fan_out_provider_answers(
                 is_pro,
                 deep_think,
             )
+            return raw, (time.monotonic() - started) * 1000, None
+        except Exception as exc:
+            return None, (time.monotonic() - started) * 1000, exc
+
+    def metric(provider: str, duration_ms: float, outcome: str) -> None:
+        record_metric(
+            "provider",
+            f"{provider}:{log_context}",
+            duration_ms=duration_ms,
+            outcome=outcome,
+        )
+
+    with ThreadPoolExecutor(max_workers=max(1, len(ordered))) as pool:
+        futures = {
+            provider: pool.submit(invoke, provider)
             for provider in ordered
         }
         for provider in ordered:
-            try:
-                raw = futures[provider].result()
-            except Exception:
-                logging.warning("%s provider failed: %s", log_context, provider)
+            raw, duration_ms, error = futures[provider].result()
+            if error is not None:
+                category = safe_exception(error)
+                outcome = "timeout" if "timeout" in category.lower() else "failure"
+                metric(provider, duration_ms, outcome)
+                logging.warning(
+                    "%s provider failed provider=%s category=%s",
+                    log_context,
+                    provider,
+                    category,
+                )
                 continue
             text = result_text(raw).strip()
             if answer_char_limit:
@@ -135,7 +160,15 @@ def fan_out_provider_answers(
             if not text or text.lower().startswith("error") or (
                 isinstance(raw, dict) and raw.get("error")
             ):
+                outcome = (
+                    "timeout"
+                    if isinstance(raw, dict)
+                    and raw.get("error_code") == "provider_timeout"
+                    else "failure"
+                )
+                metric(provider, duration_ms, outcome)
                 continue
+            metric(provider, duration_ms, "success")
             answers[provider] = ProviderAnswer(
                 provider=PROVIDER_LABELS[provider],
                 model=provider_models[provider],

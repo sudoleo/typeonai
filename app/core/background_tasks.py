@@ -9,6 +9,8 @@ import logging
 import threading
 from typing import Awaitable, Callable
 
+from app.core.observability import safe_exception
+
 
 _lock = threading.Lock()
 _health: dict[str, dict] = {}
@@ -59,8 +61,11 @@ async def _send_alert(alert: Callable[[dict], object] | None, report: dict) -> N
         result = await asyncio.to_thread(alert, report)
         if inspect.isawaitable(result):
             await result
-    except Exception:
-        logging.exception("Background task alert delivery failed")
+    except Exception as exc:
+        logging.error(
+            "Background task alert delivery failed category=%s",
+            safe_exception(exc),
+        )
 
 
 async def supervise_background_task(
@@ -109,7 +114,11 @@ async def supervise_background_task(
                 restart_count=restart_count,
                 next_retry_seconds=backoff if restart else None,
             )
-            logging.exception("Background task %s crashed", name)
+            logging.error(
+                "Background task %s crashed category=%s",
+                name,
+                safe_exception(exc),
+            )
             alert_threshold = 1 if not restart else max(1, int(alert_after_failures))
             if failures == alert_threshold:
                 await _send_alert(

@@ -9,6 +9,7 @@ from app.services.api_key_repository import (
     FirestoreApiKeyRepository,
     InvalidApiKey,
 )
+from app.services import persistence_guard
 
 
 class Snapshot:
@@ -21,26 +22,39 @@ class Snapshot:
 
 
 class Document:
-    def __init__(self, db, key):
+    def __init__(self, db, collection, key):
         self.db = db
+        self.collection = collection
         self.key = key
 
-    def set(self, data):
-        self.db[self.key] = deepcopy(data)
+    @property
+    def storage_key(self):
+        if self.collection == "api_consensus_keys":
+            return self.key
+        return (self.collection, self.key)
 
-    def get(self):
-        return Snapshot(self.db.get(self.key))
+    def set(self, data):
+        self.db[self.storage_key] = deepcopy(data)
+
+    def get(self, transaction=None):
+        return Snapshot(self.db.get(self.storage_key))
 
     def update(self, data):
-        self.db[self.key].update(deepcopy(data))
+        self.db[self.storage_key].update(deepcopy(data))
 
 
 class Collection:
-    def __init__(self, db):
+    def __init__(self, db, name):
         self.db = db
+        self.name = name
 
     def document(self, key):
-        return Document(self.db, key)
+        return Document(self.db, self.name, key)
+
+
+class Transaction:
+    def set(self, ref, data):
+        ref.set(data)
 
 
 class FakeDb:
@@ -48,8 +62,10 @@ class FakeDb:
         self.documents = {}
 
     def collection(self, name):
-        assert name == "api_consensus_keys"
-        return Collection(self.documents)
+        return Collection(self.documents, name)
+
+    def run_transaction(self, operation):
+        return operation(Transaction())
 
 
 def test_plaintext_key_is_returned_once_but_never_persisted():
@@ -68,6 +84,19 @@ def test_plaintext_key_is_returned_once_but_never_persisted():
     first_last_used = db.documents[issued["key_id"]]["last_used_at"]
     repo.authenticate(issued["api_key"])
     assert db.documents[issued["key_id"]]["last_used_at"] == first_last_used
+
+
+def test_account_deletion_tombstone_fences_api_key_issue():
+    db = FakeDb()
+    db.documents[(persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION, "user-1")] = {
+        "status": "pending"
+    }
+    repo = FirestoreApiKeyRepository(db)
+
+    with pytest.raises(persistence_guard.AccountDeletionInProgress):
+        repo.issue("user-1", label="must-not-survive")
+
+    assert not any(isinstance(key, str) for key in db.documents)
 
 
 def test_revoked_key_cannot_authenticate():

@@ -17,7 +17,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 
 import app.core.config as cfg
 from app.core.security import db_firestore
-from app.services import opinion_map, share_snapshots
+from app.services import opinion_map, persistence_guard, share_snapshots
 
 
 WATCHES_COLLECTION = "watches"
@@ -358,6 +358,9 @@ def _ensure_watch_indexes(
         )
 
     def initialize(transaction):
+        persistence_guard.ensure_account_write_allowed(
+            uid=uid, db=db, transaction=transaction
+        )
         owner_snapshot = owner_ref.get(transaction=transaction)
         unique_snapshot = unique_ref.get(transaction=transaction)
         publisher_snapshot = (
@@ -519,6 +522,9 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
     )
 
     def create(transaction):
+        persistence_guard.ensure_account_write_allowed(
+            uid=uid, db=db, transaction=transaction
+        )
         owner_snapshot = owner_ref.get(transaction=transaction)
         unique_snapshot = unique_ref.get(transaction=transaction)
         existing_ref = None
@@ -919,6 +925,9 @@ def _apply_watch_updates(
     publisher_ref = _publisher_counter_ref(db)
 
     def mutate(transaction):
+        persistence_guard.ensure_account_write_allowed(
+            uid=uid, db=db, transaction=transaction
+        )
         watch_snapshot = initial_ref.get(transaction=transaction)
         owner_snapshot = owner_ref.get(transaction=transaction)
         publisher_snapshot = (
@@ -1067,7 +1076,11 @@ def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) 
 
 
 def _delete_watch_record(
-    watch_id: str, *, expected_uid: str = "", db=None
+    watch_id: str,
+    *,
+    expected_uid: str = "",
+    allow_account_deletion: bool = False,
+    db=None,
 ) -> bool:
     db = db if db is not None else db_firestore
     watch_ref = db.collection(WATCHES_COLLECTION).document(watch_id)
@@ -1080,12 +1093,17 @@ def _delete_watch_record(
         raise WatchError("forbidden", "You can only manage your own watches.")
     uniqueness_key = _watch_uniqueness_key(initial)
     include_publisher = initial.get("model_tier") == "free"
-    _ensure_watch_indexes(
-        uid,
-        uniqueness_key,
-        db=db,
-        include_publisher=include_publisher,
-    )
+    # Normal mutations lazily backfill legacy indexes. Account-deletion cleanup
+    # must never do that: a retry can run after the watch-index area was already
+    # acknowledged, and recreating those documents would leave personal data
+    # behind a completed cleanup marker.
+    if not allow_account_deletion:
+        _ensure_watch_indexes(
+            uid,
+            uniqueness_key,
+            db=db,
+            include_publisher=include_publisher,
+        )
     owner_ref = _owner_state_ref(db, uid)
     unique_ref = _unique_ref(db, uid, uniqueness_key)
     publisher_ref = _publisher_counter_ref(db)
@@ -1093,6 +1111,10 @@ def _delete_watch_record(
     share_ref = db.collection(share_snapshots.SHARES_COLLECTION).document(share_id)
 
     def remove(transaction):
+        if not allow_account_deletion:
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid, db=db, transaction=transaction
+            )
         watch_snapshot = watch_ref.get(transaction=transaction)
         owner_snapshot = owner_ref.get(transaction=transaction)
         unique_snapshot = unique_ref.get(transaction=transaction)
@@ -1119,16 +1141,18 @@ def _delete_watch_record(
         if str((unique_data or {}).get("watch_id") or "") == watch_id:
             transaction.delete(unique_ref)
         if was_active:
-            transaction.set(owner_ref, {
-                "schema_version": 1,
-                "active_count": max(0, active_count - 1),
-                "updated_at": utcnow(),
-            })
-            if include_publisher:
-                publisher_state = (
-                    publisher_snapshot.to_dict()
-                    if publisher_snapshot and publisher_snapshot.exists else {}
-                )
+            if owner_snapshot.exists:
+                transaction.set(owner_ref, {
+                    "schema_version": 1,
+                    "active_count": max(0, active_count - 1),
+                    "updated_at": utcnow(),
+                })
+            if (
+                include_publisher
+                and publisher_snapshot is not None
+                and publisher_snapshot.exists
+            ):
+                publisher_state = publisher_snapshot.to_dict()
                 publisher_count = _safe_count(
                     (publisher_state or {}).get("active_count")
                 )
@@ -1232,14 +1256,18 @@ def unsubscribe(token: str, db=None) -> dict:
     return {"watch_id": watch_id, "question": str(data.get("question") or "")[:200]}
 
 
-def delete_watches_for_share(share_id: str, db=None) -> int:
+def delete_watches_for_share(
+    share_id: str, db=None, *, allow_account_deletion: bool = False
+) -> int:
     db = db if db is not None else db_firestore
     deleted = 0
     docs = list(
         _where_equal(db.collection(WATCHES_COLLECTION), "share_id", share_id).stream()
     )
     for doc in docs:
-        if _delete_watch_record(doc.id, db=db):
+        if _delete_watch_record(
+            doc.id, db=db, allow_account_deletion=allow_account_deletion
+        ):
             deleted += 1
     return deleted
 
@@ -1251,7 +1279,12 @@ def delete_watches_for_owner(uid: str, db=None) -> int:
     )
     deleted = 0
     for doc in docs:
-        if _delete_watch_record(doc.id, expected_uid=uid, db=db):
+        if _delete_watch_record(
+            doc.id,
+            expected_uid=uid,
+            allow_account_deletion=True,
+            db=db,
+        ):
             deleted += 1
     return deleted
 

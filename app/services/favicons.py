@@ -94,13 +94,20 @@ def get_favicon(value) -> tuple[bytes | None, str]:
                 _CACHE.move_to_end(host)
                 return cached[1], cached[2]
         return None, ""
-    data, content_type = _fetch(host)
-    ttl = _OK_TTL if data else _MISS_TTL
-    with _LOCK:
-        _CACHE[host] = (now + ttl, data, content_type)
-        _CACHE.move_to_end(host)
-        while len(_CACHE) > _MAX_ENTRIES:
-            _CACHE.popitem(last=False)
-        _INFLIGHT.pop(host, None)
-        pending.set()
-    return data, content_type
+    try:
+        data, content_type = _fetch(host)
+        ttl = _OK_TTL if data else _MISS_TTL
+        with _LOCK:
+            _CACHE[host] = (now + ttl, data, content_type)
+            _CACHE.move_to_end(host)
+            while len(_CACHE) > _MAX_ENTRIES:
+                _CACHE.popitem(last=False)
+        return data, content_type
+    finally:
+        # An unexpected decoder/client exception must never strand a host in
+        # the single-flight map. Followers are released and a later request may
+        # retry normally instead of timing out until process restart.
+        with _LOCK:
+            if _INFLIGHT.get(host) is pending:
+                _INFLIGHT.pop(host, None)
+            pending.set()

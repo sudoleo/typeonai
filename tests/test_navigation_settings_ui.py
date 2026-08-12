@@ -297,5 +297,7 @@ def test_watch_requests_cannot_repopulate_account_state_after_logout():
     assert "sessionEpoch: 0" in owner
     assert "requestEpoch !== watchState.sessionEpoch" in watch
     assert "window.auth?.currentUser?.uid !== userUid" in watch
-    assert "watchState.sessionEpoch += 1;" in watch
-    assert "watchState.telegram = null;" in watch
+    assert "watchState.resetSession();" in watch
+    assert "values.sessionEpoch += 1;" in owner
+    assert "values.telegram = null;" in owner
+    assert "values.limits = null;" in owner

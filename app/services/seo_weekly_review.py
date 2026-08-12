@@ -19,6 +19,7 @@ from google.cloud.firestore_v1 import Query
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.background_tasks import task_succeeded
+from app.core.observability import safe_exception
 from app.core.security import db_firestore
 from app.services import publisher_config, seo_data, seo_recommendation
 from app.services import share_snapshots, telegram_notifier, watch_service
@@ -640,8 +641,11 @@ class SeoWeeklyReviewService:
             notification = self.notifier(_json_safe(payload))
             if not isinstance(notification, dict):
                 notification = {"status": "unknown"}
-        except Exception:
-            logging.exception("SEO review Telegram notification failed safely")
+        except Exception as exc:
+            logging.error(
+                "SEO review Telegram notification failed safely category=%s",
+                safe_exception(exc),
+            )
             notification = {"status": "failed_internal"}
         self.repository.update_review(run_id, {"telegram_notification": notification})
         return _json_safe({**payload, "telegram_notification": notification})
@@ -866,8 +870,11 @@ class SeoWeeklyReviewService:
                     "status": "error",
                     "error": getattr(exc, "safe_message", None) or getattr(exc, "message", None) or str(exc),
                 })
-            except Exception:
-                logging.exception("Weekly SEO review action failed for %s", page.get("page_id"))
+            except Exception as exc:
+                logging.error(
+                    "Weekly SEO review action failed category=%s",
+                    safe_exception(exc),
+                )
                 results.append({
                     "page_id": page.get("page_id"),
                     "status": "error",

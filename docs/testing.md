@@ -94,15 +94,16 @@ Remove-Item Env:RUN_E2E
 
 ## CI
 
-Es gibt keine CI für die Tests: `.github/workflows/tests.yml` wurde am
-2026-08-10 bewusst entfernt, die Suite läuft ausschließlich lokal (siehe oben).
-Wer das rückgängig machen will, findet den Workflow in der Historie von Commit
-`a529a1e`.
+`.github/workflows/tests.yml` ist für Pull Requests, Pushes auf `main` und
+manuelle Dispatches blockierend. Der erste Job installiert
+`requirements-test.txt` und führt die reguläre Suite aus. Danach startet ein
+separater Job den Firestore-Emulator mit Java/Firebase CLI und führt die echten
+Emulator-Race-/Browser-E2E-Verträge aus. Ein grüner lokaler Lauf ersetzt diese
+beiden unabhängigen CI-Gates nicht.
 
-Damit gilt: Vor einem Deploy die reguläre Suite selbst laufen lassen — es prüft
-sonst niemand. Tests, die still an der lokalen `.env` hängen, fallen dabei nicht
-mehr auf; nötige Environment-Variablen deshalb im Test selbst setzen
-(`monkeypatch.setenv`) statt sie vorauszusetzen.
+Tests dürfen weiterhin nicht still von der lokalen `.env` abhängen; nötige
+Environment-Variablen im Test selbst setzen (`monkeypatch.setenv`) statt sie
+vorauszusetzen.
 
 Für manuelle Frontend-QA bleibt [`smoke-checklist.md`](smoke-checklist.md)
 verbindlich.

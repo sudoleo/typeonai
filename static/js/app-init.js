@@ -1731,9 +1731,35 @@
 
         let countdownUtcDay = null;
         let usageRefreshUtcDay = null;
+        let usageRefreshTargetUtcDay = null;
+        let usageRefreshInFlight = null;
+        let usageRefreshRetryAt = 0;
+        const usageRefreshRetryMs = Math.max(
+          25,
+          Number(window.USAGE_REFRESH_RETRY_MS) || 5000
+        );
 
         function utcDayKey(date) {
           return `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}`;
+        }
+
+        function maybeRefreshUsageForUtcDay(currentUtcDay, nowMs) {
+          if (usageRefreshTargetUtcDay !== currentUtcDay
+              || usageRefreshUtcDay === currentUtcDay
+              || usageRefreshInFlight
+              || nowMs < usageRefreshRetryAt) return;
+          usageRefreshRetryAt = nowMs + usageRefreshRetryMs;
+          const attempt = Promise.resolve().then(() => window.refreshUsageData?.());
+          usageRefreshInFlight = attempt;
+          attempt.then(refreshed => {
+            if (refreshed === true && usageRefreshTargetUtcDay === currentUtcDay) {
+              usageRefreshUtcDay = currentUtcDay;
+            }
+          }).catch(() => {
+            // Keep the target pending; the countdown tick retries with backoff.
+          }).finally(() => {
+            if (usageRefreshInFlight === attempt) usageRefreshInFlight = null;
+          });
         }
 
         function updateCountdown() {
@@ -1743,14 +1769,13 @@
             countdownUtcDay = currentUtcDay;
           } else if (currentUtcDay !== countdownUtcDay) {
             countdownUtcDay = currentUtcDay;
-            if (usageRefreshUtcDay !== currentUtcDay) {
-              usageRefreshUtcDay = currentUtcDay;
-              // Refresh the authoritative server snapshot instead of reloading
-              // the page. A tab that slept across midnight catches up on its
-              // first timer tick and a stale zero can no longer block sends.
-              Promise.resolve(window.refreshUsageData?.()).catch(() => {});
-            }
+            usageRefreshTargetUtcDay = currentUtcDay;
+            usageRefreshRetryAt = 0;
           }
+          // Mark the day complete only after the authoritative request
+          // succeeds. A transient false/rejection remains retryable, so a stale
+          // zero cannot block this tab for the rest of the UTC day.
+          maybeRefreshUsageForUtcDay(currentUtcDay, now.getTime());
 
           const resetTime = new Date(Date.UTC(
             now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1

@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from google.api_core.exceptions import Aborted as FirestoreAborted
 
 from app.core.rate_limit import limiter
-from app.core.observability import record_metric
+from app.core.observability import record_metric, safe_exception
 from app.core.security import (
     TierStatusUnavailable,
     db_firestore,
@@ -33,9 +33,10 @@ from app.services.llm.engines import (
 from app.services.llm.citations import coerce_text, source_response
 from app.services.llm.credentials import enable_gemini_adc, resolve_developer_api_keys
 from app.services.llm.mock_llm import mock_ask_result, mock_ask_stream, mock_llm_enabled
+from app.services.llm.provider_runtime import ProviderCancelled
 from app.services.llm.streaming import (
     SSE_HEADERS,
-    iter_sse_with_keepalive,
+    keepalive_streaming_response,
     sse_pack,
     streaming_model_response,
     stream_claude_query,
@@ -131,15 +132,22 @@ def get_usage_run_key(data: dict) -> str:
     return value.strip()
 
 
-def usage_run_fingerprint(data: dict, *, question: str, deep_think: bool) -> str:
+def usage_run_fingerprint(
+    data: dict,
+    *,
+    question: str,
+    deep_think: bool,
+    purpose: Optional[str] = None,
+) -> str:
     """Bind a usage run to the logical fields known before the fan-out."""
-    return canonical_request_fingerprint(
-        {
-            "schema": 1,
-            "question": question,
-            "deep_think": bool(deep_think),
-        }
-    )
+    fingerprint_input = {
+        "schema": 1,
+        "question": question,
+        "deep_think": bool(deep_think),
+    }
+    if purpose is not None:
+        fingerprint_input["purpose"] = str(purpose)
+    return canonical_request_fingerprint(fingerprint_input)
 
 
 def usage_response_fields(snapshot, is_pro: bool) -> dict:
@@ -152,7 +160,14 @@ def usage_response_fields(snapshot, is_pro: bool) -> dict:
     }
 
 
-def reserve_usage_run(uid: str, data: dict, *, is_pro: bool, deep_think: bool):
+def reserve_usage_run(
+    uid: str,
+    data: dict,
+    *,
+    is_pro: bool,
+    deep_think: bool,
+    purpose: Optional[str] = None,
+):
     key = get_usage_run_key(data)
     kind = RunKind.DEEP_THINK if deep_think else RunKind.REGULAR
     try:
@@ -165,6 +180,7 @@ def reserve_usage_run(uid: str, data: dict, *, is_pro: bool, deep_think: bool):
                 data,
                 question=str(data.get("question") or "").strip(),
                 deep_think=deep_think,
+                purpose=purpose,
             ),
         )
     except UsageLimitExceeded as exc:
@@ -460,10 +476,10 @@ def _validate_chat_turn(uid: str, ids: tuple[str, str], question: str) -> dict:
         ) from exc
     except ChatStoreError as exc:
         logging.error(
-            "chat turn preflight failed uid=%s chat_id=%s turn_id=%s",
-            uid,
+            "chat turn preflight failed chat_id=%s turn_id=%s category=%s",
             chat_id,
             turn_id,
+            safe_exception(exc),
         )
         raise HTTPException(
             status_code=503,
@@ -472,11 +488,11 @@ def _validate_chat_turn(uid: str, ids: tuple[str, str], question: str) -> dict:
             ),
         ) from exc
     except Exception as exc:
-        logging.exception(
-            "chat turn preflight failed uid=%s chat_id=%s turn_id=%s",
-            uid,
+        logging.error(
+            "chat turn preflight failed chat_id=%s turn_id=%s category=%s",
             chat_id,
             turn_id,
+            safe_exception(exc),
         )
         raise HTTPException(
             status_code=503,
@@ -498,13 +514,13 @@ def _fail_chat_turn_best_effort(
     try:
         failed_turn = chat_store.fail_turn(uid, chat_id, turn_id, error_code=error_code)
         return isinstance(failed_turn, dict) and failed_turn.get("status") == "failed"
-    except Exception:
+    except Exception as exc:
         logging.warning(
-            "chat turn failure marker failed uid=%s chat_id=%s turn_id=%s code=%s",
-            uid,
+            "chat turn failure marker failed chat_id=%s turn_id=%s code=%s category=%s",
             chat_id,
             turn_id,
             error_code,
+            safe_exception(exc),
         )
         return False
 
@@ -526,11 +542,11 @@ def _replay_completed_chat_turn(
             ),
         ) from exc
     except Exception as exc:
-        logging.exception(
-            "completed chat turn replay read failed uid=%s chat_id=%s turn_id=%s",
-            uid,
+        logging.error(
+            "completed chat turn replay read failed chat_id=%s turn_id=%s category=%s",
             chat_id,
             turn_id,
+            safe_exception(exc),
         )
         raise HTTPException(
             status_code=503,
@@ -664,10 +680,14 @@ def _resolve_authoritative_chat_context(
     except ChatContextConflict as exc:
         raise HTTPException(status_code=409, detail="Chat context conflict") from exc
     except ChatContextError as exc:
-        logging.error("chat context resolution failed uid=%s: %s", uid, exc)
+        logging.error(
+            "chat context resolution failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=503, detail="Chat context unavailable") from exc
     except Exception as exc:
-        logging.exception("chat context resolution failed uid=%s", uid)
+        logging.error(
+            "chat context resolution failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=503, detail="Chat context unavailable") from exc
 
 
@@ -805,12 +825,28 @@ def _run_ask(provider: AskProvider, *, stream_requested, question, key,
         def observed_stream():
             started = time.monotonic()
             outcome = "success"
+            saw_final = False
             try:
                 for event in source:
                     result = event.get("result") if isinstance(event, dict) else None
                     if isinstance(result, dict) and result.get("error"):
-                        outcome = "failure"
+                        outcome = (
+                            "timeout"
+                            if result.get("error_code") == "provider_timeout"
+                            else "failure"
+                        )
+                    if isinstance(event, dict) and event.get("type") == "final":
+                        saw_final = True
                     yield event
+                if not saw_final:
+                    outcome = "failure"
+            except ProviderCancelled:
+                outcome = "cancelled"
+                raise
+            except GeneratorExit:
+                if not saw_final:
+                    outcome = "cancelled"
+                raise
             except TimeoutError:
                 outcome = "timeout"
                 raise
@@ -831,7 +867,11 @@ def _run_ask(provider: AskProvider, *, stream_requested, question, key,
     try:
         result = provider.query_fn(*args, **kwargs)
         if isinstance(result, dict) and result.get("error"):
-            outcome = "failure"
+            outcome = (
+                "timeout"
+                if result.get("error_code") == "provider_timeout"
+                else "failure"
+            )
         return source_response(result, **extras)
     except TimeoutError:
         outcome = "timeout"
@@ -864,7 +904,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     if id_token:
         try:
             uid = verify_user_token(id_token)
-        except Exception:
+        except Exception as exc:
             raise HTTPException(status_code=401, detail="Authentication failed")
         try:
             is_pro_user = is_user_pro(uid)
@@ -1069,8 +1109,8 @@ def prepare(request: Request, data: dict = Body(...)):
             )
     except HTTPException as he:
         raise he
-    except Exception as e:
-        logging.error(f"Auth failed in /prepare: {e}")
+    except Exception as exc:
+        logging.error("Auth failed in /prepare category=%s", safe_exception(exc))
         raise HTTPException(status_code=401, detail="Authentication failed.")
 
     # Der Follow-up-Kontext wird hier bewusst NICHT verarbeitet: injiziert wird
@@ -1418,6 +1458,7 @@ def consensus(request: Request, data: dict = Body(...)):
             included_providers=list(included_answers.keys()),
             model_labels=model_labels,
             consensus_model=consensus_model,
+            model_responses=included_answers,
         )
 
     def persist_chat_completion(
@@ -1443,14 +1484,14 @@ def consensus(request: Request, data: dict = Body(...)):
                 result_id=result_id,
             )
             return True
-        except Exception:
+        except Exception as exc:
             # The LLM result is authoritative for the UI. Keep the pending turn
             # retryable and report only identifiers/state, never content/keys.
-            logging.exception(
-                "chat turn completion failed uid=%s chat_id=%s turn_id=%s",
-                uid,
+            logging.error(
+                "chat turn completion failed chat_id=%s turn_id=%s category=%s",
                 chat_id,
                 turn_id,
+                safe_exception(exc),
             )
             return False
 
@@ -1573,10 +1614,15 @@ def consensus(request: Request, data: dict = Body(...)):
                 )
                 raise
             except Exception as exc:
-                logging.exception("Consensus streaming failed")
+                logging.error(
+                    "Consensus streaming failed category=%s", safe_exception(exc)
+                )
                 stream_failed = True
                 if not consensus_text:
-                    consensus_text = f"Consensus error: {exc}"
+                    consensus_text = (
+                        "Consensus could not complete this request. "
+                        "Please try again later."
+                    )
                 if not differences_text:
                     differences_text = ""
 
@@ -1621,11 +1667,7 @@ def consensus(request: Request, data: dict = Body(...)):
         # (z. B. ein denkender Reasoning-Judge) länger keine Bytes liefern —
         # sonst trennt Cloudflare idle Verbindungen und das final-Event geht
         # verloren (Spinner bliebe für immer stehen).
-        return StreamingResponse(
-            iter_sse_with_keepalive(consensus_event_source()),
-            media_type="text/event-stream",
-            headers=dict(SSE_HEADERS),
-        )
+        return keepalive_streaming_response(consensus_event_source())
 
     try:
         analysis = analyze_provider_answers(
@@ -1770,7 +1812,11 @@ def resolve(request: Request, data: dict = Body(...)):
     usage_result = None
     if not use_own_keys:
         usage_key, _ = reserve_usage_run(
-            uid, data, is_pro=is_pro, deep_think=False
+            uid,
+            data,
+            is_pro=is_pro,
+            deep_think=False,
+            purpose="resolve",
         )
         usage_result = consume_usage_run(uid, usage_key, is_pro=is_pro)
         claim_usage_operation(

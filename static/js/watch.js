@@ -128,7 +128,7 @@
       if (!resultId) throw new Error("This consensus is not saved yet.");
       const payload = Object.assign(nudgeWatchDefaults(), { result_id: resultId });
       const data = await api("POST", "/api/watch", payload);
-      watchState.limits = null;
+      watchState.setLimits(null);
       window.App?.trackAppEvent?.("app_watch_created", {
         interval: data.watch.interval,
         source: "nudge"
@@ -140,7 +140,7 @@
       // Kontingent voll oder Server-Fehler: der Dialog kann mehr erklaeren
       // (Limits, Upgrade, Telegram) als dieser Streifen.
       if (error.status === 429) {
-        watchState.limits = null;
+        watchState.setLimits(null);
         dismissWatchFeatureNudge("limit");
         openWatchDialog("confirm");
         return;
@@ -195,7 +195,16 @@
     window.App?.showPopup?.(message);
   }
 
-  async function api(method, path, body) {
+  function watchModalIntentIsCurrent(intent) {
+    if (window.App?.sharedModal?.isCurrent) {
+      return window.App.sharedModal.isCurrent(intent);
+    }
+    const { modal } = els();
+    return modal?.style.display === "flex"
+      && modal.classList.contains("is-watch-dialog");
+  }
+
+  async function api(method, path, body, intentIsCurrent) {
     const user = window.auth?.currentUser;
     if (!user) throw new Error("Please log in first.");
     const userUid = user.uid;
@@ -203,6 +212,11 @@
     const token = await user.getIdToken();
     if (requestEpoch !== watchState.sessionEpoch || window.auth?.currentUser?.uid !== userUid) {
       throw new Error("Authentication changed.");
+    }
+    if (intentIsCurrent && !intentIsCurrent()) {
+      const stale = new Error("This view is no longer active.");
+      stale.stale = true;
+      throw stale;
     }
     const response = await fetch(path, {
       method,
@@ -225,7 +239,7 @@
   async function loadTelegramState(force) {
     if (watchState.telegram && !force) return watchState.telegram;
     const data = await api("GET", "/api/my/telegram");
-    watchState.telegram = data.telegram || { configured: false, connected: false };
+    watchState.setTelegram(data.telegram || { configured: false, connected: false });
     return watchState.telegram;
   }
 
@@ -262,14 +276,14 @@
     if (watchState.limitRequest && !force) return watchState.limitRequest;
     const request = api("GET", "/api/my/watches")
       .then(data => {
-        watchState.limits = normalizeWatchLimits(data.limits, data.watches);
+        watchState.setLimits(normalizeWatchLimits(data.limits, data.watches));
         renderSidebarWatchQuota(watchState.limits);
         return watchState.limits;
       })
       .finally(() => {
-        if (watchState.limitRequest === request) watchState.limitRequest = null;
+        if (watchState.limitRequest === request) watchState.setLimitRequest(null);
       });
-    watchState.limitRequest = request;
+    watchState.setLimitRequest(request);
     return watchState.limitRequest;
   }
 
@@ -497,21 +511,22 @@
     }
     const { modal } = els();
     if (!modal) return;
+    let modalIntent = null;
     if (window.App?.sharedModal?.open) {
-      window.App.sharedModal.open("watch");
+      modalIntent = window.App.sharedModal.open("watch");
     } else {
       modal.classList.add("is-watch-dialog");
       modal.style.display = "flex";
     }
-    if (view === "create") renderQuestionStep(options?.question);
-    else renderConfirm();
+    if (view === "create") renderQuestionStep(options?.question, modalIntent);
+    else renderConfirm(undefined, modalIntent);
   }
 
   function normalizeWatchQuestion(value) {
     return String(value || "").replace(/\s+/g, " ").trim();
   }
 
-  function renderQuestionStep(initialQuestion) {
+  function renderQuestionStep(initialQuestion, modalIntent) {
     const { title, body } = els();
     if (!body) return;
     title.textContent = "Create a Consensus Watch";
@@ -554,13 +569,13 @@
         focusWatchField(input);
         return;
       }
-      renderConfirm({ question: question });
+      renderConfirm({ question: question }, modalIntent);
     });
     refreshDialogWatchLimit();
     requestAnimationFrame(() => input.focus());
   }
 
-  function renderConfirm(options) {
+  function renderConfirm(options, modalIntent) {
     const directQuestion = normalizeWatchQuestion(options?.question);
     const { title, body } = els();
     if (!body) return;
@@ -638,7 +653,7 @@
         <button type="button" id="watchListLink" class="share-link-btn">Open dashboard</button>
       </div>`;
     document.getElementById("watchCancelBtn").addEventListener("click", () => {
-      if (directQuestion) renderQuestionStep(directQuestion);
+      if (directQuestion) renderQuestionStep(directQuestion, modalIntent);
       else closeDialog();
     });
     document.getElementById("watchListLink").addEventListener("click", () => {
@@ -746,6 +761,7 @@
     confirm.addEventListener("click", async function () {
       const resultId = directQuestion ? "" : await (window.resolveCurrentShareResultId?.()
         || Promise.resolve(window.lastShareResultId));
+      if (!watchModalIntentIsCurrent(modalIntent)) return;
       if (!directQuestion && !resultId) return;
       const visibility = visibilitySelect.value;
       const emailMode = emailModeSelect.value;
@@ -791,18 +807,25 @@
         };
         if (directQuestion) payload.question = directQuestion;
         else payload.result_id = resultId;
-        const data = await api("POST", "/api/watch", payload);
-        watchState.limits = null;
+        const data = await api(
+          "POST",
+          "/api/watch",
+          payload,
+          () => watchModalIntentIsCurrent(modalIntent)
+        );
+        if (!watchModalIntentIsCurrent(modalIntent)) return;
+        watchState.setLimits(null);
         window.App?.trackAppEvent?.("app_watch_created", {
           interval: data.watch.interval,
           source: directQuestion ? "query_first" : "consensus"
         });
-        renderSuccess(data.watch);
+        renderSuccess(data.watch, modalIntent);
       } catch (error) {
+        if (!watchModalIntentIsCurrent(modalIntent)) return;
         this.disabled = false;
         this.textContent = "Start watching";
         if (error.status === 429) {
-          watchState.limits = null;
+          watchState.setLimits(null);
           loadWatchLimits(true).then(applyDialogWatchLimit).catch(() => {});
           if (!window.isUserPro) showWatchCostInfo();
         }
@@ -811,7 +834,8 @@
     });
   }
 
-  function renderSuccess(watch) {
+  function renderSuccess(watch, modalIntent) {
+    if (!watchModalIntentIsCurrent(modalIntent)) return;
     const { title, body } = els();
     title.textContent = "Your Watch is active";
     const url = window.location.origin + (watch.share_path || "");
@@ -1291,7 +1315,7 @@
           this.disabled = true;
           try {
             await api("DELETE", "/api/my/telegram", {});
-            watchState.telegram = null;
+            watchState.setTelegram(null);
             onChanged();
           } catch (error) {
             this.disabled = false;
@@ -1315,7 +1339,7 @@
         this.disabled = true;
         try {
           await api("DELETE", "/api/my/telegram", {});
-          watchState.telegram = null;
+          watchState.setTelegram(null);
           onChanged();
         } catch (error) {
           this.disabled = false;
@@ -1327,7 +1351,7 @@
       actions.appendChild(makeButton("Connect Telegram", "share-primary-btn", async function () {
         this.disabled = true;
         await connectTelegram(() => {
-          watchState.telegram = null;
+          watchState.setTelegram(null);
           onChanged();
         });
         if (this.isConnected) this.disabled = false;
@@ -1798,11 +1822,11 @@
       ]);
       if (!dashboardIsCurrent()) return;
       watches = watchData.watches || [];
-      watchState.limits = normalizeWatchLimits(watchData.limits, watches);
+      watchState.setLimits(normalizeWatchLimits(watchData.limits, watches));
       renderWatchLimit(limitTarget, watchState.limits);
       brief = briefData.brief || {};
       telegram = telegramData.telegram || telegram;
-      watchState.telegram = telegram;
+      watchState.setTelegram(telegram);
     } catch (error) {
       if (!dashboardIsCurrent()) return;
       if (limitTarget) limitTarget.hidden = true;
@@ -1946,11 +1970,8 @@
 
   function resetAfterLogout() {
     const { page, body } = dashEls();
-    watchState.sessionEpoch += 1;
+    watchState.resetSession();
     if (body) body.innerHTML = "";
-    watchState.telegram = null;
-    watchState.limits = null;
-    watchState.limitRequest = null;
     const quota = document.getElementById("watchUsageDisplay");
     if (quota) quota.textContent = "";
     if (onWatchPagePath()) {
@@ -1974,8 +1995,7 @@
   initWatchPageRoute();
   window.addEventListener("consensio:auth-state", event => {
     const uid = event.detail?.uid || null;
-    const changed = uid !== watchState.authUid;
-    watchState.authUid = uid;
+    const changed = watchState.updateAuthUid(uid);
     if (!onWatchPagePath() || !changed) return;
     if (uid && window.auth?.currentUser?.uid === uid) showWatchPage();
     else renderWatchLoginHint();

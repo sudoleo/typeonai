@@ -25,6 +25,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1.field_path import FieldPath
 
 import app.core.config as cfg
+from app.services import persistence_guard
 from app.services.share_snapshots import (
     MAX_CONSENSUS_CHARS,
     MAX_DIFFERENCES_TEXT_CHARS,
@@ -552,7 +553,7 @@ class ChatStore:
 
     def create_chat(self, uid: str, *, title: str = "") -> dict:
         title = normalize_title(title)
-        self._ensure_chat_counter(uid)
+        self._ensure_chat_counter(uid, fence_writes=True)
         chat_id = secrets.token_hex(16)
         ref = self._chats_ref(uid).document(chat_id)
         counter_ref = self._chat_counter_ref(uid)
@@ -567,6 +568,11 @@ class ChatStore:
         }
 
         def operation(transaction):
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid,
+                db=self.db,
+                transaction=transaction,
+            )
             counter_snapshot = counter_ref.get(transaction=transaction)
             existing_snapshot = ref.get(transaction=transaction)
             if existing_snapshot.exists:
@@ -730,6 +736,11 @@ class ChatStore:
         turn_ref = chat_ref.collection("turns").document(turn_id)
 
         def operation(transaction):
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid,
+                db=self.db,
+                transaction=transaction,
+            )
             chat_snapshot = chat_ref.get(transaction=transaction)
             if not chat_snapshot.exists:
                 raise ChatNotFound("Chat not found")
@@ -842,9 +853,16 @@ class ChatStore:
         )
 
         def operation(transaction):
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid,
+                db=self.db,
+                transaction=transaction,
+            )
             chat_snapshot = chat_ref.get(transaction=transaction)
             turn_snapshot = turn_ref.get(transaction=transaction)
             if not chat_snapshot.exists or not turn_snapshot.exists:
+                raise ChatNotFound("Chat not found")
+            if (chat_snapshot.to_dict() or {}).get("status") != CHAT_STATUS_ACTIVE:
                 raise ChatNotFound("Chat not found")
             turn_data = turn_snapshot.to_dict() or {}
             if turn_data.get("question") != question:
@@ -906,9 +924,16 @@ class ChatStore:
         turn_ref = self._turn_ref(uid, chat_id, turn_id)
 
         def operation(transaction):
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid,
+                db=self.db,
+                transaction=transaction,
+            )
             chat_snapshot = chat_ref.get(transaction=transaction)
             turn_snapshot = turn_ref.get(transaction=transaction)
             if not chat_snapshot.exists or not turn_snapshot.exists:
+                raise ChatNotFound("Chat not found")
+            if (chat_snapshot.to_dict() or {}).get("status") != CHAT_STATUS_ACTIVE:
                 raise ChatNotFound("Chat not found")
             turn_data = turn_snapshot.to_dict() or {}
             status = turn_data.get("status")
@@ -1065,10 +1090,11 @@ class ChatStore:
                 count = int(value)
                 if count >= 0:
                     return count
-            except Exception:
+            except Exception as exc:
                 logging.warning(
-                    "chat count aggregation unavailable; falling back to a bounded scan",
-                    exc_info=True,
+                    "chat count aggregation unavailable; falling back to a bounded scan "
+                    "category=%s",
+                    safe_exception(exc),
                 )
 
         counted = 0
@@ -1082,7 +1108,7 @@ class ChatStore:
             .document("quota")
         )
 
-    def _ensure_chat_counter(self, uid: str) -> None:
+    def _ensure_chat_counter(self, uid: str, *, fence_writes: bool = False) -> None:
         """Initialize the serialized owner counter for pre-migration chats."""
         counter_ref = self._chat_counter_ref(uid)
         if counter_ref.get().exists:
@@ -1090,6 +1116,12 @@ class ChatStore:
         existing_count = self._chat_count(uid)
 
         def operation(transaction):
+            if fence_writes:
+                persistence_guard.ensure_account_write_allowed(
+                    uid=uid,
+                    db=self.db,
+                    transaction=transaction,
+                )
             snapshot = counter_ref.get(transaction=transaction)
             if snapshot.exists:
                 return
@@ -1125,22 +1157,36 @@ class ChatStore:
         repeated without ever stranding a level.
         """
         for chat_ref in _child_documents(self._chats_ref(uid)):
-            self.delete_chat(uid, chat_ref.id)
+            self.delete_chat(uid, chat_ref.id, allow_account_deletion=True)
         for state_ref in _child_documents(
             self.db.collection("users").document(uid).collection("chat_state")
         ):
             state_ref.delete()
 
-    def delete_chat(self, uid: str, chat_id: str) -> None:
+    def delete_chat(
+        self, uid: str, chat_id: str, *, allow_account_deletion: bool = False
+    ) -> None:
         """Delete one owner-bound chat with the same three-level cascade."""
         chat_ref = self._chat_ref(uid, chat_id)
-        self._ensure_chat_counter(uid)
+        self._ensure_chat_counter(uid, fence_writes=not allow_account_deletion)
         counter_ref = self._chat_counter_ref(uid)
 
         def mark_deleting(transaction):
+            if not allow_account_deletion:
+                persistence_guard.ensure_account_write_allowed(
+                    uid=uid,
+                    db=self.db,
+                    transaction=transaction,
+                )
             chat_snapshot = chat_ref.get(transaction=transaction)
             counter_snapshot = counter_ref.get(transaction=transaction)
             if not chat_snapshot.exists:
+                if allow_account_deletion:
+                    # Firestore list_documents() also exposes missing parent
+                    # documents that still own subcollections.  Account
+                    # cleanup must descend into those orphan trees even though
+                    # there is no parent status/counter left to update.
+                    return
                 raise ChatNotFound("Chat not found")
             data = chat_snapshot.to_dict() or {}
             if data.get("status") == "deleting":

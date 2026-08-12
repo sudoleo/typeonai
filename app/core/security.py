@@ -16,6 +16,7 @@ from app.core.e2e_profile import (
     e2e_test_mode_enabled,
     firebase_project_id,
 )
+from app.core.observability import safe_exception
 
 # --- E2E-Test-Hook (MOCK_AUTH=1) ------------------------------------------
 # Die Playwright-Suite laeuft ohne echten Firebase-Login: verify_user_token
@@ -79,7 +80,11 @@ class CustomSecurityMiddleware:
             return
 
         path = str(scope.get("path") or "")
-        strict_script_page = path in {"/app", "/app/watches", "/admin"}
+        strict_script_page = (
+            path in {"/app", "/app/watches"}
+            or path == "/admin"
+            or path.startswith("/admin/")
+        )
         sensitive_api_response = (
             path == "/chats"
             or path.startswith("/chats/")
@@ -301,9 +306,9 @@ def _get_tier_flags(uid: str) -> dict:
     try:
         doc = db_firestore.collection("users").document(uid).get()
         data = doc.to_dict() if doc.exists else {}
-    except Exception as e:
-        logging.error(f"Tier-Lookup Fehler für {uid}: {e}")
-        raise TierStatusUnavailable("Account tier is temporarily unavailable") from e
+    except Exception as exc:
+        logging.error("Tier lookup failed category=%s", safe_exception(exc))
+        raise TierStatusUnavailable("Account tier is temporarily unavailable") from exc
     flags = _compute_tier_flags(data or {})
     with _tier_cache_lock:
         _tier_cache[uid] = flags

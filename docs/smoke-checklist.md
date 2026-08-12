@@ -14,7 +14,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 ## Browser-Konsole
 - [ ] Beim Laden **keine** JS-Fehler in der Konsole (besonders: keine
       `ReferenceError: X is not defined`, keine `window.X is not a function`).
-- [ ] `/app`, `/app/watches` und `/admin` laden unter der strikten Script-CSP
+- [ ] `/app`, `/app/watches`, `/admin` und `/admin/benchmark` laden unter der strikten Script-CSP
       ohne `unsafe-inline`-Violation. Login-/Skeleton-First-Paint, Senden,
       Bookmark-Auswahl, Provider-Exclude, Settings und API-Key-Test reagieren
       über die externen Bootstrap-/Eventmodule weiterhin genau einmal.
@@ -150,6 +150,10 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Kontolöschung entfernt neben Bookmarks/Usage auch alle Chats inklusive
       Turns, Modellantworten und Context-Versionen — in der Firestore-Konsole
       darf unter `users/{uid}/chats` nichts zurückbleiben.
+- [ ] Einen bereits authentifizierten Bookmark-/Chat-/Share-/Watch-Write während
+      der Kontolöschung künstlich verzögern: Nach gesetztem Tombstone wird er
+      abgewiesen und kein bereits quittierter Cleanup-Bereich neu angelegt. Ein
+      vor der Löschung erzeugter Follow-Bestätigungslink ist danach ungültig.
 - [ ] Bei absichtlich unterbrochenem Löschbereich antwortet `/delete_account`
       mit `202 cleanup_pending`; die UI behauptet nicht „deleted“, beendet aber
       die lokale Session. Nach Wiederherstellung räumt der Maintenance-Retry
@@ -212,9 +216,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       späte A-Antworten ändern weder B-Sidebar/-Session noch das aktuelle Modal.
       Bei schnellem Bookmark-Klick A→B bleibt B sichtbar, auch wenn A zuletzt
       antwortet. Ein Bookmark-Listenfehler zeigt Fehler + Retry statt „leer“.
+- [ ] Während ein Watch-Create noch auf das ID-Token wartet, den Dialog schließen
+      oder zu Share wechseln: Es wird kein veralteter POST gesendet und keine
+      verspätete Antwort überschreibt den zuletzt gewählten Modalinhalt.
 - [ ] Tab über UTC-Mitternacht offen lassen: Countdown läuft bis 00:00 UTC und
       lädt den neuen `/usage`-Stand; ein vorheriges `0 / Limit` blockiert danach
-      nicht weiter. Ein transienter `/user_status`-Fehler wird durch ein
+      nicht weiter. Den ersten Refresh einmal fehlschlagen lassen: er wird erneut
+      versucht und erst der bestätigte Serverstand markiert den neuen Tag. Ein transienter `/user_status`-Fehler wird durch ein
       erfolgreiches Pro-`/usage` inklusive Badge/Features geheilt.
 
 ## Agent Mode
@@ -406,7 +414,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 ## Auth / Usage / Tier
 - [ ] E-Mail-Registrierung mit neuer und bestehender Adresse zeigt denselben
       neutralen „Check your inbox“-Zustand; die `/register`-Bodies sind exakt
-      gleich und enthalten weder UID/E-Mail noch Custom-Token.
+      gleich und enthalten weder UID/E-Mail noch Custom-Token. Das eingesendete
+      Legacy-Passwort erlaubt bei einer neuen Adresse keinen direkten Login;
+      beide Fälle führen ausschließlich über den Link im Postfach.
 - [ ] Login (E-Mail + Google), Logout.
 - [ ] Nach Logout verschwinden Account-Label, Kontingent-Ring/-Panel, Usage-
       Zahlen, Watch-Kontingent und Bookmark-Inhalte sofort; Bookmarks und Suche

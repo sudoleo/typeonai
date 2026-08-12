@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from app.core.rate_limit import limiter
+from app.core.observability import safe_exception
 from app.core.security import verify_user_token, extract_id_token, is_user_admin
 from app.core.site import SITE_URL
 from app.services import og_image
@@ -270,8 +271,8 @@ def create_share(request: Request, data: dict = Body(...)):
         result = snapshots.create_share_from_pending(uid, result_id, visibility="public")
     except ShareError as exc:
         _raise_share_error(exc)
-    except Exception:
-        logging.exception("create_share failed")
+    except Exception as exc:
+        logging.error("create_share failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error creating share link")
 
     path = snapshots.share_path(result["slug"], result["share_id"])
@@ -292,8 +293,8 @@ def delete_share(request: Request, share_id: str, data: dict = Body(default={}))
         snapshots.revoke_share(share_id, uid, is_admin=is_user_admin(uid))
     except ShareError as exc:
         _raise_share_error(exc)
-    except Exception:
-        logging.exception("delete_share failed")
+    except Exception as exc:
+        logging.error("delete_share failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error revoking share link")
     return {"status": "success", "message": "Share link revoked."}
 
@@ -304,8 +305,8 @@ def my_shares(request: Request):
     uid = _require_uid(request, {})
     try:
         shares = snapshots.list_shares_for_owner(uid)
-    except Exception:
-        logging.exception("my_shares failed")
+    except Exception as exc:
+        logging.error("my_shares failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error loading shares")
     return {"status": "success", "shares": shares, "site_url": SITE_URL}
 
@@ -326,8 +327,8 @@ def request_indexing(request: Request, share_id: str, data: dict = Body(default=
         state = snapshots.request_share_indexing(share_id, uid, want=want)
     except ShareError as exc:
         _raise_share_error(exc)
-    except Exception:
-        logging.exception("request_indexing failed")
+    except Exception as exc:
+        logging.error("request_indexing failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error updating listing request")
     return {"status": "success", **state}
 
@@ -342,8 +343,8 @@ def report_share(request: Request, share_id: str, data: dict = Body(default={}))
         snapshots.report_share(share_id, reason)
     except ShareError as exc:
         _raise_share_error(exc)
-    except Exception:
-        logging.exception("report_share failed")
+    except Exception as exc:
+        logging.error("report_share failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error reporting page")
     return {"status": "success", "message": "Thanks, this page has been reported for review."}
 
@@ -366,8 +367,8 @@ def sitemap_shares(request: Request):
     und hat in der Sitemap nichts verloren."""
     try:
         urls = snapshots.list_indexed_share_urls()
-    except Exception:
-        logging.exception("sitemap_shares failed")
+    except Exception as exc:
+        logging.error("sitemap_shares failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error building sitemap")
 
     entries = "\n".join(
@@ -401,8 +402,8 @@ def questions_hub(request: Request):
     """
     try:
         entries = snapshots.list_hub_shares()
-    except Exception:
-        logging.exception("list_hub_shares failed")
+    except Exception as exc:
+        logging.error("list_hub_shares failed category=%s", safe_exception(exc))
         entries = []
 
     watch_count = sum(1 for e in entries if e["is_watch"])
@@ -452,8 +453,10 @@ def share_og_card(request: Request, slug_id: str):
         raise HTTPException(status_code=404, detail="Not found")
     try:
         data = snapshots.get_share_cached(share_id)
-    except Exception:
-        logging.exception("share_og_card lookup failed")
+    except Exception as exc:
+        logging.error(
+            "share_og_card lookup failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Error loading share")
     if (data is None or data.get("status") != "active"
             or str(data.get("visibility") or "public") == "private"):
@@ -461,8 +464,10 @@ def share_og_card(request: Request, slug_id: str):
 
     try:
         history_points = snapshots.list_watch_history(share_id)
-    except Exception:
-        logging.exception("share_og_card history failed")
+    except Exception as exc:
+        logging.error(
+            "share_og_card history failed category=%s", safe_exception(exc)
+        )
         history_points = []
     try:
         watch_meta = watch_service.get_public_watch_meta(share_id)
@@ -520,8 +525,8 @@ def share_page(request: Request, slug_id: str):
 
     try:
         data = snapshots.get_share_cached(share_id)
-    except Exception:
-        logging.exception("share_page lookup failed")
+    except Exception as exc:
+        logging.error("share_page lookup failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error loading shared page")
 
     if data is None:
@@ -563,13 +568,17 @@ def share_page(request: Request, slug_id: str):
     # remains the original baseline and keeps its existing API semantics.
     try:
         history_points = snapshots.list_watch_history(share_id)
-    except Exception:
-        logging.exception("list_watch_history failed")
+    except Exception as exc:
+        logging.error(
+            "list_watch_history failed category=%s", safe_exception(exc)
+        )
         history_points = []
     try:
         current_watch_meta = watch_service.get_public_watch_meta(share_id)
-    except Exception:
-        logging.exception("get_public_watch_meta failed")
+    except Exception as exc:
+        logging.error(
+            "get_public_watch_meta failed category=%s", safe_exception(exc)
+        )
         current_watch_meta = None
     watch_page = _build_watch_page_meta(current_watch_meta, history_points)
 
@@ -589,8 +598,10 @@ def share_page(request: Request, slug_id: str):
         display_version = _resolve_display_version(
             data, watch_page, requested_version, latest_run_id, share_id,
         )
-    except Exception:
-        logging.exception("resolve Watch display version failed")
+    except Exception as exc:
+        logging.error(
+            "resolve Watch display version failed category=%s", safe_exception(exc)
+        )
         display_version = None
     if display_version is None:
         if requested_version:
@@ -626,8 +637,10 @@ def share_page(request: Request, slug_id: str):
     if not is_indexed and data.get("question_hash"):
         try:
             canonical_target = snapshots.find_canonical_share(data["question_hash"])
-        except Exception:
-            logging.exception("find_canonical_share failed")
+        except Exception as exc:
+            logging.error(
+                "find_canonical_share failed category=%s", safe_exception(exc)
+            )
             canonical_target = None
         if canonical_target and canonical_target["share_id"] != share_id:
             canonical_url = SITE_URL + snapshots.share_path(
@@ -686,8 +699,10 @@ def share_page(request: Request, slug_id: str):
     if not is_private:
         try:
             related_shares = snapshots.list_related_shares(share_id, payload["question"])
-        except Exception:
-            logging.exception("list_related_shares failed")
+        except Exception as exc:
+            logging.error(
+                "list_related_shares failed category=%s", safe_exception(exc)
+            )
 
     watch_history = _build_watch_history_view(history_points)
     watch_drift = _build_watch_drift_view(

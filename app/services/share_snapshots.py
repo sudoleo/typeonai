@@ -27,8 +27,9 @@ from firebase_admin import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 import app.core.config as cfg
+from app.core.observability import safe_exception
 from app.core.security import db_firestore
-from app.services import opinion_map
+from app.services import opinion_map, persistence_guard
 
 PENDING_COLLECTION = "pending_results"
 SHARES_COLLECTION = "shares"
@@ -548,9 +549,20 @@ def compute_index_eligible(question, consensus_md, sources, included_models):
     )
 
 
+def _sanitize_pending_model_responses(model_responses):
+    if not isinstance(model_responses, dict):
+        return {}
+    limit = cfg.get_consensus_answer_char_limit()
+    return {
+        provider: _clip(model_responses.get(provider), limit)
+        for provider in PROVIDER_ORDER
+        if provider in model_responses
+    }
+
+
 def build_pending_result(uid, question, consensus_md, differences_data,
                          differences_text, model_sources, included_providers,
-                         model_labels, consensus_model):
+                         model_labels, consensus_model, model_responses=None):
     """Baut das pending_results-Dokument; None, wenn Pflichtfelder fehlen."""
     question = _clip(question, MAX_QUESTION_CHARS)
     consensus_md = str(consensus_md or "").strip()
@@ -559,7 +571,7 @@ def build_pending_result(uid, question, consensus_md, differences_data,
     if len(consensus_md) > MAX_CONSENSUS_CHARS:
         consensus_md = consensus_md[:MAX_CONSENSUS_CHARS].rstrip() + "\n\n*[truncated]*"
 
-    return {
+    payload = {
         "schema_version": 1,
         "owner_uid": uid,
         "question": question,
@@ -571,33 +583,58 @@ def build_pending_result(uid, question, consensus_md, differences_data,
         "consensus_model": _clip(consensus_model, 80),
         "answered_at": _utcnow().isoformat(),
     }
+    sanitized_responses = _sanitize_pending_model_responses(model_responses)
+    if sanitized_responses:
+        payload["model_responses"] = sanitized_responses
+    return payload
 
 
 def save_pending_result(payload, db=None):
     db = db if db is not None else db_firestore
     result_id = generate_share_id()
     doc = dict(payload)
+    doc["vote_subject_id"] = str(doc.get("vote_subject_id") or result_id)
     doc["created_at"] = firestore.SERVER_TIMESTAMP
     doc["expires_at"] = _utcnow() + timedelta(hours=PENDING_TTL_HOURS)
-    db.collection(PENDING_COLLECTION).document(result_id).set(doc)
+    owner_uid = str(doc.get("owner_uid") or "").strip()
+    if not owner_uid:
+        raise ValueError("owner_uid must not be empty")
+    result_ref = db.collection(PENDING_COLLECTION).document(result_id)
+
+    def persist(transaction):
+        persistence_guard.ensure_account_write_allowed(
+            uid=owner_uid,
+            db=db,
+            transaction=transaction,
+        )
+        transaction.set(result_ref, doc)
+
+    _run_transaction(db, persist)
     return result_id
 
 
 def persist_pending_result(uid, question, consensus_md, differences_data,
                            differences_text, model_sources, included_providers,
-                           model_labels, consensus_model, db=None):
+                           model_labels, consensus_model, model_responses=None,
+                           db=None):
     """Best-effort-Persistenz aus /consensus heraus: Fehler dürfen den
     Konsens-Stream nie beeinträchtigen, daher wird hier alles geschluckt."""
     try:
         payload = build_pending_result(
             uid, question, consensus_md, differences_data, differences_text,
             model_sources, included_providers, model_labels, consensus_model,
+            model_responses,
         )
         if payload is None:
             return None
         return save_pending_result(payload, db=db)
-    except Exception:
-        logging.exception("persist_pending_result failed")
+    except persistence_guard.AccountDeletionInProgress:
+        logging.info("pending result skipped because account deletion is active")
+        return None
+    except Exception as exc:
+        logging.error(
+            "persist_pending_result failed category=%s", safe_exception(exc)
+        )
         return None
 
 
@@ -612,8 +649,15 @@ def pending_result_is_available(uid, result_id, db=None):
     pending = snap.to_dict() or {}
     if pending.get("owner_uid") != uid:
         return False
-    expires_at = pending.get("expires_at")
-    return not isinstance(expires_at, datetime) or expires_at >= _utcnow()
+    return _pending_expiry_is_valid(pending.get("expires_at"))
+
+
+def _pending_expiry_is_valid(value, *, now=None) -> bool:
+    """Pending provenance is valid only with a timezone-aware future TTL."""
+    if not isinstance(value, datetime) or value.tzinfo is None:
+        return False
+    current = now or _utcnow()
+    return value.astimezone(timezone.utc) >= current.astimezone(timezone.utc)
 
 
 def get_pending_result(uid, result_id, db=None) -> dict | None:
@@ -810,6 +854,7 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
     included_providers = []
     model_labels = {}
     model_sources = {}
+    model_responses = {}
     for answer in answers:
         if not isinstance(answer, dict):
             continue
@@ -818,6 +863,7 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
             continue
         included_providers.append(provider)
         model_labels[provider] = str(answer.get("model") or provider)
+        model_responses[provider] = str(answer.get("response") or "")
         sources = answer.get("sources")
         model_sources[provider] = sources if isinstance(sources, list) else []
 
@@ -833,6 +879,7 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
         included_providers,
         model_labels,
         plan.get("consensus_model"),
+        model_responses,
     )
     if payload is None:
         raise ShareError("bad_result", "The run has no publishable result.")
@@ -855,6 +902,9 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
     today = _utcnow().strftime("%Y-%m-%d")
 
     def publish(transaction):
+        persistence_guard.ensure_account_write_allowed(
+            uid=uid, db=db, transaction=transaction
+        )
         existing_snapshot = share_ref.get(transaction=transaction)
         existing = existing_snapshot.to_dict() if existing_snapshot.exists else None
         if existing is not None:
@@ -919,11 +969,15 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
     pending = snap.to_dict() or {}
 
     expires_at = pending.get("expires_at")
-    if isinstance(expires_at, datetime) and expires_at < _utcnow():
+    if not _pending_expiry_is_valid(expires_at):
         try:
-            pending_ref.delete()
-        except Exception:
-            logging.exception("expired pending_result cleanup failed")
+            if isinstance(expires_at, datetime) and expires_at.tzinfo is not None:
+                pending_ref.delete()
+        except Exception as exc:
+            logging.error(
+                "expired pending_result cleanup failed category=%s",
+                safe_exception(exc),
+            )
         raise ShareError("not_found", "Result not found or expired.")
 
     if pending.get("owner_uid") != uid:
@@ -942,12 +996,15 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
     visibility_id_field = f"{visibility}_share_id"
 
     def publish(transaction):
+        persistence_guard.ensure_account_write_allowed(
+            uid=uid, db=db, transaction=transaction
+        )
         pending_snapshot = pending_ref.get(transaction=transaction)
         current = pending_snapshot.to_dict() if pending_snapshot.exists else None
         if not current:
             raise ShareError("not_found", "Result not found or expired.")
         current_expiry = current.get("expires_at")
-        if isinstance(current_expiry, datetime) and current_expiry < _utcnow():
+        if not _pending_expiry_is_valid(current_expiry):
             raise ShareError("not_found", "Result not found or expired.")
         if current.get("owner_uid") != uid:
             raise ShareError("forbidden", "You can only share your own results.")
@@ -1042,7 +1099,15 @@ def create_share_for_watch_query(uid, question, *, visibility="private", db=None
     share_id, share_doc = build_share_for_watch_query(
         uid, question, visibility=visibility
     )
-    db.collection(SHARES_COLLECTION).document(share_id).set(share_doc)
+    share_ref = db.collection(SHARES_COLLECTION).document(share_id)
+
+    def publish(transaction):
+        persistence_guard.ensure_account_write_allowed(
+            uid=uid, db=db, transaction=transaction
+        )
+        transaction.set(share_ref, share_doc)
+
+    _run_transaction(db, publish)
     return {
         "share_id": share_id,
         "slug": share_doc["slug"],
@@ -1073,7 +1138,7 @@ def revoke_share(share_id, uid, is_admin=False, db=None):
     invalidate_share_cache(share_id)
 
 
-def hard_delete_share(share_id, db=None):
+def hard_delete_share(share_id, db=None, *, allow_account_deletion=False):
     """Permanently delete a share and all share-bound operational data.
 
     This is intentionally separate from the owner-facing revoke flow. It is
@@ -1090,7 +1155,9 @@ def hard_delete_share(share_id, db=None):
     from app.services.watch_service import delete_watches_for_share
     from app.services.watch_followers import delete_followers_for_share
 
-    watches_deleted = delete_watches_for_share(share_id, db=db)
+    watches_deleted = delete_watches_for_share(
+        share_id, db=db, allow_account_deletion=allow_account_deletion
+    )
     followers_deleted = delete_followers_for_share(share_id, db=db)
 
     share_ref = db.collection(SHARES_COLLECTION).document(share_id)

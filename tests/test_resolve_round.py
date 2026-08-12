@@ -226,6 +226,39 @@ def test_resolve_counts_usage_and_returns_result(fake_run_usage):
     assert args[1] == "Opening year"
 
 
+def test_resolve_rejects_a_key_reserved_for_a_normal_consensus(fake_run_usage):
+    client = make_client()
+    uid = "uid-resolve-key-purpose"
+    payload = {**resolve_payload(), "usage_run_key": "normal-consensus-key"}
+    limits = UsageLimits(
+        total=cfg.get_consensus_run_limit(True),
+        deep_think=cfg.get_deep_think_run_limit(True),
+    )
+    fake_run_usage.reserve(
+        uid,
+        payload["usage_run_key"],
+        RunKind.REGULAR,
+        limits,
+        request_fingerprint=chat_router.usage_run_fingerprint(
+            payload,
+            question=payload["question"],
+            deep_think=False,
+        ),
+    )
+
+    with patch.object(chat_router, "verify_user_token", return_value=uid), \
+         patch.object(chat_router, "is_user_pro", return_value=True), \
+         patch.object(chat_router, "run_resolve_round") as round_mock:
+        response = client.post("/resolve", headers=AUTH_HEADER, json=payload)
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["error_code"] == "usage_run_conflict"
+    round_mock.assert_not_called()
+    snapshot = fake_run_usage.snapshot(uid, limits)
+    assert snapshot.total.reserved == 1
+    assert snapshot.total.consumed == 0
+
+
 def test_resolve_blocks_when_usage_limit_reached(fake_run_usage):
     client = make_client()
     uid = "uid-resolve-limit"

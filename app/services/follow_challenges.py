@@ -23,6 +23,11 @@ def _hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def _challenge_ref(*, resource_type: str, resource_id: str, email: str, db):
+    challenge_id = _hash(f"{resource_type}:{resource_id}:{email}")
+    return db.collection(COLLECTION).document(f"challenge-{challenge_id}")
+
+
 def _get(ref, tx):
     try:
         return ref.get(transaction=tx)
@@ -48,7 +53,13 @@ def _run(db, operation):
 
 
 def claim_confirmation_send(
-    *, resource_type: str, resource_id: str, email: str, db, now: datetime | None = None
+    *,
+    resource_type: str,
+    resource_id: str,
+    email: str,
+    db,
+    now: datetime | None = None,
+    binding_id: str = "",
 ) -> bool:
     """Return True only when a confirmation mail may be sent now.
 
@@ -57,10 +68,11 @@ def claim_confirmation_send(
     """
     now = now or utcnow()
     recipient_hash = _hash(email)
-    challenge_id = _hash(f"{resource_type}:{resource_id}:{email}")
     day = now.date().isoformat()
     hour = now.strftime("%Y-%m-%dT%H")
-    challenge_ref = db.collection(COLLECTION).document(f"challenge-{challenge_id}")
+    challenge_ref = _challenge_ref(
+        resource_type=resource_type, resource_id=resource_id, email=email, db=db
+    )
     recipient_ref = db.collection(COLLECTION).document(f"recipient-{recipient_hash}")
     global_ref = db.collection(COLLECTION).document(f"global-{hour}")
 
@@ -86,6 +98,7 @@ def claim_confirmation_send(
                 "resource_type": resource_type,
                 "resource_hash": _hash(resource_id),
                 "recipient_hash": recipient_hash,
+                "binding_id": str(binding_id or "")[:200],
                 "last_sent_at": now,
                 "expires_at": now + CHALLENGE_TTL,
             }),
@@ -116,6 +129,57 @@ def claim_confirmation_send(
         # Old unit fakes have no generic top-level collections. Production and
         # emulator clients always take the transactional path above.
         return True
+
+
+def get_confirmation_challenge(
+    *,
+    resource_type: str,
+    resource_id: str,
+    email: str,
+    db,
+    transaction,
+    now: datetime | None = None,
+):
+    """Return valid server-side state bound to the caller's transaction.
+
+    A signed link alone is deliberately insufficient. Account cleanup deletes
+    this hashed state, invalidating every previously issued link without
+    retaining a raw pending e-mail address.
+    """
+    now = now or utcnow()
+    ref = _challenge_ref(
+        resource_type=resource_type, resource_id=resource_id, email=email, db=db
+    )
+    snapshot = _get(ref, transaction)
+    if not snapshot.exists:
+        return None
+    data = snapshot.to_dict() or {}
+    expires_at = data.get("expires_at")
+    valid_expiry = bool(
+        isinstance(expires_at, datetime)
+        and expires_at.tzinfo is not None
+        and expires_at.astimezone(timezone.utc) >= now.astimezone(timezone.utc)
+    )
+    if (
+        data.get("resource_type") != resource_type
+        or data.get("resource_hash") != _hash(resource_id)
+        or data.get("recipient_hash") != _hash(email)
+        or not valid_expiry
+    ):
+        return None
+    return {
+        "reference": ref,
+        "binding_id": str(data.get("binding_id") or ""),
+    }
+
+
+def consume_confirmation_challenge(challenge, *, transaction) -> None:
+    """Consume challenge state in the same transaction as follower creation."""
+    ref = challenge["reference"]
+    if transaction is None:
+        ref.delete()
+    else:
+        transaction.delete(ref)
 
 
 def delete_for_email(email: str, *, db) -> int:

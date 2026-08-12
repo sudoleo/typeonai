@@ -9,6 +9,7 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, ConfigDict, Field
 
 import app.core.config as cfg
+from app.core.observability import safe_exception
 from app.core.security import db_firestore, is_user_admin, is_user_pro
 from app.core.site import SITE_URL
 from app.core.rate_limit import (
@@ -151,8 +152,11 @@ def ensure_api_account_active(uid: str) -> None:
         api_account_cleanup.ensure_active(uid)
     except ApiAccountInactive:
         raise HTTPException(status_code=401, detail="Invalid API key") from None
-    except ApiAccountStatusUnavailable:
-        logging.exception("Consensus API account status is unavailable")
+    except ApiAccountStatusUnavailable as exc:
+        logging.error(
+            "Consensus API account status is unavailable category=%s",
+            safe_exception(exc),
+        )
         raise HTTPException(
             status_code=503, detail="Consensus API authentication is temporarily unavailable"
         ) from None
@@ -195,8 +199,11 @@ def get_api_publisher_config(
     _require_api_admin(identity)
     try:
         return publisher_config.public_config(publisher_config.get_config())
-    except Exception:
-        logging.exception("Consensus API publisher configuration failed")
+    except Exception as exc:
+        logging.error(
+            "Consensus API publisher configuration failed category=%s",
+            safe_exception(exc),
+        )
         raise HTTPException(
             status_code=503, detail="Publisher configuration is temporarily unavailable"
         ) from None
@@ -284,8 +291,11 @@ def create_consensus_run(
             raise
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from None
-        except Exception:
-            logging.exception("Consensus API server model plan is unavailable")
+        except Exception as exc:
+            logging.error(
+                "Consensus API server model plan is unavailable category=%s",
+                safe_exception(exc),
+            )
             raise HTTPException(
                 status_code=503, detail="Consensus API is temporarily unavailable"
             ) from None
@@ -305,8 +315,11 @@ def create_consensus_run(
 
     try:
         validate_server_credentials(model_plan)
-    except Exception:
-        logging.exception("Consensus API server credentials are unavailable")
+    except Exception as exc:
+        logging.error(
+            "Consensus API server credentials are unavailable category=%s",
+            safe_exception(exc),
+        )
         raise HTTPException(
             status_code=503, detail="Consensus API is temporarily unavailable"
         ) from None
@@ -327,8 +340,11 @@ def create_consensus_run(
         except UsageRunConflict as exc:
             api_run_repository.delete_accepted(run["run_id"])
             raise HTTPException(status_code=409, detail=str(exc)) from None
-        except Exception:
-            logging.exception("Consensus API usage reservation failed")
+        except Exception as exc:
+            logging.error(
+                "Consensus API usage reservation failed category=%s",
+                safe_exception(exc),
+            )
             # Keep the accepted run and any possibly committed reservation.
             # A retry with the same Idempotency-Key can safely finish this
             # step; deleting/releasing here would make that key terminal.
@@ -433,8 +449,10 @@ def publish_consensus_run(
         raise HTTPException(status_code=404, detail="Run not found") from None
     except ShareError as exc:
         _raise_api_share_error(exc)
-    except Exception:
-        logging.exception("Consensus API publication failed: %s", run_id)
+    except Exception as exc:
+        logging.error(
+            "Consensus API publication failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Publication failed") from None
     if not publication["created"]:
         response.status_code = status.HTTP_200_OK
@@ -553,8 +571,11 @@ def create_api_publisher_watch(
             status_code=status_by_code.get(exc.code, 400),
             detail={"code": exc.code, "message": exc.message},
         ) from None
-    except Exception:
-        logging.exception("Consensus API publisher Watch creation failed: %s", share_id)
+    except Exception as exc:
+        logging.error(
+            "Consensus API publisher Watch creation failed category=%s",
+            safe_exception(exc),
+        )
         raise HTTPException(status_code=500, detail="Failed to create weekly Watch") from None
     return {"status": "success", "watch": watch, "watch_status": "watch_created"}
 

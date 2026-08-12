@@ -95,6 +95,53 @@ class ModelConfigurationTests(unittest.TestCase):
 
         self.assertEqual(cfg.get_limits_config(), before_limits)
         self.assertEqual(set(cfg.ALLOWED_OPENAI_MODELS), before_openai)
+
+    def test_admin_update_restores_persisted_document_on_activation_error(self):
+        payload = self._valid_admin_payload()
+        previous = {"schema_version": 7, "openai": ["previous-model"]}
+
+        class Snapshot:
+            exists = True
+
+            def to_dict(self):
+                return dict(previous)
+
+        fake_document = mock.Mock()
+        fake_document.get.return_value = Snapshot()
+        fake_db = mock.Mock()
+        fake_db.collection.return_value.document.return_value = fake_document
+
+        with (
+            mock.patch.object(admin_router, "_require_admin"),
+            mock.patch.object(admin_router, "db_firestore", fake_db),
+            mock.patch.object(
+                admin_router,
+                "load_models_from_db",
+                side_effect=RuntimeError("activation failed"),
+            ),
+            self.assertRaises(HTTPException) as exc_info,
+        ):
+            admin_router.update_models(mock.Mock(), payload)
+
+        self.assertEqual(exc_info.exception.status_code, 500)
+        self.assertGreaterEqual(fake_document.set.call_count, 2)
+        self.assertEqual(fake_document.set.call_args_list[-1].args[0], previous)
+        fake_document.delete.assert_not_called()
+
+    def test_readiness_config_load_never_creates_missing_document(self):
+        snapshot = mock.Mock(exists=False)
+        document = mock.Mock()
+        document.get.return_value = snapshot
+        database = mock.Mock()
+        database.collection.return_value.document.return_value = document
+
+        with mock.patch("app.core.security.db_firestore", database):
+            loaded = cfg.load_models_from_db(strict=True, persist_backfill=False)
+
+        self.assertTrue(loaded)
+        document.get.assert_called_once_with(timeout=5.0, retry=None)
+        document.set.assert_not_called()
+
     def test_engine_developer_keys_use_shared_credentials_source(self):
         expected = {
             "OpenAI": "openai-dev",

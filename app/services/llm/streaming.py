@@ -12,8 +12,10 @@ from urllib.parse import quote
 import openai
 import requests
 from fastapi.responses import StreamingResponse
+from starlette.requests import ClientDisconnect
 
 import app.core.config as cfg
+from app.core.observability import safe_exception
 from app.services.llm.citations import (
     coerce_text,
     make_llm_result,
@@ -31,6 +33,7 @@ from app.services.llm.engines import (
     _log_model_selection,
     _mistral_builtin_tools_unsupported,
     _mistral_headers,
+    _raise_provider_http_status,
     _responses_empty_result,
     build_provider_payload,
     query_mistral,
@@ -61,6 +64,40 @@ def sse_pack(event: str, data: Dict[str, Any]) -> str:
 
 
 SSE_KEEPALIVE_INTERVAL_SECONDS = 15.0
+
+
+class ProviderStreamingResponse(StreamingResponse):
+    """StreamingResponse that propagates an ASGI disconnect to its producer.
+
+    Uvicorn currently advertises ASGI HTTP 2.3.  Starlette therefore listens
+    for ``http.disconnect`` in a sibling task while a synchronous iterator is
+    advanced in a worker thread.  Cancelling only that sibling task does not
+    close the iterator or an active provider response.  Signal the shared
+    provider cancellation before Starlette waits for the worker to unwind.
+    """
+
+    def __init__(self, *args, cancellation: ProviderCancellation, **kwargs):
+        self.provider_cancellation = cancellation
+        super().__init__(*args, **kwargs)
+
+    async def listen_for_disconnect(self, receive) -> None:
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                self.provider_cancellation.cancel()
+                return
+
+    async def __call__(self, scope, receive, send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        except ClientDisconnect:
+            # ASGI HTTP >= 2.4 reports disconnects through a failed send.
+            self.provider_cancellation.cancel()
+            raise
+        finally:
+            # Normal exhaustion and server-side task cancellation must release
+            # any resource that survived an unusual provider iterator exit.
+            self.provider_cancellation.cancel()
 
 
 def iter_sse_with_keepalive(
@@ -112,6 +149,17 @@ def iter_sse_with_keepalive(
             yield item
     finally:
         cancellation.cancel()
+
+
+def keepalive_streaming_response(source) -> ProviderStreamingResponse:
+    """Wrap a synchronous SSE source with keepalives and disconnect cleanup."""
+    cancellation = ProviderCancellation()
+    return ProviderStreamingResponse(
+        iter_sse_with_keepalive(source, cancellation=cancellation),
+        media_type="text/event-stream",
+        headers=dict(SSE_HEADERS),
+        cancellation=cancellation,
+    )
 
 
 def iter_sse_events(response: requests.Response) -> Iterator[Tuple[Optional[str], str]]:
@@ -167,7 +215,7 @@ def _stream_openai_responses(*, api_key: str, base_url: str, payload: dict, prov
         stream=True,
     )
     if resp.status_code >= 400:
-        raise RuntimeError(f"{resp.status_code} - {resp.text}")
+        _raise_provider_http_status(resp)
 
     final_response = None
     for event_name, data_str in iter_sse_events(resp):
@@ -219,7 +267,7 @@ def _stream_anthropic_messages(*, api_key: str, payload: dict) -> Generator[Stre
         stream=True,
     )
     if resp.status_code >= 400:
-        raise RuntimeError(f"{resp.status_code} - {resp.text}")
+        _raise_provider_http_status(resp)
 
     blocks: Dict[int, dict] = {}
     order: list = []
@@ -297,7 +345,7 @@ def _stream_gemini_generate(*, model_name: str, payload: dict, api_key: Optional
         request_payload.pop("tools", None)
         resp = _request(request_payload)
     if resp.status_code >= 400:
-        raise RuntimeError(f"{resp.status_code} - {resp.text}")
+        _raise_provider_http_status(resp)
 
     text_parts: list = []
     grounding_metadata = None
@@ -386,7 +434,7 @@ def _stream_mistral_conversations(*, api_key: str, payload: dict) -> Generator[S
         request_payload.pop("tools", None)
         resp = _request()
     if resp.status_code >= 400:
-        raise RuntimeError(f"{resp.status_code} - {resp.text}")
+        _raise_provider_http_status(resp)
 
     content_items: list = []
     for event_name, data_str in iter_sse_events(resp):
@@ -485,7 +533,10 @@ def stream_openai_query(
             payload=request_data["payload"],
             provider="openai",
         )
+    except ProviderCancelled:
+        raise
     except Exception as e:
+        raise_if_provider_cancelled()
         yield {"type": "final", "result": _error("OpenAI", e)}
 
 
@@ -523,8 +574,11 @@ def stream_grok_query(
             if suppress_reasoning and item.get("type") == "reasoning":
                 continue
             yield item
+    except ProviderCancelled:
+        raise
     except Exception as e:
-        yield {"type": "final", "result": _error("Grok", str(e))}
+        raise_if_provider_cancelled()
+        yield {"type": "final", "result": _error("Grok", e)}
 
 
 def stream_claude_query(
@@ -549,8 +603,11 @@ def stream_claude_query(
         )
         _log_model_selection("Claude", request_data["api_model"], deep_search, model_override)
         yield from _stream_anthropic_messages(api_key=api_key, payload=request_data["payload"])
+    except ProviderCancelled:
+        raise
     except Exception as e:
-        yield {"type": "final", "result": _error("Anthropic", str(e))}
+        raise_if_provider_cancelled()
+        yield {"type": "final", "result": _error("Anthropic", e)}
 
 
 def stream_gemini_query(
@@ -580,7 +637,10 @@ def stream_gemini_query(
             payload=request_data["payload"],
             api_key=api_key,
         )
+    except ProviderCancelled:
+        raise
     except Exception as e:
+        raise_if_provider_cancelled()
         yield {"type": "final", "result": _error("Gemini", e)}
 
 
@@ -607,7 +667,10 @@ def stream_deepseek_query(
         _log_model_selection("DeepSeek", request_data["api_model"], deep_search, model_override)
         client = openai_client(api_key=api_key, base_url="https://api.deepseek.com")
         yield from _stream_chat_completions(client=client, payload=request_data["payload"])
+    except ProviderCancelled:
+        raise
     except Exception as e:
+        raise_if_provider_cancelled()
         yield {"type": "final", "result": _error("DeepSeek", e)}
 
 
@@ -653,8 +716,11 @@ def stream_mistral_query(
                 attachments=attachments,
             )
         yield {"type": "final", "result": final_result}
+    except ProviderCancelled:
+        raise
     except Exception as e:
-        yield {"type": "final", "result": _error("Mistral", str(e))}
+        raise_if_provider_cancelled()
+        yield {"type": "final", "result": _error("Mistral", e)}
 
 
 # ---------------------------------------------------------------------------
@@ -728,7 +794,7 @@ def stream_mistral_chat_text(
         stream=True,
     )
     if resp.status_code >= 400:
-        raise RuntimeError(f"{resp.status_code} - {resp.text}")
+        _raise_provider_http_status(resp)
     for _, data_str in iter_sse_events(resp):
         if data_str.strip() == "[DONE]":
             break
@@ -844,8 +910,12 @@ def streaming_model_response(
                         return
         except ProviderCancelled:
             return
-        except Exception:
-            logger.exception("Streaming failed for %s", provider_label)
+        except Exception as exc:
+            logger.error(
+                "Provider stream failed provider=%s category=%s",
+                provider_label,
+                safe_exception(exc),
+            )
             payload = {
                 "error": f"{provider_label} could not complete this request. Please try again later.",
                 "error_code": "provider_stream_failed",
@@ -857,4 +927,9 @@ def streaming_model_response(
         finally:
             cancellation.cancel()
 
-    return StreamingResponse(event_source(), media_type="text/event-stream", headers=dict(SSE_HEADERS))
+    return ProviderStreamingResponse(
+        event_source(),
+        media_type="text/event-stream",
+        headers=dict(SSE_HEADERS),
+        cancellation=cancellation,
+    )

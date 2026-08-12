@@ -126,11 +126,15 @@ def _json(route, payload, status=200):
     )
 
 
-def _real_firebase_page(browser, app_server, initial_uid="account-a", path="/app"):
+def _real_firebase_page(
+    browser, app_server, initial_uid="account-a", path="/app", init_script=None
+):
     context = browser.new_context(viewport={"width": 1280, "height": 820})
     context.add_init_script(
         f"window.__E2E_INITIAL_UID = {json.dumps(initial_uid)};"
     )
+    if init_script:
+        context.add_init_script(init_script)
     context.route(
         "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js",
         lambda route: route.fulfill(content_type="application/javascript", body=FIREBASE_APP_STUB),
@@ -327,6 +331,9 @@ def test_last_bookmark_click_wins_when_detail_responses_arrive_out_of_order(brow
         page.wait_for_timeout(100)
         expect(page.locator("#threadAskText")).to_have_text("Question B")
         assert page.evaluate("() => window.App.bookmarkSession.currentId()") == "bookmark_b"
+        assert page.evaluate("() => window.lastQuestion") == "Question B"
+        assert page.evaluate("() => window.consensusCitationMeta?.question") == "Question B"
+        expect(page.locator(".explanation-popup")).to_have_count(0)
     finally:
         context.close()
 
@@ -444,5 +451,226 @@ def test_watched_navigation_closes_the_shared_modal(browser, phase4_server):
         expect(page.locator("#shareModal")).to_be_hidden()
         expect(page.locator("#watchDashboard")).to_be_visible()
         assert page.url.endswith("/app/watches")
+    finally:
+        context.close()
+
+
+def test_cancel_during_token_resolution_keeps_followup_and_creates_no_usage_run(
+    browser, phase4_server
+):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.evaluate(
+            """() => {
+              document.getElementById("selectOpenAI").checked = true;
+              document.getElementById("selectMistral").checked = true;
+              document.getElementById("questionInput").value = "What changed since yesterday?";
+              window.App.followup.offer("Previous question", "Previous consensus");
+              let release;
+              const pending = new Promise(resolve => { release = resolve; });
+              window.auth.currentUser.getIdToken = () => pending;
+              window.__releaseSlowToken = () => release("token-account-a");
+              window.__slowSend = window.sendQuestion();
+              window.__slowSend.then(() => { window.__slowSendDone = true; });
+            }"""
+        )
+        page.wait_for_function("() => window.isQueryRequestRunning() === true")
+        page.evaluate("() => window.cancelCurrentQuery()")
+        page.evaluate("() => window.__releaseSlowToken()")
+        page.wait_for_function("() => window.__slowSendDone === true")
+
+        assert page.evaluate("() => window.App.followup.isArmed()") is True
+        assert page.evaluate("() => !!window.App.followup.spentExchange") is False
+        assert page.evaluate("() => window.App.usageRun?.current?.key || null") is None
+        assert page.evaluate("() => window.isQueryRequestRunning()") is False
+    finally:
+        context.close()
+
+
+def test_late_watch_create_cannot_overwrite_newer_share_modal(browser, phase4_server):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.route(
+            "**/api/my/watches",
+            lambda route: _json(route, {
+                "watches": [],
+                "limits": {"plan": "free", "active_count": 0, "active_limit": 5},
+            }),
+        )
+        page.route("**/api/my/telegram", lambda route: _json(route, {"telegram": {}}))
+        page.evaluate(
+            """() => {
+              const nativeFetch = window.fetch.bind(window);
+              window.fetch = (input, options = {}) => {
+                if (String(input) === "/api/watch" && options.method === "POST") {
+                  return new Promise(resolve => {
+                    window.__resolveWatchCreate = () => resolve(new Response(JSON.stringify({
+                      watch: {
+                        id: "watch-race", interval: "weekly", run_weekday: "monday",
+                        run_time: "09:00", timezone: "Europe/Berlin", query_first: true,
+                        share_path: "/s/watch-race", visibility: "private",
+                        email_mode: "changes_only", email_enabled: true,
+                        telegram_enabled: false
+                      }
+                    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+                  });
+                }
+                return nativeFetch(input, options);
+              };
+              window.openWatchDialog("create", {
+                question: "Has this policy changed since last week?"
+              });
+            }"""
+        )
+        page.click("#watchQuestionNext")
+        page.click("#watchConfirmBtn")
+        page.wait_for_function("() => typeof window.__resolveWatchCreate === 'function'")
+
+        page.evaluate("() => window.openShareDialog('confirm')")
+        expect(page.locator("#shareModalTitle")).to_have_text(
+            "Share this consensus publicly"
+        )
+        page.evaluate("() => window.__resolveWatchCreate()")
+        page.wait_for_timeout(150)
+
+        expect(page.locator("#shareModalTitle")).to_have_text(
+            "Share this consensus publicly"
+        )
+        expect(page.locator("#shareModalBody")).not_to_contain_text(
+            "Your Watch is active"
+        )
+    finally:
+        context.close()
+
+
+def test_watch_create_is_not_sent_after_modal_changes_during_token_wait(
+    browser, phase4_server
+):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.route(
+            "**/api/my/watches",
+            lambda route: _json(route, {
+                "watches": [],
+                "limits": {"plan": "free", "active_count": 0, "active_limit": 5},
+            }),
+        )
+        page.route("**/api/my/telegram", lambda route: _json(route, {"telegram": {}}))
+        page.evaluate(
+            """() => window.openWatchDialog("create", {
+              question: "Has this policy changed since last week?"
+            })"""
+        )
+        page.click("#watchQuestionNext")
+        page.evaluate(
+            """() => {
+              let release;
+              const pending = new Promise(resolve => { release = resolve; });
+              window.auth.currentUser.getIdToken = () => pending;
+              window.__releaseWatchToken = () => release("token-account-a");
+              window.__watchPostSent = false;
+              const nativeFetch = window.fetch.bind(window);
+              window.fetch = (input, options = {}) => {
+                if (String(input) === "/api/watch" && options.method === "POST") {
+                  window.__watchPostSent = true;
+                }
+                return nativeFetch(input, options);
+              };
+            }"""
+        )
+        page.click("#watchConfirmBtn")
+        page.evaluate("() => window.openShareDialog('confirm')")
+        page.evaluate("() => window.__releaseWatchToken()")
+        page.wait_for_timeout(100)
+
+        assert page.evaluate("() => window.__watchPostSent") is False
+        expect(page.locator("#shareModalTitle")).to_have_text(
+            "Share this consensus publicly"
+        )
+    finally:
+        context.close()
+
+
+def test_failed_utc_usage_refresh_retries_until_authoritative_success(
+    browser, phase4_server
+):
+    context, page = _real_firebase_page(
+        browser,
+        phase4_server,
+        init_script="window.USAGE_REFRESH_RETRY_MS = 25;",
+    )
+    try:
+        page.evaluate(
+            """() => {
+              window.App.renderUsageDisplay({
+                remaining: 0, deepRemaining: 0, totalLimit: 3, deepLimit: 0
+              });
+              window.__usageRefreshCalls = 0;
+              window.refreshUsageData = async () => {
+                window.__usageRefreshCalls += 1;
+                if (window.__usageRefreshCalls === 1) return false;
+                window.App.renderUsageDisplay({
+                  remaining: 3, deepRemaining: 0, totalLimit: 3, deepLimit: 0
+                });
+                return true;
+              };
+
+              const OriginalDate = window.Date;
+              const realStartedAt = OriginalDate.now();
+              const today = new OriginalDate();
+              const fakeStartedAt = OriginalDate.UTC(
+                today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 1,
+                0, 0, 1
+              );
+              class NextUtcDayDate extends OriginalDate {
+                constructor(...args) {
+                  super(...(args.length
+                    ? args
+                    : [fakeStartedAt + (OriginalDate.now() - realStartedAt)]));
+                }
+                static now() {
+                  return fakeStartedAt + (OriginalDate.now() - realStartedAt);
+                }
+                static UTC(...args) { return OriginalDate.UTC(...args); }
+                static parse(value) { return OriginalDate.parse(value); }
+              }
+              window.Date = NextUtcDayDate;
+            }"""
+        )
+
+        page.wait_for_function("() => window.__usageRefreshCalls >= 2", timeout=5000)
+        assert page.evaluate(
+            "() => window.App.usageLimit.preflight({ useOwnKeys: false })"
+        ) is None
+    finally:
+        context.close()
+
+
+def test_template_visibility_classes_remain_overridable_by_ui_controls(
+    browser, phase4_server
+):
+    context, page = _real_firebase_page(
+        browser, phase4_server, initial_uid=None
+    )
+    try:
+        page.click("#authTopSignupBtn")
+        expect(page.locator("#loginModal")).to_be_visible()
+        expect(page.locator("#loginEmailConfirm")).to_be_visible()
+        expect(page.locator("#loginPassword")).to_be_hidden()
+        expect(page.locator("#confirmRegisterButton")).to_be_visible()
+
+        page.click("#toggleRegister")
+        expect(page.locator("#loginPassword")).to_be_visible()
+        expect(page.locator("#confirmRegisterButton")).to_be_hidden()
+
+        page.evaluate("() => document.getElementById('editSystemPromptBtn').click()")
+        expect(page.locator("#systemPromptModal")).to_be_visible()
+        page.click("#closeSystemPromptModal")
+        expect(page.locator("#systemPromptModal")).to_be_hidden()
+
+        page.evaluate("() => document.getElementById('editSystemPromptBtn').click()")
+        expect(page.locator("#apiSettingsArea")).to_be_hidden()
+        page.evaluate("() => document.getElementById('apiSettingsToggle').click()")
+        expect(page.locator("#apiSettingsArea")).to_be_visible()
     finally:
         context.close()

@@ -1,15 +1,22 @@
 import asyncio
 import logging
+import re
 import time
+from typing import Optional
 
-import firebase_admin
 from firebase_admin import auth
 from fastapi import APIRouter, BackgroundTasks, Request, Body, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.observability import safe_exception
 from app.core.rate_limit import limiter
 from app.core.security import verify_user_token
+from app.services.registration import (
+    deliver_password_setup_email,
+    find_or_provision_user,
+    is_password_setup_configured,
+)
 from app.services.telegram_notifier import send_new_user_registration_notification
 
 router = APIRouter()
@@ -20,8 +27,21 @@ _REGISTER_RESPONSE_FLOOR_SECONDS = 0.35
 class RegisterRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    email: str = Field(min_length=3, max_length=320)
-    password: str = Field(min_length=8, max_length=256)
+    email: str = Field(min_length=3, max_length=254)
+    # Accepted temporarily for cached pre-migration clients, but deliberately
+    # ignored. An anonymous caller must never choose an immediately usable
+    # Firebase credential before proving mailbox ownership.
+    password: Optional[str] = Field(default=None, max_length=256)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        normalized = str(value or "").strip().lower()
+        if any(ord(char) < 32 or ord(char) == 127 for char in normalized):
+            raise ValueError("Invalid e-mail address")
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]{2,}", normalized):
+            raise ValueError("Invalid e-mail address")
+        return normalized
 
 
 async def _neutral_registration_response(started_at: float) -> dict:
@@ -53,20 +73,6 @@ def _recent_registration_method(user) -> str:
     return "firebase"
 
 
-def _find_or_create_password_user(email: str, password: str):
-    """Run the complete blocking Firebase Auth bundle in one worker thread."""
-    try:
-        auth.get_user_by_email(email)
-        return None
-    except firebase_admin.auth.UserNotFoundError:
-        pass
-    try:
-        return auth.create_user(email=email, password=password)
-    except firebase_admin.auth.EmailAlreadyExistsError:
-        # Create race: preserve the same non-enumerating response.
-        return None
-
-
 @router.post("/register")
 @limiter.limit("3/minute")
 async def register_user(
@@ -75,19 +81,17 @@ async def register_user(
     data: RegisterRequest,
 ):
     started_at = time.monotonic()
-    email = data.email.strip().lower()
-    password = data.password
+    email = data.email
 
     try:
-        # Konto-Enumeration vermeiden: eine bereits registrierte Adresse darf
-        # NICHT als solche gemeldet werden, sonst kann jeder durchprobieren, wer
-        # hier Kunde ist. Beide Faelle liefern dieselbe neutrale Antwort; nur der
-        # echte Neuzugang bekommt zusaetzlich ein customToken. Der Client zeigt
-        # in beiden Faellen denselben "Check your inbox"-Screen.
-        user = await asyncio.to_thread(
-            _find_or_create_password_user, email, password
-        )
-        if user is not None:
+        if not is_password_setup_configured():
+            raise RuntimeError("Password setup is not configured")
+        # New users receive an unguessable temporary credential. Existing and
+        # new addresses then take the exact same mailbox-only setup path, so an
+        # anonymous caller cannot distinguish them with a follow-up login.
+        user, created = await asyncio.to_thread(find_or_provision_user, email)
+        background_tasks.add_task(deliver_password_setup_email, email)
+        if created:
             background_tasks.add_task(
                 send_new_user_registration_notification,
                 "email/password",
@@ -98,9 +102,8 @@ async def register_user(
     except HTTPException:
         # bereits bewusst gesetzte Meldungen durchreichen
         raise
-    except Exception as e:
-        # Keine E-Mail-Adresse in die Server-Logs schreiben (Datenminimierung)
-        logging.error(f"/register failed: {e}")
+    except Exception as exc:
+        logging.error("/register failed: %s", safe_exception(exc))
         # generische Meldung an den Client
         raise HTTPException(status_code=503, detail="Registration is temporarily unavailable.")
     
@@ -122,8 +125,10 @@ def confirm_registration(
             check_revoked=True,
         )
         user = auth.get_user(uid)
-    except Exception as e:
-        logging.error(f"/confirm-registration token error: {e}")
+    except Exception as exc:
+        logging.error(
+            "/confirm-registration token error: %s", safe_exception(exc)
+        )
         raise HTTPException(status_code=401, detail="Authentication failed")
 
     if not user.email_verified:

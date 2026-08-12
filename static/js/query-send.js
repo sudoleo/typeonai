@@ -391,6 +391,12 @@
       currentQueryController = new AbortController();
       const querySignal = currentQueryController.signal;
       queryRequestRunning = true;
+      const queryAuthUser = window.auth?.currentUser || null;
+      const queryAuthUid = queryAuthUser?.uid || null;
+      const queryAuthGeneration = window.__consensioAuthState?.generation;
+      const queryAuthIsCurrent = () => window.auth?.currentUser === queryAuthUser
+        && (window.auth?.currentUser?.uid || null) === queryAuthUid
+        && window.__consensioAuthState?.generation === queryAuthGeneration;
       setSendButtonRunning(true);
       // Keep consensus unavailable until the current model run produces enough complete answers.
       // Bei jeder neuen Frage den Konsens-Bereich wieder ausblenden.
@@ -402,11 +408,19 @@
       // --- NEU: Frisches Token holen ---
       let validIdToken = null;
 
-      if (window.auth && window.auth.currentUser) {
+      if (queryAuthUser) {
         try {
           // true erzwingt Refresh, false (Standard) nimmt Cache wenn gültig.
           // false reicht meistens, aber bei Fehlern ist das SDK smart genug.
-          validIdToken = await window.auth.currentUser.getIdToken();
+          validIdToken = await queryAuthUser.getIdToken();
+          // Token resolution itself is not abortable. Fence the continuation
+          // before it may reserve usage or consume follow-up context.
+          if (!isActiveQueryRun(queryRunId)) return;
+          if (!queryAuthIsCurrent()) {
+            currentQueryController?.abort();
+            finishQueryRun(queryRunId);
+            return;
+          }
 
           // Optional: LocalStorage updaten, damit er nicht komplett asynchron läuft
           localStorage.setItem("id_token", validIdToken);
@@ -415,6 +429,13 @@
           // Fallback: Versuche es trotzdem mit dem alten Token aus dem Storage, falls vorhanden
           validIdToken = localStorage.getItem("id_token");
         }
+      }
+
+      if (!isActiveQueryRun(queryRunId)) return;
+      if (!queryAuthIsCurrent()) {
+        currentQueryController?.abort();
+        finishQueryRun(queryRunId);
+        return;
       }
 
       if (!validIdToken) {

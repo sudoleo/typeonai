@@ -368,6 +368,35 @@ def test_streaming_success_completes_exactly_once(chat_consensus_api):
     assert len(store.completions) == 1
 
 
+def test_unexpected_consensus_stream_error_is_redacted_from_sse_and_logs(
+    chat_consensus_api, caplog
+):
+    client, store, monkeypatch = chat_consensus_api
+    secret = "owner@example.test|provider-response-private"
+
+    def failed_stream(*_args, **_kwargs):
+        raise RuntimeError(secret)
+        yield  # pragma: no cover - keeps this a generator
+
+    monkeypatch.setattr(chat_router, "stream_consensus", failed_stream)
+
+    with caplog.at_level("ERROR"):
+        response = client.post(
+            "/consensus", headers=AUTH, json=_base_payload(stream=True)
+        )
+    final = _final_sse_payload(response)
+
+    assert response.status_code == 200
+    assert final["consensus_response"] == (
+        "Consensus could not complete this request. Please try again later."
+    )
+    assert final["chat_turn_state"] == "failed"
+    assert secret not in response.text
+    assert secret not in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert store.failures == [(UID, CHAT_ID, TURN_ID, "consensus_failed")]
+
+
 @pytest.mark.parametrize("stream", [False, True])
 def test_terminal_consensus_error_marks_pending_turn_failed_best_effort(
     chat_consensus_api, stream

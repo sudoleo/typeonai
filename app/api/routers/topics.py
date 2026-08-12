@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from app.core.site import SITE_URL
+from app.core.observability import safe_exception
 from app.core.rate_limit import limiter
 from app.core.security import extract_id_token, is_user_admin, verify_user_token
 from app.services import favicons, mailer, topic_runner, topics
@@ -26,8 +27,20 @@ from app.services.public_markdown import (
 
 
 router = APIRouter()
-_FAVICON_CONCURRENCY = asyncio.Semaphore(8)
+_FAVICON_CONCURRENCY: Optional[asyncio.Semaphore] = None
+_FAVICON_CONCURRENCY_LOOP = None
+_FAVICON_ACQUIRE_TIMEOUT_SECONDS = 1.0
 templates = Jinja2Templates(directory="templates")
+
+
+def _favicon_concurrency() -> asyncio.Semaphore:
+    """Return a limiter bound to the currently serving event loop."""
+    global _FAVICON_CONCURRENCY, _FAVICON_CONCURRENCY_LOOP
+    loop = asyncio.get_running_loop()
+    if _FAVICON_CONCURRENCY is None or _FAVICON_CONCURRENCY_LOOP is not loop:
+        _FAVICON_CONCURRENCY = asyncio.Semaphore(8)
+        _FAVICON_CONCURRENCY_LOOP = loop
+    return _FAVICON_CONCURRENCY
 
 _STATUS_BY_CODE = {
     "not_found": 404,
@@ -217,8 +230,8 @@ def _message_page(
 async def topics_hub(request: Request):
     try:
         entries = await asyncio.to_thread(topics.list_public_topics)
-    except Exception:
-        logging.exception("topics_hub failed")
+    except Exception as exc:
+        logging.error("topics_hub failed category=%s", safe_exception(exc))
         entries = []
     categories = sorted({entry["category"] for entry in entries if entry["category"]})
     jsonld = {
@@ -255,8 +268,8 @@ async def topics_hub(request: Request):
 async def sitemap_topics():
     try:
         urls = await asyncio.to_thread(topics.list_indexed_topic_urls)
-    except Exception:
-        logging.exception("sitemap_topics failed")
+    except Exception as exc:
+        logging.error("sitemap_topics failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error building topic sitemap")
     items = []
     for item in urls:
@@ -288,8 +301,10 @@ async def topic_page(
         topic = await asyncio.to_thread(topics.get_topic_by_slug, slug)
     except topics.TopicError:
         raise HTTPException(status_code=404, detail="Topic not found")
-    except Exception:
-        logging.exception("topic_page lookup failed")
+    except Exception as exc:
+        logging.error(
+            "topic_page lookup failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Error loading topic")
     if (
         not topic
@@ -392,22 +407,42 @@ _GLOBE_SVG = (
 @limiter.limit("30/minute")
 async def topic_favicon(request: Request, d: str = Query(default="", max_length=253)):
     acquired = False
+    overloaded = False
+    concurrency = _favicon_concurrency()
     try:
-        await asyncio.wait_for(_FAVICON_CONCURRENCY.acquire(), timeout=0.02)
+        await asyncio.wait_for(
+            concurrency.acquire(), timeout=_FAVICON_ACQUIRE_TIMEOUT_SECONDS
+        )
         acquired = True
         data, content_type = await asyncio.get_running_loop().run_in_executor(
             favicons.EXECUTOR, favicons.get_favicon, d
         )
     except asyncio.TimeoutError:
+        overloaded = True
         data, content_type = None, ""
+    except Exception as exc:
+        # Favicons are optional decoration. An unexpected decoder/client
+        # failure must not turn an otherwise healthy Topic page into a 500.
+        overloaded = True
+        data, content_type = None, ""
+        logging.warning(
+            "Topic favicon lookup failed category=%s", safe_exception(exc)
+        )
     finally:
         if acquired:
-            _FAVICON_CONCURRENCY.release()
+            concurrency.release()
     if not data:
         return Response(
             content=_GLOBE_SVG,
             media_type="image/svg+xml",
-            headers={"Cache-Control": "public, max-age=86400"},
+            # A capacity fallback is transient and must not be cached by a
+            # browser/CDN for a day.  Genuine negative favicon lookups remain
+            # safely cached to prevent retry amplification.
+            headers={
+                "Cache-Control": (
+                    "no-store" if overloaded else "public, max-age=86400"
+                )
+            },
         )
     return Response(
         content=data,
@@ -428,8 +463,8 @@ async def follow_topic(request: Request, slug: str, data: dict = Body(default={}
         )
     except topics.TopicError as exc:
         _raise_topic(exc)
-    except Exception:
-        logging.exception("follow_topic failed")
+    except Exception as exc:
+        logging.error("follow_topic failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error processing follow request")
     if pending["token"]:
         if not mailer.is_configured():
@@ -489,8 +524,10 @@ async def topic_follow_unsubscribe(request: Request, token: str = ""):
 async def _notify_topic_followers(topic: dict, run: dict, old_score) -> None:
     try:
         await topic_runner.notify_topic_followers(topic, run, old_score)
-    except Exception:
-        logging.exception("Topic follower notification failed")
+    except Exception as exc:
+        logging.error(
+            "Topic follower notification failed category=%s", safe_exception(exc)
+        )
 
 
 @router.get("/api/admin/topics")
@@ -500,8 +537,8 @@ async def admin_list_topics(request: Request):
     try:
         items = await asyncio.to_thread(topics.list_admin_topics)
         return {"status": "success", "topics": items}
-    except Exception:
-        logging.exception("admin_list_topics failed")
+    except Exception as exc:
+        logging.error("admin_list_topics failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Failed to load topics")
 
 
@@ -517,8 +554,8 @@ async def admin_create_topic(request: Request, data: dict = Body(...)):
         return {"status": "success", "topic": _admin_topic_view(topic)}
     except topics.TopicError as exc:
         _raise_topic(exc)
-    except Exception:
-        logging.exception("admin_create_topic failed")
+    except Exception as exc:
+        logging.error("admin_create_topic failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Failed to create topic")
 
 
@@ -552,8 +589,8 @@ async def admin_update_topic(
         return {"status": "success", "topic": _admin_topic_view(topic)}
     except topics.TopicError as exc:
         _raise_topic(exc)
-    except Exception:
-        logging.exception("admin_update_topic failed")
+    except Exception as exc:
+        logging.error("admin_update_topic failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Failed to update topic")
 
 
@@ -602,6 +639,8 @@ async def admin_create_topic_run(
         }
     except topics.TopicError as exc:
         _raise_topic(exc)
-    except Exception:
-        logging.exception("admin_create_topic_run failed")
+    except Exception as exc:
+        logging.error(
+            "admin_create_topic_run failed category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Topic run failed")

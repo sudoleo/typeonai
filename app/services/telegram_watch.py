@@ -12,12 +12,17 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
-from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.core.site import SITE_URL
+from app.core.observability import safe_exception
 from app.core.security import db_firestore
-from app.services import share_snapshots, telegram_notifier, watch_service
+from app.services import (
+    persistence_guard,
+    share_snapshots,
+    telegram_notifier,
+    watch_service,
+)
 
 
 CONNECTIONS_COLLECTION = "telegram_connections"
@@ -94,8 +99,11 @@ def run_startup_maintenance() -> dict:
     """Non-readiness-blocking maintenance invoked once per app start."""
     try:
         cleanup_expired_metadata()
-    except Exception:
-        logging.exception("Telegram metadata cleanup failed on startup")
+    except Exception as exc:
+        logging.error(
+            "Telegram metadata cleanup failed on startup category=%s",
+            safe_exception(exc),
+        )
     return ensure_webhook_configured()
 
 
@@ -134,11 +142,20 @@ def create_link(uid: str, *, now=None, db=None) -> dict:
     db = db if db is not None else db_firestore
     now = now or utcnow()
     token = secrets.token_urlsafe(24)
-    db.collection(LINKS_COLLECTION).document(_digest(token)).set({
+    token_ref = db.collection(LINKS_COLLECTION).document(_digest(token))
+    token_data = {
         "uid": uid,
         "created_at": now,
         "expires_at": now + timedelta(minutes=LINK_TTL_MINUTES),
-    })
+    }
+
+    def persist(transaction):
+        persistence_guard.ensure_account_write_allowed(
+            uid=uid, db=db, transaction=transaction
+        )
+        transaction.set(token_ref, token_data)
+
+    watch_service._run_transaction(db, persist)
     return {
         "url": f"https://t.me/{quote(_username())}?start={quote(token)}",
         "expires_at": (now + timedelta(minutes=LINK_TTL_MINUTES)).isoformat(),
@@ -197,15 +214,21 @@ def consume_link(token: str, chat: dict, sender: dict, *, now=None, db=None) -> 
     connection_ref = db.collection(CONNECTIONS_COLLECTION).document(uid)
     chat_ref = db.collection(CHATS_COLLECTION).document(_digest(payload["chat_id"]))
 
-    if not hasattr(db, "transaction"):
+    supports_transactions = callable(getattr(db, "run_transaction", None)) or hasattr(
+        db, "transaction"
+    )
+    if not supports_transactions:
+        # Compatibility seam for minimal unit-test stores. Production always
+        # uses the transactional branch below.
+        persistence_guard.ensure_account_write_allowed(uid=uid, db=db)
         old_data = _consume_link_without_transaction(
             token_ref, connection_ref, chat_ref, payload, now,
         )
     else:
-        transaction = db.transaction()
-
-        @firestore.transactional
         def consume(tx):
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid, db=db, transaction=tx
+            )
             link_snap = token_ref.get(transaction=tx)
             link_data = link_snap.to_dict() if link_snap.exists else None
             if not link_data:
@@ -227,8 +250,8 @@ def consume_link(token: str, chat: dict, sender: dict, *, now=None, db=None) -> 
             tx.set(chat_ref, {"uid": uid, "chat_id": payload["chat_id"]})
             return old_data
 
-        old_data = consume(transaction)
-    if old_data and str(old_data.get("chat_id") or "") != payload["chat_id"] and not hasattr(db, "transaction"):
+        old_data = watch_service._run_transaction(db, consume)
+    if old_data and str(old_data.get("chat_id") or "") != payload["chat_id"] and not supports_transactions:
         db.collection(CHATS_COLLECTION).document(_digest(old_data["chat_id"])).delete()
     return _serialize_connection(payload)
 
@@ -376,11 +399,18 @@ def _watch_keyboard(watch_id: str, watch: dict) -> dict:
 
 def _claim_delivery(delivery_id: str, data: dict, db) -> bool:
     ref = db.collection(DELIVERIES_COLLECTION).document(delivery_id)
-    snap = ref.get()
-    if snap.exists:
-        return False
-    ref.set(data)
-    return True
+
+    def claim(transaction):
+        persistence_guard.ensure_account_write_allowed(
+            uid=str(data.get("uid") or ""), db=db, transaction=transaction
+        )
+        snap = ref.get(transaction=transaction)
+        if snap.exists:
+            return False
+        transaction.set(ref, data)
+        return True
+
+    return bool(watch_service._run_transaction(db, claim))
 
 
 def send_watch_notification(watch_id: str, run_id: str, kind: str, watch: dict,

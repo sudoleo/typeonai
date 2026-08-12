@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request, Body, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
 from app.core import config as cfg
+from app.core.observability import safe_exception
 from app.core.rate_limit import limiter
 from app.core.security import verify_user_token, extract_id_token, db_firestore
 from app.services.llm.attachments import ALLOWED_ATTACHMENT_MIMES, MAX_ATTACHMENTS
@@ -142,6 +143,28 @@ def _sanitize_model_responses(raw):
     }
 
 
+def _model_provenance(included_models) -> tuple[list[str], dict[str, str]]:
+    """Recover canonical providers/labels from a server-owned model list."""
+    providers = []
+    labels = {}
+    for item in included_models if isinstance(included_models, list) else []:
+        display, separator, label = str(item).partition(":")
+        display = display.strip()
+        provider = next(
+            (
+                name for name in share_snapshots.PROVIDER_ORDER
+                if display in {name, share_snapshots.PROVIDER_CITATION_LABELS[name]}
+            ),
+            None,
+        )
+        if not provider or provider in providers:
+            continue
+        providers.append(provider)
+        if separator and label.strip():
+            labels[provider] = label.strip()
+    return providers, labels
+
+
 def _authoritative_consensus_payload(uid: str, result_id: str, chat_binding: dict | None):
     """Materialize consensus fields from an owner-bound completed server run."""
     if result_id:
@@ -153,6 +176,10 @@ def _authoritative_consensus_payload(uid: str, result_id: str, chat_binding: dic
                 "differences": str(pending.get("differences_text") or ""),
                 "differences_data": pending.get("differences_data"),
                 "sources": pending.get("sources"),
+                "included_models": pending.get("included_models"),
+                "consensus_model": str(pending.get("consensus_model") or ""),
+                "model_responses": pending.get("model_responses"),
+                "vote_subject_id": str(pending.get("vote_subject_id") or result_id),
                 "result_id": result_id,
             }
     if chat_binding:
@@ -165,6 +192,7 @@ def _authoritative_consensus_payload(uid: str, result_id: str, chat_binding: dic
         if turn and turn.get("status") == "completed":
             answers = turn.get("model_answers")
             clean_answers = {}
+            model_labels = {}
             if isinstance(answers, dict):
                 clean_answers = {
                     provider: (
@@ -173,6 +201,11 @@ def _authoritative_consensus_payload(uid: str, result_id: str, chat_binding: dic
                     )
                     for provider, value in answers.items()
                 }
+                model_labels = {
+                    provider: str(value.get("model_label") or "")
+                    for provider, value in answers.items()
+                    if isinstance(value, dict) and value.get("model_label")
+                }
             return {
                 "question": str(turn.get("question") or ""),
                 "consensus": str(turn.get("consensus") or ""),
@@ -180,6 +213,9 @@ def _authoritative_consensus_payload(uid: str, result_id: str, chat_binding: dic
                 "differences_data": turn.get("differences_data"),
                 "sources": turn.get("sources"),
                 "model_responses": clean_answers,
+                "included_models": turn.get("included_models"),
+                "model_labels": model_labels,
+                "consensus_model": str(turn.get("consensus_model") or ""),
                 "result_id": str(turn.get("result_id") or ""),
             }
     raise HTTPException(
@@ -218,7 +254,7 @@ def _bookmark_uid(request: Request):
     try:
         return verify_user_token(auth_header.split(" ", 1)[1])
     except Exception as exc:
-        logging.error("bookmark auth failed: %s", exc)
+        logging.error("bookmark auth failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=401, detail="Authentication failed") from exc
 
 
@@ -316,8 +352,8 @@ def load_bookmarks(
         }
     except HTTPException:
         raise
-    except Exception as e:
-        logging.error(f"Error loading bookmarks for uid={uid}: {e}")
+    except Exception as exc:
+        logging.error("Error loading bookmarks category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error loading bookmarks")
 
 
@@ -333,7 +369,9 @@ def load_bookmark_detail(request: Request, bookmark_id: str):
             .collection("bookmarks").document(bookmark_id).get()
         )
     except Exception as exc:
-        logging.exception("Error loading bookmark detail for uid=%s", uid)
+        logging.error(
+            "Error loading bookmark detail category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Error loading bookmark") from exc
     if not snap.exists:
         raise HTTPException(status_code=404, detail="Bookmark not found")
@@ -382,14 +420,15 @@ def load_bookmark_conversation(
             )
         except (ChatNotFound, InvalidChatCursor, ChatCursorUnavailable):
             raise
-        except Exception:
+        except Exception as exc:
             # The compact path is an optimisation, not a correctness gate. If
             # a Firestore/runtime incompatibility breaks the collection reads,
             # fall back to the older owner-bound detail path so the browser
             # never silently collapses a full chat to two bookmark snapshots.
             logging.warning(
-                "Optimized bookmark transcript read failed; using detail fallback",
-                exc_info=True,
+                "Optimized bookmark transcript read failed; using detail fallback "
+                "category=%s",
+                safe_exception(exc),
             )
             metadata_page = store.list_turns(
                 uid, chat_id, cursor=cursor, limit=limit
@@ -424,7 +463,9 @@ def load_bookmark_conversation(
             status_code=503, detail="Conversation pagination unavailable"
         ) from exc
     except Exception as exc:
-        logging.exception("Error loading bookmark conversation for uid=%s", uid)
+        logging.error(
+            "Error loading bookmark conversation category=%s", safe_exception(exc)
+        )
         raise HTTPException(status_code=500, detail="Error loading bookmark conversation") from exc
 
 
@@ -511,12 +552,12 @@ def save_bookmark_consensus(request: Request, payload: BookmarkConsensusRequest)
     id_token = extract_id_token(request, data)
     question = data.get("question")
     result_id = str(data.get("resultId") or "").strip()
-    consensus_model = str(data.get("consensusModel") or "").strip()[:80]
-    model_labels = data.get("modelLabels")
     previous_question = _clean_previous_question(data.get("previousQuestion"))
     previous_turn = _sanitize_previous_turn(data.get("previousTurn"))
     chat_binding = _chat_binding(data)
-    model_responses = _sanitize_model_responses(data.get("modelResponses"))
+    # Provider answers and provenance are server-owned. Client copies are kept
+    # in the request schema only for cached clients and are never persisted.
+    model_responses = None
 
     if not id_token or not question:
         raise HTTPException(status_code=400, detail="Missing required fields.")
@@ -533,8 +574,14 @@ def save_bookmark_consensus(request: Request, payload: BookmarkConsensusRequest)
     differencesText = authoritative["differences"][:50_000]
     differencesData = authoritative.get("differences_data")
     sources = share_snapshots.sanitize_sources(authoritative.get("sources"))
-    if authoritative.get("model_responses") is not None:
-        model_responses = _sanitize_model_responses(authoritative["model_responses"])
+    model_responses = _sanitize_model_responses(
+        authoritative.get("model_responses") or {}
+    )
+    included_providers, authoritative_labels = _model_provenance(
+        authoritative.get("included_models")
+    )
+    consensus_model = str(authoritative.get("consensus_model") or "").strip()[:80]
+    authoritative_labels.update(authoritative.get("model_labels") or {})
     result_id = authoritative.get("result_id") or result_id
 
     doc_id = _bookmark_document_id(question, data.get("bookmarkId"))
@@ -578,13 +625,15 @@ def save_bookmark_consensus(request: Request, payload: BookmarkConsensusRequest)
         dataToMerge["share_result_id"] = ""
     elif result_id:
         dataToMerge["share_result_id"] = result_id
-    if consensus_model:
-        dataToMerge["consensus_model"] = consensus_model
-    clean_labels = share_snapshots.sanitize_model_labels(
-        model_labels, share_snapshots.PROVIDER_ORDER
+    dataToMerge["vote_subject_id"] = str(
+        authoritative.get("vote_subject_id") or result_id or ""
     )
-    if clean_labels:
-        dataToMerge["model_labels"] = clean_labels
+    dataToMerge["included_providers"] = included_providers
+    dataToMerge["consensus_model"] = consensus_model
+    clean_labels = share_snapshots.sanitize_model_labels(
+        authoritative_labels, included_providers
+    )
+    dataToMerge["model_labels"] = clean_labels
     
     try:
         doc_ref = (
@@ -645,10 +694,18 @@ def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
     compared = responses.get("differences_data")
     compared = compared.get("models_compared") if isinstance(compared, dict) else []
     compared = set(compared) if isinstance(compared, list) else set()
-    included_providers = [
-        provider for provider in share_snapshots.PROVIDER_ORDER
-        if str(responses.get(provider) or "").strip() or provider in compared
-    ]
+    stored_providers = bookmark.get("included_providers")
+    included_providers = (
+        [
+            provider for provider in share_snapshots.PROVIDER_ORDER
+            if isinstance(stored_providers, list) and provider in stored_providers
+        ]
+        if isinstance(stored_providers, list)
+        else [
+            provider for provider in share_snapshots.PROVIDER_ORDER
+            if str(responses.get(provider) or "").strip() or provider in compared
+        ]
+    )
     payload = share_snapshots.build_pending_result(
         uid=uid,
         question=question,
@@ -662,11 +719,26 @@ def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
     )
     if payload is None:
         raise HTTPException(status_code=400, detail="This bookmark cannot be shared.")
+    vote_subject_id = str(
+        bookmark.get("vote_subject_id") or existing_id or "bookmark:" + bookmark_id
+    )
+    payload["vote_subject_id"] = vote_subject_id
     try:
         result_id = share_snapshots.save_pending_result(payload, db=db_firestore)
-        doc_ref.set({"share_result_id": result_id}, merge=True)
+        persistence_guard.write_bookmark(
+            uid=uid,
+            doc_ref=doc_ref,
+            patch={
+                "share_result_id": result_id,
+                "vote_subject_id": vote_subject_id,
+            },
+            db=db_firestore,
+        )
     except Exception as exc:
-        logging.exception("prepare_bookmark_share_result failed")
+        logging.error(
+            "prepare_bookmark_share_result failed category=%s",
+            safe_exception(exc),
+        )
         raise HTTPException(status_code=500, detail="Could not prepare bookmark for sharing.") from exc
     return {"status": "success", "result_id": result_id, "created": True}
 
@@ -708,9 +780,10 @@ def delete_bookmark(data: BookmarkDeleteRequest):
             _chat_store().delete_chat(uid, chat_id)
         except ChatNotFound:
             pass
-        except Exception:
-            logging.exception(
-                "Bookmark deleted but chat cascade failed for uid=%s", uid
+        except Exception as exc:
+            logging.error(
+                "Bookmark deleted but chat cascade failed category=%s",
+                safe_exception(exc),
             )
 
     return {"status": "success", "message": "Bookmark deleted."}

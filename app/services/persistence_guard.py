@@ -22,6 +22,7 @@ MAX_BOOKMARK_BYTES_PER_USER = 25_000_000
 FEEDBACK_COOLDOWN_SECONDS = 30
 MAX_FEEDBACK_PER_UTC_DAY = 10
 VOTES_COLLECTION = "model_votes"
+ACCOUNT_DELETION_JOBS_COLLECTION = "account_deletion_jobs"
 
 
 class PersistenceLimitError(RuntimeError):
@@ -29,6 +30,10 @@ class PersistenceLimitError(RuntimeError):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+class AccountDeletionInProgress(RuntimeError):
+    """Raised when a user-owned write races full-account deletion."""
 
 
 def utcnow() -> datetime:
@@ -112,6 +117,41 @@ def _run_transaction(db, operation):
     return run(transaction)
 
 
+def ensure_account_write_allowed(
+    *, uid: str, db, transaction=None, now: datetime | None = None
+) -> None:
+    """Fence a user-owned write against the durable deletion tombstone.
+
+    The tombstone read must share the Firestore transaction used for the
+    mutation. If the write commits first, the later deletion sweep observes
+    it; if deletion commits first, Firestore retries this transaction against
+    the tombstone and the mutation is rejected.
+    """
+    uid = str(uid or "").strip()
+    if not uid:
+        raise ValueError("uid must not be empty")
+    snapshot = _get(
+        db.collection(ACCOUNT_DELETION_JOBS_COLLECTION).document(uid),
+        transaction,
+    )
+    if not snapshot.exists:
+        return
+    deletion = snapshot.to_dict() or {}
+    status = deletion.get("status")
+    if status == "pending":
+        raise AccountDeletionInProgress("Account deletion is in progress")
+    if status != "completed":
+        return
+    expires_at = deletion.get("tombstone_expires_at")
+    current = (now or utcnow()).astimezone(timezone.utc)
+    if (
+        not isinstance(expires_at, datetime)
+        or expires_at.tzinfo is None
+        or expires_at.astimezone(timezone.utc) > current
+    ):
+        raise AccountDeletionInProgress("Account deletion is in progress")
+
+
 def _bookmark_bootstrap(bookmarks) -> tuple[int, int]:
     count = total_bytes = 0
     for snapshot in bookmarks.stream():
@@ -123,18 +163,19 @@ def _bookmark_bootstrap(bookmarks) -> tuple[int, int]:
 
 def write_bookmark(*, uid: str, doc_ref, patch: dict, db) -> dict:
     """Merge one bookmark while enforcing persistent count/byte quotas."""
-    try:
-        bookmarks = db.collection("users").document(uid).collection("bookmarks")
-        usage_ref = db.collection(USAGE_COLLECTION).document(_owner_key("bookmarks", uid))
-        usage_exists = _get(usage_ref).exists
-    except Exception:
-        # Preserve compatibility with deliberately tiny test doubles. Real
-        # Firestore clients always support the quota collection.
+    if not hasattr(db, "transaction") and not hasattr(db, "run_transaction"):
+        # Explicit seam for the route-level tiny fakes. Production Firestore
+        # always exposes transactions; quota-access failures on a capable
+        # client are deliberately not caught and therefore fail closed.
         doc_ref.set(patch, merge=True)
         return _get(doc_ref).to_dict() or {}
+    bookmarks = db.collection("users").document(uid).collection("bookmarks")
+    usage_ref = db.collection(USAGE_COLLECTION).document(_owner_key("bookmarks", uid))
+    usage_exists = _get(usage_ref).exists
     bootstrap = _bookmark_bootstrap(bookmarks) if not usage_exists else (0, 0)
 
     def persist(tx):
+        ensure_account_write_allowed(uid=uid, db=db, transaction=tx)
         current_snapshot = _get(doc_ref, tx)
         current = current_snapshot.to_dict() or {} if current_snapshot.exists else {}
         usage_snapshot = _get(usage_ref, tx)
@@ -177,15 +218,18 @@ def write_bookmark(*, uid: str, doc_ref, patch: dict, db) -> dict:
 
 
 def delete_bookmark(*, uid: str, doc_ref, db) -> dict | None:
-    try:
-        usage_ref = db.collection(USAGE_COLLECTION).document(_owner_key("bookmarks", uid))
-    except (AttributeError, AssertionError):
+    if not hasattr(db, "transaction") and not hasattr(db, "run_transaction"):
         snapshot = _get(doc_ref)
         current = snapshot.to_dict() or {} if snapshot.exists else None
         doc_ref.delete()
         return current
+    bookmarks = db.collection("users").document(uid).collection("bookmarks")
+    usage_ref = db.collection(USAGE_COLLECTION).document(_owner_key("bookmarks", uid))
+    usage_exists = _get(usage_ref).exists
+    bootstrap = _bookmark_bootstrap(bookmarks) if not usage_exists else (0, 0)
 
     def remove(tx):
+        ensure_account_write_allowed(uid=uid, db=db, transaction=tx)
         snapshot = _get(doc_ref, tx)
         if not snapshot.exists:
             return None
@@ -196,19 +240,30 @@ def delete_bookmark(*, uid: str, doc_ref, db) -> dict | None:
         _delete(tx, doc_ref)
         _set(tx, usage_ref, {
             "schema_version": 1,
-            "bookmark_count": max(0, int(usage.get("bookmark_count") or 1) - 1),
-            "bookmark_bytes": max(0, int(usage.get("bookmark_bytes") or size) - size),
+            "bookmark_count": max(
+                0, int(usage.get("bookmark_count") or bootstrap[0]) - 1
+            ),
+            "bookmark_bytes": max(
+                0, int(usage.get("bookmark_bytes") or bootstrap[1]) - size
+            ),
             "updated_at": utcnow(),
         })
         return current
 
-    try:
-        return _run_transaction(db, remove)
-    except (AttributeError, AssertionError):
-        snapshot = _get(doc_ref)
-        current = snapshot.to_dict() or {} if snapshot.exists else None
-        doc_ref.delete()
-        return current
+    return _run_transaction(db, remove)
+
+
+def create_pro_beta_request(*, uid: str, doc_ref, payload: dict, db) -> bool:
+    """Create one owner-bound waitlist row exactly once behind the delete fence."""
+
+    def persist(tx):
+        ensure_account_write_allowed(uid=uid, db=db, transaction=tx)
+        if _get(doc_ref, tx).exists:
+            return False
+        _set(tx, doc_ref, payload)
+        return True
+
+    return bool(_run_transaction(db, persist))
 
 
 def create_feedback(*, uid: str, feedback: dict, db, now: datetime | None = None) -> None:
@@ -218,6 +273,7 @@ def create_feedback(*, uid: str, feedback: dict, db, now: datetime | None = None
     feedback_ref = db.collection("feedback").document()
 
     def persist(tx):
+        ensure_account_write_allowed(uid=uid, db=db, transaction=tx)
         snapshot = _get(state_ref, tx)
         state = snapshot.to_dict() or {} if snapshot.exists else {}
         last = state.get("last_submitted_at")
@@ -246,25 +302,33 @@ def record_model_vote(
 
     now = now or utcnow()
     pending_ref = db.collection(share_snapshots.PENDING_COLLECTION).document(result_id)
-    vote_key = hashlib.sha256(f"{uid}:{result_id}:{vote_type}".encode("utf-8")).hexdigest()
-    vote_ref = db.collection(VOTES_COLLECTION).document(vote_key)
     leaderboard_ref = db.collection("leaderboard").document(model)
 
     def persist(tx):
+        ensure_account_write_allowed(uid=uid, db=db, transaction=tx)
         pending_snapshot = _get(pending_ref, tx)
         if not pending_snapshot.exists:
             raise PersistenceLimitError("invalid_vote_run", "Completed result not found.")
         pending = pending_snapshot.to_dict() or {}
         expires_at = pending.get("expires_at")
-        if pending.get("owner_uid") != uid or (
-            isinstance(expires_at, datetime) and expires_at < now
-        ):
+        valid_expiry = bool(
+            isinstance(expires_at, datetime)
+            and expires_at.tzinfo is not None
+            and expires_at.astimezone(timezone.utc)
+            >= now.astimezone(timezone.utc)
+        )
+        if pending.get("owner_uid") != uid or not valid_expiry:
             raise PersistenceLimitError("invalid_vote_run", "Completed result not found.")
         best_model = str((pending.get("differences_data") or {}).get("best_model") or "")
         if best_model == "Claude":
             best_model = "Anthropic"
         if best_model != model:
             raise PersistenceLimitError("invalid_vote_model", "Vote does not match the completed result.")
+        vote_subject_id = str(pending.get("vote_subject_id") or result_id).strip()
+        vote_key = hashlib.sha256(
+            f"{uid}:{vote_subject_id}:{vote_type}".encode("utf-8")
+        ).hexdigest()
+        vote_ref = db.collection(VOTES_COLLECTION).document(vote_key)
         vote_snapshot = _get(vote_ref, tx)
         if vote_snapshot.exists:
             return False
@@ -272,6 +336,7 @@ def record_model_vote(
             "schema_version": 1,
             "owner_hash": _hash_uid(uid),
             "result_id": result_id,
+            "vote_subject_id": vote_subject_id,
             "model": model,
             "vote_type": vote_type,
             "created_at": now,

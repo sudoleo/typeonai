@@ -15,6 +15,8 @@ from typing import Mapping
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from app.core.observability import safe_exception
+
 
 DEFAULT_ADMIN_URL = "https://www.consens.io/admin#seo"
 _CRITICAL_DEDUPE_SECONDS = 10 * 60
@@ -68,7 +70,11 @@ def call_bot_api(method: str, payload: dict, *, timeout: int = 30) -> dict:
             raw = response.read()
         decoded = json.loads(raw or b"{}")
     except HTTPError as exc:
-        logging.warning("Telegram Bot API %s failed with HTTP %s", method, exc.code)
+        logging.warning(
+            "Telegram Bot API %s failed category=%s",
+            method,
+            safe_exception(exc),
+        )
         return {
             "status": "failed_http", "http_status": int(exc.code),
             "attempted_at": attempted_at,

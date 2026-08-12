@@ -1,7 +1,6 @@
 import asyncio
 import os
 import logging
-import traceback
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -23,6 +22,7 @@ from app.core.observability import (
     CorrelationMiddleware,
     configure_logging,
     metrics_snapshot,
+    safe_exception,
 )
 configure_logging()
 from app.core.security import CustomSecurityMiddleware, db_firestore
@@ -69,9 +69,19 @@ from app.services.telegram_notifier import send_critical_error_notification
 def _load_startup_configuration() -> None:
     """Load the only readiness-critical document with its SDK-side 5s budget."""
     try:
-        load_models_from_db()
-    except Exception:
-        logging.exception("load_models_from_db failed on startup; using code defaults")
+        # Readiness waits for one bounded read only.  Schema backfills and the
+        # initial document create are writes and run as a supervised one-shot
+        # after the lifespan yields control to the server.
+        load_models_from_db(persist_backfill=False)
+    except Exception as exc:
+        logging.error(
+            "load_models_from_db failed on startup; using code defaults category=%s",
+            safe_exception(exc),
+        )
+
+
+def _backfill_startup_configuration() -> None:
+    load_models_from_db(strict=True, persist_backfill=True)
 
 async def _disabled_loop() -> None:
     return None
@@ -122,6 +132,9 @@ async def lifespan(app: FastAPI):
     api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
     account_deletion = FirestoreAccountDeletion(db_firestore)
     _load_startup_configuration()
+    model_config_backfill_task = _one_shot_task(
+        _backfill_startup_configuration, "model-configuration-backfill"
+    )
     lineage_backfill_task = _one_shot_task(
         backfill_publisher_watch_lineage, "publisher-watch-lineage-backfill"
     )
@@ -153,6 +166,7 @@ async def lifespan(app: FastAPI):
         retention_task,
         api_account_cleanup_task,
         account_deletion_task,
+        model_config_backfill_task,
         lineage_backfill_task,
         telegram_webhook_task,
     )
@@ -230,19 +244,20 @@ async def handle_validation_exception(request, exc: RequestValidationError):
 
 @app.exception_handler(Exception)
 async def handle_unexpected_exception(request, exc: Exception):
-    logging.exception(
-        "Unhandled request exception for %s %s",
+    route = getattr(request.scope.get("route"), "path", "unmatched")
+    category = safe_exception(exc)
+    logging.error(
+        "Unhandled request exception method=%s route=%s category=%s",
         request.method,
-        request.url.path,
-        exc_info=exc,
+        route,
+        category,
     )
     report = {
         "source": "server",
-        "type": type(exc).__name__,
+        "type": category,
         "phase": "request",
-        "message": str(exc) or "Unhandled server exception",
-        "path": f"{request.method} {request.url.path}",
-        "stack": "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+        "message": "Unhandled server exception.",
+        "path": f"{request.method} {route}",
     }
     return JSONResponse(
         status_code=500,

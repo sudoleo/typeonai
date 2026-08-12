@@ -23,6 +23,7 @@ from app.services.chat_store import (
     normalize_turn_differences_data,
     normalize_turn_sources,
 )
+from app.services import persistence_guard
 from app.services.llm.consensus_engine import query_engine_json
 
 
@@ -515,6 +516,9 @@ class FirestoreChatContextRepository:
         lease_nonce = secrets.token_hex(16)
 
         def operation(transaction):
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid, db=self.db, transaction=transaction
+            )
             target_snapshot = target_ref.get(transaction=transaction)
             version_snapshot = version_ref.get(transaction=transaction)
             if not target_snapshot.exists:
@@ -543,6 +547,9 @@ class FirestoreChatContextRepository:
         target_ref = self._turn_ref(uid, chat_id, turn_id)
 
         def operation(transaction):
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid, db=self.db, transaction=transaction
+            )
             target_snapshot = target_ref.get(transaction=transaction)
             version_snapshot = version_ref.get(transaction=transaction)
             if not target_snapshot.exists or not version_snapshot.exists:

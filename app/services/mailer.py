@@ -12,6 +12,7 @@ import ssl
 from email.message import EmailMessage
 from datetime import datetime, timezone
 
+from app.core.observability import safe_exception
 from app.services.llm.mock_llm import mock_llm_enabled
 
 
@@ -59,8 +60,11 @@ def _deliver(message: EmailMessage) -> bool:
                     smtp.login(config["user"], config["password"])
                 smtp.send_message(message)
         return True
-    except Exception:
-        logging.exception("Consensus Watch mail delivery failed")
+    except Exception as exc:
+        logging.error(
+            "Consensus Watch mail delivery failed category=%s",
+            safe_exception(exc),
+        )
         return False
 
 

@@ -7,6 +7,7 @@ from datetime import timedelta
 
 import pytest
 
+from app.services import persistence_guard
 from app.services.api_run_repository import (
     API_RUN_RETENTION_DAYS,
     ApiRunConflict,
@@ -135,6 +136,19 @@ def test_same_key_with_different_request_conflicts():
     create(repo)
     with pytest.raises(ApiRunConflict):
         create(repo, question="Different")
+
+
+def test_pending_account_deletion_fences_api_run_creation():
+    repo, db = make_repo()
+    db.documents[(persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION, "user-1")] = {
+        "status": "pending"
+    }
+    before = deepcopy(db.documents)
+
+    with pytest.raises(persistence_guard.AccountDeletionInProgress):
+        create(repo)
+
+    assert db.documents == before
 
 
 def test_only_one_concurrent_worker_can_claim_running():

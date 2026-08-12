@@ -133,22 +133,48 @@ def test_cross_module_frontend_state_has_enforced_owners_and_no_direct_writers()
     assert template.index("/static/js/consensus-anchor.js") < template.index("/static/js/consensus-insights.js")
 
 
-def test_app_and_admin_templates_are_external_script_surfaces():
+def test_privileged_app_and_admin_templates_are_external_script_surfaces():
     inline_script = re.compile(r"<script(?![^>]*\bsrc=)[^>]*>", re.I)
     inline_handler = re.compile(r"\son[a-z]+\s*=", re.I)
-    for name in ("templates/index.html", "templates/admin.html"):
+    for name in (
+        "templates/index.html",
+        "templates/admin.html",
+        "templates/admin_benchmark.html",
+    ):
         html = source(name)
         assert not inline_script.search(html)
         assert not inline_handler.search(html)
         assert "<style" not in html
+        assert not re.search(r"\sstyle\s*=", html, re.I)
     admin = source("templates/admin.html")
     assert len(admin.splitlines()) < 700
-    assert "/static/css/admin.css?v=20260811-phase6" in admin
+    assert "/static/css/admin.css?v=20260812-auditfix" in admin
     assert "/static/js/admin.js?v=20260811-phase6" in admin
     assert "createAdminClient" in source("static/js/admin.js")
+    benchmark = source("templates/admin_benchmark.html")
+    assert 'id="adminBootstrapConfig"' in benchmark
+    for attribute, value in (
+        ("firebase-api-key", "firebase_api_key"),
+        ("firebase-auth-domain", "firebase_auth_domain"),
+        ("firebase-project-id", "firebase_project_id"),
+        ("firebase-storage-bucket", "firebase_storage_bucket"),
+        ("firebase-messaging-sender-id", "firebase_messaging_sender_id"),
+        ("firebase-app-id", "firebase_app_id"),
+    ):
+        assert f'data-{attribute}="{{{{ {value} | e }}}}"' in benchmark
+    assert "window.FIREBASE_CONFIG" not in benchmark
+    assert "/static/css/admin-benchmark.css?v=20260812-auditfix" in benchmark
+    assert "/static/js/admin-benchmark.js?v=20260812-auditfix" in benchmark
+    assert benchmark.index("/static/js/admin-config.js") < benchmark.index(
+        "/static/js/admin-benchmark.js"
+    )
+    benchmark_js = source("static/js/admin-benchmark.js")
+    assert 'import { initializeApp } from "https://www.gstatic.com/firebasejs/' in benchmark_js
+    assert "fill.style.width" in benchmark_js
+    assert "{ style:" not in benchmark_js
 
 
-def test_app_and_admin_receive_strict_script_csp():
+def test_app_and_all_admin_pages_receive_strict_script_csp():
     app = FastAPI()
     app.add_middleware(CustomSecurityMiddleware)
 
@@ -157,12 +183,15 @@ def test_app_and_admin_receive_strict_script_csp():
         return {"path": path}
 
     client = TestClient(app)
-    for path in ("/app", "/app/watches", "/admin"):
+    for path in ("/app", "/app/watches", "/admin", "/admin/benchmark", "/admin/nested/page"):
         csp = client.get(path).headers["content-security-policy"]
         script_src = csp.split("script-src", 1)[1].split(";", 1)[0]
         assert "'unsafe-inline'" not in script_src
-    public_script_src = client.get("/").headers["content-security-policy"].split("script-src", 1)[1].split(";", 1)[0]
-    assert "'unsafe-inline'" in public_script_src
+    for path in ("/", "/administrator"):
+        public_script_src = client.get(path).headers["content-security-policy"].split(
+            "script-src", 1
+        )[1].split(";", 1)[0]
+        assert "'unsafe-inline'" in public_script_src
 
 
 def test_consensus_visuals_are_shared_and_dead_dom_contracts_are_gone():
