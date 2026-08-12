@@ -15,6 +15,11 @@ from app.services.llm.mock_llm import mock_llm_enabled
 
 
 TOPIC_SCHEDULER_INTERVAL_SECONDS = 60
+# How far back a claim may have been stated and still be recognised as the
+# same claim when it reappears, and how many claims the identity Judge is
+# asked to consider at once.
+KNOWN_CLAIM_RUNS = 8
+MAX_KNOWN_CLAIMS = 24
 
 
 def _guard_mock_mode() -> None:
@@ -121,6 +126,25 @@ def opinion_changes_from_maps(current: dict, previous: dict) -> list[dict]:
     return changes
 
 
+def known_claims_from_runs(runs) -> list[dict]:
+    """The current wording of every claim the Topic already tracks.
+
+    Newest wording wins, so the identity Judge compares against how a claim is
+    stated today rather than how it was stated when it entered the record.
+    """
+    claims: dict[str, dict] = {}
+    for run in reversed(list(runs or [])):
+        for dimension in (run.get("opinion_map") or {}).get("dimensions") or []:
+            key = str(dimension.get("key") or "").strip()
+            label = str(dimension.get("label") or "").strip()
+            if not key or not label or key in claims:
+                continue
+            claims[key] = {"key": key, "label": label}
+            if len(claims) >= MAX_KNOWN_CLAIMS:
+                return list(claims.values())
+    return list(claims.values())
+
+
 def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
                           now=None, executor=None) -> dict:
     """Collect sources, run the selected models, and persist one immutable point."""
@@ -132,6 +156,7 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
         topics.get_run(claimed["id"], str(claimed.get("latest_run_id") or ""), db=db)
         or {}
     )
+    recent = topics.list_runs(claimed["id"], db=db, max_items=KNOWN_CLAIM_RUNS)
     run_config = claimed.get("run_config") or {}
     try:
         result = executor(
@@ -139,6 +164,8 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
             str(previous.get("consensus_md") or ""),
             previous_opinion_map=previous.get("opinion_map"),
             model_overrides=run_config.get("provider_models"),
+            known_claims=known_claims_from_runs(recent),
+            claim_key_prefix=str(claimed.get("current_run_id") or ""),
         )
         changed = bool(result.get("changed"))
         change_type = (

@@ -4,6 +4,12 @@
   {% if item.host %}<img class="src-favicon-img" src="/api/topics/favicon?d={{ item.host | urlencode }}" alt="" loading="lazy" width="22" height="22" referrerpolicy="no-referrer">{% endif %}
 </span>
 {%- endmacro %}
+{% macro src_age(item) -%}
+{%- if item.last_display %}<span class="src-age is-retired">Last cited {{ item.last_display }}</span>
+{%- elif item.is_new %}<span class="src-age is-new">New in this check</span>
+{%- elif item.first_display and item.appearances and item.appearances > 1 %}<span class="src-age">Cited since {{ item.first_display }}</span>
+{%- endif %}
+{%- endmacro %}
 {% macro source_embed(item, anchored=false) -%}
 {% set num = item.id[1:] if item.id and item.id[0] in 'Ss' else item.id %}
 <a class="src-embed src-{{ item.role }} is-quality-{{ item.quality }}{% if item.is_video %} src-video{% endif %}"{% if anchored %} id="src-{{ num }}"{% endif %} href="{{ item.url }}" target="_blank" rel="nofollow noopener noreferrer">
@@ -25,6 +31,7 @@
       {{ src_favicon(item) }}
       <span class="src-site">{{ item.site or item.host or item.publisher }}</span>
       <span class="src-badge">{{ item.role_label }}</span>
+      {{ src_age(item) }}
     </span>
     {% if item.show_title %}<strong class="src-title">{{ item.title }}</strong>{% endif %}
     {% if item.excerpt %}<p class="src-excerpt">{{ item.excerpt }}</p>{% endif %}
@@ -36,6 +43,7 @@
       {{ src_favicon(item) }}
       <span class="src-site">{{ item.site or item.host or item.publisher }}</span>
       <span class="src-badge">{{ item.role_label }}</span>
+      {{ src_age(item) }}
     </span>
     {% if item.show_title %}<strong class="src-title">{{ item.title }}</strong>{% endif %}
     {% if item.excerpt %}<p class="src-excerpt">{{ item.excerpt }}</p>{% endif %}
@@ -47,6 +55,53 @@
   {% endif %}
   <span class="src-quality-label">{{ item.quality_label }}</span>
 </a>
+{%- endmacro %}
+{% macro claim_row(claim, checks) -%}
+<li class="claim-row{% if claim.contested %} is-contested{% endif %}{% if claim.is_new %} is-new{% endif %}{% if not claim.holding %} is-retired{% endif %}">
+  <p class="claim-label">{{ claim.label }}</p>
+  <div class="claim-meta">
+    {% if not claim.holding %}
+    <span class="claim-flag is-retired">Last stated {{ claim.last_display }}</span>
+    <span class="claim-flag">Held {{ claim.appearances }} of {{ checks }} checks</span>
+    {% elif claim.is_new %}
+    <span class="claim-flag is-new">New since {{ claim.first_display }}</span>
+    {% else %}
+    <span class="claim-flag">Held {{ claim.streak }} of {{ checks }} checks</span>
+    {% endif %}
+    {% if claim.contested %}<span class="claim-flag is-split">Models split</span>{% endif %}
+    {% if claim.partial %}<span class="claim-flag is-partial">Stated by {{ claim.model_count }} of {{ claim.run_model_count }} models</span>{% endif %}
+  </div>
+  {% if claim.contested and claim.positions | length > 1 %}
+  <div class="claim-positions">
+    {% for position in claim.positions %}
+    <div class="claim-position">
+      <p>{{ position.stance }}</p>
+      <ul>{% for model in position.models %}<li>{{ model }}</li>{% endfor %}</ul>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <span class="claim-lifeline" role="img"
+        aria-label="Stated in {{ claim.appearances }} of {{ checks }} checks, first on {{ claim.first_display }}, last on {{ claim.last_display }}">
+    {% for tick in claim.lifeline %}<i class="is-{{ tick.state }}" title="{{ tick.date }} &middot; {% if tick.state == 'on' %}stated{% elif tick.state == 'gap' %}check listed no claims{% else %}not stated{% endif %}"></i>{% endfor %}
+  </span>
+</li>
+{%- endmacro %}
+{% macro timeline_row(run, slug, latest_run_id) -%}
+<li class="is-{{ run.change_type }}{% if run.is_selected %} is-selected{% endif %}">
+  <a href="/topics/{{ slug }}{% if run.id != latest_run_id %}?version={{ run.id }}{% endif %}">
+    <span class="timeline-dot"></span>
+    <span class="timeline-copy">
+      <strong>{{ run.date_display }}</strong>
+      <small>{{ run.change_summary or "No material change" }}</small>
+      {% if run.opinion_changes %}<em>{{ run.opinion_changes | length }} opinion change{{ "s" if run.opinion_changes | length != 1 }}</em>{% endif %}
+    </span>
+    <span class="timeline-score">
+      <strong>{{ run.agreement_score }}</strong>
+      <i><b style="width: {{ run.agreement_score }}%"></b></i>
+    </span>
+  </a>
+</li>
 {%- endmacro %}
 <!DOCTYPE html>
 <html lang="en">
@@ -68,7 +123,7 @@
   <title>{{ page_title }} | consens.io</title>
   <script type="application/ld+json">{{ jsonld | safe }}</script>
 <link rel="stylesheet" href="/static/css/public-pages.css?v=20260801-question-clamp1">
-  <link rel="stylesheet" href="/static/css/topics.css?v=20260731-inter1">
+  <link rel="stylesheet" href="/static/css/topics.css?v=20260812-ledger1">
   <link rel="stylesheet" href="/static/css/public-shell.css?v=20260731-inter1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
@@ -106,6 +161,29 @@
           <small>out of 100</small>
         </div>
       </div>
+      {% if record %}
+      <div class="topic-record-strip{% if record.changed_now %} is-moved{% endif %}">
+        <p class="eyebrow">The record</p>
+        {% if record.changed_now %}
+        <strong>The consensus moved in the latest check.</strong>
+        {% elif record.steady_checks %}
+        <strong>Unchanged through {{ record.steady_checks }} check{{ "s" if record.steady_checks != 1 }}{% if record.steady_days %}, {{ record.steady_days }} day{{ "s" if record.steady_days != 1 }}{% endif %}.</strong>
+        {% else %}
+        <strong>First check on this question.</strong>
+        {% endif %}
+        <p class="topic-record-detail">
+          {% if record.material_count %}
+          Last material change on {{ record.anchor_display }}{% if record.anchor_run_id and record.anchor_run_id != selected.id %} (<a href="/topics/{{ topic.slug }}?version={{ record.anchor_run_id }}">open that version</a>){% endif %}.
+          {% else %}
+          No material change since the first check on {{ record.first_display }}.
+          {% endif %}
+          {{ record.checks }} check{{ "s" if record.checks != 1 }} kept in full{% if sources.tracked_count %}, {{ sources.tracked_count }} source{{ "s" if sources.tracked_count != 1 }} dated{% endif %}.
+        </p>
+        {% if record.material_count and record.anchor_summary %}
+        <p class="topic-record-anchor">{{ record.anchor_summary }}</p>
+        {% endif %}
+      </div>
+      {% endif %}
       <ul class="share-scoreboard-facts topic-scoreboard-facts">
         {% if scoreboard.model_count %}<li><b>{{ scoreboard.model_count }}</b> AI models</li>{% endif %}
         {% if scoreboard.contradiction_count %}<li class="is-contradiction"><b>{{ scoreboard.contradiction_count }}</b> contradiction{{ "s" if scoreboard.contradiction_count != 1 }}</li>{% endif %}
@@ -123,6 +201,54 @@
 
     <div class="topic-detail-layout">
       <article class="topic-main-column">
+        {% if ledger %}
+        <section class="legal-panel topic-panel topic-ledger" id="record">
+          <div class="topic-panel-head">
+            <div>
+              <p class="eyebrow">Claim ledger</p>
+              <h2>What has held, and what moved</h2>
+            </div>
+            <div class="topic-ledger-count">
+              <strong>{{ ledger.checks }}</strong>
+              <span>check{{ "s" if ledger.checks != 1 }} since {{ ledger.tracked_since }}</span>
+            </div>
+          </div>
+          <p class="topic-panel-lead">Every check splits the answer into individual claims. This is each claim's life in the record: when it entered, how long it has held, whether the models split on it, and whether it is still stated. A single answer from a single model shows you none of that.{% if ledger.thin %} {{ ledger.thin }} of the {{ ledger.checks }} checks listed no claims and count as gaps, not as absences.{% endif %}</p>
+
+          {% if ledger.new %}
+          <div class="claim-group is-new">
+            <h3>New in the record<b>{{ ledger.new | length }}</b></h3>
+            <p class="claim-group-note">First stated within the last {{ ledger.enumerated if ledger.enumerated < 3 else 3 }} checks. New claims are the least tested part of this answer.</p>
+            <ul class="claim-list">{% for claim in ledger.new %}{{ claim_row(claim, ledger.enumerated) }}{% endfor %}</ul>
+          </div>
+          {% endif %}
+
+          {% if ledger.contested %}
+          <div class="claim-group is-contested">
+            <h3>Contested<b>{{ ledger.contested | length }}</b></h3>
+            <p class="claim-group-note">Still in the answer, but the models do not state it the same way.</p>
+            <ul class="claim-list">{% for claim in ledger.contested %}{{ claim_row(claim, ledger.enumerated) }}{% endfor %}</ul>
+          </div>
+          {% endif %}
+
+          {% if ledger.holding %}
+          <div class="claim-group is-holding">
+            <h3>Holding<b>{{ ledger.holding | length }}</b></h3>
+            <p class="claim-group-note">Still stated in the newest check. The longest unbroken run of restatements on this Topic stands at {{ ledger.longest_streak }} check{{ "s" if ledger.longest_streak != 1 }}.</p>
+            <ul class="claim-list">{% for claim in ledger.holding %}{{ claim_row(claim, ledger.enumerated) }}{% endfor %}</ul>
+          </div>
+          {% endif %}
+
+          {% if ledger.retired %}
+          <div class="claim-group is-retired">
+            <h3>No longer stated<b>{{ ledger.retired_count }}</b></h3>
+            <p class="claim-group-note">Stated in more than one earlier check, absent from this snapshot. Nothing here was retracted &mdash; the models simply stopped saying it.{% if ledger.one_off_count %} A further {{ ledger.one_off_count }} claim{{ "s" if ledger.one_off_count != 1 }} appeared in a single check only and {{ "are" if ledger.one_off_count != 1 else "is" }} left out as one-off phrasing.{% endif %}</p>
+            <ul class="claim-list">{% for claim in ledger.retired %}{{ claim_row(claim, ledger.enumerated) }}{% endfor %}</ul>
+          </div>
+          {% endif %}
+        </section>
+        {% endif %}
+
         <details class="legal-panel topic-analysis-disclosure" open>
           <summary>
             <span><small>Full dossier</small><strong>Consensus, model positions, score history and current sources</strong></span>
@@ -250,18 +376,20 @@
               <text class="watch-date-label" x="622" y="184" text-anchor="end">{{ history.end_date }}</text>
             </svg>
           </div>
-          {% if history.events %}
+          {% if record and record.material_events %}
           <ol class="watch-events">
-            {% for event in history.events %}
+            {% for event in record.material_events %}
             <li>
-              <time datetime="{{ event.ts.isoformat() }}">{{ event.ts.strftime("%Y-%m-%d") }}</time>
+              <time datetime="{{ event.iso }}">{{ event.display }}</time>
               <strong>{{ event.agreement_score }}/100</strong>
-              {% if event.severity == "major" %}<span class="watch-event-major">Major</span>{% endif %}
-              {% if event.change_summary %}<p>{{ event.change_summary }}</p>{% endif %}
+              {% if event.change_type == "major" %}<span class="watch-event-major">Major</span>{% endif %}
+              {% if event.summary %}<p>{{ event.summary }}</p>{% endif %}
               {% if event.run_id and event.run_id != selected.id %}<a class="watch-version-link" href="/topics/{{ topic.slug }}?version={{ event.run_id }}">View this version</a>{% endif %}
             </li>
             {% endfor %}
           </ol>
+          {% else %}
+          <p class="topic-empty">No check in this window was graded a material change. The steps in the curve are wording-level differences between two answers that say the same thing &mdash; the score moves between a small set of grading levels, so a step on its own is not a shift in substance.</p>
           {% endif %}
         </section>
         {% endif %}
@@ -290,8 +418,14 @@
         <section class="legal-panel topic-panel topic-sources-panel" id="evidence">
           <div class="topic-panel-head">
             <div><p class="eyebrow">Embedded sources</p><h2>Where this snapshot comes from</h2></div>
-            {% if selected.evidence %}<span class="topic-sources-count">{{ selected.evidence | length }} source{{ "s" if selected.evidence | length != 1 }}</span>{% endif %}
+            {% if selected.evidence %}<span class="topic-sources-count">{{ selected.evidence | length }} source{{ "s" if selected.evidence | length != 1 }}{% if sources and sources.new_count %} &middot; {{ sources.new_count }} new{% endif %}</span>{% endif %}
           </div>
+          {% if sources and sources.sites %}
+          <p class="topic-source-sites">
+            <span>Sites the record keeps returning to</span>
+            {% for site in sources.sites %}<b>{{ site.host }}<i>{{ site.checks }}/{{ sources.checks }}</i></b>{% endfor %}
+          </p>
+          {% endif %}
           {% if selected.evidence %}
           {% set featured_evidence = selected.evidence[:5] %}
           {% set remaining_evidence = selected.evidence[5:] %}
@@ -316,22 +450,14 @@
           </div>
         </details>
 
-        {% set history_runs = runs | selectattr("evidence") | rejectattr("is_selected") | list %}
-        {% if history_runs %}
+        {% if sources and sources.retired %}
         <details class="legal-panel topic-panel topic-history-evidence">
-          <summary><span><small>Older sources</small><strong>Browse evidence from {{ history_runs | length }} earlier snapshot{{ "s" if history_runs | length != 1 }}</strong></span><b aria-hidden="true">+</b></summary>
-          <div class="evidence-run-list topic-disclosure-body">
-            {% for run in history_runs %}
-            <section class="evidence-run">
-              <div class="evidence-run-date">
-                <span>{{ run.date_display }}</span>
-                <small>Snapshot {{ run.version }}</small>
-              </div>
-              <div class="evidence-cards">
-                {% for item in run.evidence %}{{ source_embed(item, false) }}{% endfor %}
-              </div>
-            </section>
-            {% endfor %}
+          <summary><span><small>Sources that left the record</small><strong>The links that carried an earlier answer and are no longer cited</strong></span><b aria-hidden="true">+</b></summary>
+          <div class="topic-disclosure-body">
+            <p class="topic-panel-lead">A source dropping out is part of the record too: it was the basis for an earlier version of this answer and is not part of the current one. The models re-run their own web search on every check, so single links come and go; {{ sources.retired_count }} have dropped out in total. The {{ sources.retired | length }} most recently dropped are shown here, dated to their last appearance.</p>
+            <div class="src-embed-grid">
+              {% for item in sources.retired %}{{ source_embed(item, false) }}{% endfor %}
+            </div>
           </div>
         </details>
         {% endif %}
@@ -357,21 +483,26 @@
         <details class="legal-panel topic-timeline-card" open>
           <summary><span><small>Timeline</small><strong>Browse {{ runs | length }} saved snapshot{{ "s" if runs | length != 1 }}</strong></span><b aria-hidden="true">+</b></summary>
           <ol class="topic-timeline">
-            {% for run in runs %}
-            <li class="is-{{ run.change_type }}{% if run.is_selected %} is-selected{% endif %}">
-              <a href="/topics/{{ topic.slug }}{% if run.id != topic.latest_run_id %}?version={{ run.id }}{% endif %}">
-                <span class="timeline-dot"></span>
-                <span class="timeline-copy">
-                  <strong>{{ run.date_display }}</strong>
-                  <small>{{ run.change_summary or "No material change" }}</small>
-                  {% if run.opinion_changes %}<em>{{ run.opinion_changes | length }} opinion change{{ "s" if run.opinion_changes | length != 1 }}</em>{% endif %}
-                </span>
-                <span class="timeline-score">
-                  <strong>{{ run.agreement_score }}</strong>
-                  <i><b style="width: {{ run.agreement_score }}%"></b></i>
-                </span>
-              </a>
+            {% for entry in timeline %}
+            {% if entry.kind == "quiet" %}
+            <li class="topic-timeline-quiet">
+              <details>
+                <summary>
+                  <span class="timeline-dot"></span>
+                  <span class="timeline-copy">
+                    <strong>{{ entry.count }} checks, no material change</strong>
+                    <small>{{ entry.to_display }} &ndash; {{ entry.from_display }}</small>
+                  </span>
+                  <b aria-hidden="true">+</b>
+                </summary>
+                <ol class="topic-timeline is-nested">
+                  {% for run in entry.runs %}{{ timeline_row(run, topic.slug, topic.latest_run_id) }}{% endfor %}
+                </ol>
+              </details>
             </li>
+            {% else %}
+            {{ timeline_row(entry.run, topic.slug, topic.latest_run_id) }}
+            {% endif %}
             {% endfor %}
           </ol>
         </details>

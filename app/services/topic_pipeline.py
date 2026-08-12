@@ -6,11 +6,39 @@ Watch executor or inherit Watch notification, baseline or quota behaviour.
 
 from __future__ import annotations
 
+import logging
+
+from app.core.observability import safe_exception
 from app.services import opinion_map, share_snapshots
 from app.services.consensus_pipeline import run_consensus_pipeline
-from app.services.llm.consensus_engine import query_consensus_change
+from app.services.llm.consensus_engine import query_claim_identity, query_consensus_change
 from app.services.llm.mock_llm import mock_llm_enabled
 from app.services.llm import provider_transport
+
+
+def _stamp_claim_keys(position_map, known_claims, keys, engine, prefix: str) -> None:
+    """Give every claim of this run a stable identity, in place.
+
+    A claim that continues one the Topic already tracks keeps that key; every
+    other claim gets a fresh one derived from the run it entered in. When the
+    identity Judge is unavailable the run still publishes -- the Claim Ledger
+    then falls back to comparing wording, which is how the whole history
+    before this step is read anyway.
+    """
+    dimensions = (position_map or {}).get("dimensions") or []
+    if not dimensions:
+        return
+    labels = [str(dimension.get("label") or "") for dimension in dimensions]
+    matches = {}
+    if known_claims:
+        try:
+            matches = query_claim_identity(known_claims, labels, keys, engine)
+        except Exception as exc:
+            logging.warning(
+                "Topic claim identity skipped category=%s", safe_exception(exc)
+            )
+    for index, dimension in enumerate(dimensions):
+        dimension["key"] = matches.get(index) or f"{prefix or 'c'}-{index}"
 
 
 def execute_topic(
@@ -22,6 +50,8 @@ def execute_topic(
     excluded_providers=None,
     baseline_consensus: str = "",
     model_overrides=None,
+    known_claims=None,
+    claim_key_prefix: str = "",
 ) -> dict:
     keys = provider_transport.developer_keys()
     excluded = {
@@ -75,6 +105,7 @@ def execute_topic(
         previous_opinion_map,
         consensus_changed=bool(change.get("changed")),
     )
+    _stamp_claim_keys(position_map, known_claims, keys, engine, claim_key_prefix)
     model_answers = pipeline["model_answers"]
     model_sources = {
         item["provider"]: item.get("sources") or []

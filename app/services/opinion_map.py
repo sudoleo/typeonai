@@ -44,7 +44,12 @@ def _tokens(value) -> set[str]:
     }
 
 
-def _similarity(left, right) -> float:
+def similarity(left, right) -> float:
+    """Token-overlap similarity of two generated labels (0.0 – 1.0).
+
+    Public because the Claim Ledger chains the same comparison across every
+    stored run instead of only against the direct predecessor.
+    """
     a, b = _tokens(left), _tokens(right)
     if not a and not b:
         return 1.0
@@ -78,11 +83,17 @@ def _dimensions(differences_data: dict, *, allow_single=False) -> list[dict]:
             if stance and models:
                 positions.append({"stance": stance, "models": models})
         if len(positions) >= (1 if allow_single else 2):
-            dimensions.append({
+            dimension = {
                 "label": label,
                 "type": raw.get("type") if raw.get("type") in {"contradiction", "claim"} else "emphasis",
                 "positions": positions,
-            })
+            }
+            # Topics stamp a stable identity on a claim so the Claim Ledger can
+            # follow it across rewordings. Watches never set one.
+            key = _clip(raw.get("key"), 40)
+            if key:
+                dimension["key"] = key
+            dimensions.append(dimension)
     return dimensions
 
 
@@ -140,6 +151,7 @@ def sanitize_opinion_map(value) -> dict | None:
                     "claim": dimension.get("label"),
                     "type": dimension.get("type"),
                     "positions": dimension.get("positions"),
+                    "key": dimension.get("key"),
                 })
         dimensions = _dimensions({"differences": converted}, allow_single=True)
     models = []
@@ -196,7 +208,7 @@ def _match_dimensions(current: list[dict], previous: list[dict]) -> list[tuple[d
         for index, candidate in enumerate(previous):
             if index in used:
                 continue
-            score = _similarity(dimension.get("label"), candidate.get("label"))
+            score = similarity(dimension.get("label"), candidate.get("label"))
             if score > best_score:
                 best_index, best_score = index, score
         if best_index is not None and best_score >= 0.34:
@@ -225,7 +237,7 @@ def _movement_view(dimensions: list[dict], previous=None, *, consensus_changed=N
             if not current_position or not previous_position:
                 continue
             comparable += 1
-            stance_changed = _similarity(
+            stance_changed = similarity(
                 current_position.get("stance"), previous_position.get("stance")
             ) < 0.24
             moved = stance_changed

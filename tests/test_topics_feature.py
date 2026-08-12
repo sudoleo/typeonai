@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 
 import pytest
 from fastapi import FastAPI
@@ -9,7 +10,9 @@ from fastapi.testclient import TestClient
 from app.api.routers import pages as pages_router
 from app.api.routers import topics as topics_router
 from app.core.rate_limit import limiter
-from app.services import follow_challenges, mailer, topic_runner, topics
+from app.services import (
+    follow_challenges, mailer, topic_pipeline, topic_runner, topics,
+)
 from app.services.account_deletion import FirestoreAccountDeletion
 
 
@@ -551,6 +554,11 @@ def test_topic_templates_expose_timeline_evidence_follow_and_admin_controls():
 
     assert 'class="topic-timeline"' in detail
     assert 'id="evidence"' in detail
+    assert 'id="record"' in detail
+    assert 'class="claim-lifeline"' in detail
+    # The record leads; the answer the models give now follows it.
+    assert detail.index("topic-record-strip") < detail.index("topic-ledger")
+    assert detail.index("topic-ledger") < detail.index("topic-analysis-disclosure")
     assert 'id="topicFollowForm"' in detail
     assert 'class="topic-now-grid"' not in detail
     assert 'class="legal-panel topic-analysis-disclosure" open' in detail
@@ -642,6 +650,101 @@ def test_automatic_topic_run_researches_sources_and_builds_timeline_point():
     assert run["evidence"][0]["url"] == "https://openai.com/index/current-update"
     assert run["evidence"][0]["type"] == "primary"
     assert topics.get_topic(topic["id"], db=db)["last_run_status"] == "success"
+
+
+def test_topic_run_carries_the_tracked_claims_into_the_identity_judge(monkeypatch):
+    """A new run has to know which claims the Topic already tracks, otherwise
+    every reworded claim starts a new life in the Claim Ledger."""
+    db = FakeFirestore()
+    topic = topics.create_topic(topic_payload(evidence=[]), actor_uid="admin", db=db, now=NOW)
+    topics.create_run(
+        topic["id"],
+        run_payload(opinion_map={
+            "schema_version": 1,
+            "dimensions": [{
+                "label": "No release date has been announced for GPT-6",
+                "type": "claim",
+                "key": "seed-0",
+                "positions": [{"stance": "No date", "models": ["OpenAI", "Gemini"]}],
+            }],
+            "models": [],
+            "shift_score": 0,
+            "shift_label": "Stable",
+            "center": [],
+        }),
+        actor_uid="admin", db=db, now=NOW,
+    )
+    db.documents[("topics", topic["id"])].update({
+        "current_run_id": "second-run",
+        "claimed_until": NOW,
+        "last_run_status": "running",
+    })
+    stored = topics.get_topic(topic["id"], db=db)
+    claimed = {**stored, "id": topic["id"], "current_run_id": "second-run"}
+    seen = {}
+
+    def execute(question, previous_consensus, **kwargs):
+        seen.update(kwargs)
+        return {
+            "consensus": "## Current consensus\n\nStill no date.",
+            "agreement_score": 82,
+            "changed": False,
+            "severity": "minor",
+            "change_summary": "No material shift.",
+            "opinion_map": {},
+            "differences_data": {},
+            "sources": [],
+            "included_models": ["OpenAI: GPT-5.6", "Google Gemini: Gemini 3.5"],
+        }
+
+    topic_runner.execute_claimed_topic(
+        claimed, actor_uid="admin", db=db, now=NOW, executor=execute
+    )
+
+    assert seen["known_claims"] == [
+        {"key": "seed-0", "label": "No release date has been announced for GPT-6"}
+    ]
+    # The run id keys this run's new claims, so two runs can never collide.
+    assert seen["claim_key_prefix"] == "second-run"
+
+
+def test_claim_identity_falls_back_to_fresh_keys_when_the_judge_is_unavailable():
+    """An unreachable identity Judge may cost the Ledger a link between two
+    wordings. It may never cost the Topic its run."""
+    position_map = {"dimensions": [
+        {"label": "No release date has been announced", "positions": []},
+        {"label": "GPT-5.6 is the frontier line", "positions": []},
+    ]}
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("judge offline")
+
+    with mock.patch.object(topic_pipeline, "query_claim_identity", explode):
+        topic_pipeline._stamp_claim_keys(
+            position_map,
+            [{"key": "k1", "label": "No date announced"}],
+            {}, "OpenAI", "run-7",
+        )
+
+    assert [item["key"] for item in position_map["dimensions"]] == ["run-7-0", "run-7-1"]
+
+
+def test_claim_identity_result_maps_claims_onto_the_keys_they_continue():
+    position_map = {"dimensions": [
+        {"label": "No launch window is on record", "positions": []},
+        {"label": "A brand new claim about pricing", "positions": []},
+    ]}
+
+    with mock.patch.object(
+        topic_pipeline, "query_claim_identity", lambda *args, **kwargs: {0: "k1"}
+    ):
+        topic_pipeline._stamp_claim_keys(
+            position_map,
+            [{"key": "k1", "label": "No release date has been announced"}],
+            {}, "OpenAI", "run-8",
+        )
+
+    assert [item["key"] for item in position_map["dimensions"]] == ["k1", "run-8-1"]
 
 
 def test_admin_topic_api_creates_updates_and_versions_without_share_data(
@@ -739,6 +842,80 @@ def test_topic_page_shows_the_position_map_and_agreement_history(monkeypatch):
     assert "A 2027 launch" not in historical.text
     assert "How this answer held up" not in historical.text
     assert "Return to the current consensus" in historical.text
+
+
+def test_topic_page_leads_with_the_record_and_folds_unchanged_checks(monkeypatch):
+    """The page has to answer "what happened to this answer over time" before it
+    repeats the answer itself, which any single model can produce."""
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    held = "OpenAI has not announced a release date for GPT-6"
+    for index in range(5):
+        observed = datetime(2026, 7, 23 + index, 12, 0, tzinfo=timezone.utc)
+        material = index == 1
+        topics.create_run(
+            topic["id"],
+            run_payload(
+                observed_at=observed,
+                change_type="major" if material else "stable",
+                change_summary=(
+                    "A rumoured window entered the answer." if material
+                    else "Only the wording changed."
+                ),
+                evidence=[{
+                    "type": "primary",
+                    "title": "Release notes",
+                    "url": f"https://openai.com/index/note-{min(index, 1)}",
+                    "publisher": "OpenAI",
+                }],
+                opinion_map={
+                    "schema_version": 1,
+                    "dimensions": [
+                        {
+                            "label": held if index else held + " so far",
+                            "type": "claim",
+                            "positions": [{"stance": held, "models": ["OpenAI", "Gemini"]}],
+                        },
+                        {
+                            "label": "The GPT-5.6 family is the current frontier line",
+                            "type": "claim",
+                            "positions": [{
+                                "stance": "GPT-5.6 is current", "models": ["OpenAI", "Gemini"],
+                            }],
+                        },
+                    ],
+                    "models": [],
+                    "shift_score": 0,
+                    "shift_label": "Stable",
+                    "center": [held],
+                },
+            ),
+            actor_uid="admin", db=db, now=observed,
+        )
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(topics_router.router)
+    client = TestClient(app)
+
+    page = client.get("/topics/gpt-6")
+
+    assert page.status_code == 200
+    # The record statement stands above the answer.
+    assert "Unchanged through 3 checks" in page.text
+    assert "Last material change on Jul 24, 2026" in page.text
+    assert page.text.index("The record") < page.text.index("What the models say now")
+    # The claim ledger reports the claim's life, not one row per run.
+    assert "What has held, and what moved" in page.text
+    assert "Held 5 of 5 checks" in page.text
+    # Unchanged checks are folded away instead of listed one by one.
+    assert "2 checks, no material change" in page.text
+    # A wording-only score step is not presented as a change event.
+    assert "No check in this window was graded a material change" not in page.text
+    assert "A rumoured window entered the answer." in page.text
+    # Sources carry their place in the record.
+    assert "Cited since Jul 24, 2026" in page.text
+    assert "Sources that left the record" in page.text
 
 
 def test_public_topic_history_is_ssr_and_historical_version_is_noindex(monkeypatch):

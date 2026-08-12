@@ -17,7 +17,7 @@ from app.core.site import SITE_URL
 from app.core.observability import safe_exception
 from app.core.rate_limit import limiter
 from app.core.security import extract_id_token, is_user_admin, verify_user_token
-from app.services import favicons, mailer, topic_runner, topics
+from app.services import claim_ledger, favicons, mailer, topic_runner, topics
 from app.services.history_view import build_history_view
 from app.services.public_markdown import (
     markdown_to_plaintext,
@@ -80,6 +80,19 @@ def _topic_history_view(runs_raw, selected_version: int):
             "has_snapshot": True,
         })
     return build_history_view(points)
+
+
+def _plain_position_labels(history) -> None:
+    """Position Map labels are quoted model text and arrive with markdown and
+    [S3] citation markers in them. They are rendered as plain sentences here,
+    the same way the Claim Ledger renders them."""
+    position_map = (history or {}).get("position_map") or {}
+    for dimension in position_map.get("dimensions") or []:
+        dimension["label"] = markdown_to_plaintext(dimension.get("label"), limit=200)
+        for position in dimension.get("positions") or []:
+            position["stance"] = markdown_to_plaintext(
+                position.get("stance"), limit=220
+            )
 
 
 def _topic_scoreboard(topic: dict, selected: dict, runs) -> dict:
@@ -335,8 +348,22 @@ async def topic_page(
             item.get("quality_rank", 99), item.get("published_at") or "", item.get("title") or ""
         ))
     runs_desc = list(reversed(runs))
+    # Everything that describes the record is built from the runs up to the
+    # selected one: an older version has to show what was known then, not
+    # today's picture with an older answer above it.
+    runs_upto = [
+        run for run in runs
+        if int(run.get("version") or 0) <= int(selected.get("version") or 0)
+    ]
     history = _topic_history_view(runs_raw, int(selected.get("version") or 0))
+    _plain_position_labels(history)
     scoreboard = _topic_scoreboard(topic, selected, runs)
+    ledger = claim_ledger.build_claim_ledger(runs_upto)
+    record = claim_ledger.build_record_summary(runs_upto)
+    sources = claim_ledger.apply_source_chronicle(runs_upto, selected)
+    # The timeline stays complete even on an older version, because it is the
+    # navigation between versions.
+    timeline = claim_ledger.collapse_timeline(runs_desc)
     selected["consensus_html"] = render_public_markdown(
         selected["consensus_md"], selected["evidence"]
     )
@@ -378,6 +405,10 @@ async def topic_page(
         "runs": runs_desc,
         "history": history,
         "scoreboard": scoreboard,
+        "ledger": ledger,
+        "record": record,
+        "sources": sources,
+        "timeline": timeline,
         "canonical_url": canonical_url,
         "page_url": page_url,
         "page_title": title,

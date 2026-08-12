@@ -1239,6 +1239,338 @@
   font-weight: var(--font-weight-bold);
 }
 
+/* ---- The record: stability strip, claim ledger, source dating ---------- */
+
+/* The one statement a single model answer cannot make. It sits above the
+   answer itself, so it is a plain typographic block, not another card. */
+.topic-record-strip {
+  margin-top: 26px;
+  border-left: 3px solid var(--agree);
+  padding: 2px 0 2px 16px;
+  max-width: 70ch;
+}
+
+.topic-record-strip.is-moved {
+  border-left-color: var(--partial);
+}
+
+.topic-record-strip .eyebrow {
+  margin: 0 0 4px;
+}
+
+.topic-record-strip > strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-ui);
+  letter-spacing: var(--tracking-tight);
+}
+
+.topic-record-detail {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-reading);
+}
+
+.topic-record-anchor {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-reading);
+}
+
+.topic-ledger-count {
+  flex: none;
+  text-align: right;
+}
+
+.topic-ledger-count strong {
+  display: block;
+  font-size: var(--font-size-display-sm);
+  line-height: var(--line-height-solid);
+  letter-spacing: var(--tracking-tight);
+}
+
+.topic-ledger-count span {
+  color: var(--text-muted);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/* The panel's list defaults would indent the claims away from the group note
+   they belong to, so both are reset locally. */
+.topic-ledger .topic-panel-lead {
+  margin-bottom: 26px;
+}
+
+.claim-group {
+  margin-top: 26px;
+}
+
+.claim-group + .claim-group {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 22px;
+}
+
+.claim-group h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/* The state of a claim is carried by the group heading and the flag, never by
+   a tinted surface behind the sentence itself. */
+.claim-group.is-new h3 { color: var(--accent-tertiary); }
+.claim-group.is-contested h3 { color: var(--dispute); }
+.claim-group.is-holding h3 { color: var(--agree); }
+.claim-group.is-retired h3 { color: var(--text-muted); }
+
+.claim-group h3 b {
+  min-width: 20px;
+  border-radius: 20px;
+  padding: 1px 7px;
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  font-size: var(--font-size-micro);
+  text-align: center;
+}
+
+.claim-group-note {
+  margin: 7px 0 0;
+  max-width: 64ch;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-reading);
+}
+
+.topic-ledger .claim-list {
+  margin: 14px 0 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.topic-ledger .claim-position ul {
+  padding-left: 0;
+}
+
+.claim-row {
+  border-top: 1px solid var(--border-subtle);
+  padding: 15px 0 14px;
+}
+
+.claim-row:first-child {
+  border-top: 0;
+  padding-top: 4px;
+}
+
+.claim-row.is-retired .claim-label {
+  color: var(--text-muted);
+}
+
+.claim-label {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-reading);
+  max-width: 74ch;
+}
+
+.claim-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-top: 9px;
+}
+
+.claim-flag {
+  color: var(--text-muted);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
+}
+
+.claim-flag.is-new { color: var(--accent-tertiary); }
+.claim-flag.is-split { color: var(--dispute); }
+.claim-flag.is-partial { color: var(--partial); }
+
+.claim-positions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.claim-position {
+  border-left: 2px solid var(--border-light);
+  padding: 2px 0 2px 11px;
+}
+
+.claim-position p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-reading);
+}
+
+.claim-position ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.claim-position li {
+  border-radius: 5px;
+  padding: 1px 6px;
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* One tick per check, oldest left. The gap between ticks is what carries the
+   information, so the ticks stay thin and never become a bar chart. */
+.claim-lifeline {
+  display: flex;
+  gap: 2px;
+  margin-top: 11px;
+}
+
+.claim-lifeline i {
+  width: 6px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--border-light);
+}
+
+.claim-lifeline i.is-on {
+  background: color-mix(in srgb, var(--agree) 62%, var(--border-light));
+}
+
+/* A check that listed no claims says nothing either way, so it reads as a
+   hairline gap rather than as an absence. */
+.claim-lifeline i.is-gap {
+  height: 2px;
+  align-self: center;
+  background: var(--border-subtle);
+}
+
+.claim-row.is-contested .claim-lifeline i.is-on {
+  background: color-mix(in srgb, var(--dispute) 55%, var(--border-light));
+}
+
+.claim-row.is-retired .claim-lifeline i.is-on {
+  background: var(--text-muted);
+}
+
+/* Which sites the record keeps returning to survives the churn of individual
+   search-result URLs, so it is counted in checks, not in links. */
+.topic-source-sites {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin: -6px 0 22px;
+}
+
+.topic-source-sites > span {
+  color: var(--text-muted);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.topic-source-sites b {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
+}
+
+.topic-source-sites i {
+  color: var(--text-muted);
+  font-style: normal;
+}
+
+.src-age {
+  color: var(--text-muted);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.src-age.is-new { color: var(--accent-tertiary); }
+
+.topic-sources-count {
+  white-space: nowrap;
+}
+
+/* A folded run of unchanged checks. It keeps the timeline row rhythm so the
+   fold reads as part of the list, not as a control bolted on top of it. */
+.topic-timeline-quiet > details > summary {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) 14px;
+  gap: 10px;
+  padding: 9px 0 13px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.topic-timeline-quiet > details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.topic-timeline-quiet .timeline-dot {
+  background: var(--border-light);
+  box-shadow: 0 0 0 1px var(--border-light);
+}
+
+.topic-timeline-quiet .timeline-copy strong {
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.topic-timeline-quiet > details > summary b {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.topic-timeline-quiet > details[open] > summary b {
+  transform: rotate(45deg);
+}
+
+.topic-timeline.is-nested {
+  margin: 0 0 6px 14px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border-subtle);
+}
+
+.topic-timeline.is-nested::before {
+  display: none;
+}
+
+.topic-timeline.is-nested a {
+  padding: 6px 0 8px;
+}
+
 @media (max-width: 980px) {
   .topic-detail-layout {
     grid-template-columns: 1fr;
@@ -1265,6 +1597,20 @@
 
   .topic-current-score {
     width: 130px;
+  }
+
+  /* The check count would otherwise squeeze the heading into a column two
+     words wide. */
+  .topic-ledger .topic-panel-head {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .topic-ledger-count {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    text-align: left;
   }
 
   .topic-explainer {
