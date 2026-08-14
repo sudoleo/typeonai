@@ -290,6 +290,216 @@ def test_mobile_composer_collapses_after_a_question_and_opens_on_tap(app_page):
     assert expanded["height"] > collapsed["height"]
 
 
+def _desktop_row_geometry(page):
+    return page.evaluate(
+        """() => {
+          const box = (sel) => {
+            const el = document.querySelector(sel);
+            if (!el) return null;
+            const b = el.getBoundingClientRect();
+            return {
+              x: Math.round(b.x),
+              y: Math.round(b.y),
+              w: Math.round(b.width),
+              h: Math.round(b.height),
+              bottom: Math.round(b.bottom),
+              mid: Math.round(b.top + b.height / 2),
+            };
+          };
+          return {
+            collapsedClass: document.body.classList.contains("composer-collapsed"),
+            multiline: document.querySelector(
+              ".chat-input-container"
+            ).classList.contains("is-multiline"),
+            sectionHeight: Math.round(
+              document.querySelector(".input-section").getBoundingClientRect().height
+            ),
+            field: box("#questionInput"),
+            attach: box(".attach-trigger"),
+            picker: box(".chat-input-container .model-picker-display"),
+            send: box("#sendButton"),
+            footerVisible: !!document.querySelector(".app-footer").offsetParent,
+            fieldInline: document.getElementById("questionInput").style.height,
+            focused: document.activeElement === document.getElementById("questionInput"),
+          };
+        }"""
+    )
+
+
+def test_desktop_composer_is_one_row_without_a_collapsed_state(app_page):
+    """User-Vorgabe 2026-08-14: auf dem Desktop ist die eine Zeile ab der ersten
+    Frage einfach die Form des Composers — sie klappt NICHT mehr auf, weil sie
+    dort reicht. Kein `composer-collapsed`, keine Bewegung: reines CSS. Und das
+    (+) steht ganz links, vor dem Feld."""
+    app_page.set_viewport_size({"width": 1440, "height": 900})
+    app_page.evaluate("() => window.exitHeroMode()")
+    app_page.wait_for_timeout(200)
+    row = _desktop_row_geometry(app_page)
+
+    # Der Klappzustand ist dem Desktop fremd — er gehoert composer-collapse.js,
+    # und das haelt sich ueber 1099px komplett raus.
+    assert row["collapsedClass"] is False
+    assert row["field"]["h"] == 34
+    assert row["fieldInline"] == "34px"
+    assert row["footerVisible"] is True
+
+    # (+) ganz links, dann das Feld, dann Lauf-Schalter und Senden.
+    assert row["attach"]["x"] < row["field"]["x"] < row["picker"]["x"] < row["send"]["x"]
+    # Und alle vier wirklich auf EINER Zeile, auf derselben Mittellinie.
+    for name in ("field", "attach", "picker"):
+        assert abs(row[name]["mid"] - row["send"]["mid"]) <= 2, name
+
+    # Ein Klick fokussiert das Feld und sonst nichts: keine Hoehenaenderung.
+    app_page.locator("#questionInput").click()
+    app_page.wait_for_timeout(300)
+    clicked = _desktop_row_geometry(app_page)
+    assert clicked["focused"] is True
+    assert clicked["collapsedClass"] is False
+    assert clicked["sectionHeight"] == row["sectionHeight"]
+    assert clicked["field"]["h"] == 34
+
+    # Ein kurzer Text bleibt in der einen Zeile — sonst haette der Composer bei
+    # jedem angefangenen Wort die Form gewechselt.
+    app_page.locator("#questionInput").type("Kurze Frage?")
+    app_page.wait_for_timeout(200)
+    short = _desktop_row_geometry(app_page)
+    assert short["multiline"] is False
+    assert short["attach"]["x"] < short["field"]["x"]
+
+
+LONG_QUESTION = (
+    "Welche der sechs Modelle sind sich bei dieser Frage eigentlich uneinig, "
+    "und woran genau laesst sich das im direkten Vergleich der Antworten "
+    "festmachen, ohne alle vollstaendig nebeneinander zu lesen?"
+)
+
+
+def test_desktop_long_question_takes_the_full_width_and_drops_the_buttons(app_page):
+    """User-Befund 2026-08-14: eine lange Frage wurde in eine schmale Spalte
+    neben (+), Modellwahl und Senden gequetscht. Ab der zweiten Zeile gilt
+    deshalb die Chat-Client-Form — Text ueber die ganze Breite, Knopfzeile
+    darunter. Kein "\\n" tippen: Enter sendet hier."""
+    app_page.set_viewport_size({"width": 1440, "height": 900})
+    app_page.evaluate("() => window.exitHeroMode()")
+    app_page.wait_for_timeout(200)
+    one_row = _desktop_row_geometry(app_page)
+
+    app_page.locator("#questionInput").click()
+    app_page.locator("#questionInput").type(LONG_QUESTION)
+    app_page.wait_for_timeout(250)
+    grown = _desktop_row_geometry(app_page)
+
+    assert grown["multiline"] is True
+    assert grown["field"]["h"] > one_row["field"]["h"]
+    # Der Text nimmt die ganze Breite ...
+    assert grown["field"]["w"] > one_row["field"]["w"] + 100
+    # ... und jeder Knopf steht UNTER ihm, nicht mehr daneben.
+    for name in ("attach", "picker", "send"):
+        assert grown[name]["y"] >= grown["field"]["bottom"] - 2, name
+    # In der Knopfzeile: (+) links, Modellchip direkt daneben, Senden rechts.
+    assert grown["attach"]["x"] < grown["picker"]["x"] < grown["send"]["x"]
+    assert grown["picker"]["x"] - (grown["attach"]["x"] + grown["attach"]["w"]) <= 16
+
+    # Zurueck zur einen Zeile, sobald das Feld leer ist.
+    app_page.evaluate(
+        """() => {
+          const q = document.getElementById("questionInput");
+          q.value = "";
+          q.dispatchEvent(new Event("input", { bubbles: true }));
+        }"""
+    )
+    app_page.wait_for_timeout(200)
+    emptied = _desktop_row_geometry(app_page)
+    assert emptied["multiline"] is False
+    assert emptied["field"]["h"] == 34
+    assert emptied["attach"]["x"] < emptied["field"]["x"]
+
+
+def test_desktop_composer_does_not_flip_forms_while_editing(app_page):
+    """Die Umschaltung aendert die Breite des Feldes, und derselbe Text braucht
+    breit oft eine Zeile weniger als schmal. Haengt der Ausstieg an der
+    Zeilenzahl, springt der Composer im Grenzbereich bei JEDEM Tastendruck hin
+    und her — deshalb steigt er erst beim leeren Feld wieder aus."""
+    app_page.set_viewport_size({"width": 1440, "height": 900})
+    app_page.evaluate("() => window.exitHeroMode()")
+    app_page.wait_for_timeout(200)
+
+    app_page.locator("#questionInput").click()
+    app_page.locator("#questionInput").fill(LONG_QUESTION)
+    app_page.wait_for_timeout(250)
+    assert _desktop_row_geometry(app_page)["multiline"] is True
+
+    # Zeichen fuer Zeichen bis leer loeschen und dabei die Formwechsel zaehlen.
+    flips = app_page.evaluate(
+        """() => new Promise((resolve) => {
+          const container = document.querySelector(".chat-input-container");
+          let flips = 0;
+          const observer = new MutationObserver(() => { flips += 1; });
+          observer.observe(container, { attributes: true, attributeFilter: ["class"] });
+          const q = document.getElementById("questionInput");
+          const step = () => {
+            if (!q.value.length) { observer.disconnect(); resolve(flips); return; }
+            q.value = q.value.slice(0, -1);
+            q.dispatchEvent(new Event("input", { bubbles: true }));
+            setTimeout(step, 0);
+          };
+          step();
+        })"""
+    )
+    # Genau EIN Wechsel: mehrzeilig -> aus, beim letzten Zeichen.
+    assert flips <= 1, f"Composer springt zwischen den Formen: {flips} Wechsel"
+    assert _desktop_row_geometry(app_page)["multiline"] is False
+
+
+def test_desktop_one_row_keeps_the_run_switch_and_attachments_usable(app_page):
+    """Weil der Desktop-Composer nie mehr aufklappt, muss in der einen Zeile
+    alles erreichbar bleiben: die Menues oeffnen direkt (statt dass ein Tap
+    zuerst im Aufklappen versickert), und eine Anhangleiste bekommt ihre eigene
+    Zeile UEBER der Eingabezeile, statt ausgeblendet zu bleiben."""
+    app_page.set_viewport_size({"width": 1440, "height": 900})
+    app_page.evaluate("() => window.exitHeroMode()")
+    app_page.wait_for_timeout(200)
+
+    app_page.locator(".chat-input-container .model-picker-display").click()
+    picker_menu = (
+        app_page.locator("#consensusModelDropdown").locator("xpath=..").locator(".model-picker-menu")
+    )
+    expect(picker_menu).to_have_class(re.compile(r"\bis-open\b"))
+    assert app_page.evaluate(
+        """() => {
+          const b = document.querySelector(
+            ".chat-input-container .model-picker-menu"
+          ).getBoundingClientRect();
+          return b.top >= 0 && b.bottom <= window.innerHeight;
+        }"""
+    ), "Preset-Menue muss im Viewport liegen"
+    app_page.keyboard.press("Escape")
+
+    app_page.locator(".chat-input-container .attach-trigger").click()
+    expect(app_page.locator("#attachMenu")).to_be_visible()
+    app_page.keyboard.press("Escape")
+
+    # Anhaenge: eigene Zeile ueber dem Feld, nicht versteckt.
+    app_page.evaluate(
+        """() => {
+          const bar = document.getElementById("attachmentBar");
+          bar.hidden = false;
+          bar.innerHTML = '<span class="attachment-chip">report.pdf</span>';
+        }"""
+    )
+    app_page.wait_for_timeout(150)
+    placement = app_page.evaluate(
+        """() => {
+          const bar = document.getElementById("attachmentBar");
+          const b = bar.getBoundingClientRect();
+          const f = document.getElementById("questionInput").getBoundingClientRect();
+          return { visible: !!bar.offsetParent, aboveField: b.bottom <= f.top + 1 };
+        }"""
+    )
+    assert placement["visible"] is True
+    assert placement["aboveField"] is True
+
+
 def test_mobile_composer_stays_small_when_scrolling_back_up(app_page):
     """User-Befund 2026-08-07: das Aufklappen beim Hochscrollen hat den
     Composer beim Zurueckblaettern wieder vor die Antwort geschoben. Nach

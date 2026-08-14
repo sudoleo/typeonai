@@ -1941,14 +1941,114 @@ body:not(.is-hero) .input-section {
   }
 }
 
-/* ---- Der eingeklappte Composer -------------------------------------------
-   Auf dem Handy stand der fixierte Composer mit Anhangleiste, Lauf-Schalter
-   und Disclaimer-Fuss vor einem Drittel der Antwort. Nach dem Absenden bleibt
-   deshalb nur EINE Zeile uebrig: das Feld und der Senden-Knopf. Alles andere
-   kommt zurueck, sobald man den Composer anfasst oder darin tippt — und
-   verschwindet wieder, sobald der Fokus ein leeres Feld verlaesst. Gesteuert
-   von composer-collapse.js, dessen COLLAPSE_QUERY zu dieser Breakpoint-Grenze
-   passen muss. */
+/* ---- Die eine Zeile nach der ersten Frage --------------------------------
+   Der Composer mit Anhangleiste, Lauf-Schalter und Disclaimer-Fuss stand vor
+   einem Drittel der Antwort. Sobald der Thread steht, ist er deshalb EINE
+   Zeile. Die beiden Breiten loesen das grundverschieden, und zwar absichtlich:
+
+   - Ab 1100px (unten, A) ist die eine Zeile schlicht die Form des Composers
+     im Thread. Kein Zustand, kein Aufklappen: der Platz reicht, alles bleibt
+     nebeneinander sichtbar und bedienbar (User-Vorgabe 2026-08-14). Nur die
+     Anordnung aendert sich — (+) ganz nach links, der Rest rechts vom Feld.
+   - Unter 1100px (weiter unten, B) ist sie ein Zustand, der sich oeffnet,
+     sobald man den Composer anfasst: dort passen (+), Modellwahl und Fuss
+     nicht daneben, also verschwinden sie und muessen zurueckkommen koennen.
+     Gesteuert von composer-collapse.js (COLLAPSE_QUERY muss zu dieser Grenze
+     passen), inklusive der Bewegung dazwischen.
+   -------------------------------------------------------------------------- */
+
+/* ---- A) Desktop: die Zeile IST der Composer im Thread --------------------- */
+@media (min-width: 1100px) {
+  body:not(.is-hero) .chat-input-container {
+    align-items: center;
+    padding: 6px 8px;
+    margin: 0;
+  }
+
+  /* (+) gehoert an den linken Rand (User-Vorgabe 2026-08-14), steht im Markup
+     aber mit der Modellwahl in einer Gruppe hinter dem Feld. `display:
+     contents` loest genau diese Gruppe auf, sodass ihre Kinder eigene
+     Flex-Elemente der Zeile werden und `order` sie einzeln setzen kann. Die
+     Gruppe bleibt als Element (und damit als Selektor) bestehen; ihr eigenes
+     `gap` faellt weg, aber die Zeile bringt dasselbe schon mit.
+     ACHTUNG: ohne Box hat `.consensus-switch-container` hier auch kein
+     offsetParent mehr — Sichtbarkeit an ihren KINDERN pruefen, nicht an ihr. */
+  body:not(.is-hero) .chat-input-container .consensus-switch-container {
+    display: contents;
+  }
+
+  body:not(.is-hero) .chat-input-container .attach-trigger {
+    order: -1;
+  }
+
+  /* `.consensus-model` bringt aus seiner Basis ein `margin-left: auto` mit —
+     als eigenes Flex-Element (siehe `display: contents` oben) schiebt es sich
+     damit selbst nach rechts und landete mitten in der Knopfzeile, statt neben
+     dem (+) zu stehen. Der einzige Griff, der freien Platz schlucken darf, ist
+     das `margin-left: auto` der Aktionsgruppe: nur so steht Senden rechts und
+     alles andere links. */
+  body:not(.is-hero) .chat-input-container .consensus-model {
+    margin-left: 0;
+  }
+
+  /* Anhaenge und der Kosten-Hinweis sind volle Zeilen (`flex: 1 1 100%`) und
+     gehoeren UEBER die Eingabezeile — ohne eigenen order-Wert stuenden sie
+     hinter dem (+) und schoeben es allein in eine Zeile darueber. */
+  body:not(.is-hero) .chat-input-container .attachment-bar,
+  body:not(.is-hero) .composer-run-notice {
+    order: -2;
+  }
+
+  /* `flex: 1 1 0` statt `1 1 100%`: die Basis 100% war es, die dem Feld eine
+     eigene Zeile erzwungen hat. Mit Basis 0 und `min-width: 0` nimmt es genau
+     den Rest der Zeile.
+     min-/max-height liest der Autosizer in app-init.js und schreibt daraus die
+     INLINE-Hoehe des Feldes; eine feste height waere davon ueberschrieben.
+     Das Feld waechst weiter mit dem Text — "eine Zeile" ist der Anfang, nicht
+     die Obergrenze, sonst tippt man eine lange Frage in einen 34-px-Schlitz.
+     min-height darf nicht 0 sein: `parseFloat(minHeight) || 52` im Autosizer
+     verwirft eine 0 als falsy und faellt auf die volle Hoehe zurueck. */
+  body:not(.is-hero) .chat-input-container .input-field {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 34px;
+    max-height: 180px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  /* ---- Ab der zweiten Textzeile: Text oben, Knoepfe darunter -------------
+     Eine lange Frage in einem Feld, das sich die Zeile mit (+), Modellwahl
+     und Senden teilt, wird zu einer schmalen Textspalte mit viel Betrieb
+     daneben (User-Befund 2026-08-14). Also dasselbe wie im Chat-Client: der
+     Text nimmt die ganze Breite, die Knopfzeile rutscht darunter.
+
+     `.is-multiline` setzt der Autosizer in app-init.js — nur er weiss, wie
+     viele Zeilen der Text gerade braucht. Dort steht auch, warum der Ausstieg
+     am leeren Feld haengt und nicht an der Zeilenzahl. */
+  body:not(.is-hero) .chat-input-container.is-multiline .input-field {
+    flex: 1 1 100%;
+  }
+
+  /* Das (+) gehoert dann zurueck in die Knopfzeile: mit `order: -1` stuende es
+     als einziges Element ueber dem Textfeld. */
+  body:not(.is-hero) .chat-input-container.is-multiline .attach-trigger {
+    order: 0;
+  }
+
+  body:not(.is-hero) .input-section {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  /* Der Abstand des Fusses stammt aus der Zeit, als ueber ihm eine 118 px hohe
+     Box lag; unter der schmalen Zeile ist derselbe Abstand ein Loch. */
+  body:not(.is-hero) .app-footer {
+    margin-top: 6px;
+  }
+}
+
+/* ---- B) Handy: die Zeile ist ein Zustand, der sich oeffnet ---------------- */
 @media (max-width: 1099px) {
   /* Eingeklappt bleiben genau zwei Dinge: das Feld und der Senden-Knopf. Der
      Demo-Knopf gehoert ausdruecklich dazu — er sitzt zwar in derselben
@@ -1969,13 +2069,9 @@ body:not(.is-hero) .input-section {
     margin: 0;
   }
 
-  /* min-/max-height statt height: der Autosizer in app-init.js liest genau
-     diese beiden Werte und schreibt daraus die INLINE-Hoehe des Feldes. Eine
-     feste height hier waere von dieser Inline-Hoehe ueberschrieben — das Feld
-     haette den Zustand des Composers nicht mitbekommen.
-     BEIDE Werte muessen gesetzt sein, und min-height darf nicht 0 sein:
-     `parseFloat(minHeight) || 52` im Autosizer verwirft eine 0 als falsy und
-     faellt auf die volle Hoehe zurueck. */
+  /* Siehe A): dieselben zwei Werte, aber hier deckelt max-height das Feld
+     wirklich auf eine Zeile — es waechst erst wieder, wenn der Composer beim
+     Tippen aufgeht. */
   body.composer-collapsed:not(.is-hero) .chat-input-container .input-field {
     flex: 1 1 auto;
     min-height: 34px;

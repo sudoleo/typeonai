@@ -15,8 +15,11 @@
 // Modul: Start- und Zielhoehe der Box werden als Inline-Hoehe geschrieben,
 // die Kurve steht in shell.css unter .composer-animating.
 //
-// Desktop bleibt bewusst unangetastet: dort steht der Composer neben, nicht
-// vor der Antwort. COLLAPSE_QUERY ist die einzige Stelle, an der das haengt.
+// Der Desktop hat KEINEN Zustand: dort ist die eine Zeile ab der ersten Frage
+// einfach die Form des Composers, aufklappen gibt es nicht (User-Vorgabe
+// 2026-08-14). Das ist reines CSS in shell.css (Abschnitt A) — dieses Modul
+// ruehrt oberhalb von COLLAPSE_QUERY nichts an ausser der Feldhoehe beim
+// Verlassen des Hero-Zustands.
 // Exporte: window.App.composer.{collapse,expand,isCollapsed}
 // =====================================================================
 
@@ -303,6 +306,13 @@
     wasHero = nowHero;
     if (nowHero) expand();
     else collapse();
+    // Die Hero-Grenze ist zugleich eine Feldhoehen-Grenze: auf dem Desktop
+    // faellt die min-height des Feldes hier von 52 auf 34 px, ohne dass eine
+    // der beiden Bewegungen oben laeuft. Der Autosizer haelt sonst die
+    // Inline-Hoehe des Hero-Zustands fest und das Feld bliebe zu hoch.
+    // (Nach collapse()/expand(), damit deren Messung nicht schon die neue
+    // Hoehe sieht und die Bewegung ins Leere laeuft.)
+    syncFieldHeight();
   }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
 
   document.addEventListener("transitionend", function (event) {

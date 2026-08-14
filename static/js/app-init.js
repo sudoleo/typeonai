@@ -152,9 +152,9 @@
         // Der Composer beginnt kompakt, waechst mit jeder Textzeile und wird ab
         // der CSS-Maximalhoehe zum intern scrollenden Feld. Die Grenze bleibt im
         // CSS, damit Desktop und Mobile sie unabhaengig setzen koennen.
-        function resizeQuestionInput() {
-          if (!questionInput) return;
+        const COMPOSER_MULTILINE_CLASS = "is-multiline";
 
+        function measureQuestionInput() {
           questionInput.style.height = "0px";
           questionInput.style.overflowY = "hidden";
           const styles = window.getComputedStyle(questionInput);
@@ -165,6 +165,38 @@
 
           questionInput.style.height = `${Math.ceil(nextHeight)}px`;
           questionInput.style.overflowY = contentHeight > maxHeight + 1 ? "auto" : "hidden";
+          return { minHeight, nextHeight };
+        }
+
+        function resizeQuestionInput() {
+          if (!questionInput) return;
+
+          const measured = measureQuestionInput();
+          const container = questionInput.closest(".chat-input-container");
+          if (!container) return;
+
+          // Ab der zweiten Zeile bekommt der Text die ganze Breite und die
+          // Knopfzeile rutscht darunter (Optik in shell.css, nur Desktop —
+          // Mobile ist aufgeklappt ohnehin schon so gebaut).
+          //
+          // Zurueck geht es NUR beim leeren Feld, und das ist Absicht: das
+          // Umschalten aendert die Breite des Feldes, und derselbe Text
+          // braucht breit oft eine Zeile weniger als schmal. Eine Bedingung,
+          // die selbst von dieser Breite abhaengt, wuerde in diesem
+          // Zwischenbereich bei jedem Tastendruck zwischen beiden Formen
+          // hin- und herspringen. Leer/nicht leer ist in beiden Breiten
+          // dasselbe und damit der einzige stabile Ausstieg.
+          const isMultiline = container.classList.contains(COMPOSER_MULTILINE_CLASS);
+          const wantsMultiline = questionInput.value.length > 0 &&
+            (isMultiline || measured.nextHeight > measured.minHeight + 1);
+
+          if (wantsMultiline !== isMultiline) {
+            container.classList.toggle(COMPOSER_MULTILINE_CLASS, wantsMultiline);
+            // Die neue Breite ergibt eine andere Zeilenzahl — ohne zweite
+            // Messung bliebe die Hoehe der alten Form bis zum naechsten
+            // Tastendruck stehen.
+            measureQuestionInput();
+          }
         }
 
         window.App.resizeQuestionInput = resizeQuestionInput;

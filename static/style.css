@@ -19,7 +19,7 @@
 @import url('./css/components-watch.css?v=20260802-readingchrome1');
 /* Shell layer — loaded LAST so the frameless redesign wins on equal
    specificity. Elevation, sidebar, topbar, composer and thread material. */
-@import url('./css/shell.css?v=20260814-askalign1');
+@import url('./css/shell.css?v=20260814-composergrow2');
 
 /* Template-only utilities live after every component import so they preserve
    the old inline-style initial state. They intentionally do not use
