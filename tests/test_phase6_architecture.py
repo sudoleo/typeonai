@@ -199,8 +199,8 @@ def test_consensus_visuals_are_shared_and_dead_dom_contracts_are_gone():
     assert ".consensus-verdict" in shared
     assert ".claim-badge" in shared
     assert ".cx-marker" in shared
-    assert "components-consensus-visuals.css?v=20260811-phase6" in source("static/css/landing.css")
-    assert "components-consensus-visuals.css?v=20260811-phase6" in source("static/css/components-consensus-insights.css")
+    assert "components-consensus-visuals.css?v=20260814-askalign1" in source("static/css/landing.css")
+    assert "components-consensus-visuals.css?v=20260814-askalign1" in source("static/css/components-consensus-insights.css")
     all_static = "\n".join(
         path.read_text(encoding="utf-8")
         for path in (ROOT / "static").rglob("*")

@@ -451,12 +451,16 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 
 ## Demo & Sonstiges
 - [ ] „Demo"-Query startet den Demo-Flow (demo.js Integration intakt).
-- [ ] Demo zeigt 83/100, genau einen kleinen Omega-3-Widerspruch und jede
-      Quellenmarke öffnet den fachlich passenden Eintrag (inkl. Creatine S8).
+- [ ] Demo zeigt 52/100 „Partial agreement" (amber), drei Differences-Karten
+      (kritisch: Schlusszeile, klein: Ursache benennen, Gewichtung: Entschuldigung
+      oder Plan) und sechs Claim-Badges — davon 5/6 und 4/6 mit Dissens. Alle
+      Anker sitzen INLINE im Konsenstext, keiner landet in der Fallback-Liste
+      „Key claims". Quellenliste ist bei diesem Szenario bewusst leer.
 - [ ] Demo erzeugt weder einen Best-answer-Vote noch einen Eintrag in der
       Differences-Telemetrie oder einen Bookmark-Persistenzaufruf.
-- [ ] Die Demo tippt erst die vollständige Frage, leert beim simulierten
-      Absenden das Eingabefeld und startet danach die Modell-Ladeanimation.
+- [ ] Die Demo tippt erst die Frage, fügt danach den Nachrichtenentwurf in
+      einem Zug ein, leert beim simulierten Absenden das Eingabefeld und
+      startet erst dann die Modell-Ladeanimation.
       Nach Abschluss sieht ein ausgeloggter Nutzer eine
       Login-/Registrierungs-Aufforderung; deren Button öffnet das Login-Modal.
       Nach erfolgreichem Login verschwindet die Aufforderung.

@@ -31,7 +31,11 @@
 
   // ---- Scene 01: Ask --------------------------------------------------
 
-  const ASK_QUESTION = "Should vegetarians take supplements? If yes, which ones?";
+  // Dieselbe Frage, die /app?demo=1 tippt (static/demo.js): Wer aus dem Hero
+  // in die Demo springt, sieht dort weiter, was hier anfaengt. Nur die erste
+  // Zeile — der Nachrichtenentwurf wird auch in der App eingefuegt, nicht
+  // getippt.
+  const ASK_QUESTION = "I have to tell a client that our launch slips by two weeks. Can I send this as it is?";
 
   function buildAskScene(scene) {
     const text = scene.querySelector("[data-ask-text]");

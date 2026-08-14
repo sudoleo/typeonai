@@ -999,13 +999,26 @@ def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_pag
             archivedAlign: getComputedStyle(
               document.querySelector('.thread-history-question')
             ).textAlign,
+            answerLeft: previous.getBoundingClientRect().left,
+            answerRight: previous.getBoundingClientRect().right,
+            currentTextBox: document.getElementById('threadAskText')
+              .getBoundingClientRect(),
+            archivedTextBox: document.querySelector('.thread-history-question-text')
+              .getBoundingClientRect(),
           };
         }"""
     )
     assert layout["previousBottom"] <= layout["currentTop"]
     assert abs(layout["verdictRight"] - layout["verdictMainRight"]) <= 2
-    assert layout["currentAlign"] == "right"
-    assert layout["archivedAlign"] == "right"
+    # Der Fragenblock steht rechts (die Antwort links: so bleibt sichtbar, wer
+    # spricht), gesetzt wird er aber linksbuendig — rechtsbuendiger
+    # Flattersatz ueber mehrere Zeilen liest sich schlecht (User-Befund
+    # 2026-08-14).
+    assert layout["currentAlign"] == "left"
+    assert layout["archivedAlign"] == "left"
+    for box in (layout["currentTextBox"], layout["archivedTextBox"]):
+        assert abs(box["right"] - layout["answerRight"]) <= 2
+        assert box["left"] > layout["answerLeft"]
 
     # Turn 3 is the regression boundary: the second exchange used to vanish
     # when the live render tree was recycled for the next answer.

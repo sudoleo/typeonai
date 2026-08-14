@@ -47,7 +47,7 @@ class DemoLoginPromptContractTests(unittest.TestCase):
         demo_module = (ROOT / "static" / "demo.js").read_text(encoding="utf-8")
 
         self.assertIn("agreement: {", demo_module)
-        self.assertIn("score: 83,", demo_module)
+        self.assertIn("score: 52,", demo_module)
 
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@
   <meta name="twitter:image" content="https://www.consens.io/static/og-home-v2.png?v=20260802">
   <meta name="twitter:image:alt" content="The risk of one perspective | consens.io">
   <title>Track Where AI Answers Disagree and Change | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260811-phase6">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260814-askalign1">
   <link rel="stylesheet" href="/static/css/benchmark.css?v=20260731-inter1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -89,9 +89,10 @@
            aria-label="Start the interactive demo: watch one question run across six AI models">
           <!-- Every question here is one where a single confident answer is not
                enough: the models plausibly disagree AND being wrong costs the
-               reader something. list[0] is what reduced-motion users see, so the
-               strongest case leads. -->
-          <span class="lp-prompt-text" data-type-loop="Is it safe to take ibuprofen with blood pressure medication?|Do I charge VAT to US clients as a German freelancer?|Is a 3-month notice period in my contract enforceable?|Is it safe to store JWTs in localStorage?|Postgres or DynamoDB for 50,000 writes per second?"></span>
+               reader something. list[0] is what reduced-motion users see, and
+               it is also the question the demo behind this field actually runs
+               (static/demo.js), so the field and the demo tell one story. -->
+          <span class="lp-prompt-text" data-type-loop="Our launch slips by two weeks. Can I send this to the client as it is?|Is it safe to take ibuprofen with blood pressure medication?|Do I charge VAT to US clients as a German freelancer?|Is a 3-month notice period in my contract enforceable?|Is it safe to store JWTs in localStorage?"></span>
           <span class="lp-hero-prompt-bar">
             <span class="lp-attach" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -202,7 +203,7 @@
               <div class="lp-app">
                 <div class="lp-thread-ask">
                   <div class="lp-thread-ask-label">Question</div>
-                  <div class="lp-thread-ask-text">What is the longest river in the world?</div>
+                  <div class="lp-thread-ask-text">I have to tell a client that our launch slips by two weeks. Can I send this as it is?</div>
                 </div>
                 <!-- The run and the answer it hands over to share one grid
                      cell, so the panel is always as tall as the taller of the
@@ -260,13 +261,12 @@
                 <!-- What the run hands over to once it collapses. -->
                 <div class="lp-run-result" data-run-result>
                   <h3>Consensus answer</h3>
-                  <p><strong>The Nile is the conventional longest river, but the Amazon has a credible claim.</strong></p>
+                  <p><strong>Send it — but the closing line splits the models three against three.</strong></p>
                   <div class="lp-run-provenance">
-                    <span><b>6 models</b> · 24 s · 1 contested passage</span>
+                    <span><b>6 models</b> · 24 s · 3 contested passages</span>
                     <span class="lp-run-provenance-tabs">
-                      <span>Differences <b>1</b></span>
+                      <span>Differences <b>3</b></span>
                       <span>Model answers <b>6</b></span>
-                      <span>Sources <b>9</b></span>
                     </span>
                   </div>
                 </div>
@@ -309,16 +309,16 @@
             </div>
             <div class="lp-step-visual">
               <div class="lp-excerpt">
-              <div class="consensus-verdict is-calm">
-                <span class="verdict-gauge" style="--val:68" title="Agreement score 68/100">
+              <div class="consensus-verdict is-warn">
+                <span class="verdict-gauge" style="--val:52" title="Agreement score 52/100">
                   <span class="verdict-score">
-                    <span class="verdict-score-num">68</span><span class="verdict-score-unit" aria-hidden="true">/100</span>
+                    <span class="verdict-score-num">52</span><span class="verdict-score-unit" aria-hidden="true">/100</span>
                   </span>
                   <span class="verdict-meter" aria-hidden="true"><span class="verdict-meter-fill"></span></span>
                 </span>
                 <span class="verdict-main">
-                  <span class="verdict-headline">Strong agreement</span>
-                  <span class="verdict-detail">1 minor detail · disputed: where the Amazon starts, 6 models compared</span>
+                  <span class="verdict-headline">Partial agreement</span>
+                  <span class="verdict-detail">1 critical · 1 minor detail · disputed: keep or cut the line asking if the delay is a problem, 6 models compared</span>
                 </span>
                 <span class="verdict-judge">
                   <span>Analysis by Gemini</span>
@@ -335,7 +335,7 @@
               <p class="lp-step-num">02</p>
               <h3>Who backed each claim</h3>
               <p>The small number behind a sentence is how many models supported it. Rest on it, or tap it, and it names them: who agreed, who deviated<span class="lp-wide-only">, and in what words</span>.</p>
-              <p class="lp-step-try">Try it on the 3/6.</p>
+              <p class="lp-step-try">Try it on the 4/6.</p>
             </div>
             <div class="lp-step-visual">
               <div class="lp-excerpt">
@@ -344,15 +344,15 @@
                        rather than a picture of one; the splits match the card
                        in step 04, because a mock that contradicts itself is
                        worse than no mock. -->
-                  <p>By convention and in most references the Nile leads at about 6,650 km<button class="claim-badge" type="button"
-                      data-claim-anchor="By convention and in most references the Nile leads at about 6,650 km"
+                  <p>The new date belongs in the first line, ahead of the miss, the cause and the apology<button class="claim-badge" type="button"
+                      data-claim-anchor="The new date belongs in the first line, ahead of the miss, the cause and the apology"
                       data-claim-agree="ChatGPT, Claude, Gemini, Mistral, DeepSeek, Grok"
                       aria-label="All 6 models that address this agree — open details"><span class="claim-ratio" aria-hidden="true">6/6</span></button></p>
-                  <p>The disputed 2007 expedition puts the Amazon at 6,992 km<button class="claim-badge has-dissent" type="button"
-                      data-claim-anchor="The disputed 2007 expedition puts the Amazon at 6,992 km."
-                      data-claim-agree="Claude, Gemini, Grok"
-                      data-claim-dissent="ChatGPT: the 2007 survey has not been accepted into the standard references | Mistral: most authorities still put the Amazon at about 6,400 km | DeepSeek: the expedition's measurement remains disputed"
-                      aria-label="3 of 6 models support this — open details"><span class="claim-ratio" aria-hidden="true">3/6</span></button></p>
+                  <p>Name the day you will confirm the 29th, so the next update does not arrive as another surprise<button class="claim-badge has-dissent" type="button"
+                      data-claim-anchor="Name the day you will confirm the 29th, so the next update does not arrive as another surprise."
+                      data-claim-agree="Claude, Gemini, Mistral, DeepSeek"
+                      data-claim-dissent="ChatGPT: a promised status note is a second date you now also have to hit | Grok: don't stack a new promise on top of one you just broke"
+                      aria-label="4 of 6 models support this — open details"><span class="claim-ratio" aria-hidden="true">4/6</span></button></p>
                 </div>
               </div>
             </div>
@@ -369,15 +369,15 @@
               <div class="lp-excerpt">
                 <ul class="lp-mark-key" aria-label="What the marks in a consensus answer mean">
                   <li>
-                    <span class="lp-mark-sample">All models that address it agree<span class="claim-badge" aria-hidden="true"><span class="claim-ratio" aria-hidden="true">6/6</span></span></span>
+                    <span class="lp-mark-sample">Say what she actually gets on the 15th<span class="claim-badge" aria-hidden="true"><span class="claim-ratio" aria-hidden="true">6/6</span></span></span>
                     <span class="lp-mark-note">no mark, just the count</span>
                   </li>
                   <li>
-                    <span class="lp-mark-sample"><span class="cx-claim is-minor">They differ on this detail</span><span class="cx-marker is-minor" aria-hidden="true"><span class="cx-marker-dot"></span></span></span>
+                    <span class="lp-mark-sample"><span class="cx-claim is-minor">Name the cause, or leave it vague</span><span class="cx-marker is-minor" aria-hidden="true"><span class="cx-marker-dot"></span></span></span>
                     <span class="lp-mark-note">fine rule</span>
                   </li>
                   <li>
-                    <span class="lp-mark-sample"><span class="cx-claim is-major">They contradict each other here</span><span class="cx-marker is-major" aria-hidden="true"><span class="cx-marker-dot"></span></span></span>
+                    <span class="lp-mark-sample"><span class="cx-claim is-major">Keep the closing question, or cut it</span><span class="cx-marker is-major" aria-hidden="true"><span class="cx-marker-dot"></span></span></span>
                     <span class="lp-mark-note">heavier amber rule</span>
                   </li>
                 </ul>
@@ -396,29 +396,29 @@
             <div class="lp-step-visual">
               <div class="lp-excerpt">
                 <div class="consensus-main-text consensus-answer-body lp-excerpt-lead">
-                  <p><span class="cx-claim is-minor is-interactive" data-diff-open="lpDiffRiver">Whether the Amazon overtakes the Nile depends on where its mouth is drawn.</span><button class="cx-marker is-minor" type="button" data-diff-open="lpDiffRiver" aria-haspopup="dialog" aria-label="The models differ on a detail here. Open details"><span class="cx-marker-dot" aria-hidden="true"></span></button></p>
+                  <p><span class="cx-claim is-major is-interactive" data-diff-open="lpDiffClosing">Three models read the closing line as the only sentence that gives her a way in, three as an invitation to reopen a date you cannot move.</span><button class="cx-marker is-major" type="button" data-diff-open="lpDiffClosing" aria-haspopup="dialog" aria-label="The models contradict each other here. Open details"><span class="cx-marker-dot" aria-hidden="true"></span></button></p>
                 </div>
                 <div class="differences-cards">
-                  <details class="diff-card is-contradiction" id="lpDiffRiver" open>
+                  <details class="diff-card is-contradiction is-major" id="lpDiffClosing" open>
                     <summary class="diff-card-summary">
                       <span class="diff-card-tags">
-                        <span class="sev-dot is-warn" aria-hidden="true"></span>
-                        <span class="diff-type-tag">Contradiction · minor detail</span>
+                        <span class="sev-dot is-crit" aria-hidden="true"></span>
+                        <span class="diff-type-tag">Contradiction · critical</span>
                       </span>
-                      <span class="diff-card-claim">Is the Nile definitively the longest river?</span>
+                      <span class="diff-card-claim">Keep or cut the line asking if the delay is a problem?</span>
                     </summary>
                     <div class="diff-card-body">
                       <div class="diff-position">
-                        <div class="diff-position-label">ChatGPT, Mistral, DeepSeek</div>
-                        <div class="diff-position-stance">The Nile is the settled answer at ~6,650 km.</div>
-                        <blockquote class="diff-position-quote">the Nile is traditionally listed as the longest river at about 6,650 km</blockquote>
+                        <div class="diff-position-label">ChatGPT, Gemini, Grok</div>
+                        <div class="diff-position-stance">Keep it. It is the only opening the message offers her.</div>
+                        <blockquote class="diff-position-quote">a delay announced without one reads like a decision taken for her</blockquote>
                       </div>
                       <div class="diff-position">
-                        <div class="diff-position-label">Claude, Gemini, Grok</div>
-                        <div class="diff-position-stance">The 2007 Amazon survey is a credible challenger.</div>
-                        <blockquote class="diff-position-quote">if the Pará estuary is counted, the Amazon may exceed 7,000 km</blockquote>
+                        <div class="diff-position-label">Claude, Mistral, DeepSeek</div>
+                        <div class="diff-position-stance">Cut it. It asks her to rule on something you cannot change.</div>
+                        <blockquote class="diff-position-quote">the honest answer to that question is yes, it is a problem</blockquote>
                       </div>
-                      <div class="diff-verify"><b>Worth verifying: </b>check whether the source counts the Pará estuary as part of the Amazon.</div>
+                      <div class="diff-verify"><b>Worth verifying: </b>decide first whether the new date is still negotiable. If it is not, do not ask a question that implies it is.</div>
                     </div>
                   </details>
                 </div>
@@ -648,7 +648,7 @@
 
   {% include "partials/public_footer.html" %}
 
-  <script defer src="/static/js/landing-scenes.js?v=20260727-scenes2"></script>
+  <script defer src="/static/js/landing-scenes.js?v=20260814-message1"></script>
   <script defer src="/static/js/landing-insights.js?v=20260810-claims1"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {

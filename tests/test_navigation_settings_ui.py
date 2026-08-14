@@ -87,7 +87,7 @@ def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract()
     watch = read("static/js/watch.js")
     leaderboard = read("static/js/model-pulse.js")
     pulse_page = read("templates/model-pulse.html")
-    assert "score: 83" in demo
+    assert "score: 52" in demo
     # Zwei Beschriftungen, eine sichtbar: in der Knopfzeile des Composers ist
     # auf dem Handy kein Platz fuer den ganzen Satz, sonst faellt der
     # Senden-Knopf in eine zweite Zeile.
@@ -100,8 +100,12 @@ def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract()
     narrow_rule = misc_css.split("@media (max-width: 640px) {", 1)[1]
     assert ".demo-chip-label-full" in narrow_rule
     assert ".demo-chip-label-short" in narrow_rule
+    # Die Demo zeigt beide Schweregrade: ein kritischer Widerspruch traegt die
+    # kraeftige Markierung, ein kleiner die feine. Genau daran haengt, dass die
+    # Demo das Produkt zeigt und nicht nur eine Randnotiz.
+    assert 'severity: "major"' in demo
     assert 'severity: "minor"' in demo
-    assert '[S8].</li>' in demo
+    assert 'type: "emphasis"' in demo
     # Das Kreuz ist ein echtes Glyph (wie bei den Modal-Close-Buttons), nicht
     # mehr aus zwei gedrehten Pseudo-Elementen gebaut.
     assert (

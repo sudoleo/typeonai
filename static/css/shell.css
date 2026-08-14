@@ -2060,16 +2060,19 @@ body:not(.is-hero) .consensus-section::before {
 }
 
 /* ---- The question at the head of the thread ------------------------------
-   An eyebrow and the question itself in the serif voice — the one element
-   that speaks in the user's words, so it gets the largest quiet type on the
-   page. User questions align to the right; long questions clamp to three
-   lines and the link below unfolds them. */
+   An eyebrow and the question itself — das eine Element, das in den Worten
+   des Nutzers spricht. Es liest sich in derselben Groesse wie die Antwort
+   (User-Vorgabe 2026-08-14): wer spricht, sagt die Position, nicht der Grad.
+   Der Block sitzt rechts (die Antwort links), der Text darin bleibt aber
+   linksbuendig — rechtsbuendiger Flattersatz ueber mehrere Zeilen liest sich
+   schlecht. Long questions clamp to three lines and the link below unfolds
+   them. */
 .thread-ask {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   margin: 10px 6px 18px;
-  text-align: right;
+  text-align: left;
 }
 
 .thread-ask[hidden] {
@@ -2085,14 +2088,30 @@ body:not(.is-hero) .consensus-section::before {
 }
 
 .thread-ask-text {
-  /* The question is a heading, not a paragraph: it stays right-aligned and
-     stops short of the left edge so it reads as the user's turn rather than
-     as the answer's first line. */
+  /* Der Block bleibt am rechten Rand und hoert vor dem linken auf, damit er
+     als Zug des Nutzers liest und nicht als erste Zeile der Antwort. Gesetzt
+     wird er trotzdem linksbuendig (siehe .thread-ask). Die Nachricht selbst
+     steht seit 2026-08-14 auf einer eigenen, eine Stufe abgesetzten Flaeche
+     (`--raise`, in beiden Modi genau ein Ton von der Seite entfernt) — die
+     Blase ist die Sprecherkennzeichnung, nicht eine Farbe. */
+  box-sizing: border-box;
   max-width: 70%;
   margin-left: auto;
+  /* Die Innenluft der Blase ist ein durchsichtiger Rahmen, KEIN Padding:
+     `overflow: hidden` schneidet erst an der Aussenkante des Paddings ab, die
+     vierte Zeile einer eingeklappten Frage waere dort also als angeschnittener
+     Streifen sichtbar geblieben. Der Rahmen liegt ausserhalb dieser Kante,
+     der Hintergrund reicht (background-clip: border-box) trotzdem bis unter
+     ihn. */
+  padding: 0;
+  border-style: solid;
+  border-color: transparent;
+  border-width: 11px 15px;
+  border-radius: var(--radius-lg);
+  background: var(--raise);
   font-family: var(--font-sans);
-  font-size: var(--font-size-xl);
-  line-height: var(--line-height-heading);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-reading);
   letter-spacing: var(--tracking-tight);
   color: var(--ink);
   display: -webkit-box;
@@ -2149,7 +2168,8 @@ body:not(.is-hero) .consensus-section::before {
   text-decoration-color: var(--line);
 }
 
-.thread-ask.is-long .thread-ask-more {
+.thread-ask.is-long .thread-ask-more,
+.thread-history-question.is-long .thread-ask-more {
   display: inline-block;
 }
 
@@ -2179,18 +2199,39 @@ body:not(.is-hero) .consensus-section::before {
   flex-direction: column;
   align-items: flex-end;
   margin: 10px 6px 0;
-  text-align: right;
+  text-align: left;
 }
 
+/* Eine archivierte Frage klappt genauso ein wie die aktive (.thread-ask-text).
+   Ohne den Clamp hat ab dem zweiten Turn jede lange Frage den Thread wieder
+   auseinandergeschoben — es sah aus, als schalte sich das Einklappen im Lauf
+   eines Chats ab. */
 .thread-history-question-text {
+  box-sizing: border-box;
   max-width: 70%;
   margin-left: auto;
+  /* Durchsichtiger Rahmen statt Padding — Begruendung siehe .thread-ask-text. */
+  padding: 0;
+  border-style: solid;
+  border-color: transparent;
+  border-width: 11px 15px;
+  border-radius: var(--radius-lg);
+  background: var(--raise);
   font-family: var(--font-sans);
-  font-size: var(--font-size-xl);
-  line-height: var(--line-height-heading);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-reading);
   letter-spacing: var(--tracking-tight);
   color: var(--ink);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
   overflow-wrap: anywhere;
+}
+
+.thread-history-question.is-open .thread-history-question-text {
+  -webkit-line-clamp: unset;
+  overflow: visible;
 }
 
 .thread-history-answer {

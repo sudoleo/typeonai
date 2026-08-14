@@ -95,16 +95,49 @@
     setThreadQuestionAttachments([]);
     if (!normalized) return;
 
-    requestAnimationFrame(() => {
-      wrap.classList.toggle("is-long", text.scrollHeight > text.clientHeight + 2);
-    });
+    requestAnimationFrame(() => syncThreadAskClamp(wrap, text));
+    observeThreadAskWidth(wrap, text);
   }
 
+  // Ob eine Frage laenger als drei Zeilen ist, haengt an der Breite des
+  // Blocks - und die steht im ersten Frame noch nicht fest: Der Ausstieg aus
+  // dem Hero animiert den Container, und die Sidebar aendert ihn spaeter noch
+  // einmal. Wurde nur einmal gemessen, blieb "Show full question" bei einer
+  // langen Frage aus und die vierte Zeile verschwand lautlos - beim
+  // gefuehrten Lauf ausgerechnet das Ende der Frage. Deshalb misst ein
+  // ResizeObserver nach jeder Groessenaenderung nach.
+  let threadAskResizeObserver = null;
+
+  function syncThreadAskClamp(wrap, text) {
+    // Aufgeklappt gibt es nichts zu messen: dort ist scrollHeight gleich
+    // clientHeight, und die Marke wuerde sich selbst zuruecknehmen.
+    if (wrap.hidden || wrap.classList.contains("is-open")) return;
+    const clamped = text.clientHeight;
+    // scrollHeight allein reicht nicht: An einem geklammerten Block meldet er
+    // je nach Zeitpunkt die geklammerte statt der vollen Hoehe - mal 4 Zeilen,
+    // mal 3. Deshalb wird der Clamp fuer die Messung kurz aufgehoben. Das
+    // passiert innerhalb eines Frames, es wird also nichts davon gezeichnet.
+    const previous = text.style.webkitLineClamp;
+    text.style.webkitLineClamp = "unset";
+    const full = text.scrollHeight;
+    text.style.webkitLineClamp = previous;
+    wrap.classList.toggle("is-long", full > clamped + 2);
+  }
+
+  function observeThreadAskWidth(wrap, text) {
+    if (threadAskResizeObserver || typeof ResizeObserver !== "function") return;
+    threadAskResizeObserver = new ResizeObserver(() => syncThreadAskClamp(wrap, text));
+    threadAskResizeObserver.observe(text);
+  }
+
+  // Dieselbe Geste fuer die aktive Frage (#threadAskMore) und fuer jede
+  // archivierte im Verlauf: der Link gehoert immer zu der Frage, unter der er
+  // steht, deshalb wird der Umschalter aus dem geklickten Knopf abgeleitet.
   document.addEventListener("click", (event) => {
-    if (!event.target.closest("#threadAskMore")) return;
-    const wrap = document.getElementById("threadAsk");
-    const more = document.getElementById("threadAskMore");
-    if (!wrap || !more) return;
+    const more = event.target.closest(".thread-ask-more");
+    if (!more) return;
+    const wrap = more.closest(".thread-ask, .thread-history-question");
+    if (!wrap) return;
     const open = wrap.classList.toggle("is-open");
     more.textContent = open ? "Collapse question" : "Show full question";
   });

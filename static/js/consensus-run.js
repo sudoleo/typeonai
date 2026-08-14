@@ -210,6 +210,15 @@
         if (rendered) question.appendChild(attachmentRow);
       }
 
+      // Eine archivierte Frage klappt wie die aktive auf drei Zeilen ein
+      // (#threadAskMore in app-core.js schaltet beide). Ohne das hat ab dem
+      // zweiten Turn jede lange Frage den Thread wieder aufgerissen.
+      const questionMore = document.createElement("button");
+      questionMore.type = "button";
+      questionMore.className = "thread-ask-more";
+      questionMore.textContent = "Show full question";
+      question.appendChild(questionMore);
+
       const answer = document.createElement("div");
       answer.className = "thread-history-answer";
       const answerLabel = document.createElement("div");
@@ -376,6 +385,14 @@
       turn.append(question, answer);
       history.appendChild(turn);
       history.hidden = false;
+      // Erst im DOM laesst sich messen, ob der Clamp ueberhaupt greift; nur
+      // dann bekommt der Turn seinen Aufklapp-Link.
+      requestAnimationFrame(() => {
+        question.classList.toggle(
+          "is-long",
+          questionText.scrollHeight > questionText.clientHeight + 2
+        );
+      });
       return true;
     },
 

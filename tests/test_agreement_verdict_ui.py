@@ -37,9 +37,13 @@ def test_public_mockups_use_the_same_score_semantics():
     assert '<div class="consensus-verdict is-calm">' in product
     assert '<span class="verdict-headline">Strong agreement</span>' in product
     assert (
-        'style="--val:68" title="Agreement score 68/100"' in landing
-        and '<span class="verdict-headline">Strong agreement</span>' in landing
+        'style="--val:52" title="Agreement score 52/100"' in landing
+        and '<span class="verdict-headline">Partial agreement</span>' in landing
     )
+    # Der Landing-Walkthrough zeigt denselben Lauf wie die Demo in /app: unter
+    # 65 faerbt der Verdict-Balken amber, sonst behauptet das Mockup eine Ruhe,
+    # die der Score nicht deckt.
+    assert '<div class="consensus-verdict is-warn">' in landing
     assert (
         'style="--val:64" title="Agreement score 64/100"' in engine
         and '<span class="verdict-headline">Partial agreement</span>' in engine

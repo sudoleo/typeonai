@@ -139,10 +139,18 @@ ist seit 2026-07-17 demo-first: Ein klickbares Input-Feld (Look des /app-Inputs,
 `static/demo.js` erkennt den Parameter und startet die Demo automatisch in der
 echten App. Dabei wird zuerst die vollständige Frage in den Composer getippt;
 beim simulierten Absenden wandert sie in den Thread-Kopf, der Composer wird
-geleert und erst danach beginnen Fortschrittsanzeige und Modell-Spinner. Die
-Vegetarier-Demo nutzt dieselben globalen Source-IDs in Text und Quellenliste;
-ein einzelner kleiner Omega-3-Widerspruch ergibt 83/100 statt eines künstlich
-niedrigen 41/100-Scores. Sie bleibt vollständig clientseitig und ruft weder
+geleert und erst danach beginnen Fortschrittsanzeige und Modell-Spinner. Seit
+2026-08-14 ist das Szenario die Prüfung einer heiklen Nachricht („Wir
+verschieben den Launch um zwei Wochen — kann ich das so an die Kundin
+schicken?"): Die Frage wird getippt, der Nachrichtenentwurf danach in einem Zug
+eingefügt. Der Lauf hat drei strittige Stellen (kritischer Widerspruch zur
+Schlusszeile, kleiner zur Ursachenbenennung, eine abweichende Gewichtung zur
+Entschuldigung) und sechs Claims; der Score 52/100 ist nicht gegriffen, sondern
+die Rechnung aus `consensus_scoring.py` auf genau diese Daten. Quellen gibt es
+bewusst keine — auf „kann ich das so schreiben?" zitiert kein Modell eine
+Studie, und der Quellen-Tab blendet sich bei leerer Liste ohnehin aus. Der
+Landing-Walkthrough (Szene 01–03) zeigt denselben Lauf, damit Hero, Demo und
+Mockups eine Geschichte erzählen. Die Demo bleibt vollständig clientseitig und ruft weder
 `recordModelVote` noch `/consensus`/Bookmark-Persistenz auf; Demo-Läufe verändern
 damit weder das Best-answer-Nutzungssignal noch `differences_stats`.
 Produktgeschichte führt danach über Ask/Run/Decide zum vierten
@@ -548,14 +556,24 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   fuer `body:not(.is-hero)` per Flex-`order` und macht `.input-section`
   zum letzten Flex-Abschnitt mit eigenem auslaufenden Horizont
   (`.consensus-section::before` ist in diesem Zustand aus). Die Frage steht im
-  Thread-Kopf `#threadAsk` („Question“-Eyebrow + rechtsbündiger Text,
-  3-Zeilen-Clamp mit
+  Thread-Kopf `#threadAsk` („Question“-Eyebrow + rechts stehender, aber
+  linksbündig gesetzter Text, 3-Zeilen-Clamp mit
   „Show full question“): `window.App.setThreadQuestion` (app-core.js), gefuellt
   von `query-send.js` (send), `demo.js` (nach der Tipp-Phase) und
   `firebase.js::loadSingleBookmarkUI`; geleert von „New comparison“ und
   `clearResponseBoxes`. Der Text ist auf `max-width: 70%` begrenzt und nach
   rechts gerückt: User-Turn und linksbündige Antwort bleiben sofort
-  unterscheidbar. Die
+  unterscheidbar. Gesetzt wird er trotzdem linksbündig — rechtsbündiger
+  Flattersatz über mehrere Zeilen liest sich schlecht (Befund 2026-08-14).
+  Er liest sich in derselben Größe wie die Antwort (`--font-size-base`) und
+  steht auf einer eigenen Blase (`--raise`, `--radius-lg`). Deren Innenluft ist
+  ein **durchsichtiger Rahmen statt Padding**: `overflow: hidden` schneidet erst
+  an der Außenkante des Paddings ab, sonst bliebe unter dem 3-Zeilen-Clamp ein
+  angeschnittener Streifen der vierten Zeile sichtbar.
+  Denselben Clamp und denselben „Show full question“-Link bekommt jede
+  archivierte Frage im Verlauf (`.thread-history-question`, gebaut in
+  `consensus-run.js::appendHistoryTurn`); der Klick-Handler in app-core.js
+  hängt am `.thread-ask-more`-Knopf, nicht an einer festen ID. Die
   **Demo** laesst ihre Frage waehrend des animierten Laufs zusaetzlich im
   Composer stehen (echte Laeufe leeren ihn), damit der selbst getippte Text
   nicht mitten im Ablauf verschwindet. Nach der fertigen Antwort ersetzt bei

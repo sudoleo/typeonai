@@ -157,6 +157,32 @@ def test_followup_archives_the_previous_turn_before_rendering_the_next_one():
     assert "TOPIC_MAX_WORDS" not in insights
 
 
+def test_archived_questions_clamp_like_the_active_one():
+    """Eine lange Frage bleibt auch im Verlauf auf drei Zeilen eingeklappt.
+    Ohne Clamp hat ab dem zweiten Turn jede lange Frage den Thread wieder
+    aufgerissen — es sah aus, als schalte sich das Einklappen im Lauf eines
+    Chats ab (User-Befund 2026-08-14)."""
+    css = read("static/css/shell.css")
+    run = read("static/js/consensus-run.js")
+    core = read("static/js/app-core.js")
+
+    clamp_block = css.split(".thread-history-question-text {", 1)[1].split("}", 1)[0]
+    assert "-webkit-line-clamp: 3" in clamp_block
+    assert ".thread-history-question.is-open .thread-history-question-text" in css
+    assert ".thread-history-question.is-long .thread-ask-more" in css
+
+    history_block = run.split("appendHistoryTurn(", 1)[1].split(
+        "archiveCurrentExchange()", 1
+    )[0]
+    assert 'questionMore.className = "thread-ask-more"' in history_block
+    assert 'question.classList.toggle(\n          "is-long",' in history_block
+
+    # Ein Klick auf den Link gehoert zu der Frage, unter der er steht — nicht
+    # fest zum aktiven Kopf.
+    assert 'event.target.closest(".thread-ask-more")' in core
+    assert 'more.closest(".thread-ask, .thread-history-question")' in core
+
+
 def test_archived_turns_use_the_same_drawer_row_as_the_live_answer():
     """Differences, Sources und Model answers liegen im Verlauf NEBEN-, nicht
     untereinander: dieselben .consensus-tab-Chips wie im Fuss der aktiven

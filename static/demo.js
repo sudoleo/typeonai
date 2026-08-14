@@ -9,253 +9,277 @@ if (!Array.isArray(window.currentEvidenceSources)) {
   window.App.state.set("currentEvidenceSources", [], "evidence");
 }
 
-/* === DEMO: Data & Utilities ======================================= */
+/* === DEMO: Data & Utilities =======================================
+   Das Szenario ist bewusst kein Faktencheck: Wer eine heikle Nachricht
+   vor dem Absenden prueft, holt sich im echten Leben zwei, drei Meinungen
+   ein — und bekommt sie auch. Genau dort ist Uneinigkeit die Nachricht
+   und nicht der Fehler. Deshalb hat der Lauf drei strittige Stellen
+   (ein kritischer Widerspruch, ein kleiner, eine andere Gewichtung)
+   statt einer einzigen Randnotiz, und der Score liegt entsprechend im
+   mittleren Bereich. Quellenlisten gibt es hier bewusst nicht: Auf
+   "kann ich das so schreiben?" zitiert kein Modell eine Studie, und
+   erfundene Belege waeren die schlechtere Demo.
+   ================================================================= */
 const DEMO_SCENARIO_PROMPT =
-  "Should vegetarians take supplements? If yes, which ones?";
+  "I have to tell a client that our launch slips by two weeks. Can I send this as it is?\n\n" +
+  "“Hi Anna, quick heads-up: we won’t make the 15th. We’re aiming for the 29th now. " +
+  "A few things came up on our side, sorry about that. Let me know if that’s a problem.”";
 
-const DEMO_SOURCE_LIBRARY = {
-  b12: {
-    id: "S1",
-    title: "NIH ODS: Vitamin B12 Fact Sheet",
-    url: "https://ods.od.nih.gov/factsheets/VitaminB12-Consumer/",
-    provider: "NIH Office of Dietary Supplements"
-  },
-  vitaminD: {
-    id: "S2",
-    title: "NIH ODS: Vitamin D Fact Sheet",
-    url: "https://ods.od.nih.gov/factsheets/VitaminD-HealthProfessional/",
-    provider: "NIH Office of Dietary Supplements"
-  },
-  iodine: {
-    id: "S3",
-    title: "NIH ODS: Iodine Fact Sheet",
-    url: "https://ods.od.nih.gov/factsheets/Iodine-Consumer/",
-    provider: "NIH Office of Dietary Supplements"
-  },
-  omega3: {
-    id: "S4",
-    title: "NIH ODS: Omega-3 Fatty Acids Fact Sheet",
-    url: "https://ods.od.nih.gov/factsheets/Omega3FattyAcids-HealthProfessional/",
-    provider: "NIH Office of Dietary Supplements"
-  },
-  iron: {
-    id: "S5",
-    title: "NIH ODS: Iron Fact Sheet",
-    url: "https://ods.od.nih.gov/factsheets/Iron-Consumer/",
-    provider: "NIH Office of Dietary Supplements"
-  },
-  calcium: {
-    id: "S6",
-    title: "NIH ODS: Calcium Fact Sheet",
-    url: "https://ods.od.nih.gov/factsheets/Calcium-Consumer/",
-    provider: "NIH Office of Dietary Supplements"
-  },
-  zinc: {
-    id: "S7",
-    title: "NIH ODS: Zinc Fact Sheet",
-    url: "https://ods.od.nih.gov/factsheets/Zinc-HealthProfessional/",
-    provider: "NIH Office of Dietary Supplements"
-  },
-  creatine: {
-    id: "S8",
-    title: "ISSN position stand: creatine supplementation",
-    url: "https://jissn.biomedcentral.com/articles/10.1186/s12970-017-0173-z",
-    provider: "Journal of the International Society of Sports Nutrition"
-  }
-};
-
-function demoSources(keys) {
-  return keys.map(key => DEMO_SOURCE_LIBRARY[key]).filter(Boolean);
-}
+// Der Entwurf selbst wird nicht getippt, sondern eingefuegt — so macht es
+// jeder, der eine fertige Nachricht pruefen laesst.
+const DEMO_TYPED_QUESTION = DEMO_SCENARIO_PROMPT.split("\n")[0];
 
 const DEMO_DATA = {
   delays: { OpenAI: 1400, Mistral: 2500, Anthropic: 2900, Gemini: 3600, DeepSeek: 4300, Grok: 5000 },
-  sourceKeys: {
-    OpenAI: ["b12", "vitaminD", "iodine", "omega3", "iron", "calcium", "creatine"],
-    Mistral: ["b12", "vitaminD", "omega3", "iodine", "iron", "creatine", "calcium"],
-    Anthropic: ["b12", "iodine", "vitaminD", "omega3", "iron", "zinc", "creatine"],
-    Gemini: ["b12", "vitaminD", "creatine", "iron", "iodine", "calcium", "zinc"],
-    DeepSeek: ["iron", "calcium", "b12", "vitaminD", "iodine", "omega3", "creatine"],
-    Grok: ["b12", "vitaminD", "omega3", "iodine", "iron", "creatine"]
-  },
   responses: {
     OpenAI:
 `<div class="ai-block">
-  <p>Quick overview</p>
-  <p>For many vegetarians, a targeted supplement plan is more useful than a broad multivitamin. Vitamin B12 is the most consistent baseline because people eating little or no animal food can fall short [S1].</p>
-  <h4>Likely baseline</h4>
+  <p>Short version: send it — but not in this order, and two of the four sentences are doing work you did not intend.</p>
+  <h4>What already works</h4>
   <ul>
-    <li>Vitamin B12: use a regular supplement or reliably fortified foods; many people choose a daily low dose or a larger weekly dose [S1].</li>
+    <li>You are telling her before the 15th, not on it. That is the part most people get wrong.</li>
+    <li>The tone is fine. Nothing here is rude, and nothing needs softening.</li>
   </ul>
-  <h4>Often context-dependent</h4>
+  <h4>What I would change</h4>
   <ul>
-    <li>Vitamin D: consider it when sun exposure is low, especially in winter or mostly indoor routines [S2].</li>
-    <li>Iodine: check whether iodized salt, dairy, eggs, seafood or seaweed are actually present in your diet [S3].</li>
-    <li>Omega-3: algae-based EPA/DHA is the vegetarian route when fish is absent [S4].</li>
+    <li>Lead with the new date. Right now the 29th arrives in the second sentence, after the bad news; put it first so she can act on it immediately.</li>
+    <li>Replace “a few things came up on our side” with the actual cause in one clause. Vagueness is the thing she will ask about.</li>
+    <li>Say what she gets on the 15th. Two silent weeks are harder to plan around than the delay itself.</li>
   </ul>
-  <h4>Use labs or diet tracking</h4>
-  <ul>
-    <li>Iron: supplement when deficiency is shown or a clinician recommends it, not as a default [S5].</li>
-    <li>Calcium: aim to meet the daily target from food first; fortified plant milks, tofu and dairy can change the answer [S6].</li>
-    <li>Creatine: optional, mainly for strength or high-intensity training goals [S8].</li>
-  </ul>
-  <p><small>General information only; individual needs depend on labs, medical history, medication and pregnancy status.</small></p>
+  <h4>What I would keep, against the usual advice</h4>
+  <p>Keep the closing question. It is the only line in the draft that gives Anna a way in, and a delay announced without one reads like a decision taken for her.</p>
+  <p>One thing I would not add: a fixed check-in date. A promised status note is a second date you now also have to hit, and you are already explaining a missed one.</p>
 </div>`,
 
     Mistral:
 `<div class="ai-block">
-  <p>Decision path</p>
+  <p>Work through it line by line.</p>
   <ol>
-    <li>If you are vegetarian most days, make B12 the first check. Food sources can be inconsistent unless you regularly use fortified foods [S1].</li>
-    <li>If you get little sun or live through long winters, vitamin D becomes a practical candidate; a 25-OH-D blood test can guide dosing [S2].</li>
-    <li>If you never eat fish, flax, chia and walnuts cover ALA, and for most healthy adults that is enough — a routine algae-oil supplement is optional rather than essential [S4].</li>
-    <li>If your salt is non-iodized and seaweed is rare, iodine may be a gap, especially around pregnancy planning [S3].</li>
-    <li>If fatigue or heavy periods are part of the picture, check ferritin or an iron panel before taking iron [S5].</li>
-    <li>If you train hard, creatine monohydrate at a small daily dose is a reasonable performance-oriented add-on [S8].</li>
-    <li>If dairy and fortified plant drinks are low, calculate calcium intake before buying a pill [S6].</li>
+    <li>First line: the new date. “The launch moves to the 29th” is the sentence she needs; everything else is context for it.</li>
+    <li>Second line: the reason, kept to a clause. A detailed reason moves the conversation to your process, which is the one place you do not want it.</li>
+    <li>Third line: what she has on the 15th anyway. A delay with something in it is a status update; a delay with nothing in it is a gap she has to explain to someone else.</li>
+    <li>Fourth line: the apology — drop it. It asks her to absolve you, while a concrete plan tells her what you are doing about it. Only one of those helps her.</li>
+    <li>Last line: cut “let me know if that’s a problem”. You are not offering her a choice, so do not phrase it as one; she will take you up on it and you will have to say no twice.</li>
   </ol>
-  <p><small>Start with the smallest set that solves a real gap, then review symptoms and labs after several weeks.</small></p>
+  <p>Four short lines are enough. If you cannot get it under six, the message has turned into a defence.</p>
 </div>`,
 
     Anthropic:
 `<div class="ai-block">
-  <p>Clinician-style framing</p>
-  <p>A vegetarian diet can be nutritionally complete, but it moves several nutrients from automatic intake to active monitoring. The strongest routine recommendation is B12 because natural plant foods are not dependable B12 sources [S1].</p>
+  <p>What the message is actually asking her to do</p>
+  <p>The draft asks Anna for two things: to absorb a two-week slip, and to tell you whether that is acceptable. The second request is the problem. You are asking her to rule on something you cannot change, and the honest answer to that question is yes, it is a problem — which leaves you both in a conversation with no move left in it.</p>
   <ul>
-    <li>Core: B12 through supplement or fortified foods.</li>
-    <li>Common gaps: iodine, vitamin D and long-chain omega-3, depending on salt choice, sun exposure and fish avoidance [S2] [S3] [S4].</li>
-    <li>Lab-driven: iron status, ferritin and sometimes zinc should guide extra supplementation [S5] [S7].</li>
-    <li>Optional performance layer: creatine may help people doing resistance training or repeated high-intensity work [S8].</li>
+    <li>Open with the new date, then the cause, then what she has in the meantime.</li>
+    <li>Name the cause. “A few things” is the only sentence in the draft she cannot check, and it will be the one she remembers.</li>
+    <li>Replace the apology with the remedy. An apology asks something of her; a plan gives her something.</li>
+    <li>Close with a commitment instead of a question: the day you will confirm the 29th.</li>
   </ul>
-  <p>The practical workflow is diet review, targeted labs, one or two changes, then recheck rather than stacking many products at once.</p>
-  <p><small>This is educational context and not a diagnosis or prescription.</small></p>
+  <p>Same facts, different posture. The draft reports a slip and asks for permission; the version above reports a slip and takes responsibility for the next step.</p>
 </div>`,
 
     Gemini:
 `<div class="ai-block">
-  <p>Pick the profile that fits best</p>
+  <p>How it reads on her side, sentence by sentence</p>
   <ul>
-    <li>Busy office vegetarian: B12 as the anchor; vitamin D is worth checking when most daylight hours are indoors [S1] [S2].</li>
-    <li>Strength or endurance athlete: keep the nutrition basics, then consider creatine; monitor iron if performance drops or recovery worsens [S8] [S5].</li>
-    <li>Pregnancy planning or pregnant: discuss a prenatal approach with folate, B12 and iodine; iron should follow labs and clinician advice [S1] [S3] [S5].</li>
-    <li>Dairy-light or dairy-free: count calcium from fortified drinks, tofu, dairy alternatives and greens before adding a supplement [S6].</li>
-    <li>Grain-and-legume-heavy pattern: zinc absorption can be lower in high-phytate diets, so food planning matters [S7].</li>
+    <li><b>“quick heads-up”</b> — signals something small. A two-week slip is not small, and the mismatch is the first thing she notices.</li>
+    <li><b>“we won’t make the 15th”</b> — the loss arrives before the fix. Reverse it: the 29th first, the miss second.</li>
+    <li><b>“a few things came up on our side”</b> — fine as it stands. She is not going to audit your sprint; she needs to know this is not the start of a pattern.</li>
+    <li><b>“sorry about that”</b> — keep it exactly as it is. One apology, early and unqualified, is what makes the rest of the message read as news rather than as a defence.</li>
+    <li><b>“let me know if that’s a problem”</b> — keep this one too, but only if you can live with the answer. It is the line that turns an announcement into a conversation.</li>
   </ul>
-  <p><small>Most people are a mix of profiles. The useful answer is the one that matches your diet and labs.</small></p>
+  <p>What is missing entirely: what she can show her own stakeholders on the 15th. That is the question she will be asked within an hour of forwarding your message.</p>
 </div>`,
 
     DeepSeek:
 `<div class="ai-block">
-  <p>Risk and safety checklist</p>
-  <h4>Before buying</h4>
+  <p>Before you send</p>
+  <h4>Check</h4>
   <ul>
-    <li>List medication, thyroid history and recent labs. Iron and calcium can interact with some medicines, so timing matters [S5] [S6].</li>
-    <li>Write down a normal week of meals; this quickly reveals whether B12, D, iodine, omega-3 or calcium are actually low [S1] [S2] [S3] [S4] [S6].</li>
+    <li>Is the 29th a date you would bet on? If it is a hope, you will be writing this message twice.</li>
+    <li>Does anything of hers hang on the 15th — a campaign, a client of her own, a contract date? If so, the message needs a line about that, not about you.</li>
   </ul>
-  <h4>Commonly sensible</h4>
+  <h4>Fix</h4>
   <ul>
-    <li>B12 for most vegetarians, D when sun exposure is low, iodine when iodized salt and seaweed are absent, and algae EPA/DHA for fish-free diets [S1] [S2] [S3] [S4].</li>
-    <li>Creatine is a specific performance tool, not a universal health requirement [S8].</li>
+    <li>New date in the first line.</li>
+    <li>Name the cause in one clause. A vague cause reads as a cause you do not want to name, and that is the line she will come back to.</li>
+    <li>Cut the closing question. It invites an escalation you cannot answer and implies the 29th is negotiable when it is not.</li>
+    <li>Say what lands on the 15th, and name the day you will confirm the 29th.</li>
   </ul>
-  <h4>Avoid</h4>
+  <h4>Do not</h4>
   <ul>
-    <li>High-dose shotgun multis without a reason.</li>
-    <li>Iron just in case; overdose risk and side effects make labs important [S5].</li>
-    <li>Overlapping products that quietly add multiple doses of the same nutrient.</li>
+    <li>Do not apologise twice. One acknowledgment, then move to the plan.</li>
+    <li>Do not leave it in a chat window if the 15th sits in a contract. The same three lines in an email are the ones that count later.</li>
   </ul>
-  <p><small>Use supplements as precise tools: one gap, one intervention, one follow-up check.</small></p>
 </div>`,
 
     Grok:
 `<div class="ai-block">
-  <p>Plain-language take</p>
+  <p>Plain take: it is fine, and it is also three small edits away from being good.</p>
   <ul>
-    <li>B12: yes, treat it as the boring baseline. Vegetarian diets can miss it unless fortified foods are deliberate [S1].</li>
-    <li>Vitamin D: if your lifestyle is mostly indoors or your winters are long, test or supplement thoughtfully [S2].</li>
-    <li>Omega-3: if fish is off the menu, algae oil is the direct EPA/DHA route [S4].</li>
-    <li>Iodine: trendy non-iodized salts do not help your thyroid; check your actual iodine sources [S3].</li>
-    <li>Iron: blood work first. Guessing with iron is unnecessary risk [S5].</li>
-    <li>Creatine: useful if you lift, sprint or train hard; not mandatory for everyone [S8].</li>
+    <li>Put the 29th first. She is scanning for a date, not for context.</li>
+    <li>Leave the reason vague. “A few things came up” is what everyone writes, and nobody has ever won a client back with a root-cause analysis.</li>
+    <li>Keep the “sorry”. It costs you nothing and it is the only human line in there.</li>
+    <li>Keep the closing question. If the 29th genuinely wrecks something on her side, you want to hear that now and not on the 28th.</li>
   </ul>
-  <p><small>Internet guidance can help you ask better questions; your labs and clinician still settle the personal answer.</small></p>
+  <p>Two things I would not do. Don’t stack a new promise on top of one you just broke — that includes promising a check-in date. And if you normally talk to this client on the phone, call first and send the same three lines right after; a two-week slip that arrives only as text is how a working relationship gets formal.</p>
 </div>`
   },
-  consensusSources: demoSources(["b12", "vitaminD", "iodine", "omega3", "iron", "calcium", "zinc", "creatine"]),
   consensus:
 `<div class="ai-consensus">
-  <p>Consensus: vegetarian supplement priorities</p>
-  <p>The models converge on a targeted approach. The most consistent baseline is B12 because vegetarian and especially vegan patterns can provide too little without fortified foods or supplements [S1]. After that, the answer depends on sun exposure, iodine sources, fish avoidance, calcium intake and labs.</p>
+  <p>Consensus: send it — after two fixes, and after you decide one thing yourself</p>
+  <p>All six models read the draft as close to sendable, and not one of them objects to the tone. Nothing in the draft is impolite, and that is not where the risk sits. The risk is in three sentences, and on one of them the models split three against three.</p>
+  <h4>Fix before you send</h4>
   <ul>
-    <li>B12: routine supplement or reliably fortified foods [S1].</li>
-    <li>Vitamin D: most relevant with low sun exposure or low measured 25-OH-D [S2].</li>
-    <li>Iodine: consider it when iodized salt, dairy, eggs, seafood and seaweed are not regular parts of the diet [S3].</li>
-    <li>Omega-3: algae EPA/DHA is the direct fish-free option [S4].</li>
+    <li>The new date belongs in the first line, ahead of the miss, the cause and the apology. She is scanning for a date.</li>
+    <li>Send it today, not on the 15th: two weeks of warning is a different message than a same-day cancellation, even though the delay is identical.</li>
+    <li>Say what Anna actually gets on the 15th instead of leaving the two weeks blank — that is the question she will be asked as soon as she forwards your message.</li>
+    <li>Put it in writing, so she can forward it to whoever planned around the 15th.</li>
+    <li>Name the day you will confirm the 29th, so the next update does not arrive as another surprise.</li>
   </ul>
-  <p>Other nutrients are more conditional. Iron should follow ferritin or an iron panel rather than habit [S5]. Calcium is best handled by counting food and fortified products before topping up [S6]. Zinc can matter in monotonous high-grain or legume-heavy diets [S7]. Creatine is optional and most relevant for training or performance goals [S8].</p>
-  <p>Overall recommendation: choose the smallest targeted set, avoid overlapping high-dose products, and recheck labs after a defined interval. This remains general information, not personal medical advice.</p>
+  <h4>Decide for yourself</h4>
+  <ul>
+    <li>The closing line splits the models down the middle: three read it as the only sentence that gives her a way in, three as an invitation to reopen a date you cannot move.</li>
+    <li>A few things came up on our side is the weakest sentence in the draft: half the models want the actual cause in one clause, half want it left exactly as vague as it is.</li>
+    <li>The apology itself is not disputed, only who does the work — whether the apology or the plan carries it.</li>
+  </ul>
+  <h4>What that looks like</h4>
+  <blockquote>Hi Anna, the launch moves to the 29th — we will not make the 15th. [One clause on the cause.] What you will have on the 15th is the checkout flow on staging, so your team can start testing on schedule. I will confirm the 29th by the 22nd at the latest. [Your closing line.]</blockquote>
+  <p>Both bracketed parts are the ones the models could not settle for you, and both turn on something only you know: whether the 29th is still negotiable, and whether this client reads a named cause as openness or as an excuse.</p>
 </div>`,
 
   // Strukturierte Auswertung – exakt das Schema, das eine echte Consensus-Query
   // liefert. Treibt Verdict-Header, Agreement-Badges und die Differences-Karten
   // (inkl. Contradiction) über window.renderConsensusInsights.
+  //
+  // Der Score ist nicht gegriffen, sondern die Rechnung aus
+  // app/services/llm/consensus_scoring.py auf genau diese Daten:
+  // Claim-Schnitt 5.5/6 = 0.9167, minus 0.25 (major) - 0.10 (minor)
+  // - 0.05 (emphasis) = 0.5167 -> 52, Deckel 0.64 greift nicht.
   differencesData: {
     models_compared: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"],
     best_model: "Anthropic",
+    judges: { differences: { provider: "Gemini" } },
     agreement: {
-      score: 83,
-      level: "largely",
+      score: 52,
+      level: "partially",
       model_count: 6,
-      major_contradictions: 0,
-      minor_contradictions: 1
+      major_contradictions: 1,
+      minor_contradictions: 1,
+      emphases: 1
     },
     claims: [
       {
-        anchor: "routine supplement or reliably fortified foods",
+        anchor: "The new date belongs in the first line",
         agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"],
         dissent: []
       },
       {
-        anchor: "Iron should follow ferritin or an iron panel",
+        anchor: "Send it today, not on the 15th",
         agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"],
         dissent: []
       },
       {
-        anchor: "algae EPA/DHA is the direct fish-free option",
-        agree: ["OpenAI", "Anthropic", "DeepSeek", "Grok"],
+        anchor: "Say what Anna actually gets on the 15th",
+        agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"],
+        dissent: []
+      },
+      {
+        anchor: "Nothing in the draft is impolite",
+        agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"],
+        dissent: []
+      },
+      {
+        anchor: "Put it in writing, so she can forward it",
+        agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek"],
         dissent: [
-          { model: "Mistral", quote: "a routine algae-oil supplement is optional rather than essential" }
+          {
+            model: "Grok",
+            quote: "if you normally talk to this client on the phone, call first and send the same three lines right after"
+          }
+        ]
+      },
+      {
+        anchor: "Name the day you will confirm the 29th",
+        agree: ["Mistral", "Anthropic", "Gemini", "DeepSeek"],
+        dissent: [
+          {
+            model: "OpenAI",
+            quote: "A promised status note is a second date you now also have to hit"
+          },
+          {
+            model: "Grok",
+            quote: "Don’t stack a new promise on top of one you just broke"
+          }
         ]
       }
     ],
     differences: [
       {
-        claim: "Do fish-free vegetarians need an algae omega-3 supplement?",
+        claim: "Keep or cut the line asking if the delay is a problem?",
         // Stelle im Konsenstext, die inline markiert wird (Wellenlinie +
         // Marker). Muss woertlich im Antworttext oben vorkommen.
-        consensus_anchor: "algae EPA/DHA is the direct fish-free option",
+        consensus_anchor: "an invitation to reopen a date you cannot move",
+        type: "contradiction",
+        severity: "major",
+        positions: [
+          {
+            stance: "Keep it. It is the only opening the message offers her.",
+            models: ["OpenAI", "Gemini", "Grok"],
+            quote: "It is the only line in the draft that gives Anna a way in, and a delay announced without one reads like a decision taken for her."
+          },
+          {
+            stance: "Cut it. It asks her to rule on something you cannot change.",
+            models: ["Anthropic", "Mistral", "DeepSeek"],
+            quote: "You are asking her to rule on something you cannot change, and the honest answer to that question is yes, it is a problem"
+          }
+        ],
+        verify: "Decide first whether the 29th is still negotiable. If it is not, do not ask a question that implies it is."
+      },
+      {
+        claim: "Name the cause, or leave it vague?",
+        consensus_anchor: "the weakest sentence in the draft",
         type: "contradiction",
         severity: "minor",
         positions: [
           {
-            stance: "Algae EPA/DHA is the recommended route.",
-            models: ["OpenAI", "DeepSeek", "Grok"],
-            quote: "algae-based EPA/DHA is the vegetarian route when fish is absent"
+            stance: "Name it in one clause; vagueness is what she will question.",
+            models: ["OpenAI", "Anthropic", "DeepSeek"],
+            quote: "A vague cause reads as a cause you do not want to name, and that is the line she will come back to."
           },
           {
-            stance: "Plant ALA is enough for most; it's optional.",
-            models: ["Mistral"],
-            quote: "a routine algae-oil supplement is optional rather than essential"
+            stance: "Leave it. A named cause moves the talk to your process.",
+            models: ["Mistral", "Gemini", "Grok"],
+            quote: "A detailed reason moves the conversation to your process, which is the one place you do not want it."
           }
         ],
-        verify: "Check your ALA intake and whether pregnancy or a condition raises your EPA/DHA need."
+        verify: "Ask whether the cause changes anything for her. If it does not, it is an explanation for you, not for her."
+      },
+      {
+        claim: "Apologise, or say what you are doing about it?",
+        consensus_anchor: "whether the apology or the plan carries it",
+        type: "emphasis",
+        severity: "minor",
+        positions: [
+          {
+            stance: "One short apology, early — it is what makes the rest readable.",
+            models: ["OpenAI", "Gemini", "Grok"],
+            quote: "One apology, early and unqualified, is what makes the rest of the message read as news rather than as a defence."
+          },
+          {
+            stance: "Let the plan do it — an apology puts the work on her.",
+            models: ["Anthropic", "Mistral", "DeepSeek"],
+            quote: "An apology asks something of her; a plan gives her something."
+          }
+        ],
+        verify: "Both camps keep an acknowledgment. The question is only whether it stands alone or comes with the next step attached."
       }
     ]
   },
 
   differences:
-`The consensus answer is largely credible.
+`The consensus answer is partially credible.
 
-The models broadly agree on the hierarchy: B12 first; vitamin D, iodine and omega-3 as diet and lifestyle indicate; iron only with labs; calcium by intake calculation; creatine mainly for training goals. They differ on one substantive point — whether a fish-free vegetarian really needs an algae-based omega-3 supplement, or whether plant ALA is enough for most people.
+All six models agree on the mechanics: new date first, say what she gets on the 15th, put it in writing, and leave the tone alone. They contradict each other on the closing question — three would keep it as the only opening the message offers her, three would cut it as an invitation to reopen a date that is not negotiable — and again, more mildly, on whether the cause should be named or left vague.
 
 BestModel: Anthropic`
 };
@@ -264,7 +288,8 @@ BestModel: Anthropic`
 const DEMO_PHASES = {
   preType: true,
   order: ["OpenAI", "Anthropic", "Gemini", "Mistral", "DeepSeek", "Grok"],
-  typeChars: 90,
+  // Obergrenze fuer die getippte Frage (ohne den eingefuegten Entwurf).
+  typeChars: 140,
   typeSpeed: 40,
   gapBetweenModels: 540,
   pauseAfterTypingAll: 650
@@ -418,15 +443,12 @@ function setSpinnerEl(box) {
 
 window.setSpinnerEl = setSpinnerEl;
 
-function getDemoSourcesForModel(model) {
-  return demoSources(DEMO_DATA.sourceKeys[model] || []);
-}
-
 function renderDemoModelResponse(model, outputEl) {
   const markdown = DEMO_DATA.responses[model] || "";
-  const sources = getDemoSourcesForModel(model);
+  // Ohne Quellen, aber ueber denselben Weg wie eine echte Antwort: der
+  // Renderer legt nebenbei die Kopier-/Bestantwort-Daten am Kasten ab.
   if (window.renderModelResponseWithSources) {
-    window.renderModelResponseWithSources(outputEl, markdown, sources);
+    window.renderModelResponseWithSources(outputEl, markdown, []);
     return;
   }
   if (window.injectMarkdown) window.injectMarkdown(outputEl, markdown);
@@ -440,19 +462,13 @@ async function renderDemoConsensus(mainP, diffP) {
   // Lauf stand auf "Done", waehrend der Konsenstext noch geschrieben wurde.
   // Hier meldet die Demo dieselben Uebergaenge wie ein echter Lauf.
   window.App?.consensusPipeline?.onConsensusStart?.();
-  let consensusMarkdown = DEMO_DATA.consensus;
-  if (window.registerResponseSources) {
-    consensusMarkdown = window.registerResponseSources(consensusMarkdown, DEMO_DATA.consensusSources);
-  } else if (window.mergeEvidenceSources) {
-    window.mergeEvidenceSources(DEMO_DATA.consensusSources);
-  }
 
   // Konsens-Antwort als Streaming-Response aufbauen, danach sauber rendern,
-  // damit [S1]-Quellenlinks und Copy-Buttons korrekt entstehen.
+  // damit Copy-Buttons und die Inline-Marker auf fertigem Markup sitzen.
   if (mainP) {
     await streamDemoInto(mainP, DEMO_DATA.consensus, runId, DEMO_CONSENSUS_STREAM);
     if (runId !== demoRunId) return;
-    if (window.injectMarkdown) window.injectMarkdown(mainP, consensusMarkdown);
+    if (window.injectMarkdown) window.injectMarkdown(mainP, DEMO_DATA.consensus);
   }
 
   // Konsenstext steht: ab hier prueft die Auswertung auf Widersprueche.
@@ -508,10 +524,19 @@ async function runDemoFlow() {
 
   if (DEMO_PHASES.preType) {
     const qiEl = document.getElementById("questionInput");
-    const snippet =
-      DEMO_SCENARIO_PROMPT.slice(0, DEMO_PHASES.typeChars) +
-      (DEMO_SCENARIO_PROMPT.length > DEMO_PHASES.typeChars ? "..." : "");
-    await typeIntoInput(qiEl, snippet, DEMO_PHASES.typeSpeed);
+    await typeIntoInput(
+      qiEl,
+      DEMO_TYPED_QUESTION.slice(0, DEMO_PHASES.typeChars),
+      DEMO_PHASES.typeSpeed
+    );
+    // Den Entwurf tippt niemand ab; er wird eingefuegt. Deshalb erscheint er
+    // in einem Zug, mit einer kurzen Pause davor, damit sichtbar bleibt, dass
+    // Frage und Nachricht zwei verschiedene Dinge sind.
+    if (qiEl) {
+      await sleep(340);
+      qiEl.value = DEMO_SCENARIO_PROMPT;
+      qiEl.dispatchEvent(new Event("input", { bubbles: true }));
+    }
     await sleep(DEMO_PHASES.pauseAfterTypingAll);
   }
 
