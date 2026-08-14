@@ -54,8 +54,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Ausgeloggt stehen Login/Sign-up nur oben rechts; die Sidebar zeigt kein
       zweites Login-Feld. Das Account-Popup hat in Light und Dark einen
       vollständig deckenden, gut lesbaren Hintergrund.
-      Das Eingabefeld steht mit Begrüßung mittig; nach dem ersten Senden gleitet
-      es nach oben und die unveränderten Modell-Antwortboxen blenden ein.
+      Mit Agent Mode steht das Eingabefeld mit Begrüßung mittig und wechselt
+      nach dem Senden in den geführten Thread. Ohne Agent Mode bleiben Composer
+      oben und die sechs Modell-Antwortboxen darunter wie im Ausgangs-Mockup.
 - [ ] Login-Dialog: Fokus wandert beim Öffnen hinein, Tab bleibt im Dialog,
       Escape/Backdrop/benannter Close-Button schließen ihn und geben den Fokus
       an den Auslöser zurück. Mit altem `id_token` und blockiertem Firebase-CDN
@@ -75,19 +76,29 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Settings: Experience, Connections, Model behavior und Account sind als
       klar getrennte Kategorien erkennbar; alle Schalter, API-Key-Felder,
       System Prompt und Account-Löschung funktionieren weiterhin.
+- [ ] Das (+)-Menü zeigt Agent Mode direkt unter Deep Think im identischen
+      Zeilen-/Switch-Stil. Der Agent-Schalter hat kein Pro-Badge, ist für
+      Free-Nutzer bedienbar und bleibt in beide Richtungen mit dem
+      Settings-Schalter synchron.
 - [ ] Frage eingeben + senden → alle ausgewählten Modelle streamen Antworten.
 - [ ] Bei null oder einem ausgewählten Modell ist Senden deaktiviert; Sidebar-
       Zähler und Custom-Picker nennen „choose at least 2“. Ab zwei Modellen startet
-      der Lauf normal und endet in Consensus + Differences. Mit Anhang und genau
+      der Lauf; nur Agent Mode endet in Consensus + Differences, der
+      Direktvergleich endet nach den Modellantworten. Mit Anhang und genau
       OpenAI + stale DeepSeek wird nach dem Attachment-Filter erneut geprüft:
       kein Usage-Run, kein `/prepare`, kein Ein-Modell-Fan-out.
 - [ ] Antworten alle ausgewählten `/ask_*` mit HTTP-/Netzfehler, endet der Lauf
       sichtbar und in Analytics als Fehler; kein Consensus startet. Nach dem
       ersten echten Lauf enthält `#consensusMarkerLegend` weiterhin seinen Text.
-- [ ] Ohne Agent Mode erscheint direkt unter dem Input die kompakte Pipeline:
-      Zähler folgt den fertigen Modellantworten, danach wird „Consensus &
-      differences“ ohne falsche Prozent-/Zeitprognose aktiv; Abschluss, Fehler
-      und Stop blenden die Zeile wieder aus. Light/Dark und Mobile ohne Clipping.
+- [ ] Ohne Agent Mode bleibt die Oberfläche im direkten Vergleich: kein
+      Pipeline-Block, kein Thread-Kopf und kein `/consensus`-Request; alle sechs
+      Antworten streamen sichtbar in ihre Boxen, Consensus, Differences und
+      Claims bleiben leer/verborgen. Das gilt in Light/Dark und mobil ohne
+      horizontalen Overflow.
+- [ ] Mit Agent Mode erscheint die kompakte Pipeline: Zähler folgt den fertigen
+      Modellantworten, danach wird „Consensus & differences“ ohne falsche
+      Prozent-/Zeitprognose aktiv; Abschluss, Fehler und Stop blenden die Zeile
+      wieder aus.
 - [ ] Senden während Lauf abbrechen (Stop) funktioniert.
 - [ ] Modell per Checkbox ein-/ausschließen blendet die Antwortbox korrekt ein/aus.
 - [ ] Echter Bild-/PDF-Anhang pausiert DeepSeek mit sichtbarer Erklärung; nach
@@ -200,7 +211,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Herunterscrollen; Aufwärtsscrollen, Seitenanfang oder Tastatur-Navigation
       bringen beide ohne Flackern zurück. Dasselbe gilt im scrollenden
       Watch-Dashboard für den View-Schalter.
-- [ ] Auto-Consensus (Toggle an) triggert automatisch nach Abschluss.
+- [ ] Auto-Consensus ist an Agent Mode gekoppelt: Agent Mode an triggert ihn
+      nach Abschluss; Agent Mode aus hält den read-only Toggle aus und sendet
+      keinen `/consensus`-Request.
 - [ ] Credibility-Frame-Farbe (cred-very … cred-not) wird gesetzt.
 - [ ] Consensus-Insights: Claim-Badges, Difference-Karten, Klick öffnet Popover,
       „Jump to model answer" highlightet die Originalantwort.
@@ -226,7 +239,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       erfolgreiches Pro-`/usage` inklusive Badge/Features geheilt.
 
 ## Agent Mode
-- [ ] Agent-Mode an/aus, Timer läuft, Status-Text korrekt, Auto-Consensus-Kopplung.
+- [ ] Agent-Mode an/aus, Timer läuft, Status-Text korrekt, Auto-Consensus-Kopplung;
+      ausgeschaltet bleiben sechs direkte Antworten sichtbar und der
+      Consensus-/Differences-/Claims-Pfad unberührt.
 - [ ] Nach der ersten fertigen Modellantwort erscheint dezent „Compare answers“
       (auch im eingeklappten Mobile-Panel); der Toggle zeigt/versteckt die
       einzelnen Antwortboxen, ohne Agent Mode auszuschalten, und startet bei

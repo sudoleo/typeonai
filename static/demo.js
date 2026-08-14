@@ -507,9 +507,17 @@ async function renderDemoConsensus(mainP, diffP) {
 }
 
 async function runDemoFlow() {
-  // Die Demo kann auch direkt über den "Try Demo"-Chip starten und muss dann
-  // denselben Hero->Antworten-Übergang wie eine reguläre Frage auslösen.
-  window.exitHeroMode?.();
+  const agentModeEnabled = window.isAgentModeEnabled?.() === true;
+  // Auch die lokale Demo respektiert den Produktmodus: Agent Mode baut den
+  // Thread auf, der Direktvergleich bleibt bei den sechs Antwortfenstern.
+  if (agentModeEnabled) {
+    window.exitHeroMode?.();
+  } else {
+    document.body.classList.add("is-hero", "direct-comparison-active");
+    window.App?.setThreadQuestion?.("");
+    window.syncHeroResponseAccess?.();
+    window.App?.consensusPipeline?.dismiss?.();
+  }
   const runId = ++demoRunId;
   const sendBtn = document.getElementById("sendButton");
   if (sendBtn) sendBtn.disabled = true;
@@ -543,7 +551,9 @@ async function runDemoFlow() {
   // Die fertig getippte Frage wird jetzt "abgeschickt": Sie wandert in den
   // Thread-Kopf und verschwindet wie bei einem echten Lauf aus dem Composer.
   // Erst danach beginnen Fortschrittsanzeige und Modell-Spinner.
-  window.App?.setThreadQuestion?.(DEMO_SCENARIO_PROMPT);
+  if (agentModeEnabled) {
+    window.App?.setThreadQuestion?.(DEMO_SCENARIO_PROMPT);
+  }
   if (qi) {
     qi.value = "";
     qi.dispatchEvent(new Event("input", { bubbles: true }));
@@ -579,9 +589,10 @@ async function runDemoFlow() {
   const consensusDiv = document.getElementById("consensusResponse");
   const mainP = window.App.consensusBodyEl(consensusDiv);
   const diffP = consensusDiv?.querySelector(".consensus-differences p");
-  // Auto Consensus ist standardmäßig an (Einstellungen). Ist es nicht explizit
-  // deaktiviert, läuft der Konsens automatisch, sobald alle Antworten da sind.
-  const auto = document.getElementById("autoConsensusToggle")?.checked !== false;
+  // Consensus/Differences sind Teil des Agent Mode. Im Direktvergleich endet
+  // die Demo nach den sechs Modellantworten.
+  const auto = window.isAgentModeEnabled?.() === true
+    && document.getElementById("autoConsensusToggle")?.checked !== false;
 
   if (auto) {
     window.resetConsensusInsights?.();

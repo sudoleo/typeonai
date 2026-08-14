@@ -32,7 +32,7 @@
   <script src="/static/js/auth-session-state.js?v=20260811-phase6"></script>
   <script src="/static/js/watch-state.js?v=20260812-auditfix"></script>
   <!-- Google Fonts -->
-  <link rel="stylesheet" href="/static/style.css?v=20260814-composergrow2">
+  <link rel="stylesheet" href="/static/style.css?v=20260814-directcompare1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
@@ -50,10 +50,10 @@
   <script src="/static/js/auth-bootstrap.js?v=20260811-phase4" defer></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
   <script type="module" src="/static/firebase.js?v=20260812-auditfix"></script>
-  <script type="module" src="/static/demo.js?v=20260814-message1"></script>
+  <script type="module" src="/static/demo.js?v=20260814-directcompare1"></script>
   <script src="/static/app-ui.js?v=20260811-phase4" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
-  <script src="/static/js/app-core.js?v=20260814-askclamp2" defer></script>
+  <script src="/static/js/app-core.js?v=20260814-directcompare1" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
   <script src="/static/js/model-picker.js?v=20260810-runblock1" defer></script>
   <!-- Gemeinsame LaTeX-Aufbereitung; muss vor markdown-stream.js laden. -->
@@ -65,8 +65,8 @@
   <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
   <script src="/static/js/attachments.js?v=20260810-runblock1" defer></script>
   <!-- Agent Mode (aus index.html ausgelagert) -->
-  <script src="/static/js/agent-mode.js?v=20260811-phase6" defer></script>
-  <!-- Kompakte Zwei-Phasen-Anzeige fuer regulaere Laeufe (ohne Agent Mode). -->
+  <script src="/static/js/agent-mode.js?v=20260814-agentquick1" defer></script>
+  <!-- Gefuehrte Fortschrittsanzeige fuer Agent-Mode-Laeufe. -->
   <script src="/static/js/consensus-progress.js?v=20260807-threadmessages1" defer></script>
   <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
   <script src="/static/js/consensus-lifecycle.js?v=20260811-phase6" defer></script>
@@ -89,7 +89,7 @@
   <script src="/static/js/consensus-insights.js?v=20260811-phase6" defer></script>
   <script src="/static/js/chat-session.js?v=20260806-chatlimits1" defer></script>
   <script src="/static/js/consensus-run.js?v=20260814-askalign1" defer></script>
-  <script src="/static/js/query-send.js?v=20260812-auditfix" defer></script>
+  <script src="/static/js/query-send.js?v=20260814-directcompare1" defer></script>
   <!-- Composer einklappen (Handy): eine Zeile beim Lesen, voll beim Anfassen -->
   <script src="/static/js/composer-collapse.js?v=20260814-composergrow2" defer></script>
   {% include "partials/analytics.html" %}
@@ -435,11 +435,24 @@
               </span>
             </span>
           </label>
+          <!-- Agent Mode nutzt dieselbe Zeile und denselben Switch-Look wie
+               Deep Think, ist aber bewusst kein Pro-Feature. -->
+          <label class="attach-menu-toggle" for="agentModeMenuSwitch" title="Agent Mode">
+            <span class="attach-menu-toggle-icon" aria-hidden="true"></span>
+            <span class="attach-menu-toggle-text">
+              <span class="search-mode-label deep-switch-label">Agent Mode</span>
+              <span class="attach-menu-toggle-sub">Build consensus, differences and claims after all models answer.</span>
+            </span>
+            <span class="switch deep-switch attach-menu-switch">
+              <input type="checkbox" id="agentModeMenuSwitch">
+              <span class="slider"></span>
+            </span>
+          </label>
         </div>
         <input type="file" id="attachFileInput" accept=".pdf,.docx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,image/png,image/jpeg,image/webp" multiple hidden>
         <!-- Composer-Zeile: Anhang, EIN Lauf-Schalter ("N models · Preset"),
-             Senden. Agent Mode und die Modus-Erklaerung sind in die Settings
-             gewandert, der Trash-Button in "New comparison" — der gefuehrte
+             Senden. Agent Mode ist im (+)-Menue und in den Settings erreichbar,
+             der Trash-Button in "New comparison" — der gefuehrte
              Lauf sagt jetzt selbst, was passiert, statt es hier anzukuendigen.
              .consensus-switch-container bleibt als Selektor-Vertrag bestehen. -->
         <div class="consensus-switch-container">
@@ -490,9 +503,9 @@
         </div>
         <button type="button" id="postDemoLoginButton" class="post-demo-login-action">Log in or sign up</button>
       </div>
-      <!-- Der Modus-Erklaerer ist entfallen: Agent Mode und Auto Consensus
-           stehen mit eigener Beschreibung in den Settings, Deep Think im
-           (+)-Menue, und der gefuehrte Lauf benennt jeden Schritt waehrend er
+      <!-- Der Modus-Erklaerer ist entfallen: Agent Mode und Deep Think stehen
+           im (+)-Menue, Agent Mode und Auto Consensus zusaetzlich in den
+           Settings, und der gefuehrte Lauf benennt jeden Schritt waehrend er
            laeuft. Eine vierte Stelle, die dasselbe erklaert, war Ballast. -->
 
       <!-- Disclaimer + Legal-Links gehören zum Eingabebereich. Dadurch folgen
@@ -795,7 +808,7 @@
       </div>
     </div>
 
-  <script src="/static/js/app-init.js?v=20260814-composergrow2" defer></script>
+  <script src="/static/js/app-init.js?v=20260814-directcompare1" defer></script>
   <script src="/static/js/app-dom-events.js?v=20260811-phase6" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
@@ -1047,7 +1060,7 @@
                 <label for="agentModeSwitch" class="custom-checkbox-label settings-switch-row settings-agent-mode-row">
                   <span>
                     <strong>Agent Mode</strong>
-                    <small>Group selected models while keeping their answers available for consensus.</small>
+                    <small>Build consensus, differences and claims after the model answers. Turn off for six direct answers only.</small>
                   </span>
                   <input type="checkbox" id="agentModeSwitch">
                 </label>
@@ -1057,7 +1070,7 @@
                 <label for="autoConsensusToggle" class="custom-checkbox-label settings-switch-row">
                   <span>
                     <strong>Auto Consensus</strong>
-                    <small>Build consensus and differences automatically after all models finish.</small>
+                    <small>Follows Agent Mode: on for guided runs, off for direct comparisons.</small>
                   </span>
                   <input type="checkbox" id="autoConsensusToggle">
                 </label>

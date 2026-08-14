@@ -1695,6 +1695,7 @@
 
         window.clearResponseBoxes = function (options = {}) {
           if (!options.silent) trackAppEvent("app_responses_cleared");
+          document.body.classList.remove("direct-comparison-active");
           const boxIds = [
             "openaiResponse",
             "mistralResponse",

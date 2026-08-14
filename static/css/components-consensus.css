@@ -117,13 +117,9 @@
   opacity: 0;
 }
 
-/* Die Einzelantworten liegen in BEIDEN Modi hinter dem Schalter in der
-   Fusszeile (2026-07-27), nicht mehr nur im Agent Mode: der Thread liest
-   sich als Frage → Antwort → Composer, und sechs volle Modellboxen
-   dazwischen sind der Beleg, den man aufschlaegt, nicht der Standardweg.
-   Der Hero bleibt ausgenommen — dort sind die leeren Boxen die Vorschau auf
-   das, was gleich passiert. */
-body:not(.is-hero):not(.agent-mode-show-answers) .response-section > .response-box {
+/* Nur Agent Mode legt Einzelantworten hinter "Compare answers". Ohne Agent
+   Mode SIND die sechs Modellboxen das Ergebnis und bleiben sichtbar. */
+body:not(.is-hero).agent-mode-enabled:not(.agent-mode-show-answers) .response-section > .response-box {
   display: none;
 }
 

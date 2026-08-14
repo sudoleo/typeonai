@@ -1,7 +1,9 @@
 // =====================================================================
 // agent-mode.js
 // Agent Mode: gruppierter Modell-Lauf mit Timer, Status und erzwungenem
-// Auto-Consensus. In eigene IIFE gekapselt. State (Status/Timer) ist
+// Auto-Consensus. Ausgeschaltet bleibt die App im direkten Sechs-Antworten-
+// Vergleich und startet keine Consensus-Pipeline. In eigene IIFE gekapselt.
+// State (Status/Timer) ist
 // modul-privat; agentModeStatus wird extern via window.isAgentModeRunning()
 // gelesen.
 // Extrahiert aus templates/index.html (initApp-Closure).
@@ -315,28 +317,27 @@
   }
 
   function setAutoConsensusForAgentMode(enabled) {
-    // Auto Consensus lebt jetzt in den Einstellungen. In Agent Mode bleibt
-    // es zwingend an und wird ausgegraut, damit der Konsens garantiert läuft.
+    // Auto Consensus ist eine Eigenschaft des Agent Mode, kein zweiter Modus.
+    // Der gekoppelte Settings-Schalter zeigt den Zustand read-only:
+    // an bedeutet Consensus, aus bedeutet ausschliesslich Modellantworten.
     const autoToggle = document.getElementById("autoConsensusToggle");
     if (!autoToggle) return;
     const autoWrap = autoToggle.closest(".settings-section");
 
-    if (enabled) {
-      autoToggle.checked = true;
-      localStorage.setItem("autoConsensus", "true");
-    }
-
-    autoToggle.disabled = !!enabled;
-    autoWrap?.classList.toggle("is-agent-locked", !!enabled);
+    autoToggle.checked = !!enabled;
+    localStorage.setItem("autoConsensus", String(!!enabled));
+    autoToggle.disabled = true;
+    autoWrap?.classList.add("is-agent-locked");
     autoToggle.title = enabled
       ? "Auto Consensus is always on in Agent Mode"
-      : "";
+      : "Auto Consensus is available only in Agent Mode";
   }
 
   function updateAgentModeUI() {
     const enabled = isAgentModeEnabled();
     const panel = document.getElementById("agentModePanel");
     const switchEl = document.getElementById("agentModeSwitch");
+    const menuSwitchEl = document.getElementById("agentModeMenuSwitch");
     const toggleSwitch = document.querySelector(".agent-mode-switch");
     const modelsEl = document.getElementById("agentModeModels");
     const statusEl = document.getElementById("agentModeStatus");
@@ -359,6 +360,9 @@
 
     document.body.classList.toggle("agent-mode-enabled", enabled);
     document.body.classList.toggle("agent-mode-running", enabled && agentModeStatus === "running");
+    if (enabled) {
+      document.body.classList.remove("direct-comparison-active");
+    }
     // Hero-Desktop zeigt die Response-Boxen nur ohne Agent Mode; inert/
     // aria-hidden muessen der CSS-Sichtbarkeit folgen (app-core.js).
     if (typeof window.syncHeroResponseAccess === "function") {
@@ -387,6 +391,7 @@
     }
 
     if (switchEl) switchEl.checked = enabled;
+    if (menuSwitchEl) menuSwitchEl.checked = enabled;
     if (toggleSwitch) {
       toggleSwitch.title = enabled ? "Disable Agent Mode" : "Enable Agent Mode";
       toggleSwitch.setAttribute("aria-label", toggleSwitch.title);
@@ -545,9 +550,13 @@
     if (typeof window.updateConsensusButtonAvailability === "function") {
       window.updateConsensusButtonAvailability();
     }
-    // Zentraler Status-Hub für JEDEN Lauf (auch ohne Agent Mode): die
-    // Fortschritts-Pipeline unter dem Input hört hier mit (consensus-progress.js).
-    window.App?.consensusPipeline?.onQueryStatus?.(status);
+    // Der Modellstatus bleibt fuer jeden Lauf zentral. Nur Agent Mode reicht
+    // ihn an die gefuehrte Pipeline weiter; der Direktvergleich raeumt sie ab.
+    if (isAgentModeEnabled()) {
+      window.App?.consensusPipeline?.onQueryStatus?.(status);
+    } else {
+      window.App?.consensusPipeline?.dismiss?.();
+    }
   }
 
   function setModelAnswersVisible(visible, options = {}) {
@@ -591,6 +600,13 @@
   if (agentAnswersToggle) {
     agentAnswersToggle.addEventListener("click", function () {
       setModelAnswersVisible(!modelAnswersVisible, { track: true });
+    });
+  }
+
+  const agentModeMenuSwitch = document.getElementById("agentModeMenuSwitch");
+  if (agentModeMenuSwitch) {
+    agentModeMenuSwitch.addEventListener("change", function () {
+      setAgentMode(this.checked, { persist: true });
     });
   }
 

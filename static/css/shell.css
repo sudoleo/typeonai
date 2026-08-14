@@ -2129,10 +2129,9 @@ body:not(.is-hero) .input-section {
   }
 }
 
-/* Die sechs Antwortboxen liegen standardmaessig hinter "Compare answers".
-   Ist der Drawer zu, verschwindet auch ihr leerer Flex-Wrapper samt
-   margin-bottom; sonst bleiben zwischen Footer und Composer weitere 20px. */
-body:not(.is-hero):not(.agent-mode-show-answers) .response-section {
+/* Nur im Agent Mode liegen die sechs Antwortboxen hinter "Compare answers".
+   Im Direktvergleich sind sie selbst das Ergebnis. */
+body:not(.is-hero).agent-mode-enabled:not(.agent-mode-show-answers) .response-section {
   display: none;
 }
 
@@ -3331,4 +3330,10 @@ body:has(#postDemoLoginPrompt:not([hidden])) .chat-input-container {
 
 body.is-hero.agent-mode-enabled .response-section {
   display: none;
+}
+
+/* Der aktive Direktvergleich verwendet den Hero-Aufbau als dauerhafte
+   Vergleichsflaeche. Diese spaete Regel gewinnt gegen den mobilen Empty-Hero. */
+body.is-hero.direct-comparison-active .response-section {
+  display: flex;
 }

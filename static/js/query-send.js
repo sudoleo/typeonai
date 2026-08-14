@@ -1,8 +1,9 @@
 // =====================================================================
 // query-send.js
 // Query send only: window.sendQuestion fans the question out to the
-// selected providers (/prepare + /ask_*), streams each answer, updates
-// usage/tier UI, and triggers auto-consensus. Plus the query run-state
+// selected providers (/prepare + /ask_*), streams each answer and updates
+// usage/tier UI. Only Agent Mode triggers auto-consensus; with it disabled,
+// the six streamed answers are the complete result. Plus the query run-state
 // (controller/runId/running), cancel, and the small query helpers
 // (mode detection, demo/search-intent, spinner/cancel bookkeeping).
 //
@@ -297,7 +298,12 @@
       }
 
       const question = document.getElementById("questionInput").value;
-      const followupRequested = window.App.followup?.isArmed?.() === true;
+      const agentModeAtStart = isAgentModeEnabled?.() === true;
+      // Follow-ups are consensus conversations. A direct comparison is a
+      // fresh one-question fan-out and must not create a pending chat turn
+      // that can only be finalized by the disabled consensus endpoint.
+      const followupRequested = agentModeAtStart
+        && window.App.followup?.isArmed?.() === true;
       window.App.state.set("lastQuestion", question, "run");
 
       if (!question.trim()) {
@@ -338,20 +344,29 @@
       window.App.updateDeepThinkText?.();
       window.App.bookmarkSession?.begin?.(question, { followup: followupRequested });
 
-      // Ab dem ersten echten Lauf wird die Seite zum Thread: Frage oben,
-      // Composer unten. Der Demo-Pfad nutzt denselben Übergang.
-      window.exitHeroMode?.();
-      // Bei einem Follow-up bleibt der bisherige Turn waehrend /prepare noch
-      // unangetastet. Erst wenn der Lauf wirklich fortgesetzt wird, archivieren
-      // wir ihn und setzen die neue Frage darunter.
-      if (!followupRequested) {
-        window.App.setThreadQuestion?.(question);
-      }
+      if (agentModeAtStart) {
+        // Agent Mode wird zum gefuehrten Thread: Frage oben, Composer unten.
+        window.exitHeroMode?.();
+        // Bei einem Follow-up bleibt der bisherige Turn waehrend /prepare noch
+        // unangetastet. Erst wenn der Lauf wirklich fortgesetzt wird,
+        // archivieren wir ihn und setzen die neue Frage darunter.
+        if (!followupRequested) {
+          window.App.setThreadQuestion?.(question);
+        }
 
-      // Der gefuehrte Lauf beginnt HIER, nicht erst beim Fan-out: zwischen
-      // Klick und erster Modellantwort liegen Validierung und /prepare, und
-      // genau in dieser Luecke soll der Nutzer schon sehen, dass etwas laeuft.
-      window.App?.consensusPipeline?.onPrepare?.();
+        // Der gefuehrte Lauf beginnt vor /prepare, damit die Pipeline bereits
+        // zwischen Klick und erstem Modell-Token sichtbar ist.
+        window.App?.consensusPipeline?.onPrepare?.();
+      } else {
+        // Direktvergleich: dieselbe ruhige Zwei-Spalten-Oberflaeche wie im
+        // Ausgangszustand bleibt stehen. Kein Thread-Kopf, kein Pipeline-Widget.
+        window.App.followup?.reset?.();
+        window.App.chatSession?.reset?.();
+        document.body.classList.add("is-hero", "direct-comparison-active");
+        window.App.setThreadQuestion?.("");
+        window.syncHeroResponseAccess?.();
+        window.App?.consensusPipeline?.dismiss?.();
+      }
 
       // === DEMO: Früh raus, wenn "Demo" ===
       if (isDemoQuery(question) && !followupRequested) {
@@ -383,7 +398,8 @@
         custom_credentials: document.getElementById("useOwnKeysSwitch")?.checked === true,
         logged_in: !!window.auth?.currentUser,
         agent_mode: typeof window.isAgentModeEnabled === "function" && window.isAgentModeEnabled(),
-        auto_consensus: document.getElementById("autoConsensusToggle")?.checked === true
+        auto_consensus: agentModeAtStart
+          && document.getElementById("autoConsensusToggle")?.checked === true
       });
 
       currentQueryRunId++;
@@ -1194,11 +1210,13 @@
             selected_models: totalActive
           });
 
-          // Konsens läuft jetzt immer automatisch – außer er ist in den
-          // Einstellungen deaktiviert. Erst wenn ALLE Antworten fertig sind
-          // (inkl. Agent Mode) und genug Antworten vorliegen, blenden wir den
-          // rahmenlosen Konsens-Bereich sanft ein und starten die Synthese.
-          const autoConsensusOn = document.getElementById("autoConsensusToggle")?.checked !== false;
+          // Consensus gehoert ausschliesslich zum Agent Mode. Im
+          // Direktvergleich sind die sechs Antworten bereits das Ergebnis.
+          const autoConsensusOn = agentModeAtStart
+            && isAgentModeEnabled?.() === true
+            && document.getElementById("autoConsensusToggle")?.checked !== false;
+          if (!autoConsensusOn) return;
+
           const canGenerate = typeof window.canGenerateConsensus === "function"
             ? window.canGenerateConsensus()
             : true;

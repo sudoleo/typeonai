@@ -211,8 +211,10 @@
   function syncHeroResponseAccess() {
     const responses = document.querySelector(".response-section");
     if (!responses) return;
+    const directComparisonActive = document.body.classList.contains("direct-comparison-active");
     const hiddenInHero =
       document.body.classList.contains("is-hero") &&
+      !directComparisonActive &&
       (document.body.classList.contains("agent-mode-enabled") || !heroDesktopQuery.matches);
     responses.inert = hiddenInHero;
     if (hiddenInHero) {

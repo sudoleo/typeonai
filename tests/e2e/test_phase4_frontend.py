@@ -392,6 +392,67 @@ def test_all_model_failures_end_in_error_without_consensus(browser, phase4_serve
         context.close()
 
 
+def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        consensus_requests = []
+        page.on(
+            "request",
+            lambda request: consensus_requests.append(request.url)
+            if request.url.endswith("/consensus") else None,
+        )
+        page.route(
+            "**/prepare",
+            lambda route: _json(route, {"system_prompt": "Prepared prompt"}),
+        )
+        page.route(
+            "**/ask_*",
+            lambda route: _json(route, {
+                "response": "Direct answer from " + route.request.url.rsplit("_", 1)[-1],
+                "sources": [],
+            }),
+        )
+        page.click("#attachTrigger")
+        menu_toggle = page.locator("#agentModeMenuSwitch")
+        menu_toggle_row = page.locator('label[for="agentModeMenuSwitch"]')
+        expect(menu_toggle_row).to_be_visible()
+        expect(menu_toggle).to_be_enabled()
+        expect(menu_toggle).to_be_checked()
+        menu_toggle_row.click()
+        expect(menu_toggle).not_to_be_checked()
+        expect(page.locator("#agentModeSwitch")).not_to_be_checked()
+        expect(page.locator("#autoConsensusToggle")).not_to_be_checked()
+        page.fill("#questionInput", "Give me six direct answers only.")
+        page.evaluate("() => window.sendQuestion()")
+
+        for response_id in (
+            "openaiResponse", "mistralResponse", "claudeResponse",
+            "geminiResponse", "deepseekResponse", "grokResponse",
+        ):
+            expect(page.locator(f"#{response_id}")).to_contain_text(
+                "Direct answer from", timeout=10000
+            )
+            expect(page.locator(f"#{response_id}")).to_be_visible()
+
+        page.wait_for_timeout(500)
+        assert consensus_requests == []
+        assert page.locator("body").evaluate(
+            "el => el.classList.contains('is-hero')"
+            " && el.classList.contains('direct-comparison-active')"
+            " && !el.classList.contains('agent-mode-enabled')"
+        )
+        expect(page.locator("#threadAsk")).to_be_hidden()
+        expect(page.locator("#consensusRun")).to_be_hidden()
+        expect(page.locator("#consensusOutput")).to_be_hidden()
+        expect(page.locator("#consensusAnswerBody .cx-claim")).to_have_count(0)
+        expect(page.locator("#differencesCards")).to_be_hidden()
+        auto_toggle = page.locator("#autoConsensusToggle")
+        expect(auto_toggle).not_to_be_checked()
+        expect(auto_toggle).to_be_disabled()
+    finally:
+        context.close()
+
+
 def test_attachment_filter_blocks_one_model_run_before_prepare(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)
     try:

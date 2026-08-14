@@ -407,8 +407,9 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   `window.pendingAttachments`, `getAttachmentsPayload`,
   `window.App.attachments.{detachForMessage,renderMessageAttachments}`.
 - **`agent-mode.js`** — Agent-Mode-**Zustand**, Status-Hub und Timer; einzige
-  Stelle, die den Auto-Consensus-Toggle erzwingt/sperrt, und `setAgentModeStatus`
-  bleibt der zentrale Lifecycle-Kanal JEDES Laufs (auch ohne Agent Mode).
+  Stelle, die den Auto-Consensus-Toggle erzwingt/sperrt. `setAgentModeStatus`
+  verwaltet weiterhin jeden Modelllauf, reicht Statusereignisse aber nur im
+  Agent Mode an die gefuehrte Consensus-Pipeline weiter.
   Seit 2026-07-27 ist das Panel `#agentModePanel` als **Fortschrittsanzeige
   stillgelegt** (in `shell.css` auf `display:none`): zwei Progress-UIs fuer
   einen Request waren genau der Ueberschuss, den der gefuehrte Lauf abbaut.
@@ -416,9 +417,10 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   Auto-Consensus. Der session-lokale
   „Compare answers/Hide answers"-Disclosure (`#agentModeAnswersRow`) ist ins Markup
   der Provenance-Zeile gewandert — agent-mode.js adressiert ihn unveraendert
-  per `getElementById`, die Position ist kein Vertrag — und gilt seither in
-  **beiden Modi**: `body:not(.is-hero):not(.agent-mode-show-answers)` blendet
-  die Antwortboxen aus. Sobald der fertige Consensus-Fuss sichtbar ist, bleibt
+  per `getElementById`, die Position ist kein Vertrag. Sie gilt nur fuer fertige
+  Agent-Mode-Ergebnisse: `.agent-mode-enabled:not(.agent-mode-show-answers)`
+  blendet dort die Antwortboxen aus. Im Direktvergleich bleiben alle sechs
+  Antwortboxen durchgehend sichtbar. Sobald der fertige Consensus-Fuss sichtbar ist, bleibt
   `#agentModeAnswersRow` immer vorhanden; er haengt nicht mehr an einer
   fehleranfaelligen Erkennung aktiver/abgeschlossener Modellboxen.
   Vorher war der Schalter an den Agent Mode gebunden und damit in zwei von
@@ -620,7 +622,9 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
 - **Composer-Reduktion (2026-07-27)** — die Eingabezeile ist auf Anhang (+),
   EINEN Lauf-Schalter („N models · Preset", der bestehende Consensus-Picker mit
   vorangestellter Modellanzahl) und Senden reduziert. Entfallen sind dort
-  `#toggleAllButton` (Agent Mode → Settings `#agentModeSwitch`),
+  `#toggleAllButton` (Agent Mode → Settings `#agentModeSwitch` und seit
+  2026-08-14 zusätzlich der Free-verfügbare `#agentModeMenuSwitch` direkt unter
+  Deep Think im (+)-Menü),
   `#modeExplainerTrigger` samt `#modeExplainer`-Section (Modi werden dort
   erklaert, wo man sie schaltet) und `#clearButton` (→ „New comparison").
   Alle betroffenen JS-Stellen waren bereits null-gesichert.
@@ -818,9 +822,10 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   `index.html` nach `app-core.js`, aber vor `consensus-run.js` geladen werden.
 - **`query-send.js`** — `window.sendQuestion`: `/prepare` + `/ask_*`-Fan-out,
   vorgelagerte Turn-/Context-Bindung, Streaming-Rendering, Usage/Tier-UI,
-  Auto-Consensus-Trigger, Query-Run-State
-  (`isQueryRequestRunning`, `cancelCurrentQuery`). Ein valider erster Lauf
-  beendet über `window.exitHeroMode()` den zentrierten Input-Leerzustand. Vor
+  Agent-Mode-gebundener Auto-Consensus-Trigger, Query-Run-State
+  (`isQueryRequestRunning`, `cancelCurrentQuery`). Ein valider Agent-Mode-Lauf
+  beendet über `window.exitHeroMode()` den zentrierten Input-Leerzustand; der
+  Direktvergleich behält den Hero-/Screenshot-Aufbau. Vor
   `/prepare` gilt eine harte Mindestzahl von zwei ausgewählten Modellen;
   `app-init.js::updateQuestionInputAccess` deaktiviert den Send-Button bereits
   synchron dazu, während `query-send.js` programmgesteuerte Starts nochmals
@@ -959,11 +964,16 @@ Controls wie `#consensusButton`, `#toggleAllButton` oder `#apiTestArea`.
    Browserabbruch beendet einen begonnenen SSE-Lauf: das Cancellation-Signal
    schließt aktive HTTP-/SDK-Streams, unterbindet weitere Provider-Retries und
    der abgebrochene Generator erreicht keine nachgelagerte Persistenz.
-4. Ohne Agent Mode begleitet `consensus-progress.js` den Lauf rahmenlos unter
-   dem Input: Antwortfortschritt basiert auf `dataset.responseState`; nach dem
-   Fan-out wechselt die Anzeige zur nicht prozentual geschätzten Synthesephase
-   und verschwindet bei Abschluss, Fehler oder Abbruch. Es ist die EINZIGE
-   Fortschrittsanzeige des Laufs — der Differences-Spinner hatte bis
+4. **Agent Mode an:** `consensus-progress.js` begleitet den gefuehrten Lauf
+   rahmenlos unter dem Input. Antwortfortschritt basiert auf
+   `dataset.responseState`; nach dem Fan-out wechselt die Anzeige zur nicht
+   prozentual geschaetzten Synthesephase und verschwindet bei Abschluss, Fehler
+   oder Abbruch. **Agent Mode aus:** `query-send.js` behaelt den Hero-/Screenshot-
+   Aufbau mit Composer oben und sechs sichtbaren Antwortboxen bei; die Frage wird
+   nur an `/ask_*` gefächert. Es gibt keinen Pipeline-Block, keinen
+   `/consensus`-Aufruf und folglich keine Differences oder Claims. Die Body-
+   Klasse `.direct-comparison-active` haelt diesen Layoutzustand auch mobil
+   sichtbar. Der Differences-Spinner hatte bis
    2026-07-27 eine eigene Leiste (`.differences-progress`), die mit ihr
    dieselbe Phase doppelt zeigte und deshalb entfallen ist. Im zweiten
    Schritt ist auch der verbliebene Text „Comparing responses" weg:
@@ -1309,10 +1319,24 @@ Modellen).
 `query-send.js` automatisch `getConsensus` aus. Run-State/Gating läuft über
 `consensus-lifecycle.js` (`startRun()→{runId,signal}`, `isActiveRun`, `finishRun`,
 `setSynthesizing`, `cancelCurrentConsensus`). Agent Mode ist die **einzige** Stelle,
-die den Auto-Consensus-Toggle erzwingt/sperrt. Standardmäßig bleiben die sechs
+die den Auto-Consensus-Toggle erzwingt/sperrt: aktiv = an, inaktiv = aus; der
+gekoppelte Settings-Schalter ist in beiden Zustaenden read-only. Standardmäßig bleiben die sechs
 Einzelantwortboxen verborgen; `#agentModeAnswersToggle` setzt ausschließlich die
 session-lokale Body-Klasse `.agent-mode-show-answers`, ohne Agent Mode oder dessen
 Auto-Consensus-Kopplung zu deaktivieren.
+
+Bei deaktiviertem Agent Mode ist der Fan-out selbst das Endergebnis. Der Client
+bleibt in der durch `.direct-comparison-active` markierten Vergleichsansicht,
+zeigt alle sechs Streams direkt und startet weder Consensus noch Differences/
+Claims. Follow-up-/Chat-Turn-Persistenz wird in diesem Ein-Frage-Pfad nicht
+begonnen, weil deren Abschluss an `/consensus` gebunden ist.
+
+Der Agent Mode ist an zwei Stellen schaltbar: `#agentModeSwitch` in den Settings
+und `#agentModeMenuSwitch` direkt unter Deep Think im (+)-Menü. Beide Controls
+schreiben ausschließlich über `setAgentMode(..., {persist:true})` denselben
+`localStorage.agentMode`-Zustand und werden von `updateAgentModeUI()` in beide
+Richtungen synchronisiert. Der Menü-Schalter trägt kein Pro-Badge und kein
+Tier-Gate; er ist auch für Free-Nutzer bedienbar.
 
 **Default fuer neue Nutzer** (seit 2026-07-27 auf allen Geraeten, vorher nur
 mobil): `agentMode = "true"` und `agentModePanelCollapsed = "false"` werden beim
@@ -2563,8 +2587,9 @@ ersten Check statt eines leeren Consensus-Panels.
   genutzten `#shareModal` für Share und Watch einschließlich Modusklasse,
   Background-Scroll-Lock und Rückgabe des Fokus an den Auslöser.
 - **DOM-als-State**: `dataset.consensusAnswer`, `dataset.consensusSources`,
-  `dataset.responseState`, `.excluded`-Klassen und die session-lokale
-  `.agent-mode-show-answers`-Body-Klasse u. a. sind echte State-Quellen.
+  `dataset.responseState`, `.excluded`-Klassen sowie die session-lokalen
+  `.agent-mode-show-answers`- und `.direct-comparison-active`-Body-Klassen
+  u. a. sind echte State-Quellen.
   Vorsicht beim Umbauen von Markup. Alte, nicht vorhandene Control-IDs
   `#consensusButton`, `#toggleAllButton` und `#apiTestArea` sind kein Vertrag mehr.
 - **Jinja↔JS-Brücke**: Config geht nur über die escaped `data-*`-Attribute von

@@ -754,13 +754,66 @@ def test_send_question_streams_all_models(app_page):
     _wait_for_all_final_answers(app_page)
 
 
+def test_disabled_agent_mode_stays_in_direct_six_answer_comparison(app_page):
+    """Agent Mode off is a terminal fan-out: no guided workflow or judge."""
+    consensus_requests = []
+    app_page.on(
+        "request",
+        lambda request: consensus_requests.append(request.url)
+        if request.url.endswith("/consensus")
+        else None,
+    )
+    app_page.set_viewport_size({"width": 1280, "height": 800})
+    app_page.click("#attachTrigger")
+    menu_toggle = app_page.locator("#agentModeMenuSwitch")
+    menu_toggle_row = app_page.locator('label[for="agentModeMenuSwitch"]')
+    expect(menu_toggle_row).to_be_visible()
+    expect(menu_toggle).to_be_enabled()
+    menu_toggle_row.click()
+    expect(menu_toggle).not_to_be_checked()
+    expect(app_page.locator("#agentModeSwitch")).not_to_be_checked()
+
+    auto_state = app_page.evaluate(
+        """() => {
+          const toggle = document.getElementById('autoConsensusToggle');
+          return { checked: toggle.checked, disabled: toggle.disabled };
+        }"""
+    )
+    assert auto_state == {"checked": False, "disabled": True}
+
+    _send_question(app_page)
+    _wait_for_all_final_answers(app_page)
+    app_page.wait_for_timeout(1500)
+
+    expect(app_page.locator("body")).to_have_class(
+        re.compile(r"\bis-hero\b.*\bdirect-comparison-active\b")
+    )
+    expect(app_page.locator("#threadAsk")).to_be_hidden()
+    expect(app_page.locator("#consensusRun")).to_be_hidden()
+    expect(app_page.locator("#consensusOutput")).to_be_hidden()
+    expect(app_page.locator("#consensusAnswerBody .cx-claim, #consensusAnswerBody .claim-badge")).to_have_count(0)
+    expect(app_page.locator("#differencesCards")).to_be_hidden()
+    for _, response_id, _ in PROVIDERS.values():
+        expect(app_page.locator(f"#{response_id}")).to_be_visible()
+
+    layout = app_page.evaluate(
+        """() => {
+          const input = document.querySelector('.input-section').getBoundingClientRect();
+          const responses = document.querySelector('.response-section').getBoundingClientRect();
+          return { inputBottom: input.bottom, responsesTop: responses.top };
+        }"""
+    )
+    assert layout["inputBottom"] <= layout["responsesTop"] + 1
+    assert consensus_requests == []
+
+
 def test_consensus_renders_differences_and_agreement_score(app_page, get_console_errors):
     """Hoechstes Risiko laut Smoke-Checkliste: Auto-Consensus (per Default an)
     triggert nach Abschluss aller Antworten und rendert Consensus-Text,
     Claim-Badges, Widerspruchs-Karte und Agreement-Score. Einen manuellen
     Consensus-Button gibt es im aktuellen UI nicht mehr."""
     app_page.set_viewport_size({"width": 390, "height": 844})
-    app_page.evaluate("() => window.setAgentMode(false, { persist: true })")
+    app_page.evaluate("() => window.setAgentMode(true, { persist: true })")
     # Passage-Interaktion explizit unter Touch-Bedingungen pruefen. Die alte
     # Implementierung brach bei genau diesem Media Query vor dem Binding ab.
     app_page.evaluate(
@@ -780,7 +833,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     )
     _send_question(app_page)
 
-    # Regulärer Modus: determinate Antwortphase -> indeterminate Synthese.
+    # Agent Mode: determinate Antwortphase -> indeterminate Synthese.
     # Die rahmenlose Zeile bleibt mobil kompakt und clippt ihren Text nicht.
     pipeline = app_page.locator("#consensusRun")
     expect(pipeline).to_be_visible(timeout=10000)
@@ -817,8 +870,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     )
     expect(app_page.locator("#consensusAnswerBody .cx-claim")).to_have_count(2)
 
-    # Der fertige Footer zeigt die Einzelantworten-Disclosure auch ohne
-    # Agent Mode. Sie ist ein fester Teil jeder Consensus-Antwort.
+    # Der fertige Agent-Mode-Footer zeigt die Einzelantworten-Disclosure.
     model_answers_toggle = app_page.locator("#agentModeAnswersToggle")
     expect(model_answers_toggle).to_be_visible(timeout=15000)
     expect(model_answers_toggle.locator(".consensus-tab-label")).to_have_text("Compare answers")
@@ -1064,7 +1116,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     expect(app_page.locator("body.agent-mode-show-answers")).to_have_count(1)
     expect(model_answers_toggle.locator(".consensus-tab-label")).to_have_text("Hide answers")
     expect(app_page.locator(".response-section mark.quote-flash, .response-section .quote-flash-block").first).to_be_visible()
-    assert app_page.evaluate("() => window.isAgentModeEnabled()") is False
+    assert app_page.evaluate("() => window.isAgentModeEnabled()") is True
 
     model_answers_toggle.click()
     expect(app_page.locator("#openaiResponse")).to_be_hidden()
@@ -1075,7 +1127,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     claim_jump.click()
     expect(app_page.locator("body.agent-mode-show-answers")).to_have_count(1)
     expect(app_page.locator("#grokResponse")).to_be_visible()
-    assert app_page.evaluate("() => window.isAgentModeEnabled()") is False
+    assert app_page.evaluate("() => window.isAgentModeEnabled()") is True
 
     # Ausgangszustand für die bestehende Disclosure-/Reihenfolge-Prüfung.
     model_answers_toggle.click()
