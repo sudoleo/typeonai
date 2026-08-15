@@ -158,6 +158,7 @@ class Database:
 
 
 def test_bookmark_quota_counts_merges_and_rejects_oversize(monkeypatch):
+    assert persistence_guard.MAX_BOOKMARKS_PER_USER == 250
     db = Database()
     ref = db.collection("users").document("u1").collection("bookmarks").document("b1")
     first = persistence_guard.write_bookmark(
@@ -187,6 +188,25 @@ def test_bookmark_quota_counts_merges_and_rejects_oversize(monkeypatch):
         persistence_guard.write_bookmark(
             uid="u1", doc_ref=ref, patch={"responses": {"OpenAI": "x" * 100}}, db=db
         )
+
+
+def test_bookmark_quota_accepts_legacy_owner_above_the_old_cap():
+    db = Database()
+    usage_ref = db.collection(persistence_guard.USAGE_COLLECTION).document(
+        persistence_guard._owner_key("bookmarks", "u1")
+    )
+    usage_ref.set({"bookmark_count": 102, "bookmark_bytes": 10_000})
+    ref = db.collection("users").document("u1").collection("bookmarks").document("new")
+
+    stored = persistence_guard.write_bookmark(
+        uid="u1",
+        doc_ref=ref,
+        patch={"query": "Q", "responses": {"OpenAI": "A"}},
+        db=db,
+    )
+
+    assert stored["query"] == "Q"
+    assert usage_ref.get().to_dict()["bookmark_count"] == 103
 
 
 def test_bookmark_delete_updates_quota_with_firestore_transaction_contract():

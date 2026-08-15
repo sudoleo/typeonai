@@ -143,6 +143,34 @@
           });
         });
 
+        // Agreement bleibt standardmaessig sichtbar. Wer die numerische
+        // Bewertung beim Lesen nicht sehen moechte, kann sie fuer Live- und
+        // archivierte Consensus-Antworten gemeinsam ausblenden.
+        const AGREEMENT_SCORE_STORAGE_KEY = "consensio.showAgreementScore.v1";
+        const agreementScoreSwitch = document.getElementById("showAgreementScoreSwitch");
+
+        function applyAgreementScorePreference(showScore) {
+          document.body.classList.toggle("agreement-score-hidden", !showScore);
+          if (agreementScoreSwitch) agreementScoreSwitch.checked = showScore;
+        }
+
+        function restoreAgreementScorePreference() {
+          applyAgreementScorePreference(
+            localStorage.getItem(AGREEMENT_SCORE_STORAGE_KEY) !== "false"
+          );
+        }
+
+        restoreAgreementScorePreference();
+        agreementScoreSwitch?.addEventListener("change", function () {
+          localStorage.setItem(AGREEMENT_SCORE_STORAGE_KEY, String(this.checked));
+          applyAgreementScorePreference(this.checked);
+          trackAppEvent("app_agreement_score_visibility_changed", {
+            visible: this.checked
+          });
+        });
+
+        window.addEventListener("pageshow", restoreAgreementScorePreference);
+
         window.App.consensusLifecycle.initAutoConsensusToggle();
 
         const questionInput = document.getElementById("questionInput");

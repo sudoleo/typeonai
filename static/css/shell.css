@@ -1528,6 +1528,14 @@ body:not(.is-hero) #verifyBanner {
   display: none;
 }
 
+/* Lesepraeferenz aus Settings: Nur der numerische Score verschwindet. Die
+   qualitative Einordnung und der Widerspruchshinweis bleiben sichtbar, damit
+   das Ergebnis nicht seine wichtigste Warnung verliert. Die Body-Klasse gilt
+   zugleich fuer den Live-Fuss und archivierte Turns. */
+body.agreement-score-hidden .verdict-gauge {
+  display: none;
+}
+
 /* The headline is a headline: one line. It used to chain two truncated
    claim fragments plus "+2 more" into a two-line run-on that was the
    loudest thing in the footer and the hardest to read. One topic, cut with

@@ -1290,6 +1290,32 @@ function upsertBookmarkMeta(bookmark, { prepend = true } = {}) {
   }
 }
 
+let lastBookmarkSaveNotice = { key: "", shownAt: 0 };
+
+function showBookmarkSaveError(status, detail, scope = "") {
+  const normalizedDetail = String(detail || "").trim();
+  let message = "This bookmark could not be saved.";
+  if (normalizedDetail === "Bookmark limit reached.") {
+    message = "Bookmark limit reached. Delete an older bookmark before saving a new one.";
+  } else if (normalizedDetail === "Bookmark storage limit reached.") {
+    message = "Bookmark storage is full. Delete older bookmarks before saving a new one.";
+  } else if (normalizedDetail === "Bookmark is too large.") {
+    message = "This result is too large to save as a bookmark.";
+  } else if (status === 429) {
+    message = "Bookmarks could not be saved right now. Please wait a minute and try again.";
+  }
+
+  // Ein Lauf speichert bis zu sechs Modellantworten parallel. Derselbe Fehler
+  // darf deshalb genau einmal sichtbar werden, nicht als Popup-Kaskade.
+  const key = `${scope}:${status}:${message}`;
+  const now = Date.now();
+  if (lastBookmarkSaveNotice.key === key && now - lastBookmarkSaveNotice.shownAt < 600_000) {
+    return;
+  }
+  lastBookmarkSaveNotice = { key, shownAt: now };
+  window.App?.showPopup?.(message);
+}
+
 async function saveBookmark(question, response, modelName, mode, previousQuestion = "") {
   const requestUser = auth.currentUser;
   if (!requestUser) return;
@@ -1330,6 +1356,7 @@ async function saveBookmark(question, response, modelName, mode, previousQuestio
 
     if (!res.ok) {
       console.error("Error saving bookmark:", data.detail);
+      showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`);
       return;
     }
 
@@ -1396,6 +1423,7 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
     if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
     if (!res.ok) {
       console.error("Error saving consensus bookmark:", data.detail);
+      showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`);
       return;
     }
     if (data.bookmark) {

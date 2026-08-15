@@ -49,6 +49,26 @@ def test_bookmark_writes_and_views_are_bound_to_auth_and_intent_generations():
     assert open_bookmark.count("viewIsCurrent()") >= 4
 
 
+def test_bookmark_save_failures_are_visible_and_deduplicated():
+    firebase = read("static/firebase.js")
+    notice = section(
+        firebase,
+        "function showBookmarkSaveError(",
+        "async function saveBookmark(",
+    )
+    model_save = section(firebase, "async function saveBookmark(", "window.saveBookmark =")
+    consensus_save = section(
+        firebase, "async function saveBookmarkConsensus(", "window.saveBookmarkConsensus ="
+    )
+
+    assert "Bookmark limit reached" in notice
+    assert "Bookmark storage is full" in notice
+    assert "600_000" in notice
+    assert "window.App?.showPopup?.(message)" in notice
+    assert 'showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`)' in model_save
+    assert 'showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`)' in consensus_save
+
+
 def test_share_requests_use_auth_snapshots_abort_controllers_and_view_epochs():
     share = read("static/js/share-dialog.js")
 

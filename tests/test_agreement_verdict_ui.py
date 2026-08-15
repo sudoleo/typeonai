@@ -22,6 +22,18 @@ def test_verdict_color_and_label_follow_the_agreement_score():
     assert 'headline.textContent = "Very low agreement"' in verdict
 
 
+def test_settings_can_hide_the_numeric_agreement_score_persistently():
+    template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
+    init = (ROOT / "static" / "js" / "app-init.js").read_text(encoding="utf-8")
+    shell = (ROOT / "static" / "css" / "shell.css").read_text(encoding="utf-8")
+
+    assert 'id="showAgreementScoreSwitch" checked' in template
+    assert "consensio.showAgreementScore.v1" in init
+    assert 'classList.toggle("agreement-score-hidden", !showScore)' in init
+    assert 'localStorage.getItem(AGREEMENT_SCORE_STORAGE_KEY) !== "false"' in init
+    assert "body.agreement-score-hidden .verdict-gauge" in shell
+
+
 def test_public_mockups_use_the_same_score_semantics():
     landing = (ROOT / "templates" / "landing.html").read_text(encoding="utf-8")
     engine = (ROOT / "templates" / "consensus-engine.html").read_text(

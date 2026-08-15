@@ -76,6 +76,10 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Settings: Experience, Connections, Model behavior und Account sind als
       klar getrennte Kategorien erkennbar; alle Schalter, API-Key-Felder,
       System Prompt und Account-Löschung funktionieren weiterhin.
+- [ ] „Show agreement score“ ist standardmäßig aktiv. Ausschalten blendet die
+      numerische Score-Anzeige im aktuellen Consensus und in archivierten Turns
+      aus; die qualitative Einordnung/Widerspruchswarnung bleibt sichtbar. Nach
+      Reload bleibt die Auswahl erhalten.
 - [ ] Das (+)-Menü zeigt Agent Mode direkt unter Deep Think im identischen
       Zeilen-/Switch-Stil. Der Agent-Schalter hat kein Pro-Badge, ist für
       Free-Nutzer bedienbar und bleibt in beide Richtungen mit dem
@@ -449,6 +453,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Nach einer fertigen Antwort öffnet „Models“ den Picker normal — es gibt
       keine Entscheidung mehr, die ihn sperren könnte.
 - [ ] Bookmarks laden/aufklappen, Chat-Suche filtert.
+- [ ] Ein abgewiesener Bookmark-Save (Count-/Speicher-/Rate-Limit) zeigt genau
+      eine verständliche Meldung, auch wenn sechs Modell-Merges parallel
+      denselben Fehler erhalten; es entsteht keine Popup-Kaskade.
 - [ ] Turn 1, Turn 2, Turn 3 und weitere Follow-ups aktualisieren genau ein
       Sidebar-Bookmark. Nach Reload öffnet dieses eine Bookmark den vollständigen
       Verlauf in richtiger Reihenfolge und ein weiteres Follow-up bleibt im
