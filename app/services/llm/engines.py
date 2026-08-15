@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import logging
-import openai
 import requests
 from typing import Optional
 from urllib.parse import quote
@@ -38,13 +37,36 @@ from app.services.llm.citations import (
     parse_openai_response,
     result_text,
 )
-from app.services.llm.provider_runtime import (
-    PROVIDER_HTTP_TIMEOUT,
-    managed_provider_resource,
-    openai_client,
-)
+from app.services.llm.provider_runtime import PROVIDER_HTTP_TIMEOUT
 
 logger = logging.getLogger(__name__)
+
+# Achtung, der Pfad ist irrefuehrend: das ist DeepSeeks EIGENER Server mit
+# DeepSeek-Key, DeepSeek-Modellen und DeepSeek-Preisen. Nur das JSON-Format ist
+# Anthropics Messages-Schema nachgebaut (so wie /chat/completions OpenAIs
+# Schema nachbaut). Es geht kein Request an Anthropic.
+#
+# DeepSeek bietet die serverseitige Web-Suche auf zwei Wegen an:
+#   /responses            -> `{"type": "web_search"}`, laeuft, liefert aber
+#                            weder `action.sources` noch Annotationen: gemessen
+#                            0 Quellen ueber alle Testfragen.
+#   /anthropic/v1/messages -> `web_search_20250305`, liefert die Treffer als
+#                            `web_search_tool_result`-Bloecke (Titel + URL).
+# Fuer eine App, die Herkunft anzeigt, ist nur der zweite Weg brauchbar.
+# /chat/completions kann es gar nicht ("unknown variant `web_search`, expected
+# `function`") und bleibt deshalb der closed-book Benchmark-Pfad.
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+DEEPSEEK_ANTHROPIC_URL = f"{DEEPSEEK_BASE_URL}/anthropic/v1/messages"
+
+# Jede Suche liefert pauschal 10 Treffer – es gibt keinen Parameter fuer
+# "weniger Ergebnisse pro Suche". `max_uses` ist damit der einzige Hebel und
+# steuert Quellenzahl und Kosten zugleich (gemessen, v4-flash):
+#   1 -> ~10 Quellen,  3.8k Input-Tokens
+#   2 -> ~18 Quellen,  9.6k
+#   5 -> ~35 Quellen, 23.6k
+# 2 als Kompromiss: die Liste bleibt lesbar, mehrteilige Fragen duerfen aber
+# noch mehr als einmal suchen.
+DEEPSEEK_SEARCH_MAX_USES = 2
 
 
 class _ProviderHTTPStatusError(RuntimeError):
@@ -395,20 +417,46 @@ def build_provider_payload(
         else:
             internal_model = model_override or DEFAULT_DEEPSEEK_MODEL
             api_model, _ = cfg.resolve_api_model(model_override, DEFAULT_DEEPSEEK_MODEL, "deepseek")
+        if benchmark_mode:
+            # Closed book: unveraenderter OpenAI-kompatibler Payload, damit die
+            # Benchmark-Laeufe mit den bestehenden V1-Ergebnissen vergleichbar
+            # bleiben (kein Endpoint- und kein Prompt-Format-Wechsel).
+            return {
+                "provider": "deepseek",
+                "endpoint": "chat.completions",
+                "internal_model": internal_model,
+                "api_model": api_model,
+                "is_low_reasoning": False,
+                "payload": {
+                    "model": api_model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": question},
+                    ],
+                    "stream": False,
+                    "max_tokens": max_tokens,
+                },
+            }
+        # Anhaenge gehen hier nie als Content-Block mit: DeepSeek listet image
+        # und document als "Not Supported"; `native_attachments_for_provider`
+        # liefert fuer deepseek daher immer [] (der Text-Fallback haengt bereits
+        # an `question`).
         return {
             "provider": "deepseek",
-            "endpoint": "chat.completions",
+            "endpoint": "anthropic.messages",
             "internal_model": internal_model,
             "api_model": api_model,
             "is_low_reasoning": False,
             "payload": {
                 "model": api_model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": question},
-                ],
-                "stream": False,
                 "max_tokens": max_tokens,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": question}],
+                "tools": [{
+                    "type": "web_search_20250305",
+                    "name": "web_search",
+                    "max_uses": DEEPSEEK_SEARCH_MAX_USES,
+                }],
             },
         }
 
@@ -716,7 +764,6 @@ def query_deepseek(
     max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
 
     try:
-        client = openai_client(api_key=api_key, base_url="https://api.deepseek.com")
         request_data = build_provider_payload(
             "deepseek",
             question=question,
@@ -727,28 +774,40 @@ def query_deepseek(
             attachments=attachments,
         )
         _log_model_selection("DeepSeek", request_data["api_model"], deep_search, model_override)
-        with managed_provider_resource(client):
-            response = client.chat.completions.create(**request_data["payload"])
-        choice = response.choices[0]
-        content = (choice.message.content or "").strip()
-        if not content:
-            # Reasoning-Modelle können das Token-Budget komplett im Denken
-            # verbrauchen; ohne diese Auswertung zeigt das Frontend nur den
-            # irreführenden Generik-Text "No response received".
-            finish_reason = getattr(choice, "finish_reason", None)
-            logger.warning(
-                "DeepSeek returned no content (finish_reason=%s, model=%s)",
-                finish_reason, request_data["api_model"],
-            )
-            if finish_reason == "length":
-                message = ("The model ran out of output tokens while reasoning and never "
-                           "produced an answer. Please try again or simplify the question.")
-                code = "empty_reasoning_response"
-            else:
-                message = "The model returned no answer. Please try again."
-                code = "empty_response"
-            return {"text": "", "sources": [], "error": message, "error_code": code}
-        return content
+
+        response = requests.post(
+            DEEPSEEK_ANTHROPIC_URL,
+            json=request_data["payload"],
+            headers={
+                "x-api-key": api_key,
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01",
+            },
+            timeout=PROVIDER_HTTP_TIMEOUT,
+        )
+        if response.status_code >= 400:
+            _raise_provider_http_status(response)
+        data = response.json()
+        parsed = parse_anthropic_response(data, "deepseek")
+        if result_text(parsed):
+            return parsed
+
+        # Reasoning-Modelle können das Token-Budget komplett im Denken
+        # verbrauchen; ohne diese Auswertung zeigt das Frontend nur den
+        # irreführenden Generik-Text "No response received".
+        stop_reason = data.get("stop_reason")
+        logger.warning(
+            "DeepSeek returned no content (stop_reason=%s, model=%s)",
+            stop_reason, request_data["api_model"],
+        )
+        if stop_reason == "max_tokens":
+            message = ("The model ran out of output tokens while reasoning and never "
+                       "produced an answer. Please try again or simplify the question.")
+            code = "empty_reasoning_response"
+        else:
+            message = "The model returned no answer. Please try again."
+            code = "empty_response"
+        return {"text": "", "sources": [], "error": message, "error_code": code}
     except Exception as e:
         return _error("DeepSeek", e)
     

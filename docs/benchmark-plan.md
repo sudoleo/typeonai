@@ -73,7 +73,21 @@ Die Consensus-Synthese selbst (`app/services/llm/consensus_engine.py`) ist
 | Anthropic | `:268‑272` | `web_search_20250305` |
 | Gemini | `:302` | `tools:[{google_search:{}}]` |
 | Grok | `:357` (via `_openai_responses_payload`) | `web_search` |
-| DeepSeek | `:336‑344` | **kein Tool** → bereits closed-book |
+| DeepSeek | `:391‑453` | `web_search_20250305` (seit 2026-08-15, nur auf `api.deepseek.com/anthropic/v1/messages`) |
+
+DeepSeek ist der einzige Provider, bei dem `benchmark_mode=True` nicht nur das
+Tool entfernt, sondern auch den Endpoint wechselt: closed book laeuft weiter
+ueber `/chat/completions` (OpenAI-kompatibel), damit die V1-Laeufe vergleichbar
+bleiben. Die Web-Suche gibt es dort nicht — `/chat/completions` akzeptiert nur
+`function`-Tools.
+
+**Nicht verwechseln:** `api.deepseek.com/anthropic/...` ist DeepSeeks eigener
+Server mit DeepSeek-Key, -Modellen und -Preisen; nur das JSON-Format ist
+Anthropics Messages-Schema nachgebaut. Es geht kein Request an Anthropic, und
+die Websuche wird nicht separat berechnet (nur Tokens). DeepSeeks zweiter
+Suchweg, `/responses` mit `{"type": "web_search"}`, ist zwar offiziell
+dokumentiert, liefert aber weder `action.sources` noch Annotationen — gemessen
+0 Quellen — und ist fuer eine App, die Herkunft anzeigt, unbrauchbar.
 
 Hinweis: Der frühere `/prepare`-Intent-Router (`tool_heuristics.py`) wurde
 entfernt — Echtzeitdaten kommen ausschließlich aus der nativen Web-Suche oben.

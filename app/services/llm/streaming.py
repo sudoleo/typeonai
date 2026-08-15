@@ -27,6 +27,7 @@ from app.services.llm.citations import (
     source_response,
 )
 from app.services.llm.engines import (
+    DEEPSEEK_ANTHROPIC_URL,
     _error,
     _gemini_search_tool_unsupported,
     _google_adc_headers,
@@ -251,12 +252,18 @@ def _stream_openai_responses(*, api_key: str, base_url: str, payload: dict, prov
     yield {"type": "final", "result": result}
 
 
-def _stream_anthropic_messages(*, api_key: str, payload: dict) -> Generator[StreamEvent, None, None]:
+def _stream_anthropic_messages(
+    *,
+    api_key: str,
+    payload: dict,
+    url: str = "https://api.anthropic.com/v1/messages",
+    provider: str = "anthropic",
+) -> Generator[StreamEvent, None, None]:
     raise_if_provider_cancelled()
     request_payload = dict(payload)
     request_payload["stream"] = True
     resp = requests.post(
-        "https://api.anthropic.com/v1/messages",
+        url,
         json=request_payload,
         headers={
             "x-api-key": api_key,
@@ -271,6 +278,9 @@ def _stream_anthropic_messages(*, api_key: str, payload: dict) -> Generator[Stre
 
     blocks: Dict[int, dict] = {}
     order: list = []
+    # Suchtreffer kommen komplett im `content_block_start` (kein Delta) und sind
+    # bei DeepSeek die einzige Quellenspur, weil dort keine citations folgen.
+    search_blocks: list = []
     for event_name, data_str in iter_sse_events(resp):
         data = _parse_json(data_str)
         if data is None:
@@ -289,6 +299,8 @@ def _stream_anthropic_messages(*, api_key: str, payload: dict) -> Generator[Stre
                 yield {"type": "delta", "text": blocks[index]["text"]}
             elif blocks[index]["type"] == "thinking":
                 yield {"type": "reasoning"}
+            elif blocks[index]["type"] == "web_search_tool_result":
+                search_blocks.append(content_block)
         elif event_type == "content_block_delta":
             index = data.get("index")
             if index not in blocks:
@@ -315,8 +327,8 @@ def _stream_anthropic_messages(*, api_key: str, payload: dict) -> Generator[Stre
         {"type": "text", "text": blocks[i]["text"], "citations": blocks[i]["citations"]}
         for i in order
         if blocks[i]["type"] == "text"
-    ]
-    result = parse_anthropic_response({"content": content})
+    ] + search_blocks
+    result = parse_anthropic_response({"content": content}, provider)
     if not result_text(result):
         result = make_llm_result("Error: No response found in the API response.", [])
     yield {"type": "final", "result": result}
@@ -665,8 +677,14 @@ def stream_deepseek_query(
             attachments=attachments,
         )
         _log_model_selection("DeepSeek", request_data["api_model"], deep_search, model_override)
-        client = openai_client(api_key=api_key, base_url="https://api.deepseek.com")
-        yield from _stream_chat_completions(client=client, payload=request_data["payload"])
+        # Web-Suche gibt es nur auf dem Anthropic-kompatiblen Endpoint; das
+        # SSE-Format ist dort identisch zu Anthropic (thinking_delta inklusive).
+        yield from _stream_anthropic_messages(
+            api_key=api_key,
+            payload=request_data["payload"],
+            url=DEEPSEEK_ANTHROPIC_URL,
+            provider="deepseek",
+        )
     except ProviderCancelled:
         raise
     except Exception as e:

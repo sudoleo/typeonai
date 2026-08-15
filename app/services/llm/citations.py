@@ -285,7 +285,49 @@ def parse_openai_response(data: Dict[str, Any], provider: str = "openai") -> LLM
     return merge_results(annotated, markdown)
 
 
-def parse_anthropic_response(data: Dict[str, Any]) -> LLMResult:
+def _web_search_result_sources(
+    data: Dict[str, Any], provider: str
+) -> List[Source]:
+    """Sammelt die Treffer aus `web_search_tool_result`-Bloecken.
+
+    DeepSeeks Anthropic-kompatibler Endpoint fuehrt die Suche serverseitig aus,
+    haengt aber – anders als Anthropic – **keine** `citations` an den Textblock
+    (die Kompatibilitaetstabelle listet das Feld als "Ignored"). Ohne diese
+    Treffer haette eine DeepSeek-Antwort trotz Websuche gar keine Quellen.
+
+    Bewusst ohne Inline-Tags: die Liste sagt "das hat das Modell gesucht", nicht
+    "dieser Satz stammt aus S3". Ein Tag wuerde eine Belegtiefe vortaeuschen,
+    die der Provider nicht liefert.
+    """
+    sources: List[Source] = []
+    index_by_key: Dict[str, int] = {}
+
+    for block in data.get("content", []) or []:
+        if block.get("type") != "web_search_tool_result":
+            continue
+        content = block.get("content")
+        if not isinstance(content, list):
+            continue
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+            url = item.get("url")
+            if not url:
+                continue
+            _ensure_source(
+                sources,
+                index_by_key,
+                url=url,
+                title=item.get("title"),
+                snippet=None,
+                provider=provider,
+            )
+    return sources
+
+
+def parse_anthropic_response(
+    data: Dict[str, Any], provider: str = "anthropic"
+) -> LLMResult:
     text_parts: List[str] = []
     citations: List[Dict[str, Any]] = []
     offset = 0
@@ -307,7 +349,15 @@ def parse_anthropic_response(data: Dict[str, Any]) -> LLMResult:
         text_parts.append(part_text)
         offset += len(part_text)
 
-    return insert_source_tags("".join(text_parts), citations, "anthropic")
+    annotated = insert_source_tags("".join(text_parts), citations, provider)
+    if result_sources(annotated):
+        return annotated
+    return merge_results(
+        annotated,
+        make_llm_result(
+            result_text(annotated), _web_search_result_sources(data, provider)
+        ),
+    )
 
 
 def parse_gemini_response(resp: Any, fallback_text: str = "") -> LLMResult:

@@ -3,12 +3,16 @@ Tool-Injektion (Status quo) unveraendert (Regression)."""
 
 import unittest
 
-from app.services.llm.engines import build_provider_payload
+from app.services.llm.engines import (
+    DEEPSEEK_SEARCH_MAX_USES,
+    build_provider_payload,
+)
 from benchmark.audit import assert_no_web_tools, find_web_tool_violations
 
 PROVIDERS = ["openai", "mistral", "anthropic", "gemini", "deepseek", "grok"]
-# Provider, die in der normalen App ein Web-Tool injizieren (DeepSeek nicht).
-TOOL_PROVIDERS = ["openai", "mistral", "anthropic", "gemini", "grok"]
+# Provider, die in der normalen App ein Web-Tool injizieren – seit DeepSeek die
+# serverseitige Suche auf dem Anthropic-Endpoint anbietet, sind das alle sechs.
+TOOL_PROVIDERS = PROVIDERS
 
 
 def _build(provider, benchmark_mode):
@@ -41,11 +45,41 @@ class BenchmarkModeTests(unittest.TestCase):
                     f"{provider} should still inject a web tool in normal mode",
                 )
 
-    def test_deepseek_is_closed_book_in_both_modes(self):
-        off = _build("deepseek", benchmark_mode=False)
-        on = _build("deepseek", benchmark_mode=True)
-        self.assertEqual(off, on)
-        self.assertFalse(find_web_tool_violations(on))
+    def test_deepseek_benchmark_mode_keeps_openai_compatible_payload(self):
+        """Closed book bleibt auf /chat/completions: der Benchmark darf weder
+        Endpoint noch Prompt-Format wechseln, sonst sind die V1-Laeufe nicht
+        mehr vergleichbar."""
+        request = build_provider_payload(
+            "deepseek",
+            question="What is 2+2?",
+            system_prompt="system",
+            max_output_tokens=128,
+            benchmark_mode=True,
+        )
+        self.assertEqual(request["endpoint"], "chat.completions")
+        self.assertIn("messages", request["payload"])
+        self.assertEqual(request["payload"]["messages"][0]["role"], "system")
+        self.assertFalse(find_web_tool_violations(request["payload"]))
+
+    def test_deepseek_normal_mode_uses_anthropic_endpoint_with_search(self):
+        """Die Suche laeuft nur ueber /anthropic/v1/messages – /chat/completions
+        lehnt `web_search` als Tool-Typ ab."""
+        request = build_provider_payload(
+            "deepseek",
+            question="What is 2+2?",
+            system_prompt="system",
+            max_output_tokens=128,
+        )
+        self.assertEqual(request["endpoint"], "anthropic.messages")
+        self.assertEqual(request["payload"]["system"], "system")
+        self.assertEqual(
+            request["payload"]["tools"],
+            [{
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": DEEPSEEK_SEARCH_MAX_USES,
+            }],
+        )
 
     def test_default_matches_normal_mode(self):
         # Default (benchmark_mode weggelassen) == explizit False (Produktion unveraendert).
