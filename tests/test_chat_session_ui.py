@@ -301,8 +301,10 @@ def test_session6_frontend_replay_disposition_and_ui_ordering_contracts():
     assert own_key_check < query.index('prepareWithUsageRetry(')
 
     # A context failure must leave the live completed predecessor untouched.
+    # rindex: the reconciliation replay above archives too, but it runs on an
+    # already-completed server turn and never builds a context.
     context_build = query.index("await chatSession.ensureContext({")
-    archive = query.index("window.App.followup?.archiveCurrentExchange?.()")
+    archive = query.rindex("window.App.followup?.archiveCurrentExchange?.()")
     destructive_reset = query.index("delete box.dataset.consensusAnswer")
     evidence_reset = query.index(
         'window.App.state.set("currentEvidenceSources", [], "evidence")'

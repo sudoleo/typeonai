@@ -143,6 +143,11 @@ function createSourceRef(ref) {
   // keyboard and touch, where no hover exists.
   el.title = getSourceTitle(ref.src, ref.token);
   el.setAttribute("aria-label", `Source ${number || ref.token}: ${el.title}`);
+  // Die Nummer allein ist keine Identitaet: ein archivierter Turn nummeriert
+  // seine EIGENE Quellenliste, waehrend window.currentEvidenceSources schon
+  // dem naechsten Lauf gehoert. Der Teaser liest deshalb die aufgeloeste
+  // Quelle vom Element und nicht noch einmal die Nummer nach.
+  el.sourceData = ref.src || null;
 
   if (href) {
     el.href = href;
@@ -172,12 +177,21 @@ function appendNumberedSourceRefs(fragment, refs) {
   });
 }
 
+// Die hochgestellte Ziffer gehoert dem Konsens-Fliesstext — und der hat mehr
+// als eine Adresse: die ID gibt es nur einmal (der Live-Lauf), die Klasse
+// tragen auch die archivierten Turns im Thread. Die Kernaussagen-Liste
+// darunter zitiert woertlich denselben Text und muss deshalb dieselbe Form
+// sprechen; ein Favicon-Chip mitten in einer Claim-Zeile waere ein zweites
+// Vokabular fuer dieselbe Fussnote.
+const NUMBERED_REF_SELECTOR =
+  "#consensusAnswerBody, .consensus-answer-body, .consensus-claims-fallback";
+
 function wantsNumberedRefs(containerEl) {
   if (!containerEl || typeof containerEl.closest !== "function") return false;
   return Boolean(
-    containerEl.id === "consensusAnswerBody"
-    || containerEl.closest("#consensusAnswerBody")
-    || containerEl.querySelector?.("#consensusAnswerBody")
+    containerEl.matches?.(NUMBERED_REF_SELECTOR)
+    || containerEl.closest(NUMBERED_REF_SELECTOR)
+    || containerEl.querySelector?.(NUMBERED_REF_SELECTOR)
   );
 }
 
@@ -537,7 +551,7 @@ const sourceTeaser = (function () {
   function show(target) {
     const number = parseInt(target.dataset.sourceNumber || "", 10);
     if (!Number.isFinite(number)) return;
-    const src = lookup(number);
+    const src = target.sourceData || lookup(number);
     if (!src) return;
 
     window.clearTimeout(hideTimer);

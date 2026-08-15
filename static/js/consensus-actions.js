@@ -189,7 +189,7 @@
       let mainText = "";
       if (mainPara) {
         const clone = mainPara.cloneNode(true);
-        clone.querySelectorAll(".claim-badge, .cx-marker, .copy-btn, .response-code-copy").forEach(el => el.remove());
+        clone.querySelectorAll(".claim-badge, .copy-btn, .response-code-copy").forEach(el => el.remove());
         clone.style.position = "absolute";
         clone.style.left = "-99999px";
         clone.style.top = "0";

@@ -129,6 +129,80 @@
     let currentQueryRunId = 0;
     let queryRequestRunning = false;
 
+    // ---- Die abgeschickte Nachricht ----------------------------------------
+    // Zwischen dem Klick auf Senden und dem Moment, in dem der Lauf den neuen
+    // Turn aufmacht, liegen /prepare und — im laufenden Gespraech — das Binden
+    // des Chat-Kontexts. Das sind Sekunden, und frueher passierte in ihnen
+    // nichts Sichtbares: die Frage stand unveraendert im Feld, der Thread
+    // zeigte weiter die vorige. Gleichzeitig darf der fertige Vorgaenger noch
+    // nicht abgeraeumt sein, solange der Lauf am Kontingent scheitern kann.
+    // Deshalb drei Schritte statt einem:
+    //   hold()    - das Feld ist sofort leer, die Nachricht steht als eigene
+    //               Blase unter der bisherigen Antwort,
+    //   promote() - der Lauf findet statt: sie wird Kopf des neuen Turns,
+    //   restore() - der Lauf findet NICHT statt: sie geht unveraendert und
+    //               abschickbar ins Feld zurueck.
+    const sentMessage = {
+      question: "",
+      attachmentsMeta: [],
+      pending: false,
+      ownsHead: false,
+
+      // ownsHead: ob der Fragen-Kopf noch uebernommen werden muss. Ein frisches
+      // Gespraech setzt ihn direkt (dort steht nichts, das erst archiviert
+      // werden muesste); ein Follow-up erst nach dem Archivieren.
+      hold(question, { ownsHead = false } = {}) {
+        this.question = String(question || "");
+        this.attachmentsMeta = window.App.attachments?.messageMeta?.() || [];
+        this.pending = true;
+        this.ownsHead = ownsHead === true;
+        if (this.ownsHead) {
+          window.App.setPendingThreadQuestion?.(this.question, this.attachmentsMeta);
+        }
+
+        const input = document.getElementById("questionInput");
+        if (input) {
+          input.value = "";
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          window.syncDemoChipState?.();
+        }
+        // force: die Frage ist raus, also faellt der Composer auf eine Zeile
+        // zusammen — auch dann, wenn der Fokus (und damit die Tastatur) noch im
+        // gerade geleerten Feld steht. Tippt man dort weiter, geht er wieder auf.
+        window.App.composer?.collapse?.({ force: true });
+        window.App.revealSentMessage?.();
+      },
+
+      promote() {
+        if (!this.pending) return;
+        this.pending = false;
+        if (this.ownsHead) {
+          this.ownsHead = false;
+          window.App.setThreadQuestion?.(this.question);
+        }
+        // setThreadQuestion raeumt die Blase mit ab; ohne eigenen Kopf steht
+        // sie gar nicht erst — der Aufruf ist die Zusicherung, dass danach
+        // keine schwebende Nachricht mehr im Thread haengt.
+        window.App.clearPendingThreadQuestion?.();
+        window.App.setThreadQuestionAttachments?.(this.attachmentsMeta);
+      },
+
+      restore() {
+        if (!this.pending) return;
+        this.pending = false;
+        this.ownsHead = false;
+        window.App.clearPendingThreadQuestion?.();
+        const input = document.getElementById("questionInput");
+        // Wer in der Zwischenzeit schon die naechste Frage getippt hat, behaelt
+        // sie: der zurueckgegebene Text ueberschreibt nie einen Entwurf.
+        if (input && !input.value.trim()) {
+          input.value = this.question;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          window.syncDemoChipState?.();
+        }
+      }
+    };
+
     async function releaseReservedUsageRun() {
       const run = window.App.usageRun?.current;
       if (!run?.key || !["new", "reserved"].includes(run.status)) return;
@@ -246,7 +320,10 @@
       currentQueryController.abort();
       markPendingQueryResponsesCanceled();
       finishQueryRun(runId);
-      window.hideConsensusOutput?.();
+      // Solange die Nachricht noch schwebt, gehoert die sichtbare Antwort dem
+      // VORIGEN Turn — der bleibt stehen, denn abgebrochen wurde der neue.
+      if (!sentMessage.pending) window.hideConsensusOutput?.();
+      sentMessage.restore();
       const chatSession = window.App.chatSession;
       if (chatSession?.pendingClientRequestId) {
         chatSession.markPendingUncertain?.();
@@ -349,11 +426,11 @@
         window.exitHeroMode?.();
         // Bei einem Follow-up bleibt der bisherige Turn waehrend /prepare noch
         // unangetastet. Erst wenn der Lauf wirklich fortgesetzt wird,
-        // archivieren wir ihn und setzen die neue Frage darunter.
+        // archivieren wir ihn und setzen die neue Frage darunter — bis dahin
+        // steht sie als eigene Blase darunter (sentMessage.hold).
         if (!followupRequested) {
           window.App.setThreadQuestion?.(question);
         }
-
         // Der gefuehrte Lauf beginnt vor /prepare, damit die Pipeline bereits
         // zwischen Klick und erstem Modell-Token sichtbar ist.
         window.App?.consensusPipeline?.onPrepare?.();
@@ -362,9 +439,7 @@
         // Ausgangszustand bleibt stehen. Kein Thread-Kopf, kein Pipeline-Widget.
         window.App.followup?.reset?.();
         window.App.chatSession?.reset?.();
-        document.body.classList.add("is-hero", "direct-comparison-active");
-        window.App.setThreadQuestion?.("");
-        window.syncHeroResponseAccess?.();
+        window.enterDirectComparisonView?.();
         window.App?.consensusPipeline?.dismiss?.();
       }
 
@@ -387,6 +462,15 @@
         return; // WICHTIG: keine echten API-Calls ausführen
       }
       // === DEMO: Früh raus, wenn "Demo" ===
+
+      // Die Nachricht verlaesst das Eingabefeld SOFORT (die Demo tippt in
+      // dasselbe Feld weiter und ist deshalb oben schon raus). Sonst sieht der
+      // Weg bis zum ersten sichtbaren Schritt aus, als sei der Klick ins Leere
+      // gegangen — im laufenden Gespraech dauert er am laengsten, weil dort
+      // zusaetzlich der Chat-Kontext gebunden wird.
+      if (agentModeAtStart) {
+        sentMessage.hold(question, { ownsHead: followupRequested });
+      }
 
       // clearResponseBoxes();
       consensusGenerated = false;
@@ -415,8 +499,14 @@
         && window.__consensioAuthState?.generation === queryAuthGeneration;
       setSendButtonRunning(true);
       // Keep consensus unavailable until the current model run produces enough complete answers.
-      // Bei jeder neuen Frage den Konsens-Bereich wieder ausblenden.
-      window.hideConsensusOutput?.();
+      // Bei jeder neuen Frage den Konsens-Bereich wieder ausblenden — im
+      // laufenden Gespraech aber erst, wenn der Lauf wirklich stattfindet.
+      // Bis dahin ist die letzte Antwort das, was auf dem Schirm steht: sie
+      // gehoert zu der Frage, die oben im Thread noch als Kopf sitzt, und ein
+      // Lauf, der am Kontingent scheitert, darf sie nicht abgeraeumt haben.
+      // Der Follow-up-Zweig weiter unten holt das nach — dort, wo sie in den
+      // Verlauf uebergeht.
+      if (!followupRequested) window.hideConsensusOutput?.();
 
       // 1. Definiere useOwnKeys frühzeitig
       const useOwnKeys = document.getElementById("useOwnKeysSwitch").checked;
@@ -459,6 +549,7 @@
           ? "Please log in before using your own API keys."
           : "Please log in before sending a question.");
         finishQueryRun(queryRunId);
+        sentMessage.restore();
         return;
       }
 
@@ -469,12 +560,18 @@
         });
         if (reconciledTurn?.status === "completed") {
           finishQueryRun(queryRunId);
+          // Der Turn ist serverseitig fertig: dieselbe Frage wird nicht noch
+          // einmal gestellt, sondern nachgezeichnet. Sie gehoert damit an den
+          // Kopf des Threads — der Vorgaenger davor in den Verlauf.
+          window.App.followup?.archiveCurrentExchange?.();
+          sentMessage.promote();
           await window.getConsensus?.("replay");
           return;
         }
       } catch (error) {
         if (isAbortError(error) || !isActiveQueryRun(queryRunId)) return;
         finishQueryRun(queryRunId);
+        sentMessage.restore();
         window.App.followup?.restoreAfterBlockedRun?.();
         window.App?.showPopup?.(
           error?.message || "The pending conversation turn could not be checked. Please retry."
@@ -513,6 +610,7 @@
           window.App?.showPopup?.("File uploads are off here. Remove the attachments to continue.");
         }
         finishQueryRun(queryRunId);
+        sentMessage.restore();
         return;
       }
 
@@ -553,6 +651,7 @@
       if (selectedProviderConfigsForRun.length < 2) {
         finishQueryRun(queryRunId);
         setAgentModeStatus("error", "Choose at least two compatible models for this run.");
+        sentMessage.restore();
         window.App.followup?.restoreAfterBlockedRun?.();
         window.App?.showPopup?.("Choose at least two compatible models. Remove the attachment or select another model.");
         trackAppEvent("app_query_blocked", {
@@ -585,6 +684,7 @@
         });
         if (missingOwnKeyProviders.length) {
           finishQueryRun(queryRunId);
+          sentMessage.restore();
           window.App?.showPopup?.(
             `Add API keys for the selected providers before sending: ${missingOwnKeyProviders.join(", ")}.`
           );
@@ -644,6 +744,8 @@
         await releaseReservedUsageRun();
         finishQueryRun(queryRunId);
         setAgentModeStatus("error", "Choose at least two compatible models for this run.");
+        sentMessage.restore();
+        window.App.followup?.restoreAfterBlockedRun?.();
         return;
       }
 
@@ -861,7 +963,13 @@
         // die Modelle sehen sie nicht, also darf der Thread sie nicht behaupten.
         window.App.followup?.clearHistory?.();
         window.App.followup?.reset?.();
-        if (followupRequested) window.App.setThreadQuestion?.(question);
+        if (followupRequested) {
+          // Kein Kontext, also auch kein Vorgaenger, der stehen bleiben
+          // duerfte: die schwebende Nachricht wird der Kopf, die alte Antwort
+          // geht mit dem Rest des Fadens.
+          sentMessage.promote();
+          window.hideConsensusOutput?.();
+        }
       }
 
       // Wir rufen /prepare IMMER auf, damit Wetter-Infos etc. injiziert werden können.
@@ -923,6 +1031,7 @@
             finishQueryRun(queryRunId);
             setAgentModeStatus("error", message);
             window.App.usageLimit?.showTemporaryStorageBusy?.();
+            sentMessage.restore();
             window.App.followup?.restoreAfterBlockedRun?.();
             return;
           }
@@ -949,11 +1058,14 @@
               source: "prepare",
               phase: "prepare"
             });
-            // Die Frage steht noch im Feld (geleert wird erst nach diesem
-            // Zweig) und soll unveraendert abschickbar bleiben. Bei einem
-            // Follow-up hat consume() den Kontext aber schon verbraucht — ohne
-            // diese Ruecknahme ginge die Wiederholung stillschweigend ohne den
-            // Kontext raus, den die Absage-Karte als ungesendet ausweist.
+            // Nichts ist rausgegangen, also wird auch nichts uebernommen: die
+            // Nachricht geht unveraendert und abschickbar ins Feld zurueck,
+            // der bisherige Turn bleibt stehen, wo er steht. Bei einem
+            // Follow-up hat consume() den Kontext ausserdem schon verbraucht —
+            // ohne diese Ruecknahme ginge die Wiederholung stillschweigend
+            // ohne den Kontext raus, den die Absage-Karte als ungesendet
+            // ausweist.
+            sentMessage.restore();
             window.App.followup?.restoreAfterBlockedRun?.();
             return;
           }
@@ -1036,6 +1148,7 @@
         }
         finishQueryRun(queryRunId);
         setAgentModeStatus("error", message);
+        sentMessage.restore();
         window.App.followup?.restoreAfterBlockedRun?.();
         window.App?.showPopup?.(message);
         return;
@@ -1051,8 +1164,10 @@
       }
 
       if (followupContext) {
+        // Der Lauf findet statt: erst wandert der bisherige Turn in den
+        // Verlauf, dann wird die schwebende Nachricht sein Nachfolger.
         window.App.followup?.archiveCurrentExchange?.();
-        window.App.setThreadQuestion?.(question);
+        sentMessage.promote();
         // Der archivierte Turn ist jetzt die sichtbare alte Antwort. Das Live-
         // Renderziel wird fuer den neuen Consensus frei und darf nicht unter
         // der neuen Frage noch einmal den alten Text zeigen.
@@ -1062,15 +1177,19 @@
         window.resetConsensusInsights?.();
       }
 
-      // Die Frage steht jetzt im Thread-Kopf; der Composer wird frei für die
-      // nächste. Erst hier leeren — die frühen Abbruch-Pfade (Login, Limit)
-      // sollen den getippten Text nicht verlieren.
+      // Der Direktvergleich kennt keinen Thread-Kopf und gibt die Frage
+      // deshalb erst hier ab; im Thread ist das Feld seit sentMessage.hold()
+      // leer und dieser Aufruf nur noch die Zusicherung, dass es das bleibt.
       const questionInputEl = document.getElementById("questionInput");
-      if (questionInputEl) {
+      if (questionInputEl && questionInputEl.value === question) {
         questionInputEl.value = "";
         questionInputEl.dispatchEvent(new Event("input", { bubbles: true }));
         window.syncDemoChipState?.();
       }
+      // Ein Lauf, der bis hierher gekommen ist, findet statt: was noch
+      // schwebt, gehoert jetzt dem aktiven Turn (im Thread laengst erledigt,
+      // hier nur die letzte Schranke).
+      sentMessage.promote();
       // Die Anhaenge sind mit DIESER Frage rausgegangen: der Composer gibt sie
       // ab, die Chips stehen ab jetzt an der Nachricht im Thread. Vorher hingen
       // sie ueber dem leeren Feld und sahen aus wie ein Anhang der naechsten

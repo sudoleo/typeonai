@@ -231,7 +231,12 @@ def test_hero_greeting_requires_agent_mode_and_available_space():
     input_css = read("static/css/components-input.css")
 
     assert "What should the models cross-check?" in template
-    assert "body.is-hero.agent-mode-enabled .hero-greeting" in input_css
+    # Der sichtbare Direktvergleich ist ausgenommen: dort steht der Composer
+    # oben, die Begruessung schwebte darueber hinaus in die Kopfzeile.
+    assert (
+        "body.is-hero.agent-mode-enabled:not(.direct-comparison-active) .hero-greeting"
+        in input_css
+    )
     assert "@media (min-width: 680px) and (min-height: 620px)" in input_css
     assert "body.is-hero .hero-greeting" not in input_css
     assert "body.is-hero:not(.agent-mode-enabled) .hero-greeting" not in input_css

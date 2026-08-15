@@ -75,28 +75,171 @@
     row.hidden = true;
   }
 
-  // Kopf des Threads (#threadAsk): zeigt die gestellte Frage über dem Lauf.
-  // Leerer Text versteckt den Block wieder (New comparison, Clear). Lange
-  // Fragen clampen per CSS auf drei Zeilen; is-long schaltet den Aufklapp-
-  // Link frei, is-open hebt den Clamp auf.
-  function setThreadQuestion(question = "") {
-    const wrap = document.getElementById("threadAsk");
-    const text = document.getElementById("threadAskText");
-    if (!wrap || !text) return;
+  // Beide Fragen-Koepfe im Thread teilen sich Optik und Aufklapp-Logik: der
+  // aktive (#threadAsk) und der der gerade abgeschickten, noch nicht
+  // uebernommenen Nachricht (#threadPendingAsk). Leerer Text versteckt den
+  // Block wieder. Lange Fragen clampen per CSS auf drei Zeilen; is-long
+  // schaltet den Aufklapp-Link frei, is-open hebt den Clamp auf.
+  function renderThreadQuestion(wrap, text, question) {
+    if (!wrap || !text) return "";
 
     const normalized = String(question || "").replace(/\s+/g, " ").trim();
     text.textContent = normalized;
     wrap.hidden = !normalized;
     wrap.classList.remove("is-open", "is-long");
-    const more = document.getElementById("threadAskMore");
+    const more = wrap.querySelector(".thread-ask-more");
     if (more) more.textContent = "Show full question";
-    // Eine neue Frage beginnt ohne Anhaenge; wer welche mitschickt, meldet sie
-    // direkt nach dem Senden ueber setThreadQuestionAttachments an.
-    setThreadQuestionAttachments([]);
-    if (!normalized) return;
+    if (!normalized) return "";
 
     requestAnimationFrame(() => syncThreadAskClamp(wrap, text));
     observeThreadAskWidth(wrap, text);
+    return normalized;
+  }
+
+  // Kopf des Threads (#threadAsk): zeigt die gestellte Frage über dem Lauf.
+  // Leerer Text versteckt den Block wieder (New comparison, Clear).
+  function setThreadQuestion(question = "") {
+    // Wer den Kopf setzt, hat die schwebende Nachricht uebernommen (oder den
+    // Thread ganz geraeumt) — in beiden Faellen ist die Blase erledigt. Das
+    // gilt auch fuer Aufrufer ausserhalb des Sendepfads (Bookmark-Restore,
+    // "New comparison", Direktvergleich), damit sie nie stehen bleibt.
+    clearPendingThreadQuestion();
+    const wrap = document.getElementById("threadAsk");
+    const text = document.getElementById("threadAskText");
+    if (!wrap || !text) return;
+    // Eine neue Frage beginnt ohne Anhaenge; wer welche mitschickt, meldet sie
+    // direkt nach dem Senden ueber setThreadQuestionAttachments an.
+    setThreadQuestionAttachments([]);
+    renderThreadQuestion(wrap, text, question);
+  }
+
+  // ---- Die gerade abgeschickte Nachricht -----------------------------------
+  // Sie steht sofort im Thread, nicht erst wenn der Lauf sie zum Kopf des
+  // neuen Turns macht: dazwischen liegen /prepare und, im laufenden Gespraech,
+  // das Binden des Chat-Kontexts. Das sind Sekunden, in denen frueher nichts
+  // passierte — die Frage stand unveraendert im Feld, der Thread zeigte
+  // weiter die vorige. Der Vorgaenger bleibt dabei unangetastet: erst wenn der
+  // Lauf wirklich stattfindet, wandert er in den Verlauf.
+  const PENDING_MESSAGE_CLASS = "thread-message-pending";
+
+  function setPendingThreadQuestion(question = "", attachmentsMeta = []) {
+    const wrap = document.getElementById("threadPendingAsk");
+    const text = document.getElementById("threadPendingAskText");
+    const normalized = renderThreadQuestion(wrap, text, question);
+    const row = document.getElementById("threadPendingAskAttachments");
+    if (row) {
+      const renderer = window.App.attachments?.renderMessageAttachments;
+      if (normalized && typeof renderer === "function") {
+        renderer(row, attachmentsMeta);
+      } else {
+        row.replaceChildren();
+        row.hidden = true;
+      }
+    }
+    document.body.classList.toggle(PENDING_MESSAGE_CLASS, !!normalized);
+    return !!normalized;
+  }
+
+  function clearPendingThreadQuestion() {
+    document.body.classList.remove(PENDING_MESSAGE_CLASS);
+    const wrap = document.getElementById("threadPendingAsk");
+    const text = document.getElementById("threadPendingAskText");
+    const row = document.getElementById("threadPendingAskAttachments");
+    if (text) text.textContent = "";
+    if (wrap) {
+      wrap.hidden = true;
+      wrap.classList.remove("is-open", "is-long");
+    }
+    if (row) {
+      row.replaceChildren();
+      row.hidden = true;
+    }
+  }
+
+  // ---- Die abgeschickte Nachricht ins Bild holen ---------------------------
+  // Genau EINE Bewegung, und zwar die, die der Nutzer selbst ausgeloest hat:
+  // der Klick auf Senden. Danach scrollt hier nichts mehr von allein — ein
+  // Thread, der beim Lesen unter den Fingern wegwandert, ist schlimmer als
+  // eine Antwort, die man selbst nach unten holt. Deshalb drei Schranken:
+  // die Bewegung geht NIE nach oben, sie unterbleibt, wenn das Ziel ohnehin
+  // fast im Bild steht, und sie bricht bei der ersten eigenen Geste (Rad,
+  // Finger, Taste) sofort ab, statt dagegen zu ziehen.
+  const REVEAL_TOP_GAP = 76;      // Luft fuer die schwebende Navigation
+  const REVEAL_MIN_DISTANCE = 24; // darunter waere es Zappeln, keine Bewegung
+  const REVEAL_DURATION = 420;
+  const REVEAL_INTERRUPTS = ["wheel", "touchstart", "keydown", "pointerdown"];
+  const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  let revealFrame = 0;
+  let revealRelease = null;
+
+  function stopSentMessageReveal() {
+    if (revealFrame) window.cancelAnimationFrame(revealFrame);
+    revealFrame = 0;
+    const release = revealRelease;
+    revealRelease = null;
+    if (release) release();
+  }
+
+  // Gemessen wird erst nach dem Layout, und zwar nach dem zweiten Frame: im
+  // ersten wird die Blase sichtbar, im zweiten steht fest, ob die Frage
+  // geklammert ist (das schaltet den "Show full question"-Link zu und aendert
+  // damit die Hoehe). Vorher gemessen, zielte die Bewegung daneben.
+  function revealSentMessage(element) {
+    stopSentMessageReveal();
+    revealFrame = window.requestAnimationFrame(() => {
+      revealFrame = window.requestAnimationFrame(() => {
+        revealFrame = 0;
+        startSentMessageReveal(element);
+      });
+    });
+  }
+
+  function startSentMessageReveal(element) {
+    const el = element
+      || document.getElementById("threadPendingAsk")
+      || document.getElementById("threadAsk");
+    if (!el || el.hidden) return;
+
+    // Der Boden des Dokuments ist die Grenze: weiter als bis dorthin laesst
+    // sich nicht scrollen, und ein Ziel dahinter wuerde die Bewegung im
+    // Nichts enden lassen.
+    const maxTop = Math.max(
+      0,
+      document.documentElement.scrollHeight - window.innerHeight
+    );
+    const wanted = el.getBoundingClientRect().top + window.scrollY - REVEAL_TOP_GAP;
+    const from = window.scrollY;
+    const distance = Math.max(0, Math.min(wanted, maxTop)) - from;
+    if (distance < REVEAL_MIN_DISTANCE) return;
+
+    if (reducedMotionQuery.matches) {
+      window.scrollTo(0, from + distance);
+      return;
+    }
+
+    const startedAt = (window.performance?.now?.() ?? Date.now());
+    const interrupt = () => stopSentMessageReveal();
+    REVEAL_INTERRUPTS.forEach(name => {
+      window.addEventListener(name, interrupt, { passive: true, capture: true });
+    });
+    revealRelease = () => REVEAL_INTERRUPTS.forEach(name => {
+      window.removeEventListener(name, interrupt, { capture: true });
+    });
+
+    const step = (now) => {
+      revealFrame = 0;
+      const elapsed = (now || (window.performance?.now?.() ?? Date.now())) - startedAt;
+      const progress = Math.min(1, Math.max(0, elapsed / REVEAL_DURATION));
+      const eased = 1 - Math.pow(1 - progress, 3);
+      window.scrollTo(0, Math.round(from + distance * eased));
+      if (progress < 1) {
+        revealFrame = window.requestAnimationFrame(step);
+        return;
+      }
+      stopSentMessageReveal();
+    };
+    revealFrame = window.requestAnimationFrame(step);
   }
 
   // Ob eine Frage laenger als drei Zeilen ist, haengt an der Breite des
@@ -105,8 +248,10 @@
   // einmal. Wurde nur einmal gemessen, blieb "Show full question" bei einer
   // langen Frage aus und die vierte Zeile verschwand lautlos - beim
   // gefuehrten Lauf ausgerechnet das Ende der Frage. Deshalb misst ein
-  // ResizeObserver nach jeder Groessenaenderung nach.
-  let threadAskResizeObserver = null;
+  // ResizeObserver nach jeder Groessenaenderung nach — einer je Fragen-Kopf
+  // (der aktive und der der gerade abgeschickten Nachricht), sonst zoege der
+  // zweite Kopf am Beobachter des ersten vorbei.
+  const threadAskResizeObservers = new WeakMap();
 
   function syncThreadAskClamp(wrap, text) {
     // Aufgeklappt gibt es nichts zu messen: dort ist scrollHeight gleich
@@ -125,9 +270,10 @@
   }
 
   function observeThreadAskWidth(wrap, text) {
-    if (threadAskResizeObserver || typeof ResizeObserver !== "function") return;
-    threadAskResizeObserver = new ResizeObserver(() => syncThreadAskClamp(wrap, text));
-    threadAskResizeObserver.observe(text);
+    if (typeof ResizeObserver !== "function" || threadAskResizeObservers.has(text)) return;
+    const observer = new ResizeObserver(() => syncThreadAskClamp(wrap, text));
+    observer.observe(text);
+    threadAskResizeObservers.set(text, observer);
   }
 
   // Dieselbe Geste fuer die aktive Frage (#threadAskMore) und fuer jede
@@ -229,12 +375,27 @@
   }
   syncHeroResponseAccess();
 
+  // Der Thread ist das Gegenteil der Vergleichsflaeche: wer den Hero verlaesst,
+  // verlaesst auch den Direktvergleich. Die Marke haengen zu lassen waere eine
+  // Mine — sie steuert Sichtbarkeit und inert der .response-section.
   function exitHeroMode() {
-    document.body.classList.remove("is-hero");
+    document.body.classList.remove("is-hero", "direct-comparison-active");
+    syncHeroResponseAccess();
+  }
+
+  // Der Direktvergleich (Agent Mode aus) ist keine Zwischenstufe des Threads,
+  // sondern eine eigene Ansicht: Composer oben, sechs Antworten darunter, kein
+  // Thread-Kopf und kein Consensus. Ein frisch gesendeter Vergleich und ein aus
+  // einem Bookmark wiederhergestellter muessen dieselbe Ansicht ergeben —
+  // deshalb steht sie hier einmal statt zweimal (query-send.js, firebase.js).
+  function enterDirectComparisonView() {
+    document.body.classList.add("is-hero", "direct-comparison-active");
+    setThreadQuestion("");
     syncHeroResponseAccess();
   }
 
   window.exitHeroMode = exitHeroMode;
+  window.enterDirectComparisonView = enterDirectComparisonView;
   window.syncHeroResponseAccess = syncHeroResponseAccess;
 
   // Einziger Renderer fuer die Usage-Zeilen. API-Antworten ohne vollstaendige
@@ -310,11 +471,15 @@
     setAppTitle,
     setThreadQuestion,
     setThreadQuestionAttachments,
+    setPendingThreadQuestion,
+    clearPendingThreadQuestion,
+    revealSentMessage,
     getThreadAttachments,
     consensusBodyEl,
     trackAppEvent,
     showPopup,
     exitHeroMode,
+    enterDirectComparisonView,
     syncHeroResponseAccess,
     renderUsageDisplay,
     usageRun

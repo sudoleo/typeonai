@@ -101,7 +101,7 @@
     }
     
     // Textknoten, die beim Markieren und bei der Ankersuche uebersprungen
-    // werden: Badges/Marker und die [S1]-Quellenchips sind UI (ihr Text
+    // werden: die Quoten-Badges und die [S1]-Quellenchips sind UI (ihr Text
     // wuerde die Offsets verschieben), Code und KaTeX duerfen nicht
     // angefasst werden.
     // `.src-ref` sind die hochgestellten Quellenzahlen im Konsens. Ohne
@@ -109,7 +109,7 @@
     // die Unterstreichung der Passage — eine bernsteinfarbene "3" sieht
     // aus wie ein Fehler, nicht wie eine Fussnote.
     const MARK_SKIP_SELECTOR =
-      ".claim-badge, .cx-marker, .source-link, .src-ref, .src-ref-sep, code, pre, .katex";
+      ".claim-badge, .source-link, .src-ref, .src-ref-sep, code, pre, .katex";
     const BLOCK_SELECTOR = "p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, dd, dt";
     
     // --- Inline-Marker: Satzgrenzen und Text-Wrapping -----------------

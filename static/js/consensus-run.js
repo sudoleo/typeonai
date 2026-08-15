@@ -239,7 +239,8 @@
       window.renderStoredConsensusClaims?.(
         answerBody,
         turnData.differences_data,
-        claimsFallback
+        claimsFallback,
+        turnSources
       );
       const verdict = this.staticizeHistoryNode(liveVerdict)
         || this.buildStoredAgreement(turnData.differences_data);

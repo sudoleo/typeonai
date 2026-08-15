@@ -619,11 +619,11 @@ def test_consensus_citations_follow_terminal_punctuation(app_page):
     result = app_page.evaluate(
         """() => {
           const host = document.getElementById("consensusAnswerBody");
-          window.currentEvidenceSources = [{
+          window.App.state.set("currentEvidenceSources", [{
             id: "S1",
             title: "Example source",
             url: "https://example.org/source",
-          }];
+          }], "evidence");
           window.injectMarkdown(
             host,
             'Fact [S1]. Question [S1]? "Quote [S1]."'
@@ -982,29 +982,25 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     expect(app_page.locator(".chat-input-container .consensus-switch-container")).to_be_hidden()
 
     # Inline-Confidence: der Widerspruch wird im Antworttext selbst markiert
-    # (Linie + Quote), nicht nur in einer Karte daneben.
+    # (farbiger Textmarker), nicht nur in einer Karte daneben.
     marked = app_page.locator("#consensusAnswerBody .cx-claim.is-major").first
     expect(marked).to_be_visible(timeout=15000)
+    # Seit 2026-08-15 gibt es keine Punkte mehr neben dem Satz: die
+    # angestrichene Passage IST das Steuerelement und muss deshalb selbst fuer
+    # Tastatur und Screenreader erreichbar sein.
+    expect(app_page.locator("#consensusAnswerBody .cx-marker")).to_have_count(0)
+    assert marked.get_attribute("aria-label"), "Markierte Passage braucht ein sprechendes aria-label"
+    assert marked.get_attribute("role") == "button"
+    assert marked.get_attribute("tabindex") == "0"
     # Claim und Difference treffen im Fixture denselben Satz. Dort steht genau
-    # EIN Steuerelement — und zwar der Widerspruchs-Marker, nicht das
-    # Claim-Badge: eine Zustimmungsquote wuerde den Streit verharmlosen.
-    overlap_marker = app_page.locator("#consensusAnswerBody .cx-marker").first
-    expect(overlap_marker).to_be_visible()
-    assert (
-        overlap_marker.get_attribute("aria-label")
-    ), "Marker braucht ein sprechendes aria-label"
+    # EIN Steuerelement — und zwar der Widerspruch, nicht das Claim-Badge:
+    # eine Zustimmungsquote wuerde den Streit verharmlosen.
     assert app_page.evaluate(
-        """() => {
-          const marker = document.querySelector("#consensusAnswerBody .cx-marker");
-          const span = marker.previousElementSibling;
-          return span && span.classList.contains("cx-claim")
-            && span.classList.contains("is-major")
-            && !document.querySelector("#consensusAnswerBody .claim-badge.has-dissent");
-        }"""
-    ), "Strittiger Satz: rote Linie + Widerspruchs-Marker, kein Dissens-Badge daneben"
+        """() => !document.querySelector("#consensusAnswerBody .claim-badge.has-dissent")"""
+    ), "Strittiger Satz: rote Marke, kein Dissens-Badge daneben"
 
-    # Linie und Quote sagen dasselbe: wo ein Badge gelb ist (Dissens), darf die
-    # Unterlinie nicht neutral grau bleiben.
+    # Marke und Quote sagen dasselbe: wo ein Badge gelb ist (Dissens), darf die
+    # Marke nicht neutral grau bleiben.
     assert app_page.evaluate(
         """() => Array.from(
              document.querySelectorAll("#consensusAnswerBody .claim-badge.has-dissent")
@@ -1013,7 +1009,19 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
              return span && span.classList.contains("cx-claim")
                && (span.classList.contains("is-split") || span.classList.contains("is-major"));
            })"""
-    ), "Gelbe Quote braucht eine Bernstein-Linie, keine graue"
+    ), "Gelbe Quote braucht eine Bernstein-Marke, keine graue"
+
+    # Und die Marke ist wirklich eine Flaeche, keine Unterstreichung: eine
+    # Linie unter dem Satz las sich wie ein Link (User-Befund 2026-08-15).
+    mark_paint = app_page.evaluate(
+        """() => {
+          const el = document.querySelector("#consensusAnswerBody .cx-claim.is-major");
+          const style = getComputedStyle(el);
+          return {bg: style.backgroundColor, line: style.textDecorationLine};
+        }"""
+    )
+    assert mark_paint["line"] == "none", mark_paint
+    assert mark_paint["bg"] not in ("rgba(0, 0, 0, 0)", "transparent"), mark_paint
 
     # Touch: die unstrittige Claim-Passage selbst oeffnet dasselbe Agreement-
     # Sheet wie ihr sichtbarer Badge. Die Widerspruchspassage oben bleibt
@@ -1133,12 +1141,12 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     model_answers_toggle.click()
     expect(model_answers_toggle.locator(".consensus-tab-label")).to_have_text("Compare answers")
 
-    # Kopierter Text darf keine Marker-/Badge-Beschriftung enthalten.
+    # Kopierter Text darf keine Badge-Beschriftung enthalten.
     copied = app_page.evaluate(
         """() => {
           const body = window.App.consensusBodyEl();
           const clone = body.cloneNode(true);
-          clone.querySelectorAll('.claim-badge, .cx-marker, .copy-btn, .response-code-copy')
+          clone.querySelectorAll('.claim-badge, .copy-btn, .response-code-copy')
             .forEach(el => el.remove());
           clone.style.position = 'absolute';
           clone.style.left = '-99999px';
@@ -1202,7 +1210,7 @@ def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_pag
     original_answer = app_page.evaluate(
         """() => {
           const clone = document.getElementById("consensusAnswerBody").cloneNode(true);
-          clone.querySelectorAll(".claim-badge, .cx-marker").forEach(el => el.remove());
+          clone.querySelectorAll(".claim-badge").forEach(el => el.remove());
           return clone.textContent.trim();
         }"""
     )
@@ -1222,7 +1230,7 @@ def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_pag
     archived_answer_text = archived_answer.evaluate(
         """element => {
           const clone = element.cloneNode(true);
-          clone.querySelectorAll(".claim-badge, .cx-marker").forEach(el => el.remove());
+          clone.querySelectorAll(".claim-badge").forEach(el => el.remove());
           return clone.textContent.trim();
         }"""
     )
@@ -1298,12 +1306,13 @@ def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_pag
     expect(app_page.locator("#threadAskText")).to_have_text(third_question)
 
 
-def test_split_claim_underlines_in_the_colour_of_its_badge(app_page):
-    """Geteilte Zustimmung ohne Widerspruchs-Karte: Linie und Quote muessen
-    dieselbe Bernstein-Note tragen. Vorher lief die Linie hier neutral grau,
-    waehrend die 2/4-Quote daneben schon gelb war (User-Befund 2026-07-28).
-    Das Mock-Fixture deckt nur den Ueberlappungsfall (is-major) ab, deshalb
-    wird der Renderer hier direkt mit einem geteilten Claim gefuettert."""
+def test_split_claim_is_marked_in_the_colour_of_its_badge(app_page):
+    """Geteilte Zustimmung ohne Widerspruchs-Karte: Marke und Quote muessen
+    dieselbe Bernstein-Note tragen. Vorher lief die Markierung hier neutral
+    grau, waehrend die 2/4-Quote daneben schon gelb war (User-Befund
+    2026-07-28). Das Mock-Fixture deckt nur den Ueberlappungsfall (is-major)
+    ab, deshalb wird der Renderer hier direkt mit einem geteilten Claim
+    gefuettert."""
     app_page.evaluate(
         """() => {
           document.getElementById("consensusAnswerBody").innerHTML =
@@ -1331,7 +1340,7 @@ def test_split_claim_underlines_in_the_colour_of_its_badge(app_page):
           const span = document.querySelector("#consensusAnswerBody .cx-claim");
           const badge = document.querySelector("#consensusAnswerBody .claim-badge");
           return {
-            line: channels(getComputedStyle(span).textDecorationColor),
+            mark: channels(getComputedStyle(span).backgroundColor),
             badge: channels(getComputedStyle(badge).color),
           };
         }"""
@@ -1465,6 +1474,42 @@ def test_claim_anchor_with_markdown_syntax_marks_the_rendered_sentence(app_page)
     assert "*" not in fallback.inner_text()
 
 
+def test_key_claim_fallback_renders_source_tags_as_citations(app_page):
+    """Ein Anker ist woertlicher Konsenstext und traegt dessen Quellentags. In
+    der Fallback-Liste "Key claims" stand die rohe Klammer "[S2]" mitten im
+    Satz, waehrend derselbe Tag im Fliesstext laengst eine hochgestellte
+    Fussnote ist (User-Befund 2026-08-15)."""
+    app_page.evaluate(
+        """() => {
+          window.App.state.set("currentEvidenceSources", [
+            { id: "S1", title: "First source", url: "https://example.org/one" },
+            { id: "S2", title: "Second source", url: "https://example.net/two" }
+          ], "evidence");
+          document.getElementById("consensusAnswerBody").innerHTML =
+            "<p>Something else entirely.</p>";
+          window.renderConsensusInsights({
+            claims: [{
+              anchor: "The broadcast runs until 22:55.[S2]",
+              agree: [{model: "openai"}],
+              dissent: []
+            }],
+            differences: [],
+            models_compared: ["openai"]
+          }, 1);
+        }"""
+    )
+    fallback = app_page.locator("#consensusClaimsFallback")
+    assert fallback.get_attribute("hidden") is None
+    assert "[S2]" not in fallback.inner_text()
+
+    # Dieselbe Form wie im Konsenstext: die hochgestellte Ziffer, verlinkt auf
+    # die Quelle hinter GENAU dieser Nummer.
+    ref = fallback.locator(".src-ref")
+    expect(ref).to_have_count(1)
+    expect(ref).to_have_text("2")
+    assert ref.get_attribute("href") == "https://example.net/two"
+
+
 def test_two_claims_in_one_paragraph_mark_their_own_sentence(app_page):
     """Der Anker ist seit dem Satz-Index ein GANZER Satz. sentenceBounds dehnte
     ihn trotzdem bis zum naechsten Satzende weiter - der erste Satz verschluckte
@@ -1498,7 +1543,7 @@ def test_two_claims_in_one_paragraph_mark_their_own_sentence(app_page):
 def test_contradiction_keeps_the_visible_control_on_a_shared_sentence(app_page):
     """Seit die Claims jeden pruefbaren Satz abdecken, traegt ein strittiger
     Satz fast immer AUCH ein Claim-Badge. Solange dort das Badge gewann,
-    verschwand praktisch jeder Widerspruchs-Marker aus dem Text: der strittige
+    verschwand praktisch jeder Widerspruch aus dem Text: der strittige
     Satz sah aus wie jeder andere und der Klick darauf oeffnete "4 of 6 models
     agree" statt der Widerspruchs-Karte (User-Befund 2026-08-07)."""
     app_page.evaluate(
@@ -1531,16 +1576,16 @@ def test_contradiction_keeps_the_visible_control_on_a_shared_sentence(app_page):
     state = app_page.evaluate(
         """() => {
           const body = document.getElementById("consensusAnswerBody");
-          const marker = body.querySelector(".cx-marker.is-major");
+          const passage = body.querySelector(".cx-claim.is-major");
           return {
-            markerSuppressed: !marker || marker.hidden
-              || marker.getAttribute("aria-hidden") === "true",
+            markerSuppressed: !passage || passage.getAttribute("role") !== "button"
+              || passage.getAttribute("tabindex") !== "0",
             badges: Array.from(body.querySelectorAll(".claim-badge"))
               .map(b => b.textContent)
           };
         }"""
     )
-    # Auf dem strittigen Satz bleibt der Widerspruchs-Marker stehen ...
+    # Auf dem strittigen Satz bleibt die Passage das Steuerelement ...
     assert state["markerSuppressed"] is False, "Widerspruch darf nicht zurueckgedraengt werden"
     # ... und das Claim-Badge tritt dort zurueck. Der unstrittige Satz behaelt
     # seins, es bleibt also bei genau EINEM Steuerelement pro Satz.
@@ -1576,14 +1621,23 @@ def test_emphasis_marker_still_yields_to_the_claim_badge(app_page):
           }, 3);
         }"""
     )
+    # Zuruecktreten heisst hier: die Passage gibt ihren Tabstopp ab, damit der
+    # Satz nicht zwei Fokusziele fuer dieselbe Aussage hat.
     suppressed = app_page.evaluate(
         """() => {
-          const marker = document.querySelector("#consensusAnswerBody .cx-marker");
-          return !!marker && (marker.hidden || marker.getAttribute("aria-hidden") === "true");
+          const passage = document.querySelector("#consensusAnswerBody .cx-claim");
+          return !!passage && !passage.hasAttribute("role") && !passage.hasAttribute("tabindex");
         }"""
     )
     expect(app_page.locator("#consensusAnswerBody .claim-badge")).to_have_count(1)
-    assert suppressed is True, "Emphasis-Marker tritt weiterhin hinter das Badge zurueck"
+    assert suppressed is True, "Emphasis-Marke tritt weiterhin hinter das Badge zurueck"
+
+    # Und der Klick auf den Satz oeffnet dann auch das Agreement-Popover,
+    # nicht die zurueckgetretene Emphasis-Karte.
+    app_page.evaluate(
+        """() => document.querySelector("#consensusAnswerBody .cx-claim").click()"""
+    )
+    expect(app_page.locator("#claimPopover")).to_be_visible()
 
 
 def test_claim_anchor_with_source_tag_still_marks_its_sentence(app_page):

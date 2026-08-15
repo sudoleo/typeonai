@@ -694,7 +694,7 @@ def test_bookmark_frontend_restores_every_turn_and_keeps_a_context_fallback():
     consensus_run = (root / "static" / "js" / "consensus-run.js").read_text(encoding="utf-8")
 
     assert "function bookmarkDisplayQuestion(bookmark)" in firebase
-    assert "window.App?.setThreadQuestion?.(displayQuestion);" in firebase
+    assert 'window.App?.setThreadQuestion?.(directComparison ? "" : displayQuestion);' in firebase
     assert "renderStoredTurns?.(materialized.historyTurns)" in firebase
     assert '"/conversation?limit=50"' in firebase
     assert "function loadBookmarkConversationOnce(bookmark)" in firebase
@@ -737,6 +737,40 @@ def test_bookmark_restore_uses_historical_model_labels_without_mutating_picker_s
     assert query_send.index("window.App.updateDeepThinkText?.();") < query_send.index(
         "window.App?.consensusPipeline?.onPrepare?.();"
     )
+
+
+def test_bookmark_restores_the_view_the_run_had_not_the_current_toggle():
+    """Ein Direktvergleich (kein Consensus) laedt als Direktvergleich zurueck.
+
+    Vorher entschied allein der heutige Agent-Mode-Schalter ueber die Ansicht:
+    war er inzwischen wieder an, verschwanden die gespeicherten Modellantworten
+    hinter "Compare answers" und das Bookmark zeigte nur noch die Frage.
+    """
+    root = Path(__file__).resolve().parents[1]
+    firebase = (root / "static" / "firebase.js").read_text(encoding="utf-8")
+    core = (root / "static" / "js" / "app-core.js").read_text(encoding="utf-8")
+    agent = (root / "static" / "js" / "agent-mode.js").read_text(encoding="utf-8")
+    consensus_css = (root / "static" / "css" / "components-consensus.css").read_text(encoding="utf-8")
+
+    # Der Modus des Laufs steckt im Bookmark selbst, nicht im Schalter.
+    assert "function isDirectComparisonBookmark(bookmark)" in firebase
+    assert "const directComparison = isDirectComparisonBookmark(bookmark);" in firebase
+    assert "window.enterDirectComparisonView?.();" in firebase
+
+    # Eine Ansicht, ein Aufbau — geteilt mit dem frisch gesendeten Vergleich.
+    assert 'document.body.classList.add("is-hero", "direct-comparison-active")' in core
+    # Der Ausstieg in den Thread raeumt die Marke wieder ab.
+    assert 'classList.remove("is-hero", "direct-comparison-active")' in core
+
+    # Nur das Umlegen des Schalters beendet den sichtbaren Direktvergleich,
+    # nicht jeder beilaeufige UI-Sync.
+    strip = 'document.body.classList.remove("direct-comparison-active");'
+    assert agent.count(strip) == 1
+    assert strip in agent.split("function setAgentMode(", 1)[1].split("function setAgentModeStatus(", 1)[0]
+
+    # Bei eingeschaltetem Agent Mode darf das Modell-Panel nicht ueber den
+    # wiederhergestellten Antworten auftauchen.
+    assert "body.direct-comparison-active .agent-mode-panel" in consensus_css
 
 
 def test_bookmark_list_is_compact_and_cursor_paginated():

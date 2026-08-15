@@ -161,7 +161,12 @@ def test_login_dialog_accessibility_and_current_landing_marker_vocabulary():
     assert 'if (event.key === "Escape")' in firebase
     assert "authModalReturnFocus.focus" in firebase
     assert 'event.key !== "Tab"' in firebase
-    assert "fine rule" in landing
-    assert "heavier amber rule" in landing
+    # Seit 2026-08-15 sind die Marken farbige Textmarker statt Linien unter
+    # dem Satz (User-Vorgabe: eine Unterstreichung liest sich wie ein Link).
+    # Die Legende muss von Farben sprechen, nicht mehr von Linienstaerken.
+    assert "green &middot; all of them agreed" in landing or "green · all of them agreed" in landing
+    assert "red · they contradict each other" in landing
+    assert "fine rule" not in landing
+    assert "heavier amber rule" not in landing
     assert "fine dotted line" not in landing
     assert "amber wavy line" not in landing

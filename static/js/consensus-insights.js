@@ -825,10 +825,12 @@
           }
 
           // --- Inline-Marker: Widersprüche und Claims im Antworttext ---------
-          // Rechtschreibprüfungs-Metapher: die Textstelle selbst trägt die
-          // Markierung (Wellenlinie/Punktlinie), der Marker daneben öffnet die
-          // Details. Einigkeit bekommt bewusst KEINE Dekoration - nur das
-          // bestehende kompakte Badge.
+          // Seit 2026-08-15 (User-Vorgabe) trägt die Textstelle einen farbigen
+          // Textmarker statt einer Unterstreichung, und der Punkt daneben ist
+          // ersatzlos weg: die Farbe sagt bereits alles, was der Punkt sagen
+          // konnte. Bei einer Differenz ist die angestrichene Passage deshalb
+          // selbst das Steuerelement (role="button"), bei einem Claim bleibt
+          // die Quote daneben das sichtbare Ziel.
 
           // Ein Satz wird höchstens einmal dekoriert. Widersprüche laufen
           // deshalb zuerst (stärkere Stufe), Claim-Badges hängen sich danach an
@@ -842,24 +844,6 @@
             return (diff.type === "contradiction"
               ? (isMajor ? "The models contradict each other here" : "The models differ on a detail here")
               : "The models set a different focus here") + " — open details";
-          }
-
-          function makeDiffMarker(diff, index) {
-            const marker = document.createElement("button");
-            marker.type = "button";
-            const isMajor = diff.type === "contradiction" && diff.severity === "major";
-            marker.className = "cx-marker " + (isMajor ? "is-major" : "is-minor");
-            const dot = document.createElement("span");
-            dot.className = "cx-marker-dot";
-            dot.setAttribute("aria-hidden", "true");
-            marker.appendChild(dot);
-            const label = diffMarkerLabel(diff);
-            marker.setAttribute("aria-label", label + ": " + diff.claim);
-            marker.addEventListener("click", function (event) {
-              event.stopPropagation();
-              focusDifferenceCard(index);
-            });
-            return marker;
           }
 
           // Öffnet die zugehörige Karte im Differences-Überblick und hebt sie
@@ -931,14 +915,14 @@
           }
 
           // --- Passage und Marker aneinander koppeln --------------------------
-          // Der Marker ist ein 5px-Punkt, die markierte Passage daneben ein
-          // ganzer Satz. Auf dem Desktop ist der Satz also das weitaus groessere
-          // Ziel und traegt deshalb dieselbe Aufforderung: Vorschau, Zeigefinger,
-          // Klick. Der Hover wirkt in beide Richtungen, damit sichtbar wird,
-          // welcher Marker zu welchem Satz gehoert (ein Absatz kann mehrere
-          // tragen). Der Marker/das Badge bleibt das fokussierbare Steuerelement
-          // fuer Tastatur und Screenreader; die Passage ist nur ein zusaetzlicher
-          // Mausweg und deshalb bewusst nicht in der Tab-Reihenfolge.
+          // Die markierte Passage ist ein ganzer Satz und damit das weitaus
+          // groesste Ziel: Vorschau, Zeigefinger, Klick haengen an ihr. Der
+          // Hover wirkt in beide Richtungen, damit sichtbar wird,
+          // welches Badge zu welchem Satz gehoert (ein Absatz kann mehrere
+          // tragen). Wo ein Badge steht, bleibt es das fokussierbare
+          // Steuerelement und die Passage ist nur ein zusaetzlicher Mausweg;
+          // an einer Differenz gibt es daneben nichts mehr, deshalb wird dort
+          // die Passage selbst fokussierbar (attachPassageControl).
           function applyPassageHover(group) {
             group.spans.forEach(function (span) {
               span.classList.toggle("is-hovered", group.hover);
@@ -964,6 +948,17 @@
             });
           }
 
+          // Ueberlappende Markierungen haben mehrere Controls. Sichtbar ist
+          // immer nur eines: das zugunsten des Claims zurueckgetretene
+          // Difference-Control (suppressed) darf weder den Klick abfangen noch
+          // die Hover-Vorschau stellen.
+          function activeControl(group) {
+            return group.controls.find(function (item) {
+              return !item.suppressed && !item.el.hidden
+                && item.el.getAttribute("aria-hidden") !== "true";
+            }) || group.controls[0] || null;
+          }
+
           function passageGroup(spans) {
             if (spans[0].cxGroup) return spans[0].cxGroup;
             const group = { spans: spans, controls: [], hover: false };
@@ -981,13 +976,7 @@
                 if (event.target.closest("a, button")) return;
                 const selection = window.getSelection?.();
                 if (selection && !selection.isCollapsed) return;
-                // Ueberlappende Markierungen haben mehrere Controls. Die Passage
-                // oeffnet dasselbe sichtbare Ziel wie der Badge daneben; ein
-                // zugunsten des Claims versteckter Difference-Marker darf den
-                // Touch-Klick nicht abfangen.
-                const target = group.controls.find(item =>
-                  !item.el.hidden && item.el.getAttribute("aria-hidden") !== "true"
-                ) || group.controls[0];
+                const target = activeControl(group);
                 if (target) target.activate(event);
               });
             });
@@ -1049,8 +1038,10 @@
           }
 
           function showHoverPreview(group) {
-            const build = group.controls.find(function (c) { return c.preview; });
-            if (!build) return;
+            const active = activeControl(group);
+            const build = (active && active.preview) ? active
+              : group.controls.find(function (c) { return c.preview && !c.suppressed; });
+            if (!build || !build.preview) return;
             const card = ensureHoverCard();
             card.innerHTML = "";
             card.appendChild(build.preview());
@@ -1172,13 +1163,63 @@
           function attachControl(result, control, activate, preview) {
             insertAfterMark(result, control);
             const spans = result.spans;
-            if (!spans || !spans.length) return;
+            if (!spans || !spans.length) return null;
             const group = passageGroup(spans);
-            group.controls.push({ el: control, activate: activate, preview: preview });
+            const entry = { el: control, activate: activate, preview: preview };
+            group.controls.push(entry);
             if (canHoverPassages()) {
               control.addEventListener("mouseenter", function () { setPassageHover(group, true); });
               control.addEventListener("mouseleave", function () { setPassageHover(group, false); });
             }
+            return entry;
+          }
+
+          // Dieselbe Kopplung ohne eigenes Element: die angestrichene Passage
+          // IST das Steuerelement. Seit die Punkte weg sind (2026-08-15) haengt
+          // hier die gesamte Bedienbarkeit einer Differenz - ohne role/tabindex
+          // waere sie fuer Tastatur und Screenreader unerreichbar. Der erste
+          // Span traegt die Semantik; ein Satz, der ueber einen Zeilenumbruch
+          // in mehrere Spans zerfaellt, bekommt trotzdem nur EINEN Tabstopp.
+          function attachPassageControl(result, label, activate, preview) {
+            const spans = result.spans;
+            if (!spans || !spans.length) return null;
+            const group = passageGroup(spans);
+            const host = spans[0];
+            host.setAttribute("role", "button");
+            host.setAttribute("tabindex", "0");
+            host.setAttribute("aria-label", label);
+            if (!host.dataset.cxKeyboard) {
+              host.dataset.cxKeyboard = "1";
+              host.addEventListener("keydown", function (event) {
+                if (event.key !== "Enter" && event.key !== " " && event.key !== "Spacebar") return;
+                event.preventDefault();
+                const target = activeControl(group);
+                if (target) target.activate(event);
+              });
+              host.addEventListener("focus", function () { setPassageHover(group, true); });
+              host.addEventListener("blur", function () { setPassageHover(group, false); });
+            }
+            const entry = { el: host, activate: activate, preview: preview, isPassage: true };
+            group.controls.push(entry);
+            return entry;
+          }
+
+          // Das unterlegene Control tritt zurueck, bleibt aber fuer Vorschau
+          // und Zaehlung im Group-Objekt. Bei einer Passage heisst
+          // "zuruecktreten" auch: den Tabstopp abgeben, sonst haette der Satz
+          // zwei Fokusziele (Passage und Badge) fuer dieselbe Aussage.
+          function suppressControl(entry) {
+            if (!entry) return;
+            entry.suppressed = true;
+            if (entry.isPassage) {
+              entry.el.removeAttribute("role");
+              entry.el.removeAttribute("tabindex");
+              entry.el.removeAttribute("aria-label");
+              return;
+            }
+            entry.el.hidden = true;
+            entry.el.setAttribute("aria-hidden", "true");
+            entry.el.tabIndex = -1;
           }
 
           function renderInlineMarkers(claims, differences, modelsCompared, options) {
@@ -1208,11 +1249,11 @@
             // Wenn Claim und Difference denselben Satz meinen, steht dort nur
             // EIN sichtbares Signal — welches, entscheidet die Schwere:
             //
-            // - WIDERSPRUCH: der Marker gewinnt, das Claim-Badge entfaellt.
+            // - WIDERSPRUCH: die Passage gewinnt, das Claim-Badge entfaellt.
             //   Seit die Claims jeden pruefbaren Satz abdecken (Satz-Index,
             //   2026-08-07), traegt ein strittiger Satz fast IMMER auch ein
             //   Claim-Badge. Mit der alten Regel (Badge gewinnt) verschwand
-            //   damit praktisch jeder Widerspruchs-Marker aus dem Text: der
+            //   damit praktisch jeder Widerspruch aus dem Text: der
             //   strittige Satz sah aus wie jeder andere, und der Klick darauf
             //   oeffnete "4 of 6 models agree" statt der Widerspruchs-Karte.
             //   Genau das ist der Kern des Produkts — es darf nicht als
@@ -1220,8 +1261,8 @@
             // - EMPHASIS: das Badge gewinnt wie bisher; eine andere Gewichtung
             //   ist die schwaechere Aussage als die Stuetzungsquote.
             //
-            // Der unterlegene Marker bleibt unsichtbar im DOM, damit
-            // Hover-Vorschau und Provenance-Zaehlung ihn weiterhin kennen.
+            // Das unterlegene Control bleibt als suppressed im Group-Objekt,
+            // damit Hover-Vorschau und Zaehlung es weiterhin kennen.
             const differenceControls = [];
 
             // Trefferquote der Ankersuche: nur so laesst sich belegen, ob eine
@@ -1242,15 +1283,17 @@
                 diffAnchorMisses += 1;
                 return;
               }
-              const marker = makeDiffMarker(diff, index);
+              const control = attachPassageControl(
+                result,
+                diffMarkerLabel(diff) + ": " + diff.claim,
+                function () { focusDifferenceCard(index); },
+                function () { return buildDiffPreview(diff); }
+              );
               differenceControls.push({
                 spans: result.spans,
-                marker: marker,
+                control: control,
                 isContradiction: diff.type === "contradiction"
               });
-              attachControl(result, marker, function () {
-                focusDifferenceCard(index);
-              }, function () { return buildDiffPreview(diff); });
             });
 
             // 2. Claims: is-unanimous ist bewusst dekorationslos (nur Badge),
@@ -1308,18 +1351,21 @@
                   support: support
                 });
               }
-              // Nur noch Emphasis-Marker treten hinter das Badge zurueck.
-              if (overlappingDifference) {
-                overlappingDifference.marker.hidden = true;
-                overlappingDifference.marker.setAttribute("aria-hidden", "true");
-                overlappingDifference.marker.tabIndex = -1;
-              }
+              // Nur noch Emphasis-Marken treten hinter das Badge zurueck.
+              if (overlappingDifference) suppressControl(overlappingDifference.control);
               attachControl(result, badge, function () {
                 openClaimPopover(claim, badge, modelsCompared, answerNavigation);
               }, function () { return buildClaimPreview(claim, modelsCompared); });
             });
 
             if (unanchored.length) {
+              // Der Anker ist eine woertliche Kopie des Konsenstextes und
+              // traegt damit dessen Quellentags. Im Fliesstext macht
+              // linkifySourceTags daraus die hochgestellte Fussnote - hier
+              // stand bis dahin die rohe Klammer "[S4]" im Satz.
+              const sources = Array.isArray(options.sources)
+                ? options.sources
+                : (Array.isArray(window.currentEvidenceSources) ? window.currentEvidenceSources : []);
               fallbackBox.innerHTML = "";
               const title = document.createElement("div");
               title.className = "claims-fallback-title";
@@ -1333,6 +1379,9 @@
                 renderInlineMarkdown(text, claim.anchor);
                 row.append(text, makeBadge(claim, modelsCompared, answerNavigation));
                 fallbackBox.appendChild(row);
+                // Erst nach dem Einhaengen: die Nummernform erkennt
+                // linkifySourceTags an den Vorfahren der Zeile.
+                if (sources.length) window.linkifySourceTags?.(text, sources);
               });
               fallbackBox.hidden = false;
             }
@@ -1342,7 +1391,7 @@
             if (!options.stored) {
               const legend = $("consensusMarkerLegend");
               if (legend) {
-                legend.hidden = !body.querySelector(".cx-claim, .claim-badge, .cx-marker");
+                legend.hidden = !body.querySelector(".cx-claim, .claim-badge");
               }
 
               // Die Provenance-Zeile zaehlt die strittigen Stellen aus genau
@@ -1362,7 +1411,7 @@
           // globalen Live-IDs. Claims werden deshalb containerlokal erneut
           // verankert; Hover und Detaildialog bleiben genauso erreichbar wie
           // beim aktuell sichtbaren Consensus.
-          function renderStoredConsensusClaims(body, data, fallbackBox) {
+          function renderStoredConsensusClaims(body, data, fallbackBox, sources) {
             if (!body || !data || typeof data !== "object") return false;
             const claims = (Array.isArray(data.claims) ? data.claims : [])
               .filter(c => c && c.anchor && Array.isArray(c.agree) && Array.isArray(c.dissent));
@@ -1372,6 +1421,9 @@
               body: body,
               fallbackBox: fallbackBox,
               stored: true,
+              // Ein archivierter Turn hat seine eigenen Quellen; die globale
+              // Liste gehoert bereits dem naechsten Lauf.
+              sources: Array.isArray(sources) ? sources : [],
               answerNavigation: storedAnswerNavigation(body)
             });
             return claims.length > 0;
@@ -1933,9 +1985,9 @@
             if (legend) legend.hidden = true;
             // Nur der aktive Consensus wird fuer den naechsten Lauf
             // zurueckgesetzt. Statische Follow-up-Turns in #threadHistory
-            // behalten ihre sichtbaren Marker und Unterstreichungen.
+            // behalten ihre sichtbaren Quoten und Marken.
             const insightRoot = window.App.consensusBodyEl?.() || document;
-            insightRoot.querySelectorAll(".claim-badge, .cx-marker").forEach(function (el) { el.remove(); });
+            insightRoot.querySelectorAll(".claim-badge").forEach(function (el) { el.remove(); });
             // Inline-Markierungen auflösen: Span entfernen, Text an Ort und
             // Stelle lassen. normalize() führt die Textknoten wieder zusammen,
             // damit eine erneute Ankersuche nicht an Fragmenten scheitert.

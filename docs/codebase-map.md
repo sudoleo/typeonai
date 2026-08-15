@@ -166,11 +166,12 @@ aus `partials/product_result_mockup.html`. **Seit 2026-07-25 spiegeln alle
 Marketing-Mockups die Inline-Confidence-Darstellung der App** (Scene 03 in
 `landing.html` inkl. der drei Slider-Beispiele, `product_result_mockup.html`
 und die beiden Mockups in `consensus-engine.html`): eine Antwort in voller
-Breite, Uneinigkeit als `.cx-claim`/`.cx-marker` im Satz, die Differences als
+Breite, Uneinigkeit als farbige `.cx-claim`-Marke im Satz, die Differences als
 zugeklapptes `details.consensus-differences-panel` darunter.
-`components-consensus-visuals.css` enthält dafür das gemeinsame Marker-,
-Verdict- und Differences-Vokabular (`--cx-major-line`, `--cx-flash`,
-durchgezogene 1px-/2px-Linien, `.diff-card.is-focused`) und wird von App und
+`components-consensus-visuals.css` enthält dafür das gemeinsame Marken-,
+Verdict- und Differences-Vokabular (`--cx-mark-*` auf der Ampel
+`--agree`/`--partial`/`--dispute`, `--cx-major-line`, `--cx-flash`,
+`.diff-card.is-focused`) und wird von App und
 Landing importiert. Landing-
 spezifisch sind nur die Lesehilfe `.lp-mark-key` unter der Scene-03-Überschrift,
 das Einlaufen der Marker beim Scroll (`.lp-scene-visual.is-visible` /
@@ -405,7 +406,13 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   Anhänge (`showBookmarkAttachments`) landen aus demselben Grund an der
   wiederhergestellten Frage statt im Eingabefeld.
   `window.pendingAttachments`, `getAttachmentsPayload`,
-  `window.App.attachments.{detachForMessage,renderMessageAttachments}`.
+  `window.App.attachments.{detachForMessage,messageMeta,renderMessageAttachments}`.
+  `messageMeta()` liefert dieselben Metadaten, ohne die Dateien abzugeben: die
+  Blase der gerade abgeschickten Frage (`#threadPendingAsk`) zeigt die Chips
+  schon, waehrend der Composer die Daten noch haelt — ein Lauf, der nicht
+  stattfindet, gibt Text UND Anhänge unveraendert zurueck. Solange sie schwebt,
+  blendet `body.thread-message-pending` den Composer-`#attachmentBar` aus,
+  damit dieselben Chips nicht zweimal dastehen.
 - **`agent-mode.js`** — Agent-Mode-**Zustand**, Status-Hub und Timer; einzige
   Stelle, die den Auto-Consensus-Toggle erzwingt/sperrt. `setAgentModeStatus`
   verwaltet weiterhin jeden Modelllauf, reicht Statusereignisse aber nur im
@@ -543,7 +550,7 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   manuell gestarteter Consensus); `firebase.js::loadSingleBookmarkUI` tut
   dasselbe explizit fuer wiederhergestellte Bookmarks.
   Die strittigen
-  Stellen werden aus den tatsaechlich gerenderten `.cx-marker` gezaehlt, nicht
+  Stellen werden aus den tatsaechlich gerenderten Marken gezaehlt, nicht
   separat gebucht; `consensus-insights.js` ruft dafuer nach dem Markieren
   `renderProvenance()` nach; `app-init.js::renderEvidenceSources` ebenso fuer
   den Quellen-Chip. Bruecke: `window.App.consensusPipeline.{onPrepare,
@@ -580,10 +587,30 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   Composer stehen (echte Laeufe leeren ihn), damit der selbst getippte Text
   nicht mitten im Ablauf verschwindet. Nach der fertigen Antwort ersetzt bei
   Gaesten `#postDemoLoginPrompt` den ganzen deaktivierten Composer; die Frage
-  bleibt im Thread-Kopf sichtbar. Der Composer wird beim Senden **geleert** (erst nach
-  `/prepare`, damit Login-/Limit-Abbrueche den Text nicht fressen) — deshalb ist
-  `window.lastQuestion` die Quelle fuer `getConsensus` und die Citation, nicht
-  mehr `#questionInput`. Der gefuehrte Lauf `#consensusRun` liegt jetzt als
+  bleibt im Thread-Kopf sichtbar. Der Composer wird beim Senden **geleert** —
+  deshalb ist `window.lastQuestion` die Quelle fuer `getConsensus` und die
+  Citation, nicht mehr `#questionInput`. **Seit 2026-08-15 sofort** (im Thread;
+  der Direktvergleich leert weiter erst nach `/prepare`): zwischen Klick und
+  dem Moment, in dem der Lauf den neuen Turn aufmacht, liegen `/prepare` und im
+  laufenden Gespraech das Binden des Chat-Kontexts. Ab der dritten Frage dauerte
+  das so lange, dass es aussah, als sei der Klick ins Leere gegangen (User-Befund
+  2026-08-15). Der Uebergang gehoert `sentMessage` in `query-send.js`:
+  `hold()` leert das Feld und zeigt die Nachricht als eigene Blase
+  `#threadPendingAsk` (gleiche Optik wie der Kopf, gefuellt von
+  `window.App.setPendingThreadQuestion`; `body.thread-message-pending` schiebt
+  sie per `order: 4` UNTER die bisherige Antwort und den gefuehrten Lauf gleich
+  mit), `promote()` macht sie nach dem Archivieren zum Kopf, `restore()` gibt
+  sie unveraendert und abschickbar ins Feld zurueck, wenn der Lauf gar nicht
+  stattfindet (Kontingent, fehlender Key, Abbruch) — parallel zu
+  `followup.restoreAfterBlockedRun()`, das denselben Lauf beim Kontext haelt.
+  Deshalb blendet ein Follow-up den bisherigen Konsens auch NICHT mehr beim
+  Absenden aus, sondern erst beim Archivieren: bis dahin ist er die Antwort auf
+  die Frage, die oben noch als Kopf steht. Genau eine Scroll-Bewegung haengt
+  daran (`window.App.revealSentMessage`, app-core.js): einmal beim Absenden,
+  nie nach oben, nicht fuer wenige Pixel, nie ueber den Dokumentboden hinaus
+  und bei der ersten eigenen Geste (`wheel`/`touchstart`/`keydown`/
+  `pointerdown`) sofort abgebrochen. Danach scrollt nur noch
+  `revealConsensusOutput()`, wenn die neue Antwort erscheint. Der gefuehrte Lauf `#consensusRun` liegt jetzt als
   Container-Kind im Thread (unter der Frage), nicht mehr in der Input-Section.
   Antwort-Typo im Mockup-Mass: `.consensus-main`-H2 als Eyebrow, Body 1.03rem/
   1.7 auf max. 64ch; `.consensus-main` ist `overflow:visible`, weil der alte
@@ -748,14 +775,17 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   Tag fand seine Stelle sonst nie. Gewrappt wird pro Textknoten (nicht per
   `Range.extractContents`), damit `<strong>`, `[S1]`-Links und KaTeX exakt an
   ihrem Platz bleiben; `code`/`pre`/`.katex`/Badges werden übersprungen.
-  `is-unanimous` ist bewusst dekorationslos (nur die Marke), `is-minor` eine
-  feine neutrale 1px-Linie (Difference ohne `severity: major`), `is-split` eine
-  1px-Linie in Bernstein (Claim mit Dissens — dieselbe Farbe wie sein gelbes
-  Badge, seit 2026-07-28: vorher lief die Linie unter einer gelben „2/4"-Quote
-  neutral grau), `is-major` eine 2px-Linie in Bernstein — alle
-  **durchgezogen** (die Wellenlinie las sich als Rechtschreibfehler,
-  User-Vorgabe 2026-07-27); kein reduzierter Kontrast, keine Hintergrundfarbe.
-  Treffen zwei Marken denselben Satz, hebt `markSentence` die Linie über
+  Seit **2026-08-15 (User-Vorgabe) ist die Marke ein farbiger Textmarker statt
+  einer Unterstreichung**: eine Linie unter dem Satz ist im Web die Form eines
+  Links, der Leser erwartet einen Sprung und bekommt eine Bewertung. Die Farbe
+  spricht die Ampel des Hauses (`--agree`/`--partial`/`--dispute`, Tokens
+  `--cx-mark-*` in `components-consensus-visuals.css`): `is-unanimous` grün
+  (volle Zustimmung, auch „4/4"), `is-minor` ein neutraler Grau-Wash (Difference
+  ohne `severity: major`), `is-split` bernstein (Claim mit Dissens — dieselbe
+  Note wie sein gelbes Badge), `is-major` rot (Widerspruch). Deckung bewusst
+  niedrig (10–21 %), damit der Textkontrast unangetastet bleibt; Hover vertieft
+  denselben Ton (`--cx-mark-*-strong`), statt eine zweite Fläche zu setzen.
+  Treffen zwei Marken denselben Satz, hebt `markSentence` die Marke über
   `MARK_LEVELS` (unanimous < minor < split < major) auf die stärkere Stufe an,
   statt die zuerst gesetzte Klasse zu behalten.
   Das `.claim-badge` daneben zeigt seit 2026-07-27 wieder die scanbare Quote
@@ -764,15 +794,16 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   Quellenzahlen unterschieden; Neutral = Einigkeit, Bernstein
   (`has-dissent`) = Abweichung. Wenn Claim und Difference denselben Satz
   belegen, bleibt genau EIN Steuerelement sichtbar — welches, entscheidet seit
-  2026-08-07 die Schwere: bei **Widerspruch** gewinnt der `.cx-marker` und das
+  2026-08-07 die Schwere: bei **Widerspruch** gewinnt die Passage selbst und das
   Claim-Badge entfaellt, bei **Emphasis** bleibt es wie bisher beim Badge.
   Grund: seit die Claims über den Satz-Index jeden prüfbaren Satz abdecken,
   trägt ein strittiger Satz fast immer AUCH ein Claim-Badge — mit der alten
   Regel (Badge gewinnt immer) verschwand damit praktisch jeder
-  Widerspruchs-Marker aus dem Text, und der Klick auf den strittigen Satz
+  Widerspruch aus dem Text, und der Klick auf den strittigen Satz
   öffnete „4 of 6 models agree" statt der Widerspruchs-Karte (User-Befund
-  2026-08-07). Der unterlegene Marker bleibt verborgen im DOM, Preview und
-  Zaehlung kennen ihn weiterhin. Treffen mehrere Claims denselben Satz, bleibt
+  2026-08-07). Das unterlegene Control bleibt als `suppressed` im Group-Objekt,
+  Preview und Zaehlung kennen es weiterhin; eine zurueckgetretene Passage gibt
+  dabei `role`/`tabindex` ab, damit ein Satz nie zwei Fokusziele hat. Treffen mehrere Claims denselben Satz, bleibt
   ebenfalls nur eine Marke sichtbar: die konservative Satzquote des am
   wenigsten gestuetzten Claims. Die Kopien in
   `landing.css` **und die Mockup-Markups** (`landing.html`,
@@ -786,19 +817,23 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   die Answers-Schublade genau dieses archivierten Turns statt der globalen
   Modellbox des neuesten Turns.
   Ausserdem steht `.src-ref` jetzt im `MARK_SKIP_SELECTOR` — ohne das wurde
-  die Quellenzahl selbst als Satzteil gewrappt und trug die Unterstreichung
-  der Passage (eine bernsteinfarbene „3" sieht aus wie ein Fehler). Ein Satz wird höchstens einmal dekoriert
+  die Quellenzahl selbst als Satzteil gewrappt und trug die Markierung
+  der Passage (eine angestrichene „3" sieht aus wie ein Fehler). Ein Satz wird höchstens einmal dekoriert
   (Widersprüche laufen zuerst, Claims hängen sich an). Der Spalten-Balancer
   ist mit dem einspaltigen Layout entfallen; `window.balanceConsensusColumns`
   existiert nicht mehr.
   `attachControl` koppelt die Passage an ihr Steuerelement: auf **allen**
-  Eingabegeräten bekommt jeder `.cx-claim`-Span `is-interactive`, denselben
-  `title` wie Marker/Badge und einen Klick, der dieselbe Aktion auslöst. Nur der
+  Eingabegeräten bekommt jeder `.cx-claim`-Span `is-interactive` und einen
+  Klick, der dieselbe Aktion auslöst wie das Badge. Nur der
   Hover ist auf echte Zeigergeräte (`(hover: hover) and (pointer: fine)`)
   begrenzt, damit sein Zustand auf Touch nicht hängen bleibt. Der
-  Hover wirkt in beide Richtungen: `.cx-claim.is-hovered` (Wash, nur im Hover)
-  ↔ `.cx-marker/.claim-badge.is-linked-hover`. Fokussierbar bleibt allein das
-  Steuerelement — die Passage ist ein zusätzlicher Mausweg, kein Tab-Stop.
+  Hover wirkt in beide Richtungen: `.cx-claim.is-hovered` (vertiefte Marke)
+  ↔ `.claim-badge.is-linked-hover`. Wo ein Badge steht, ist es das
+  fokussierbare Steuerelement und die Passage nur ein zusätzlicher Mausweg.
+  An einer **Differenz** gibt es daneben seit 2026-08-15 nichts mehr — dort
+  macht `attachPassageControl` den ersten Span selbst zum Steuerelement
+  (`role="button"`, `tabindex="0"`, sprechendes `aria-label`, Enter/Space),
+  sonst wäre der Widerspruch für Tastatur und Screenreader unerreichbar.
   Das Claim-Detail ist mobil ein echtes modales Dialogfenster (`aria-modal`,
   Fokuswechsel/-falle/-rückgabe, inerter Hintergrund); Desktop bleibt ein
   nichtmodaler Popover am Badge.
@@ -1027,7 +1062,9 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   Erst nachdem `/prepare` und der optionale Context-Build erfolgreich waren, archiviert
   `archiveCurrentExchange()` die bisherige Frage und den bereits gerenderten
   Consensus samt Agreement als statischen Turn in `#threadHistory`; erst danach
-  erscheint die neue Frage darunter im aktiven `#threadAsk`. Der alte Live-Renderbaum wird
+  uebernimmt `sentMessage.promote()` die neue Frage in den aktiven
+  `#threadAsk`. Sichtbar ist sie da laengst — als `#threadPendingAsk` an
+  derselben Stelle im Thread, sodass die Uebernahme nichts verschiebt. Der alte Live-Renderbaum wird
   geleert und für die neue Antwort wiederverwendet, sodass IDs einmalig bleiben
   und die vorherige Antwort trotzdem sichtbar bleibt. Interaktive Marker der
   Archivkopie werden zu reinen Anzeigeelementen. Das archivierte Agreement
@@ -2297,9 +2334,9 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, kompakte Antwort→Consensus-
   Pipeline inkl. Mobile-Clipping/Ergebnis-Reihenfolge,
-  Consensus→Differences+Score inkl. Inline-Marker (`.cx-claim.is-major`,
-  `.cx-marker` mit aria-label), zugeklapptem `#consensusDifferencesPanel` und
-  markerfreiem Copy-Text, Watch-Dialog mit Pflicht-Sichtbarkeit/Condition-
+  Consensus→Differences+Score inkl. Inline-Marken (`.cx-claim.is-major` als
+  eigenes Steuerelement mit aria-label, keine `.cx-marker`-Punkte mehr),
+  zugeklapptem `#consensusDifferencesPanel` und markenfreiem Copy-Text, Watch-Dialog mit Pflicht-Sichtbarkeit/Condition-
   Feld, Exclude, Theme, Picker-Persistenz). Startet einen eigenen uvicorn auf
   Port 8031 mit `E2E_TEST_MODE=1`, `MOCK_LLM=1` (deterministische Fixtures in
   `app/services/llm/mock_llm.py`, Seams: `_run_ask`,

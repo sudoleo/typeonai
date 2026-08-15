@@ -13,7 +13,7 @@
    ========================================================================== */
 
 @import url('./public-tokens.css?v=20260731-inter1');
-@import url('./components-consensus-visuals.css?v=20260814-askalign1');
+@import url('./components-consensus-visuals.css?v=20260815-claimmark1');
 
 *,
 *::before,
@@ -1820,31 +1820,32 @@ img { display: block; max-width: 100%; }
   100% { background: transparent; }
 }
 
-/* The marks ink themselves in when the mockup scrolls into view: the product
-   in one gesture — a plain answer, then the doubt written onto it. */
-@keyframes cxInkMinor {
-  from { text-decoration-color: transparent; }
-  to { text-decoration-color: color-mix(in srgb, var(--text-color) 38%, transparent); }
+/* The marks stroke themselves on when the mockup scrolls into view: the
+   product in one gesture — a plain answer, then someone going over it with a
+   marker pen. Since 2026-08-15 that is literally what happens: the wash grows
+   from the left edge of the sentence to its right, so the eye reads it as a
+   stroke and not as a box switching on. */
+@keyframes cxStroke {
+  from { background-size: 0% 100%; }
+  to { background-size: 100% 100%; }
 }
 
-@keyframes cxInkMajor {
-  from { text-decoration-color: transparent; }
-  to { text-decoration-color: var(--cx-major-line); }
-}
-
-@keyframes cxMarkerPop {
-  from { opacity: 0; transform: scale(0.5); }
-  to { opacity: 1; transform: none; }
-}
-
+.lp-scene-visual.is-visible .cx-claim.is-unanimous,
 .lp-scene-visual.is-visible .cx-claim.is-minor,
-.lp-step.is-visible .cx-claim.is-minor { animation: cxInkMinor 0.6s ease 0.45s backwards; }
-
+.lp-scene-visual.is-visible .cx-claim.is-split,
 .lp-scene-visual.is-visible .cx-claim.is-major,
-.lp-step.is-visible .cx-claim.is-major { animation: cxInkMajor 0.6s ease 0.45s backwards; }
-
-.lp-scene-visual.is-visible .cx-marker,
-.lp-step.is-visible .cx-marker { animation: cxMarkerPop 0.3s ease 0.95s backwards; }
+.lp-step.is-visible .cx-claim.is-unanimous,
+.lp-step.is-visible .cx-claim.is-minor,
+.lp-step.is-visible .cx-claim.is-split,
+.lp-step.is-visible .cx-claim.is-major {
+  /* Ein Verlauf statt background-color: nur er laesst sich in der Breite
+     animieren. Die Farbe bleibt dieselbe wie in der App - die Flaeche
+     darunter muss dafuer aber weichen, sonst liegt sie schon fertig da. */
+  background-color: transparent;
+  background-image: linear-gradient(var(--cx-mark), var(--cx-mark));
+  background-repeat: no-repeat;
+  animation: cxStroke 0.55s ease 0.45s backwards;
+}
 
 /* --------------------------------------------------------------------------
    Reading key — the three states in their real visual vocabulary.
@@ -1884,8 +1885,7 @@ img { display: block; max-width: 100%; }
 
 /* The samples are illustrations, not controls: no pointer, and above all no
    44px hit area that would swallow clicks on the neighbouring entry. */
-.lp-mark-key .cx-marker { cursor: default; }
-.lp-mark-key .cx-marker::after { display: none; }
+.lp-mark-key .cx-claim { cursor: default; }
 
 /* Differences: flat list, exactly like the /app — hairline separators instead
    of card frames; severity lives in the dot and the subtle text label. */
@@ -2477,7 +2477,7 @@ img { display: block; max-width: 100%; }
   .lp-reveal { opacity: 1; transform: none; transition: none; }
   /* Marks are present from the start instead of inking themselves in; the
      flash stays put (the JS removes the class after 2s). */
-  .cx-claim, .cx-marker, .consensus-differences-summary::before { animation: none; transition: none; }
+  .cx-claim, .consensus-differences-summary::before { animation: none; transition: none; }
   .diff-card.is-focused { animation: none; background: var(--cx-flash); }
   html { scroll-behavior: auto; }
 }

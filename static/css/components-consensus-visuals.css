@@ -155,8 +155,9 @@
    Die Quote ist die Kernbotschaft ("4/6"), aber visuell nur eine Mikro-Marke:
    tabellarische Ziffern, transparente Flaeche, feine Kontur. Damit ist sie
    sofort scanbar und zugleich klar von den hochgestellten Quellenzahlen
-   unterschieden. Wenn Claim und Difference denselben Satz markieren, bleibt
-   nur diese eine sichtbare Marke; der zusaetzliche Punkt wird ausgeblendet.
+   unterschieden. Wenn Claim und Difference denselben Satz meinen, steht dort
+   weiterhin nur EIN Steuerelement - entweder diese Quote oder (beim
+   Widerspruch) die angestrichene Passage selbst.
 
    Seit 2026-08-10 ohne Kontur: ein 999px-Rahmen mitten im Satz war ein
    Steuerelement im Fliesstext. Die Quote steht jetzt wie eine Fussnote hinter
@@ -217,145 +218,123 @@
 }
 
 /* --- Inline-Marker im Antworttext -----------------------------------------
-   Rechtschreibpruefungs-Metapher: die Textstelle traegt die Markierung, der
-   Marker daneben oeffnet die Details. Bewusst NUR text-decoration - kein
-   reduzierter Textkontrast und keine Hintergrundfarbe, damit der
-   WCAG-Kontrast der Antwort unangetastet bleibt. */
+   Textmarker statt Unterstreichung (2026-08-15, User-Vorgabe): eine Linie
+   unter einem Satz ist im Web die Form eines Links - der Leser erwartet einen
+   Sprung und bekommt eine Bewertung. Ein Marker ueber der Stelle sagt
+   dagegen genau das, was hier gemeint ist: jemand hat den Satz gelesen und
+   angestrichen.
+
+   Die Farbe traegt die ganze Aussage, seit die Punkte daneben weg sind, und
+   spricht die Ampel des Hauses (--agree/--partial/--dispute):
+     gruen    volle Zustimmung (6/6, auch 4/4)
+     grau     Nuance - die Modelle setzen einen anderen Schwerpunkt
+     bernstein geteilte Zustimmung (4/6)
+     rot      echter Widerspruch
+   Bewusst niedrige Deckung: der Text darunter behaelt seinen WCAG-Kontrast,
+   und eine Antwort, in der fast jeder Satz eine Marke traegt, bleibt lesbar. */
+:root {
+  --cx-mark-agree: color-mix(in srgb, var(--agree) 13%, transparent);
+  --cx-mark-agree-strong: color-mix(in srgb, var(--agree) 24%, transparent);
+  --cx-mark-note: color-mix(in srgb, var(--ink) 10%, transparent);
+  --cx-mark-note-strong: color-mix(in srgb, var(--ink) 17%, transparent);
+  --cx-mark-split: color-mix(in srgb, var(--partial) 20%, transparent);
+  --cx-mark-split-strong: color-mix(in srgb, var(--partial) 34%, transparent);
+  --cx-mark-major: color-mix(in srgb, var(--dispute) 20%, transparent);
+  --cx-mark-major-strong: color-mix(in srgb, var(--dispute) 34%, transparent);
+}
+
+.dark-mode {
+  /* Die Ampelfarben sind im Dark Mode ohnehin heller; eine Spur mehr Deckung
+     haelt die Marke sichtbar, ohne zu leuchten. */
+  --cx-mark-agree: color-mix(in srgb, var(--agree) 16%, transparent);
+  --cx-mark-agree-strong: color-mix(in srgb, var(--agree) 28%, transparent);
+  --cx-mark-note: color-mix(in srgb, var(--ink) 12%, transparent);
+  --cx-mark-note-strong: color-mix(in srgb, var(--ink) 19%, transparent);
+  --cx-mark-split: color-mix(in srgb, var(--partial) 20%, transparent);
+  --cx-mark-split-strong: color-mix(in srgb, var(--partial) 34%, transparent);
+  --cx-mark-major: color-mix(in srgb, var(--dispute) 21%, transparent);
+  --cx-mark-major-strong: color-mix(in srgb, var(--dispute) 35%, transparent);
+}
+
 .cx-claim {
-  /* Einigkeit ist der Normalfall und bleibt undekoriert; die Klasse dient nur
-     als praeziser Einhaengepunkt fuer das Badge. */
+  /* Ohne Stufenklasse (Alt-Snapshots) bleibt der Satz unmarkiert; die Klasse
+     ist dann nur der praezise Einhaengepunkt fuer das Badge. */
   text-decoration: none;
 }
 
-/* Solid, not squiggly: the wavy rule read as a spell-checker error and drew
-   more attention to itself than to the sentence it marks. A straight line
-   underneath says "look here" without shouting; weight and colour carry the
-   severity instead — 1px muted for a minor point, 2px amber for a major
-   contradiction. */
-.cx-claim.is-minor {
-  text-decoration: underline solid
-    color-mix(in srgb, var(--text-color) 38%, transparent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 4px;
+/* Gemeinsame Geometrie aller vier Stufen. Der Innenabstand ist bewusst klein
+   und der negative Aussenabstand noch kleiner: zwischen zwei markierten
+   Saetzen muss ein sichtbarer Rest des Wortzwischenraums frei bleiben, sonst
+   laufen die Marken zu einem durchgehenden Farbband zusammen und der Absatz
+   sieht aus wie eine Flaeche statt wie mehrere angestrichene Saetze. */
+.cx-claim.is-unanimous,
+.cx-claim.is-minor,
+.cx-claim.is-split,
+.cx-claim.is-major {
+  padding: 0.1em 0.14em;
+  margin: 0 -0.02em;
+  border-radius: 3px;
+  background-color: var(--cx-mark, transparent);
+  /* Ueber einen Zeilenumbruch hinweg bekommt jedes Fragment eigene Ecken. */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: background-color 0.14s ease;
 }
 
-/* Geteilte Zustimmung (2/4): dieselbe Bernstein-Note wie das Badge daneben.
-   Vorher lief die Linie hier neutral grau, waehrend die Quote schon gelb war -
-   zwei Signale fuer denselben Befund, die sich widersprachen. Die Staerke
-   trennt die Stufen weiter: 1px geteilt, 2px echter Widerspruch. */
+.cx-claim.is-unanimous {
+  --cx-mark: var(--cx-mark-agree);
+  --cx-mark-strong: var(--cx-mark-agree-strong);
+}
+
+.cx-claim.is-minor {
+  --cx-mark: var(--cx-mark-note);
+  --cx-mark-strong: var(--cx-mark-note-strong);
+}
+
 .cx-claim.is-split {
-  text-decoration: underline solid
-    color-mix(in srgb, var(--cx-major-line) 75%, transparent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 4px;
+  --cx-mark: var(--cx-mark-split);
+  --cx-mark-strong: var(--cx-mark-split-strong);
 }
 
 .cx-claim.is-major {
-  text-decoration: underline solid var(--cx-major-line);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
+  --cx-mark: var(--cx-mark-major);
+  --cx-mark-strong: var(--cx-mark-major-strong);
 }
 
 :root {
+  /* Bernstein-Note der Badges und der kurze Aufblitz einer geoeffneten Karte.
+     Die Marken selbst laufen ueber die Ampel-Tokens darueber. */
   --cx-major-line: #c8862f;
   --cx-flash: rgba(217, 155, 70, 0.16);
 }
 
 .dark-mode {
-  /* Bernstein im Dark Mode aufhellen, sonst verschwindet die Wellenlinie. */
   --cx-major-line: #e8b968;
   --cx-flash: rgba(243, 198, 111, 0.15);
 }
 
-/* Die markierte Passage ist selbst anfassbar: auf dem Desktop ist der Satz
-   ein viel groesseres Ziel als der 5px-Punkt daneben. Der Hover laeuft in
-   beide Richtungen (Passage <-> Marker), damit die Zuordnung sichtbar wird.
-   Nur im Hover gibt es eine Flaeche - im Ruhezustand bleibt die Antwort
-   dekorationsfrei und ihr Kontrast unangetastet. */
+/* Die markierte Passage ist selbst anfassbar - und seit die Punkte daneben
+   weg sind (2026-08-15, User-Vorgabe) ist sie bei einer Differenz auch das
+   einzige Steuerelement: Tastatur und Screenreader erreichen sie ueber
+   role="button"/tabindex, die das JS an den ersten Span haengt. Der Hover
+   vertieft die Marke, statt eine zweite Flaeche darueber zu legen. */
 .cx-claim.is-interactive {
   cursor: pointer;
-  /* Am .is-interactive statt am Hover-Zustand, damit der Wash in beide
-     Richtungen weich laeuft. */
-  transition: background-color 0.14s ease;
 }
 
 .cx-claim.is-hovered {
+  background-color: var(--cx-mark-strong, color-mix(in srgb, var(--text-color) 7%, transparent));
   border-radius: 3px;
-  background: color-mix(in srgb, var(--text-color) 7%, transparent);
-  /* Ueber einen Zeilenumbruch hinweg bekommt jedes Fragment eigene Ecken. */
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
 
-.cx-claim.is-major.is-hovered {
-  background: var(--cx-flash);
-  text-decoration-thickness: 3px;
-}
-
-.cx-claim.is-minor.is-hovered {
-  text-decoration-color: color-mix(in srgb, var(--text-color) 72%, transparent);
-  text-decoration-thickness: 2px;
-}
-
-.cx-claim.is-split.is-hovered {
-  background: var(--cx-flash);
-  text-decoration-color: var(--cx-major-line);
-  text-decoration-thickness: 2px;
-}
-
-/* Marker an einem Widerspruch: kompakter Punkt-Button, keine Zaehlung. */
-.cx-marker {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  vertical-align: 1px;
-  margin: 0 2px 0 4px;
-  padding: 0 4px;
-  min-height: 16px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 90%, transparent);
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--glass-bg-strong) 55%, transparent);
-  line-height: var(--line-height-solid);
-  cursor: pointer;
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-/* Author-level display:inline-flex would otherwise override the browser's
-   [hidden] rule on an overlap marker. */
-.cx-marker[hidden] {
-  display: none;
-}
-
-/* Trefferflaeche >= 44px ohne Einfluss auf die Zeilenhoehe: das Pseudoelement
-   vergroessert nur den Klickbereich, nicht die Box. */
-.cx-marker::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 44px;
-  height: 44px;
-  transform: translate(-50%, -50%);
-}
-
-.cx-marker:hover,
-.cx-marker:focus-visible,
-.cx-marker.is-linked-hover {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
-  box-shadow: var(--liquid-focus-ring);
-  outline: none;
-}
-
-.cx-marker .cx-marker-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--text-color) 45%, transparent);
-}
-
-.cx-marker.is-major .cx-marker-dot {
-  background: var(--cx-major-line);
+/* Tastaturfokus auf der Passage: der Ring liegt aussen um die Marke, damit er
+   nicht mit ihr verschmilzt. */
+.cx-claim:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 /* Dasselbe fuer das bestehende Claim-Badge: Trefferflaeche vergroessern,

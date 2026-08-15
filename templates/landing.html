@@ -23,7 +23,7 @@
   <meta name="twitter:image" content="https://www.consens.io/static/og-home-v2.png?v=20260802">
   <meta name="twitter:image:alt" content="The risk of one perspective | consens.io">
   <title>Track Where AI Answers Disagree and Change | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260814-askalign1">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260815-claimmark1">
   <link rel="stylesheet" href="/static/css/benchmark.css?v=20260731-inter1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -344,11 +344,11 @@
                        rather than a picture of one; the splits match the card
                        in step 04, because a mock that contradicts itself is
                        worse than no mock. -->
-                  <p>The new date belongs in the first line, ahead of the miss, the cause and the apology<button class="claim-badge" type="button"
+                  <p><span class="cx-claim is-unanimous">The new date belongs in the first line, ahead of the miss, the cause and the apology</span><button class="claim-badge" type="button"
                       data-claim-anchor="The new date belongs in the first line, ahead of the miss, the cause and the apology"
                       data-claim-agree="ChatGPT, Claude, Gemini, Mistral, DeepSeek, Grok"
                       aria-label="All 6 models that address this agree — open details"><span class="claim-ratio" aria-hidden="true">6/6</span></button></p>
-                  <p>Name the day you will confirm the 29th, so the next update does not arrive as another surprise<button class="claim-badge has-dissent" type="button"
+                  <p><span class="cx-claim is-split">Name the day you will confirm the 29th, so the next update does not arrive as another surprise</span><button class="claim-badge has-dissent" type="button"
                       data-claim-anchor="Name the day you will confirm the 29th, so the next update does not arrive as another surprise."
                       data-claim-agree="Claude, Gemini, Mistral, DeepSeek"
                       data-claim-dissent="ChatGPT: a promised status note is a second date you now also have to hit | Grok: don't stack a new promise on top of one you just broke"
@@ -363,22 +363,26 @@
             <div class="lp-step-copy">
               <p class="lp-step-num">03</p>
               <h3>Where they pull apart</h3>
-              <p>Agreement gets no decoration at all — only the count. A difference in detail gets a fine rule under the sentence, a real contradiction a heavier amber one.<span class="lp-wide-only"> The mark sits on the sentence it belongs to, so you never have to hold two documents open at once.</span></p>
+              <p>Every checked sentence is highlighted in the colour of its result: green where every model agreed, amber where they split, red where they contradict each other.<span class="lp-wide-only"> The mark sits on the sentence it belongs to, so you never have to hold two documents open at once.</span></p>
             </div>
             <div class="lp-step-visual">
               <div class="lp-excerpt">
                 <ul class="lp-mark-key" aria-label="What the marks in a consensus answer mean">
                   <li>
-                    <span class="lp-mark-sample">Say what she actually gets on the 15th<span class="claim-badge" aria-hidden="true"><span class="claim-ratio" aria-hidden="true">6/6</span></span></span>
-                    <span class="lp-mark-note">no mark, just the count</span>
+                    <span class="lp-mark-sample"><span class="cx-claim is-unanimous">Say what she actually gets on the 15th</span><span class="claim-badge" aria-hidden="true"><span class="claim-ratio" aria-hidden="true">6/6</span></span></span>
+                    <span class="lp-mark-note">green · all of them agreed</span>
                   </li>
                   <li>
-                    <span class="lp-mark-sample"><span class="cx-claim is-minor">Name the cause, or leave it vague</span><span class="cx-marker is-minor" aria-hidden="true"><span class="cx-marker-dot"></span></span></span>
-                    <span class="lp-mark-note">fine rule</span>
+                    <span class="lp-mark-sample"><span class="cx-claim is-split">Name the day you will confirm the 29th</span><span class="claim-badge has-dissent" aria-hidden="true"><span class="claim-ratio" aria-hidden="true">4/6</span></span></span>
+                    <span class="lp-mark-note">amber · support is split</span>
                   </li>
                   <li>
-                    <span class="lp-mark-sample"><span class="cx-claim is-major">Keep the closing question, or cut it</span><span class="cx-marker is-major" aria-hidden="true"><span class="cx-marker-dot"></span></span></span>
-                    <span class="lp-mark-note">heavier amber rule</span>
+                    <span class="lp-mark-sample"><span class="cx-claim is-minor">Name the cause, or leave it vague</span></span>
+                    <span class="lp-mark-note">grey · a difference in detail</span>
+                  </li>
+                  <li>
+                    <span class="lp-mark-sample"><span class="cx-claim is-major">Keep the closing question, or cut it</span></span>
+                    <span class="lp-mark-note">red · they contradict each other</span>
                   </li>
                 </ul>
               </div>
@@ -396,7 +400,7 @@
             <div class="lp-step-visual">
               <div class="lp-excerpt">
                 <div class="consensus-main-text consensus-answer-body lp-excerpt-lead">
-                  <p><span class="cx-claim is-major is-interactive" data-diff-open="lpDiffClosing">Three models read the closing line as the only sentence that gives her a way in, three as an invitation to reopen a date you cannot move.</span><button class="cx-marker is-major" type="button" data-diff-open="lpDiffClosing" aria-haspopup="dialog" aria-label="The models contradict each other here. Open details"><span class="cx-marker-dot" aria-hidden="true"></span></button></p>
+                  <p><span class="cx-claim is-major is-interactive" role="button" tabindex="0" data-diff-open="lpDiffClosing" aria-haspopup="dialog" aria-label="The models contradict each other here. Open details">Three models read the closing line as the only sentence that gives her a way in, three as an invitation to reopen a date you cannot move.</span></p>
                 </div>
                 <div class="differences-cards">
                   <details class="diff-card is-contradiction is-major" id="lpDiffClosing" open>
@@ -649,7 +653,7 @@
   {% include "partials/public_footer.html" %}
 
   <script defer src="/static/js/landing-scenes.js?v=20260814-message1"></script>
-  <script defer src="/static/js/landing-insights.js?v=20260810-claims1"></script>
+  <script defer src="/static/js/landing-insights.js?v=20260815-claimmark1"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       // Lean scroll reveal: one fade-up per block when it enters the viewport.
@@ -706,11 +710,18 @@
       });
 
       // Marked passages in the mockups behave like the real ones in /app:
-      // clicking the sentence (or its dot) opens the entry behind the mark and
+      // clicking the highlighted sentence opens the entry behind the mark and
       // flashes it. Since the Decide rebuild the card lives in the step below
       // rather than inside a collapsed panel, so it may be off screen when the
       // mark is clicked - a flash nobody sees is the same as no answer.
+      // Seit die Punkte weg sind, ist die Passage das einzige Steuerelement -
+      // sie muss deshalb auch auf die Tastatur hoeren.
       document.querySelectorAll("[data-diff-open]").forEach(trigger => {
+        trigger.addEventListener("keydown", event => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          trigger.click();
+        });
         trigger.addEventListener("click", () => {
           const card = document.getElementById(trigger.dataset.diffOpen);
           if (!card) return;

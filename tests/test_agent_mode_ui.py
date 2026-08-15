@@ -34,7 +34,11 @@ def test_disabled_agent_mode_is_a_direct_six_answer_flow():
     input_css = (ROOT / "static" / "css" / "components-input.css").read_text(encoding="utf-8")
 
     assert 'const agentModeAtStart = isAgentModeEnabled?.() === true;' in query
-    assert 'document.body.classList.add("is-hero", "direct-comparison-active")' in query
+    # Die Vergleichsansicht wird an EINER Stelle aufgebaut, damit ein frisch
+    # gesendeter und ein aus einem Bookmark geladener Direktvergleich nicht
+    # auseinanderlaufen.
+    assert 'window.enterDirectComparisonView?.();' in query
+    assert 'document.body.classList.add("is-hero", "direct-comparison-active")' in core
     assert 'window.App.followup?.reset?.();' in query
     assert 'window.App.chatSession?.reset?.();' in query
     assert 'window.App?.consensusPipeline?.dismiss?.();' in query
@@ -64,6 +68,22 @@ def test_plus_menu_agent_mode_switch_is_free_and_synchronized():
     assert 'if (menuSwitchEl) menuSwitchEl.checked = enabled;' in script
     assert 'agentModeMenuSwitch.addEventListener("change"' in script
     assert 'setAgentMode(this.checked, { persist: true });' in script
+
+
+def test_composer_and_its_plus_menu_stay_above_the_answer_boxes():
+    """Waehrend des Hero-Slides ist die .input-section selbst ein
+    Stacking-Context — der z-index des offenen (+)-Menues bleibt darin
+    gefangen. Ohne eigenen z-index gewannen die spaeter im DOM stehenden
+    .response-box (will-change/isolation) und ihre Modellnamen lagen fuer die
+    Dauer der Umschalt-Animation vor dem Menue."""
+    input_css = (ROOT / "static" / "css" / "components-input.css").read_text(encoding="utf-8")
+
+    base = input_css.split(".input-section {", 1)[1].split("}", 1)[0]
+    assert "position: relative;" in base
+    assert "z-index: 5;" in base
+    # Der Direktvergleich ist kein Leerzustand: keine Begruessung ueber dem
+    # nach oben gerueckten Composer.
+    assert "body.is-hero.agent-mode-enabled:not(.direct-comparison-active) .hero-greeting" in input_css
 
 
 def test_consensus_jumps_reveal_answers_without_disabling_agent_mode():

@@ -141,8 +141,11 @@ def test_followup_archives_the_previous_turn_before_rendering_the_next_one():
     assert "const insightRoot = window.App.consensusBodyEl?.() || document" in read(
         "static/js/consensus-insights.js"
     )
-    archive_at = query.index("archiveCurrentExchange?.()")
-    assert archive_at < query.index("setThreadQuestion?.(question)", archive_at)
+    # Erst archivieren, dann uebernehmen: promote() macht die abgeschickte
+    # Nachricht zum Kopf des neuen Turns (siehe sentMessage in query-send.js).
+    archive_at = query.index("window.App.followup?.archiveCurrentExchange?.();")
+    assert archive_at < query.index("sentMessage.promote()", archive_at)
+    assert "window.App.setThreadQuestion?.(this.question)" in query
     assert "clearHistory?.()" in app_init
 
     # User-Turns stehen rechts; Consensus-Turns bleiben als Lesetext links.
@@ -155,6 +158,109 @@ def test_followup_archives_the_previous_turn_before_rendering_the_next_one():
     insights = read("static/js/consensus-insights.js")
     assert "TOPIC_MAX_SHOWN = 1" in insights
     assert "TOPIC_MAX_WORDS" not in insights
+
+
+def test_the_sent_message_leaves_the_field_before_prepare_runs():
+    """Zwischen Klick und dem Moment, in dem der Lauf den neuen Turn aufmacht,
+    liegen /prepare und — im laufenden Gespraech — das Binden des Chat-
+    Kontexts. Ab der dritten Frage dauerte das so lange, dass es aussah, als
+    sei der Klick ins Leere gegangen: die Frage stand unveraendert im Feld
+    (User-Befund 2026-08-15). Sie geht deshalb SOFORT raus und steht als
+    eigene Blase im Thread — der Vorgaenger bleibt bis zum Archivieren
+    unangetastet."""
+    template = read("templates/index.html")
+    query = read("static/js/query-send.js")
+    core = read("static/js/app-core.js")
+    css = read("static/css/shell.css")
+
+    # Eigener Block, damit der aktive Kopf (und mit ihm die alte Antwort
+    # darunter) stehen bleiben kann, solange der Lauf noch scheitern darf.
+    assert 'id="threadPendingAsk"' in template
+    assert 'id="threadPendingAskText"' in template
+    assert 'id="threadPendingAskAttachments"' in template
+    assert template.index('id="threadAsk"') < template.index('id="threadPendingAsk"')
+    assert template.index('id="threadPendingAsk"') < template.index('id="consensusRun"')
+
+    # Das Feld ist leer, bevor die erste Anfrage rausgeht.
+    hold_at = query.index("sentMessage.hold(question,")
+    assert hold_at < query.index("prepareWithUsageRetry(", hold_at)
+    assert hold_at < query.index("chatSession?.beginRun?.({", hold_at)
+    hold_block = query.split("hold(question,", 1)[1].split("promote()", 1)[0]
+    assert 'input.value = "";' in hold_block
+    assert "window.App.setPendingThreadQuestion?.(this.question" in hold_block
+
+    # Die letzte Antwort bleibt im Gespraech stehen, bis sie archiviert ist.
+    assert "if (!followupRequested) window.hideConsensusOutput?.();" in query
+
+    # Sie steht dort, wo sie gleich als Kopf weiterlebt: unter der bisherigen
+    # Antwort, mit dem gefuehrten Lauf darunter.
+    assert ".thread-ask-pending { order: 4; }" in css
+    assert "body.thread-message-pending:not(.is-hero) #consensusRun { order: 4; }" in css
+    assert "body.thread-message-pending:not(.is-hero) .response-section { order: 3; }" in css
+    assert css.index("body:not(.is-hero) .consensus-section { order: 3; }") < css.index(
+        ".thread-ask-pending { order: 4; }"
+    )
+
+    # Jeder Kopf im Thread wird vom selben Renderer gefuellt (Clamp, Aufklapp-
+    # Link, ResizeObserver) — sonst verhielte sich die Blase anders als der
+    # Kopf, zu dem sie wird.
+    assert "function renderThreadQuestion(wrap, text, question)" in core
+    assert "const threadAskResizeObservers = new WeakMap()" in core
+    # Wer den Kopf setzt, hat die schwebende Nachricht uebernommen — das gilt
+    # auch fuer Bookmark-Restore, "New comparison" und den Direktvergleich.
+    set_head = core.split("function setThreadQuestion(", 1)[1].split("}", 1)[0]
+    assert "clearPendingThreadQuestion()" in set_head
+
+
+def test_a_run_that_never_happens_gives_the_message_back():
+    """Kontingent leer, fehlender Key, abgebrochen: dann ist nichts
+    rausgegangen. Die Nachricht gehoert unveraendert und abschickbar zurueck
+    ins Feld, und der bisherige Turn bleibt, wo er ist."""
+    query = read("static/js/query-send.js")
+
+    restore_block = query.split("restore() {", 1)[1].split("\n      }", 1)[0]
+    assert "window.App.clearPendingThreadQuestion?.();" in restore_block
+    assert "input.value = this.question;" in restore_block
+    # Ein inzwischen getippter Entwurf wird nie ueberschrieben.
+    assert "!input.value.trim()" in restore_block
+
+    # Jeder Pfad, der den Follow-up-Kontext zurueckgibt, gibt auch die
+    # Nachricht zurueck: beides gehoert zu demselben Lauf, der nicht
+    # stattgefunden hat.
+    lines = query.splitlines()
+    blocked = [i for i, line in enumerate(lines) if "restoreAfterBlockedRun?.()" in line]
+    assert blocked
+    for index in blocked:
+        # Grosszuegiges Fenster: im Abbruch-Pfad liegt die Ruecknahme der
+        # Antwortboxen dazwischen.
+        window = "\n".join(lines[max(0, index - 20):index])
+        assert "sentMessage.restore();" in window, (
+            f"line {index + 1} restores the context but not the message"
+        )
+
+
+def test_the_new_message_is_scrolled_to_once_and_never_fights_the_reader():
+    """Die Bewegung beim Absenden ist die einzige, die dieser Modul macht —
+    und sie ist die, die der Nutzer selbst ausgeloest hat. Sie geht nie nach
+    oben, unterbleibt bei kurzen Wegen und bricht bei der ersten eigenen
+    Geste ab."""
+    core = read("static/js/app-core.js")
+
+    reveal = core.split("function startSentMessageReveal(", 1)[1].split(
+        "\n  }", 1
+    )[0]
+    # Nie nach oben und nie fuer ein paar Pixel.
+    assert "Math.max(0, Math.min(wanted, maxTop)) - from" in reveal
+    assert "if (distance < REVEAL_MIN_DISTANCE) return;" in reveal
+    # Nie ueber den Boden des Dokuments hinaus.
+    assert "document.documentElement.scrollHeight - window.innerHeight" in reveal
+    # Die erste eigene Geste gewinnt.
+    assert 'REVEAL_INTERRUPTS = ["wheel", "touchstart", "keydown", "pointerdown"]' in core
+    assert "stopSentMessageReveal()" in reveal
+    assert 'window.matchMedia("(prefers-reduced-motion: reduce)")' in core
+    # Genau ein Aufrufer: das Absenden. Alles andere waere ein Thread, der
+    # beim Lesen unter den Fingern wegwandert.
+    assert read("static/js/query-send.js").count("revealSentMessage") == 1
 
 
 def test_archived_questions_clamp_like_the_active_one():

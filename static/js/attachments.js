@@ -330,12 +330,20 @@
     // der nach dem Senden ueber dem leeren Feld haengen bleibt, behauptet
     // sonst, er gehoere zur naechsten Frage — mitgeschickt wurde er aber mit
     // der letzten.
-    function detachForMessage() {
-      const meta = (window.pendingAttachments || [])
+    // Was von den Anhaengen an der Nachricht haengen bleibt: reine Metadaten.
+    // Die Blase der gerade abgeschickten Frage braucht sie schon, BEVOR der
+    // Composer die Dateien abgibt — der Lauf kann noch scheitern, dann muessen
+    // sie unveraendert am Feld stehen.
+    function messageMeta() {
+      return (window.pendingAttachments || [])
         .filter(function (att) { return !att.previewOnly && att.data; })
         .map(function (att) {
           return { name: att.name, mime: att.mime, size: att.size || 0 };
         });
+    }
+
+    function detachForMessage() {
+      const meta = messageMeta();
       if (window.pendingAttachments.length) {
         window.pendingAttachments = [];
         detachingForSend = true;
@@ -389,6 +397,7 @@
     window.App = window.App || {};
     window.App.attachments = {
       detachForMessage: detachForMessage,
+      messageMeta: messageMeta,
       renderMessageAttachments: renderMessageAttachments
     };
 

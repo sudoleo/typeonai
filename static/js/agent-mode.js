@@ -360,9 +360,13 @@
 
     document.body.classList.toggle("agent-mode-enabled", enabled);
     document.body.classList.toggle("agent-mode-running", enabled && agentModeStatus === "running");
-    if (enabled) {
-      document.body.classList.remove("direct-comparison-active");
-    }
+    // "direct-comparison-active" beschreibt, was GERADE AUF DEM SCHIRM steht,
+    // der Agent-Mode-Schalter dagegen, was der NAECHSTE Lauf tut. Nur das
+    // Umlegen des Schalters raeumt den sichtbaren Direktvergleich weg (siehe
+    // setAgentMode) — nicht jeder beilaeufige updateAgentModeUI-Aufruf. Sonst
+    // riss die naechstbeste /ask-Antwort oder ein Bookmark-Restore die
+    // wiederhergestellte Vergleichsansicht wieder ein und liess nur die Frage
+    // stehen.
     // Hero-Desktop zeigt die Response-Boxen nur ohne Agent Mode; inert/
     // aria-hidden muessen der CSS-Sichtbarkeit folgen (app-core.js).
     if (typeof window.syncHeroResponseAccess === "function") {
@@ -502,6 +506,12 @@
     }
     if (wasEnabled !== nextEnabled) {
       modelAnswersVisible = false;
+      // Der Schalter wechselt den Modus: ein sichtbarer Direktvergleich (oder
+      // ein aus einem Bookmark wiederhergestellter) gehoert zum alten Modus.
+      // (updateAgentModeUI unten synchronisiert inert/aria-hidden danach.)
+      if (nextEnabled) {
+        document.body.classList.remove("direct-comparison-active");
+      }
       document.body.classList.add("agent-mode-transitioning");
       window.setTimeout(() => {
         document.body.classList.remove("agent-mode-transitioning");

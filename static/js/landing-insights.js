@@ -363,9 +363,8 @@
     return frag;
   }
 
-  /* A badge and the sentence it sits behind light up together, the same
-     pairing .cx-claim and .cx-marker already have in CSS. The sentence is the
-     one before the badge in the same block. */
+  /* A badge and the highlighted sentence it sits behind light up together.
+     The sentence is the one before the badge in the same block. */
   function linkedPassage(badge) {
     const previous = badge.previousElementSibling;
     return previous && previous.classList.contains("cx-claim") ? previous : null;

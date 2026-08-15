@@ -1239,6 +1239,24 @@ window.App.bookmarkSession = {
   }
 };
 
+const BOOKMARK_MODEL_KEYS = ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"];
+
+function bookmarkModelAnswerCount(bookmark) {
+  const responses = bookmark?.responses && typeof bookmark.responses === "object" ? bookmark.responses : {};
+  return BOOKMARK_MODEL_KEYS.filter(name => String(responses[name] || "").trim()).length;
+}
+
+// Ein Direktvergleich (Agent Mode aus) legt Modellantworten ab und nie einen
+// Consensus — daran, nicht am heutigen Stand des Schalters, ist er beim Laden
+// zu erkennen. Ohne diese Unterscheidung blieb ein solches Bookmark unter
+// eingeschaltetem Agent Mode unsichtbar hinter "Compare answers" haengen und
+// zeigte nur noch die Frage. Ein abgebrochener Consensus-Lauf faellt in
+// dieselbe Kategorie: seine Antworten sind alles, was es zu zeigen gibt.
+function isDirectComparisonBookmark(bookmark) {
+  const consensus = String(bookmark?.responses?.consensus || "").trim();
+  return !consensus && bookmarkModelAnswerCount(bookmark) > 0;
+}
+
 function bookmarkMeta(bookmark) {
   const responses = bookmark?.responses && typeof bookmark.responses === "object" ? bookmark.responses : {};
   const modelCount = Object.entries(responses).filter(([key, value]) =>
@@ -1655,9 +1673,19 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
     const bookmark = materialized.bookmark;
     let bookmarkCitationModels = [];
     const displayQuestion = bookmarkDisplayQuestion(bookmark);
+    // Ein Bookmark bringt seine eigene Ansicht mit: ein Direktvergleich laedt
+    // als Direktvergleich zurueck (Composer oben, sechs Antworten darunter),
+    // ein gefuehrter Lauf als Thread. Der aktuelle Agent-Mode-Schalter sagt
+    // nur, was der NAECHSTE Lauf tun wird.
+    const directComparison = isDirectComparisonBookmark(bookmark);
     // Ein geladenes Bookmark zeigt sofort Antworten und startet daher nie im
     // zentrierten Leerzustand.
-    window.exitHeroMode?.();
+    if (directComparison) {
+        window.enterDirectComparisonView?.();
+        window.App?.consensusPipeline?.dismiss?.();
+    } else {
+        window.exitHeroMode?.();
+    }
     window.App?.followup?.reset?.();
     window.App?.chatSession?.reset?.();
     window.App?.followup?.clearHistory?.();
@@ -1836,9 +1864,11 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
         bookmarkCitationModels = applyBookmarkModelPresentation(bookmark);
         
         // Die Frage steht im Thread-Kopf über der Antwort; das Eingabefeld
-        // unten bleibt frei für die nächste Frage.
+        // unten bleibt frei für die nächste Frage. Der Direktvergleich kennt
+        // keinen Thread-Kopf — dort sind die sechs Antworten das Ergebnis,
+        // genau wie direkt nach dem Senden.
         if (bookmark.query) {
-            window.App?.setThreadQuestion?.(displayQuestion);
+            window.App?.setThreadQuestion?.(directComparison ? "" : displayQuestion);
             const questionInput = document.getElementById("questionInput");
             if (questionInput) {
                 questionInput.value = "";

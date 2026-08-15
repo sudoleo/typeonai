@@ -1,7 +1,11 @@
 # Auftrag: Consensus-Bereich auf Inline-Confidence umbauen
 
 **Erstellt:** 2026-07-24
-**Status:** Umsetzungsauftrag für eine neue Session
+**Status:** umgesetzt; historisches Dokument
+**Achtung:** Die Marken-Beschreibungen unten (Wellen-/Unterlinien) sind seit
+**2026-08-15** überholt — die Markierung ist jetzt ein farbiger Textmarker auf
+der Ampel (grün/grau/bernstein/rot) und die Punkte neben dem Satz sind
+ersatzlos entfallen. Verbindlich ist `docs/codebase-map.md`.
 **Voraussetzung:** [`docs/codebase-map.md`](codebase-map.md) zuerst lesen (AGENTS.md-Pflicht).
 
 ---

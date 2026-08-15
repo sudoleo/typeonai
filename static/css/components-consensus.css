@@ -131,6 +131,15 @@ body.agent-mode-show-answers .response-section > .response-box {
   display: block;
 }
 
+/* Was auf dem Schirm steht, gewinnt gegen den Schalter: ein sichtbarer
+   Direktvergleich (frisch gesendet oder aus einem Bookmark geladen) zeigt die
+   sechs Antworten als Ergebnis. Das Modell-Panel gehoert zum gefuehrten Lauf
+   und haette hier ueber den Antworten gestanden, sobald der Nutzer den Agent
+   Mode inzwischen wieder eingeschaltet hat. */
+body.direct-comparison-active .agent-mode-panel {
+  display: none;
+}
+
 .agent-mode-transitioning.agent-mode-enabled .agent-mode-panel {
   animation: agentPanelIn 0.32s cubic-bezier(0.2, 0, 0, 1);
 }

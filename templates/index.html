@@ -32,7 +32,7 @@
   <script src="/static/js/auth-session-state.js?v=20260811-phase6"></script>
   <script src="/static/js/watch-state.js?v=20260812-auditfix"></script>
   <!-- Google Fonts -->
-  <link rel="stylesheet" href="/static/style.css?v=20260814-directcompare1">
+  <link rel="stylesheet" href="/static/style.css?v=20260815-claimmark1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
@@ -49,11 +49,11 @@
        Module nicht importiert werden koennen. Muss vor firebase.js stehen. -->
   <script src="/static/js/auth-bootstrap.js?v=20260811-phase4" defer></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260812-auditfix"></script>
+  <script type="module" src="/static/firebase.js?v=20260814-bookmarkview1"></script>
   <script type="module" src="/static/demo.js?v=20260814-directcompare1"></script>
   <script src="/static/app-ui.js?v=20260811-phase4" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
-  <script src="/static/js/app-core.js?v=20260814-directcompare1" defer></script>
+  <script src="/static/js/app-core.js?v=20260815-sentmessage1" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
   <script src="/static/js/model-picker.js?v=20260810-runblock1" defer></script>
   <!-- Gemeinsame LaTeX-Aufbereitung; muss vor markdown-stream.js laden. -->
@@ -61,11 +61,11 @@
   <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
   <script src="/static/js/markdown-stream.js?v=20260809-phase0c1" defer></script>
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
-  <script src="/static/js/sources.js?v=20260812-auditfix" defer></script>
+  <script src="/static/js/sources.js?v=20260815-claimrefs" defer></script>
   <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
-  <script src="/static/js/attachments.js?v=20260810-runblock1" defer></script>
+  <script src="/static/js/attachments.js?v=20260815-sentmessage1" defer></script>
   <!-- Agent Mode (aus index.html ausgelagert) -->
-  <script src="/static/js/agent-mode.js?v=20260814-agentquick1" defer></script>
+  <script src="/static/js/agent-mode.js?v=20260814-bookmarkview1" defer></script>
   <!-- Gefuehrte Fortschrittsanzeige fuer Agent-Mode-Laeufe. -->
   <script src="/static/js/consensus-progress.js?v=20260807-threadmessages1" defer></script>
   <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
@@ -73,7 +73,7 @@
   <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
   <script src="/static/js/share-dialog.js?v=20260812-auditfix" defer></script>
   <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-actions.js?v=20260727-resultactions1" defer></script>
+  <script src="/static/js/consensus-actions.js?v=20260815-claimmark1" defer></script>
   <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
   <script src="/static/js/watch.js?v=20260812-auditfix" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
@@ -84,12 +84,12 @@
        Absage-Karte im Thread. Vor query-send/consensus-run, die sie nutzen. -->
   <script src="/static/js/usage-limit.js?v=20260802-storagebusy1" defer></script>
   <!-- Deterministische Textanker getrennt von Netzwerk/Modal/Rendering. -->
-  <script src="/static/js/consensus-anchor.js?v=20260811-phase6" defer></script>
+  <script src="/static/js/consensus-anchor.js?v=20260815-claimmark1" defer></script>
   <!-- Consensus-Insights und Credibility-Frames (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-insights.js?v=20260811-phase6" defer></script>
+  <script src="/static/js/consensus-insights.js?v=20260815-claimmark1" defer></script>
   <script src="/static/js/chat-session.js?v=20260806-chatlimits1" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260814-askalign1" defer></script>
-  <script src="/static/js/query-send.js?v=20260814-directcompare1" defer></script>
+  <script src="/static/js/consensus-run.js?v=20260815-claimrefs" defer></script>
+  <script src="/static/js/query-send.js?v=20260815-sentmessage1" defer></script>
   <!-- Composer einklappen (Handy): eine Zeile beim Lesen, voll beim Anfassen -->
   <script src="/static/js/composer-collapse.js?v=20260814-composergrow2" defer></script>
   {% include "partials/analytics.html" %}
@@ -346,6 +346,21 @@
            Frage samt Dateien rausgegangen ist. -->
       <div class="attachment-bar message-attachments" id="threadAskAttachments" hidden></div>
       <button type="button" id="threadAskMore" class="thread-ask-more">Show full question</button>
+    </div>
+    <!-- Die gerade abgeschickte Nachricht, solange der Lauf sie noch nicht zum
+         Kopf des aktiven Turns gemacht hat. Zwischen Klick und Uebernahme
+         liegen /prepare und — im laufenden Gespraech — das Binden des
+         Chat-Kontexts; solange darf der fertige Vorgaenger nicht abgeraeumt
+         werden (der Lauf kann noch am Kontingent scheitern). Die Blase steht
+         deshalb schon dort, wo sie gleich als Kopf weiterlebt: UNTER der
+         bisherigen Antwort. Die Reihenfolge macht shell.css ueber
+         body.thread-message-pending; gefuellt von
+         window.App.setPendingThreadQuestion (app-core.js). -->
+    <div id="threadPendingAsk" class="thread-ask thread-ask-pending" hidden>
+      <div class="thread-ask-label">Question</div>
+      <div class="thread-ask-text" id="threadPendingAskText"></div>
+      <div class="attachment-bar message-attachments" id="threadPendingAskAttachments" hidden></div>
+      <button type="button" class="thread-ask-more">Show full question</button>
     </div>
     <!-- Gefuehrter Lauf. Sichtbar ist immer nur EIN aktiver Schritt: eine
          Zeile, ein Balken, eine "Next"-Zeile. Erledigte Schritte schrumpfen

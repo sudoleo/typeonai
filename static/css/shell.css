@@ -1891,6 +1891,25 @@ body:not(.is-hero) #runBlocked { order: 2; }
 body:not(.is-hero) .consensus-section { order: 3; }
 body:not(.is-hero) .response-section { order: 4; }
 
+/* ---- Die gerade abgeschickte Nachricht ----------------------------------
+   Sie steht im Thread, bevor der Lauf sie zum Kopf des neuen Turns macht —
+   also waehrend oben noch die vorige Frage und darunter noch deren Antwort
+   stehen. Ihr Platz ist deshalb UNTER der bisherigen Antwort: genau dort,
+   wo sie gleich als Kopf weiterlebt, sodass die Uebernahme nichts mehr
+   verschiebt. Der gefuehrte Lauf zieht mit — er gehoert zu der Frage, die
+   gerade rausgegangen ist, und nicht zwischen die alte Frage und ihre
+   Antwort. Die Antwortboxen bleiben beim alten Turn (order: 3, im DOM nach
+   der Konsens-Sektion), solange sie dessen Antworten zeigen.
+   -------------------------------------------------------------------------- */
+.thread-ask-pending { order: 4; }
+body.thread-message-pending:not(.is-hero) #consensusRun { order: 4; }
+body.thread-message-pending:not(.is-hero) .response-section { order: 3; }
+
+/* Die Dateien sind noch nicht abgegeben (der Lauf kann scheitern), aber sie
+   haengen sichtbar schon an der Nachricht. Zwei Mal dieselben Chips waeren
+   eine Frage zu viel: gehoeren sie zur abgeschickten oder zur naechsten? */
+body.thread-message-pending #attachmentBar { display: none; }
+
 body:not(.is-hero) .input-section {
   order: 5;
   position: sticky;
@@ -2350,8 +2369,7 @@ body:not(.is-hero) .consensus-section::before {
   color: var(--ink);
 }
 
-.thread-history-answer-body .claim-badge,
-.thread-history-answer-body .cx-marker {
+.thread-history-answer-body .claim-badge {
   pointer-events: none;
 }
 
