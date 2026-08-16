@@ -1792,7 +1792,7 @@ app/services/llm/
 app/services/
   consensus_pipeline.py      Neutraler Fan-out→Synthese→Differences→Score-Vertrag für alle Produkte
   chat_store.py              Firestore-Pfade, Turn-Lifecycle/Antwortdokumente, atomare Finalisierung, Idempotenz, Cursor + Allowlists, Loesch-Kaskade
-  chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Budgets, Lease/Idempotenz, Fallback-Rendering + Fan-out-Cache
+  chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Frage-Auflösung vor dem Fan-out, Budgets, Lease/Idempotenz, Fallback-Rendering + Provider-Cache
   usage_repository.py        Firestore-Usage fuer logische Runs (reserve/consume/release/get_run/context-target-binding/snapshot)
   api_account_cleanup.py     Fail-closed Account-Blocks + retrybare API-Datenlöschung
   account_deletion.py         Persistenter Vollkonto-Tombstone + bereichsweise Retry-Kaskade
@@ -1938,12 +1938,27 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
     Engine-Metadaten, feste Budgetwerte und `ready|building`-Lifecyclefelder.
     Eine deterministische ID plus zeitlich begrenzte Build-Lease verhindert
     parallele Komprimierungen; erst die fertige Version wird atomar am Ziel-Turn
-    als `context_version_id` verknüpft. Keys, Providerfehlertexte und Roh-Prompts
+    als `context_version_id` **und `resolved_question`** verknüpft. Letzteres ist
+    die einmal vor dem Fan-out selbststehend gemachte aktuelle Frage
+    (`ChatMemoryCompressor.resolve_question`, läuft ab dem ersten Follow-up):
+    sie ersetzt die Frage nie, sondern geht zusätzlich in den Kontext der sechs
+    Modelle und — vom Turn gelesen, nie aus dem Request — an Consensus- und
+    Judge-Engine. Steht die Frage schon für sich oder scheitert der Rewrite,
+    bleibt sie leer und die Frage geht roh raus. Keys, Providerfehlertexte und Roh-Prompts
     werden nie gespeichert. Vollständige Turns werden weder ersetzt noch
     verändert; bei Fehlern entsteht eine explizit `degraded` markierte,
     deterministische Fallback-Memory. Die Provenienzkarte hält validierte
     Turn-/Quellenreferenzen inkrementeller Memory auch dann stabil, wenn der
     betreffende Roh-Turn außerhalb des begrenzten 200-Turn-Lesefensters liegt.
+    Zwei Dinge gelangen bewusst in **keinen** abgeleiteten Kontext:
+    `differences_data` (Meta-Ebene des Laufs — Agreement-Score, Widersprüche,
+    Judge-Metadaten, Modell-Klarnamen; sie las sich im Kontext wie Inhalt und
+    hob die Anonymisierung des Consensus-Prompts ab dem zweiten Turn auf) und
+    die Antwort eines *anderen* Modells. Vom letzten Turn sieht ein Provider den
+    gemeinsamen Konsens plus **seine eigene** Antwort aus `model_answers` —
+    deshalb wird der Kontext pro Provider gerendert und der Fan-out-Cache ist
+    pro Provider verschlüsselt. Memory aus älteren Builder-Versionen wird nie
+    fortgeschrieben.
   - Erfolgreiche normale Browser-Runs schreiben den ersten completed Turn;
     Turn 2 und alle späteren Fortsetzungen schreiben nur bei einer als completed
     bestätigten `activeChatId` in denselben Chat. Pending Chat-/Turn-/Context-IDs

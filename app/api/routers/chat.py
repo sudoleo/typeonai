@@ -639,6 +639,7 @@ def _resolve_authoritative_chat_context(
     uid: Optional[str],
     data: dict,
     question: str,
+    provider: str = "",
 ) -> Optional[str]:
     fields = (
         data.get("chat_id"),
@@ -661,18 +662,22 @@ def _resolve_authoritative_chat_context(
         raise HTTPException(status_code=400, detail="Invalid chat context identifier.")
     chat_id, turn_id, version_id = fields
     try:
-        # All six /ask_* calls of one run resolve the identical owner-bound
-        # tuple. Resolving stays server-side (the context must never travel
-        # through the client), but the cache pays the ~18 reads and six
-        # renders exactly once per turn instead of once per provider.
+        # All six /ask_* calls of one run resolve the same owner-bound tuple,
+        # differing only in the caller's own previous answer. Resolving stays
+        # server-side (the context must never travel through the client); the
+        # cache still collapses the reads and renders of one provider, including
+        # its retries.
         return resolved_context_cache.get_or_resolve(
-            resolved_context_cache_key(uid, chat_id, turn_id, version_id, question),
+            resolved_context_cache_key(
+                uid, chat_id, turn_id, version_id, question, provider
+            ),
             lambda: chat_context_service.resolve_for_ask(
                 uid,
                 chat_id,
                 turn_id,
                 version_id,
                 question=question,
+                provider=provider,
             ),
         )
     except ChatContextNotFound as exc:
@@ -928,7 +933,9 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     attachments = parse_attachments(data, is_pro_user)
     max_tokens = cfg.get_output_token_limit(is_pro_user, deep_search)
 
-    authoritative_context = _resolve_authoritative_chat_context(uid, data, question)
+    authoritative_context = _resolve_authoritative_chat_context(
+        uid, data, question, provider.label
+    )
     if authoritative_context:
         base_prompt = (
             system_prompt.strip()
@@ -1194,9 +1201,17 @@ def consensus(request: Request, data: dict = Body(...)):
         max_bytes=MAX_QUESTION_BYTES,
     )
     validated_chat_turn_ids = None
+    # Dieselbe aufgeloeste Lesart, die auch die sechs Modelle bekommen haben.
+    # Sie steht am Turn, nicht im Request: der Client darf den Prompt der
+    # Synthese so wenig bestimmen wie den Kontext der Modelle. Ohne sie schrieb
+    # der Synthesizer die sichtbare Antwort auf eine Frage, die er selbst nicht
+    # aufloesen konnte ("1-10?"), und der Judge verglich sechs Antworten auf
+    # sechs verschiedene Lesarten als inhaltlichen Widerspruch.
+    resolved_question = ""
     if question and chat_turn_ids is not None:
         validated_turn = _validate_chat_turn(uid, chat_turn_ids, question)
         validated_chat_turn_ids = chat_turn_ids
+        resolved_question = str(validated_turn.get("resolved_question") or "")
         linked_context_version_id = validated_turn.get("context_version_id")
         if linked_context_version_id != context_version_id:
             raise HTTPException(
@@ -1555,6 +1570,7 @@ def consensus(request: Request, data: dict = Body(...)):
                     consensus_model,
                     api_keys,
                     model_sources=model_sources,
+                    resolved_question=resolved_question,
                 ):
                     if item.get("type") == "delta":
                         text = coerce_text(item.get("text"))
@@ -1592,6 +1608,7 @@ def consensus(request: Request, data: dict = Body(...)):
                         api_keys,
                         differences_model=consensus_model,
                         excluded_models=excluded_models,
+                        resolved_question=resolved_question,
                     ):
                         if item.get("type") == "delta":
                             # Das Frontend rendert diese Deltas nicht mehr (die Engine
@@ -1683,6 +1700,7 @@ def consensus(request: Request, data: dict = Body(...)):
             consensus_model=consensus_model,
             keys=api_keys,
             model_sources=model_sources,
+            resolved_question=resolved_question,
             synthesize=query_consensus,
             judge=query_differences,
             allow_consensus_error=True,

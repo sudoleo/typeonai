@@ -90,6 +90,9 @@ MODEL_ANSWER_MAX_LENGTH_FALLBACK = 40_000
 MODEL_SOURCES_MAX_ITEMS = MAX_SOURCES
 TURN_SOURCES_MAX_ITEMS = MAX_SOURCES
 RESULT_ID_MAX_LENGTH = SHARE_ID_LENGTH
+# Muss zu MAX_RESOLVED_QUESTION_CHARS in chat_context.py passen; hier definiert,
+# weil chat_context von chat_store importiert und nicht umgekehrt.
+RESOLVED_QUESTION_MAX_LENGTH = 400
 ERROR_CODE_MAX_LENGTH = max(len(code) for code in FAILED_TURN_ERROR_CODES)
 
 CHAT_PAGE_SIZE = 30
@@ -455,6 +458,14 @@ def turn_metadata(turn_id: object, data: object) -> dict:
     context_version_id = source.get("context_version_id")
     if isinstance(context_version_id, str) and _ID_RE.fullmatch(context_version_id):
         result["context_version_id"] = context_version_id
+    # Die selbststehende Lesart einer Folgefrage, geschrieben vom Context-Build
+    # zusammen mit context_version_id. /consensus reicht sie an Synthese und
+    # Judge weiter, damit beide dieselbe Frage sehen wie die sechs Modelle.
+    resolved_question = source.get("resolved_question")
+    if isinstance(resolved_question, str) and resolved_question.strip():
+        result["resolved_question"] = " ".join(
+            resolved_question.split()
+        )[:RESOLVED_QUESTION_MAX_LENGTH]
     for field in ("completed_at", "failed_at"):
         if source.get(field) is not None:
             result[field] = source.get(field)

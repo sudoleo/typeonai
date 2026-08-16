@@ -18,15 +18,18 @@ from app.services.chat_context import (
     ChatContextNotFound,
     ChatContextService,
     ChatMemoryCompressor,
+    CONTEXT_BUILDER_VERSION,
     FirestoreChatContextRepository,
     MEMORY_CATEGORIES,
     MAX_CONTEXT_CHARS,
+    MAX_MEMORY_ITEMS_PER_CATEGORY,
     ResolvedContextCache,
     empty_memory,
     deterministic_memory_fallback,
     render_context,
     resolved_context_cache_key,
     sanitize_memory,
+    sanitize_resolved_question,
 )
 from app.services.usage_repository import RunStatus
 from app.services.chat_store import ChatStore, normalize_question
@@ -99,8 +102,14 @@ def pending(turn_id, position, question):
 
 
 class RecordingCompressor:
-    def __init__(self):
+    def __init__(self, resolved_question="What does that mean for the migration?"):
         self.calls = []
+        self.resolved_calls = []
+        self._resolved_question = resolved_question
+
+    def resolve_question(self, question, recent_turn, memory=None):
+        self.resolved_calls.append((question, recent_turn.get("id")))
+        return self._resolved_question
 
     def update(
         self,
@@ -146,6 +155,175 @@ def test_turn_two_keeps_recent_completed_turn_without_compression():
     assert context["generation_mode"] == "deterministic"
     assert db.documents[_turn_path(TURN_2)]["context_version_id"] == context["id"]
     assert ChatStore(db).get_turn(UID, CHAT_ID, TURN_2)["context_version_id"] == context["id"]
+
+
+def test_first_follow_up_resolves_the_question_before_the_fan_out():
+    """Ohne diesen Schritt ging eine Frage wie "1-10?" roh an sechs Modelle."""
+    db = FakeChatDatabase()
+    seed_chat(db, [
+        completed(TURN_1, 1, "Tell me about consens.io", "consens.io compares models."),
+        pending(TURN_2, 2, "1-10?"),
+    ])
+    compressor = RecordingCompressor(
+        resolved_question="How would you rate consens.io on a scale of 1 to 10?"
+    )
+    service = ChatContextService(FirestoreChatContextRepository(db))
+
+    context = service.build_for_turn(
+        UID, CHAT_ID, TURN_2, compressor=compressor, now=NOW
+    )
+
+    # Turn 2 komprimiert keine Memory -- die Aufloesung laeuft trotzdem.
+    assert compressor.calls == []
+    assert compressor.resolved_calls == [("1-10?", TURN_1)]
+    assert context["state"] == "ready"
+    assert context["resolved_question"] == (
+        "How would you rate consens.io on a scale of 1 to 10?"
+    )
+
+    rendered = service.resolve_for_ask(
+        UID, CHAT_ID, TURN_2, context["id"], question="1-10?", provider="Anthropic"
+    )
+    assert "How would you rate consens.io on a scale of 1 to 10?" in rendered
+
+    # Dieselbe Lesart haengt am Turn -- von dort holen Consensus und Judge sie,
+    # ohne einen zweiten Read auf die Version.
+    assert ChatStore(db).get_turn(UID, CHAT_ID, TURN_2)["resolved_question"] == (
+        "How would you rate consens.io on a scale of 1 to 10?"
+    )
+
+
+def test_a_self_contained_question_renders_no_resolved_reading():
+    db = FakeChatDatabase()
+    seed_chat(db, [
+        completed(TURN_1, 1, "First question", "First consensus"),
+        pending(TURN_2, 2, "What is the capital of France?"),
+    ])
+    # Der Resolver meldet "steht schon fuer sich" -> leere Lesart.
+    compressor = RecordingCompressor(resolved_question="")
+    service = ChatContextService(FirestoreChatContextRepository(db))
+
+    context = service.build_for_turn(
+        UID, CHAT_ID, TURN_2, compressor=compressor, now=NOW
+    )
+    rendered = service.resolve_for_ask(
+        UID,
+        CHAT_ID,
+        TURN_2,
+        context["id"],
+        question="What is the capital of France?",
+        provider="OpenAI",
+    )
+
+    assert context["resolved_question"] == ""
+    assert "self-contained question" not in rendered
+
+
+def test_a_failed_resolution_never_blocks_the_run():
+    class BrokenResolver(RecordingCompressor):
+        def resolve_question(self, question, recent_turn, memory=None):
+            raise RuntimeError("engine down")
+
+    db = FakeChatDatabase()
+    seed_chat(db, [
+        completed(TURN_1, 1, "First question", "First consensus"),
+        pending(TURN_2, 2, "and in Europe?"),
+    ])
+    service = ChatContextService(FirestoreChatContextRepository(db))
+
+    context = service.build_for_turn(
+        UID, CHAT_ID, TURN_2, compressor=BrokenResolver(), now=NOW
+    )
+
+    assert context["resolved_question"] == ""
+    assert context["degraded_reason"] == "question_resolution_failed"
+    # Der Kontext bleibt benutzbar: die Frage geht roh raus, wie vorher.
+    assert service.resolve_for_ask(
+        UID, CHAT_ID, TURN_2, context["id"], question="and in Europe?", provider="Grok"
+    )
+
+
+def test_a_maxed_out_context_still_ends_with_its_instructions():
+    """Der Frame darf die aeussere Kappung nie erreichen: sie schnitte mitten
+    aus dem Text und koennte die Lesart oder die Schlussanweisung treffen."""
+    memory = empty_memory()
+    memory["entities_facts"] = [
+        {"text": f"{index}{'x' * 790}", "status": "active",
+         "origin_turn_ids": [], "source_refs": []}
+        for index in range(MAX_MEMORY_ITEMS_PER_CATEGORY)
+    ]
+    memory["decisions"] = [
+        {"text": f"{index}{'d' * 790}", "status": "active",
+         "origin_turn_ids": [], "source_refs": []}
+        for index in range(MAX_MEMORY_ITEMS_PER_CATEGORY)
+    ]
+    memory = sanitize_memory(memory, [])
+    recent = {
+        "id": TURN_1,
+        "position": 1,
+        "question": "q" * 8_000,
+        "consensus": "c" * 40_000,
+        "sources": [{"title": "t" * 200, "url": "u" * 500} for _ in range(12)],
+    }
+
+    frame = render_context(
+        memory,
+        recent,
+        resolved_question="r" * 800,
+        own_previous_answer={"answer": "o" * 40_000},
+    )
+
+    assert len(frame) < MAX_CONTEXT_CHARS
+    assert "The answer you yourself gave" in frame
+    assert "self-contained question" in frame
+    assert frame.rstrip().endswith("END AUTHORITATIVE CHAT CONTEXT.")
+
+
+def test_the_resolver_also_sees_the_memory_of_older_turns():
+    """Sonst kennt der Resolver nur den letzten Austausch und kann "die zweite
+    Option von vorhin" nicht aufloesen -- also genau die Bezuege, fuer die es
+    die Memory gibt."""
+    db = FakeChatDatabase()
+    seed_chat(db, [
+        completed(TURN_1, 1, "Which database?", "PostgreSQL or MySQL."),
+        completed(TURN_2, 2, "Which region?", "eu-central-1."),
+        pending(TURN_3, 3, "the second one?"),
+    ])
+    seen = {}
+
+    class MemoryAwareCompressor(RecordingCompressor):
+        def resolve_question(self, question, recent_turn, memory=None):
+            seen["memory"] = memory
+            return super().resolve_question(question, recent_turn)
+
+    service = ChatContextService(FirestoreChatContextRepository(db))
+    service.build_for_turn(
+        UID, CHAT_ID, TURN_3, compressor=MemoryAwareCompressor(), now=NOW
+    )
+
+    assert seen["memory"]["decisions"][0]["text"] == (
+        "Decision retained from: Which database?"
+    )
+
+
+def test_sanitize_resolved_question_drops_noise():
+    question = "1-10?"
+    assert sanitize_resolved_question(
+        {"depends_on_previous_turn": True, "resolved_question": "Rate consens.io 1-10."},
+        question,
+    ) == "Rate consens.io 1-10."
+    # Selbststaendig laut Resolver -> keine Zeile.
+    assert sanitize_resolved_question(
+        {"depends_on_previous_turn": False, "resolved_question": "Rate consens.io."},
+        question,
+    ) == ""
+    # Wortgleich zur Frage -> Wiederholung, keine Lesart.
+    assert sanitize_resolved_question(
+        {"depends_on_previous_turn": True, "resolved_question": "  1-10?  "},
+        question,
+    ) == ""
+    assert sanitize_resolved_question({"resolved_question": "x"}, question) == ""
+    assert sanitize_resolved_question("not a dict", question) == ""
 
 
 def test_turn_three_compresses_older_history_once_and_reuses_version():
@@ -367,7 +545,7 @@ def test_incremental_context_keeps_prior_provenance_beyond_read_window():
     })
     db.documents[_version_path(previous_version_id)] = {
         "schema_version": 1,
-        "builder_version": "chat-memory-v1",
+        "builder_version": CONTEXT_BUILDER_VERSION,
         "status": "ready",
         "target_turn_id": f"{202:032x}",
         "target_position": 202,
@@ -783,13 +961,207 @@ def test_authoritative_context_ids_are_all_required_and_legacy_context_cannot_mi
     monkeypatch.setattr(
         chat_router.chat_context_service,
         "resolve_for_ask",
-        lambda uid, chat_id, turn_id, version_id, question: "resolved context",
+        lambda uid, chat_id, turn_id, version_id, question, provider="": (
+            "resolved context"
+        ),
     )
     assert chat_router._resolve_authoritative_chat_context(
         UID,
         {"chat_id": CHAT_ID, "turn_id": TURN_2, "context_version_id": TURN_3},
         "Question",
     ) == "resolved context"
+
+
+DIFFERENCES_DATA = {
+    "claims": [{
+        "anchor": "consens.io compares model answers",
+        "agree": ["Anthropic", "OpenAI"],
+        "dissent": [{"model": "Mistral", "quote": "electronic signatures"}],
+    }],
+    "differences": [{
+        "claim": "What the platform actually does",
+        "type": "contradiction",
+        "severity": "major",
+        "positions": [
+            {"stance": "It compares AI answers", "models": ["Anthropic", "OpenAI"],
+             "quote": "compares the answers of several AI models"},
+            {"stance": "It is consent management", "models": ["DeepSeek", "Gemini"],
+             "quote": "Einwilligungsmanagement"},
+        ],
+        "verify": "Open the site.",
+    }],
+    "best_model": "Anthropic",
+    "models_compared": ["OpenAI", "Anthropic", "Mistral", "Gemini"],
+    "agreement": {
+        "score": 25,
+        "level": "hardly",
+        "model_count": 6,
+        "major_contradictions": 1,
+        "minor_contradictions": 0,
+        "emphases": 0,
+    },
+    "judges": {"differences": {"provider": "Gemini", "model": "gemini-2.5-flash",
+                               "tier": "free"}},
+}
+
+
+def test_no_derived_context_ever_carries_judge_metadata_or_model_names():
+    """Der Score 25/100 und die Klarnamen aus differences_data lasen sich im
+    Kontext wie Inhalt: Modelle beantworteten die Folgefrage gegen den Score
+    ("2,5/10") statt gegen das Thema, und die Anonymisierung des
+    Consensus-Prompts war ab dem zweiten Turn hinfaellig."""
+    db = FakeChatDatabase()
+    seed_chat(db, [
+        completed(
+            TURN_1,
+            1,
+            "Tell me about consens.io",
+            "consens.io compares the answers of several AI models.",
+            differences_data=DIFFERENCES_DATA,
+        ),
+        pending(TURN_2, 2, "1-10?"),
+    ])
+    service = ChatContextService(FirestoreChatContextRepository(db))
+
+    context = service.build_for_turn(
+        UID, CHAT_ID, TURN_2, compressor=RecordingCompressor(), now=NOW
+    )
+    rendered = service.resolve_for_ask(
+        UID, CHAT_ID, TURN_2, context["id"], question="1-10?", provider="Anthropic"
+    )
+
+    for leak in ("agreement", "hardly", "major_contradictions", "best_model",
+                 "judges", "Einwilligungsmanagement", "dissent", "differences_data"):
+        assert leak not in rendered, leak
+    for model_name in ("Anthropic", "OpenAI", "Mistral", "DeepSeek", "Gemini", "Grok"):
+        assert model_name not in rendered, model_name
+    # Der Inhalt des Turns bleibt selbstverstaendlich erhalten.
+    assert "consens.io compares the answers of several AI models." in rendered
+    # Und im Turn selbst ist die Meta-Ebene weiterhin gespeichert.
+    assert db.documents[_turn_path(TURN_1)]["differences_data"] == DIFFERENCES_DATA
+
+
+def test_each_model_sees_only_its_own_previous_answer():
+    db = FakeChatDatabase()
+    seed_chat(db, [
+        completed(TURN_1, 1, "Tell me about consens.io", "It compares AI answers."),
+        pending(TURN_2, 2, "1-10?"),
+    ])
+    for provider, document_id, answer in (
+        ("Anthropic", "anthropic", "My earlier reading of the site."),
+        ("Grok", "grok", "A different earlier reading."),
+    ):
+        db.documents[(*_turn_path(TURN_1), "model_answers", document_id)] = {
+            "schema_version": 1,
+            "provider": provider,
+            "model_label": provider,
+            "answer": answer,
+            "sources": [],
+        }
+    service = ChatContextService(FirestoreChatContextRepository(db))
+    context = service.build_for_turn(
+        UID, CHAT_ID, TURN_2, compressor=RecordingCompressor(), now=NOW
+    )
+
+    def rendered_for(provider):
+        return service.resolve_for_ask(
+            UID, CHAT_ID, TURN_2, context["id"], question="1-10?", provider=provider
+        )
+
+    claude = rendered_for("Anthropic")
+    grok = rendered_for("Grok")
+    mistral = rendered_for("Mistral")
+
+    assert "My earlier reading of the site." in claude
+    assert "A different earlier reading." not in claude
+    assert "A different earlier reading." in grok
+    assert "My earlier reading of the site." not in grok
+    # Kein Modell wird namentlich benannt, auch nicht das eigene.
+    assert "Anthropic" not in claude and "Grok" not in grok
+    # Wer letzte Runde nicht geantwortet hat, bekommt schlicht keinen Block.
+    assert "the answer you yourself gave" not in mistral.casefold()
+
+
+def test_the_previous_answer_never_carries_its_source_markers_forward():
+    """"[S1]" ist pro Provider UND pro Lauf vergeben. Uebernaehme ein Modell
+    einen Satz samt Marke, zeigte sie im neuen Lauf auf eine andere Quelle --
+    der Consensus-Prompt liesse sie durch (sie STEHT ja in der Antwort) und die
+    Zitat-Verifikation des Judge auch (das Zitat ist echt)."""
+    db = FakeChatDatabase()
+    seed_chat(db, [
+        completed(TURN_1, 1, "Which database?", "PostgreSQL."),
+        pending(TURN_2, 2, "and for analytics?"),
+    ])
+    db.documents[(*_turn_path(TURN_1), "model_answers", "anthropic")] = {
+        "schema_version": 1,
+        "provider": "Anthropic",
+        "model_label": "claude",
+        "answer": (
+            "PostgreSQL handles this well. [S1] It scales to large datasets.[S2, S3]\n"
+            "Licensing is permissive. [S1, S2]"
+        ),
+        "sources": [],
+    }
+    service = ChatContextService(FirestoreChatContextRepository(db))
+    context = service.build_for_turn(
+        UID, CHAT_ID, TURN_2, compressor=RecordingCompressor(), now=NOW
+    )
+
+    rendered = service.resolve_for_ask(
+        UID,
+        CHAT_ID,
+        TURN_2,
+        context["id"],
+        question="and for analytics?",
+        provider="Anthropic",
+    )
+
+    assert "PostgreSQL handles this well." in rendered
+    assert "Licensing is permissive." in rendered
+    for tag in ("[S1]", "[S2, S3]", "[S1, S2]"):
+        assert tag not in rendered, tag
+    # Die Turn-eigenen Referenzen (turn_id:S<n>) bleiben davon unberuehrt.
+    assert "turn_id:S<number>" in rendered
+
+
+def test_the_previous_answer_is_offered_as_context_not_as_a_commitment():
+    """Ein "bleib dabei" macht aus Kontext eine Selbstbindung -- das Modell
+    verteidigt dann seine alte Position auch gegen eine Korrektur des Nutzers."""
+    rendered = render_context(
+        empty_memory(),
+        {"id": TURN_1, "position": 1, "question": "q", "consensus": "c", "sources": []},
+        own_previous_answer={"answer": "My earlier answer."},
+    )
+
+    assert "context, not a commitment" in rendered
+    assert "on its own merits" in rendered
+    assert "stay consistent" not in rendered
+
+
+def test_a_previous_answer_can_never_be_claimed_under_a_foreign_provider():
+    db = FakeChatDatabase()
+    seed_chat(db, [
+        completed(TURN_1, 1, "Tell me about consens.io", "It compares AI answers."),
+        pending(TURN_2, 2, "1-10?"),
+    ])
+    # Dokument unter der falschen ID abgelegt: darf nie ausgeliefert werden.
+    db.documents[(*_turn_path(TURN_1), "model_answers", "grok")] = {
+        "schema_version": 1,
+        "provider": "Anthropic",
+        "model_label": "Anthropic",
+        "answer": "Smuggled answer.",
+        "sources": [],
+    }
+    service = ChatContextService(FirestoreChatContextRepository(db))
+    context = service.build_for_turn(
+        UID, CHAT_ID, TURN_2, compressor=RecordingCompressor(), now=NOW
+    )
+
+    for provider in ("Grok", "Anthropic"):
+        rendered = service.resolve_for_ask(
+            UID, CHAT_ID, TURN_2, context["id"], question="1-10?", provider=provider
+        )
+        assert "Smuggled answer." not in rendered
 
 
 def test_offline_memory_evaluation_preserves_reference_numbers_negations_and_corrections():
@@ -820,9 +1192,11 @@ def test_offline_memory_evaluation_preserves_reference_numbers_negations_and_cor
 
 
 # ---------------------------------------------------------------------------
-# Fan-out-Cache: alle sechs /ask_*-Calls eines Laufs loesen dasselbe
-# owner-gebundene Tripel auf. Die Aufloesung bleibt serverseitig (der Kontext
-# darf nie ueber den Client laufen), kostet aber nur noch einen Read statt sechs.
+# Fan-out-Cache: die sechs /ask_*-Calls eines Laufs loesen dasselbe
+# owner-gebundene Tripel auf, unterscheiden sich aber im Provider -- jeder
+# bekommt seine EIGENE Vorantwort in den Kontext. Die Aufloesung bleibt
+# serverseitig (der Kontext darf nie ueber den Client laufen); der Cache
+# buendelt die Wiederholungen eines Providers.
 # ---------------------------------------------------------------------------
 
 
@@ -834,25 +1208,51 @@ def _ask_data(uid_scope=CHAT_ID, turn_id=TURN_2, version_id=TURN_3):
     }
 
 
-def test_fan_out_resolves_the_same_context_once(monkeypatch):
+def test_repeated_resolution_for_one_provider_reads_once(monkeypatch):
     chat_router.resolved_context_cache.clear()
     calls = []
     monkeypatch.setattr(
         chat_router.chat_context_service,
         "resolve_for_ask",
-        lambda uid, chat_id, turn_id, version_id, question: (
-            calls.append((uid, chat_id, turn_id, version_id, question))
+        lambda uid, chat_id, turn_id, version_id, question, provider="": (
+            calls.append((uid, chat_id, turn_id, version_id, question, provider))
             or "resolved context"
         ),
     )
 
     resolved = [
-        chat_router._resolve_authoritative_chat_context(UID, _ask_data(), "Question")
-        for _ in range(6)
+        chat_router._resolve_authoritative_chat_context(
+            UID, _ask_data(), "Question", "Anthropic"
+        )
+        for _ in range(3)
     ]
 
-    assert resolved == ["resolved context"] * 6
+    assert resolved == ["resolved context"] * 3
     assert len(calls) == 1
+
+
+def test_each_provider_gets_its_own_rendered_context(monkeypatch):
+    """Ein geteilter Cache-Eintrag wuerde einem Modell die Vorantwort eines
+    anderen als seine eigene unterschieben."""
+    chat_router.resolved_context_cache.clear()
+    monkeypatch.setattr(
+        chat_router.chat_context_service,
+        "resolve_for_ask",
+        lambda uid, chat_id, turn_id, version_id, question, provider="": (
+            f"context for {provider}"
+        ),
+    )
+
+    providers = ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"]
+    rendered = [
+        chat_router._resolve_authoritative_chat_context(
+            UID, _ask_data(), "Question", provider
+        )
+        for provider in providers
+    ]
+
+    assert rendered == [f"context for {provider}" for provider in providers]
+    assert len(set(rendered)) == 6
 
 
 def test_cached_context_never_crosses_owners_turns_or_questions(monkeypatch):
@@ -860,26 +1260,33 @@ def test_cached_context_never_crosses_owners_turns_or_questions(monkeypatch):
     monkeypatch.setattr(
         chat_router.chat_context_service,
         "resolve_for_ask",
-        lambda uid, chat_id, turn_id, version_id, question: (
-            f"{uid}|{chat_id}|{turn_id}|{version_id}|{question}"
+        lambda uid, chat_id, turn_id, version_id, question, provider="": (
+            f"{uid}|{chat_id}|{turn_id}|{version_id}|{question}|{provider}"
         ),
     )
 
-    owner = chat_router._resolve_authoritative_chat_context(UID, _ask_data(), "Question")
+    owner = chat_router._resolve_authoritative_chat_context(
+        UID, _ask_data(), "Question", "OpenAI"
+    )
     other = chat_router._resolve_authoritative_chat_context(
-        OTHER_UID, _ask_data(), "Question"
+        OTHER_UID, _ask_data(), "Question", "OpenAI"
     )
     other_turn = chat_router._resolve_authoritative_chat_context(
-        UID, _ask_data(turn_id=TURN_4), "Question"
+        UID, _ask_data(turn_id=TURN_4), "Question", "OpenAI"
     )
     other_version = chat_router._resolve_authoritative_chat_context(
-        UID, _ask_data(version_id=TURN_1), "Question"
+        UID, _ask_data(version_id=TURN_1), "Question", "OpenAI"
     )
     other_question = chat_router._resolve_authoritative_chat_context(
-        UID, _ask_data(), "A different question"
+        UID, _ask_data(), "A different question", "OpenAI"
+    )
+    other_provider = chat_router._resolve_authoritative_chat_context(
+        UID, _ask_data(), "Question", "Grok"
     )
 
-    assert len({owner, other, other_turn, other_version, other_question}) == 5
+    assert len({
+        owner, other, other_turn, other_version, other_question, other_provider
+    }) == 6
     assert owner.startswith(f"{UID}|")
     assert other.startswith(f"{OTHER_UID}|")
 
@@ -888,7 +1295,7 @@ def test_context_errors_are_never_cached(monkeypatch):
     chat_router.resolved_context_cache.clear()
     attempts = []
 
-    def failing(uid, chat_id, turn_id, version_id, question):
+    def failing(uid, chat_id, turn_id, version_id, question, provider=""):
         attempts.append(question)
         raise ChatContextConflict("Context version is not ready")
 
@@ -932,11 +1339,17 @@ def test_resolved_context_cache_expires_and_stays_bounded():
 
 def test_resolved_context_cache_key_is_owner_first_and_bounded():
     long_question = "q" * 50_000
-    key = resolved_context_cache_key(UID, CHAT_ID, TURN_2, TURN_3, long_question)
+    key = resolved_context_cache_key(
+        UID, CHAT_ID, TURN_2, TURN_3, long_question, "OpenAI"
+    )
 
     assert key[0] == UID
     # The question is hashed, so a huge question cannot inflate the key.
-    assert len(key[-1]) == 64
+    assert len(key[4]) == 64
+    assert key[-1] == "OpenAI"
     assert key == resolved_context_cache_key(
-        UID, CHAT_ID, TURN_2, TURN_3, f"  {long_question}  "
+        UID, CHAT_ID, TURN_2, TURN_3, f"  {long_question}  ", "OpenAI"
+    )
+    assert key != resolved_context_cache_key(
+        UID, CHAT_ID, TURN_2, TURN_3, long_question, "Grok"
     )

@@ -53,6 +53,7 @@ def analyze_provider_answers(
     consensus_model: str,
     keys: dict,
     model_sources: dict | None = None,
+    resolved_question: str = "",
     synthesize: Callable = query_consensus,
     judge: Callable = query_differences,
     consensus_error: Callable[[str], bool] = is_consensus_error_text,
@@ -75,6 +76,13 @@ def analyze_provider_answers(
             for answer in answers.values()
             if isinstance(answer, ProviderAnswer) and answer.sources
         }
+    # Nur weitergereicht, wenn eine aufgeloeste Lesart vorliegt (Folgefragen).
+    # synthesize/judge sind injizierbar -- Benchmark und Topic-Runner geben
+    # eigene Callables herein, die dieses Argument nicht kennen und es ohne
+    # Folgefrage auch nie zu sehen bekommen.
+    follow_up = (
+        {"resolved_question": resolved_question} if resolved_question else {}
+    )
     consensus = synthesize(
         question,
         slots["openai"],
@@ -87,6 +95,7 @@ def analyze_provider_answers(
         consensus_model,
         keys,
         model_sources=model_sources,
+        **follow_up,
     )
     if consensus_error(consensus):
         if not allow_consensus_error:
@@ -108,6 +117,7 @@ def analyze_provider_answers(
         keys,
         differences_model=consensus_model,
         excluded_models=excluded,
+        **follow_up,
     )
     if not isinstance(differences_data, dict):
         if require_differences_data:

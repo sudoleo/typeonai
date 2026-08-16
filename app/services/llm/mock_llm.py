@@ -153,6 +153,12 @@ def _mock_engine_output(prompt: str, json_mode: bool) -> str:
     if json_mode:
         if "Compare the OLD and NEW consensus answers" in prompt:
             return json.dumps({"changed": False, "severity": "minor", "change_summary": "No material change."})
+        if '"current_question"' in prompt:
+            # Frage-Aufloesung vor dem Fan-out (chat_context.ChatMemoryCompressor).
+            return json.dumps({
+                "depends_on_previous_turn": True,
+                "resolved_question": "Mock resolved follow-up question.",
+            })
         if '"claims"' in prompt:
             return _build_mock_differences_json(prompt)
         # Fremder Structured-Output-Call (z. B. Resolve-Runde): neutrales,

@@ -1,4 +1,5 @@
 import json
+import random
 import unittest
 from unittest import mock
 
@@ -637,6 +638,30 @@ class DifferencesPromptTests(unittest.TestCase):
         self.assertIn("[1] This is the consensus answer.", prompt)
         self.assertEqual(sentences, ["This is the consensus answer."])
         self.assertIn('"s"', prompt)
+
+    def test_follow_up_reading_reaches_the_judge_without_touching_single_runs(self):
+        """Der Judge sah die Frage bisher gar nicht und wertete Antworten auf
+        verschiedene Lesarten derselben Frage als inhaltlichen Widerspruch."""
+        # Gleiche Anonymisierungs-Reihenfolge fuer beide Prompts erzwingen.
+        random.seed(7)
+        base = _build_differences_prompt(
+            "answer one", "answer two", None, None, None, None,
+            consensus_answer="This is the consensus answer.",
+            excluded_models=[],
+        )[0]
+        random.seed(7)
+        with_question = _build_differences_prompt(
+            "answer one", "answer two", None, None, None, None,
+            consensus_answer="This is the consensus answer.",
+            excluded_models=[],
+            resolved_question="How would you rate consens.io from 1 to 10?",
+        )[0]
+
+        self.assertIn("How would you rate consens.io from 1 to 10?", with_question)
+        self.assertIn("not a factual", with_question)
+        # Einzellauf: unveraenderter Prompt, damit die Score-Kalibrierung haelt.
+        self.assertNotIn("resolved against the conversation", base)
+        self.assertTrue(with_question.endswith(base))
 
     def test_differences_are_requested_before_claims(self):
         """Reisst das Token-Budget, faellt die redundantere Claim-Liste weg -

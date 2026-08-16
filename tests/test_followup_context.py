@@ -195,12 +195,14 @@ def test_ask_with_context_version_loads_authoritative_context_without_compressin
         captured.update(kwargs)
         return {"ok": True}
 
-    def resolve(uid, chat_id, turn_id, version_id, *, question):
+    def resolve(uid, chat_id, turn_id, version_id, *, question, provider=""):
         assert uid == "uid-followup-tests"
         assert (chat_id, turn_id, version_id) == (
             ids["chat_id"], ids["turn_id"], ids["context_version_id"]
         )
         assert question == "Does that decision still hold?"
+        # Der Provider entscheidet, wessen Vorantwort im Kontext landet.
+        assert provider == "Gemini"
         return "AUTHORITATIVE CHAT CONTEXT: decision=PostgreSQL"
 
     p1, p2 = auth_patches(is_pro=False)
